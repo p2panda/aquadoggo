@@ -1,5 +1,5 @@
 use jsonrpc_core::IoHandler;
-use std::io;
+use std::io::{Result, ErrorKind};
 use std::net::SocketAddr;
 
 /// Maximal payload accepted by RPC servers.
@@ -14,7 +14,7 @@ pub type HttpServer = http::Server;
 pub type WebsocketServer = ws::Server;
 
 /// Start HTTP server listening on given address.
-pub fn start_http(addr: &SocketAddr, io: IoHandler) -> io::Result<HttpServer> {
+pub fn start_http(addr: &SocketAddr, io: IoHandler) -> Result<HttpServer> {
     http::ServerBuilder::new(io)
         .threads(4)
         .max_request_body_size(MAX_PAYLOAD)
@@ -26,17 +26,17 @@ pub fn start_ws (
     addr: &SocketAddr,
     max_connections: Option<usize>,
     io: IoHandler,
-) -> io::Result<WebsocketServer> {
+) -> Result<WebsocketServer> {
     ws::ServerBuilder::new(io)
         .max_payload(MAX_PAYLOAD)
         .max_connections(max_connections.unwrap_or(WS_MAX_CONNECTIONS))
         .start(addr)
         .map_err(|err| match err {
             ws::Error::Io(io) => io,
-            ws::Error::ConnectionClosed => io::ErrorKind::BrokenPipe.into(),
+            ws::Error::ConnectionClosed => ErrorKind::BrokenPipe.into(),
             e => {
-                println!("{}", e);
-                io::ErrorKind::Other.into()
+                error!("{}", e);
+                ErrorKind::Other.into()
             }
         })
 }
