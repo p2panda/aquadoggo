@@ -1,4 +1,5 @@
-#[macro_use] extern crate log;
+#[macro_use]
+extern crate log;
 
 use async_ctrlc::CtrlC;
 use async_std::task;

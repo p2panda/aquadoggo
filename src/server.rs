@@ -1,5 +1,5 @@
 use jsonrpc_core::IoHandler;
-use std::io::{Result, ErrorKind};
+use std::io::{ErrorKind, Result};
 use std::net::SocketAddr;
 
 /// Maximal payload accepted by RPC servers.
@@ -22,7 +22,7 @@ pub fn start_http(addr: &SocketAddr, io: IoHandler) -> Result<HttpServer> {
 }
 
 /// Start WS server listening on given address.
-pub fn start_ws (
+pub fn start_ws(
     addr: &SocketAddr,
     max_connections: Option<usize>,
     io: IoHandler,

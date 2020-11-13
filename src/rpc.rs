@@ -1,5 +1,5 @@
 use jsonrpc_core::futures::future::{self, FutureResult};
-use jsonrpc_core::{IoHandler, Error, Result};
+use jsonrpc_core::{Error, IoHandler, Result};
 use jsonrpc_derive::rpc;
 
 /// Node RPC API methods
@@ -13,8 +13,7 @@ pub trait NodeApi {
 }
 
 /// Implementations of RPC methods
-struct NodeApiService {
-}
+struct NodeApiService {}
 
 impl NodeApiService {
     pub fn new() -> Self {
