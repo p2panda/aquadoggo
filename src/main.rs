@@ -38,29 +38,40 @@ fn main() {
 
     let mut task_manager = tasks::TaskManager::new();
 
+    // Start HTTP RPC Server
+    let http_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), http_port);
+    let http_server = server::start_http(&http_address, rpc::build_rpc_handler())
+        .expect("Could not start HTTP server");
+    let http_close_handle = http_server.close_handle();
+
     task_manager.spawn("HTTP RPC Server", async move {
-        // @TODO: Refactor server method as it is blocking the task
-        // let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), http_port);
-        // server::start_http(&address, rpc::build_rpc_handler())
-        //     .expect("Could not start http server")
-        //     .wait();
+        info!("Start HTTP server at {}", http_address);
+        http_server.wait();
         Ok(())
     });
+
+    // Start WebSocket RPC Server
+    let ws_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), ws_port);
+    let ws_server = server::start_ws(&ws_address, Some(128), rpc::build_rpc_handler())
+        .expect("Could not start WebSocket server");
+    let ws_close_handle = ws_server.close_handle();
 
     task_manager.spawn("WebSocket RPC Server", async move {
-        // @TODO: Refactor server method as it is blocking the task
-        // let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), ws_port);
-        // server::start_ws(&address, Some(128), rpc::build_rpc_handler())
-        //     .expect("Could not start websocket server")
-        //     .wait()
-        //     .unwrap();
+        info!("Start WebSocket server at {}", ws_address);
+        ws_server.wait().unwrap();
         Ok(())
     });
 
+    // Run this until [CTRL] + [C] got pressed
     task::block_on(async {
         let ctrlc = CtrlC::new().unwrap();
         ctrlc.await;
     });
 
+    // Send close signals to RPC servers
+    http_close_handle.close();
+    ws_close_handle.close();
+
+    // Wait until all tasks are gracefully shut down and exit
     task::block_on(task_manager.shutdown());
 }
