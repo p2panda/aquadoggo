@@ -6,13 +6,13 @@ edition = "2018"
 
 [dependencies]
 async-ctrlc = "1.2.0"
-async-std = { version = "1.6.5", features=["unstable", "attributes"] }
-env_logger = "0.7.1"
+async-std = { version = "1.7.0", features = ["unstable", "attributes"] }
+env_logger = "0.8.2"
 exit-future = "0.2.0"
-futures = "0.3.6"
+futures = "0.3.8"
 http = { package = "jsonrpc-http-server", version = "15.1.0" }
 jsonrpc-core = "15.1.0"
 jsonrpc-derive = "15.1.0"
 log = "0.4.11"
-structopt = "0.3.18"
+structopt = "0.3.20"
 ws = { package = "jsonrpc-ws-server", version = "15.1.0" }
