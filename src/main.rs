@@ -8,6 +8,7 @@ use structopt::StructOpt;
 
 mod rpc;
 mod server;
+mod tasks;
 
 /// Default RPC API HTTP server port.
 const DEFAULT_HTTP_PORT: u16 = 9123;
@@ -27,8 +28,7 @@ struct Opt {
     ws_port: Option<u16>,
 }
 
-#[async_std::main]
-async fn main() -> std::io::Result<()> {
+fn main() {
     env_logger::init();
 
     // Parse command line arguments
@@ -36,28 +36,31 @@ async fn main() -> std::io::Result<()> {
     let http_port = opt.http_port.unwrap_or(DEFAULT_HTTP_PORT);
     let ws_port = opt.ws_port.unwrap_or(DEFAULT_WEBSOCKET_PORT);
 
-    let exit_signal_handler = task::spawn(async {
+    let mut task_manager = tasks::TaskManager::new();
+
+    task_manager.spawn("HTTP RPC Server", async move {
+        // @TODO: Refactor server method as it is blocking the task
+        // let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), http_port);
+        // server::start_http(&address, rpc::build_rpc_handler())
+        //     .expect("Could not start http server")
+        //     .wait();
+        Ok(())
+    });
+
+    task_manager.spawn("WebSocket RPC Server", async move {
+        // @TODO: Refactor server method as it is blocking the task
+        // let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), ws_port);
+        // server::start_ws(&address, Some(128), rpc::build_rpc_handler())
+        //     .expect("Could not start websocket server")
+        //     .wait()
+        //     .unwrap();
+        Ok(())
+    });
+
+    task::block_on(async {
         let ctrlc = CtrlC::new().unwrap();
         ctrlc.await;
-        info!("Shut down node");
     });
 
-    task::spawn(async move {
-        let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), http_port);
-        server::start_http(&address, rpc::build_rpc_handler())
-            .expect("Could not start http server")
-            .wait();
-    });
-
-    task::spawn(async move {
-        let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), ws_port);
-        server::start_ws(&address, Some(128), rpc::build_rpc_handler())
-            .expect("Could not start websocket server")
-            .wait()
-            .unwrap();
-    });
-
-    exit_signal_handler.await;
-
-    Ok(())
+    task::block_on(task_manager.shutdown());
 }
