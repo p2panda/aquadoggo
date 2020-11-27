@@ -8,6 +8,7 @@ edition = "2018"
 async-ctrlc = "1.2.0"
 async-std = { version = "1.6.5", features=["unstable", "attributes"] }
 env_logger = "0.7.1"
+exit-future = "0.2.0"
 futures = "0.3.6"
 http = { package = "jsonrpc-http-server", version = "15.1.0" }
 jsonrpc-core = "15.1.0"
@@ -15,4 +16,3 @@ jsonrpc-derive = "15.1.0"
 log = "0.4.11"
 structopt = "0.3.18"
 ws = { package = "jsonrpc-ws-server", version = "15.1.0" }
-exit-future = "0.2.0"
