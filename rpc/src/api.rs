@@ -4,7 +4,7 @@ use jsonrpc_derive::rpc;
 
 /// Node RPC API methods
 #[rpc(server)]
-pub trait NodeApi {
+pub trait Api {
     #[rpc(name = "add")]
     fn add(&self, a: u64, b: u64) -> Result<u64>;
 
@@ -13,15 +13,15 @@ pub trait NodeApi {
 }
 
 /// Implementations of RPC methods
-struct NodeApiService {}
+pub struct ApiService {}
 
-impl NodeApiService {
+impl ApiService {
     pub fn new() -> Self {
-        NodeApiService {}
+        ApiService {}
     }
 }
 
-impl NodeApi for NodeApiService {
+impl Api for ApiService {
     fn add(&self, a: u64, b: u64) -> Result<u64> {
         Ok(a + b)
     }
@@ -33,6 +33,6 @@ impl NodeApi for NodeApiService {
 
 pub fn build_rpc_handler() -> IoHandler {
     let mut io = IoHandler::default();
-    io.extend_with(NodeApi::to_delegate(NodeApiService::new()));
+    io.extend_with(Api::to_delegate(ApiService::new()));
     io
 }

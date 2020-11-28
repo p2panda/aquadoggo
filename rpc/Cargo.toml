@@ -1,0 +1,13 @@
+[package]
+name = "p2panda-rpc"
+version = "0.1.0"
+authors = ["Andreas Dzialocha <x1d@adz.garden>"]
+edition = "2018"
+
+[dependencies]
+http = { package = "jsonrpc-http-server", version = "15.1.0" }
+jsonrpc-core = "15.1.0"
+jsonrpc-derive = "15.1.0"
+log = "0.4.11"
+p2panda-core = { path = "../core" }
+ws = { package = "jsonrpc-ws-server", version = "15.1.0" }

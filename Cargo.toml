@@ -1,21 +1,6 @@
-[package]
-name = "node"
-version = "0.1.0"
-authors = ["Andreas Dzialocha <x1d@adz.garden>"]
-edition = "2018"
-
-[dependencies]
-async-ctrlc = "1.2.0"
-async-std = { version = "1.7.0", features = ["unstable", "attributes"] }
-config = "0.10.1"
-directories = "3.0.1"
-env_logger = "0.8.2"
-exit-future = "0.2.0"
-futures = "0.3.8"
-http = { package = "jsonrpc-http-server", version = "15.1.0" }
-jsonrpc-core = "15.1.0"
-jsonrpc-derive = "15.1.0"
-log = "0.4.11"
-serde = { version = "1.0.117", features = ["derive"] }
-structopt = "0.3.20"
-ws = { package = "jsonrpc-ws-server", version = "15.1.0" }
+[workspace]
+members = [
+  "core",
+  "node",
+  "rpc",
+]
