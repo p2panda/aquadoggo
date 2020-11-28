@@ -1,47 +1,49 @@
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate serde;
 
 use async_ctrlc::CtrlC;
 use async_std::task;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use structopt::StructOpt;
 
+mod config;
 mod rpc;
 mod server;
 mod tasks;
 
-/// Default RPC API HTTP server port.
-const DEFAULT_HTTP_PORT: u16 = 9123;
-
-/// Default RPC API WebSocket server port.
-const DEFAULT_WEBSOCKET_PORT: u16 = 9456;
-
 #[derive(StructOpt, Debug)]
 #[structopt(name = "p2panda Node", about = "Node server for the p2panda network")]
 struct Opt {
-    /// Port to bind RPC http server, 9123 by default.
-    #[structopt(short, long)]
-    http_port: Option<u16>,
-
-    /// Port to bind RPC websocket server, 9456 by default.
-    #[structopt(short, long)]
-    ws_port: Option<u16>,
+    /// Path to data folder, $HOME/.local/share/p2panda by default on Linux.
+    #[structopt(short, long, parse(from_os_str))]
+    data_dir: Option<std::path::PathBuf>,
 }
 
-fn main() {
+#[async_std::main]
+async fn main() -> std::io::Result<()> {
     env_logger::init();
 
     // Parse command line arguments
     let opt = Opt::from_args();
-    let http_port = opt.http_port.unwrap_or(DEFAULT_HTTP_PORT);
-    let ws_port = opt.ws_port.unwrap_or(DEFAULT_WEBSOCKET_PORT);
+    let configuration =
+        config::Configuration::new(opt.data_dir).expect("Could not load configuration");
 
     let mut task_manager = tasks::TaskManager::new();
 
     // Start HTTP RPC Server
-    let http_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), http_port);
-    let http_server = server::start_http(&http_address, rpc::build_rpc_handler())
-        .expect("Could not start HTTP server");
+    let http_address = SocketAddr::new(
+        IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+        configuration.server.http_port,
+    );
+    let http_server = server::start_http(
+        &http_address,
+        rpc::build_rpc_handler(),
+        configuration.server.http_threads,
+        configuration.server.max_payload,
+    )
+    .expect("Could not start HTTP server");
     let http_close_handle = http_server.close_handle();
 
     task_manager.spawn("HTTP RPC Server", async move {
@@ -51,9 +53,17 @@ fn main() {
     });
 
     // Start WebSocket RPC Server
-    let ws_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), ws_port);
-    let ws_server = server::start_ws(&ws_address, Some(128), rpc::build_rpc_handler())
-        .expect("Could not start WebSocket server");
+    let ws_address = SocketAddr::new(
+        IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+        configuration.server.ws_port,
+    );
+    let ws_server = server::start_ws(
+        &ws_address,
+        configuration.server.ws_max_connections,
+        configuration.server.max_payload,
+        rpc::build_rpc_handler(),
+    )
+    .expect("Could not start WebSocket server");
     let ws_close_handle = ws_server.close_handle();
 
     task_manager.spawn("WebSocket RPC Server", async move {
@@ -74,4 +84,6 @@ fn main() {
 
     // Wait until all tasks are gracefully shut down and exit
     task::block_on(task_manager.shutdown());
+
+    Ok(())
 }
