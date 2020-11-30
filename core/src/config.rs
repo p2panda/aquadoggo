@@ -66,6 +66,7 @@ impl Configuration {
     }
 
     /// Create a new configuration object pulling in the variables from the process environment.
+    /// This method also assures a data directory exists on the host machine.
     pub fn new(path: Option<PathBuf>) -> Result<Self> {
         // Make sure data directory exists
         let base_path = Self::create_data_directory(path)?;
