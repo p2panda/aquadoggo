@@ -9,20 +9,20 @@ const CONFIG_NAMESPACE: &str = "p2panda";
 /// Config file name inside of data directory.
 const CONFIG_FILE_NAME: &str = "config.toml";
 
-/// Maximal payload accepted by RPC servers.
-const DEFAULT_MAX_RPC_PAYLOAD: usize = 15 * 1024 * 1024;
-
 /// RPC API HTTP server port.
 const DEFAULT_HTTP_PORT: u16 = 9123;
 
-/// Maximum HTTP server threads.
+/// Number of HTTP server threads to run.
 const DEFAULT_HTTP_THREADS: usize = 4;
+
+/// Maximal size of RPC request body in bytes.
+const DEFAULT_MAX_RPC_PAYLOAD: usize = 512000;
+
+/// Maximum number of connections for WebSocket RPC server.
+const DEFAULT_WEBSOCKET_CONNECTIONS: usize = 128;
 
 /// RPC API WebSocket server port.
 const DEFAULT_WEBSOCKET_PORT: u16 = 9456;
-
-/// Default maximum number of connections for WebSocket RPC server.
-const DEFAULT_WEBSOCKET_CONNECTIONS: usize = 128;
 
 #[derive(Debug, Deserialize)]
 pub struct Server {

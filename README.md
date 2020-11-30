@@ -6,15 +6,41 @@ Node server with JSON RPC API for the p2panda network.
 
 ```
 USAGE:
-    node [OPTIONS]
+    p2panda [OPTIONS]
 
 FLAGS:
-        --help       Prints help information
+    -h, --help       Prints help information
     -V, --version    Prints version information
 
 OPTIONS:
-    -h, --http-port <http-port>    Port to bind RPC http server, 9123 by default
-    -w, --ws-port <ws-port>        Port to bind RPC websocket server, 9456 by default
+    -d, --data-dir <data-dir>    Path to data folder, $HOME/.local/share/p2panda by default on Linux
+```
+
+## Configuration
+
+Configure the application by creating a `config.toml` file in the data directory `~/.local/share/p2panda` (Linux), `~/Library/Application Support/p2panda` (MacOS) or `~\AppData\Roaming\p2panda\data` (Windows).
+
+Possible values with the regarding defaults are:
+
+```toml
+[server]
+# RPC API HTTP server port
+http_port = 9123
+# Number of HTTP server threads to run
+http_threads = 4
+# Maximum size of RPC request body in bytes (default is 512kB)
+max_payload = 512000
+# Maximum number of connections for WebSocket RPC server
+ws_max_connections = 128
+# RPC API WebSocket server port
+ws_port = 9456
+```
+
+## Development
+
+```
+cargo run
+cargo test
 ```
 
 ## License
