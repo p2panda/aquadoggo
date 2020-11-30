@@ -1,9 +1,8 @@
 use async_ctrlc::CtrlC;
 use async_std::task;
-use structopt::StructOpt;
-
 use p2panda_core::Configuration;
 use p2panda_node::Runtime;
+use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "p2panda Node", about = "Node server for the p2panda network")]

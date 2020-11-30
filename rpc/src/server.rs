@@ -1,21 +1,21 @@
 use jsonrpc_core::IoHandler;
+use p2panda_core::{Configuration, TaskManager};
 use std::io::{ErrorKind, Result};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-
-use p2panda_core::{Configuration, TaskManager};
 
 /// Type alias for http server close handle.
 type HttpCloseHandle = http::CloseHandle;
 /// Type alias for ws server close handle.
 type WebSocketCloseHandle = ws::CloseHandle;
 
+/// Wrapper around jsonrpc-http-server implementation.
 struct HttpServer {
     inner: http::Server,
 }
 
 impl HttpServer {
     /// Start HTTP RPC server listening on given address.
-    pub fn new(config: &Configuration, io: IoHandler) -> Result<Self> {
+    pub fn start(config: &Configuration, io: IoHandler) -> Result<Self> {
         let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), config.http_port);
 
         let inner = http::ServerBuilder::new(io)
@@ -26,22 +26,25 @@ impl HttpServer {
         Ok(Self { inner })
     }
 
+    /// Keep server alive by running this blocking method.
     pub fn wait(self) {
         self.inner.wait();
     }
 
+    /// Returns separate handler which can be used to close the server.
     pub fn close_handle(&self) -> HttpCloseHandle {
         self.inner.close_handle()
     }
 }
 
+/// Wrapper around jsonrpc-ws-server implementation.
 struct WebSocketServer {
     inner: ws::Server,
 }
 
 impl WebSocketServer {
     /// Start WebSocket RPC server listening on given address.
-    pub fn new(config: &Configuration, io: IoHandler) -> Result<Self> {
+    pub fn start(config: &Configuration, io: IoHandler) -> Result<Self> {
         let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), config.ws_port);
 
         let inner = ws::ServerBuilder::new(io)
@@ -60,25 +63,29 @@ impl WebSocketServer {
         Ok(Self { inner })
     }
 
+    /// Keep server alive by running this blocking method.
     pub fn wait(self) {
         self.inner.wait().unwrap();
     }
 
+    /// Returns separate handler which can be used to close the server.
     pub fn close_handle(&self) -> WebSocketCloseHandle {
         self.inner.close_handle()
     }
 }
 
+/// Manages both HTTP and WebSocket server to expose the JSON RPC API.
 pub struct RpcServer {
     close_handle_http: HttpCloseHandle,
     close_handle_ws: WebSocketCloseHandle,
 }
 
 impl RpcServer {
+    /// Spawn two separate tasks running HTTP and WebSocket servers both exposing a JSON RPC API.
     pub fn start(config: &Configuration, task_manager: &mut TaskManager, io: IoHandler) -> Self {
         // Start HTTP RPC server
-        let http_server =
-            HttpServer::new(&config, io.clone()).expect("Could not start HTTP RPC server");
+        let http_server = HttpServer::start(&config, io.clone())
+            .expect("Could not start HTTP JSON RPC API server");
         let close_handle_http = http_server.close_handle();
 
         task_manager.spawn("HTTP RPC Server", async move {
@@ -87,8 +94,8 @@ impl RpcServer {
         });
 
         // Start WebSocket RPC server
-        let ws_server =
-            WebSocketServer::new(&config, io.clone()).expect("Could not start WebSocket server");
+        let ws_server = WebSocketServer::start(&config, io.clone())
+            .expect("Could not start WebSocket JSON RPC API server");
         let close_handle_ws = ws_server.close_handle();
 
         task_manager.spawn("WebSocket RPC Server", async move {
@@ -96,13 +103,14 @@ impl RpcServer {
             Ok(())
         });
 
+        // Keep close handlers for later
         Self {
             close_handle_http,
             close_handle_ws,
         }
     }
 
-    /// Send close signals to all RPC servers
+    /// Send close signals to all RPC servers.
     pub fn shutdown(self) {
         self.close_handle_http.close();
         self.close_handle_ws.close();

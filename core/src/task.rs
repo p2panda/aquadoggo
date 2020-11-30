@@ -2,8 +2,10 @@ use async_std::{future::Future, task};
 use futures::future;
 use std::error::Error;
 
+/// Generic Result type for all async tasks used by TaskManager.
 pub type FutureResult<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
 
+/// Handles multiple concurrent tasks and exists them gracefully on shutdown.
 pub struct TaskManager {
     on_exit: exit_future::Exit,
     exit_signal: Option<exit_future::Signal>,
@@ -11,6 +13,7 @@ pub struct TaskManager {
 }
 
 impl TaskManager {
+    /// Returns a new TaskManager instance.
     pub fn new() -> Self {
         let (exit_signal, on_exit) = exit_future::signal();
 
@@ -21,6 +24,7 @@ impl TaskManager {
         }
     }
 
+    /// Spawn a new task and register it in the task manager.
     pub fn spawn(
         &mut self,
         name: &'static str,
@@ -46,6 +50,7 @@ impl TaskManager {
         self.tasks.push(task_handle);
     }
 
+    /// Signal all tasks to exit and wait until they are actually shut down.
     pub async fn shutdown(mut self) {
         if let Some(exit_signal) = self.exit_signal.take() {
             let _ = exit_signal.fire();
