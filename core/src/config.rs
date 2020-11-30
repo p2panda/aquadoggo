@@ -79,7 +79,10 @@ impl Configuration {
         config.set_default("server.http_port", DEFAULT_HTTP_PORT as i64)?;
         config.set_default("server.http_threads", DEFAULT_HTTP_THREADS as i64)?;
         config.set_default("server.max_payload", DEFAULT_MAX_RPC_PAYLOAD as i64)?;
-        config.set_default("server.ws_max_connections", DEFAULT_WEBSOCKET_CONNECTIONS as i64)?;
+        config.set_default(
+            "server.ws_max_connections",
+            DEFAULT_WEBSOCKET_CONNECTIONS as i64,
+        )?;
         config.set_default("server.ws_port", DEFAULT_WEBSOCKET_PORT as i64)?;
 
         // Read local config file and update variables
