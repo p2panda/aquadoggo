@@ -18,10 +18,10 @@ fn main() {
 
     // Parse command line arguments and load configuration
     let opt = Opt::from_args();
-    let configuration = Configuration::new(opt.data_dir).expect("Could not load configuration");
+    let config = Configuration::new(opt.data_dir).expect("Could not load configuration");
 
     // Start p2panda node in async runtime
-    let node = Runtime::start(configuration);
+    let node = Runtime::start(config);
 
     // Run this until [CTRL] + [C] got pressed
     task::block_on(async {

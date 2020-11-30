@@ -15,15 +15,12 @@ struct HttpServer {
 
 impl HttpServer {
     /// Start HTTP RPC server listening on given address.
-    pub fn new(configuration: &Configuration, io: IoHandler) -> Result<Self> {
-        let address = SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-            configuration.server.http_port,
-        );
+    pub fn new(config: &Configuration, io: IoHandler) -> Result<Self> {
+        let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), config.http_port);
 
         let inner = http::ServerBuilder::new(io)
-            .threads(configuration.server.http_threads)
-            .max_request_body_size(configuration.server.max_payload)
+            .threads(config.http_threads)
+            .max_request_body_size(config.rpc_max_payload)
             .start_http(&address)?;
 
         Ok(Self { inner })
@@ -44,15 +41,12 @@ struct WebSocketServer {
 
 impl WebSocketServer {
     /// Start WebSocket RPC server listening on given address.
-    pub fn new(configuration: &Configuration, io: IoHandler) -> Result<Self> {
-        let address = SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-            configuration.server.ws_port,
-        );
+    pub fn new(config: &Configuration, io: IoHandler) -> Result<Self> {
+        let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), config.ws_port);
 
         let inner = ws::ServerBuilder::new(io)
-            .max_payload(configuration.server.max_payload)
-            .max_connections(configuration.server.ws_max_connections)
+            .max_payload(config.rpc_max_payload)
+            .max_connections(config.ws_max_connections)
             .start(&address)
             .map_err(|err| match err {
                 ws::Error::Io(io) => io,
@@ -81,14 +75,10 @@ pub struct RpcServer {
 }
 
 impl RpcServer {
-    pub fn start(
-        configuration: &Configuration,
-        task_manager: &mut TaskManager,
-        io: IoHandler,
-    ) -> Self {
+    pub fn start(config: &Configuration, task_manager: &mut TaskManager, io: IoHandler) -> Self {
         // Start HTTP RPC server
         let http_server =
-            HttpServer::new(&configuration, io.clone()).expect("Could not start HTTP RPC server");
+            HttpServer::new(&config, io.clone()).expect("Could not start HTTP RPC server");
         let close_handle_http = http_server.close_handle();
 
         task_manager.spawn("HTTP RPC Server", async move {
@@ -97,8 +87,8 @@ impl RpcServer {
         });
 
         // Start WebSocket RPC server
-        let ws_server = WebSocketServer::new(&configuration, io.clone())
-            .expect("Could not start WebSocket server");
+        let ws_server =
+            WebSocketServer::new(&config, io.clone()).expect("Could not start WebSocket server");
         let close_handle_ws = ws_server.close_handle();
 
         task_manager.spawn("WebSocket RPC Server", async move {

@@ -1,37 +1,10 @@
-use config::{Config, ConfigError, Environment, File, FileFormat};
+use anyhow::Result;
 use directories::ProjectDirs;
 use std::fs;
 use std::path::PathBuf;
 
-/// XDG data directory prefix.
-const CONFIG_NAMESPACE: &str = "p2panda";
-
-/// Config file name inside of data directory.
-const CONFIG_FILE_NAME: &str = "config.toml";
-
-/// RPC API HTTP server port.
-const DEFAULT_HTTP_PORT: u16 = 9123;
-
-/// Number of HTTP server threads to run.
-const DEFAULT_HTTP_THREADS: usize = 4;
-
-/// Maximal size of RPC request body in bytes.
-const DEFAULT_MAX_RPC_PAYLOAD: usize = 512000;
-
-/// Maximum number of connections for WebSocket RPC server.
-const DEFAULT_WEBSOCKET_CONNECTIONS: usize = 128;
-
-/// RPC API WebSocket server port.
-const DEFAULT_WEBSOCKET_PORT: u16 = 9456;
-
-#[derive(Debug, Deserialize)]
-pub struct Server {
-    pub http_port: u16,
-    pub http_threads: usize,
-    pub max_payload: usize,
-    pub ws_max_connections: usize,
-    pub ws_port: u16,
-}
+/// Data directory name.
+const DATA_DIR_NAME: &str = "p2panda";
 
 /// Configuration object holding all important variables throughout the application.
 ///
@@ -44,18 +17,43 @@ pub struct Server {
 ///
 /// An optional config.toml file is read in the data directory and can be used to overwrite the
 /// default variables.
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
+#[serde(default)]
 pub struct Configuration {
-    pub server: Server,
+    /// Path to data directory (can be changed via command line argument)
+    pub base_path: Option<PathBuf>,
+    /// Maximum number of connections for WebSocket RPC server.
+    pub rpc_max_payload: usize,
+    /// RPC API HTTP server port.
+    pub http_port: u16,
+    /// Number of HTTP server threads to run.
+    pub http_threads: usize,
+    /// Maximal size of RPC request body in bytes.
+    pub ws_max_connections: usize,
+    /// RPC API WebSocket server port.
+    pub ws_port: u16,
+}
+
+impl Default for Configuration {
+    fn default() -> Self {
+        Self {
+            base_path: None,
+            rpc_max_payload: 128,
+            http_port: 9123,
+            http_threads: 4,
+            ws_max_connections: 512000,
+            ws_port: 9456,
+        }
+    }
 }
 
 impl Configuration {
     /// Returns the data directory path and creates the folders when not existing.
-    fn create_data_directory(path: Option<PathBuf>) -> std::io::Result<PathBuf> {
+    fn create_data_directory(path: Option<PathBuf>) -> Result<PathBuf> {
         // Use custom data directory path or determine one from host
         let base_path = path.unwrap_or(
-            ProjectDirs::from("", "", CONFIG_NAMESPACE)
-                .ok_or("Can not determine XDG data directory")
+            ProjectDirs::from("", "", DATA_DIR_NAME)
+                .ok_or("Can not determine data directory")
                 .unwrap()
                 .data_dir()
                 .to_path_buf(),
@@ -67,31 +65,17 @@ impl Configuration {
         Ok(base_path)
     }
 
-    /// Create a new configuration object pointing at a data directory where we also check if an
-    /// optional config.toml file exists for custom variables.
-    pub fn new(path: Option<PathBuf>) -> Result<Self, ConfigError> {
-        // Get path of data directory
-        let base_path =
-            Self::create_data_directory(path).map_err(|err| ConfigError::Foreign(Box::new(err)))?;
+    /// Create a new configuration object pulling in the variables from the process environment.
+    pub fn new(path: Option<PathBuf>) -> Result<Self> {
+        // Make sure data directory exists
+        let base_path = Self::create_data_directory(path)?;
 
-        // Create a default configuration
-        let mut config = Config::new();
-        config.set_default("server.http_port", DEFAULT_HTTP_PORT as i64)?;
-        config.set_default("server.http_threads", DEFAULT_HTTP_THREADS as i64)?;
-        config.set_default("server.max_payload", DEFAULT_MAX_RPC_PAYLOAD as i64)?;
-        config.set_default(
-            "server.ws_max_connections",
-            DEFAULT_WEBSOCKET_CONNECTIONS as i64,
-        )?;
-        config.set_default("server.ws_port", DEFAULT_WEBSOCKET_PORT as i64)?;
+        // Create configuration based on defaults and populate with environment variables
+        let mut config = envy::from_env::<Self>()?;
 
-        // Read local config file and update variables
-        let config_path = base_path.join(CONFIG_FILE_NAME);
-        config.merge(File::new(config_path.to_str().unwrap(), FileFormat::Toml).required(false))?;
+        // Store data directory path in object
+        config.base_path = Some(base_path);
 
-        // Read process environment and update variables
-        config.merge(Environment::with_prefix(CONFIG_NAMESPACE))?;
-
-        config.try_into()
+        Ok(config)
     }
 }

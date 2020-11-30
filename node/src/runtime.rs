@@ -7,10 +7,10 @@ pub struct Runtime {
 }
 
 impl Runtime {
-    pub fn start(configuration: Configuration) -> Self {
+    pub fn start(config: Configuration) -> Self {
         let mut task_manager = TaskManager::new();
         let io_handler = build_rpc_handler();
-        let rpc_server = RpcServer::start(&configuration, &mut task_manager, io_handler);
+        let rpc_server = RpcServer::start(&config, &mut task_manager, io_handler);
 
         Self {
             task_manager,
