@@ -4,13 +4,13 @@ use std::io::{ErrorKind, Result};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 /// Type alias for http server close handle.
-type HttpCloseHandle = http::CloseHandle;
+type HttpCloseHandle = jsonrpc_http_server::CloseHandle;
 /// Type alias for ws server close handle.
-type WebSocketCloseHandle = ws::CloseHandle;
+type WebSocketCloseHandle = jsonrpc_ws_server::CloseHandle;
 
 /// Wrapper around jsonrpc-http-server implementation.
 struct HttpServer {
-    inner: http::Server,
+    inner: jsonrpc_http_server::Server,
 }
 
 impl HttpServer {
@@ -18,7 +18,7 @@ impl HttpServer {
     pub fn start(config: &Configuration, io: IoHandler) -> Result<Self> {
         let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), config.http_port);
 
-        let inner = http::ServerBuilder::new(io)
+        let inner = jsonrpc_http_server::ServerBuilder::new(io)
             .threads(config.http_threads)
             .max_request_body_size(config.rpc_max_payload)
             .start_http(&address)?;
@@ -39,7 +39,7 @@ impl HttpServer {
 
 /// Wrapper around jsonrpc-ws-server implementation.
 struct WebSocketServer {
-    inner: ws::Server,
+    inner: jsonrpc_ws_server::Server,
 }
 
 impl WebSocketServer {
@@ -47,13 +47,13 @@ impl WebSocketServer {
     pub fn start(config: &Configuration, io: IoHandler) -> Result<Self> {
         let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), config.ws_port);
 
-        let inner = ws::ServerBuilder::new(io)
+        let inner = jsonrpc_ws_server::ServerBuilder::new(io)
             .max_payload(config.rpc_max_payload)
             .max_connections(config.ws_max_connections)
             .start(&address)
             .map_err(|err| match err {
-                ws::Error::Io(io) => io,
-                ws::Error::ConnectionClosed => ErrorKind::BrokenPipe.into(),
+                jsonrpc_ws_server::Error::Io(io) => io,
+                jsonrpc_ws_server::Error::ConnectionClosed => ErrorKind::BrokenPipe.into(),
                 err => {
                     error!("{}", err);
                     ErrorKind::Other.into()
