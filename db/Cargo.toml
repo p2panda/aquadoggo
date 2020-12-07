@@ -6,5 +6,5 @@ edition = "2018"
 
 [dependencies]
 async-std = { version = "1.7.0", features = ["unstable", "attributes"] }
-sqlx = { version = "0.4.1", features = ["runtime-async-std-native-tls", "any", "sqlite", "postgres"] }
+sqlx = { version = "0.4.1", features = ["runtime-async-std-native-tls", "any", "sqlite", "mysql", "postgres"] }
 anyhow = "1.0.35"
