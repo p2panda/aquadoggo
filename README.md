@@ -18,7 +18,7 @@ OPTIONS:
 
 ## Environment variables
 
-* `DATABASE_URL` Database url (SQLite, MySQL, PostgreSQL) (default `sqlite:$HOME/.local/share/p2panda/main.db` on Linux).
+* `DATABASE_URL` Database url (SQLite, MySQL, PostgreSQL) (default `sqlite:<data-dir>/main.db` on Linux).
 * `DATABASE_MAX_CONNECTIONS` Maximum number of database connections in pool (default `32`).
 * `HTTP_PORT` RPC API HTTP server port (default `9123`).
 * `HTTP_THREADS` Number of HTTP server threads to run (default `4`).
