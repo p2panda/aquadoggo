@@ -7,7 +7,7 @@ env:
 
 jobs:
   test:
-    name: rust build
+    name: build and test
 
     runs-on: ubuntu-latest
 
