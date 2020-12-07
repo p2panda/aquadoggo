@@ -25,7 +25,7 @@ const DEFAULT_SQLITE_NAME: &str = "main.db";
 pub struct Configuration {
     /// Path to data directory.
     pub base_path: Option<PathBuf>,
-    /// Database uri (sqlite or postgres).
+    /// Database url (sqlite, mysql or postgres).
     pub database_url: Option<String>,
     /// Maximum number of database connections in pool.
     pub database_max_connections: u32,
@@ -93,7 +93,7 @@ impl Configuration {
                 let mut path = config.base_path.clone().unwrap();
                 path.push(DEFAULT_SQLITE_NAME);
                 Some(format!("sqlite:{}", path.to_str().unwrap()))
-            },
+            }
         };
 
         Ok(config)

@@ -34,6 +34,7 @@ impl Runtime {
     pub async fn start(config: Configuration) -> Self {
         let mut task_manager = TaskManager::new();
 
+        // Initialize database and get connection pool
         let pool = initialize_db(&config)
             .await
             .expect("Could not initialize database");
