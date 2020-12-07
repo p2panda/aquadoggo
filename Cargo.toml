@@ -2,6 +2,7 @@
 members = [
   "bin",
   "core",
+  "db",
   "node",
   "rpc",
 ]

@@ -12,7 +12,8 @@ struct Opt {
     data_dir: Option<std::path::PathBuf>,
 }
 
-fn main() {
+#[async_std::main]
+async fn main() {
     env_logger::init();
 
     // Parse command line arguments and load configuration
@@ -20,7 +21,7 @@ fn main() {
     let config = Configuration::new(opt.data_dir).expect("Could not load configuration");
 
     // Start p2panda node in async runtime
-    let node = Runtime::start(config);
+    let node = Runtime::start(config).await;
 
     // Run this until [CTRL] + [C] got pressed
     task::block_on(async {

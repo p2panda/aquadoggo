@@ -6,6 +6,9 @@ use std::path::PathBuf;
 /// Data directory name.
 const DATA_DIR_NAME: &str = "p2panda";
 
+/// Filename of default sqlite database.
+const DEFAULT_SQLITE_NAME: &str = "main.db";
+
 /// Configuration object holding all important variables throughout the application.
 ///
 /// Each configuration also assures that a data directory exists on the host machine where database
@@ -20,8 +23,12 @@ const DATA_DIR_NAME: &str = "p2panda";
 #[derive(Deserialize)]
 #[serde(default)]
 pub struct Configuration {
-    /// Path to data directory (can be changed via command line argument)
+    /// Path to data directory.
     pub base_path: Option<PathBuf>,
+    /// Database uri (sqlite or postgres).
+    pub database_url: Option<String>,
+    /// Maximum number of database connections in pool.
+    pub database_max_connections: u32,
     /// Maximum number of connections for WebSocket RPC server.
     pub rpc_max_payload: usize,
     /// RPC API HTTP server port.
@@ -38,6 +45,8 @@ impl Default for Configuration {
     fn default() -> Self {
         Self {
             base_path: None,
+            database_url: None,
+            database_max_connections: 32,
             rpc_max_payload: 128,
             http_port: 9123,
             http_threads: 4,
@@ -76,6 +85,16 @@ impl Configuration {
 
         // Store data directory path in object
         config.base_path = Some(base_path);
+
+        // Set default database url (sqlite) when not given
+        config.database_url = match config.database_url {
+            Some(url) => Some(url),
+            None => {
+                let mut path = config.base_path.clone().unwrap();
+                path.push(DEFAULT_SQLITE_NAME);
+                Some(format!("sqlite:{}", path.to_str().unwrap()))
+            },
+        };
 
         Ok(config)
     }
