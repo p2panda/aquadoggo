@@ -48,10 +48,10 @@ impl Default for Configuration {
             database_url: None,
             database_max_connections: 32,
             rpc_max_payload: 128,
-            http_port: 9123,
+            http_port: 2020,
             http_threads: 4,
             ws_max_connections: 512000,
-            ws_port: 9456,
+            ws_port: 2022,
         }
     }
 }
