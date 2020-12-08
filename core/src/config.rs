@@ -7,7 +7,7 @@ use std::path::PathBuf;
 const DATA_DIR_NAME: &str = "p2panda";
 
 /// Filename of default sqlite database.
-const DEFAULT_SQLITE_NAME: &str = "main.db";
+const DEFAULT_SQLITE_NAME: &str = "p2panda-node.sqlite3";
 
 /// Configuration object holding all important variables throughout the application.
 ///
