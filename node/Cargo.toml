@@ -5,9 +5,11 @@ authors = ["Andreas Dzialocha <x1d@adz.garden>"]
 edition = "2018"
 
 [dependencies]
+anyhow = "1.0.35"
 async-ctrlc = "1.2.0"
 async-std = { version = "1.7.0", features = ["unstable", "attributes"] }
 env_logger = "0.8.2"
 p2panda-core = { path = "../core" }
+p2panda-db = { path = "../db" }
 p2panda-rpc = { path = "../rpc" }
 structopt = "0.3.20"

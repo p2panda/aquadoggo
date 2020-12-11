@@ -18,11 +18,13 @@ OPTIONS:
 
 ## Environment variables
 
-* `HTTP_PORT` RPC API HTTP server port (default `9123`).
+* `DATABASE_URL` Database url (SQLite, MySQL, PostgreSQL) (default `sqlite:<data-dir>/p2panda-node.sqlite3`).
+* `DATABASE_MAX_CONNECTIONS` Maximum number of database connections in pool (default `32`).
+* `HTTP_PORT` RPC API HTTP server port (default `2020`).
 * `HTTP_THREADS` Number of HTTP server threads to run (default `4`).
 * `RPC_MAX_PAYLOAD` Maximum size of RPC request body in bytes (default `512000`, 512kB).
 * `WS_MAX_CONNECTIONS` Maximum number of connections for WebSocket RPC server (default `128`).
-* `WS_PORT` RPC API WebSocket server port (default `9456`).
+* `WS_PORT` RPC API WebSocket server port (default `2022`).
 
 ## Development
 
