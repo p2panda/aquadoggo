@@ -1574,6 +1574,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-std",
+ "sqlformat",
  "sqlx",
 ]
 
@@ -2142,9 +2143,9 @@ checksum = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
 
 [[package]]
 name = "sqlformat"
-version = "0.1.5"
+version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74c70f0235b9925cbb106c52af1a28b5ea4885a8b851e328b8562e257a389c2d"
+checksum = "505be58e0d3d361655c644ccc1d05c2ff4b98bb2c3373822813308baced0909a"
 dependencies = [
  "lazy_static",
  "maplit",
