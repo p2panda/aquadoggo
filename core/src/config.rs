@@ -20,7 +20,7 @@ const DEFAULT_SQLITE_NAME: &str = "p2panda-node.sqlite3";
 ///
 /// An optional config.toml file is read in the data directory and can be used to overwrite the
 /// default variables.
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(default)]
 pub struct Configuration {
     /// Path to data directory.
@@ -47,7 +47,7 @@ impl Default for Configuration {
             base_path: None,
             database_url: None,
             database_max_connections: 32,
-            rpc_max_payload: 512000,
+            rpc_max_payload: 512_000,
             http_port: 2020,
             http_threads: 4,
             ws_max_connections: 128,
