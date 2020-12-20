@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["sophiiistika <sophiiistika@mailbox.org>", "adz <x1d@adz.garden>", "cafca <cafca@001.land>"]
 license = "AGPL-3.0-only"
 repository = "https://github.com/p2panda/node"
+readme = "README.md"
 edition = "2018"
 
 [[bin]]
