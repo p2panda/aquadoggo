@@ -1,8 +1,10 @@
 use jsonrpc_core::IoHandler;
 use log::error;
-use p2panda_core::{Configuration, TaskManager};
 use std::io::{ErrorKind, Result};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+use crate::config::Configuration;
+use crate::task::TaskManager;
 
 /// Type alias for http server close handle.
 type HttpCloseHandle = jsonrpc_http_server::CloseHandle;

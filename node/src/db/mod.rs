@@ -30,6 +30,6 @@ pub async fn connection_pool(
 
 /// Run any pending database migrations from inside the application.
 pub async fn run_pending_migrations(pool: &Pool) -> Result<()> {
-    migrate!("./migrations").run(pool).await?;
+    migrate!("./src/db/migrations").run(pool).await?;
     Ok(())
 }

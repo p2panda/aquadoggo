@@ -31,6 +31,7 @@ OPTIONS:
 ```
 cargo run
 cargo test
+cargo build
 ```
 
 ## License
