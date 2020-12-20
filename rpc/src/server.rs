@@ -1,4 +1,5 @@
 use jsonrpc_core::IoHandler;
+use log::error;
 use p2panda_core::{Configuration, TaskManager};
 use std::io::{ErrorKind, Result};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
