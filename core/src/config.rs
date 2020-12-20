@@ -17,9 +17,6 @@ const DEFAULT_SQLITE_NAME: &str = "p2panda-node.sqlite3";
 /// When no custom directory path is set it reads the process environment $XDG_DATA_HOME
 /// variable to determine the XDG data directory path which is $HOME/.local/share/p2panda on
 /// Linux by default.
-///
-/// An optional config.toml file is read in the data directory and can be used to overwrite the
-/// default variables.
 #[derive(Deserialize, Debug)]
 #[serde(default)]
 pub struct Configuration {
