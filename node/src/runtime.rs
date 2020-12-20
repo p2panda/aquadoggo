@@ -24,6 +24,7 @@ async fn initialize_db(config: &Configuration) -> Result<Pool> {
 }
 
 /// Main runtime managing the p2panda node process.
+#[allow(missing_debug_implementations)]
 pub struct Runtime {
     pool: Pool,
     rpc_server: RpcServer,

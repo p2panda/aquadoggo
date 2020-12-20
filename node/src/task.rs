@@ -4,7 +4,7 @@ use log::debug;
 use std::error::Error;
 
 /// Generic Result type for all async tasks used by TaskManager.
-pub type FutureResult<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
+pub type FutureResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
 /// Handles multiple concurrent tasks and exists them gracefully on shutdown.
 pub struct TaskManager {
