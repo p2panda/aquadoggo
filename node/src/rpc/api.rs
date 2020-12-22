@@ -90,6 +90,42 @@ mod tests {
         .replace("\n", "")
     }
 
+    // Helper method to generate valid JSON RPC error response string
+    fn rpc_error<'a>(code: i16, message: &str) -> String {
+        format!(
+            r#"{{
+            "jsonrpc": "2.0",
+            "error": {{
+                "code": {},
+                "message": "<message>"
+            }},
+            "id": 1
+        }}"#,
+            code,
+        )
+        .replace(" ", "")
+        .replace("\n", "")
+        .replace("<message>", message)
+    }
+
+    #[test]
+    fn respond_with_missing_param_error() {
+        let io = ApiService::io_handler();
+
+        let request = rpc_request(
+            "panda_nextEntryArguments",
+            r#"
+            {
+                "schema": "test"
+            }
+            "#,
+        );
+
+        let response = rpc_error(-32602, "Invalid params: missing field `author`.");
+
+        assert_eq!(io.handle_request_sync(&request), Some(response));
+    }
+
     #[test]
     fn next_entry_arguments() {
         let io = ApiService::io_handler();
