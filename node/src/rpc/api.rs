@@ -1,4 +1,3 @@
-use jsonrpc_core::futures::future;
 use jsonrpc_core::{BoxFuture, IoHandler, Params, Result};
 use jsonrpc_derive::rpc;
 use serde::{Deserialize, Serialize};
@@ -44,18 +43,17 @@ impl ApiService {
 }
 
 impl Api for ApiService {
-    fn next_entry_arguments(&self, params: Params) -> BoxFuture<Result<EntryArgs>> {
-        let _parsed: EntryArgsParams = params.parse().unwrap();
+    fn next_entry_arguments(&self, params_raw: Params) -> BoxFuture<Result<EntryArgs>> {
+        Box::pin(async {
+            let _params: EntryArgsParams = params_raw.parse()?;
 
-        Box::pin(future::ready(
             Ok(EntryArgs {
                 encoded_entry_backlink: String::from("encoded_entry_backlink"),
                 encoded_entry_skiplink: String::from("skiplink"),
                 last_seq_num: 1,
                 log_id: 0,
             })
-            .into(),
-        ))
+        })
     }
 }
 
