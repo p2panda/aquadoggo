@@ -5,10 +5,10 @@ name = "p2panda-rpc"
 version = "0.1.0"
 
 [dependencies]
-jsonrpc-core = "15.1.0"
-jsonrpc-derive = "15.1.0"
-jsonrpc-http-server = "15.1.0"
-jsonrpc-ws-server = "15.1.0"
+jsonrpc-core = "16.0.0"
+jsonrpc-derive = "16.0.0"
+jsonrpc-http-server = "16.0.0"
+jsonrpc-ws-server = "16.0.0"
 log = "0.4.11"
 p2panda-core = {path = "../core"}
 serde = {version = "1.0.118", features = ["derive"]}
