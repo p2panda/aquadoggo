@@ -11,8 +11,8 @@ pub struct EntryArgsParams {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EntryArgs {
-    encoded_entry_backlink: String,
-    encoded_entry_skiplink: String,
+    encoded_entry_backlink: Option<String>,
+    encoded_entry_skiplink: Option<String>,
     last_seq_num: u64,
     log_id: u64,
 }
@@ -48,8 +48,8 @@ impl Api for ApiService {
             let _params: EntryArgsParams = params_raw.parse()?;
 
             Ok(EntryArgs {
-                encoded_entry_backlink: String::from("encoded_entry_backlink"),
-                encoded_entry_skiplink: String::from("skiplink"),
+                encoded_entry_backlink: Some(String::from("encoded_entry_backlink")),
+                encoded_entry_skiplink: Some(String::from("skiplink")),
                 last_seq_num: 1,
                 log_id: 0,
             })
