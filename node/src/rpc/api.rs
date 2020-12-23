@@ -59,17 +59,18 @@ impl Api for ApiService {
 
 #[cfg(test)]
 mod tests {
+    use jsonrpc_core::ErrorCode;
     use super::ApiService;
 
     // Helper method to generate valid JSON RPC request string
     fn rpc_request(method: &str, params: &str) -> String {
         format!(
             r#"{{
-            "jsonrpc": "2.0",
-            "method": "{}",
-            "params": {},
-            "id": 1
-        }}"#,
+                "jsonrpc": "2.0",
+                "method": "{}",
+                "params": {},
+                "id": 1
+            }}"#,
             method, params
         )
         .replace(" ", "")
@@ -80,10 +81,10 @@ mod tests {
     fn rpc_response<'a>(result: &str) -> String {
         format!(
             r#"{{
-            "jsonrpc": "2.0",
-            "result": {},
-            "id": 1
-        }}"#,
+                "jsonrpc": "2.0",
+                "result": {},
+                "id": 1
+            }}"#,
             result
         )
         .replace(" ", "")
@@ -91,17 +92,17 @@ mod tests {
     }
 
     // Helper method to generate valid JSON RPC error response string
-    fn rpc_error<'a>(code: i16, message: &str) -> String {
+    fn rpc_error<'a>(code: ErrorCode, message: &str) -> String {
         format!(
             r#"{{
-            "jsonrpc": "2.0",
-            "error": {{
-                "code": {},
-                "message": "<message>"
-            }},
-            "id": 1
-        }}"#,
-            code,
+                "jsonrpc": "2.0",
+                "error": {{
+                    "code": {},
+                    "message": "<message>"
+                }},
+                "id": 1
+            }}"#,
+            code.code(),
         )
         .replace(" ", "")
         .replace("\n", "")
@@ -114,14 +115,15 @@ mod tests {
 
         let request = rpc_request(
             "panda_nextEntryArguments",
-            r#"
-            {
+            r#"{
                 "schema": "test"
-            }
-            "#,
+            }"#,
         );
 
-        let response = rpc_error(-32602, "Invalid params: missing field `author`.");
+        let response = rpc_error(
+            ErrorCode::InvalidParams,
+            "Invalid params: missing field `author`.",
+        );
 
         assert_eq!(io.handle_request_sync(&request), Some(response));
     }
@@ -132,23 +134,19 @@ mod tests {
 
         let request = rpc_request(
             "panda_nextEntryArguments",
-            r#"
-            {
+            r#"{
                 "author": "world",
                 "schema": "test"
-            }
-            "#,
+            }"#,
         );
 
         let response = rpc_response(
-            r#"
-            {
+            r#"{
                 "encodedEntryBacklink": "encoded_entry_backlink",
                 "encodedEntrySkiplink": "skiplink",
                 "lastSeqNum": 1,
                 "logId": 0
-            }
-            "#,
+            }"#,
         );
 
         assert_eq!(io.handle_request_sync(&request), Some(response));
