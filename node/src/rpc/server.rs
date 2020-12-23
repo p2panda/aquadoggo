@@ -97,7 +97,7 @@ impl RpcServer {
         });
 
         // Start WebSocket RPC server
-        let ws_server = WebSocketServer::start(&config, io.clone())
+        let ws_server = WebSocketServer::start(&config, io)
             .expect("Could not start WebSocket JSON RPC API server");
         let close_handle_ws = ws_server.close_handle();
 
