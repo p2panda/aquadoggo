@@ -1,8 +1,5 @@
 [workspace]
 members = [
-  "bin",
-  "core",
-  "db",
   "node",
-  "rpc",
+  "node_cli",
 ]

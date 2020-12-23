@@ -1,5 +1,6 @@
 use anyhow::Result;
 use directories::ProjectDirs;
+use serde::Deserialize;
 use std::fs;
 use std::path::PathBuf;
 

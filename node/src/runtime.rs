@@ -1,7 +1,9 @@
 use anyhow::Result;
-use p2panda_core::{Configuration, TaskManager};
-use p2panda_db::utils::{connection_pool, create_database, run_pending_migrations, Pool};
-use p2panda_rpc::{ApiService, RpcServer};
+
+use crate::config::Configuration;
+use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
+use crate::rpc::{ApiService, RpcServer};
+use crate::task::TaskManager;
 
 /// Makes sure database is created and migrated before returning connection pool.
 async fn initialize_db(config: &Configuration) -> Result<Pool> {
@@ -22,6 +24,7 @@ async fn initialize_db(config: &Configuration) -> Result<Pool> {
 }
 
 /// Main runtime managing the p2panda node process.
+#[allow(missing_debug_implementations)]
 pub struct Runtime {
     pool: Pool,
     rpc_server: RpcServer,
