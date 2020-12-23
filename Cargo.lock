@@ -739,9 +739,9 @@ checksum = "3dcaa9ae7725d12cdb85b3ad99a434db70b468c09ded17e012d86b5c1010f7a7"
 
 [[package]]
 name = "funty"
-version = "1.0.1"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ba62103ce691c2fd80fbae2213dfdda9ce60804973ac6b6e97de818ea7f52c8"
+checksum = "fed34cd105917e91daa4da6b3728c47b068749d6a62c59811f06ed2ac71d9da7"
 
 [[package]]
 name = "futures"
@@ -975,9 +975,9 @@ dependencies = [
 
 [[package]]
 name = "heck"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20564e78d53d2bb135c343b3f47714a56af2061f1c928fdb541dc7b9fdd94205"
+checksum = "87cbf45460356b7deeb5e3415b5563308c0a9b057c85e12b06ad551f98d0a6ac"
 dependencies = [
  "unicode-segmentation",
 ]
@@ -1612,55 +1612,14 @@ dependencies = [
  "envy",
  "exit-future",
  "futures 0.3.8",
-<<<<<<< HEAD
-=======
- "log",
- "serde",
-]
-
-[[package]]
-name = "p2panda-db"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-std",
- "sqlformat",
- "sqlx",
-]
-
-[[package]]
-name = "p2panda-node"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-ctrlc",
- "async-std",
- "env_logger",
- "p2panda-core",
- "p2panda-db",
- "p2panda-rpc",
- "structopt",
-]
-
-[[package]]
-name = "p2panda-rpc"
-version = "0.1.0"
-dependencies = [
->>>>>>> dadf3fc (Start writing rpc method for next entry args)
  "jsonrpc-core",
  "jsonrpc-derive",
  "jsonrpc-http-server",
  "jsonrpc-ws-server",
  "log",
-<<<<<<< HEAD
  "serde",
  "sqlformat",
  "sqlx",
-=======
- "p2panda-core",
- "serde",
- "serde_json",
->>>>>>> dadf3fc (Start writing rpc method for next entry args)
 ]
 
 [[package]]
@@ -1706,7 +1665,7 @@ checksum = "6d7744ac029df22dca6284efe4e898991d28e3085c706c972bcd7da4a27a15eb"
 dependencies = [
  "instant",
  "lock_api 0.4.2",
- "parking_lot_core 0.8.1",
+ "parking_lot_core 0.8.2",
 ]
 
 [[package]]
@@ -1726,26 +1685,9 @@ dependencies = [
 
 [[package]]
 name = "parking_lot_core"
-<<<<<<< HEAD
-version = "0.7.2"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d58c7c768d4ba344e3e8d72518ac13e259d7c7ade24167003b8488e10b6740a3"
-dependencies = [
- "cfg-if 0.1.10",
- "cloudabi",
- "libc",
- "redox_syscall",
- "smallvec 1.5.1",
- "winapi 0.3.9",
-]
-
-[[package]]
-name = "parking_lot_core"
-=======
->>>>>>> 5579ef2 (Bump jsonrpc version to 0.16.0)
-version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7c6d9b8427445284a09c55be860a15855ab580a417ccad9da88f5a06787ced0"
+checksum = "9ccb628cad4f84851442432c60ad8e1f607e29752d0bf072cbd0baf28aa34272"
 dependencies = [
  "cfg-if 1.0.0",
  "instant",
@@ -1928,9 +1870,9 @@ dependencies = [
 
 [[package]]
 name = "quote"
-version = "1.0.7"
+version = "1.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa563d17ecb180e500da1cfd2b028310ac758de548efdd203e18f283af693f37"
+checksum = "991431c3519a3f36861882da93630ce66b52918dcf1b8e2fd66b397fc96f28df"
 dependencies = [
  "proc-macro2",
 ]
@@ -2441,9 +2383,9 @@ checksum = "1e81da0851ada1f3e9d4312c704aa4f8806f0f9d69faaf8df2f3464b4a9437c2"
 
 [[package]]
 name = "syn"
-version = "1.0.54"
+version = "1.0.55"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a2af957a63d6bd42255c359c93d9bfdb97076bd3b820897ce55ffbfbf107f44"
+checksum = "a571a711dddd09019ccc628e1b17fe87c59b09d513c06c026877aa708334f37a"
 dependencies = [
  "proc-macro2",
  "quote",
