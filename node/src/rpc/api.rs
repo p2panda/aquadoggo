@@ -78,7 +78,7 @@ mod tests {
     }
 
     // Helper method to generate valid JSON RPC response string
-    fn rpc_response<'a>(result: &str) -> String {
+    fn rpc_response(result: &str) -> String {
         format!(
             r#"{{
                 "jsonrpc": "2.0",
@@ -92,7 +92,7 @@ mod tests {
     }
 
     // Helper method to generate valid JSON RPC error response string
-    fn rpc_error<'a>(code: ErrorCode, message: &str) -> String {
+    fn rpc_error(code: ErrorCode, message: &str) -> String {
         format!(
             r#"{{
                 "jsonrpc": "2.0",
