@@ -59,8 +59,8 @@ impl Api for ApiService {
 
 #[cfg(test)]
 mod tests {
-    use jsonrpc_core::ErrorCode;
     use super::ApiService;
+    use jsonrpc_core::ErrorCode;
 
     // Helper method to generate valid JSON RPC request string
     fn rpc_request(method: &str, params: &str) -> String {

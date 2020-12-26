@@ -8,7 +8,7 @@
     unsafe_code,
     unstable_features,
     unused_import_braces,
-    unused_qualifications,
+    unused_qualifications
 )]
 
 mod config;
