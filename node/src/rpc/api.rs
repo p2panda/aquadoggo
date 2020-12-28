@@ -1,14 +1,17 @@
 use async_std::channel::{unbounded, Sender};
+use async_std::task;
 use jsonrpc_core::{BoxFuture, IoHandler, Params, Result};
 use jsonrpc_derive::rpc;
 use serde::{Deserialize, Serialize};
 
+/// Request body of `panda_getEntryArguments`.
 #[derive(Deserialize, Debug)]
 pub struct EntryArgsRequest {
     author: String,
     schema: String,
 }
 
+/// Response body of `panda_getEntryArguments`.
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct EntryArgsResponse {
@@ -18,19 +21,22 @@ pub struct EntryArgsResponse {
     log_id: u64,
 }
 
-/// Node RPC API methods.
+/// Trait defining all Node RPC API methods.
 #[rpc(server)]
 pub trait Api {
     #[rpc(name = "panda_getEntryArguments", params = "raw")]
     fn get_entry_args(&self, params: Params) -> BoxFuture<Result<EntryArgsResponse>>;
 }
 
+/// Channel messages to send RPC command requests and their payloads to ApiService. Every message
+/// contains a `Sender` as a `back_channel` to send the response back to the RPC call.
 #[derive(Debug)]
 enum ApiServiceMessages {
     GetEntryArgs(EntryArgsRequest, Sender<Result<EntryArgsResponse>>),
 }
 
-/// Service implementing API methods.
+/// Service implementing API methods. Exposes a `service_channel` for frontend API to notify
+/// service about incoming requests.
 pub struct ApiService {
     service_channel: Sender<ApiServiceMessages>,
 }
@@ -40,7 +46,7 @@ impl ApiService {
     pub fn new() -> Self {
         let (service_channel, service_channel_notifier) = unbounded::<ApiServiceMessages>();
 
-        async_std::task::spawn(async move {
+        task::spawn(async move {
             match service_channel_notifier.recv().await {
                 Ok(ApiServiceMessages::GetEntryArgs(_params, back_channel)) => {
                     back_channel
@@ -53,7 +59,9 @@ impl ApiService {
                         .await
                         .unwrap();
                 }
-                _ => {}
+                Err(_err) => {
+                    // Channel closed, there are no more messages.
+                }
             }
         });
 
@@ -69,6 +77,9 @@ impl ApiService {
     }
 }
 
+/// API frontend for the ApiService. Every implemented API method sents the command further via the
+/// `service_channel` to the ApiService where they get handled and then returned via `back_channel`
+/// to then finally send the JSON RPC response back to the client.
 impl Api for ApiService {
     fn get_entry_args(&self, params_raw: Params) -> BoxFuture<Result<EntryArgsResponse>> {
         let service_channel = self.service_channel.clone();
@@ -77,12 +88,11 @@ impl Api for ApiService {
             let params: EntryArgsRequest = params_raw.parse()?;
             let (back_channel, back_channel_notifier) = unbounded();
 
-            async_std::task::block_on(
+            task::block_on(
                 service_channel.send(ApiServiceMessages::GetEntryArgs(params, back_channel)),
             )
             .unwrap();
-
-            async_std::task::block_on(back_channel_notifier.recv()).unwrap()
+            task::block_on(back_channel_notifier.recv()).unwrap()
         })
     }
 }
