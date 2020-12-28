@@ -4,14 +4,14 @@ use jsonrpc_derive::rpc;
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Debug)]
-pub struct EntryArgsParams {
+pub struct EntryArgsRequest {
     author: String,
     schema: String,
 }
 
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct EntryArgs {
+pub struct EntryArgsResponse {
     encoded_entry_backlink: Option<String>,
     encoded_entry_skiplink: Option<String>,
     last_seq_num: u64,
@@ -21,30 +21,30 @@ pub struct EntryArgs {
 /// Node RPC API methods.
 #[rpc(server)]
 pub trait Api {
-    #[rpc(name = "panda_nextEntryArguments", params = "raw")]
-    fn next_entry_arguments(&self, params: Params) -> BoxFuture<Result<EntryArgs>>;
+    #[rpc(name = "panda_getEntryArguments", params = "raw")]
+    fn get_entry_args(&self, params: Params) -> BoxFuture<Result<EntryArgsResponse>>;
 }
 
 #[derive(Debug)]
-enum ApiServiceHandler {
-    NextEntryArgs(EntryArgsParams, Sender<Result<EntryArgs>>),
+enum ApiServiceMessages {
+    GetEntryArgs(EntryArgsRequest, Sender<Result<EntryArgsResponse>>),
 }
 
 /// Service implementing API methods.
 pub struct ApiService {
-    sender: Sender<ApiServiceHandler>,
+    service_channel: Sender<ApiServiceMessages>,
 }
 
 impl ApiService {
     /// Creates a JSON RPC API service.
     pub fn new() -> Self {
-        let (sender, receiver) = unbounded::<ApiServiceHandler>();
+        let (service_channel, service_channel_notifier) = unbounded::<ApiServiceMessages>();
 
         async_std::task::spawn(async move {
-            match receiver.recv().await {
-                Ok(ApiServiceHandler::NextEntryArgs(_params, send_back)) => {
-                    send_back
-                        .send(Ok(EntryArgs {
+            match service_channel_notifier.recv().await {
+                Ok(ApiServiceMessages::GetEntryArgs(_params, back_channel)) => {
+                    back_channel
+                        .send(Ok(EntryArgsResponse {
                             encoded_entry_backlink: Some(String::from("encoded_entry_backlink")),
                             encoded_entry_skiplink: Some(String::from("skiplink")),
                             last_seq_num: 1,
@@ -53,13 +53,11 @@ impl ApiService {
                         .await
                         .unwrap();
                 }
-                _ => {
-                    panic!("ERROR");
-                }
+                _ => {}
             }
         });
 
-        ApiService { sender }
+        ApiService { service_channel }
     }
 
     /// Creates JSON RPC API service and wraps it around a jsonrpc_core IoHandler object which can
@@ -72,19 +70,20 @@ impl ApiService {
 }
 
 impl Api for ApiService {
-    fn next_entry_arguments(&self, params_raw: Params) -> BoxFuture<Result<EntryArgs>> {
-        let params: EntryArgsParams = params_raw.parse().unwrap();
-        let (sender, receiver) = unbounded();
+    fn get_entry_args(&self, params_raw: Params) -> BoxFuture<Result<EntryArgsResponse>> {
+        let service_channel = self.service_channel.clone();
 
-        async_std::task::block_on(
-            self.sender
-                .send(ApiServiceHandler::NextEntryArgs(params, sender)),
-        )
-        .unwrap();
+        Box::pin(async move {
+            let params: EntryArgsRequest = params_raw.parse()?;
+            let (back_channel, back_channel_notifier) = unbounded();
 
-        let response = async_std::task::block_on(receiver.recv()).unwrap();
+            async_std::task::block_on(
+                service_channel.send(ApiServiceMessages::GetEntryArgs(params, back_channel)),
+            )
+            .unwrap();
 
-        Box::pin(futures::future::ready(response))
+            async_std::task::block_on(back_channel_notifier.recv()).unwrap()
+        })
     }
 }
 
@@ -140,31 +139,31 @@ mod tests {
         .replace("<message>", message)
     }
 
-    // #[test]
-    // fn respond_with_missing_param_error() {
-    //     let io = ApiService::io_handler();
+    #[test]
+    fn respond_with_missing_param_error() {
+        let io = ApiService::io_handler();
 
-    //     let request = rpc_request(
-    //         "panda_nextEntryArguments",
-    //         r#"{
-    //             "schema": "test"
-    //         }"#,
-    //     );
+        let request = rpc_request(
+            "panda_getEntryArguments",
+            r#"{
+                "schema": "test"
+            }"#,
+        );
 
-    //     let response = rpc_error(
-    //         ErrorCode::InvalidParams,
-    //         "Invalid params: missing field `author`.",
-    //     );
+        let response = rpc_error(
+            ErrorCode::InvalidParams,
+            "Invalid params: missing field `author`.",
+        );
 
-    //     assert_eq!(io.handle_request_sync(&request), Some(response));
-    // }
+        assert_eq!(io.handle_request_sync(&request), Some(response));
+    }
 
     #[test]
     fn next_entry_arguments() {
         let io = ApiService::io_handler();
 
         let request = rpc_request(
-            "panda_nextEntryArguments",
+            "panda_getEntryArguments",
             r#"{
                 "author": "world",
                 "schema": "test"
