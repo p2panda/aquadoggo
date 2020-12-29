@@ -16,10 +16,7 @@ pub async fn create_database(url: String) -> Result<()> {
 }
 
 /// Create a database agnostic connection pool.
-pub async fn connection_pool(
-    url: String,
-    max_connections: u32,
-) -> std::result::Result<Pool, Error> {
+pub async fn connection_pool(url: String, max_connections: u32) -> Result<Pool, Error> {
     let pool: Pool = AnyPoolOptions::new()
         .max_connections(max_connections)
         .connect(&url)

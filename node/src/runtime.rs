@@ -43,7 +43,7 @@ impl Runtime {
             .expect("Could not initialize database");
 
         // Start JSON RPC API servers
-        let io_handler = ApiService::io_handler();
+        let io_handler = ApiService::io_handler(pool.clone());
         let rpc_server = RpcServer::start(&config, &mut task_manager, io_handler);
 
         Self {

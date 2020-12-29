@@ -1,8 +1,10 @@
 use async_std::channel::{unbounded, Sender};
 use async_std::task;
-use jsonrpc_core::{BoxFuture, IoHandler, Params, Result};
+use jsonrpc_core::{BoxFuture, Error, IoHandler, Params, Result};
 use jsonrpc_derive::rpc;
 use serde::{Deserialize, Serialize};
+
+use crate::db::Pool;
 
 /// Request body of `panda_getEntryArguments`.
 #[derive(Deserialize, Debug)]
@@ -17,7 +19,7 @@ pub struct EntryArgsRequest {
 pub struct EntryArgsResponse {
     encoded_entry_backlink: Option<String>,
     encoded_entry_skiplink: Option<String>,
-    last_seq_num: u64,
+    last_seq_num: Option<u64>,
     log_id: u64,
 }
 
@@ -28,34 +30,33 @@ pub trait Api {
     fn get_entry_args(&self, params: Params) -> BoxFuture<Result<EntryArgsResponse>>;
 }
 
-/// Channel messages to send RPC command requests and their payloads to ApiService. Every message
-/// contains a `Sender` as a `back_channel` to send the response back to the RPC call.
+/// Channel messages to send RPC command requests and their payloads from frontend Api to
+/// ApiService backend.
+///
+/// Every message contains a `Sender` as a `back_channel` to send the response back to the RPC
+/// frontend.
 #[derive(Debug)]
 enum ApiServiceMessages {
     GetEntryArgs(EntryArgsRequest, Sender<Result<EntryArgsResponse>>),
 }
 
-/// Service implementing API methods. Exposes a `service_channel` for frontend API to notify
-/// service about incoming requests.
+/// Service implementing API methods.
+///
+/// Exposes a `service_channel` for frontend API to notify service about incoming requests.
 pub struct ApiService {
     service_channel: Sender<ApiServiceMessages>,
 }
 
 impl ApiService {
     /// Creates a JSON RPC API service.
-    pub fn new() -> Self {
+    pub fn new(pool: Pool) -> Self {
         let (service_channel, service_channel_notifier) = unbounded::<ApiServiceMessages>();
 
         task::spawn(async move {
             match service_channel_notifier.recv().await {
-                Ok(ApiServiceMessages::GetEntryArgs(_params, back_channel)) => {
+                Ok(ApiServiceMessages::GetEntryArgs(params, back_channel)) => {
                     back_channel
-                        .send(Ok(EntryArgsResponse {
-                            encoded_entry_backlink: Some(String::from("encoded_entry_backlink")),
-                            encoded_entry_skiplink: Some(String::from("skiplink")),
-                            last_seq_num: 1,
-                            log_id: 0,
-                        }))
+                        .send(get_entry_args(pool, params).await)
                         .await
                         .unwrap();
                 }
@@ -68,18 +69,20 @@ impl ApiService {
         ApiService { service_channel }
     }
 
-    /// Creates JSON RPC API service and wraps it around a jsonrpc_core IoHandler object which can
-    /// be used for a server exposing the API.
-    pub fn io_handler() -> IoHandler {
+    /// Creates JSON RPC API service and wraps it around a jsonrpc_core `IoHandler` object which
+    /// can be used for a server exposing the API.
+    pub fn io_handler(pool: Pool) -> IoHandler {
         let mut io = IoHandler::default();
-        io.extend_with(Api::to_delegate(ApiService::new()));
+        io.extend_with(Api::to_delegate(ApiService::new(pool)));
         io
     }
 }
 
-/// API frontend for the ApiService. Every implemented API method sents the command further via the
-/// `service_channel` to the ApiService where they get handled and then returned via `back_channel`
-/// to then finally send the JSON RPC response back to the client.
+/// API frontend for ApiService.
+///
+/// Every implemented API method sends the command further via the `service_channel` to the
+/// ApiService backend where it gets handled. Its being returned via the `back_channel` to finally
+/// send the JSON RPC response back to the client.
 impl Api for ApiService {
     fn get_entry_args(&self, params_raw: Params) -> BoxFuture<Result<EntryArgsResponse>> {
         let service_channel = self.service_channel.clone();
@@ -97,10 +100,34 @@ impl Api for ApiService {
     }
 }
 
+async fn get_entry_args(
+    _pool: Pool,
+    _params: EntryArgsRequest,
+) -> std::result::Result<EntryArgsResponse, Error> {
+    Ok(EntryArgsResponse {
+        encoded_entry_backlink: Some("encoded_entry_backlink".to_owned()),
+        encoded_entry_skiplink: Some("skiplink".to_owned()),
+        last_seq_num: None,
+        log_id: 0,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::ApiService;
+
     use jsonrpc_core::ErrorCode;
+
+    use crate::db::{connection_pool, run_pending_migrations, Pool};
+
+    // Helper method to create test database pool
+    async fn initialize_test_db() -> Pool {
+        let pool = connection_pool("sqlite::memory:".to_owned(), 5)
+            .await
+            .unwrap();
+        run_pending_migrations(&pool).await.unwrap();
+        pool
+    }
 
     // Helper method to generate valid JSON RPC request string
     fn rpc_request(method: &str, params: &str) -> String {
@@ -149,9 +176,10 @@ mod tests {
         .replace("<message>", message)
     }
 
-    #[test]
-    fn respond_with_missing_param_error() {
-        let io = ApiService::io_handler();
+    #[async_std::test]
+    async fn respond_with_missing_param_error() {
+        let pool = initialize_test_db().await;
+        let io = ApiService::io_handler(pool);
 
         let request = rpc_request(
             "panda_getEntryArguments",
@@ -168,9 +196,10 @@ mod tests {
         assert_eq!(io.handle_request_sync(&request), Some(response));
     }
 
-    #[test]
-    fn next_entry_arguments() {
-        let io = ApiService::io_handler();
+    #[async_std::test]
+    async fn next_entry_arguments() {
+        let pool = initialize_test_db().await;
+        let io = ApiService::io_handler(pool);
 
         let request = rpc_request(
             "panda_getEntryArguments",
@@ -184,7 +213,7 @@ mod tests {
             r#"{
                 "encodedEntryBacklink": "encoded_entry_backlink",
                 "encodedEntrySkiplink": "skiplink",
-                "lastSeqNum": 1,
+                "lastSeqNum": null,
                 "logId": 0
             }"#,
         );
