@@ -17,5 +17,8 @@ mod rpc;
 mod runtime;
 mod task;
 
+#[cfg(test)]
+mod test_helpers;
+
 pub use config::Configuration;
 pub use runtime::Runtime;

@@ -8,11 +8,11 @@ use crate::task::TaskManager;
 /// Makes sure database is created and migrated before returning connection pool.
 async fn initialize_db(config: &Configuration) -> Result<Pool> {
     // Create database when not existing
-    create_database(config.database_url.clone().unwrap()).await?;
+    create_database(&config.database_url.clone().unwrap()).await?;
 
     // Create connection pool
     let pool = connection_pool(
-        config.database_url.clone().unwrap(),
+        &config.database_url.clone().unwrap(),
         config.database_max_connections,
     )
     .await?;
@@ -35,6 +35,8 @@ impl Runtime {
     /// Start p2panda node with your configuration. This method can be used to run the node within
     /// other applications.
     pub async fn start(config: Configuration) -> Self {
+        env_logger::init();
+
         let mut task_manager = TaskManager::new();
 
         // Initialize database and get connection pool

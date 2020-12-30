@@ -1,9 +1,12 @@
 use async_std::channel::{unbounded, Sender};
 use async_std::task;
-use jsonrpc_core::{BoxFuture, Error, IoHandler, Params, Result};
+use bamboo_core::lipmaa;
+use jsonrpc_core::{BoxFuture, Error, ErrorCode, IoHandler, Params, Result};
 use jsonrpc_derive::rpc;
+use log::error;
 use serde::{Deserialize, Serialize};
 
+use crate::db::models::{Entry, Log};
 use crate::db::Pool;
 
 /// Request body of `panda_getEntryArguments`.
@@ -19,8 +22,8 @@ pub struct EntryArgsRequest {
 pub struct EntryArgsResponse {
     encoded_entry_backlink: Option<String>,
     encoded_entry_skiplink: Option<String>,
-    last_seq_num: Option<u64>,
-    log_id: u64,
+    last_seq_num: Option<i64>,
+    log_id: i64,
 }
 
 /// Trait defining all Node RPC API methods.
@@ -100,16 +103,58 @@ impl Api for ApiService {
     }
 }
 
+// @TODO: Add params validation (schema hash, author public key)
 async fn get_entry_args(
-    _pool: Pool,
-    _params: EntryArgsRequest,
+    pool: Pool,
+    params: EntryArgsRequest,
 ) -> std::result::Result<EntryArgsResponse, Error> {
-    Ok(EntryArgsResponse {
-        encoded_entry_backlink: Some("encoded_entry_backlink".to_owned()),
-        encoded_entry_skiplink: Some("skiplink".to_owned()),
-        last_seq_num: None,
-        log_id: 0,
-    })
+    // Determine log id for author's schema
+    let log_id = Log::schema_log_id(&pool, &params.author, &params.schema)
+        .await
+        .map_err(|err| {
+            // @TODO: Improve error handling
+            error!("{}", err);
+            Error::new(ErrorCode::ServerError(-1))
+        })?;
+
+    // Find latest entry in this log
+    let entry = Entry::latest(&pool, &params.author, log_id)
+        .await
+        .map_err(|err| {
+            error!("{}", err);
+            Error::new(ErrorCode::ServerError(-1))
+        })?;
+
+    match entry {
+        Some(entry_backlink) => {
+            // Determine skiplink ("lipmaa"-link) entry in this log
+            let entry_skiplink = Entry::at_seq_num(
+                &pool,
+                &params.author,
+                log_id,
+                lipmaa(entry_backlink.seqnum as u64 + 1) as i64,
+            )
+            .await
+            .map_err(|err| {
+                error!("{}", err);
+                Error::new(ErrorCode::ServerError(-1))
+            })?
+            .unwrap();
+
+            Ok(EntryArgsResponse {
+                encoded_entry_backlink: Some(entry_backlink.entry_bytes),
+                encoded_entry_skiplink: Some(entry_skiplink.entry_bytes),
+                last_seq_num: Some(entry_backlink.seqnum),
+                log_id,
+            })
+        }
+        None => Ok(EntryArgsResponse {
+            encoded_entry_backlink: None,
+            encoded_entry_skiplink: None,
+            last_seq_num: None,
+            log_id,
+        }),
+    }
 }
 
 #[cfg(test)]
@@ -118,16 +163,7 @@ mod tests {
 
     use jsonrpc_core::ErrorCode;
 
-    use crate::db::{connection_pool, run_pending_migrations, Pool};
-
-    // Helper method to create test database pool
-    async fn initialize_test_db() -> Pool {
-        let pool = connection_pool("sqlite::memory:".to_owned(), 5)
-            .await
-            .unwrap();
-        run_pending_migrations(&pool).await.unwrap();
-        pool
-    }
+    use crate::test_helpers::initialize_db;
 
     // Helper method to generate valid JSON RPC request string
     fn rpc_request(method: &str, params: &str) -> String {
@@ -178,7 +214,7 @@ mod tests {
 
     #[async_std::test]
     async fn respond_with_missing_param_error() {
-        let pool = initialize_test_db().await;
+        let pool = initialize_db().await;
         let io = ApiService::io_handler(pool);
 
         let request = rpc_request(
@@ -197,8 +233,8 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn next_entry_arguments() {
-        let pool = initialize_test_db().await;
+    async fn get_entry_arguments() {
+        let pool = initialize_db().await;
         let io = ApiService::io_handler(pool);
 
         let request = rpc_request(
@@ -211,10 +247,10 @@ mod tests {
 
         let response = rpc_response(
             r#"{
-                "encodedEntryBacklink": "encoded_entry_backlink",
-                "encodedEntrySkiplink": "skiplink",
+                "encodedEntryBacklink": null,
+                "encodedEntrySkiplink": null,
                 "lastSeqNum": null,
-                "logId": 0
+                "logId": 1
             }"#,
         );
 

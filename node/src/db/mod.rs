@@ -3,23 +3,27 @@ use sqlx::any::{Any, AnyPool, AnyPoolOptions};
 use sqlx::migrate;
 use sqlx::migrate::MigrateDatabase;
 
+pub mod models;
+
 /// Re-export of generic connection pool type.
 pub type Pool = AnyPool;
 
 /// Create database when not existing.
-pub async fn create_database(url: String) -> Result<()> {
-    if !Any::database_exists(&url).await? {
-        Any::create_database(&url).await?;
+pub async fn create_database(url: &str) -> Result<()> {
+    if !Any::database_exists(url).await? {
+        Any::create_database(url).await?;
     }
+
+    Any::drop_database(&url);
 
     Ok(())
 }
 
 /// Create a database agnostic connection pool.
-pub async fn connection_pool(url: String, max_connections: u32) -> Result<Pool, Error> {
+pub async fn connection_pool(url: &str, max_connections: u32) -> Result<Pool, Error> {
     let pool: Pool = AnyPoolOptions::new()
         .max_connections(max_connections)
-        .connect(&url)
+        .connect(url)
         .await?;
 
     Ok(pool)
@@ -27,6 +31,6 @@ pub async fn connection_pool(url: String, max_connections: u32) -> Result<Pool, 
 
 /// Run any pending database migrations from inside the application.
 pub async fn run_pending_migrations(pool: &Pool) -> Result<()> {
-    migrate!("./src/db/migrations").run(pool).await?;
+    migrate!().run(pool).await?;
     Ok(())
 }
