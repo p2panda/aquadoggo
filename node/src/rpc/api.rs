@@ -56,15 +56,19 @@ impl ApiService {
         let (service_channel, service_channel_notifier) = unbounded::<ApiServiceMessages>();
 
         task::spawn(async move {
-            match service_channel_notifier.recv().await {
-                Ok(ApiServiceMessages::GetEntryArgs(params, back_channel)) => {
-                    back_channel
-                        .send(get_entry_args(pool, params).await)
-                        .await
-                        .unwrap();
-                }
-                Err(_err) => {
-                    // Channel closed, there are no more messages.
+            while !service_channel_notifier.is_closed() {
+                let pool = pool.clone();
+
+                match service_channel_notifier.recv().await {
+                    Ok(ApiServiceMessages::GetEntryArgs(params, back_channel)) => {
+                        back_channel
+                            .send(get_entry_args(pool, params).await)
+                            .await
+                            .unwrap();
+                    }
+                    Err(_err) => {
+                        // Channel closed, there are no more messages.
+                    }
                 }
             }
         });
