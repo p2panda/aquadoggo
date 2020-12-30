@@ -1,7 +1,7 @@
-use anyhow::Result;
 use sqlx::{query_as, FromRow};
 
 use crate::db::Pool;
+use crate::errors::Result;
 
 #[derive(FromRow, Debug)]
 pub struct Entry {
@@ -15,6 +15,7 @@ pub struct Entry {
 }
 
 impl Entry {
+    /// Returns the latest bamboo entry of an author's log.
     pub async fn latest(pool: &Pool, author: &str, log_id: i64) -> Result<Option<Entry>> {
         let latest_entry = query_as::<_, Entry>(
             "
@@ -33,6 +34,7 @@ impl Entry {
         Ok(latest_entry)
     }
 
+    /// Returns an entry at sequence number within an author's log.
     pub async fn at_seq_num(
         pool: &Pool,
         author: &str,

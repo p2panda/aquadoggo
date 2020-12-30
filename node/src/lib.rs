@@ -13,6 +13,7 @@
 
 mod config;
 mod db;
+mod errors;
 mod rpc;
 mod runtime;
 mod task;

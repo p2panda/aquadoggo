@@ -1,13 +1,13 @@
 use async_std::channel::{unbounded, Sender};
 use async_std::task;
 use bamboo_core::lipmaa;
-use jsonrpc_core::{BoxFuture, Error, ErrorCode, IoHandler, Params, Result};
+use jsonrpc_core::{BoxFuture, IoHandler, Params};
 use jsonrpc_derive::rpc;
-use log::error;
 use serde::{Deserialize, Serialize};
 
-use crate::db::models::{Entry, Log};
 use crate::db::Pool;
+use crate::db::models::{Entry, Log};
+use crate::errors::Result;
 
 /// Request body of `panda_getEntryArguments`.
 #[derive(Deserialize, Debug)]
@@ -108,26 +108,12 @@ impl Api for ApiService {
 }
 
 // @TODO: Add params validation (schema hash, author public key)
-async fn get_entry_args(
-    pool: Pool,
-    params: EntryArgsRequest,
-) -> std::result::Result<EntryArgsResponse, Error> {
+async fn get_entry_args(pool: Pool, params: EntryArgsRequest) -> Result<EntryArgsResponse> {
     // Determine log id for author's schema
-    let log_id = Log::schema_log_id(&pool, &params.author, &params.schema)
-        .await
-        .map_err(|err| {
-            // @TODO: Improve error handling
-            error!("{}", err);
-            Error::new(ErrorCode::ServerError(-1))
-        })?;
+    let log_id = Log::schema_log_id(&pool, &params.author, &params.schema).await?;
 
     // Find latest entry in this log
-    let entry = Entry::latest(&pool, &params.author, log_id)
-        .await
-        .map_err(|err| {
-            error!("{}", err);
-            Error::new(ErrorCode::ServerError(-1))
-        })?;
+    let entry = Entry::latest(&pool, &params.author, log_id).await?;
 
     match entry {
         Some(entry_backlink) => {
@@ -138,11 +124,7 @@ async fn get_entry_args(
                 log_id,
                 lipmaa(entry_backlink.seqnum as u64 + 1) as i64,
             )
-            .await
-            .map_err(|err| {
-                error!("{}", err);
-                Error::new(ErrorCode::ServerError(-1))
-            })?
+            .await?
             .unwrap();
 
             Ok(EntryArgsResponse {

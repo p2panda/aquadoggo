@@ -1,7 +1,7 @@
-use anyhow::Result;
 use sqlx::{query, query_as, Done, FromRow};
 
 use crate::db::Pool;
+use crate::errors::Result;
 
 const FIRST_USER_LOG_ID: i64 = 1;
 
