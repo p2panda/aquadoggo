@@ -1730,7 +1730,6 @@ dependencies = [
  "async-std",
  "bamboo-core",
  "directories",
- "env_logger",
  "envy",
  "exit-future",
  "futures 0.3.8",

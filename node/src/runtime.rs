@@ -35,8 +35,6 @@ impl Runtime {
     /// Start p2panda node with your configuration. This method can be used to run the node within
     /// other applications.
     pub async fn start(config: Configuration) -> Self {
-        env_logger::init();
-
         let mut task_manager = TaskManager::new();
 
         // Initialize database and get connection pool
