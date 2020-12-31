@@ -20,9 +20,6 @@ impl Log {
         schema: &Schema,
         log_id: &LogId,
     ) -> Result<bool> {
-        // Make sure its odd-numbered
-        assert!(log_id.is_user_log());
-
         let rows_affected = query(
             "
             INSERT INTO logs (author, log_id, schema)
@@ -43,26 +40,34 @@ impl Log {
     ///
     /// User schema log ids are odd-numbered.
     pub async fn find_next_log_id(pool: &Pool, author: &Author) -> Result<LogId> {
-        // @TODO: Do not determine the next one from the max log id as we might be missing free
-        // ones before the largest (we can't assume that log ids from the wild are used
-        // sequentially / without gaps).
-        let last_log_id: (LogId,) = query_as(
+        // Get all log ids from this author
+        let log_ids: Vec<LogId> = query_as::<_, LogId>(
             "
-            SELECT MAX(log_id)
+            SELECT log_id
             FROM logs
             WHERE author = ?1
+            ORDER BY log_id ASC
             ",
         )
         .bind(author)
-        .fetch_one(pool)
+        .fetch_all(pool)
         .await?;
 
-        // @TODO: Check for option not for zero value
-        let next_log_id = if last_log_id.0.is_zero() {
-            LogId::default()
-        } else {
-            last_log_id.0.next_user_log()?
-        };
+        // Find next free user log id
+        let mut next_log_id = LogId::default();
+        let mut current_log_ids = log_ids.iter();
+
+        while let Some(log_id) = current_log_ids.next() {
+            if log_id.is_system_log() {
+                continue;
+            }
+
+            if next_log_id == *log_id {
+                next_log_id = next_log_id.next().unwrap();
+            } else {
+                break;
+            }
+        }
 
         Ok(next_log_id)
     }
@@ -73,7 +78,7 @@ impl Log {
     /// has already been registered for a certain schema and returns its id. If no log has been
     /// found it automatically returns the next possible free log id.
     pub async fn schema_log_id(pool: &Pool, author: &Author, schema: &Schema) -> Result<LogId> {
-        let log = query_as::<_, Log>(
+        let result = query_as::<_, LogId>(
             "
             SELECT log_id
             FROM logs
@@ -85,8 +90,8 @@ impl Log {
         .fetch_optional(pool)
         .await?;
 
-        let log_id = match log {
-            Some(row) => row.log_id,
+        let log_id = match result {
+            Some(value) => value,
             None => Self::find_next_log_id(pool, author).await?,
         };
 
@@ -99,7 +104,7 @@ mod tests {
     use super::Log;
 
     use crate::test_helpers::initialize_db;
-    use crate::types::{Author, Schema};
+    use crate::types::{Author, LogId, Schema};
 
     #[async_std::test]
     async fn initial_log_id() {
@@ -111,7 +116,7 @@ mod tests {
         let schema = Schema::new("lala").unwrap();
 
         let log_id = Log::schema_log_id(&pool, &author, &schema).await.unwrap();
-        assert_eq!(log_id.0, 1);
+        assert_eq!(log_id, LogId::new(1).unwrap());
     }
 
     #[async_std::test]
@@ -124,20 +129,30 @@ mod tests {
 
         let schema_first = Schema::new("bubu").unwrap();
         let schema_second = Schema::new("baba").unwrap();
+        let schema_third = Schema::new("lulu").unwrap();
+        let schema_system = Schema::new("system").unwrap();
 
         let log_id = Log::find_next_log_id(&pool, &author).await.unwrap();
-        assert_eq!(log_id.0, 1);
+        assert_eq!(log_id, LogId::new(1).unwrap());
         Log::register_log_id(&pool, &author, &schema_first, &log_id)
             .await
             .unwrap();
 
-        let log_id = Log::find_next_log_id(&pool, &author).await.unwrap();
-        assert_eq!(log_id.0, 3);
-        Log::register_log_id(&pool, &author, &schema_second, &log_id)
+        Log::register_log_id(&pool, &author, &schema_system, &LogId::new(2).unwrap())
+            .await
+            .unwrap();
+
+        Log::register_log_id(&pool, &author, &schema_second, &LogId::new(3).unwrap())
             .await
             .unwrap();
 
         let log_id = Log::find_next_log_id(&pool, &author).await.unwrap();
-        assert_eq!(log_id.0, 5);
+        assert_eq!(log_id, LogId::new(5).unwrap());
+        Log::register_log_id(&pool, &author, &schema_third, &log_id)
+            .await
+            .unwrap();
+
+        let log_id = Log::find_next_log_id(&pool, &author).await.unwrap();
+        assert_eq!(log_id, LogId::new(7).unwrap());
     }
 }

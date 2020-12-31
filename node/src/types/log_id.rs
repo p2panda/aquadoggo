@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use sqlx::Type;
+use sqlx::{FromRow, Type};
 use validator::{Validate, ValidationError, ValidationErrors};
 
 use crate::errors::Result;
@@ -8,9 +8,9 @@ use crate::errors::Result;
 ///
 /// By specification the log id is an u64 integer but since this is not handled by our database
 /// library (sqlx) we use the signed variant.
-#[derive(Type, Clone, Debug, Serialize, Deserialize)]
+#[derive(Type, FromRow, Clone, Debug, Serialize, Deserialize)]
 #[sqlx(transparent)]
-pub struct LogId(pub i64);
+pub struct LogId(i64);
 
 impl LogId {
     /// Validates and returns a new log id instance when correct.
@@ -18,17 +18,6 @@ impl LogId {
         let log_id = Self(value);
         log_id.validate()?;
         Ok(log_id)
-    }
-
-    /// Determines the next odd log id given it already is one.
-    // @TODO: Make this into an Iterator
-    pub fn next_user_log(&self) -> Result<Self> {
-        Self::new(self.0 + 2)
-    }
-
-    /// Returns true when log id is zero.
-    pub fn is_zero(&self) -> bool {
-        self.0 == 0
     }
 
     /// Returns true when log id is a user log (odd-numbered).
@@ -68,6 +57,24 @@ impl Validate for LogId {
     }
 }
 
+impl Iterator for LogId {
+    type Item = LogId;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.is_user_log() {
+            Some(Self(self.0 + 2))
+        } else {
+            None
+        }
+    }
+}
+
+impl PartialEq for LogId {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::LogId;
@@ -80,22 +87,24 @@ mod tests {
 
     #[test]
     fn user_log_ids() {
-        let log_id = LogId::default();
+        let mut log_id = LogId::default();
         assert_eq!(log_id.is_user_log(), true);
         assert_eq!(log_id.is_system_log(), false);
 
-        let next_log_id = log_id.next_user_log().unwrap();
-        assert_eq!(next_log_id.0, 3);
+        let mut next_log_id = log_id.next().unwrap();
+        assert_eq!(next_log_id, LogId::new(3).unwrap());
 
-        let next_log_id = next_log_id.next_user_log().unwrap();
-        assert_eq!(next_log_id.0, 5);
+        let next_log_id = next_log_id.next().unwrap();
+        assert_eq!(next_log_id, LogId::new(5).unwrap());
     }
 
     #[test]
     fn system_log_ids() {
-        let log_id = LogId::new(0).unwrap();
-        assert_eq!(log_id.is_zero(), true);
+        let mut log_id = LogId::new(0).unwrap();
         assert_eq!(log_id.is_user_log(), false);
         assert_eq!(log_id.is_system_log(), true);
+
+        // Can't iterate on system logs
+        assert!(log_id.next().is_none());
     }
 }
