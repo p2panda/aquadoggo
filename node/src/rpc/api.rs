@@ -4,6 +4,7 @@ use bamboo_core::lipmaa;
 use jsonrpc_core::{BoxFuture, IoHandler, Params};
 use jsonrpc_derive::rpc;
 use serde::{Deserialize, Serialize};
+use validator::Validate;
 
 use crate::db::models::{Entry, Log};
 use crate::db::Pool;
@@ -11,18 +12,12 @@ use crate::errors::Result;
 use crate::types::{Author, LogId, Schema};
 
 /// Request body of `panda_getEntryArguments`.
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Validate, Debug)]
 pub struct EntryArgsRequest {
+    #[validate]
     author: Author,
+    #[validate]
     schema: Schema,
-}
-
-impl EntryArgsRequest {
-    pub fn validate(&self) -> Result<()> {
-        self.author.validate()?;
-        self.schema.validate()?;
-        Ok(())
-    }
 }
 
 /// Response body of `panda_getEntryArguments`.
@@ -237,14 +232,14 @@ mod tests {
         let request = rpc_request(
             "panda_getEntryArguments",
             r#"{
-                "author": "123",
+                "author": "1234",
                 "schema": "test"
             }"#,
         );
 
         let response = rpc_error(
             ErrorCode::InvalidParams,
-            "Invalid params: invalid `author` hex string.",
+            "Invalid params: invalid `author` string length, invalid `author` ed25519 public key.",
         );
 
         assert_eq!(io.handle_request_sync(&request), Some(response));

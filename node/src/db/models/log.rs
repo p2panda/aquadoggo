@@ -57,6 +57,7 @@ impl Log {
         .fetch_one(pool)
         .await?;
 
+        // @TODO: Check for option not for zero value
         let next_log_id = if last_log_id.0.is_zero() {
             LogId::default()
         } else {

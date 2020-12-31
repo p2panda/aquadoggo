@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use sqlx::Type;
+use validator::{Validate, ValidationErrors};
 
 use crate::errors::Result;
 
@@ -11,14 +12,15 @@ pub struct Schema(String);
 impl Schema {
     /// Validates and returns a schema when correct.
     #[allow(dead_code)]
-    pub fn new(inner: &str) -> Result<Self> {
-        let entry = Self(String::from(inner));
-        entry.validate()?;
-        Ok(entry)
+    pub fn new(value: &str) -> Result<Self> {
+        let schema = Self(String::from(value));
+        schema.validate()?;
+        Ok(schema)
     }
+}
 
-    /// Checks if schema is valid.
-    pub fn validate(&self) -> Result<()> {
+impl Validate for Schema {
+    fn validate(&self) -> anyhow::Result<(), ValidationErrors> {
         // @TODO
         Ok(())
     }

@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use sqlx::Type;
+use validator::{Validate, ValidationError, ValidationErrors};
 
-use crate::errors::{Error, Result};
+use crate::errors::Result;
 
 /// Authors can write to multiple logs identified by their log ids.
 ///
@@ -13,29 +14,16 @@ pub struct LogId(pub i64);
 
 impl LogId {
     /// Validates and returns a new log id instance when correct.
-    pub fn new(inner: i64) -> Result<Self> {
-        let log_id = Self(inner);
+    pub fn new(value: i64) -> Result<Self> {
+        let log_id = Self(value);
         log_id.validate()?;
         Ok(log_id)
     }
 
-    /// Checks if log id is valid.
-    pub fn validate(&self) -> Result<()> {
-        // Numbers have to be positive
-        if self.0 < 0 {
-            return Err(Error::Validation("`logId` can't be negative.".to_owned()));
-        }
-
-        Ok(())
-    }
-
     /// Determines the next odd log id given it already is one.
+    // @TODO: Make this into an Iterator
     pub fn next_user_log(&self) -> Result<Self> {
-        if self.is_user_log() {
-            Self::new(self.0 + 2)
-        } else {
-            Err(Error::Validation("invalid user `log_id`.".to_owned()))
-        }
+        Self::new(self.0 + 2)
     }
 
     /// Returns true when log id is zero.
@@ -59,7 +47,24 @@ impl Default for LogId {
     fn default() -> Self {
         // We never create system logs during runtime, the default value is therefore an odd user
         // log id.
-        Self(1)
+        Self::new(1).unwrap()
+    }
+}
+
+impl Validate for LogId {
+    fn validate(&self) -> anyhow::Result<(), ValidationErrors> {
+        let mut errors = ValidationErrors::new();
+
+        // Numbers have to be positive
+        if self.0 < 0 {
+            errors.add("logId", ValidationError::new("`logId` can't be negative"));
+        }
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
     }
 }
 
@@ -92,6 +97,5 @@ mod tests {
         assert_eq!(log_id.is_zero(), true);
         assert_eq!(log_id.is_user_log(), false);
         assert_eq!(log_id.is_system_log(), true);
-        assert_eq!(log_id.next_user_log().is_err(), true);
     }
 }

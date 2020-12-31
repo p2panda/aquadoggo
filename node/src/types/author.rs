@@ -1,8 +1,9 @@
 use ed25519_dalek::{PublicKey, PUBLIC_KEY_LENGTH};
 use serde::{Deserialize, Serialize};
 use sqlx::Type;
+use validator::{Validate, ValidationError, ValidationErrors};
 
-use crate::errors::{Error, Result};
+use crate::errors::Result;
 
 /// Authors are hex encoded ed25519 public keys.
 #[derive(Type, Clone, Debug, Serialize, Deserialize)]
@@ -12,30 +13,49 @@ pub struct Author(String);
 impl Author {
     /// Validates and returns an author when correct.
     #[allow(dead_code)]
-    pub fn new(inner: &str) -> Result<Self> {
-        let entry = Self(String::from(inner));
-        entry.validate()?;
-        Ok(entry)
+    pub fn new(value: &str) -> Result<Self> {
+        let author = Self(String::from(value));
+        author.validate()?;
+        Ok(author)
     }
+}
 
-    /// Checks if author is valid.
-    pub fn validate(&self) -> Result<()> {
+impl Validate for Author {
+    fn validate(&self) -> anyhow::Result<(), ValidationErrors> {
+        let mut errors = ValidationErrors::new();
+
         // Check if author is a hex string
-        let bytes = hex::decode(self.0.as_str())
-            .map_err(|_| Error::Validation("invalid `author` hex string.".to_owned()))?;
+        match hex::decode(self.0.to_owned()) {
+            Ok(bytes) => {
+                // Check if length is correct
+                if bytes.len() < PUBLIC_KEY_LENGTH {
+                    errors.add(
+                        "author",
+                        ValidationError::new("invalid `author` string length"),
+                    );
+                }
 
-        // Check if length is correct
-        if bytes.len() < PUBLIC_KEY_LENGTH {
-            return Err(Error::Validation(
-                "invalid `author` string length.".to_owned(),
-            ));
+                // Check if ed25519 public key is valid
+                if PublicKey::from_bytes(&bytes).is_err() {
+                    errors.add(
+                        "author",
+                        ValidationError::new("invalid `author` ed25519 public key"),
+                    );
+                }
+            }
+            Err(_) => {
+                errors.add(
+                    "author",
+                    ValidationError::new("invalid `author` hex string"),
+                );
+            }
         }
 
-        // Check if ed25519 public key is valid
-        PublicKey::from_bytes(&bytes)
-            .map_err(|_| Error::Validation("invalid `author` public key.".to_owned()))?;
-
-        Ok(())
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
     }
 }
 
