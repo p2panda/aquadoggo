@@ -12,9 +12,11 @@ anyhow = "1.0.35"
 async-std = { version = "1.7.0", features = ["unstable", "attributes"] }
 bamboo-core = { git = "https://github.com/pietgeursen/bamboo-rs", tag = "v0.1.0-pre-26" }
 directories = "3.0.1"
+ed25519-dalek = "1.0.1"
 envy = "0.4.1"
 exit-future = "0.2.0"
 futures = "0.3.8"
+hex = "0.4.2"
 jsonrpc-core = "16.0.0"
 jsonrpc-derive = "16.0.0"
 jsonrpc-http-server = "16.0.0"

@@ -5,15 +5,24 @@ use jsonrpc_core::{BoxFuture, IoHandler, Params};
 use jsonrpc_derive::rpc;
 use serde::{Deserialize, Serialize};
 
-use crate::db::Pool;
 use crate::db::models::{Entry, Log};
+use crate::db::Pool;
 use crate::errors::Result;
+use crate::types::{Author, LogId, Schema};
 
 /// Request body of `panda_getEntryArguments`.
 #[derive(Deserialize, Debug)]
 pub struct EntryArgsRequest {
-    author: String,
-    schema: String,
+    author: Author,
+    schema: Schema,
+}
+
+impl EntryArgsRequest {
+    pub fn validate(&self) -> Result<()> {
+        self.author.validate()?;
+        self.schema.validate()?;
+        Ok(())
+    }
 }
 
 /// Response body of `panda_getEntryArguments`.
@@ -23,7 +32,7 @@ pub struct EntryArgsResponse {
     encoded_entry_backlink: Option<String>,
     encoded_entry_skiplink: Option<String>,
     last_seq_num: Option<i64>,
-    log_id: i64,
+    log_id: LogId,
 }
 
 /// Trait defining all Node RPC API methods.
@@ -96,6 +105,8 @@ impl Api for ApiService {
 
         Box::pin(async move {
             let params: EntryArgsRequest = params_raw.parse()?;
+            params.validate()?;
+
             let (back_channel, back_channel_notifier) = unbounded();
 
             task::block_on(
@@ -107,13 +118,13 @@ impl Api for ApiService {
     }
 }
 
-// @TODO: Add params validation (schema hash, author public key)
+/// Returns required data to the client to encode a new bamboo entry.
 async fn get_entry_args(pool: Pool, params: EntryArgsRequest) -> Result<EntryArgsResponse> {
     // Determine log id for author's schema
     let log_id = Log::schema_log_id(&pool, &params.author, &params.schema).await?;
 
     // Find latest entry in this log
-    let entry = Entry::latest(&pool, &params.author, log_id).await?;
+    let entry = Entry::latest(&pool, &params.author, &log_id).await?;
 
     match entry {
         Some(entry_backlink) => {
@@ -121,7 +132,7 @@ async fn get_entry_args(pool: Pool, params: EntryArgsRequest) -> Result<EntryArg
             let entry_skiplink = Entry::at_seq_num(
                 &pool,
                 &params.author,
-                log_id,
+                &log_id,
                 lipmaa(entry_backlink.seqnum as u64 + 1) as i64,
             )
             .await?
@@ -226,7 +237,7 @@ mod tests {
         let request = rpc_request(
             "panda_getEntryArguments",
             r#"{
-                "author": "world",
+                "author": "1a8a62c5f64eed987326513ea15a6ea2682c256ac57a418c1c92d96787c8b36e",
                 "schema": "test"
             }"#,
         );

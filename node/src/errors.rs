@@ -4,8 +4,11 @@ pub type Result<T> = anyhow::Result<T, Error>;
 /// Represents all the ways a method can fail within the node.
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    /// Error returned from the database.
+    /// Error returned from validating data types.
     #[error("{0}")]
+    Validation(String),
+    /// Error returned from the database.
+    #[error("validation failed: {0}")]
     Database(#[from] sqlx::Error),
     /// Error returned from JSON RPC API.
     #[error(transparent)]
@@ -16,6 +19,11 @@ impl From<Error> for jsonrpc_core::Error {
     fn from(error: Error) -> Self {
         match error {
             Error::RPC(rpc_error) => rpc_error,
+            Error::Validation(validation_error) => jsonrpc_core::Error {
+                code: jsonrpc_core::ErrorCode::InvalidParams,
+                message: format!("{}", validation_error),
+                data: None,
+            },
             _ => {
                 log::error!("{:#}", error);
 

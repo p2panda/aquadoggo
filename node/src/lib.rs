@@ -17,6 +17,7 @@ mod errors;
 mod rpc;
 mod runtime;
 mod task;
+mod types;
 
 #[cfg(test)]
 mod test_helpers;
