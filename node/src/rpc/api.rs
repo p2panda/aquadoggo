@@ -230,6 +230,27 @@ mod tests {
     }
 
     #[async_std::test]
+    async fn respond_with_wrong_author_error() {
+        let pool = initialize_db().await;
+        let io = ApiService::io_handler(pool);
+
+        let request = rpc_request(
+            "panda_getEntryArguments",
+            r#"{
+                "author": "123",
+                "schema": "test"
+            }"#,
+        );
+
+        let response = rpc_error(
+            ErrorCode::InvalidParams,
+            "Invalid params: invalid `author` hex string.",
+        );
+
+        assert_eq!(io.handle_request_sync(&request), Some(response));
+    }
+
+    #[async_std::test]
     async fn get_entry_arguments() {
         let pool = initialize_db().await;
         let io = ApiService::io_handler(pool);

@@ -68,7 +68,7 @@ mod tests {
     use crate::types::{Author, LogId};
 
     #[async_std::test]
-    async fn initial_log_id() {
+    async fn latest_entry() {
         let pool = initialize_db().await;
 
         let author =

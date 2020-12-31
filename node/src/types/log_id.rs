@@ -23,7 +23,7 @@ impl LogId {
     pub fn validate(&self) -> Result<()> {
         // Numbers have to be positive
         if self.0 < 0 {
-            return Err(Error::Validation("`logId` can't be negative".to_owned()));
+            return Err(Error::Validation("`logId` can't be negative.".to_owned()));
         }
 
         Ok(())
@@ -34,7 +34,7 @@ impl LogId {
         if self.is_user_log() {
             Self::new(self.0 + 2)
         } else {
-            Err(Error::Validation("Invalid user log id".to_owned()))
+            Err(Error::Validation("invalid user `log_id`.".to_owned()))
         }
     }
 

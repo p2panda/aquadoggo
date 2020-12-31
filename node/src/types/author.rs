@@ -22,18 +22,18 @@ impl Author {
     pub fn validate(&self) -> Result<()> {
         // Check if author is a hex string
         let bytes = hex::decode(self.0.as_str())
-            .map_err(|_| Error::Validation("Invalid `author` hex string".to_owned()))?;
+            .map_err(|_| Error::Validation("invalid `author` hex string.".to_owned()))?;
 
         // Check if length is correct
         if bytes.len() < PUBLIC_KEY_LENGTH {
             return Err(Error::Validation(
-                "Invalid `author` string length".to_owned(),
+                "invalid `author` string length.".to_owned(),
             ));
         }
 
         // Check if ed25519 public key is valid
         PublicKey::from_bytes(&bytes)
-            .map_err(|_| Error::Validation("Invalid `author` public key".to_owned()))?;
+            .map_err(|_| Error::Validation("invalid `author` public key.".to_owned()))?;
 
         Ok(())
     }
