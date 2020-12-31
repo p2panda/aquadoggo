@@ -47,11 +47,11 @@ impl Log {
         // ones before the largest (we can't assume that log ids from the wild are used
         // sequentially / without gaps).
         let last_log_id: (LogId,) = query_as(
-            r#"
-            SELECT MAX(log_id) as "log_id: LogId"
+            "
+            SELECT MAX(log_id)
             FROM logs
             WHERE author = ?1
-            "#,
+            ",
         )
         .bind(author)
         .fetch_one(pool)

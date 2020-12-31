@@ -19,13 +19,13 @@ impl Entry {
     /// Returns the latest bamboo entry of an author's log.
     pub async fn latest(pool: &Pool, author: &Author, log_id: &LogId) -> Result<Option<Entry>> {
         let latest_entry = query_as::<_, Entry>(
-            r#"
-            SELECT author as "id: Author", entry_bytes, entry_hash, log_id, payload_bytes, payload_hash, seqnum
+            "
+            SELECT author, entry_bytes, entry_hash, log_id, payload_bytes, payload_hash, seqnum
             FROM entries
             WHERE author = ?1 AND log_id = ?2
             ORDER BY seqnum DESC
             LIMIT 1
-            "#,
+            ",
         )
         .bind(author)
         .bind(log_id)
