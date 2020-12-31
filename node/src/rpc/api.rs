@@ -239,7 +239,7 @@ mod tests {
 
         let response = rpc_error(
             ErrorCode::InvalidParams,
-            "Invalid params: invalid `author` string length, invalid `author` ed25519 public key.",
+            "Invalid params: `author`: invalid string length, invalid ed25519 public key.",
         );
 
         assert_eq!(io.handle_request_sync(&request), Some(response));

@@ -46,7 +46,7 @@ impl Validate for LogId {
 
         // Numbers have to be positive
         if self.0 < 0 {
-            errors.add("logId", ValidationError::new("`logId` can't be negative"));
+            errors.add("logId", ValidationError::new("can't be negative"));
         }
 
         if errors.is_empty() {

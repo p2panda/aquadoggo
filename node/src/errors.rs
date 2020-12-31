@@ -25,20 +25,24 @@ impl From<Error> for jsonrpc_core::Error {
                 let message = validation_errors
                     .errors()
                     .iter()
-                    .map(|error_kind| match error_kind.1 {
-                        ValidationErrorsKind::Struct(struct_err) => {
-                            validation_errs_to_str_vec(struct_err).join(", ")
-                        }
-                        ValidationErrorsKind::Field(field_errs) => field_errs
-                            .iter()
-                            .map(|fe| format!("{}", fe.code))
-                            .collect::<Vec<String>>()
-                            .join(", "),
-                        ValidationErrorsKind::List(vec_errs) => vec_errs
-                            .iter()
-                            .map(|ve| validation_errs_to_str_vec(ve.1).join(", ").to_string())
-                            .collect::<Vec<String>>()
-                            .join(", "),
+                    .map(|error_kind| {
+                        let error_message = match error_kind.1 {
+                            ValidationErrorsKind::Struct(struct_err) => {
+                                validation_errs_to_str_vec(struct_err).join(", ")
+                            }
+                            ValidationErrorsKind::Field(field_errs) => field_errs
+                                .iter()
+                                .map(|fe| format!("{}", fe.code))
+                                .collect::<Vec<String>>()
+                                .join(", "),
+                            ValidationErrorsKind::List(vec_errs) => vec_errs
+                                .iter()
+                                .map(|ve| validation_errs_to_str_vec(ve.1).join(", ").to_string())
+                                .collect::<Vec<String>>()
+                                .join(", "),
+                        };
+
+                        format!("`{}`: {}", error_kind.0, error_message)
                     })
                     .collect::<Vec<String>>()
                     .join(", ");

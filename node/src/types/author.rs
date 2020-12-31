@@ -29,25 +29,16 @@ impl Validate for Author {
             Ok(bytes) => {
                 // Check if length is correct
                 if bytes.len() < PUBLIC_KEY_LENGTH {
-                    errors.add(
-                        "author",
-                        ValidationError::new("invalid `author` string length"),
-                    );
+                    errors.add("author", ValidationError::new("invalid string length"));
                 }
 
                 // Check if ed25519 public key is valid
                 if PublicKey::from_bytes(&bytes).is_err() {
-                    errors.add(
-                        "author",
-                        ValidationError::new("invalid `author` ed25519 public key"),
-                    );
+                    errors.add("author", ValidationError::new("invalid ed25519 public key"));
                 }
             }
             Err(_) => {
-                errors.add(
-                    "author",
-                    ValidationError::new("invalid `author` hex string"),
-                );
+                errors.add("author", ValidationError::new("invalid hex string"));
             }
         }
 
