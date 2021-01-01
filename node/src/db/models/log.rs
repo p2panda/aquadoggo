@@ -64,9 +64,8 @@ impl Log {
 
         // Find next unused user schema log_id
         let mut next_log_id = LogId::default();
-        let mut current_log_ids = log_ids.iter();
 
-        while let Some(log_id) = current_log_ids.next() {
+        for log_id in log_ids.iter() {
             // Ignore system schema log ids
             if log_id.is_system_log() {
                 continue;

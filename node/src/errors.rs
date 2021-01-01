@@ -39,7 +39,7 @@ impl From<Error> for jsonrpc_core::Error {
                                 .join(", "),
                             ValidationErrorsKind::List(vec_errs) => vec_errs
                                 .iter()
-                                .map(|ve| validation_errs_to_str_vec(ve.1).join(", ").to_string())
+                                .map(|ve| validation_errs_to_str_vec(ve.1).join(", "))
                                 .collect::<Vec<String>>()
                                 .join(", "),
                         };
