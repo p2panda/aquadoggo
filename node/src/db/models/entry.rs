@@ -12,7 +12,7 @@ pub struct Entry {
     pub log_id: LogId,
     pub payload_bytes: Option<String>,
     pub payload_hash: EntryHash,
-    pub seqnum: SeqNum,
+    pub seq_num: SeqNum,
 }
 
 impl Entry {
@@ -20,10 +20,10 @@ impl Entry {
     pub async fn latest(pool: &Pool, author: &Author, log_id: &LogId) -> Result<Option<Entry>> {
         let latest_entry = query_as::<_, Entry>(
             "
-            SELECT author, entry_bytes, entry_hash, log_id, payload_bytes, payload_hash, seqnum
+            SELECT author, entry_bytes, entry_hash, log_id, payload_bytes, payload_hash, seq_num
             FROM entries
             WHERE author = ?1 AND log_id = ?2
-            ORDER BY seqnum DESC
+            ORDER BY seq_num DESC
             LIMIT 1
             ",
         )
@@ -44,9 +44,9 @@ impl Entry {
     ) -> Result<Option<Entry>> {
         let entry = query_as::<_, Entry>(
             "
-            SELECT author, entry_bytes, entry_hash, log_id, payload_bytes, payload_hash, seqnum
+            SELECT author, entry_bytes, entry_hash, log_id, payload_bytes, payload_hash, seq_num
             FROM entries
-            WHERE author = ?1 AND log_id = ?2 AND seqnum = ?3
+            WHERE author = ?1 AND log_id = ?2 AND seq_num = ?3
             LIMIT 1
             ",
         )

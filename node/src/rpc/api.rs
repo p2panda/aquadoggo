@@ -118,16 +118,16 @@ async fn get_entry_args(pool: Pool, params: EntryArgsRequest) -> Result<EntryArg
     let log_id = Log::schema_log_id(&pool, &params.author, &params.schema).await?;
 
     // Find latest entry in this log
-    let entry = Entry::latest(&pool, &params.author, &log_id).await?;
+    let entry_latest = Entry::latest(&pool, &params.author, &log_id).await?;
 
-    match entry {
+    match entry_latest {
         Some(entry_backlink) => {
             // Determine skiplink ("lipmaa"-link) entry in this log
             let entry_skiplink = Entry::at_seq_num(
                 &pool,
                 &params.author,
                 &log_id,
-                &entry_backlink.seqnum.skiplink_num(),
+                &entry_backlink.seq_num.skiplink_seq_num(),
             )
             .await?
             .unwrap();
@@ -135,7 +135,7 @@ async fn get_entry_args(pool: Pool, params: EntryArgsRequest) -> Result<EntryArg
             Ok(EntryArgsResponse {
                 entry_hash_backlink: Some(entry_backlink.entry_hash),
                 entry_hash_skiplink: Some(entry_skiplink.entry_hash),
-                last_seq_num: Some(entry_backlink.seqnum),
+                last_seq_num: Some(entry_backlink.seq_num),
                 log_id,
             })
         }

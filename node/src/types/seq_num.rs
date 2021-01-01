@@ -6,7 +6,7 @@ use validator::{Validate, ValidationError, ValidationErrors};
 use crate::errors::Result;
 
 /// Start counting sequence numbers from here.
-const FIRST_SEQ_NUM: i64 = 1;
+pub const FIRST_SEQ_NUM: i64 = 1;
 
 /// Bamboo append-only log sequence number.
 #[derive(Type, FromRow, Clone, Debug, Serialize, Deserialize)]
@@ -22,8 +22,13 @@ impl SeqNum {
     }
 
     /// Return sequence number of skiplink.
-    pub fn skiplink_num(&self) -> Self {
+    pub fn skiplink_seq_num(&self) -> Self {
         Self(lipmaa(self.0 as u64) as i64 + FIRST_SEQ_NUM)
+    }
+
+    /// Return sequence number of backlink.
+    pub fn backlink_seq_num(&self) -> Result<Self> {
+        Self::new(self.0 - 1)
     }
 }
 
@@ -38,7 +43,7 @@ impl Validate for SeqNum {
         let mut errors = ValidationErrors::new();
 
         // Numbers have to be larger than zero
-        if self.0 < 1 {
+        if self.0 < FIRST_SEQ_NUM {
             errors.add("logId", ValidationError::new("can't be zero or negative"));
         }
 
@@ -68,10 +73,20 @@ mod tests {
     }
 
     #[test]
-    fn skiplink_num() {
+    fn skiplink_seq_num() {
         assert_eq!(
-            SeqNum::new(13).unwrap().skiplink_num(),
+            SeqNum::new(13).unwrap().skiplink_seq_num(),
             SeqNum::new(5).unwrap()
         );
+    }
+
+    #[test]
+    fn backlink_seq_num() {
+        assert_eq!(
+            SeqNum::new(12).unwrap().backlink_seq_num().unwrap(),
+            SeqNum::new(11).unwrap()
+        );
+
+        assert!(SeqNum::new(1).unwrap().backlink_seq_num().is_err());
     }
 }

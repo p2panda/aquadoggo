@@ -5,6 +5,6 @@ CREATE TABLE IF NOT EXISTS entries (
     log_id            UNSIGNED BIGINT   NOT NULL,
     payload_bytes     TEXT,
     payload_hash      VARCHAR(128)      NOT NULL,
-    seqnum            UNSIGNED BIGINT   NOT NULL,
-    PRIMARY KEY (author, log_id, seqnum)
+    seq_num           UNSIGNED BIGINT   NOT NULL,
+    PRIMARY KEY (author, log_id, seq_num)
 );
