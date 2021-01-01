@@ -9,7 +9,7 @@ use validator::Validate;
 use crate::db::models::{Entry, Log};
 use crate::db::Pool;
 use crate::errors::Result;
-use crate::types::{Author, LogId, Schema};
+use crate::types::{Author, EntryHash, LogId, Schema};
 
 /// Request body of `panda_getEntryArguments`.
 #[derive(Deserialize, Validate, Debug)]
@@ -24,8 +24,8 @@ pub struct EntryArgsRequest {
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct EntryArgsResponse {
-    encoded_entry_backlink: Option<String>,
-    encoded_entry_skiplink: Option<String>,
+    entry_hash_backlink: Option<EntryHash>,
+    entry_hash_skiplink: Option<EntryHash>,
     last_seq_num: Option<i64>,
     log_id: LogId,
 }
@@ -134,15 +134,15 @@ async fn get_entry_args(pool: Pool, params: EntryArgsRequest) -> Result<EntryArg
             .unwrap();
 
             Ok(EntryArgsResponse {
-                encoded_entry_backlink: Some(entry_backlink.entry_bytes),
-                encoded_entry_skiplink: Some(entry_skiplink.entry_bytes),
+                entry_hash_backlink: Some(entry_backlink.entry_hash),
+                entry_hash_skiplink: Some(entry_skiplink.entry_hash),
                 last_seq_num: Some(entry_backlink.seqnum),
                 log_id,
             })
         }
         None => Ok(EntryArgsResponse {
-            encoded_entry_backlink: None,
-            encoded_entry_skiplink: None,
+            entry_hash_backlink: None,
+            entry_hash_skiplink: None,
             last_seq_num: None,
             log_id,
         }),
@@ -272,8 +272,8 @@ mod tests {
 
         let response = rpc_response(
             r#"{
-                "encodedEntryBacklink": null,
-                "encodedEntrySkiplink": null,
+                "entryHashBacklink": null,
+                "entryHashSkiplink": null,
                 "lastSeqNum": null,
                 "logId": 1
             }"#,

@@ -2,16 +2,16 @@ use sqlx::{query_as, FromRow};
 
 use crate::db::Pool;
 use crate::errors::Result;
-use crate::types::{Author, LogId};
+use crate::types::{Author, EntryHash, LogId};
 
 #[derive(FromRow, Debug)]
 pub struct Entry {
     pub author: Author,
     pub entry_bytes: String,
-    pub entry_hash: String,
+    pub entry_hash: EntryHash,
     pub log_id: LogId,
     pub payload_bytes: Option<String>,
-    pub payload_hash: String,
+    pub payload_hash: EntryHash,
     pub seqnum: i64,
 }
 

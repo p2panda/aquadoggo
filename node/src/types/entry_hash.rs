@@ -1,12 +1,12 @@
 use bamboo_core::yamf_hash::{new_blake2b, YamfHash, MAX_YAMF_HASH_SIZE};
 use serde::{Deserialize, Serialize};
-use sqlx::Type;
+use sqlx::{FromRow, Type};
 use validator::{Validate, ValidationError, ValidationErrors};
 
 use crate::errors::Result;
 
 /// Yamf Blake2b Hash of a bamboo entry encoded as hex.
-#[derive(Type, Clone, Debug, Serialize, Deserialize)]
+#[derive(Type, FromRow, Clone, Debug, Serialize, Deserialize)]
 #[sqlx(transparent)]
 pub struct EntryHash(String);
 
