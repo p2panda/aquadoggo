@@ -59,7 +59,7 @@ impl Entry {
         Ok(latest_entry)
     }
 
-    /// Returns an entry at sequence number within an author's log.
+    /// Returns entry at sequence position within an author's log.
     pub async fn at_seq_num(
         pool: &Pool,
         author: &Author,

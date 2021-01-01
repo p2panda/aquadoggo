@@ -9,9 +9,11 @@ pub enum Error {
     /// Error returned from JSON RPC API.
     #[error(transparent)]
     RPC(#[from] jsonrpc_core::Error),
+
     /// Error returned from validating data types.
     #[error(transparent)]
     Validation(#[from] ValidationErrors),
+
     /// Error returned from the database.
     #[error(transparent)]
     Database(#[from] sqlx::Error),

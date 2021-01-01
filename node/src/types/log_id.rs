@@ -26,7 +26,7 @@ impl LogId {
         self.0 % 2 == 1
     }
 
-    /// Returns true when LogId is for a system log.
+    /// Returns true when LogId is for a system schema.
     #[allow(dead_code)]
     pub fn is_system_log(&self) -> bool {
         // Log ids for system schemas are even numbers

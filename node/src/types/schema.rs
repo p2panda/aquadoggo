@@ -5,15 +5,16 @@ use validator::{Validate, ValidationErrors};
 use crate::errors::Result;
 use crate::types::EntryHash;
 
-/// Schemas are pointers for entries describing how user data is formatted.
+/// Schemas are pointers at entries describing how user data is formatted.
 ///
-/// A schema addresses one entry via its hash. This entry holds the data to describe a schema.
+/// A schema addresses one entry via its hash. This entry holds the data to describe the schema in
+/// its payload.
 #[derive(Type, Clone, Debug, Serialize, Deserialize)]
 #[sqlx(transparent)]
 pub struct Schema(EntryHash);
 
 impl Schema {
-    /// Validates and returns a schema when correct.
+    /// Validates and returns schema when correct.
     #[allow(dead_code)]
     pub fn new(value: &str) -> Result<Self> {
         let hash = EntryHash::new(value)?;
@@ -23,7 +24,7 @@ impl Schema {
 
 impl Validate for Schema {
     fn validate(&self) -> anyhow::Result<(), ValidationErrors> {
-        // Only check if the inner entry hash is correct
+        // Only check if the inner entry hash is valid
         self.0.validate()
     }
 }
