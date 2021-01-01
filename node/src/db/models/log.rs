@@ -4,15 +4,26 @@ use crate::db::Pool;
 use crate::errors::Result;
 use crate::types::{Author, LogId, Schema};
 
+/// Keeps track of which log_id has been used for which schema per author.
+///
+/// This serves as an indexing layer on top of the lower-level bamboo entries. The node updates
+/// this data according to what it sees in the newly incoming entries.
 #[derive(FromRow, Debug)]
 pub struct Log {
+    /// Public key of the author.
     author: Author,
+
+    /// Log id used for the author's schema.
     log_id: LogId,
+
+    /// Schema hash used by author.
     schema: Schema,
 }
 
 impl Log {
-    /// Register a new log id for an author's schema.
+    /// Register any new log_id for an author's schema.
+    ///
+    /// The database will reject duplicate entries.
     #[allow(dead_code)]
     pub async fn register_log_id(
         pool: &Pool,
@@ -36,10 +47,8 @@ impl Log {
         Ok(rows_affected > 0)
     }
 
-    /// Determines the next free log id to register future user schemas of an author.
-    ///
-    /// User schema log ids are odd-numbered.
-    pub async fn find_next_log_id(pool: &Pool, author: &Author) -> Result<LogId> {
+    /// Determines the next unused user schema log_id of an author.
+    pub async fn next_user_schema_log_id(pool: &Pool, author: &Author) -> Result<LogId> {
         // Get all log ids from this author
         let log_ids: Vec<LogId> = query_as::<_, LogId>(
             "
@@ -53,31 +62,37 @@ impl Log {
         .fetch_all(pool)
         .await?;
 
-        // Find next free user log id
+        // Find next unused user schema log_id
         let mut next_log_id = LogId::default();
         let mut current_log_ids = log_ids.iter();
 
         while let Some(log_id) = current_log_ids.next() {
+            // Ignore system schema log ids
             if log_id.is_system_log() {
                 continue;
             }
 
-            if next_log_id == *log_id {
-                next_log_id = next_log_id.next().unwrap();
-            } else {
+            // This log_id is already used
+            if next_log_id != *log_id {
                 break;
             }
+
+            // Iterate over the sequence of possible log_ids
+            next_log_id = next_log_id.next().unwrap();
         }
 
         Ok(next_log_id)
     }
 
-    /// Returns the log_id of an author's schema. Finds the next one if not existing yet.
+    /// Returns the registered log_id of an author's schema.
     ///
     /// Messages are separated in different logs per schema and author. This method checks if a log
-    /// has already been registered for a certain schema and returns its id. If no log has been
-    /// found it automatically returns the next possible free log id.
+    /// has already been registered for a certain schema and returns its id.
+    ///
+    /// If no log has been found for a USER schema it automatically returns the next unused log_id.
+    /// SYSTEM schema log ids are constant and defined by the protocol specification.
     pub async fn schema_log_id(pool: &Pool, author: &Author, schema: &Schema) -> Result<LogId> {
+        // @TODO: Check if system schema was used and return regarding log id
         let result = query_as::<_, LogId>(
             "
             SELECT log_id
@@ -90,9 +105,10 @@ impl Log {
         .fetch_optional(pool)
         .await?;
 
+        // Return result or find next unused user schema log id
         let log_id = match result {
             Some(value) => value,
-            None => Self::find_next_log_id(pool, author).await?,
+            None => Self::next_user_schema_log_id(pool, author).await?,
         };
 
         Ok(log_id)
@@ -120,6 +136,26 @@ mod tests {
     }
 
     #[async_std::test]
+    async fn prevent_duplicate_log_ids() {
+        let pool = initialize_db().await;
+
+        let author = Author::new(TEST_AUTHOR).unwrap();
+        let schema = Schema::new(&random_entry_hash()).unwrap();
+
+        assert!(
+            Log::register_log_id(&pool, &author, &schema, &LogId::new(2).unwrap())
+                .await
+                .is_ok()
+        );
+
+        assert!(
+            Log::register_log_id(&pool, &author, &schema, &LogId::new(2).unwrap())
+                .await
+                .is_err()
+        );
+    }
+
+    #[async_std::test]
     async fn user_log_ids() {
         let pool = initialize_db().await;
 
@@ -136,26 +172,26 @@ mod tests {
         Log::register_log_id(&pool, &author, &schema_system, &LogId::new(2).unwrap())
             .await
             .unwrap();
-        Log::register_log_id(&pool, &author, &schema_second, &LogId::new(3).unwrap())
+        Log::register_log_id(&pool, &author, &schema_first, &LogId::new(3).unwrap())
             .await
             .unwrap();
 
-        // Find first free user log id and register it
-        let log_id = Log::find_next_log_id(&pool, &author).await.unwrap();
+        // Find next free user log id and register it
+        let log_id = Log::next_user_schema_log_id(&pool, &author).await.unwrap();
         assert_eq!(log_id, LogId::new(1).unwrap());
-        Log::register_log_id(&pool, &author, &schema_first, &log_id)
+        Log::register_log_id(&pool, &author, &schema_second, &log_id)
             .await
             .unwrap();
 
-        // Find second free user log id and register it
-        let log_id = Log::find_next_log_id(&pool, &author).await.unwrap();
+        // Find next free user log id and register it
+        let log_id = Log::next_user_schema_log_id(&pool, &author).await.unwrap();
         assert_eq!(log_id, LogId::new(5).unwrap());
         Log::register_log_id(&pool, &author, &schema_third, &log_id)
             .await
             .unwrap();
 
-        // Find third free user log id
-        let log_id = Log::find_next_log_id(&pool, &author).await.unwrap();
+        // Find next free user log id
+        let log_id = Log::next_user_schema_log_id(&pool, &author).await.unwrap();
         assert_eq!(log_id, LogId::new(7).unwrap());
     }
 }

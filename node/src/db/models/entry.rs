@@ -4,14 +4,38 @@ use crate::db::Pool;
 use crate::errors::Result;
 use crate::types::{Author, EntryHash, LogId, SeqNum};
 
+/// Entry of an append-only log based on Bamboo specification. It describes the actual data in the
+/// p2p network and is shared between nodes.
+///
+/// Bamboo entries are the main data type of p2panda. Entries are organized in a distributed,
+/// single-writer append-only log structure, created and signed by holders of private keys and
+/// stored inside the node database.
+///
+/// The actual entry data is kept in `entry_bytes` and separated from the `payload_bytes` as the
+/// payload can be deleted without affecting the data structures integrity. All other fields like
+/// `author`, `payload_hash` etc. can be retrieved from `entry_bytes` but are separately stored in
+/// the database for faster querying.
 #[derive(FromRow, Debug)]
 pub struct Entry {
+    /// Public key of the author.
     pub author: Author,
+
+    /// Actual bamboo entry data.
     pub entry_bytes: String,
+
+    /// Hash of bamboo entry data.
     pub entry_hash: EntryHash,
+
+    /// Used log for this entry.
     pub log_id: LogId,
+
+    /// Payload of entry, can be deleted.
     pub payload_bytes: Option<String>,
+
+    /// Hash of payload data.
     pub payload_hash: EntryHash,
+
+    /// Sequence number of this entry.
     pub seq_num: SeqNum,
 }
 

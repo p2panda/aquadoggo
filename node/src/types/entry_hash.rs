@@ -5,13 +5,16 @@ use validator::{Validate, ValidationError, ValidationErrors};
 
 use crate::errors::Result;
 
-/// Yamf Blake2b Hash of a bamboo entry encoded as hex.
+/// Hash of an entry encoded as hex string.
+///
+/// Entry Hashes are BLAKE2b hashes wrapped in YAMF "Yet-Another-Multi-Format" according to the
+/// Bamboo specification.
 #[derive(Type, FromRow, Clone, Debug, Serialize, Deserialize)]
 #[sqlx(transparent)]
 pub struct EntryHash(String);
 
 impl EntryHash {
-    /// Validates and returns a new entry hash when correct.
+    /// Validates and returns entry hash instance when correct.
     #[allow(dead_code)]
     pub fn new(value: &str) -> Result<Self> {
         let hash = Self(String::from(value));
@@ -22,26 +25,31 @@ impl EntryHash {
     /// Generates a new hash and returns it.
     #[allow(dead_code)]
     pub fn from_bytes(value: Vec<u8>) -> Result<Self> {
-        let yamf_hash = new_blake2b(&value);
+        // Generate Blake2b hash
+        let blake2b_hash = new_blake2b(&value);
 
+        // Wrap hash in YAMF container format
         let mut bytes = Vec::new();
-        yamf_hash.encode_write(&mut bytes).map_err(|_| {
+        blake2b_hash.encode_write(&mut bytes).map_err(|_| {
             let mut errors = ValidationErrors::new();
             errors.add("hash", ValidationError::new("failed hash encoding"));
             errors
         })?;
 
-        Ok(Self(hex::encode(&bytes)))
+        // Encode bytes as hex string
+        let hex_str = hex::encode(&bytes);
+
+        Ok(Self(hex_str))
     }
 
-    /// Returns the hash as bytes.
+    /// Returns hash as bytes.
     #[allow(dead_code)]
     pub fn to_bytes(&self) -> Vec<u8> {
         // Unwrap as we already validated the hash
         hex::decode(&self.0).unwrap()
     }
 
-    /// Returns the hash as hex.
+    /// Returns hash as hex string.
     #[allow(dead_code)]
     pub fn to_hex(&self) -> &str {
         self.0.as_str()

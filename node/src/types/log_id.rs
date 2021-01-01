@@ -4,38 +4,40 @@ use validator::{Validate, ValidationError, ValidationErrors};
 
 use crate::errors::Result;
 
-/// Authors can write to multiple logs identified by their log ids.
+/// Authors can write entries to multiple logs identified by log ids.
 ///
-/// By specification the log id is an u64 integer but since this is not handled by our database
-/// library (sqlx) we use the signed variant.
+/// By specification the log_id is an u64 integer but since this is not supported by sqlx we use
+/// the signed variant i64.
 #[derive(Type, FromRow, Clone, Debug, Serialize, Deserialize)]
 #[sqlx(transparent)]
 pub struct LogId(i64);
 
 impl LogId {
-    /// Validates and returns a new log id instance when correct.
+    /// Validates and returns a new LogId instance when correct.
     pub fn new(value: i64) -> Result<Self> {
         let log_id = Self(value);
         log_id.validate()?;
         Ok(log_id)
     }
 
-    /// Returns true when log id is a user log (odd-numbered).
+    /// Returns true when LogId is for a user schema.
     pub fn is_user_log(&self) -> bool {
+        // Log ids for user schemas are odd numbers
         self.0 % 2 == 1
     }
 
-    /// Returns true when log id is a system log (even-numbered).
+    /// Returns true when LogId is for a system log.
     #[allow(dead_code)]
     pub fn is_system_log(&self) -> bool {
+        // Log ids for system schemas are even numbers
         self.0 % 2 == 0
     }
 }
 
 impl Default for LogId {
     fn default() -> Self {
-        // We never create system logs during runtime, the default value is therefore an odd user
-        // log id.
+        // Log ids for system schemes are defined by the specification and fixed, the default value
+        // is hence the first possible user schema log id.
         Self::new(1).unwrap()
     }
 }

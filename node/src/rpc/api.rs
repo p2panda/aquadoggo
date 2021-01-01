@@ -36,8 +36,8 @@ pub trait Api {
     fn get_entry_args(&self, params: Params) -> BoxFuture<Result<EntryArgsResponse>>;
 }
 
-/// Channel messages to send RPC command requests and their payloads from frontend Api to
-/// ApiService backend.
+/// Channel messages to send RPC command requests and their payloads from frontend `Api` to
+/// `ApiService` backend.
 ///
 /// Every message contains a `Sender` as a `back_channel` to send the response back to the RPC
 /// frontend.
@@ -46,9 +46,7 @@ enum ApiServiceMessages {
     GetEntryArgs(EntryArgsRequest, Sender<Result<EntryArgsResponse>>),
 }
 
-/// Service implementing API methods.
-///
-/// Exposes a `service_channel` for frontend API to notify service about incoming requests.
+/// Backend service handling the RPC API methods.
 pub struct ApiService {
     service_channel: Sender<ApiServiceMessages>,
 }
@@ -88,21 +86,24 @@ impl ApiService {
     }
 }
 
-/// API frontend for ApiService.
+/// RPC API frontend for `ApiService`.
 ///
 /// Every implemented API method sends the command further via the `service_channel` to the
-/// ApiService backend where it gets handled. Its being returned via the `back_channel` to finally
-/// send the JSON RPC response back to the client.
+/// `ApiService` backend where it gets handled. The result is returned via the `back_channel` and
+/// finally sent back to the client as a JSON RPC response.
 impl Api for ApiService {
     fn get_entry_args(&self, params_raw: Params) -> BoxFuture<Result<EntryArgsResponse>> {
         let service_channel = self.service_channel.clone();
 
         Box::pin(async move {
+            // Parse and validate incoming command parameters
             let params: EntryArgsRequest = params_raw.parse()?;
             params.validate()?;
 
+            // Create back_channel to receive result from backend
             let (back_channel, back_channel_notifier) = unbounded();
 
+            // Send request to backend and wait for response on back_channel
             task::block_on(
                 service_channel.send(ApiServiceMessages::GetEntryArgs(params, back_channel)),
             )
@@ -112,9 +113,12 @@ impl Api for ApiService {
     }
 }
 
-/// Returns required data to the client to encode a new bamboo entry.
+/// Implementation of `p2panda_getEntryArguments` RPC method.
+///
+/// Returns required data (backlink and skiplink entry hashes, last sequence number and the schemas
+/// log_id) to encode a new bamboo entry.
 async fn get_entry_args(pool: Pool, params: EntryArgsRequest) -> Result<EntryArgsResponse> {
-    // Determine log id for author's schema
+    // Determine log_id for author's schema
     let log_id = Log::schema_log_id(&pool, &params.author, &params.schema).await?;
 
     // Find latest entry in this log

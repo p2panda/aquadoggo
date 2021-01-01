@@ -5,10 +5,10 @@ use validator::{Validate, ValidationError, ValidationErrors};
 
 use crate::errors::Result;
 
-/// Start counting sequence numbers from here.
+/// Start counting entries from here.
 pub const FIRST_SEQ_NUM: i64 = 1;
 
-/// Bamboo append-only log sequence number.
+/// Sequence number describing the position of an entry in its append-only log.
 #[derive(Type, FromRow, Clone, Debug, Serialize, Deserialize)]
 #[sqlx(transparent)]
 pub struct SeqNum(i64);
@@ -21,14 +21,17 @@ impl SeqNum {
         Ok(seq_num)
     }
 
-    /// Return sequence number of skiplink.
-    pub fn skiplink_seq_num(&self) -> Self {
-        Self(lipmaa(self.0 as u64) as i64 + FIRST_SEQ_NUM)
-    }
-
-    /// Return sequence number of backlink.
+    /// Return sequence number of the previous entry (backlink).
+    #[allow(dead_code)]
     pub fn backlink_seq_num(&self) -> Result<Self> {
         Self::new(self.0 - 1)
+    }
+
+    /// Return sequence number of the lipmaa entry (skiplink).
+    ///
+    /// See Bamboo specification for more details about how skiplinks are calculated.
+    pub fn skiplink_seq_num(&self) -> Self {
+        Self(lipmaa(self.0 as u64) as i64 + FIRST_SEQ_NUM)
     }
 }
 

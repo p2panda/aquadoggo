@@ -5,7 +5,7 @@ use validator::{Validate, ValidationError, ValidationErrors};
 
 use crate::errors::Result;
 
-/// Authors are hex encoded ed25519 public keys.
+/// Authors are hex encoded ed25519 public key strings.
 #[derive(Type, Clone, Debug, Serialize, Deserialize)]
 #[sqlx(transparent)]
 pub struct Author(String);
@@ -24,7 +24,7 @@ impl Validate for Author {
     fn validate(&self) -> anyhow::Result<(), ValidationErrors> {
         let mut errors = ValidationErrors::new();
 
-        // Check if author is a hex string
+        // Check if author is hex encoded
         match hex::decode(self.0.to_owned()) {
             Ok(bytes) => {
                 // Check if length is correct
