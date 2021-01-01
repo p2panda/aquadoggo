@@ -1,6 +1,5 @@
 use async_std::channel::{unbounded, Sender};
 use async_std::task;
-use bamboo_core::lipmaa;
 use jsonrpc_core::{BoxFuture, IoHandler, Params};
 use jsonrpc_derive::rpc;
 use serde::{Deserialize, Serialize};
@@ -9,7 +8,7 @@ use validator::Validate;
 use crate::db::models::{Entry, Log};
 use crate::db::Pool;
 use crate::errors::Result;
-use crate::types::{Author, EntryHash, LogId, Schema};
+use crate::types::{Author, EntryHash, LogId, Schema, SeqNum};
 
 /// Request body of `panda_getEntryArguments`.
 #[derive(Deserialize, Validate, Debug)]
@@ -26,7 +25,7 @@ pub struct EntryArgsRequest {
 pub struct EntryArgsResponse {
     entry_hash_backlink: Option<EntryHash>,
     entry_hash_skiplink: Option<EntryHash>,
-    last_seq_num: Option<i64>,
+    last_seq_num: Option<SeqNum>,
     log_id: LogId,
 }
 
@@ -128,7 +127,7 @@ async fn get_entry_args(pool: Pool, params: EntryArgsRequest) -> Result<EntryArg
                 &pool,
                 &params.author,
                 &log_id,
-                lipmaa(entry_backlink.seqnum as u64 + 1) as i64,
+                &entry_backlink.seqnum.skiplink_num(),
             )
             .await?
             .unwrap();

@@ -2,7 +2,7 @@ use sqlx::{query_as, FromRow};
 
 use crate::db::Pool;
 use crate::errors::Result;
-use crate::types::{Author, EntryHash, LogId};
+use crate::types::{Author, EntryHash, LogId, SeqNum};
 
 #[derive(FromRow, Debug)]
 pub struct Entry {
@@ -12,7 +12,7 @@ pub struct Entry {
     pub log_id: LogId,
     pub payload_bytes: Option<String>,
     pub payload_hash: EntryHash,
-    pub seqnum: i64,
+    pub seqnum: SeqNum,
 }
 
 impl Entry {
@@ -40,7 +40,7 @@ impl Entry {
         pool: &Pool,
         author: &Author,
         log_id: &LogId,
-        seq_num: i64,
+        seq_num: &SeqNum,
     ) -> Result<Option<Entry>> {
         let entry = query_as::<_, Entry>(
             "
