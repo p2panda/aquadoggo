@@ -56,7 +56,7 @@ impl Validate for EntryHash {
         match hex::decode(self.0.to_owned()) {
             Ok(bytes) => {
                 // Check if length is correct
-                if bytes.len() < MAX_YAMF_HASH_SIZE {
+                if bytes.len() != MAX_YAMF_HASH_SIZE {
                     errors.add("hash", ValidationError::new("invalid hash length"));
                 }
 

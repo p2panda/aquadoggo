@@ -28,7 +28,7 @@ impl Validate for Author {
         match hex::decode(self.0.to_owned()) {
             Ok(bytes) => {
                 // Check if length is correct
-                if bytes.len() < PUBLIC_KEY_LENGTH {
+                if bytes.len() != PUBLIC_KEY_LENGTH {
                     errors.add("author", ValidationError::new("invalid string length"));
                 }
 
