@@ -67,13 +67,13 @@ mod tests {
     use crate::test_helpers::initialize_db;
     use crate::types::{Author, LogId};
 
+    const TEST_AUTHOR: &str = "1a8a62c5f64eed987326513ea15a6ea2682c256ac57a418c1c92d96787c8b36e";
+
     #[async_std::test]
     async fn latest_entry() {
         let pool = initialize_db().await;
 
-        let author =
-            Author::new("1a8a62c5f64eed987326513ea15a6ea2682c256ac57a418c1c92d96787c8b36e")
-                .unwrap();
+        let author = Author::new(TEST_AUTHOR).unwrap();
         let log_id = LogId::new(1).unwrap();
 
         let latest_entry = Entry::latest(&pool, &author, &log_id).await.unwrap();

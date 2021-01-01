@@ -29,7 +29,9 @@ pub async fn drop_database() {
 
 // Generate random entry hash
 pub fn random_entry_hash() -> String {
-    EntryHash::from_bytes(rand::thread_rng().gen::<[u8; 32]>().to_vec())
+    let random_data = rand::thread_rng().gen::<[u8; 32]>().to_vec();
+
+    EntryHash::from_bytes(random_data)
         .unwrap()
         .to_hex()
         .to_owned()
