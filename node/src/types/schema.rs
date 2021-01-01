@@ -3,25 +3,24 @@ use sqlx::Type;
 use validator::{Validate, ValidationErrors};
 
 use crate::errors::Result;
+use crate::types::EntryHash;
 
-/// Schemas are entry hash strings pointing at an entry of a schema migration.
+/// Schemas are entry hashes pointing at an entry with a schema migration.
 #[derive(Type, Clone, Debug, Serialize, Deserialize)]
 #[sqlx(transparent)]
-pub struct Schema(String);
+pub struct Schema(EntryHash);
 
 impl Schema {
     /// Validates and returns a schema when correct.
     #[allow(dead_code)]
     pub fn new(value: &str) -> Result<Self> {
-        let schema = Self(String::from(value));
-        schema.validate()?;
-        Ok(schema)
+        let hash = EntryHash::new(value)?;
+        Ok(Self(hash))
     }
 }
 
 impl Validate for Schema {
     fn validate(&self) -> anyhow::Result<(), ValidationErrors> {
-        // @TODO
-        Ok(())
+        self.0.validate()
     }
 }

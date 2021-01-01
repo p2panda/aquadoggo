@@ -155,7 +155,9 @@ mod tests {
 
     use jsonrpc_core::ErrorCode;
 
-    use crate::test_helpers::initialize_db;
+    use crate::test_helpers::{initialize_db, random_entry_hash};
+
+    const TEST_AUTHOR: &str = "8b52ae153142288402382fd6d9619e018978e015e6bc372b1b0c7bd40c6a240a";
 
     // Helper method to generate valid JSON RPC request string
     fn rpc_request(method: &str, params: &str) -> String {
@@ -211,9 +213,12 @@ mod tests {
 
         let request = rpc_request(
             "panda_getEntryArguments",
-            r#"{
-                "schema": "test"
-            }"#,
+            &format!(
+                r#"{{
+                    "schema": "{}"
+                }}"#,
+                random_entry_hash()
+            ),
         );
 
         let response = rpc_error(
@@ -231,10 +236,13 @@ mod tests {
 
         let request = rpc_request(
             "panda_getEntryArguments",
-            r#"{
-                "author": "1234",
-                "schema": "test"
-            }"#,
+            &format!(
+                r#"{{
+                    "author": "1234",
+                    "schema": "{}"
+                }}"#,
+                random_entry_hash()
+            ),
         );
 
         let response = rpc_error(
@@ -252,10 +260,14 @@ mod tests {
 
         let request = rpc_request(
             "panda_getEntryArguments",
-            r#"{
-                "author": "1a8a62c5f64eed987326513ea15a6ea2682c256ac57a418c1c92d96787c8b36e",
-                "schema": "test"
-            }"#,
+            &format!(
+                r#"{{
+                    "author": "{}",
+                    "schema": "{}"
+                }}"#,
+                TEST_AUTHOR,
+                random_entry_hash(),
+            ),
         );
 
         let response = rpc_response(
