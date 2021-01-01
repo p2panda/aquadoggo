@@ -20,10 +20,10 @@ pub struct Entry {
     /// Public key of the author.
     pub author: Author,
 
-    /// Actual bamboo entry data.
+    /// Actual Bamboo entry data.
     pub entry_bytes: String,
 
-    /// Hash of bamboo entry data.
+    /// Hash of Bamboo entry data.
     pub entry_hash: EntryHash,
 
     /// Used log for this entry.
@@ -40,7 +40,7 @@ pub struct Entry {
 }
 
 impl Entry {
-    /// Returns the latest bamboo entry of an author's log.
+    /// Returns the latest Bamboo entry of an author's log.
     pub async fn latest(pool: &Pool, author: &Author, log_id: &LogId) -> Result<Option<Entry>> {
         let latest_entry = query_as::<_, Entry>(
             "

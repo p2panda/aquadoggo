@@ -68,13 +68,13 @@ impl Validate for EntryHash {
                     errors.add("hash", ValidationError::new("invalid hash length"));
                 }
 
-                // Check if yamf blake2b hash is valid
+                // Check if YAMF BLAKE2b hash is valid
                 match YamfHash::<&[u8]>::decode(&bytes) {
                     Ok((YamfHash::Blake2b(_), _)) => {}
                     _ => {
                         errors.add(
                             "hash",
-                            ValidationError::new("can't decode yamf blake2b hash"),
+                            ValidationError::new("can't decode YAMF BLAKE2b hash"),
                         );
                     }
                 }
