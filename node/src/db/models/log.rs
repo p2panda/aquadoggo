@@ -77,12 +77,12 @@ impl Log {
                 continue;
             }
 
-            // This log_id is already used
+            // Success! Found unused log id
             if next_log_id != *log_id {
                 break;
             }
 
-            // Iterate over the sequence of possible log_ids
+            // Otherwise, try next possible log id
             next_log_id = next_log_id.next().unwrap();
         }
 
@@ -95,9 +95,9 @@ impl Log {
     /// has already been registered for a certain schema and returns its id.
     ///
     /// If no log has been found for a USER schema it automatically returns the next unused log_id.
-    /// SYSTEM schema log ids are constant and defined by the protocol specification.
+    /// SYSTEM schema log ids are pre-defined by the protocol specification.
     pub async fn schema_log_id(pool: &Pool, author: &Author, schema: &Schema) -> Result<LogId> {
-        // @TODO: Check if system schema was used and return regarding log id
+        // @TODO: Look up if system schema was used and return regarding log id
         let result = query_as::<_, LogId>(
             "
             SELECT
