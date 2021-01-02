@@ -33,8 +33,10 @@ impl Log {
     ) -> Result<bool> {
         let rows_affected = query(
             "
-            INSERT INTO logs (author, log_id, schema)
-            VALUES (?1, ?2, ?3)
+            INSERT INTO
+                logs (author, log_id, schema)
+            VALUES
+                (?1, ?2, ?3)
             ",
         )
         .bind(author)
@@ -52,10 +54,14 @@ impl Log {
         // Get all log ids from this author
         let log_ids: Vec<LogId> = query_as::<_, LogId>(
             "
-            SELECT log_id
-            FROM logs
-            WHERE author = ?1
-            ORDER BY log_id ASC
+            SELECT
+                log_id
+            FROM
+                logs
+            WHERE
+                author = ?1
+            ORDER BY
+                log_id ASC
             ",
         )
         .bind(author)
@@ -94,9 +100,13 @@ impl Log {
         // @TODO: Check if system schema was used and return regarding log id
         let result = query_as::<_, LogId>(
             "
-            SELECT log_id
-            FROM logs
-            WHERE author = ?1 AND schema = ?2
+            SELECT
+                log_id
+            FROM
+                logs
+            WHERE
+                author = ?1
+                AND schema = ?2
             ",
         )
         .bind(author)

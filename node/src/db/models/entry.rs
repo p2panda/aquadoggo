@@ -44,11 +44,23 @@ impl Entry {
     pub async fn latest(pool: &Pool, author: &Author, log_id: &LogId) -> Result<Option<Entry>> {
         let latest_entry = query_as::<_, Entry>(
             "
-            SELECT author, entry_bytes, entry_hash, log_id, payload_bytes, payload_hash, seq_num
-            FROM entries
-            WHERE author = ?1 AND log_id = ?2
-            ORDER BY seq_num DESC
-            LIMIT 1
+            SELECT
+                author,
+                entry_bytes,
+                entry_hash,
+                log_id,
+                payload_bytes,
+                payload_hash,
+                seq_num
+            FROM
+                entries
+            WHERE
+                author = ?1
+                AND log_id = ?2
+            ORDER BY
+                seq_num DESC
+            LIMIT
+                1
             ",
         )
         .bind(author)
@@ -68,10 +80,20 @@ impl Entry {
     ) -> Result<Option<Entry>> {
         let entry = query_as::<_, Entry>(
             "
-            SELECT author, entry_bytes, entry_hash, log_id, payload_bytes, payload_hash, seq_num
-            FROM entries
-            WHERE author = ?1 AND log_id = ?2 AND seq_num = ?3
-            LIMIT 1
+            SELECT
+                author,
+                entry_bytes,
+                entry_hash,
+                log_id,
+                payload_bytes,
+                payload_hash,
+                seq_num
+            FROM
+                entries
+            WHERE
+                author = ?1
+                AND log_id = ?2
+                AND seq_num = ?3
             ",
         )
         .bind(author)
