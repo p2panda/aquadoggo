@@ -31,6 +31,7 @@ impl Log {
         schema: &Schema,
         log_id: &LogId,
     ) -> Result<bool> {
+        assert!(log_id.is_user_log());
         let rows_affected = query(
             "
             INSERT INTO
@@ -46,7 +47,7 @@ impl Log {
         .await?
         .rows_affected();
 
-        Ok(rows_affected > 0)
+        Ok(rows_affected == 1)
     }
 
     /// Determines the next unused user schema log_id of an author.
@@ -68,7 +69,8 @@ impl Log {
         .fetch_all(pool)
         .await?;
 
-        // Find next unused user schema log_id
+        // Find next unused user schema log_id by comparing the sequence of known log ids with an
+        // ideal sequence of subsequent log ids until we find a gap.
         let mut next_log_id = LogId::default();
 
         for log_id in log_ids.iter() {
@@ -152,13 +154,13 @@ mod tests {
         let schema = Schema::new(&random_entry_hash()).unwrap();
 
         assert!(
-            Log::register_log_id(&pool, &author, &schema, &LogId::new(2).unwrap())
+            Log::register_log_id(&pool, &author, &schema, &LogId::new(1).unwrap())
                 .await
                 .is_ok()
         );
 
         assert!(
-            Log::register_log_id(&pool, &author, &schema, &LogId::new(2).unwrap())
+            Log::register_log_id(&pool, &author, &schema, &LogId::new(1).unwrap())
                 .await
                 .is_err()
         );
@@ -177,8 +179,8 @@ mod tests {
         let schema_third = Schema::new(&random_entry_hash()).unwrap();
         let schema_system = Schema::new(&random_entry_hash()).unwrap();
 
-        // Register already two log ids at the beginning
-        Log::register_log_id(&pool, &author, &schema_system, &LogId::new(2).unwrap())
+        // Register two log ids at the beginning
+        Log::register_log_id(&pool, &author, &schema_system, &LogId::new(9).unwrap())
             .await
             .unwrap();
         Log::register_log_id(&pool, &author, &schema_first, &LogId::new(3).unwrap())

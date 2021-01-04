@@ -1,4 +1,4 @@
-use ed25519_dalek::{PublicKey, PUBLIC_KEY_LENGTH};
+use ed25519_dalek::PUBLIC_KEY_LENGTH;
 use serde::{Deserialize, Serialize};
 use sqlx::Type;
 use validator::{Validate, ValidationError, ValidationErrors};
@@ -31,11 +31,6 @@ impl Validate for Author {
                 if bytes.len() != PUBLIC_KEY_LENGTH {
                     errors.add("author", ValidationError::new("invalid string length"));
                 }
-
-                // Check if ed25519 public key is valid
-                if PublicKey::from_bytes(&bytes).is_err() {
-                    errors.add("author", ValidationError::new("invalid ed25519 public key"));
-                }
             }
             Err(_) => {
                 errors.add("author", ValidationError::new("invalid hex string"));
@@ -58,10 +53,6 @@ mod tests {
     fn validate() {
         assert!(Author::new("abcdefg").is_err());
         assert!(Author::new("112233445566ff").is_err());
-        assert!(
-            Author::new("01234567812345678123456781234567812345678123456781234567812345678")
-                .is_err()
-        );
         assert!(
             Author::new("7cf4f58a2d89e93313f2de99604a814ecea9800cf217b140e9c3a7ba59a5d982").is_ok()
         );
