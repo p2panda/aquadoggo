@@ -8,7 +8,7 @@ use validator::Validate;
 use crate::db::models::{Entry, Log};
 use crate::db::Pool;
 use crate::errors::Result;
-use crate::types::{Author, EntryHash, LogId, Schema, SeqNum};
+use crate::types::{Author, EncodedEntry, EncodedMessage, EntryHash, LogId, Schema, SeqNum};
 
 /// Request body of `panda_getEntryArguments`.
 #[derive(Deserialize, Validate, Debug)]
@@ -35,8 +35,11 @@ pub struct EntryArgsResponse {
 #[derive(Deserialize, Validate, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct PublishEntryRequest {
-    encoded_entry: String,
-    encoded_payload: String,
+    #[validate]
+    encoded_entry: EncodedEntry,
+
+    #[validate]
+    encoded_message: EncodedMessage,
 }
 
 /// Response body of `panda_publishEntry`.
@@ -200,7 +203,7 @@ async fn get_entry_args(pool: Pool, params: EntryArgsRequest) -> Result<EntryArg
 }
 
 /// Implementation of `panda_publishEntry` RPC method.
-async fn publish_entry(_pool: Pool, _params: PublishEntryRequest) -> Result<PublishEntryResponse> {
+async fn publish_entry(_pool: Pool, params: PublishEntryRequest) -> Result<PublishEntryResponse> {
     Ok(PublishEntryResponse {
         entry_hash: EntryHash::new("test")?,
     })

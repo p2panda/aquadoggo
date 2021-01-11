@@ -6,6 +6,10 @@ pub type Result<T> = anyhow::Result<T, Error>;
 /// Represents all the ways a method can fail within the node.
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
+    /// Error returned from hex en-/decoder.
+    #[error(transparent)]
+    Hex(#[from] hex::FromHexError),
+
     /// Error returned from JSON RPC API.
     #[error(transparent)]
     RPC(#[from] jsonrpc_core::Error),
@@ -22,6 +26,13 @@ pub enum Error {
 impl From<Error> for jsonrpc_core::Error {
     fn from(error: Error) -> Self {
         match error {
+            Error::Hex(hex_error) => {
+                jsonrpc_core::Error {
+                    code: jsonrpc_core::ErrorCode::InvalidParams,
+                    message: format!("Invalid params: {}.", hex_error),
+                    data: None,
+                }
+            }
             Error::RPC(rpc_error) => rpc_error,
             Error::Validation(validation_errors) => {
                 let message = validation_errors

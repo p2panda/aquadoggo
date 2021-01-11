@@ -28,3 +28,4 @@ sqlformat = "=0.1.4"
 sqlx = { version = "0.4.2", features = ["runtime-async-std-native-tls", "any", "sqlite", "mysql", "postgres"] }
 thiserror = "1.0.23"
 validator = { version = "0.12.0", features = ["derive"] }
+cddl = "0.8.5"
