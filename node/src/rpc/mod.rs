@@ -1,5 +1,3 @@
-extern crate log;
-
 mod api;
 mod server;
 

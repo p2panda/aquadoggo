@@ -58,13 +58,13 @@ impl Configuration {
     /// Returns the data directory path and creates the folders when not existing.
     fn create_data_directory(path: Option<PathBuf>) -> Result<PathBuf> {
         // Use custom data directory path or determine one from host
-        let base_path = path.unwrap_or(
+        let base_path = path.unwrap_or_else(|| {
             ProjectDirs::from("", "", DATA_DIR_NAME)
                 .ok_or("Can not determine data directory")
                 .unwrap()
                 .data_dir()
-                .to_path_buf(),
-        );
+                .to_path_buf()
+        });
 
         // Create folders when they don't exist yet
         fs::create_dir_all(&base_path)?;

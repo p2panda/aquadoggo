@@ -8,14 +8,19 @@
     unsafe_code,
     unstable_features,
     unused_import_braces,
-    unused_qualifications,
+    unused_qualifications
 )]
 
 mod config;
 mod db;
+mod errors;
 mod rpc;
 mod runtime;
 mod task;
+mod types;
+
+#[cfg(test)]
+mod test_helpers;
 
 pub use config::Configuration;
 pub use runtime::Runtime;

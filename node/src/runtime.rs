@@ -8,11 +8,11 @@ use crate::task::TaskManager;
 /// Makes sure database is created and migrated before returning connection pool.
 async fn initialize_db(config: &Configuration) -> Result<Pool> {
     // Create database when not existing
-    create_database(config.database_url.clone().unwrap()).await?;
+    create_database(&config.database_url.clone().unwrap()).await?;
 
     // Create connection pool
     let pool = connection_pool(
-        config.database_url.clone().unwrap(),
+        &config.database_url.clone().unwrap(),
         config.database_max_connections,
     )
     .await?;
@@ -43,7 +43,7 @@ impl Runtime {
             .expect("Could not initialize database");
 
         // Start JSON RPC API servers
-        let io_handler = ApiService::io_handler();
+        let io_handler = ApiService::io_handler(pool.clone());
         let rpc_server = RpcServer::start(&config, &mut task_manager, io_handler);
 
         Self {
