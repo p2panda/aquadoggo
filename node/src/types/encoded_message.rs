@@ -7,40 +7,32 @@ use crate::errors::Result;
 // CDDL Schema
 const MESSAGE_SCHEMA: &str = r#"
     message = {
-        message-context,
-        $message-body,
+        schema: entry-hash,
+        version: 1,
+        message-body,
     }
 
-    message-context = {
-        schema: message-schema,
-        version: message-version,
-    }
+    entry-hash = tstr .regexp "[0-9a-fa-f]{128}"
+    message-fields = (+ tstr => any)
 
-    message-schema = tstr .regexp "[0-9a-fA-F]{128}"
-    message-version = 1
-
-    $message-body /= {
+    ; Create message
+    message-body = (
         action: "create",
         fields: message-fields
-    }
+    )
 
-    $message-body /= {
+    ; Update message
+    message-body //= (
         action: "update",
         fields: message-fields,
-        id: uint,
-    }
+        id: entry-hash,
+    )
 
-    $message-body /= {
+    ; Delete message
+    message-body //= (
         action: "delete",
-        id: uint,
-    }
-
-    message-fields = {
-        + message-label => message-value,
-    }
-
-    message-label = tstr
-    message-value = any
+        id: entry-hash,
+    )
 "#;
 
 #[derive(Type, Clone, Debug, Serialize, Deserialize)]
