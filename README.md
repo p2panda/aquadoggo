@@ -76,7 +76,7 @@ OPTIONS:
     -d, --data-dir <data-dir>    Path to data folder, $HOME/.local/share/p2panda by default on Linux
 ```
 
-[Tauri]: https://tauri.studio
+[`Tauri`]: https://tauri.studio
 
 ## Installation
 
