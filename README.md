@@ -35,7 +35,7 @@
 
 <br/>
 
-Configurable node server implementation for the [`p2panda`] network running as a [standalone process](/node_cli) or embedded as a [library](/node).
+Configurable node server implementation for the [`p2panda`] network running as a [command line application](/node_cli) or embedded via the [library](/node) inside your Rust program.
 
 [`p2panda`]: https://github.com/p2panda/design-document
 
