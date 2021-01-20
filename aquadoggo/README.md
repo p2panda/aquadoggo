@@ -1,6 +1,6 @@
-# p2panda-node library
+# aquadoggo library
 
-Embeddable p2panda node library.
+Embeddable p2panda node server library.
 
 ## Development
 

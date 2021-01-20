@@ -1,4 +1,4 @@
-//! # p2panda-node
+//! # aquadoggo
 #![warn(
     missing_copy_implementations,
     missing_debug_implementations,

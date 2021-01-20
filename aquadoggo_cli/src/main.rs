@@ -2,12 +2,12 @@ use async_ctrlc::CtrlC;
 use async_std::task;
 use structopt::StructOpt;
 
-use p2panda_node::{Configuration, Runtime};
+use aquadoggo::{Configuration, Runtime};
 
 #[derive(StructOpt, Debug)]
-#[structopt(name = "p2panda Node", about = "Node server for the p2panda network")]
+#[structopt(name = "aquadoggo Node", about = "Node server for the p2panda network")]
 struct Opt {
-    /// Path to data folder, $HOME/.local/share/p2panda by default on Linux.
+    /// Path to data folder, $HOME/.local/share/aquadoggo by default on Linux.
     #[structopt(short, long, parse(from_os_str))]
     data_dir: Option<std::path::PathBuf>,
 }

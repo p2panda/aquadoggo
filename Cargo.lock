@@ -42,6 +42,43 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68803225a7b13e47191bab76f2687382b60d259e8cf37f6e1893658b84bb9479"
 
 [[package]]
+name = "aquadoggo"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-std",
+ "bamboo-core",
+ "directories",
+ "ed25519-dalek",
+ "envy",
+ "exit-future",
+ "futures 0.3.8",
+ "hex",
+ "jsonrpc-core",
+ "jsonrpc-derive",
+ "jsonrpc-http-server",
+ "jsonrpc-ws-server",
+ "log",
+ "rand 0.8.0",
+ "serde",
+ "sqlformat",
+ "sqlx",
+ "thiserror",
+ "validator",
+]
+
+[[package]]
+name = "aquadoggo_cli"
+version = "0.1.0"
+dependencies = [
+ "aquadoggo",
+ "async-ctrlc",
+ "async-std",
+ "env_logger",
+ "structopt",
+]
+
+[[package]]
 name = "arrayref"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1715,43 +1752,6 @@ dependencies = [
  "libc",
  "pkg-config",
  "vcpkg",
-]
-
-[[package]]
-name = "p2panda_cli"
-version = "0.1.0"
-dependencies = [
- "async-ctrlc",
- "async-std",
- "env_logger",
- "p2panda_node",
- "structopt",
-]
-
-[[package]]
-name = "p2panda_node"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-std",
- "bamboo-core",
- "directories",
- "ed25519-dalek",
- "envy",
- "exit-future",
- "futures 0.3.8",
- "hex",
- "jsonrpc-core",
- "jsonrpc-derive",
- "jsonrpc-http-server",
- "jsonrpc-ws-server",
- "log",
- "rand 0.8.0",
- "serde",
- "sqlformat",
- "sqlx",
- "thiserror",
- "validator",
 ]
 
 [[package]]

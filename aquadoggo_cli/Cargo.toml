@@ -1,14 +1,14 @@
 [package]
-name = "p2panda_cli"
+name = "aquadoggo_cli"
 version = "0.1.0"
 authors = ["sophiiistika <sophiiistika@mailbox.org>", "adz <x1d@adz.garden>", "cafca <cafca@001.land>"]
 license = "AGPL-3.0-only"
-repository = "https://github.com/p2panda/node"
+repository = "https://github.com/p2panda/aquadoggo"
 readme = "README.md"
 edition = "2018"
 
 [[bin]]
-name = "p2panda"
+name = "aquadoggo"
 path = "src/main.rs"
 doc = false
 
@@ -18,6 +18,6 @@ async-std = { version = "1.7.0", features = ["unstable", "attributes"] }
 env_logger = "0.8.2"
 structopt = "0.3.20"
 
-[dependencies.p2panda_node]
+[dependencies.aquadoggo]
 version = "~0.1.0"
-path = "../node"
+path = "../aquadoggo"
