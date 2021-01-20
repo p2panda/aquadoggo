@@ -1,5 +1,5 @@
 [workspace]
 members = [
-  "node",
-  "node_cli",
+  "aquadoggo",
+  "aquadoggo_cli",
 ]

@@ -1,4 +1,4 @@
-# p2panda-node CLI
+# aquadoggo CLI
 
 Node server with JSON RPC API for the p2panda network.
 
@@ -6,19 +6,19 @@ Node server with JSON RPC API for the p2panda network.
 
 ```
 USAGE:
-    p2panda [OPTIONS]
+    aquadoggo [OPTIONS]
 
 FLAGS:
     -h, --help       Prints help information
     -V, --version    Prints version information
 
 OPTIONS:
-    -d, --data-dir <data-dir>    Path to data folder, $HOME/.local/share/p2panda by default on Linux
+    -d, --data-dir <data-dir>    Path to data folder, $HOME/.local/share/aquadoggo by default on Linux
 ```
 
 ## Environment variables
 
-* `DATABASE_URL` Database url (SQLite, MySQL, PostgreSQL) (default `sqlite:<data-dir>/p2panda-node.sqlite3`).
+* `DATABASE_URL` Database url (SQLite, MySQL, PostgreSQL) (default `sqlite:<data-dir>/aquadoggo-node.sqlite3`).
 * `DATABASE_MAX_CONNECTIONS` Maximum number of database connections in pool (default `32`).
 * `HTTP_PORT` RPC API HTTP server port (default `2020`).
 * `HTTP_THREADS` Number of HTTP server threads to run (default `4`).

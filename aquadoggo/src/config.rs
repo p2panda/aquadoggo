@@ -5,10 +5,10 @@ use std::fs;
 use std::path::PathBuf;
 
 /// Data directory name.
-const DATA_DIR_NAME: &str = "p2panda";
+const DATA_DIR_NAME: &str = "aquadoggo";
 
 /// Filename of default sqlite database.
-const DEFAULT_SQLITE_NAME: &str = "p2panda-node.sqlite3";
+const DEFAULT_SQLITE_NAME: &str = "aquadoggo-node.sqlite3";
 
 /// Configuration object holding all important variables throughout the application.
 ///
