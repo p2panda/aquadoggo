@@ -86,7 +86,7 @@ With [cargo-edit](https://github.com/killercup/cargo-edit) installed run:
 $ cargo add aquadoggo
 ```
 
-[cargo-add]: https://github.com/killercup/cargo-edit
+[cargo-edit]: https://github.com/killercup/cargo-edit
 
 ## License
 
