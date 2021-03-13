@@ -1,4 +1,4 @@
-use bamboo_core::yamf_hash::{new_blake2b, YamfHash, MAX_YAMF_HASH_SIZE};
+use bamboo_rs_core::yamf_hash::{new_blake2b, YamfHash, MAX_YAMF_HASH_SIZE};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Type};
 use validator::{Validate, ValidationError, ValidationErrors};

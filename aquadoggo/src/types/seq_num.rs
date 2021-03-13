@@ -1,4 +1,4 @@
-use bamboo_core::lipmaa;
+use bamboo_rs_core::lipmaa;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Type};
 use validator::{Validate, ValidationError, ValidationErrors};
