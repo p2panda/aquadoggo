@@ -12,25 +12,25 @@ readme = "README.md"
 edition = "2018"
 
 [dependencies]
-anyhow = "1.0.38"
+anyhow = "1.0.39"
 async-std = { version = "1.9.0", features = ["unstable", "attributes"] }
 directories = "3.0.1"
 ed25519-dalek = "1.0.1"
 envy = "0.4.2"
 exit-future = "0.2.0"
-futures = "0.3.12"
-hex = "0.4.2"
-jsonrpc-core = "16.0.0"
-jsonrpc-derive = "16.0.0"
-jsonrpc-http-server = "16.0.0"
-jsonrpc-ws-server = "16.0.0"
-log = "0.4.13"
-rand = "0.8.2"
-serde = { version = "1.0.119", features = ["derive"] }
-sqlformat = "0.1.5"
+futures = "0.3.13"
+hex = "0.4.3"
+jsonrpc-core = "17.0.0"
+jsonrpc-derive = "17.0.0"
+jsonrpc-http-server = "17.0.0"
+jsonrpc-ws-server = "17.0.0"
+log = "0.4.14"
+rand = "0.8.3"
+serde = { version = "1.0.125", features = ["derive"] }
+sqlformat = "0.1.6"
 sqlx = { version = "0.5.1", features = ["runtime-async-std-native-tls", "all-databases"] }
-thiserror = "1.0.23"
-validator = { version = "0.12.0", features = ["derive"] }
+thiserror = "1.0.24"
+validator = { version = "0.13.0", features = ["derive"] }
 
 # @TODO: Change this as soon as `bamboo-rs` gets published
 [dependencies.bamboo-rs-core]
