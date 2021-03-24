@@ -1,9 +1,9 @@
+use p2panda_rs::atomic::Hash;
 use rand::Rng;
 use sqlx::any::Any;
 use sqlx::migrate::MigrateDatabase;
 
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
-use crate::types::EntryHash;
 
 const DB_URL: &str = "sqlite::memory:";
 
@@ -31,8 +31,8 @@ pub async fn drop_database() {
 pub fn random_entry_hash() -> String {
     let random_data = rand::thread_rng().gen::<[u8; 32]>().to_vec();
 
-    EntryHash::from_bytes(random_data)
+    Hash::new_from_bytes(random_data)
         .unwrap()
-        .to_hex()
+        .as_hex()
         .to_owned()
 }

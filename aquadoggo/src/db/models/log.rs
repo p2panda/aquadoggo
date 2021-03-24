@@ -1,8 +1,8 @@
-use sqlx::{query, query_as, Done, FromRow};
+use p2panda_rs::atomic::{Author, Hash, LogId};
+use sqlx::{query, query_as, FromRow};
 
 use crate::db::Pool;
 use crate::errors::Result;
-use crate::types::{Author, LogId, Schema};
 
 /// Keeps track of which log_id has been used for which schema per author.
 ///
@@ -17,7 +17,7 @@ pub struct Log {
     log_id: LogId,
 
     /// Schema hash used by author.
-    schema: Schema,
+    schema: Hash,
 }
 
 impl Log {
@@ -28,7 +28,7 @@ impl Log {
     pub async fn register_log_id(
         pool: &Pool,
         author: &Author,
-        schema: &Schema,
+        schema: &Hash,
         log_id: &LogId,
     ) -> Result<bool> {
         assert!(log_id.is_user_log());
@@ -98,7 +98,7 @@ impl Log {
     ///
     /// If no log has been found for a USER schema it automatically returns the next unused log_id.
     /// SYSTEM schema log ids are pre-defined by the protocol specification.
-    pub async fn schema_log_id(pool: &Pool, author: &Author, schema: &Schema) -> Result<LogId> {
+    pub async fn schema_log_id(pool: &Pool, author: &Author, schema: &Hash) -> Result<LogId> {
         // @TODO: Look up if system schema was used and return regarding log id
         let result = query_as::<_, LogId>(
             "
@@ -128,10 +128,11 @@ impl Log {
 
 #[cfg(test)]
 mod tests {
+    use p2panda_rs::atomic::{Author, LogId, Hash};
+
     use super::Log;
 
     use crate::test_helpers::{initialize_db, random_entry_hash};
-    use crate::types::{Author, LogId, Schema};
 
     const TEST_AUTHOR: &str = "58223678ab378f1b07d1d8c789e6da01d16a06b1a4d17cc10119a0109181156c";
 
@@ -140,10 +141,10 @@ mod tests {
         let pool = initialize_db().await;
 
         let author = Author::new(TEST_AUTHOR).unwrap();
-        let schema = Schema::new(&random_entry_hash()).unwrap();
+        let schema = Hash::new(&random_entry_hash()).unwrap();
 
         let log_id = Log::schema_log_id(&pool, &author, &schema).await.unwrap();
-        assert_eq!(log_id, LogId::new(1).unwrap());
+        assert_eq!(log_id, LogId::new(1));
     }
 
     #[async_std::test]
@@ -151,16 +152,16 @@ mod tests {
         let pool = initialize_db().await;
 
         let author = Author::new(TEST_AUTHOR).unwrap();
-        let schema = Schema::new(&random_entry_hash()).unwrap();
+        let schema = Hash::new(&random_entry_hash()).unwrap();
 
         assert!(
-            Log::register_log_id(&pool, &author, &schema, &LogId::new(1).unwrap())
+            Log::register_log_id(&pool, &author, &schema, &LogId::new(1))
                 .await
                 .is_ok()
         );
 
         assert!(
-            Log::register_log_id(&pool, &author, &schema, &LogId::new(1).unwrap())
+            Log::register_log_id(&pool, &author, &schema, &LogId::new(1))
                 .await
                 .is_err()
         );
@@ -174,35 +175,35 @@ mod tests {
         let author = Author::new(TEST_AUTHOR).unwrap();
 
         // Mock four different scheme hashes
-        let schema_first = Schema::new(&random_entry_hash()).unwrap();
-        let schema_second = Schema::new(&random_entry_hash()).unwrap();
-        let schema_third = Schema::new(&random_entry_hash()).unwrap();
-        let schema_system = Schema::new(&random_entry_hash()).unwrap();
+        let schema_first = Hash::new(&random_entry_hash()).unwrap();
+        let schema_second = Hash::new(&random_entry_hash()).unwrap();
+        let schema_third = Hash::new(&random_entry_hash()).unwrap();
+        let schema_system = Hash::new(&random_entry_hash()).unwrap();
 
         // Register two log ids at the beginning
-        Log::register_log_id(&pool, &author, &schema_system, &LogId::new(9).unwrap())
+        Log::register_log_id(&pool, &author, &schema_system, &LogId::new(9))
             .await
             .unwrap();
-        Log::register_log_id(&pool, &author, &schema_first, &LogId::new(3).unwrap())
+        Log::register_log_id(&pool, &author, &schema_first, &LogId::new(3))
             .await
             .unwrap();
 
         // Find next free user log id and register it
         let log_id = Log::next_user_schema_log_id(&pool, &author).await.unwrap();
-        assert_eq!(log_id, LogId::new(1).unwrap());
+        assert_eq!(log_id, LogId::new(1));
         Log::register_log_id(&pool, &author, &schema_second, &log_id)
             .await
             .unwrap();
 
         // Find next free user log id and register it
         let log_id = Log::next_user_schema_log_id(&pool, &author).await.unwrap();
-        assert_eq!(log_id, LogId::new(5).unwrap());
+        assert_eq!(log_id, LogId::new(5));
         Log::register_log_id(&pool, &author, &schema_third, &log_id)
             .await
             .unwrap();
 
         // Find next free user log id
         let log_id = Log::next_user_schema_log_id(&pool, &author).await.unwrap();
-        assert_eq!(log_id, LogId::new(7).unwrap());
+        assert_eq!(log_id, LogId::new(7));
     }
 }

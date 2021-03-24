@@ -2,29 +2,26 @@ use async_std::channel::{unbounded, Sender};
 use async_std::task;
 use jsonrpc_core::{BoxFuture, IoHandler, Params};
 use jsonrpc_derive::rpc;
+use p2panda_rs::atomic::{Author, Hash, LogId, SeqNum};
 use serde::{Deserialize, Serialize};
-use validator::Validate;
 
 use crate::db::models::{Entry, Log};
 use crate::db::Pool;
 use crate::errors::Result;
-use crate::types::{Author, EntryHash, LogId, Schema, SeqNum};
 
 /// Request body of `panda_getEntryArguments`.
-#[derive(Deserialize, Validate, Debug)]
+#[derive(Deserialize, Debug)]
 pub struct EntryArgsRequest {
-    #[validate]
     author: Author,
-    #[validate]
-    schema: Schema,
+    schema: Hash,
 }
 
 /// Response body of `panda_getEntryArguments`.
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct EntryArgsResponse {
-    entry_hash_backlink: Option<EntryHash>,
-    entry_hash_skiplink: Option<EntryHash>,
+    entry_hash_backlink: Option<Hash>,
+    entry_hash_skiplink: Option<Hash>,
     last_seq_num: Option<SeqNum>,
     log_id: LogId,
 }
@@ -98,7 +95,8 @@ impl Api for ApiService {
         Box::pin(async move {
             // Parse and validate incoming command parameters
             let params: EntryArgsRequest = params_raw.parse()?;
-            params.validate()?;
+            // @TODO: Fix validation
+            // params.validate()?;
 
             // Create back_channel to receive result from backend
             let (back_channel, back_channel_notifier) = unbounded();
@@ -131,7 +129,8 @@ async fn get_entry_args(pool: Pool, params: EntryArgsRequest) -> Result<EntryArg
                 &pool,
                 &params.author,
                 &log_id,
-                &entry_backlink.seq_num.skiplink_seq_num(),
+                // Unwrap as we know that an skiplink exists as soon as previous entry is given
+                &entry_backlink.seq_num.skiplink_seq_num().unwrap(),
             )
             .await?
             .unwrap();

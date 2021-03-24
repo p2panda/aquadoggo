@@ -22,10 +22,10 @@ jsonrpc-derive = "16.0.0"
 jsonrpc-http-server = "16.0.0"
 jsonrpc-ws-server = "16.0.0"
 log = "0.4.13"
-p2panda-rs = { path = "../../p2panda/p2panda-rs" }
+p2panda-rs = { path = "../../p2panda/p2panda-rs", features = ["db-sqlx"] }
 rand = "0.8.2"
 serde = { version = "1.0.119", features = ["derive"] }
 sqlformat = "0.1.5"
-sqlx = { version = "0.4.2", features = ["runtime-async-std-native-tls", "any", "sqlite", "mysql", "postgres"] }
+sqlx = { version = "0.5.1", features = ["runtime-async-std-native-tls", "any", "sqlite", "mysql", "postgres"] }
 thiserror = "1.0.23"
 validator = { version = "0.12.0", features = ["derive"] }

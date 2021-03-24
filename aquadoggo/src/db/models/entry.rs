@@ -1,8 +1,8 @@
+use p2panda_rs::atomic::{Author, Hash, LogId, SeqNum};
 use sqlx::{query_as, FromRow};
 
 use crate::db::Pool;
 use crate::errors::Result;
-use crate::types::{Author, EntryHash, LogId, SeqNum};
 
 /// Entry of an append-only log based on Bamboo specification. It describes the actual data in the
 /// p2p network and is shared between nodes.
@@ -24,7 +24,7 @@ pub struct Entry {
     pub entry_bytes: String,
 
     /// Hash of Bamboo entry data.
-    pub entry_hash: EntryHash,
+    pub entry_hash: Hash,
 
     /// Used log for this entry.
     pub log_id: LogId,
@@ -33,7 +33,7 @@ pub struct Entry {
     pub payload_bytes: Option<String>,
 
     /// Hash of payload data.
-    pub payload_hash: EntryHash,
+    pub payload_hash: Hash,
 
     /// Sequence number of this entry.
     pub seq_num: SeqNum,
@@ -108,10 +108,11 @@ impl Entry {
 
 #[cfg(test)]
 mod tests {
+    use p2panda_rs::atomic::{Author, LogId};
+
     use super::Entry;
 
     use crate::test_helpers::initialize_db;
-    use crate::types::{Author, LogId};
 
     const TEST_AUTHOR: &str = "1a8a62c5f64eed987326513ea15a6ea2682c256ac57a418c1c92d96787c8b36e";
 
@@ -120,7 +121,7 @@ mod tests {
         let pool = initialize_db().await;
 
         let author = Author::new(TEST_AUTHOR).unwrap();
-        let log_id = LogId::new(1).unwrap();
+        let log_id = LogId::new(1);
 
         let latest_entry = Entry::latest(&pool, &author, &log_id).await.unwrap();
         assert!(latest_entry.is_none());
