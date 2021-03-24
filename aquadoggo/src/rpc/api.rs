@@ -2,7 +2,7 @@ use async_std::channel::{unbounded, Sender};
 use async_std::task;
 use jsonrpc_core::{BoxFuture, IoHandler, Params};
 use jsonrpc_derive::rpc;
-use p2panda_rs::atomic::{Author, Hash, LogId, SeqNum};
+use p2panda_rs::atomic::{Author, Hash, LogId, SeqNum, Validation};
 use serde::{Deserialize, Serialize};
 
 use crate::db::models::{Entry, Log};
@@ -95,8 +95,8 @@ impl Api for ApiService {
         Box::pin(async move {
             // Parse and validate incoming command parameters
             let params: EntryArgsRequest = params_raw.parse()?;
-            // @TODO: Fix validation
-            // params.validate()?;
+            params.author.validate()?;
+            params.schema.validate()?;
 
             // Create back_channel to receive result from backend
             let (back_channel, back_channel_notifier) = unbounded();
@@ -249,7 +249,7 @@ mod tests {
 
         let response = rpc_error(
             ErrorCode::InvalidParams,
-            "Invalid params: `author`: invalid string length.",
+            "Invalid params: invalid author key length.",
         );
 
         assert_eq!(io.handle_request_sync(&request), Some(response));

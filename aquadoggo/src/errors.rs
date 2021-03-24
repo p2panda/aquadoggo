@@ -1,4 +1,4 @@
-use validator::{ValidationErrors, ValidationErrorsKind};
+use p2panda_rs::atomic::error::{AuthorError, HashError};
 
 /// A specialized `Result` type for the node.
 pub type Result<T> = anyhow::Result<T, Error>;
@@ -10,9 +10,13 @@ pub enum Error {
     #[error(transparent)]
     RPC(#[from] jsonrpc_core::Error),
 
-    /// Error returned from validating data types.
+    /// Error returned from validating p2panda-rs `Author` data types.
     #[error(transparent)]
-    Validation(#[from] ValidationErrors),
+    AuthorValidation(#[from] AuthorError),
+
+    /// Error returned from validating p2panda-rs `Hash` data types.
+    #[error(transparent)]
+    HashValidation(#[from] HashError),
 
     /// Error returned from the database.
     #[error(transparent)]
@@ -23,37 +27,11 @@ impl From<Error> for jsonrpc_core::Error {
     fn from(error: Error) -> Self {
         match error {
             Error::RPC(rpc_error) => rpc_error,
-            Error::Validation(validation_errors) => {
-                let message = validation_errors
-                    .errors()
-                    .iter()
-                    .map(|error_kind| {
-                        let error_message = match error_kind.1 {
-                            ValidationErrorsKind::Struct(struct_err) => {
-                                validation_errs_to_str_vec(struct_err).join(", ")
-                            }
-                            ValidationErrorsKind::Field(field_errs) => field_errs
-                                .iter()
-                                .map(|fe| format!("{}", fe.code))
-                                .collect::<Vec<String>>()
-                                .join(", "),
-                            ValidationErrorsKind::List(vec_errs) => vec_errs
-                                .iter()
-                                .map(|ve| validation_errs_to_str_vec(ve.1).join(", "))
-                                .collect::<Vec<String>>()
-                                .join(", "),
-                        };
-
-                        format!("`{}`: {}", error_kind.0, error_message)
-                    })
-                    .collect::<Vec<String>>()
-                    .join(", ");
-
-                jsonrpc_core::Error {
-                    code: jsonrpc_core::ErrorCode::InvalidParams,
-                    message: format!("Invalid params: {}.", message),
-                    data: None,
-                }
+            Error::AuthorValidation(validation_error) => {
+                handle_validation_error(format!("{}", validation_error))
+            }
+            Error::HashValidation(validation_error) => {
+                handle_validation_error(format!("{}", validation_error))
             }
             _ => {
                 log::error!("{:#}", error);
@@ -68,15 +46,10 @@ impl From<Error> for jsonrpc_core::Error {
     }
 }
 
-fn validation_errs_to_str_vec(errors: &ValidationErrors) -> Vec<String> {
-    errors
-        .field_errors()
-        .iter()
-        .map(|fe| {
-            fe.1.iter()
-                .map(|ve| format!("{}", ve.code))
-                .collect::<Vec<String>>()
-                .join(", ")
-        })
-        .collect()
+fn handle_validation_error(message: String) -> jsonrpc_core::Error {
+    jsonrpc_core::Error {
+        code: jsonrpc_core::ErrorCode::InvalidParams,
+        message: format!("Invalid params: {}.", message),
+        data: None,
+    }
 }

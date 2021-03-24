@@ -30,7 +30,6 @@ serde = { version = "1.0.125", features = ["derive"] }
 sqlformat = "0.1.6"
 sqlx = { version = "0.5.1", features = ["runtime-async-std-native-tls", "all-databases"] }
 thiserror = "1.0.24"
-validator = { version = "0.13.0", features = ["derive"] }
 
 # @TODO: Change this as soon as `bamboo-rs` gets published
 [dependencies.bamboo-rs-core]
