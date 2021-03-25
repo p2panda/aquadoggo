@@ -2,7 +2,7 @@ use async_std::channel::{unbounded, Sender};
 use async_std::task;
 use jsonrpc_core::{BoxFuture, IoHandler, Params};
 use jsonrpc_derive::rpc;
-use p2panda_rs::atomic::{Author, Hash, LogId, SeqNum, Validation};
+use p2panda_rs::atomic::{Author, EntrySigned, Hash, LogId, MessageEncoded, SeqNum, Validation};
 use serde::{Deserialize, Serialize};
 
 use crate::db::models::{Entry, Log};
@@ -16,6 +16,14 @@ pub struct EntryArgsRequest {
     schema: Hash,
 }
 
+/// Request body of `panda_publishEntry`.
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct PublishEntryRequest {
+    entry_encoded: EntrySigned,
+    message_encoded: MessageEncoded,
+}
+
 /// Response body of `panda_getEntryArguments`.
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -26,11 +34,21 @@ pub struct EntryArgsResponse {
     log_id: LogId,
 }
 
+/// Response body of `panda_publishEntry`.
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct PublishEntryResponse {
+    // @TODO: Define response body
+}
+
 /// Trait defining all Node RPC API methods.
 #[rpc(server)]
 pub trait Api {
     #[rpc(name = "panda_getEntryArguments", params = "raw")]
     fn get_entry_args(&self, params: Params) -> BoxFuture<Result<EntryArgsResponse>>;
+
+    #[rpc(name = "panda_publishEntry", params = "raw")]
+    fn publish_entry(&self, params: Params) -> BoxFuture<Result<PublishEntryResponse>>;
 }
 
 /// Channel messages to send RPC command requests and their payloads from frontend `Api` to
@@ -41,6 +59,7 @@ pub trait Api {
 #[derive(Debug)]
 enum ApiServiceMessages {
     GetEntryArgs(EntryArgsRequest, Sender<Result<EntryArgsResponse>>),
+    PublishEntry(PublishEntryRequest, Sender<Result<PublishEntryResponse>>),
 }
 
 /// Backend service handling the RPC API methods.
@@ -61,6 +80,12 @@ impl ApiService {
                     Ok(ApiServiceMessages::GetEntryArgs(params, back_channel)) => {
                         back_channel
                             .send(get_entry_args(pool, params).await)
+                            .await
+                            .unwrap();
+                    }
+                    Ok(ApiServiceMessages::PublishEntry(params, back_channel)) => {
+                        back_channel
+                            .send(publish_entry(pool, params).await)
                             .await
                             .unwrap();
                     }
@@ -109,6 +134,27 @@ impl Api for ApiService {
             task::block_on(back_channel_notifier.recv()).unwrap()
         })
     }
+
+    fn publish_entry(&self, params_raw: Params) -> BoxFuture<Result<PublishEntryResponse>> {
+        let service_channel = self.service_channel.clone();
+
+        Box::pin(async move {
+            // Parse and validate incoming command parameters
+            let params: PublishEntryRequest = params_raw.parse()?;
+            params.entry_encoded.validate()?;
+            params.message_encoded.validate()?;
+
+            // Create back_channel to receive result from backend
+            let (back_channel, back_channel_notifier) = unbounded();
+
+            // Send request to backend and wait for response on back_channel
+            task::block_on(
+                service_channel.send(ApiServiceMessages::PublishEntry(params, back_channel)),
+            )
+            .unwrap();
+            task::block_on(back_channel_notifier.recv()).unwrap()
+        })
+    }
 }
 
 /// Implementation of `panda_getEntryArguments` RPC method.
@@ -149,6 +195,11 @@ async fn get_entry_args(pool: Pool, params: EntryArgsRequest) -> Result<EntryArg
             log_id,
         }),
     }
+}
+
+/// Implementation of `panda_publishEntry` RPC method.
+async fn publish_entry(pool: Pool, params: PublishEntryRequest) -> Result<PublishEntryResponse> {
+    Ok(PublishEntryResponse {})
 }
 
 #[cfg(test)]

@@ -1,4 +1,4 @@
-use p2panda_rs::atomic::error::{AuthorError, HashError};
+use p2panda_rs::atomic::error::{AuthorError, EntrySignedError, HashError, MessageEncodedError};
 
 /// A specialized `Result` type for the node.
 pub type Result<T> = anyhow::Result<T, Error>;
@@ -17,6 +17,14 @@ pub enum Error {
     /// Error returned from validating p2panda-rs `Hash` data types.
     #[error(transparent)]
     HashValidation(#[from] HashError),
+
+    /// Error returned from validating p2panda-rs `EntrySigned` data types.
+    #[error(transparent)]
+    EntrySignedValidation(#[from] EntrySignedError),
+
+    /// Error returned from validating p2panda-rs `MessageEncoded` data types.
+    #[error(transparent)]
+    MessageEncodedValidation(#[from] MessageEncodedError),
 
     /// Error returned from the database.
     #[error(transparent)]
