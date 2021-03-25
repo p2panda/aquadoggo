@@ -128,7 +128,7 @@ impl Log {
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::atomic::{Author, LogId, Hash};
+    use p2panda_rs::atomic::{Author, Hash, LogId};
 
     use super::Log;
 

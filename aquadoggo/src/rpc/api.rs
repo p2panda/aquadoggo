@@ -1,8 +1,13 @@
+use std::convert::TryFrom;
+
 use async_std::channel::{unbounded, Sender};
 use async_std::task;
 use jsonrpc_core::{BoxFuture, IoHandler, Params};
 use jsonrpc_derive::rpc;
-use p2panda_rs::atomic::{Author, EntrySigned, Hash, LogId, MessageEncoded, SeqNum, Validation};
+use p2panda_rs::atomic::{
+    Author, Entry as EntryUnsigned, EntrySigned, Hash, LogId, Message, MessageEncoded, SeqNum,
+    Validation,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::db::models::{Entry, Log};
@@ -139,9 +144,13 @@ impl Api for ApiService {
         let service_channel = self.service_channel.clone();
 
         Box::pin(async move {
-            // Parse and validate incoming command parameters
+            // Parse incoming command parameters
             let params: PublishEntryRequest = params_raw.parse()?;
+
+            // Validate entry hex encoding
             params.entry_encoded.validate()?;
+
+            // Validate message schema and hex encoding
             params.message_encoded.validate()?;
 
             // Create back_channel to receive result from backend
@@ -199,6 +208,52 @@ async fn get_entry_args(pool: Pool, params: EntryArgsRequest) -> Result<EntryArg
 
 /// Implementation of `panda_publishEntry` RPC method.
 async fn publish_entry(pool: Pool, params: PublishEntryRequest) -> Result<PublishEntryResponse> {
+    let message = Message::try_from(&params.message_encoded).unwrap();
+    let entry =
+        EntryUnsigned::try_from((&params.entry_encoded, Some(&params.message_encoded))).unwrap();
+
+    // Retreive author and entry hash
+    let author = params.entry_encoded.author();
+
+    // Get related bamboo entries
+    let entry_backlink_bytes = if entry.seq_num().is_first() {
+        Entry::at_seq_num(
+            &pool,
+            &author,
+            &entry.log_id(),
+            &entry.seq_num_backlink().unwrap(),
+        )
+        .await?
+        .map(|link| hex::decode(link.entry_bytes).unwrap())
+        // @TODO: Error case when entry was not found in db
+    } else {
+        None
+    };
+
+    let entry_skiplink_bytes = if entry.seq_num().is_first() {
+        Entry::at_seq_num(
+            &pool,
+            &author,
+            &entry.log_id(),
+            &entry.seq_num_skiplink().unwrap(),
+        )
+        .await?
+        .map(|link| hex::decode(link.entry_bytes).unwrap())
+        // @TODO: Error case when entry was not found in db
+    } else {
+        None
+    };
+
+    // Verify bamboo entry integrity
+    let result = bamboo_rs_core::verify(
+        &params.entry_encoded.to_bytes(),
+        Some(&params.message_encoded.to_bytes()),
+        entry_skiplink_bytes.as_deref(),
+        entry_backlink_bytes.as_deref(),
+    )
+    .map_err(|_| "Can't verify message") // @TODO: Handle error
+    .unwrap();
+
     Ok(PublishEntryResponse {})
 }
 

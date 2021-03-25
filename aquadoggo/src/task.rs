@@ -1,7 +1,8 @@
+use std::error::Error;
+
 use async_std::{future::Future, task};
 use futures::future;
 use log::debug;
-use std::error::Error;
 
 /// Generic Result type for all async tasks used by TaskManager.
 pub type FutureResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
@@ -65,9 +66,10 @@ impl TaskManager {
 mod tests {
     use super::{FutureResult, TaskManager};
 
-    use async_std::task;
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
+
+    use async_std::task;
 
     #[derive(Clone, Debug)]
     struct DropTester(Arc<Mutex<usize>>);

@@ -46,6 +46,7 @@ name = "aquadoggo"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "arrayvec 0.6.0",
  "async-std",
  "bamboo-rs-core",
  "directories",
@@ -89,6 +90,12 @@ name = "arrayvec"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23b62fc65de8e4e7f52534fb52b0f3ed04746ae267519eef2a83941e8085068b"
+
+[[package]]
+name = "arrayvec"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "682f88bd1270f264991da8922b89ee1fb520b0da73f97c9f73cda54980123017"
 
 [[package]]
 name = "async-attributes"
@@ -294,7 +301,7 @@ name = "bamboo-rs-core"
 version = "0.1.0-pre-31"
 source = "git+https://github.com/pietgeursen/bamboo-rs?tag=v0.1.0-pre-31#ee8cf5fbfded69ef9c4f9457e85643f23bcc2257"
 dependencies = [
- "arrayvec",
+ "arrayvec 0.5.2",
  "blake2b_simd",
  "ed25519-dalek",
  "hex",
@@ -354,7 +361,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "afa748e348ad3be8263be728124b24a24f268266f6f5d58af9d75f6a40b5c587"
 dependencies = [
  "arrayref",
- "arrayvec",
+ "arrayvec 0.5.2",
  "constant_time_eq",
 ]
 
@@ -1425,7 +1432,7 @@ version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "21f866863575d0e1d654fbeeabdc927292fdf862873dc3c96c6f753357e13374"
 dependencies = [
- "arrayvec",
+ "arrayvec 0.5.2",
  "bitflags",
  "cfg-if 1.0.0",
  "ryu",
@@ -1511,9 +1518,9 @@ checksum = "0ee1c47aaa256ecabcaea351eae4a9b01ef39ed810004e298d2511ed284b1525"
 
 [[package]]
 name = "memoffset"
-version = "0.6.1"
+version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "157b4208e3059a8f9e78d559edc658e13df41410cb3ae03979c83130067fdd87"
+checksum = "cc14fc54a812b4472b4113facc3e44d099fbc0ea2ce0551fa5c703f8edfbfd38"
 dependencies = [
  "autocfg 1.0.1",
 ]
@@ -1803,9 +1810,9 @@ dependencies = [
 [[package]]
 name = "p2panda-rs"
 version = "0.1.0"
-source = "git+https://github.com/p2panda/p2panda?branch=experimental-aquadoggo#800197f1d842af7b054ae2c5dc1e4beedcf4b4bf"
+source = "git+https://github.com/p2panda/p2panda?branch=experimental-aquadoggo#dd6b96be845c8b35a807db0699dacb5904a4af45"
 dependencies = [
- "arrayvec",
+ "arrayvec 0.5.2",
  "bamboo-rs-core",
  "cddl",
  "console_error_panic_hook",
@@ -1890,18 +1897,18 @@ checksum = "d4fd5641d01c8f18a23da7b6fe29298ff4b55afcccdf78973b24cf3175fee32e"
 
 [[package]]
 name = "pin-project"
-version = "1.0.5"
+version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96fa8ebb90271c4477f144354485b8068bd8f6b78b428b01ba892ca26caf0b63"
+checksum = "bc174859768806e91ae575187ada95c91a29e96a98dc5d2cd9a1fed039501ba6"
 dependencies = [
  "pin-project-internal",
 ]
 
 [[package]]
 name = "pin-project-internal"
-version = "1.0.5"
+version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "758669ae3558c6f74bd2a18b41f7ac0b5a195aea6639d6a9b5e5d1ad5ba24c0b"
+checksum = "a490329918e856ed1b083f244e3bfe2d8c4f336407e4ea9e1a9f479ff09049e5"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3131,7 +3138,7 @@ version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "702402e18caf3d1960249ecec2dfac9e75d55cbd073a7fbf4832a6bceb1d6413"
 dependencies = [
- "arrayvec",
+ "arrayvec 0.5.2",
  "blake2b_simd",
  "hex",
  "serde",
