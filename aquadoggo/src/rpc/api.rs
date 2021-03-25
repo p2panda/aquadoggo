@@ -5,8 +5,7 @@ use async_std::task;
 use jsonrpc_core::{BoxFuture, IoHandler, Params};
 use jsonrpc_derive::rpc;
 use p2panda_rs::atomic::{
-    Author, Entry as EntryUnsigned, EntrySigned, Hash, LogId, Message, MessageEncoded, SeqNum,
-    Validation,
+    Author, Entry as EntryUnsigned, EntrySigned, Hash, LogId, MessageEncoded, SeqNum, Validation,
 };
 use serde::{Deserialize, Serialize};
 
@@ -208,7 +207,7 @@ async fn get_entry_args(pool: Pool, params: EntryArgsRequest) -> Result<EntryArg
 
 /// Implementation of `panda_publishEntry` RPC method.
 async fn publish_entry(pool: Pool, params: PublishEntryRequest) -> Result<PublishEntryResponse> {
-    let message = Message::try_from(&params.message_encoded).unwrap();
+    // @TODO: Handle error case as this conversion validates message hash
     let entry =
         EntryUnsigned::try_from((&params.entry_encoded, Some(&params.message_encoded))).unwrap();
 
@@ -245,7 +244,7 @@ async fn publish_entry(pool: Pool, params: PublishEntryRequest) -> Result<Publis
     };
 
     // Verify bamboo entry integrity
-    let result = bamboo_rs_core::verify(
+    bamboo_rs_core::verify(
         &params.entry_encoded.to_bytes(),
         Some(&params.message_encoded.to_bytes()),
         entry_skiplink_bytes.as_deref(),
