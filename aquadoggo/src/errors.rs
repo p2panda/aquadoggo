@@ -35,6 +35,14 @@ pub enum Error {
     /// Error returned from the database.
     #[error(transparent)]
     Database(#[from] sqlx::Error),
+
+    /// Error returned from validating Bamboo entries.
+    #[error(transparent)]
+    BambooVerification(#[from] bamboo_rs_core::verify::Error),
+
+    /// Custom API errors.
+    #[error(transparent)]
+    APIError(#[from] super::rpc::APIError),
 }
 
 impl From<Error> for jsonrpc_core::Error {

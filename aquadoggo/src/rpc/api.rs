@@ -13,6 +13,15 @@ use crate::db::models::{Entry, Log};
 use crate::db::Pool;
 use crate::errors::Result;
 
+#[derive(thiserror::Error, Debug)]
+pub enum APIError {
+    #[error("")]
+    BacklinkMissing,
+
+    #[error("")]
+    SkiplinkMissing,
+}
+
 /// Request body of `panda_getEntryArguments`.
 #[derive(Deserialize, Debug)]
 pub struct EntryArgsRequest {
@@ -210,10 +219,10 @@ async fn publish_entry(pool: Pool, params: PublishEntryRequest) -> Result<Publis
     // Handle error as this conversion validates message hash
     let entry = EntryUnsigned::try_from((&params.entry_encoded, Some(&params.message_encoded)))?;
 
-    // Retreive author and entry hash
+    // Retreive author
     let author = params.entry_encoded.author();
 
-    // Get related bamboo entries
+    // Get related bamboo backlink and skiplink entries
     let entry_backlink_bytes = if entry.seq_num().is_first() {
         Entry::at_seq_num(
             &pool,
@@ -222,11 +231,16 @@ async fn publish_entry(pool: Pool, params: PublishEntryRequest) -> Result<Publis
             &entry.seq_num_backlink().unwrap(),
         )
         .await?
-        .map(|link| hex::decode(link.entry_bytes).unwrap())
-        // @TODO: Error case when entry was not found in db
+        .map(|link| {
+            Some(
+                hex::decode(link.entry_bytes)
+                    .expect("Backlink entry with invalid hex-encoding detected in database"),
+            )
+        })
+        .ok_or(APIError::BacklinkMissing)
     } else {
-        None
-    };
+        Ok(None)
+    }?;
 
     let entry_skiplink_bytes = if entry.seq_num().is_first() {
         Entry::at_seq_num(
@@ -236,11 +250,16 @@ async fn publish_entry(pool: Pool, params: PublishEntryRequest) -> Result<Publis
             &entry.seq_num_skiplink().unwrap(),
         )
         .await?
-        .map(|link| hex::decode(link.entry_bytes).unwrap())
-        // @TODO: Error case when entry was not found in db
+        .map(|link| {
+            Some(
+                hex::decode(link.entry_bytes)
+                    .expect("Skiplink entry with invalid hex-encoding detected in database"),
+            )
+        })
+        .ok_or(APIError::SkiplinkMissing)
     } else {
-        None
-    };
+        Ok(None)
+    }?;
 
     // Verify bamboo entry integrity
     bamboo_rs_core::verify(
@@ -248,9 +267,7 @@ async fn publish_entry(pool: Pool, params: PublishEntryRequest) -> Result<Publis
         Some(&params.message_encoded.to_bytes()),
         entry_skiplink_bytes.as_deref(),
         entry_backlink_bytes.as_deref(),
-    )
-    .map_err(|_| "Can't verify message") // @TODO: Handle error
-    .unwrap();
+    )?;
 
     Ok(PublishEntryResponse {})
 }
