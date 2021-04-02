@@ -207,9 +207,8 @@ async fn get_entry_args(pool: Pool, params: EntryArgsRequest) -> Result<EntryArg
 
 /// Implementation of `panda_publishEntry` RPC method.
 async fn publish_entry(pool: Pool, params: PublishEntryRequest) -> Result<PublishEntryResponse> {
-    // @TODO: Handle error case as this conversion validates message hash
-    let entry =
-        EntryUnsigned::try_from((&params.entry_encoded, Some(&params.message_encoded))).unwrap();
+    // Handle error as this conversion validates message hash
+    let entry = EntryUnsigned::try_from((&params.entry_encoded, Some(&params.message_encoded)))?;
 
     // Retreive author and entry hash
     let author = params.entry_encoded.author();

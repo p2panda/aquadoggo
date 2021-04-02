@@ -1,4 +1,6 @@
-use p2panda_rs::atomic::error::{AuthorError, EntrySignedError, HashError, MessageEncodedError};
+use p2panda_rs::atomic::error::{
+    AuthorError, EntryError, EntrySignedError, HashError, MessageEncodedError,
+};
 
 /// A specialized `Result` type for the node.
 pub type Result<T> = anyhow::Result<T, Error>;
@@ -17,6 +19,10 @@ pub enum Error {
     /// Error returned from validating p2panda-rs `Hash` data types.
     #[error(transparent)]
     HashValidation(#[from] HashError),
+
+    /// Error returned from validating p2panda-rs `Entry` data types.
+    #[error(transparent)]
+    EntryValidation(#[from] EntryError),
 
     /// Error returned from validating p2panda-rs `EntrySigned` data types.
     #[error(transparent)]
@@ -39,6 +45,12 @@ impl From<Error> for jsonrpc_core::Error {
                 handle_validation_error(format!("{}", validation_error))
             }
             Error::HashValidation(validation_error) => {
+                handle_validation_error(format!("{}", validation_error))
+            }
+            Error::EntryValidation(validation_error) => {
+                handle_validation_error(format!("{}", validation_error))
+            }
+            Error::EntrySignedValidation(validation_error) => {
                 handle_validation_error(format!("{}", validation_error))
             }
             _ => {
