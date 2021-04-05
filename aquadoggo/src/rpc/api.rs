@@ -221,12 +221,9 @@ async fn get_entry_args(pool: Pool, params: EntryArgsRequest) -> Result<EntryArg
 
 /// Implementation of `panda_publishEntry` RPC method.
 async fn publish_entry(pool: Pool, params: PublishEntryRequest) -> Result<PublishEntryResponse> {
-    println!("HUHu");
     // Handle error as this conversion validates message hash
     let entry = EntryUnsigned::try_from((&params.entry_encoded, Some(&params.message_encoded)))?;
     let message = Message::from(&params.message_encoded);
-
-    println!("{:?} {:?}", entry, message);
 
     // Retreive author and schema
     let author = params.entry_encoded.author();
@@ -239,8 +236,6 @@ async fn publish_entry(pool: Pool, params: PublishEntryRequest) -> Result<Publis
     if schema_log_id.is_some() && schema_log_id.as_ref() != Some(entry.log_id()) {
         Err(APIError::InvalidLogId)?;
     }
-
-    println!("schema_log_id={:?}", schema_log_id);
 
     // Get related bamboo backlink and skiplink entries
     let entry_backlink_bytes = if !entry.seq_num().is_first() {
@@ -374,6 +369,32 @@ mod tests {
         .replace("<message>", message)
     }
 
+    // Helper method to create encoded entries and messages
+    fn create_test_entry(
+        key_pair: &KeyPair,
+        schema: &Hash,
+        log_id: &LogId,
+        skiplink: Option<&Hash>,
+        backlink: Option<&Hash>,
+        previous_seq_num: Option<&SeqNum>,
+    ) -> (EntrySigned, MessageEncoded) {
+        // Create message with dummy data
+        let mut fields = MessageFields::new();
+        fields
+            .add("test", MessageValue::Text("Hello".to_owned()))
+            .unwrap();
+        let message = Message::new_create(schema.clone(), fields).unwrap();
+
+        // Encode message
+        let message_encoded = MessageEncoded::try_from(&message).unwrap();
+
+        // Create, sign and encode entry
+        let entry = Entry::new(log_id, &message, skiplink, backlink, previous_seq_num).unwrap();
+        let entry_encoded = EntrySigned::try_from((&entry, key_pair)).unwrap();
+
+        (entry_encoded, message_encoded)
+    }
+
     #[async_std::test]
     async fn respond_with_missing_param_error() {
         let pool = initialize_db().await;
@@ -450,44 +471,20 @@ mod tests {
         assert_eq!(io.handle_request_sync(&request), Some(response));
     }
 
-    fn create_test_entry(
-        key_pair: &KeyPair,
-        schema: &Hash,
-        log_id: &LogId,
-        skiplink: Option<&Hash>,
-        backlink: Option<&Hash>,
-        previous_seq_num: Option<&SeqNum>,
-    ) -> (EntrySigned, MessageEncoded) {
-        let mut fields = MessageFields::new();
-        fields
-            .add("test", MessageValue::Text("Hello".to_owned()))
-            .unwrap();
-        let message = Message::new_create(schema.clone(), fields).unwrap();
-        let message_encoded = MessageEncoded::try_from(&message).unwrap();
-
-        let first_entry =
-            Entry::new(log_id, &message, skiplink, backlink, previous_seq_num).unwrap();
-        let entry_encoded = EntrySigned::try_from((&first_entry, key_pair)).unwrap();
-
-        println!(
-            "{:?} {:?}",
-            entry_encoded.as_str(),
-            message_encoded.as_str()
-        );
-
-        (entry_encoded, message_encoded)
-    }
-
     #[async_std::test]
     async fn publish_entry() {
+        // Create key pair for author
         let key_pair = KeyPair::new();
 
+        // Prepare test database
         let pool = initialize_db().await;
         let io = ApiService::io_handler(pool);
 
+        // Define schema and log id for entries
         let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
         let log_id = LogId::new(5);
 
+        // Create first entry for log and send it to RPC endpoint
         let (entry_encoded, message_encoded) =
             create_test_entry(&key_pair, &schema, &log_id, None, None, None);
 
@@ -507,6 +504,7 @@ mod tests {
 
         assert_eq!(io.handle_request_sync(&request), Some(response));
 
+        // Create second entry for log and send it to RPC endpoint
         let (entry_encoded, message_encoded) = create_test_entry(
             &key_pair,
             &schema,
