@@ -12,8 +12,8 @@ readme = "README.md"
 edition = "2018"
 
 [dependencies]
-anyhow = "1.0.39"
-arrayvec = "0.6.0"
+anyhow = "1.0.40"
+arrayvec = "0.6.1"
 async-std = { version = "1.9.0", features = ["unstable", "attributes"] }
 directories = "3.0.1"
 ed25519-dalek = "1.0.1"
@@ -41,5 +41,5 @@ tag = "v0.1.0-pre-31"
 # crate via git. See: https://github.com/p2panda/p2panda/issues/38
 [dependencies.p2panda-rs]
 git = "https://github.com/p2panda/p2panda"
-branch = "experimental-aquadoggo"
+branch = "fix-skiplink-encoding"
 features = ["db-sqlx"]
