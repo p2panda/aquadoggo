@@ -74,6 +74,9 @@ impl From<Error> for jsonrpc_core::Error {
             Error::BambooVerification(validation_error) => {
                 handle_validation_error(format!("{}", validation_error))
             }
+            Error::APIError(validation_error) => {
+                handle_validation_error(format!("{}", validation_error))
+            }
             _ => {
                 log::error!("{:#}", error);
 

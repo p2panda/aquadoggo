@@ -485,7 +485,7 @@ mod tests {
         let log_id = LogId::new(5);
 
         // Create first entry for log and send it to RPC endpoint
-        let (entry_encoded, message_encoded) =
+        let (entry_encoded_first, message_encoded) =
             create_test_entry(&key_pair, &schema, &log_id, None, None, None);
 
         let request = rpc_request(
@@ -495,7 +495,7 @@ mod tests {
                     "entryEncoded": "{}",
                     "messageEncoded": "{}"
                 }}"#,
-                entry_encoded.as_str(),
+                entry_encoded_first.as_str(),
                 message_encoded.as_str(),
             ),
         );
@@ -505,12 +505,12 @@ mod tests {
         assert_eq!(io.handle_request_sync(&request), Some(response));
 
         // Create second entry for log and send it to RPC endpoint
-        let (entry_encoded, message_encoded) = create_test_entry(
+        let (entry_encoded_second, message_encoded) = create_test_entry(
             &key_pair,
             &schema,
             &log_id,
             None,
-            Some(&entry_encoded.hash()),
+            Some(&entry_encoded_first.hash()),
             Some(&SeqNum::new(1).unwrap()),
         );
 
@@ -521,12 +521,99 @@ mod tests {
                     "entryEncoded": "{}",
                     "messageEncoded": "{}"
                 }}"#,
-                entry_encoded.as_str(),
+                entry_encoded_second.as_str(),
                 message_encoded.as_str(),
             ),
         );
 
         let response = rpc_response(r#"{}"#);
+
+        assert_eq!(io.handle_request_sync(&request), Some(response));
+
+        // Send invalid log id for this schema
+        let (entry_encoded_wrong, message_encoded) = create_test_entry(
+            &key_pair,
+            &schema,
+            &LogId::new(1),
+            None,
+            Some(&entry_encoded_first.hash()),
+            Some(&SeqNum::new(1).unwrap()),
+        );
+
+        let request = rpc_request(
+            "panda_publishEntry",
+            &format!(
+                r#"{{
+                    "entryEncoded": "{}",
+                    "messageEncoded": "{}"
+                }}"#,
+                entry_encoded_wrong.as_str(),
+                message_encoded.as_str(),
+            ),
+        );
+
+        let response = rpc_error(
+            ErrorCode::InvalidParams,
+            "Invalid params: Claimed log_id for schema not the same as in database.",
+        );
+
+        assert_eq!(io.handle_request_sync(&request), Some(response));
+
+        // Send invalid hash
+        let (entry_encoded_third, message_encoded) = create_test_entry(
+            &key_pair,
+            &schema,
+            &log_id,
+            None,
+            Some(&Hash::new_from_bytes(vec![1, 2, 3]).unwrap()),
+            Some(&SeqNum::new(2).unwrap()),
+        );
+
+        let request = rpc_request(
+            "panda_publishEntry",
+            &format!(
+                r#"{{
+                    "entryEncoded": "{}",
+                    "messageEncoded": "{}"
+                }}"#,
+                entry_encoded_third.as_str(),
+                message_encoded.as_str(),
+            ),
+        );
+
+        let response = rpc_error(
+            ErrorCode::InvalidParams,
+            "Invalid params: The backlink hash encoded in the entry does not match the lipmaa entry provided.",
+        );
+
+        assert_eq!(io.handle_request_sync(&request), Some(response));
+
+        // Send invalid seq num
+        let (entry_encoded_third, message_encoded) = create_test_entry(
+            &key_pair,
+            &schema,
+            &log_id,
+            Some(&entry_encoded_first.hash()),
+            Some(&entry_encoded_second.hash()),
+            Some(&SeqNum::new(5).unwrap()),
+        );
+
+        let request = rpc_request(
+            "panda_publishEntry",
+            &format!(
+                r#"{{
+                    "entryEncoded": "{}",
+                    "messageEncoded": "{}"
+                }}"#,
+                entry_encoded_third.as_str(),
+                message_encoded.as_str(),
+            ),
+        );
+
+        let response = rpc_error(
+            ErrorCode::InvalidParams,
+            "Invalid params: Could not find backlink entry in database.",
+        );
 
         assert_eq!(io.handle_request_sync(&request), Some(response));
     }
