@@ -1,5 +1,5 @@
-use p2panda_rs::atomic::{Author, Hash, LogId, SeqNum};
-use sqlx::{query_as, FromRow};
+use p2panda_rs::atomic::{Author, EntrySigned, Hash, LogId, MessageEncoded, SeqNum};
+use sqlx::{query, query_as, FromRow};
 
 use crate::db::Pool;
 use crate::errors::Result;
@@ -40,6 +40,46 @@ pub struct Entry {
 }
 
 impl Entry {
+    pub async fn insert(
+        pool: &Pool,
+        author: &Author,
+        entry_bytes: &EntrySigned,
+        entry_hash: &Hash,
+        log_id: &LogId,
+        payload_bytes: &MessageEncoded,
+        payload_hash: &Hash,
+        seq_num: &SeqNum,
+    ) -> Result<bool> {
+        let rows_affected = query(
+            "
+            INSERT INTO
+                entries (
+                    author,
+                    entry_bytes,
+                    entry_hash,
+                    log_id,
+                    payload_bytes,
+                    payload_hash,
+                    seq_num
+                )
+            VALUES
+                (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            ",
+        )
+        .bind(author)
+        .bind(entry_bytes)
+        .bind(entry_hash)
+        .bind(log_id)
+        .bind(payload_bytes)
+        .bind(payload_hash)
+        .bind(seq_num)
+        .execute(pool)
+        .await?
+        .rows_affected();
+
+        Ok(rows_affected == 1)
+    }
+
     /// Returns the latest Bamboo entry of an author's log.
     pub async fn latest(pool: &Pool, author: &Author, log_id: &LogId) -> Result<Option<Entry>> {
         let latest_entry = query_as::<_, Entry>(

@@ -1,5 +1,5 @@
 use p2panda_rs::atomic::error::{
-    AuthorError, EntryError, EntrySignedError, HashError, MessageEncodedError,
+    AuthorError, EntryError, EntrySignedError, HashError, MessageEncodedError, MessageError,
 };
 
 /// A specialized `Result` type for the node.
@@ -27,6 +27,10 @@ pub enum Error {
     /// Error returned from validating p2panda-rs `EntrySigned` data types.
     #[error(transparent)]
     EntrySignedValidation(#[from] EntrySignedError),
+
+    /// Error returned from validating p2panda-rs `Message` data types.
+    #[error(transparent)]
+    MessageValidation(#[from] MessageError),
 
     /// Error returned from validating p2panda-rs `MessageEncoded` data types.
     #[error(transparent)]
@@ -59,6 +63,15 @@ impl From<Error> for jsonrpc_core::Error {
                 handle_validation_error(format!("{}", validation_error))
             }
             Error::EntrySignedValidation(validation_error) => {
+                handle_validation_error(format!("{}", validation_error))
+            }
+            Error::MessageValidation(validation_error) => {
+                handle_validation_error(format!("{}", validation_error))
+            }
+            Error::MessageEncodedValidation(validation_error) => {
+                handle_validation_error(format!("{}", validation_error))
+            }
+            Error::BambooVerification(validation_error) => {
                 handle_validation_error(format!("{}", validation_error))
             }
             _ => {

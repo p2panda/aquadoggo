@@ -1,5 +1,5 @@
 mod api;
 mod server;
 
-pub use api::{Api, APIError, ApiService};
+pub use api::{APIError, Api, ApiService};
 pub use server::RpcServer;

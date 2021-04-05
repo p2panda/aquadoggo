@@ -5,7 +5,8 @@ use async_std::task;
 use jsonrpc_core::{BoxFuture, IoHandler, Params};
 use jsonrpc_derive::rpc;
 use p2panda_rs::atomic::{
-    Author, Entry as EntryUnsigned, EntrySigned, Hash, LogId, MessageEncoded, SeqNum, Validation,
+    Author, Entry as EntryUnsigned, EntrySigned, Hash, LogId, Message, MessageEncoded, SeqNum,
+    Validation,
 };
 use serde::{Deserialize, Serialize};
 
@@ -14,12 +15,16 @@ use crate::db::Pool;
 use crate::errors::Result;
 
 #[derive(thiserror::Error, Debug)]
+#[allow(missing_copy_implementations)]
 pub enum APIError {
-    #[error("")]
+    #[error("Could not find backlink entry in database")]
     BacklinkMissing,
 
-    #[error("")]
+    #[error("Could not find skiplink entry in database")]
     SkiplinkMissing,
+
+    #[error("Claimed log_id for schema not the same as in database")]
+    InvalidLogId,
 }
 
 /// Request body of `panda_getEntryArguments`.
@@ -180,7 +185,7 @@ impl Api for ApiService {
 /// log_id) to encode a new bamboo entry.
 async fn get_entry_args(pool: Pool, params: EntryArgsRequest) -> Result<EntryArgsResponse> {
     // Determine log_id for author's schema
-    let log_id = Log::schema_log_id(&pool, &params.author, &params.schema).await?;
+    let log_id = Log::find_schema_log_id(&pool, &params.author, &params.schema).await?;
 
     // Find latest entry in this log
     let entry_latest = Entry::latest(&pool, &params.author, &log_id).await?;
@@ -216,14 +221,29 @@ async fn get_entry_args(pool: Pool, params: EntryArgsRequest) -> Result<EntryArg
 
 /// Implementation of `panda_publishEntry` RPC method.
 async fn publish_entry(pool: Pool, params: PublishEntryRequest) -> Result<PublishEntryResponse> {
+    println!("HUHu");
     // Handle error as this conversion validates message hash
     let entry = EntryUnsigned::try_from((&params.entry_encoded, Some(&params.message_encoded)))?;
+    let message = Message::from(&params.message_encoded);
 
-    // Retreive author
+    println!("{:?} {:?}", entry, message);
+
+    // Retreive author and schema
     let author = params.entry_encoded.author();
+    let schema = message.schema();
+
+    // Determine log_id for author's schema
+    let schema_log_id = Log::get(&pool, &author, &schema).await?;
+
+    // Check if log_id is the same as the previously claimed one (when given)
+    if schema_log_id.is_some() && schema_log_id.as_ref() != Some(entry.log_id()) {
+        Err(APIError::InvalidLogId)?;
+    }
+
+    println!("schema_log_id={:?}", schema_log_id);
 
     // Get related bamboo backlink and skiplink entries
-    let entry_backlink_bytes = if entry.seq_num().is_first() {
+    let entry_backlink_bytes = if !entry.seq_num().is_first() {
         Entry::at_seq_num(
             &pool,
             &author,
@@ -242,7 +262,7 @@ async fn publish_entry(pool: Pool, params: PublishEntryRequest) -> Result<Publis
         Ok(None)
     }?;
 
-    let entry_skiplink_bytes = if entry.seq_num().is_first() {
+    let entry_skiplink_bytes = if !entry.seq_num().is_first() {
         Entry::at_seq_num(
             &pool,
             &author,
@@ -269,16 +289,41 @@ async fn publish_entry(pool: Pool, params: PublishEntryRequest) -> Result<Publis
         entry_backlink_bytes.as_deref(),
     )?;
 
+    // Register used log id in database when not set yet
+    if schema_log_id.is_none() {
+        Log::insert(&pool, &author, &schema, entry.log_id()).await?;
+    }
+
+    // Finally insert Entry in database
+    Entry::insert(
+        &pool,
+        &author,
+        &params.entry_encoded,
+        &params.entry_encoded.hash(),
+        &entry.log_id(),
+        &params.message_encoded,
+        &params.message_encoded.hash(),
+        &entry.seq_num(),
+    )
+    .await?;
+
     Ok(PublishEntryResponse {})
 }
 
 #[cfg(test)]
 mod tests {
-    use super::ApiService;
+    use std::convert::TryFrom;
 
     use jsonrpc_core::ErrorCode;
+    use p2panda_rs::atomic::{
+        Entry, EntrySigned, Hash, LogId, Message, MessageEncoded, MessageFields, MessageValue,
+        SeqNum,
+    };
+    use p2panda_rs::key_pair::KeyPair;
 
     use crate::test_helpers::{initialize_db, random_entry_hash};
+
+    use super::ApiService;
 
     const TEST_AUTHOR: &str = "8b52ae153142288402382fd6d9619e018978e015e6bc372b1b0c7bd40c6a240a";
 
@@ -401,6 +446,89 @@ mod tests {
                 "logId": 1
             }"#,
         );
+
+        assert_eq!(io.handle_request_sync(&request), Some(response));
+    }
+
+    fn create_test_entry(
+        key_pair: &KeyPair,
+        schema: &Hash,
+        log_id: &LogId,
+        skiplink: Option<&Hash>,
+        backlink: Option<&Hash>,
+        previous_seq_num: Option<&SeqNum>,
+    ) -> (EntrySigned, MessageEncoded) {
+        let mut fields = MessageFields::new();
+        fields
+            .add("test", MessageValue::Text("Hello".to_owned()))
+            .unwrap();
+        let message = Message::new_create(schema.clone(), fields).unwrap();
+        let message_encoded = MessageEncoded::try_from(&message).unwrap();
+
+        let first_entry =
+            Entry::new(log_id, &message, skiplink, backlink, previous_seq_num).unwrap();
+        let entry_encoded = EntrySigned::try_from((&first_entry, key_pair)).unwrap();
+
+        println!(
+            "{:?} {:?}",
+            entry_encoded.as_str(),
+            message_encoded.as_str()
+        );
+
+        (entry_encoded, message_encoded)
+    }
+
+    #[async_std::test]
+    async fn publish_entry() {
+        let key_pair = KeyPair::new();
+
+        let pool = initialize_db().await;
+        let io = ApiService::io_handler(pool);
+
+        let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
+        let log_id = LogId::new(5);
+
+        let (entry_encoded, message_encoded) =
+            create_test_entry(&key_pair, &schema, &log_id, None, None, None);
+
+        let request = rpc_request(
+            "panda_publishEntry",
+            &format!(
+                r#"{{
+                    "entryEncoded": "{}",
+                    "messageEncoded": "{}"
+                }}"#,
+                entry_encoded.as_str(),
+                message_encoded.as_str(),
+            ),
+        );
+
+        let response = rpc_response(r#"{}"#);
+
+        assert_eq!(io.handle_request_sync(&request), Some(response));
+
+        let (entry_encoded, message_encoded) = create_test_entry(
+            &key_pair,
+            &schema,
+            &log_id,
+            None,
+            Some(&entry_encoded.hash()),
+            Some(&SeqNum::new(1).unwrap()),
+        );
+
+        let request = rpc_request(
+            "panda_publishEntry",
+            &format!(
+                r#"{{
+                    "entryEncoded": "{}",
+                    "messageEncoded": "{}"
+                }}"#,
+                entry_encoded.as_str(),
+                message_encoded.as_str(),
+            ),
+        );
+
+        let response = rpc_response(r#"{}"#);
 
         assert_eq!(io.handle_request_sync(&request), Some(response));
     }
