@@ -198,7 +198,7 @@ async fn get_entry_args(pool: Pool, params: EntryArgsRequest) -> Result<EntryArg
                 &params.author,
                 &log_id,
                 // Unwrap as we know that an skiplink exists as soon as previous entry is given
-                &entry_backlink.seq_num.skiplink_seq_num().unwrap(),
+                &entry_backlink.seq_num.clone().next().unwrap().skiplink_seq_num().unwrap(),
             )
             .await?
             .unwrap();
