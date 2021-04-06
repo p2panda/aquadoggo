@@ -2,6 +2,7 @@ use std::convert::TryFrom;
 
 use async_std::channel::{unbounded, Sender};
 use async_std::task;
+use bamboo_rs_core::entry::is_lipmaa_required;
 use jsonrpc_core::{BoxFuture, IoHandler, Params};
 use jsonrpc_derive::rpc;
 use p2panda_rs::atomic::{
@@ -192,20 +193,25 @@ async fn get_entry_args(pool: Pool, params: EntryArgsRequest) -> Result<EntryArg
 
     match entry_latest {
         Some(entry_backlink) => {
-            // Determine skiplink ("lipmaa"-link) entry in this log
-            let entry_skiplink = Entry::at_seq_num(
-                &pool,
-                &params.author,
-                &log_id,
-                // Unwrap as we know that an skiplink exists as soon as previous entry is given
-                &entry_backlink.seq_num.clone().next().unwrap().skiplink_seq_num().unwrap(),
-            )
-            .await?
-            .unwrap();
+            let mut seq_num = entry_backlink.seq_num.clone();
+
+            // Unwrap as we know that an skiplink exists as soon as previous entry is given:
+            let skiplink_seq_num = seq_num.next().unwrap().skiplink_seq_num().unwrap();
+
+            // Determine skiplink ("lipmaa"-link) entry in this log, return `None` when no skiplink
+            // is required for the next entry
+            let entry_hash_skiplink = if is_lipmaa_required(seq_num.as_i64() as u64) {
+                let entry = Entry::at_seq_num(&pool, &params.author, &log_id, &skiplink_seq_num)
+                    .await?
+                    .unwrap();
+                Some(entry.entry_hash)
+            } else {
+                None
+            };
 
             Ok(EntryArgsResponse {
                 entry_hash_backlink: Some(entry_backlink.entry_hash),
-                entry_hash_skiplink: Some(entry_skiplink.entry_hash),
+                entry_hash_skiplink,
                 last_seq_num: Some(entry_backlink.seq_num),
                 log_id,
             })
