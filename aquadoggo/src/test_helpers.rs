@@ -1,3 +1,4 @@
+use jsonrpc_core::ErrorCode;
 use p2panda_rs::atomic::Hash;
 use rand::Rng;
 use sqlx::any::Any;
@@ -35,4 +36,51 @@ pub fn random_entry_hash() -> String {
         .unwrap()
         .as_hex()
         .to_owned()
+}
+
+// Helper method to generate valid JSON RPC request string
+pub fn rpc_request(method: &str, params: &str) -> String {
+    format!(
+        r#"{{
+            "jsonrpc": "2.0",
+            "method": "{}",
+            "params": {},
+            "id": 1
+        }}"#,
+        method, params
+    )
+    .replace(" ", "")
+    .replace("\n", "")
+}
+
+// Helper method to generate valid JSON RPC response string
+pub fn rpc_response(result: &str) -> String {
+    format!(
+        r#"{{
+            "jsonrpc": "2.0",
+            "result": {},
+            "id": 1
+        }}"#,
+        result
+    )
+    .replace(" ", "")
+    .replace("\n", "")
+}
+
+// Helper method to generate valid JSON RPC error response string
+pub fn rpc_error(code: ErrorCode, message: &str) -> String {
+    format!(
+        r#"{{
+            "jsonrpc": "2.0",
+            "error": {{
+                "code": {},
+                "message": "<message>"
+            }},
+            "id": 1
+        }}"#,
+        code.code(),
+    )
+    .replace(" ", "")
+    .replace("\n", "")
+    .replace("<message>", message)
 }
