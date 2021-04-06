@@ -1,9 +1,9 @@
 mod api;
-mod backend;
+mod methods;
 mod request;
 mod response;
 mod server;
 
 pub use api::{Api, ApiService};
-pub use backend::ApiError;
+pub use methods::error::{EntryArgsError, PublishEntryError};
 pub use server::RpcServer;

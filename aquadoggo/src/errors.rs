@@ -46,7 +46,7 @@ pub enum Error {
 
     /// Custom API errors.
     #[error(transparent)]
-    ApiError(#[from] super::rpc::ApiError),
+    ApiError(#[from] crate::rpc::PublishEntryError),
 }
 
 impl From<Error> for jsonrpc_core::Error {

@@ -4,11 +4,11 @@ use jsonrpc_core::{BoxFuture, IoHandler, Params};
 use jsonrpc_derive::rpc;
 use p2panda_rs::atomic::Validation;
 
-use super::backend::{get_entry_args, publish_entry};
-use super::request::{EntryArgsRequest, PublishEntryRequest};
-use super::response::{EntryArgsResponse, PublishEntryResponse};
 use crate::db::Pool;
 use crate::errors::Result;
+use crate::rpc::methods::{get_entry_args, publish_entry};
+use crate::rpc::request::{EntryArgsRequest, PublishEntryRequest};
+use crate::rpc::response::{EntryArgsResponse, PublishEntryResponse};
 
 /// Trait defining all Node RPC API methods.
 #[rpc(server)]
