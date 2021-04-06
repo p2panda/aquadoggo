@@ -16,26 +16,33 @@ const DEFAULT_SQLITE_NAME: &str = "aquadoggo-node.sqlite3";
 /// Each configuration also assures that a data directory exists on the host machine where database
 /// files or private keys get persisted.
 ///
-/// When no custom directory path is set it reads the process environment $XDG_DATA_HOME
-/// variable to determine the XDG data directory path which is $HOME/.local/share/p2panda on
-/// Linux by default.
+/// When no custom directory path is set it reads the process environment $XDG_DATA_HOME variable
+/// to determine the XDG data directory path which is $HOME/.local/share/aquadoggo on Linux by
+/// default.
 #[derive(Deserialize, Debug)]
 #[serde(default)]
 pub struct Configuration {
     /// Path to data directory.
     pub base_path: Option<PathBuf>,
+
     /// Database url (sqlite, mysql or postgres).
     pub database_url: Option<String>,
+
     /// Maximum number of database connections in pool.
     pub database_max_connections: u32,
+
     /// Maximal size of RPC request body in bytes.
     pub rpc_max_payload: usize,
+
     /// RPC API HTTP server port.
     pub http_port: u16,
+
     /// Number of HTTP server threads to run.
     pub http_threads: usize,
+
     /// Maximum number of connections for WebSocket RPC server.
     pub ws_max_connections: usize,
+
     /// RPC API WebSocket server port.
     pub ws_port: u16,
 }
