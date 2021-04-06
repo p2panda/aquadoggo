@@ -193,14 +193,15 @@ async fn get_entry_args(pool: Pool, params: EntryArgsRequest) -> Result<EntryArg
 
     match entry_latest {
         Some(entry_backlink) => {
-            let mut seq_num = entry_backlink.seq_num.clone();
+            let next_seq_num = entry_backlink.seq_num.clone().next().unwrap();
 
             // Unwrap as we know that an skiplink exists as soon as previous entry is given:
-            let skiplink_seq_num = seq_num.next().unwrap().skiplink_seq_num().unwrap();
+            let skiplink_seq_num = next_seq_num.skiplink_seq_num().unwrap();
 
             // Determine skiplink ("lipmaa"-link) entry in this log, return `None` when no skiplink
             // is required for the next entry
-            let entry_hash_skiplink = if is_lipmaa_required(seq_num.as_i64() as u64) {
+            let entry_hash_skiplink = if is_lipmaa_required(next_seq_num.as_i64() as u64)
+            {
                 let entry = Entry::at_seq_num(&pool, &params.author, &log_id, &skiplink_seq_num)
                     .await?
                     .unwrap();
