@@ -41,5 +41,5 @@ tag = "v0.1.0-pre-31"
 # crate via git. See: https://github.com/p2panda/p2panda/issues/38
 [dependencies.p2panda-rs]
 git = "https://github.com/p2panda/p2panda"
-branch = "fix-skiplink-encoding"
+branch = "main"
 features = ["db-sqlx"]

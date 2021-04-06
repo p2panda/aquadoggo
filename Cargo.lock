@@ -1810,7 +1810,7 @@ dependencies = [
 [[package]]
 name = "p2panda-rs"
 version = "0.1.0"
-source = "git+https://github.com/p2panda/p2panda?branch=fix-skiplink-encoding#7e01e39a1d80c53b97a0a834e6aed9eb49ca1959"
+source = "git+https://github.com/p2panda/p2panda?branch=main#e1d92be5d7f93ef9dff97bf4fc85995694768fc7"
 dependencies = [
  "arrayvec 0.5.2",
  "bamboo-rs-core",
