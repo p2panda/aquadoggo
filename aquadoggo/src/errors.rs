@@ -36,17 +36,17 @@ pub enum Error {
     #[error(transparent)]
     MessageEncodedValidation(#[from] MessageEncodedError),
 
+    /// Error returned from validating Bamboo entries.
+    #[error(transparent)]
+    BambooValidation(#[from] bamboo_rs_core::verify::Error),
+
+    /// Error returned from `panda_publishEntry` RPC method.
+    #[error(transparent)]
+    PublishEntryValidation(#[from] crate::rpc::PublishEntryError),
+
     /// Error returned from the database.
     #[error(transparent)]
     Database(#[from] sqlx::Error),
-
-    /// Error returned from validating Bamboo entries.
-    #[error(transparent)]
-    BambooVerification(#[from] bamboo_rs_core::verify::Error),
-
-    /// Custom API errors.
-    #[error(transparent)]
-    ApiError(#[from] crate::rpc::PublishEntryError),
 }
 
 impl From<Error> for jsonrpc_core::Error {
@@ -71,10 +71,10 @@ impl From<Error> for jsonrpc_core::Error {
             Error::MessageEncodedValidation(validation_error) => {
                 handle_validation_error(format!("{}", validation_error))
             }
-            Error::BambooVerification(validation_error) => {
+            Error::BambooValidation(validation_error) => {
                 handle_validation_error(format!("{}", validation_error))
             }
-            Error::ApiError(validation_error) => {
+            Error::PublishEntryValidation(validation_error) => {
                 handle_validation_error(format!("{}", validation_error))
             }
             _ => {
