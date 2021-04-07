@@ -1,4 +1,5 @@
 use bamboo_rs_core::entry::is_lipmaa_required;
+use p2panda_rs::atomic::Hash;
 
 use crate::db::models::{Entry, Log};
 use crate::db::Pool;
@@ -23,21 +24,8 @@ pub async fn get_entry_args(pool: Pool, params: EntryArgsRequest) -> Result<Entr
 
     match entry_latest {
         Some(entry_backlink) => {
-            let next_seq_num = entry_backlink.seq_num.clone().next().unwrap();
-
-            // Unwrap as we know that an skiplink exists as soon as previous entry is given:
-            let skiplink_seq_num = next_seq_num.skiplink_seq_num().unwrap();
-
-            // Determine skiplink ("lipmaa"-link) entry in this log, return `None` when no skiplink
-            // is required for the next entry
-            let entry_hash_skiplink = if is_lipmaa_required(next_seq_num.as_i64() as u64) {
-                let entry = Entry::at_seq_num(&pool, &params.author, &log_id, &skiplink_seq_num)
-                    .await?
-                    .unwrap();
-                Some(entry.entry_hash)
-            } else {
-                None
-            };
+            // Determine skiplink ("lipmaa"-link) entry in this log
+            let entry_hash_skiplink = determine_skiplink(pool.clone(), &entry_backlink).await?;
 
             Ok(EntryArgsResponse {
                 entry_hash_backlink: Some(entry_backlink.entry_hash),
@@ -53,6 +41,28 @@ pub async fn get_entry_args(pool: Pool, params: EntryArgsRequest) -> Result<Entr
             log_id,
         }),
     }
+}
+
+/// Determine skiplink entry hash ("lipmaa"-link) for entry in this log, return `None` when no
+/// skiplink is required for the next entry.
+pub async fn determine_skiplink(pool: Pool, entry: &Entry) -> Result<Option<Hash>> {
+    let next_seq_num = entry.seq_num.clone().next().unwrap();
+
+    // Unwrap as we know that an skiplink exists as soon as previous entry is given
+    let skiplink_seq_num = next_seq_num.skiplink_seq_num().unwrap();
+
+    // Check if skiplink is required and return hash if so
+    let entry_skiplink_hash = if is_lipmaa_required(next_seq_num.as_i64() as u64) {
+        let skiplink_entry =
+            Entry::at_seq_num(&pool, &entry.author, &entry.log_id, &skiplink_seq_num)
+                .await?
+                .unwrap();
+        Some(skiplink_entry.entry_hash)
+    } else {
+        None
+    };
+
+    Ok(entry_skiplink_hash)
 }
 
 #[cfg(test)]
