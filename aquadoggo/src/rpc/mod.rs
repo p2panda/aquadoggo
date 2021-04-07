@@ -5,5 +5,5 @@ mod response;
 mod server;
 
 pub use api::{Api, ApiService};
-pub use methods::error::{EntryArgsError, PublishEntryError};
+pub use methods::error::PublishEntryError;
 pub use server::RpcServer;

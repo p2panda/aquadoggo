@@ -7,10 +7,6 @@ use crate::errors::Result;
 use crate::rpc::request::EntryArgsRequest;
 use crate::rpc::response::EntryArgsResponse;
 
-#[derive(thiserror::Error, Debug)]
-#[allow(missing_copy_implementations)]
-pub enum EntryArgsError {}
-
 /// Implementation of `panda_getEntryArguments` RPC method.
 ///
 /// Returns required data (backlink and skiplink entry hashes, last sequence number and the schemas
