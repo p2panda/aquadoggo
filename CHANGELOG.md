@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0]
 
-Released: :package: `crate` [tbc](https://github.com/p2panda/aquadoggo/issues/16) ~ 🐳 `docker` [2021-04-07](https://hub.docker.com/u/p2panda)
+Released: :package: `crate` [tbc](https://github.com/p2panda/aquadoggo/issues/16) ~ 🐳 `docker` [2021-04-08](https://hub.docker.com/repository/docker/p2panda/aquadoggo)
 
 ### Added
 
