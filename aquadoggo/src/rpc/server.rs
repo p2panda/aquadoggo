@@ -1,7 +1,8 @@
-use jsonrpc_core::IoHandler;
-use log::error;
 use std::io::{ErrorKind, Result};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+use jsonrpc_core::IoHandler;
+use log::error;
 
 use crate::config::Configuration;
 use crate::task::TaskManager;

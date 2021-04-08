@@ -1,4 +1,6 @@
-use p2panda_rs::atomic::error::{AuthorError, HashError};
+use p2panda_rs::atomic::error::{
+    AuthorError, EntryError, EntrySignedError, HashError, MessageEncodedError, MessageError,
+};
 
 /// A specialized `Result` type for the node.
 pub type Result<T> = anyhow::Result<T, Error>;
@@ -18,6 +20,30 @@ pub enum Error {
     #[error(transparent)]
     HashValidation(#[from] HashError),
 
+    /// Error returned from validating p2panda-rs `Entry` data types.
+    #[error(transparent)]
+    EntryValidation(#[from] EntryError),
+
+    /// Error returned from validating p2panda-rs `EntrySigned` data types.
+    #[error(transparent)]
+    EntrySignedValidation(#[from] EntrySignedError),
+
+    /// Error returned from validating p2panda-rs `Message` data types.
+    #[error(transparent)]
+    MessageValidation(#[from] MessageError),
+
+    /// Error returned from validating p2panda-rs `MessageEncoded` data types.
+    #[error(transparent)]
+    MessageEncodedValidation(#[from] MessageEncodedError),
+
+    /// Error returned from validating Bamboo entries.
+    #[error(transparent)]
+    BambooValidation(#[from] bamboo_rs_core::verify::Error),
+
+    /// Error returned from `panda_publishEntry` RPC method.
+    #[error(transparent)]
+    PublishEntryValidation(#[from] crate::rpc::PublishEntryError),
+
     /// Error returned from the database.
     #[error(transparent)]
     Database(#[from] sqlx::Error),
@@ -31,6 +57,24 @@ impl From<Error> for jsonrpc_core::Error {
                 handle_validation_error(format!("{}", validation_error))
             }
             Error::HashValidation(validation_error) => {
+                handle_validation_error(format!("{}", validation_error))
+            }
+            Error::EntryValidation(validation_error) => {
+                handle_validation_error(format!("{}", validation_error))
+            }
+            Error::EntrySignedValidation(validation_error) => {
+                handle_validation_error(format!("{}", validation_error))
+            }
+            Error::MessageValidation(validation_error) => {
+                handle_validation_error(format!("{}", validation_error))
+            }
+            Error::MessageEncodedValidation(validation_error) => {
+                handle_validation_error(format!("{}", validation_error))
+            }
+            Error::BambooValidation(validation_error) => {
+                handle_validation_error(format!("{}", validation_error))
+            }
+            Error::PublishEntryValidation(validation_error) => {
                 handle_validation_error(format!("{}", validation_error))
             }
             _ => {

@@ -2,35 +2,22 @@ use async_std::channel::{unbounded, Sender};
 use async_std::task;
 use jsonrpc_core::{BoxFuture, IoHandler, Params};
 use jsonrpc_derive::rpc;
-use p2panda_rs::atomic::{Author, Hash, LogId, SeqNum, Validation};
-use serde::{Deserialize, Serialize};
+use p2panda_rs::atomic::Validation;
 
-use crate::db::models::{Entry, Log};
 use crate::db::Pool;
 use crate::errors::Result;
-
-/// Request body of `panda_getEntryArguments`.
-#[derive(Deserialize, Debug)]
-pub struct EntryArgsRequest {
-    author: Author,
-    schema: Hash,
-}
-
-/// Response body of `panda_getEntryArguments`.
-#[derive(Serialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct EntryArgsResponse {
-    entry_hash_backlink: Option<Hash>,
-    entry_hash_skiplink: Option<Hash>,
-    last_seq_num: Option<SeqNum>,
-    log_id: LogId,
-}
+use crate::rpc::methods::{get_entry_args, publish_entry};
+use crate::rpc::request::{EntryArgsRequest, PublishEntryRequest};
+use crate::rpc::response::{EntryArgsResponse, PublishEntryResponse};
 
 /// Trait defining all Node RPC API methods.
 #[rpc(server)]
 pub trait Api {
     #[rpc(name = "panda_getEntryArguments", params = "raw")]
     fn get_entry_args(&self, params: Params) -> BoxFuture<Result<EntryArgsResponse>>;
+
+    #[rpc(name = "panda_publishEntry", params = "raw")]
+    fn publish_entry(&self, params: Params) -> BoxFuture<Result<PublishEntryResponse>>;
 }
 
 /// Channel messages to send RPC command requests and their payloads from frontend `Api` to
@@ -41,6 +28,7 @@ pub trait Api {
 #[derive(Debug)]
 enum ApiServiceMessages {
     GetEntryArgs(EntryArgsRequest, Sender<Result<EntryArgsResponse>>),
+    PublishEntry(PublishEntryRequest, Sender<Result<PublishEntryResponse>>),
 }
 
 /// Backend service handling the RPC API methods.
@@ -61,6 +49,12 @@ impl ApiService {
                     Ok(ApiServiceMessages::GetEntryArgs(params, back_channel)) => {
                         back_channel
                             .send(get_entry_args(pool, params).await)
+                            .await
+                            .unwrap();
+                    }
+                    Ok(ApiServiceMessages::PublishEntry(params, back_channel)) => {
+                        back_channel
+                            .send(publish_entry(pool, params).await)
                             .await
                             .unwrap();
                     }
@@ -109,104 +103,40 @@ impl Api for ApiService {
             task::block_on(back_channel_notifier.recv()).unwrap()
         })
     }
-}
 
-/// Implementation of `panda_getEntryArguments` RPC method.
-///
-/// Returns required data (backlink and skiplink entry hashes, last sequence number and the schemas
-/// log_id) to encode a new bamboo entry.
-async fn get_entry_args(pool: Pool, params: EntryArgsRequest) -> Result<EntryArgsResponse> {
-    // Determine log_id for author's schema
-    let log_id = Log::schema_log_id(&pool, &params.author, &params.schema).await?;
+    fn publish_entry(&self, params_raw: Params) -> BoxFuture<Result<PublishEntryResponse>> {
+        let service_channel = self.service_channel.clone();
 
-    // Find latest entry in this log
-    let entry_latest = Entry::latest(&pool, &params.author, &log_id).await?;
+        Box::pin(async move {
+            // Parse incoming command parameters
+            let params: PublishEntryRequest = params_raw.parse()?;
 
-    match entry_latest {
-        Some(entry_backlink) => {
-            // Determine skiplink ("lipmaa"-link) entry in this log
-            let entry_skiplink = Entry::at_seq_num(
-                &pool,
-                &params.author,
-                &log_id,
-                // Unwrap as we know that an skiplink exists as soon as previous entry is given
-                &entry_backlink.seq_num.skiplink_seq_num().unwrap(),
+            // Validate entry hex encoding
+            params.entry_encoded.validate()?;
+
+            // Validate message schema and hex encoding
+            params.message_encoded.validate()?;
+
+            // Create back_channel to receive result from backend
+            let (back_channel, back_channel_notifier) = unbounded();
+
+            // Send request to backend and wait for response on back_channel
+            task::block_on(
+                service_channel.send(ApiServiceMessages::PublishEntry(params, back_channel)),
             )
-            .await?
             .unwrap();
-
-            Ok(EntryArgsResponse {
-                entry_hash_backlink: Some(entry_backlink.entry_hash),
-                entry_hash_skiplink: Some(entry_skiplink.entry_hash),
-                last_seq_num: Some(entry_backlink.seq_num),
-                log_id,
-            })
-        }
-        None => Ok(EntryArgsResponse {
-            entry_hash_backlink: None,
-            entry_hash_skiplink: None,
-            last_seq_num: None,
-            log_id,
-        }),
+            task::block_on(back_channel_notifier.recv()).unwrap()
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::ApiService;
-
     use jsonrpc_core::ErrorCode;
 
-    use crate::test_helpers::{initialize_db, random_entry_hash};
+    use crate::test_helpers::{initialize_db, random_entry_hash, rpc_error, rpc_request};
 
-    const TEST_AUTHOR: &str = "8b52ae153142288402382fd6d9619e018978e015e6bc372b1b0c7bd40c6a240a";
-
-    // Helper method to generate valid JSON RPC request string
-    fn rpc_request(method: &str, params: &str) -> String {
-        format!(
-            r#"{{
-                "jsonrpc": "2.0",
-                "method": "{}",
-                "params": {},
-                "id": 1
-            }}"#,
-            method, params
-        )
-        .replace(" ", "")
-        .replace("\n", "")
-    }
-
-    // Helper method to generate valid JSON RPC response string
-    fn rpc_response(result: &str) -> String {
-        format!(
-            r#"{{
-                "jsonrpc": "2.0",
-                "result": {},
-                "id": 1
-            }}"#,
-            result
-        )
-        .replace(" ", "")
-        .replace("\n", "")
-    }
-
-    // Helper method to generate valid JSON RPC error response string
-    fn rpc_error(code: ErrorCode, message: &str) -> String {
-        format!(
-            r#"{{
-                "jsonrpc": "2.0",
-                "error": {{
-                    "code": {},
-                    "message": "<message>"
-                }},
-                "id": 1
-            }}"#,
-            code.code(),
-        )
-        .replace(" ", "")
-        .replace("\n", "")
-        .replace("<message>", message)
-    }
+    use super::ApiService;
 
     #[async_std::test]
     async fn respond_with_missing_param_error() {
@@ -250,35 +180,6 @@ mod tests {
         let response = rpc_error(
             ErrorCode::InvalidParams,
             "Invalid params: invalid author key length.",
-        );
-
-        assert_eq!(io.handle_request_sync(&request), Some(response));
-    }
-
-    #[async_std::test]
-    async fn get_entry_arguments() {
-        let pool = initialize_db().await;
-        let io = ApiService::io_handler(pool);
-
-        let request = rpc_request(
-            "panda_getEntryArguments",
-            &format!(
-                r#"{{
-                    "author": "{}",
-                    "schema": "{}"
-                }}"#,
-                TEST_AUTHOR,
-                random_entry_hash(),
-            ),
-        );
-
-        let response = rpc_response(
-            r#"{
-                "entryHashBacklink": null,
-                "entryHashSkiplink": null,
-                "lastSeqNum": null,
-                "logId": 1
-            }"#,
         );
 
         assert_eq!(io.handle_request_sync(&request), Some(response));

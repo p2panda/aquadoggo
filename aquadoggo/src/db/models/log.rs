@@ -25,7 +25,7 @@ impl Log {
     ///
     /// The database will reject duplicate entries.
     #[allow(dead_code)]
-    pub async fn register_log_id(
+    pub async fn insert(
         pool: &Pool,
         author: &Author,
         schema: &Hash,
@@ -95,10 +95,7 @@ impl Log {
     ///
     /// Messages are separated in different logs per schema and author. This method checks if a log
     /// has already been registered for a certain schema and returns its id.
-    ///
-    /// If no log has been found for a USER schema it automatically returns the next unused log_id.
-    /// SYSTEM schema log ids are pre-defined by the protocol specification.
-    pub async fn schema_log_id(pool: &Pool, author: &Author, schema: &Hash) -> Result<LogId> {
+    pub async fn get(pool: &Pool, author: &Author, schema: &Hash) -> Result<Option<LogId>> {
         // @TODO: Look up if system schema was used and return regarding log id
         let result = query_as::<_, LogId>(
             "
@@ -116,10 +113,21 @@ impl Log {
         .fetch_optional(pool)
         .await?;
 
-        // Return result or find next unused user schema log id
-        let log_id = match result {
+        Ok(result)
+    }
+
+    /// Returns registered or possible log_id of an author's schema.
+    ///
+    /// If no log has been found for a USER schema it automatically returns the next unused log_id.
+    /// SYSTEM schema log ids are pre-defined by the protocol specification.
+    pub async fn find_schema_log_id(pool: &Pool, author: &Author, schema: &Hash) -> Result<LogId> {
+        // Determine log_id for author's schema
+        let schema_log_id = Log::get(pool, author, schema).await?;
+
+        // Use result or find next possible log_id automatically
+        let log_id = match schema_log_id {
             Some(value) => value,
-            None => Self::next_user_schema_log_id(pool, author).await?,
+            None => Log::next_user_schema_log_id(pool, author).await?,
         };
 
         Ok(log_id)
@@ -128,7 +136,7 @@ impl Log {
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::atomic::{Author, LogId, Hash};
+    use p2panda_rs::atomic::{Author, Hash, LogId};
 
     use super::Log;
 
@@ -143,7 +151,10 @@ mod tests {
         let author = Author::new(TEST_AUTHOR).unwrap();
         let schema = Hash::new(&random_entry_hash()).unwrap();
 
-        let log_id = Log::schema_log_id(&pool, &author, &schema).await.unwrap();
+        let log_id = Log::find_schema_log_id(&pool, &author, &schema)
+            .await
+            .unwrap();
+
         assert_eq!(log_id, LogId::new(1));
     }
 
@@ -154,17 +165,13 @@ mod tests {
         let author = Author::new(TEST_AUTHOR).unwrap();
         let schema = Hash::new(&random_entry_hash()).unwrap();
 
-        assert!(
-            Log::register_log_id(&pool, &author, &schema, &LogId::new(1))
-                .await
-                .is_ok()
-        );
+        assert!(Log::insert(&pool, &author, &schema, &LogId::new(1))
+            .await
+            .is_ok());
 
-        assert!(
-            Log::register_log_id(&pool, &author, &schema, &LogId::new(1))
-                .await
-                .is_err()
-        );
+        assert!(Log::insert(&pool, &author, &schema, &LogId::new(1))
+            .await
+            .is_err());
     }
 
     #[async_std::test]
@@ -181,24 +188,24 @@ mod tests {
         let schema_system = Hash::new(&random_entry_hash()).unwrap();
 
         // Register two log ids at the beginning
-        Log::register_log_id(&pool, &author, &schema_system, &LogId::new(9))
+        Log::insert(&pool, &author, &schema_system, &LogId::new(9))
             .await
             .unwrap();
-        Log::register_log_id(&pool, &author, &schema_first, &LogId::new(3))
+        Log::insert(&pool, &author, &schema_first, &LogId::new(3))
             .await
             .unwrap();
 
         // Find next free user log id and register it
         let log_id = Log::next_user_schema_log_id(&pool, &author).await.unwrap();
         assert_eq!(log_id, LogId::new(1));
-        Log::register_log_id(&pool, &author, &schema_second, &log_id)
+        Log::insert(&pool, &author, &schema_second, &log_id)
             .await
             .unwrap();
 
         // Find next free user log id and register it
         let log_id = Log::next_user_schema_log_id(&pool, &author).await.unwrap();
         assert_eq!(log_id, LogId::new(5));
-        Log::register_log_id(&pool, &author, &schema_third, &log_id)
+        Log::insert(&pool, &author, &schema_third, &log_id)
             .await
             .unwrap();
 

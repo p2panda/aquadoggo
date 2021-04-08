@@ -1,8 +1,9 @@
+use std::fs;
+use std::path::PathBuf;
+
 use anyhow::Result;
 use directories::ProjectDirs;
 use serde::Deserialize;
-use std::fs;
-use std::path::PathBuf;
 
 /// Data directory name.
 const DATA_DIR_NAME: &str = "aquadoggo";
