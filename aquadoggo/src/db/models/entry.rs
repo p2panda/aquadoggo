@@ -17,6 +17,7 @@ use crate::errors::Result;
 /// `author`, `payload_hash` etc. can be retrieved from `entry_bytes` but are separately stored in
 /// the database for faster querying.
 #[derive(FromRow, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Entry {
     /// Public key of the author.
     pub author: Author,
