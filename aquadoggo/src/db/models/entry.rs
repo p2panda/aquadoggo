@@ -118,17 +118,20 @@ impl Entry {
         let entries = query_as::<_, Entry>(
             "
             SELECT
-                author,
-                entry_bytes,
-                entry_hash,
-                log_id,
-                payload_bytes,
-                payload_hash,
-                seq_num
+                entries.author,
+                entries.entry_bytes,
+                entries.entry_hash,
+                entries.log_id,
+                entries.payload_bytes,
+                entries.payload_hash,
+                entries.seq_num
             FROM
                 entries
-            -- schema col does not exist yet
-            -- WHERE schema = ?1
+            INNER JOIN logs
+                ON (entries.log_id == logs.log_id
+                    AND entries.author == logs.author)
+            WHERE
+                logs.schema == ?1
             ",
         )
         .bind(schema)
