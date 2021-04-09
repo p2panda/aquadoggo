@@ -1,4 +1,5 @@
 use p2panda_rs::atomic::{Author, EntrySigned, Hash, LogId, MessageEncoded, SeqNum};
+use serde::Serialize;
 use sqlx::{query, query_as, FromRow};
 
 use crate::db::Pool;
@@ -15,7 +16,7 @@ use crate::errors::Result;
 /// payload can be deleted without affecting the data structures integrity. All other fields like
 /// `author`, `payload_hash` etc. can be retrieved from `entry_bytes` but are separately stored in
 /// the database for faster querying.
-#[derive(FromRow, Debug)]
+#[derive(FromRow, Debug, Serialize)]
 pub struct Entry {
     /// Public key of the author.
     pub author: Author,
@@ -111,6 +112,31 @@ impl Entry {
         Ok(latest_entry)
     }
 
+    /// Return vector of all entries of a given schema
+    pub async fn by_schema(pool: &Pool, schema: &Hash) -> Result<Vec<Entry>> {
+        let entries = query_as::<_, Entry>(
+            "
+            SELECT
+                author,
+                entry_bytes,
+                entry_hash,
+                log_id,
+                payload_bytes,
+                payload_hash,
+                seq_num
+            FROM
+                entries
+            -- schema col does not exist yet
+            -- WHERE schema = ?1
+            ",
+        )
+        .bind(schema)
+        .fetch_all(pool)
+        .await?;
+
+        Ok(entries)
+    }
+
     /// Returns entry at sequence position within an author's log.
     pub async fn at_seq_num(
         pool: &Pool,
@@ -148,7 +174,7 @@ impl Entry {
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::atomic::{Author, LogId};
+    use p2panda_rs::atomic::{Author, Hash, LogId};
 
     use super::Entry;
 
@@ -165,5 +191,15 @@ mod tests {
 
         let latest_entry = Entry::latest(&pool, &author, &log_id).await.unwrap();
         assert!(latest_entry.is_none());
+    }
+
+    #[async_std::test]
+    async fn entries_by_schema() {
+        let pool = initialize_db().await;
+
+        let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
+
+        let entries = Entry::by_schema(&pool, &schema).await.unwrap();
+        assert!(entries.len() == 0);
     }
 }

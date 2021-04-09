@@ -1,5 +1,6 @@
 use serde::Serialize;
 
+use crate::db::models::Entry;
 use p2panda_rs::atomic::{Hash, LogId, SeqNum};
 
 /// Response body of `panda_getEntryArguments`.
@@ -20,4 +21,10 @@ pub struct PublishEntryResponse {
     pub entry_hash_skiplink: Option<Hash>,
     pub last_seq_num: Option<SeqNum>,
     pub log_id: LogId,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct QueryEntriesResponse {
+    pub entries: Vec<Entry>,
 }

@@ -16,3 +16,9 @@ pub struct PublishEntryRequest {
     pub entry_encoded: EntrySigned,
     pub message_encoded: MessageEncoded,
 }
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct QueryEntriesRequest {
+    pub schema: Hash,
+}
