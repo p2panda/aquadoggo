@@ -60,6 +60,7 @@ dependencies = [
  "jsonrpc-http-server",
  "jsonrpc-ws-server",
  "log",
+ "openssl-probe",
  "p2panda-rs",
  "rand 0.8.3",
  "serde",

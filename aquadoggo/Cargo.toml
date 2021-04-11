@@ -26,6 +26,7 @@ jsonrpc-derive = "17.0.0"
 jsonrpc-http-server = "17.0.0"
 jsonrpc-ws-server = "17.0.0"
 log = "0.4.14"
+openssl-probe = "0.1.2"
 rand = "0.8.3"
 serde = { version = "1.0.125", features = ["derive"] }
 sqlformat = "0.1.6"

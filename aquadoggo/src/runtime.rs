@@ -7,6 +7,9 @@ use crate::task::TaskManager;
 
 /// Makes sure database is created and migrated before returning connection pool.
 async fn initialize_db(config: &Configuration) -> Result<Pool> {
+    // Find SSL certificate locations on the system for OpenSSL for TLS
+    openssl_probe::init_ssl_cert_env_vars();
+
     // Create database when not existing
     create_database(&config.database_url.clone().unwrap()).await?;
 
