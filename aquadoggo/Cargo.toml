@@ -30,7 +30,7 @@ openssl-probe = "0.1.2"
 rand = "0.8.3"
 serde = { version = "1.0.125", features = ["derive"] }
 sqlformat = "0.1.6"
-sqlx = { version = "0.5.1", features = ["runtime-async-std-rustls", "all-databases"] }
+sqlx = { version = "0.5.2", features = ["runtime-async-std-rustls", "all-databases"] }
 thiserror = "1.0.24"
 
 # @TODO: Change this as soon as `bamboo-rs` gets published
