@@ -6,9 +6,9 @@ use p2panda_rs::atomic::Validation;
 
 use crate::db::Pool;
 use crate::errors::Result;
-use crate::rpc::methods::{get_entry_args, publish_entry};
-use crate::rpc::request::{EntryArgsRequest, PublishEntryRequest};
-use crate::rpc::response::{EntryArgsResponse, PublishEntryResponse};
+use crate::rpc::methods::{get_entry_args, publish_entry, query_entries};
+use crate::rpc::request::{EntryArgsRequest, PublishEntryRequest, QueryEntriesRequest};
+use crate::rpc::response::{EntryArgsResponse, PublishEntryResponse, QueryEntriesResponse};
 
 /// Trait defining all Node RPC API methods.
 #[rpc(server)]
@@ -18,6 +18,9 @@ pub trait Api {
 
     #[rpc(name = "panda_publishEntry", params = "raw")]
     fn publish_entry(&self, params: Params) -> BoxFuture<Result<PublishEntryResponse>>;
+
+    #[rpc(name = "panda_queryEntries", params = "raw")]
+    fn query_entries(&self, params: Params) -> BoxFuture<Result<QueryEntriesResponse>>;
 }
 
 /// Channel messages to send RPC command requests and their payloads from frontend `Api` to
@@ -29,6 +32,7 @@ pub trait Api {
 enum ApiServiceMessages {
     GetEntryArgs(EntryArgsRequest, Sender<Result<EntryArgsResponse>>),
     PublishEntry(PublishEntryRequest, Sender<Result<PublishEntryResponse>>),
+    QueryEntries(QueryEntriesRequest, Sender<Result<QueryEntriesResponse>>),
 }
 
 /// Backend service handling the RPC API methods.
@@ -55,6 +59,12 @@ impl ApiService {
                     Ok(ApiServiceMessages::PublishEntry(params, back_channel)) => {
                         back_channel
                             .send(publish_entry(pool, params).await)
+                            .await
+                            .unwrap();
+                    }
+                    Ok(ApiServiceMessages::QueryEntries(params, back_channel)) => {
+                        back_channel
+                            .send(query_entries(pool, params).await)
                             .await
                             .unwrap();
                     }
@@ -123,6 +133,26 @@ impl Api for ApiService {
             // Send request to backend and wait for response on back_channel
             task::block_on(
                 service_channel.send(ApiServiceMessages::PublishEntry(params, back_channel)),
+            )
+            .unwrap();
+            task::block_on(back_channel_notifier.recv()).unwrap()
+        })
+    }
+
+    fn query_entries(&self, params_raw: Params) -> BoxFuture<Result<QueryEntriesResponse>> {
+        let service_channel = self.service_channel.clone();
+
+        Box::pin(async move {
+            // Parse and validate incoming command parameters
+            let params: QueryEntriesRequest = params_raw.parse()?;
+            params.schema.validate()?;
+
+            // Create back_channel to receive result from backend
+            let (back_channel, back_channel_notifier) = unbounded();
+
+            // Send request to backend and wait for response on back_channel
+            task::block_on(
+                service_channel.send(ApiServiceMessages::QueryEntries(params, back_channel)),
             )
             .unwrap();
             task::block_on(back_channel_notifier.recv()).unwrap()
