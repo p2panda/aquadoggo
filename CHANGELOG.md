@@ -15,6 +15,7 @@ Released: :package: `crate` [tbc](https://github.com/p2panda/aquadoggo/issues/16
 
 ### Added
 
+- `panda_queryEntries` RPC method. [#23](https://github.com/p2panda/aquadoggo/pull/23)
 - Docker support. [#22](https://github.com/p2panda/aquadoggo/pull/22)
 - `panda_publishEntry` RPC method. [#21](https://github.com/p2panda/aquadoggo/pull/21)
 - `panda_getEntryArguments` RPC method. [#11](https://github.com/p2panda/aquadoggo/pull/11)
