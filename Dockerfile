@@ -33,6 +33,6 @@ FROM alpine:latest
 # Copy release into final alpine image
 RUN apk --no-cache add ca-certificates
 COPY --from=BUILDER \
-            /home/rust/src/target/x86_64-unknown-linux-musl/release \
+            /home/rust/src/target/x86_64-unknown-linux-musl/release/aquadoggo \
             /usr/local/bin/
 CMD /usr/local/bin/aquadoggo
