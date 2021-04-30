@@ -19,6 +19,7 @@ envy = "0.4.2"
 exit-future = "0.2.0"
 futures = "0.3.13"
 hex = "0.4.3"
+http-types = "2.11.0"
 jsonrpc-v2 = { version = "0.10.0", features = ["easy-errors", "bytes-v05"], default-features = false }
 log = "0.4.14"
 openssl-probe = "0.1.2"
@@ -29,7 +30,7 @@ sqlformat = "0.1.6"
 sqlx = { version = "0.5.2", features = ["runtime-async-std-rustls", "postgres", "sqlite"] }
 thiserror = "1.0.24"
 tide = "0.16.0"
-http-types = "2.11.0"
+tide-websockets = "0.3.0"
 
 # @TODO: Change this as soon as `bamboo-rs` gets published
 [dependencies.bamboo-rs-core]

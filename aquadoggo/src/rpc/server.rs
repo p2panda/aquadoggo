@@ -1,8 +1,10 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
+use async_std::stream::StreamExt;
 use http_types::headers::HeaderValue;
 use jsonrpc_v2::RequestObject;
 use tide::security::{CorsMiddleware, Origin};
+use tide_websockets::{Message, WebSocket, WebSocketConnection};
 
 use crate::config::Configuration;
 use crate::rpc::RpcApiService;
@@ -28,6 +30,28 @@ async fn handle_http_request(mut request: tide::Request<RpcApiService>) -> tide:
     Ok(response)
 }
 
+pub async fn handle_ws_request(
+    request: tide::Request<RpcApiService>,
+    mut stream: WebSocketConnection,
+) -> Result<(), tide::Error> {
+    while let Some(Ok(Message::Text(ws_input))) = stream.next().await {
+        // Parse RPC request
+        let rpc_request: RequestObject = serde_json::from_str(&ws_input)?;
+
+        // Handle RPC request
+        let rpc_server = request.state();
+        let rpc_result = rpc_server.handle(rpc_request).await;
+
+        // Serialize response to JSON
+        let rpc_result_json = serde_json::to_string(&rpc_result)?;
+
+        // Respond with RPC result
+        stream.send_string(rpc_result_json).await?;
+    }
+
+    Ok(())
+}
+
 /// Spawn HTTP and WebSocket servers both exposing a JSON RPC API.
 pub async fn start_rpc_server(config: &Configuration, api: RpcApiService) -> anyhow::Result<()> {
     let http_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), config.http_port);
@@ -42,8 +66,9 @@ pub async fn start_rpc_server(config: &Configuration, api: RpcApiService) -> any
     let mut app = tide::with_state(api);
     app.with(cors);
     app.at("/")
-        .get(|_| async { Ok("Used HTTP Method is not allowed. POST or OPTIONS is required") });
-    app.at("/").post(handle_http_request);
+        .with(WebSocket::new(handle_ws_request))
+        .get(|_| async { Ok("Used HTTP Method is not allowed. POST or OPTIONS is required") })
+        .post(handle_http_request);
 
     // Start server
     app.listen(http_address).await?;
