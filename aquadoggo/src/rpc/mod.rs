@@ -6,4 +6,4 @@ mod server;
 
 pub use api::{new_rpc_api_service, RpcApiService, RpcServerState};
 pub use methods::error::PublishEntryError;
-pub use server::RpcServer;
+pub use server::start_rpc_server;
