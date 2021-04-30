@@ -8,9 +8,9 @@ pub type Result<T> = anyhow::Result<T, Error>;
 /// Represents all the ways a method can fail within the node.
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    /// Error returned from JSON RPC API.
-    #[error(transparent)]
-    RPC(#[from] jsonrpc_core::Error),
+    // /// Error returned from JSON RPC API.
+    // #[error(transparent)]
+    // RPC(#[from] jsonrpc_core::Error),
 
     /// Error returned from validating p2panda-rs `Author` data types.
     #[error(transparent)]
@@ -49,51 +49,51 @@ pub enum Error {
     Database(#[from] sqlx::Error),
 }
 
-impl From<Error> for jsonrpc_core::Error {
-    fn from(error: Error) -> Self {
-        match error {
-            Error::RPC(rpc_error) => rpc_error,
-            Error::AuthorValidation(validation_error) => {
-                handle_validation_error(format!("{}", validation_error))
-            }
-            Error::HashValidation(validation_error) => {
-                handle_validation_error(format!("{}", validation_error))
-            }
-            Error::EntryValidation(validation_error) => {
-                handle_validation_error(format!("{}", validation_error))
-            }
-            Error::EntrySignedValidation(validation_error) => {
-                handle_validation_error(format!("{}", validation_error))
-            }
-            Error::MessageValidation(validation_error) => {
-                handle_validation_error(format!("{}", validation_error))
-            }
-            Error::MessageEncodedValidation(validation_error) => {
-                handle_validation_error(format!("{}", validation_error))
-            }
-            Error::BambooValidation(validation_error) => {
-                handle_validation_error(format!("{}", validation_error))
-            }
-            Error::PublishEntryValidation(validation_error) => {
-                handle_validation_error(format!("{}", validation_error))
-            }
-            _ => {
-                log::error!("{:#}", error);
+// impl From<Error> for jsonrpc_core::Error {
+//     fn from(error: Error) -> Self {
+//         match error {
+//             Error::RPC(rpc_error) => rpc_error,
+//             Error::AuthorValidation(validation_error) => {
+//                 handle_validation_error(format!("{}", validation_error))
+//             }
+//             Error::HashValidation(validation_error) => {
+//                 handle_validation_error(format!("{}", validation_error))
+//             }
+//             Error::EntryValidation(validation_error) => {
+//                 handle_validation_error(format!("{}", validation_error))
+//             }
+//             Error::EntrySignedValidation(validation_error) => {
+//                 handle_validation_error(format!("{}", validation_error))
+//             }
+//             Error::MessageValidation(validation_error) => {
+//                 handle_validation_error(format!("{}", validation_error))
+//             }
+//             Error::MessageEncodedValidation(validation_error) => {
+//                 handle_validation_error(format!("{}", validation_error))
+//             }
+//             Error::BambooValidation(validation_error) => {
+//                 handle_validation_error(format!("{}", validation_error))
+//             }
+//             Error::PublishEntryValidation(validation_error) => {
+//                 handle_validation_error(format!("{}", validation_error))
+//             }
+//             _ => {
+//                 log::error!("{:#}", error);
 
-                jsonrpc_core::Error {
-                    code: jsonrpc_core::ErrorCode::InternalError,
-                    message: "Internal server error".to_owned(),
-                    data: Some(jsonrpc_core::Value::String(format!("{}", error))),
-                }
-            }
-        }
-    }
-}
+//                 jsonrpc_core::Error {
+//                     code: jsonrpc_core::ErrorCode::InternalError,
+//                     message: "Internal server error".to_owned(),
+//                     data: Some(jsonrpc_core::Value::String(format!("{}", error))),
+//                 }
+//             }
+//         }
+//     }
+// }
 
-fn handle_validation_error(message: String) -> jsonrpc_core::Error {
-    jsonrpc_core::Error {
-        code: jsonrpc_core::ErrorCode::InvalidParams,
-        message: format!("Invalid params: {}.", message),
-        data: None,
-    }
-}
+// fn handle_validation_error(message: String) -> jsonrpc_core::Error {
+//     jsonrpc_core::Error {
+//         code: jsonrpc_core::ErrorCode::InvalidParams,
+//         message: format!("Invalid params: {}.", message),
+//         data: None,
+//     }
+// }

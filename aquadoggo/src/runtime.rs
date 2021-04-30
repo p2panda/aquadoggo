@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::config::Configuration;
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
-use crate::rpc::{ApiService, RpcServer};
+use crate::rpc::{new_rpc_api_service, RpcServer};
 use crate::task::TaskManager;
 
 /// Makes sure database is created and migrated before returning connection pool.
@@ -30,7 +30,6 @@ async fn initialize_db(config: &Configuration) -> Result<Pool> {
 #[allow(missing_debug_implementations)]
 pub struct Runtime {
     pool: Pool,
-    rpc_server: RpcServer,
     task_manager: TaskManager,
 }
 
@@ -46,23 +45,16 @@ impl Runtime {
             .expect("Could not initialize database");
 
         // Start JSON RPC API servers
-        let io_handler = ApiService::io_handler(pool.clone());
-        let rpc_server = RpcServer::start(&config, &mut task_manager, io_handler);
+        let rpc_api_service = new_rpc_api_service(pool.clone());
+        RpcServer::start(&config, &mut task_manager, rpc_api_service);
 
-        Self {
-            pool,
-            task_manager,
-            rpc_server,
-        }
+        Self { pool, task_manager }
     }
 
     /// Close all running concurrent tasks and wait until they are fully shut down.
     pub async fn shutdown(self) {
         // Close connection pool
         self.pool.close().await;
-
-        // Close RPC servers
-        self.rpc_server.shutdown();
 
         // Wait until all tasks are shut down
         self.task_manager.shutdown().await;
