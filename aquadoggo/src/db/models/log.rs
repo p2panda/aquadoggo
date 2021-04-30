@@ -37,7 +37,7 @@ impl Log {
             INSERT INTO
                 logs (author, log_id, schema)
             VALUES
-                (?1, ?2, ?3)
+                (?, ?, ?)
             ",
         )
         .bind(author)
@@ -60,7 +60,7 @@ impl Log {
             FROM
                 logs
             WHERE
-                author = ?1
+                author = ?
             ORDER BY
                 log_id ASC
             ",
@@ -104,8 +104,8 @@ impl Log {
             FROM
                 logs
             WHERE
-                author = ?1
-                AND schema = ?2
+                author = ?
+                AND schema = ?
             ",
         )
         .bind(author)
