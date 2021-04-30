@@ -65,7 +65,7 @@ impl Entry {
                     seq_num
                 )
             VALUES
-                (?, ?, ?, ?, ?, ?, ?)
+                ($1, $2, $3, $4, $5, $6, $7)
             ",
         )
         .bind(author)
@@ -97,8 +97,8 @@ impl Entry {
             FROM
                 entries
             WHERE
-                author = ?
-                AND log_id = ?
+                author = $1
+                AND log_id = $2
             ORDER BY
                 seq_num DESC
             LIMIT
@@ -131,7 +131,7 @@ impl Entry {
                 ON (entries.log_id == logs.log_id
                     AND entries.author == logs.author)
             WHERE
-                logs.schema == ?
+                logs.schema == $1
             ",
         )
         .bind(schema)
@@ -161,9 +161,9 @@ impl Entry {
             FROM
                 entries
             WHERE
-                author = ?
-                AND log_id = ?
-                AND seq_num = ?
+                author = $1
+                AND log_id = $2
+                AND seq_num = $3
             ",
         )
         .bind(author)
