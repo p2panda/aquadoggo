@@ -2,7 +2,7 @@ use std::error::Error;
 
 use async_std::{future::Future, task};
 use futures::future;
-use log::debug;
+use log::{debug, error};
 
 /// Generic Result type for all async tasks used by TaskManager.
 pub type FutureResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
@@ -36,7 +36,7 @@ impl TaskManager {
 
         let task_with_error_log = async move {
             if let Err(e) = task.await {
-                debug!("[{}]: ERROR @ {}", name, e)
+                error!("[{}]: ERROR @ {}", name, e)
             }
         };
 
