@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::config::Configuration;
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
-use crate::rpc::{new_rpc_api_service, start_rpc_server};
+use crate::rpc::{rpc_api_handler, start_rpc_server};
 use crate::task::TaskManager;
 
 /// Makes sure database is created and migrated before returning connection pool.
@@ -44,10 +44,12 @@ impl Runtime {
             .await
             .expect("Could not initialize database");
 
+        // Create RPC API handler with shared database connection pool
+        let rpc_api_handler = rpc_api_handler(pool.clone());
+
         // Start JSON RPC API server
-        let rpc_api_service = new_rpc_api_service(pool.clone());
         task_manager.spawn("JSON RPC Server", async move {
-            start_rpc_server(&config, rpc_api_service).await?;
+            start_rpc_server(&config, rpc_api_handler).await?;
             Ok(())
         });
 

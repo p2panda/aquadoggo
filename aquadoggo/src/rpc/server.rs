@@ -30,6 +30,7 @@ async fn handle_http_request(mut request: tide::Request<RpcApiService>) -> tide:
     Ok(response)
 }
 
+/// Handle incoming WebSocket JSON RPC requests.
 pub async fn handle_ws_request(
     request: tide::Request<RpcApiService>,
     mut stream: WebSocketConnection,
@@ -52,7 +53,7 @@ pub async fn handle_ws_request(
     Ok(())
 }
 
-/// Spawn HTTP and WebSocket servers both exposing a JSON RPC API.
+/// Start HTTP and WebSocket server both exposing a JSON RPC API.
 pub async fn start_rpc_server(config: &Configuration, api: RpcApiService) -> anyhow::Result<()> {
     let http_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), config.http_port);
 

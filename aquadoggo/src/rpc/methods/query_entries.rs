@@ -5,10 +5,10 @@ use crate::db::models::Entry;
 use crate::errors::Result;
 use crate::rpc::request::QueryEntriesRequest;
 use crate::rpc::response::QueryEntriesResponse;
-use crate::rpc::RpcServerState;
+use crate::rpc::RpcApiState;
 
 pub async fn query_entries(
-    data: Data<RpcServerState>,
+    data: Data<RpcApiState>,
     Params(params): Params<QueryEntriesRequest>,
 ) -> Result<QueryEntriesResponse> {
     // Validate request parameters

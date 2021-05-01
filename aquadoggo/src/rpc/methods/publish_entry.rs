@@ -7,7 +7,7 @@ use crate::db::models::{Entry, Log};
 use crate::errors::Result;
 use crate::rpc::request::PublishEntryRequest;
 use crate::rpc::response::PublishEntryResponse;
-use crate::rpc::RpcServerState;
+use crate::rpc::RpcApiState;
 
 #[derive(thiserror::Error, Debug)]
 #[allow(missing_copy_implementations)]
@@ -26,7 +26,7 @@ pub enum PublishEntryError {
 ///
 /// Stores an author's Bamboo entry with message payload in database after validating it.
 pub async fn publish_entry(
-    data: Data<RpcServerState>,
+    data: Data<RpcApiState>,
     Params(params): Params<PublishEntryRequest>,
 ) -> Result<PublishEntryResponse> {
     // Validate request parameters

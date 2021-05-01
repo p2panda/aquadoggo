@@ -7,14 +7,14 @@ use crate::db::Pool;
 use crate::errors::Result;
 use crate::rpc::request::EntryArgsRequest;
 use crate::rpc::response::EntryArgsResponse;
-use crate::rpc::RpcServerState;
+use crate::rpc::RpcApiState;
 
 /// Implementation of `panda_getEntryArguments` RPC method.
 ///
 /// Returns required data (backlink and skiplink entry hashes, last sequence number and the schemas
 /// log_id) to encode a new bamboo entry.
 pub async fn get_entry_args(
-    data: Data<RpcServerState>,
+    data: Data<RpcApiState>,
     Params(params): Params<EntryArgsRequest>,
 ) -> Result<EntryArgsResponse> {
     // Validate request parameters
