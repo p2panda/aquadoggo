@@ -67,20 +67,19 @@ pub fn rpc_response(result: &str) -> String {
     .replace("\n", "")
 }
 
-// // Helper method to generate valid JSON RPC error response string
-// pub fn rpc_error(code: ErrorCode, message: &str) -> String {
-//     format!(
-//         r#"{{
-//             "jsonrpc": "2.0",
-//             "error": {{
-//                 "code": {},
-//                 "message": "<message>"
-//             }},
-//             "id": 1
-//         }}"#,
-//         code.code(),
-//     )
-//     .replace(" ", "")
-//     .replace("\n", "")
-//     .replace("<message>", message)
-// }
+// Helper method to generate valid JSON RPC error response string
+pub fn rpc_error(message: &str) -> String {
+    format!(
+        r#"{{
+            "error": {{
+                "code": 0,
+                "message": "<message>"
+            }},
+            "id": 1,
+            "jsonrpc": "2.0"
+        }}"#
+    )
+    .replace(" ", "")
+    .replace("\n", "")
+    .replace("<message>", message)
+}
