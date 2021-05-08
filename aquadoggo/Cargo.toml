@@ -43,3 +43,6 @@ tag = "v0.1.0-pre-31"
 git = "https://github.com/p2panda/p2panda"
 branch = "main"
 features = ["db-sqlx"]
+
+[dev-dependencies]
+tide-testing = "0.1.3"
