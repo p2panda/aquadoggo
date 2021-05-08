@@ -38,34 +38,34 @@ pub fn random_entry_hash() -> String {
 }
 
 // @TODO
-// // Helper method to generate valid JSON RPC request string
-// pub fn rpc_request(method: &str, params: &str) -> String {
-//     format!(
-//         r#"{{
-//             "jsonrpc": "2.0",
-//             "method": "{}",
-//             "params": {},
-//             "id": 1
-//         }}"#,
-//         method, params
-//     )
-//     .replace(" ", "")
-//     .replace("\n", "")
-// }
+// Helper method to generate valid JSON RPC request string
+pub fn rpc_request(method: &str, params: &str) -> String {
+    format!(
+        r#"{{
+            "jsonrpc": "2.0",
+            "method": "{}",
+            "params": {},
+            "id": 1
+        }}"#,
+        method, params
+    )
+    .replace(" ", "")
+    .replace("\n", "")
+}
 
-// // Helper method to generate valid JSON RPC response string
-// pub fn rpc_response(result: &str) -> String {
-//     format!(
-//         r#"{{
-//             "jsonrpc": "2.0",
-//             "result": {},
-//             "id": 1
-//         }}"#,
-//         result
-//     )
-//     .replace(" ", "")
-//     .replace("\n", "")
-// }
+// Helper method to generate valid JSON RPC response string
+pub fn rpc_response(result: &str) -> String {
+    format!(
+        r#"{{
+            "id": 1,
+            "jsonrpc": "2.0",
+            "result": {}
+        }}"#,
+        result
+    )
+    .replace(" ", "")
+    .replace("\n", "")
+}
 
 // // Helper method to generate valid JSON RPC error response string
 // pub fn rpc_error(code: ErrorCode, message: &str) -> String {

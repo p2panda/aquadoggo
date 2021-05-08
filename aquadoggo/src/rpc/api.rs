@@ -26,13 +26,13 @@ pub fn rpc_api_handler(pool: Pool) -> RpcApiService {
 #[cfg(test)]
 mod tests {
 
-   use crate::test_helpers::{initialize_db, random_entry_hash};
+   use crate::test_helpers::{initialize_db, random_entry_hash, rpc_request, rpc_response};
    use crate::rpc::server::handle_http_request;
 
    use super::rpc_api_handler;
 
    #[async_std::test]
-   async fn respond_with_missing_param_error() {
+   async fn respond_with_method_not_allowed() {
        let pool = initialize_db().await;
        let rpc_api_handler = rpc_api_handler(pool.clone());
        
@@ -44,8 +44,49 @@ mod tests {
         use tide_testing::TideTestingExt;
         assert_eq!(app.get("/").recv_string().await.unwrap(), "Used HTTP Method is not allowed. POST or OPTIONS is required");
 
-    //    assert_eq!(io.handle_request_sync(&request), Some(response));
    }
+
+    #[async_std::test]
+    async fn respond_with_entry_args() {
+        let pool = initialize_db().await;
+        let rpc_api_handler = rpc_api_handler(pool.clone());
+       
+        let mut app = tide::with_state(rpc_api_handler);
+        app.at("/")
+            .get(|_| async { Ok("Used HTTP Method is not allowed. POST or OPTIONS is required") })
+            .post(handle_http_request);
+
+        let request = rpc_request(
+            "panda_getEntryArguments",
+            &format!(
+                r#"{{
+                    "author": "7cf4f58a2d89e93313f2de99604a814ecea9800cf217b140e9c3a7ba59a5d982",
+                    "schema": "{}"
+                }}"#,
+                random_entry_hash()
+            ),
+        );
+
+        let response = rpc_response(
+            r#"{
+                "entryHashBacklink": null,
+                "entryHashSkiplink": null,
+                "lastSeqNum": null,
+                "logId": 1
+            }"#);
+            
+        let response_body: serde_json::value::Value = app
+            .post("/")
+            .body(tide::Body::from_string(request.into()))
+            .content_type("application/json")
+            .recv_json()
+            .await.unwrap();
+        
+        use tide_testing::TideTestingExt;
+        assert_eq!(
+            response_body.to_string(), response
+        );
+    }
 
 //    #[async_std::test]
 //    async fn respond_with_wrong_author_error() {
