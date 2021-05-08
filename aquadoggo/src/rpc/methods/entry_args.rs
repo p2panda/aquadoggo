@@ -73,40 +73,56 @@ pub async fn determine_skiplink(pool: Pool, entry: &Entry) -> Result<Option<Hash
     Ok(entry_skiplink_hash)
 }
 
-// @TODO
-// #[cfg(test)]
-// mod tests {
-//     use crate::rpc::ApiService;
-//     use crate::test_helpers::{initialize_db, random_entry_hash, rpc_request, rpc_response};
+#[cfg(test)]
+mod tests {
+    use tide_testing::TideTestingExt;
 
-//     const TEST_AUTHOR: &str = "8b52ae153142288402382fd6d9619e018978e015e6bc372b1b0c7bd40c6a240a";
+    use crate::rpc::api::rpc_api_handler;
+    use crate::rpc::server::handle_http_request;
+    use crate::test_helpers::{initialize_db, random_entry_hash, rpc_request, rpc_response};
 
-//     #[async_std::test]
-//     async fn get_entry_arguments() {
-//         let pool = initialize_db().await;
-//         let io = ApiService::io_handler(pool);
+    const TEST_AUTHOR: &str = "8b52ae153142288402382fd6d9619e018978e015e6bc372b1b0c7bd40c6a240a";
+    
+    #[async_std::test]
+    async fn get_entry_arguments() {
+        // Prepare test database
+        let pool = initialize_db().await;
+        let rpc_api_handler = rpc_api_handler(pool);
+       
+        // Create tider server with endpoints
+        let mut app = tide::with_state(rpc_api_handler);
+        app.at("/")
+            .get(|_| async { Ok("Used HTTP Method is not allowed. POST or OPTIONS is required") })
+            .post(handle_http_request);
+  
+        let request = rpc_request(
+            "panda_getEntryArguments",
+            &format!(
+                r#"{{
+                    "author": "{}",
+                    "schema": "{}"
+                }}"#,
+                TEST_AUTHOR,
+                random_entry_hash(),
+            ),
+        );
 
-//         let request = rpc_request(
-//             "panda_getEntryArguments",
-//             &format!(
-//                 r#"{{
-//                     "author": "{}",
-//                     "schema": "{}"
-//                 }}"#,
-//                 TEST_AUTHOR,
-//                 random_entry_hash(),
-//             ),
-//         );
+        let response = rpc_response(
+            r#"{
+                "entryHashBacklink": null,
+                "entryHashSkiplink": null,
+                "lastSeqNum": null,
+                "logId": 1
+            }"#,
+        );
 
-//         let response = rpc_response(
-//             r#"{
-//                 "entryHashBacklink": null,
-//                 "entryHashSkiplink": null,
-//                 "lastSeqNum": null,
-//                 "logId": 1
-//             }"#,
-//         );
+        let response_body: serde_json::value::Value = app
+            .post("/")
+            .body(tide::Body::from_string(request.into()))
+            .content_type("application/json")
+            .recv_json()
+            .await.unwrap();
 
-//         assert_eq!(io.handle_request_sync(&request), Some(response));
-//     }
-// }
+        assert_eq!(response_body.to_string(), response);
+    }
+}
