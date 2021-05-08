@@ -23,36 +23,29 @@ pub fn rpc_api_handler(pool: Pool) -> RpcApiService {
         .finish()
 }
 
-//#[cfg(test)]
-//mod tests {
-//    use jsonrpc_core::ErrorCode;
+#[cfg(test)]
+mod tests {
 
-//    use crate::test_helpers::{initialize_db, random_entry_hash, rpc_error, rpc_request};
+   use crate::test_helpers::{initialize_db, random_entry_hash};
+   use crate::rpc::server::handle_http_request;
 
-//    use super::ApiService;
+   use super::rpc_api_handler;
 
-//    #[async_std::test]
-//    async fn respond_with_missing_param_error() {
-//        let pool = initialize_db().await;
-//        let io = ApiService::io_handler(pool);
+   #[async_std::test]
+   async fn respond_with_missing_param_error() {
+       let pool = initialize_db().await;
+       let rpc_api_handler = rpc_api_handler(pool.clone());
+       
+        let mut app = tide::with_state(rpc_api_handler);
+        app.at("/")
+            .get(|_| async { Ok("Used HTTP Method is not allowed. POST or OPTIONS is required") })
+            .post(handle_http_request);
+        
+        use tide_testing::TideTestingExt;
+        assert_eq!(app.get("/").recv_string().await.unwrap(), "Used HTTP Method is not allowed. POST or OPTIONS is required");
 
-//        let request = rpc_request(
-//            "panda_getEntryArguments",
-//            &format!(
-//                r#"{{
-//                    "schema": "{}"
-//                }}"#,
-//                random_entry_hash()
-//            ),
-//        );
-
-//        let response = rpc_error(
-//            ErrorCode::InvalidParams,
-//            "Invalid params: missing field `author`.",
-//        );
-
-//        assert_eq!(io.handle_request_sync(&request), Some(response));
-//    }
+    //    assert_eq!(io.handle_request_sync(&request), Some(response));
+   }
 
 //    #[async_std::test]
 //    async fn respond_with_wrong_author_error() {
@@ -77,4 +70,4 @@ pub fn rpc_api_handler(pool: Pool) -> RpcApiService {
 
 //        assert_eq!(io.handle_request_sync(&request), Some(response));
 //    }
-//}
+}

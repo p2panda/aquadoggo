@@ -10,7 +10,7 @@ use crate::config::Configuration;
 use crate::rpc::RpcApiService;
 
 /// Handle incoming HTTP JSON RPC requests.
-async fn handle_http_request(mut request: tide::Request<RpcApiService>) -> tide::Result {
+pub async fn handle_http_request(mut request: tide::Request<RpcApiService>) -> tide::Result {
     // Parse RPC request
     let rpc_request: RequestObject = request.body_json().await?;
 
