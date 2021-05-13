@@ -79,9 +79,41 @@ mod tests {
 
     use crate::rpc::api::rpc_api_handler;
     use crate::rpc::server::build_rpc_server;
-    use crate::test_helpers::{initialize_db, random_entry_hash, rpc_request, rpc_response};
+    use crate::test_helpers::{
+        initialize_db, random_entry_hash, rpc_error, rpc_request, rpc_response,
+    };
 
     const TEST_AUTHOR: &str = "8b52ae153142288402382fd6d9619e018978e015e6bc372b1b0c7bd40c6a240a";
+
+    #[async_std::test]
+    async fn respond_with_wrong_author_error() {
+        let pool = initialize_db().await;
+        let rpc_api_handler = rpc_api_handler(pool.clone());
+        let app = build_rpc_server(rpc_api_handler);
+
+        let request = rpc_request(
+            "panda_getEntryArguments",
+            &format!(
+                r#"{{
+                    "author": "1234",
+                    "schema": "{}"
+                }}"#,
+                random_entry_hash()
+            ),
+        );
+
+        let response = rpc_error("invalid author key length");
+
+        let response_body: serde_json::value::Value = app
+            .post("/")
+            .body(tide::Body::from_string(request.into()))
+            .content_type("application/json")
+            .recv_json()
+            .await
+            .unwrap();
+
+        assert_eq!(response_body.to_string(), response);
+    }
 
     #[async_std::test]
     async fn get_entry_arguments() {
