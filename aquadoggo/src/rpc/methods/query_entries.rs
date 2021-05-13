@@ -28,7 +28,7 @@ mod tests {
 
     use crate::rpc::api::build_rpc_api_service;
     use crate::rpc::server::build_rpc_server;
-    use crate::test_helpers::{initialize_db, handle_http, rpc_request, rpc_response};
+    use crate::test_helpers::{handle_http, initialize_db, rpc_request, rpc_response};
 
     #[async_std::test]
     async fn query_entries() {
