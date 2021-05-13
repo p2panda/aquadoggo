@@ -128,10 +128,10 @@ impl Entry {
             FROM
                 entries
             INNER JOIN logs
-                ON (entries.log_id == logs.log_id
-                    AND entries.author == logs.author)
+                ON (entries.log_id = logs.log_id
+                    AND entries.author = logs.author)
             WHERE
-                logs.schema == $1
+                logs.schema = $1
             ",
         )
         .bind(schema)
