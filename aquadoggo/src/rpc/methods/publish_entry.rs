@@ -139,11 +139,10 @@ mod tests {
         SeqNum,
     };
     use p2panda_rs::key_pair::KeyPair;
-    use tide_testing::TideTestingExt;
 
-    use crate::rpc::api::rpc_api_handler;
+    use crate::rpc::api::build_rpc_api_service;
     use crate::rpc::server::{build_rpc_server, RpcServer};
-    use crate::test_helpers::{initialize_db, rpc_error, rpc_request, rpc_response};
+    use crate::test_helpers::{handle_http, initialize_db, rpc_error, rpc_request, rpc_response};
 
     // Helper method to create encoded entries and messages
     fn create_test_entry(
@@ -221,15 +220,7 @@ mod tests {
             log_id.as_i64(),
         ));
 
-        let response_body: serde_json::value::Value = app
-            .post("/")
-            .body(tide::Body::from_string(request.into()))
-            .content_type("application/json")
-            .recv_json()
-            .await
-            .unwrap();
-
-        assert_eq!(response_body.to_string(), response);
+        assert_eq!(handle_http(&app, request).await, response);
     }
 
     #[async_std::test]
@@ -241,8 +232,8 @@ mod tests {
         let pool = initialize_db().await;
 
         // Create tide server with endpoints
-        let rpc_api_handler = rpc_api_handler(pool);
-        let app = build_rpc_server(rpc_api_handler);
+        let rpc_api = build_rpc_api_service(pool);
+        let app = build_rpc_server(rpc_api);
 
         // Define schema and log id for entries
         let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
@@ -350,8 +341,8 @@ mod tests {
         let pool = initialize_db().await;
 
         // Create tide server with endpoints
-        let rpc_api_handler = rpc_api_handler(pool);
-        let app = build_rpc_server(rpc_api_handler);
+        let rpc_api = build_rpc_api_service(pool);
+        let app = build_rpc_server(rpc_api);
 
         // Define schema and log id for entries
         let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
@@ -411,15 +402,7 @@ mod tests {
 
         let response = rpc_error("Claimed log_id for schema not the same as in database");
 
-        let response_body: serde_json::value::Value = app
-            .post("/")
-            .body(tide::Body::from_string(request.into()))
-            .content_type("application/json")
-            .recv_json()
-            .await
-            .unwrap();
-
-        assert_eq!(response_body.to_string(), response);
+        assert_eq!(handle_http(&app, request).await, response);
 
         // Send invalid backlink entry / hash
         let (entry_wrong_hash, _) = create_test_entry(
@@ -447,15 +430,7 @@ mod tests {
             "The backlink hash encoded in the entry does not match the lipmaa entry provided",
         );
 
-        let response_body: serde_json::value::Value = app
-            .post("/")
-            .body(tide::Body::from_string(request.into()))
-            .content_type("application/json")
-            .recv_json()
-            .await
-            .unwrap();
-
-        assert_eq!(response_body.to_string(), response);
+        assert_eq!(handle_http(&app, request).await, response);
 
         // Send invalid seq num
         let (entry_wrong_seq_num, _) = create_test_entry(
@@ -481,14 +456,6 @@ mod tests {
 
         let response = rpc_error("Could not find backlink entry in database");
 
-        let response_body: serde_json::value::Value = app
-            .post("/")
-            .body(tide::Body::from_string(request.into()))
-            .content_type("application/json")
-            .recv_json()
-            .await
-            .unwrap();
-
-        assert_eq!(response_body.to_string(), response);
+        assert_eq!(handle_http(&app, request).await, response);
     }
 }

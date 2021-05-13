@@ -86,15 +86,15 @@ pub async fn start_rpc_server(config: &Configuration, api: RpcApiService) -> any
 mod tests {
     use tide_testing::TideTestingExt;
 
-    use crate::rpc::api::rpc_api_handler;
+    use crate::rpc::api::build_rpc_api_service;
     use crate::rpc::server::build_rpc_server;
     use crate::test_helpers::initialize_db;
 
     #[async_std::test]
     async fn respond_with_method_not_allowed() {
         let pool = initialize_db().await;
-        let rpc_api_handler = rpc_api_handler(pool.clone());
-        let app = build_rpc_server(rpc_api_handler);
+        let rpc_api = build_rpc_api_service(pool.clone());
+        let app = build_rpc_server(rpc_api);
 
         assert_eq!(
             app.get("/").recv_string().await.unwrap(),

@@ -75,12 +75,10 @@ pub async fn determine_skiplink(pool: Pool, entry: &Entry) -> Result<Option<Hash
 
 #[cfg(test)]
 mod tests {
-    use tide_testing::TideTestingExt;
-
-    use crate::rpc::api::rpc_api_handler;
+    use crate::rpc::api::build_rpc_api_service;
     use crate::rpc::server::build_rpc_server;
     use crate::test_helpers::{
-        initialize_db, random_entry_hash, rpc_error, rpc_request, rpc_response,
+        handle_http, initialize_db, random_entry_hash, rpc_error, rpc_request, rpc_response,
     };
 
     const TEST_AUTHOR: &str = "8b52ae153142288402382fd6d9619e018978e015e6bc372b1b0c7bd40c6a240a";
@@ -88,8 +86,8 @@ mod tests {
     #[async_std::test]
     async fn respond_with_wrong_author_error() {
         let pool = initialize_db().await;
-        let rpc_api_handler = rpc_api_handler(pool.clone());
-        let app = build_rpc_server(rpc_api_handler);
+        let rpc_api = build_rpc_api_service(pool.clone());
+        let app = build_rpc_server(rpc_api);
 
         let request = rpc_request(
             "panda_getEntryArguments",
@@ -104,15 +102,7 @@ mod tests {
 
         let response = rpc_error("invalid author key length");
 
-        let response_body: serde_json::value::Value = app
-            .post("/")
-            .body(tide::Body::from_string(request.into()))
-            .content_type("application/json")
-            .recv_json()
-            .await
-            .unwrap();
-
-        assert_eq!(response_body.to_string(), response);
+        assert_eq!(handle_http(&app, request).await, response);
     }
 
     #[async_std::test]
@@ -121,8 +111,8 @@ mod tests {
         let pool = initialize_db().await;
 
         // Create tide server with endpoints
-        let rpc_api_handler = rpc_api_handler(pool);
-        let app = build_rpc_server(rpc_api_handler);
+        let rpc_api = build_rpc_api_service(pool);
+        let app = build_rpc_server(rpc_api);
 
         let request = rpc_request(
             "panda_getEntryArguments",
@@ -145,14 +135,6 @@ mod tests {
             }"#,
         );
 
-        let response_body: serde_json::value::Value = app
-            .post("/")
-            .body(tide::Body::from_string(request.into()))
-            .content_type("application/json")
-            .recv_json()
-            .await
-            .unwrap();
-
-        assert_eq!(response_body.to_string(), response);
+        assert_eq!(handle_http(&app, request).await, response);
     }
 }

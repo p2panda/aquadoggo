@@ -25,11 +25,10 @@ pub async fn query_entries(
 #[cfg(test)]
 mod tests {
     use p2panda_rs::atomic::Hash;
-    use tide_testing::TideTestingExt;
 
-    use crate::rpc::api::rpc_api_handler;
+    use crate::rpc::api::build_rpc_api_service;
     use crate::rpc::server::build_rpc_server;
-    use crate::test_helpers::{initialize_db, rpc_request, rpc_response};
+    use crate::test_helpers::{initialize_db, handle_http, rpc_request, rpc_response};
 
     #[async_std::test]
     async fn query_entries() {
@@ -37,12 +36,11 @@ mod tests {
         let pool = initialize_db().await;
 
         // Create tide server with endpoints
-        let rpc_api_handler = rpc_api_handler(pool);
-        let app = build_rpc_server(rpc_api_handler);
-
-        let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
+        let rpc_api = build_rpc_api_service(pool);
+        let app = build_rpc_server(rpc_api);
 
         // Prepare request to API
+        let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
         let request = rpc_request(
             "panda_queryEntries",
             &format!(
@@ -60,14 +58,6 @@ mod tests {
             }}"#,
         ));
 
-        let response_body: serde_json::value::Value = app
-            .post("/")
-            .body(tide::Body::from_string(request.into()))
-            .content_type("application/json")
-            .recv_json()
-            .await
-            .unwrap();
-
-        assert_eq!(response_body.to_string(), response);
+        assert_eq!(handle_http(&app, request).await, response);
     }
 }

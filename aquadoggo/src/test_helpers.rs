@@ -2,8 +2,10 @@ use p2panda_rs::atomic::Hash;
 use rand::Rng;
 use sqlx::any::Any;
 use sqlx::migrate::MigrateDatabase;
+use tide_testing::TideTestingExt;
 
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
+use crate::rpc::RpcServer;
 
 const DB_URL: &str = "sqlite::memory:";
 
@@ -81,4 +83,17 @@ pub fn rpc_error(message: &str) -> String {
     .replace(" ", "")
     .replace("\n", "")
     .replace("<message>", message)
+}
+
+// Helper method to handle tide HTTP request and return response
+pub async fn handle_http(app: &RpcServer, request: String) -> String {
+    let response_body: serde_json::value::Value = app
+        .post("/")
+        .body(tide::Body::from_string(request.into()))
+        .content_type("application/json")
+        .recv_json()
+        .await
+        .unwrap();
+
+    response_body.to_string()
 }
