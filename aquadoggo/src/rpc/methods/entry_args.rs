@@ -82,19 +82,19 @@ mod tests {
     use crate::test_helpers::{initialize_db, random_entry_hash, rpc_request, rpc_response};
 
     const TEST_AUTHOR: &str = "8b52ae153142288402382fd6d9619e018978e015e6bc372b1b0c7bd40c6a240a";
-    
+
     #[async_std::test]
     async fn get_entry_arguments() {
         // Prepare test database
         let pool = initialize_db().await;
         let rpc_api_handler = rpc_api_handler(pool);
-       
+
         // Create tider server with endpoints
         let mut app = tide::with_state(rpc_api_handler);
         app.at("/")
             .get(|_| async { Ok("Used HTTP Method is not allowed. POST or OPTIONS is required") })
             .post(handle_http_request);
-  
+
         let request = rpc_request(
             "panda_getEntryArguments",
             &format!(
@@ -121,7 +121,8 @@ mod tests {
             .body(tide::Body::from_string(request.into()))
             .content_type("application/json")
             .recv_json()
-            .await.unwrap();
+            .await
+            .unwrap();
 
         assert_eq!(response_body.to_string(), response);
     }

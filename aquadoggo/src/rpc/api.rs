@@ -27,8 +27,8 @@ pub fn rpc_api_handler(pool: Pool) -> RpcApiService {
 mod tests {
     use tide_testing::TideTestingExt;
 
-    use crate::test_helpers::{initialize_db, random_entry_hash, rpc_request, rpc_error};
     use crate::rpc::server::handle_http_request;
+    use crate::test_helpers::{initialize_db, random_entry_hash, rpc_error, rpc_request};
 
     use super::rpc_api_handler;
 
@@ -36,21 +36,23 @@ mod tests {
     async fn respond_with_method_not_allowed() {
         let pool = initialize_db().await;
         let rpc_api_handler = rpc_api_handler(pool.clone());
-        
+
         let mut app = tide::with_state(rpc_api_handler);
         app.at("/")
             .get(|_| async { Ok("Used HTTP Method is not allowed. POST or OPTIONS is required") })
             .post(handle_http_request);
-        
-        assert_eq!(app.get("/").recv_string().await.unwrap(), "Used HTTP Method is not allowed. POST or OPTIONS is required");
 
+        assert_eq!(
+            app.get("/").recv_string().await.unwrap(),
+            "Used HTTP Method is not allowed. POST or OPTIONS is required"
+        );
     }
 
     #[async_std::test]
     async fn respond_with_wrong_author_error() {
         let pool = initialize_db().await;
         let rpc_api_handler = rpc_api_handler(pool.clone());
-        
+
         let mut app = tide::with_state(rpc_api_handler);
         app.at("/")
             .get(|_| async { Ok("Used HTTP Method is not allowed. POST or OPTIONS is required") })
@@ -67,19 +69,16 @@ mod tests {
             ),
         );
 
-        let response = rpc_error(
-            "invalid author key length",
-        );
+        let response = rpc_error("invalid author key length");
 
         let response_body: serde_json::value::Value = app
             .post("/")
             .body(tide::Body::from_string(request.into()))
             .content_type("application/json")
             .recv_json()
-            .await.unwrap();
+            .await
+            .unwrap();
 
-        assert_eq!(
-            response_body.to_string(), response
-        );
+        assert_eq!(response_body.to_string(), response);
     }
 }

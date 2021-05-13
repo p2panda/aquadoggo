@@ -132,54 +132,54 @@ pub async fn publish_entry(
 }
 #[cfg(test)]
 mod tests {
-   use std::convert::TryFrom;
-   use std::sync::Arc;
-       
-   use jsonrpc_v2::MapRouter;
-      use p2panda_rs::atomic::{
-       Entry, EntrySigned, Hash, LogId, Message, MessageEncoded, MessageFields, MessageValue,
-       SeqNum,
-   };
-   use p2panda_rs::key_pair::KeyPair;
+    use std::convert::TryFrom;
+    use std::sync::Arc;
 
-   use crate::rpc::api::rpc_api_handler;
-   use crate::rpc::server::handle_http_request;
-   use crate::test_helpers::{initialize_db, rpc_error, rpc_request, rpc_response};
+    use jsonrpc_v2::MapRouter;
+    use p2panda_rs::atomic::{
+        Entry, EntrySigned, Hash, LogId, Message, MessageEncoded, MessageFields, MessageValue,
+        SeqNum,
+    };
+    use p2panda_rs::key_pair::KeyPair;
 
-   // Helper method to create encoded entries and messages
-   fn create_test_entry(
-       key_pair: &KeyPair,
-       schema: &Hash,
-       log_id: &LogId,
-       skiplink: Option<&EntrySigned>,
-       backlink: Option<&EntrySigned>,
-       previous_seq_num: Option<&SeqNum>,
-   ) -> (EntrySigned, MessageEncoded) {
-       // Create message with dummy data
-       let mut fields = MessageFields::new();
-       fields
-           .add("test", MessageValue::Text("Hello".to_owned()))
-           .unwrap();
-       let message = Message::new_create(schema.clone(), fields).unwrap();
+    use crate::rpc::api::rpc_api_handler;
+    use crate::rpc::server::handle_http_request;
+    use crate::test_helpers::{initialize_db, rpc_error, rpc_request, rpc_response};
 
-       // Encode message
-       let message_encoded = MessageEncoded::try_from(&message).unwrap();
+    // Helper method to create encoded entries and messages
+    fn create_test_entry(
+        key_pair: &KeyPair,
+        schema: &Hash,
+        log_id: &LogId,
+        skiplink: Option<&EntrySigned>,
+        backlink: Option<&EntrySigned>,
+        previous_seq_num: Option<&SeqNum>,
+    ) -> (EntrySigned, MessageEncoded) {
+        // Create message with dummy data
+        let mut fields = MessageFields::new();
+        fields
+            .add("test", MessageValue::Text("Hello".to_owned()))
+            .unwrap();
+        let message = Message::new_create(schema.clone(), fields).unwrap();
 
-       // Create, sign and encode entry
-       let entry = Entry::new(
-           log_id,
-           &message,
-           skiplink.map(|e| e.hash()).as_ref(),
-           backlink.map(|e| e.hash()).as_ref(),
-           previous_seq_num,
-       )
-       .unwrap();
-       let entry_encoded = EntrySigned::try_from((&entry, key_pair)).unwrap();
+        // Encode message
+        let message_encoded = MessageEncoded::try_from(&message).unwrap();
 
-       (entry_encoded, message_encoded)
-   }
+        // Create, sign and encode entry
+        let entry = Entry::new(
+            log_id,
+            &message,
+            skiplink.map(|e| e.hash()).as_ref(),
+            backlink.map(|e| e.hash()).as_ref(),
+            previous_seq_num,
+        )
+        .unwrap();
+        let entry_encoded = EntrySigned::try_from((&entry, key_pair)).unwrap();
 
-   // Helper method to compare expected API responses with what was returned
+        (entry_encoded, message_encoded)
+    }
+
+    // Helper method to compare expected API responses with what was returned
     async fn assert_request(
         app: &tide::Server<Arc<jsonrpc_v2::Server<MapRouter>>>,
         entry_encoded: &EntrySigned,
@@ -227,138 +227,141 @@ mod tests {
             .body(tide::Body::from_string(request.into()))
             .content_type("application/json")
             .recv_json()
-            .await.unwrap();
+            .await
+            .unwrap();
 
         use tide_testing::TideTestingExt;
-        assert_eq!(
-            response_body.to_string(), response
-        );
+        assert_eq!(response_body.to_string(), response);
     }
 
-   #[async_std::test]
-   async fn publish_entry() {
-       // Create key pair for author
-       let key_pair = KeyPair::new();
-
-       // Prepare test database
-       let pool = initialize_db().await;
-       let rpc_api_handler = rpc_api_handler(pool);
-       
-       // Create tider server with endpoints
-       let mut app = tide::with_state(rpc_api_handler);
-       app.at("/")
-           .get(|_| async { Ok("Used HTTP Method is not allowed. POST or OPTIONS is required") })
-           .post(handle_http_request);
-
-       // Define schema and log id for entries
-       let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
-       let log_id = LogId::new(5);
-
-       // Create a couple of entries in the same log and check for consistency
-       //
-       // [1] --
-       let (entry_1, message_1) = create_test_entry(&key_pair, &schema, &log_id, None, None, None);
-       assert_request(
-           &app,
-           &entry_1,
-           &message_1,
-           None,
-           &log_id,
-           &SeqNum::new(1).unwrap(),
-       ).await;
-
-       // [1] <-- [2]
-       let (entry_2, message_2) = create_test_entry(
-           &key_pair,
-           &schema,
-           &log_id,
-           None,
-           Some(&entry_1),
-           Some(&SeqNum::new(1).unwrap()),
-       );
-       assert_request(
-           &app,
-           &entry_2,
-           &message_2,
-           None,
-           &log_id,
-           &SeqNum::new(2).unwrap(),
-       ).await;
-
-       // [1] <-- [2] <-- [3]
-       let (entry_3, message_3) = create_test_entry(
-           &key_pair,
-           &schema,
-           &log_id,
-           None,
-           Some(&entry_2),
-           Some(&SeqNum::new(2).unwrap()),
-       );
-       assert_request(
-           &app,
-           &entry_3,
-           &message_3,
-           Some(&entry_1),
-           &log_id,
-           &SeqNum::new(3).unwrap(),
-       ).await;
-
-       //  /------------------ [4]
-       // [1] <-- [2] <-- [3]
-       let (entry_4, message_4) = create_test_entry(
-           &key_pair,
-           &schema,
-           &log_id,
-           Some(&entry_1),
-           Some(&entry_3),
-           Some(&SeqNum::new(3).unwrap()),
-       );
-       assert_request(
-           &app,
-           &entry_4,
-           &message_4,
-           None,
-           &log_id,
-           &SeqNum::new(4).unwrap(),
-       ).await;
-
-       //  /------------------ [4]
-       // [1] <-- [2] <-- [3]   \-- [5] --
-       let (entry_5, message_5) = create_test_entry(
-           &key_pair,
-           &schema,
-           &log_id,
-           None,
-           Some(&entry_4),
-           Some(&SeqNum::new(4).unwrap()),
-       );
-       assert_request(
-           &app,
-           &entry_5,
-           &message_5,
-           None,
-           &log_id,
-           &SeqNum::new(5).unwrap(),
-       ).await;
-   }
-
     #[async_std::test]
-    async fn validate() {
-        use tide_testing::TideTestingExt;
-        
+    async fn publish_entry() {
         // Create key pair for author
         let key_pair = KeyPair::new();
 
         // Prepare test database
         let pool = initialize_db().await;
         let rpc_api_handler = rpc_api_handler(pool);
-        
+
         // Create tider server with endpoints
         let mut app = tide::with_state(rpc_api_handler);
         app.at("/")
             .get(|_| async { Ok("Used HTTP Method is not allowed. POST or OPTIONS is required") })
             .post(handle_http_request);
 
+        // Define schema and log id for entries
+        let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
+        let log_id = LogId::new(5);
+
+        // Create a couple of entries in the same log and check for consistency
+        //
+        // [1] --
+        let (entry_1, message_1) = create_test_entry(&key_pair, &schema, &log_id, None, None, None);
+        assert_request(
+            &app,
+            &entry_1,
+            &message_1,
+            None,
+            &log_id,
+            &SeqNum::new(1).unwrap(),
+        )
+        .await;
+
+        // [1] <-- [2]
+        let (entry_2, message_2) = create_test_entry(
+            &key_pair,
+            &schema,
+            &log_id,
+            None,
+            Some(&entry_1),
+            Some(&SeqNum::new(1).unwrap()),
+        );
+        assert_request(
+            &app,
+            &entry_2,
+            &message_2,
+            None,
+            &log_id,
+            &SeqNum::new(2).unwrap(),
+        )
+        .await;
+
+        // [1] <-- [2] <-- [3]
+        let (entry_3, message_3) = create_test_entry(
+            &key_pair,
+            &schema,
+            &log_id,
+            None,
+            Some(&entry_2),
+            Some(&SeqNum::new(2).unwrap()),
+        );
+        assert_request(
+            &app,
+            &entry_3,
+            &message_3,
+            Some(&entry_1),
+            &log_id,
+            &SeqNum::new(3).unwrap(),
+        )
+        .await;
+
+        //  /------------------ [4]
+        // [1] <-- [2] <-- [3]
+        let (entry_4, message_4) = create_test_entry(
+            &key_pair,
+            &schema,
+            &log_id,
+            Some(&entry_1),
+            Some(&entry_3),
+            Some(&SeqNum::new(3).unwrap()),
+        );
+        assert_request(
+            &app,
+            &entry_4,
+            &message_4,
+            None,
+            &log_id,
+            &SeqNum::new(4).unwrap(),
+        )
+        .await;
+
+        //  /------------------ [4]
+        // [1] <-- [2] <-- [3]   \-- [5] --
+        let (entry_5, message_5) = create_test_entry(
+            &key_pair,
+            &schema,
+            &log_id,
+            None,
+            Some(&entry_4),
+            Some(&SeqNum::new(4).unwrap()),
+        );
+        assert_request(
+            &app,
+            &entry_5,
+            &message_5,
+            None,
+            &log_id,
+            &SeqNum::new(5).unwrap(),
+        )
+        .await;
+    }
+
+    #[async_std::test]
+    async fn validate() {
+        use tide_testing::TideTestingExt;
+
+        // Create key pair for author
+        let key_pair = KeyPair::new();
+
+        // Prepare test database
+        let pool = initialize_db().await;
+        let rpc_api_handler = rpc_api_handler(pool);
+
+        // Create tider server with endpoints
+        let mut app = tide::with_state(rpc_api_handler);
+        app.at("/")
+            .get(|_| async { Ok("Used HTTP Method is not allowed. POST or OPTIONS is required") })
+            .post(handle_http_request);
 
         // Define schema and log id for entries
         let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
@@ -373,7 +376,8 @@ mod tests {
             None,
             &log_id,
             &SeqNum::new(1).unwrap(),
-        ).await;
+        )
+        .await;
 
         let (entry_2, message_2) = create_test_entry(
             &key_pair,
@@ -390,7 +394,8 @@ mod tests {
             None,
             &log_id,
             &SeqNum::new(2).unwrap(),
-        ).await;
+        )
+        .await;
 
         // Send invalid log id for this schema
         let (entry_wrong_log_id, _) = create_test_entry(
@@ -414,16 +419,15 @@ mod tests {
             ),
         );
 
-        let response = rpc_error(
-            "Claimed log_id for schema not the same as in database"
-        );
+        let response = rpc_error("Claimed log_id for schema not the same as in database");
 
         let response_body: serde_json::value::Value = app
             .post("/")
             .body(tide::Body::from_string(request.into()))
             .content_type("application/json")
             .recv_json()
-            .await.unwrap();
+            .await
+            .unwrap();
 
         assert_eq!(response_body.to_string(), response);
 
@@ -450,7 +454,7 @@ mod tests {
         );
 
         let response = rpc_error(
-            "The backlink hash encoded in the entry does not match the lipmaa entry provided"
+            "The backlink hash encoded in the entry does not match the lipmaa entry provided",
         );
 
         let response_body: serde_json::value::Value = app
@@ -458,7 +462,8 @@ mod tests {
             .body(tide::Body::from_string(request.into()))
             .content_type("application/json")
             .recv_json()
-            .await.unwrap();
+            .await
+            .unwrap();
 
         assert_eq!(response_body.to_string(), response);
 
@@ -484,16 +489,15 @@ mod tests {
             ),
         );
 
-        let response = rpc_error(
-            "Could not find backlink entry in database"
-        );
+        let response = rpc_error("Could not find backlink entry in database");
 
         let response_body: serde_json::value::Value = app
             .post("/")
             .body(tide::Body::from_string(request.into()))
             .content_type("application/json")
             .recv_json()
-            .await.unwrap();
+            .await
+            .unwrap();
 
         assert_eq!(response_body.to_string(), response);
     }

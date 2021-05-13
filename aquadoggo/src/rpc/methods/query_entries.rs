@@ -36,13 +36,13 @@ mod tests {
         // Prepare test database
         let pool = initialize_db().await;
         let rpc_api_handler = rpc_api_handler(pool);
-       
+
         // Create tider server with endpoints
         let mut app = tide::with_state(rpc_api_handler);
         app.at("/")
             .get(|_| async { Ok("Used HTTP Method is not allowed. POST or OPTIONS is required") })
             .post(handle_http_request);
-  
+
         let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
 
         // Prepare request to API
@@ -68,7 +68,8 @@ mod tests {
             .body(tide::Body::from_string(request.into()))
             .content_type("application/json")
             .recv_json()
-            .await.unwrap();
+            .await
+            .unwrap();
 
         assert_eq!(response_body.to_string(), response);
     }

@@ -11,7 +11,6 @@ pub enum Error {
     // /// Error returned from JSON RPC API.
     // #[error(transparent)]
     // RPC(#[from] jsonrpc_core::Error),
-
     /// Error returned from validating p2panda-rs `Author` data types.
     #[error(transparent)]
     AuthorValidation(#[from] AuthorError),
