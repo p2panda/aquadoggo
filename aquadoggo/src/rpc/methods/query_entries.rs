@@ -24,24 +24,21 @@ pub async fn query_entries(
 
 #[cfg(test)]
 mod tests {
+    use p2panda_rs::atomic::Hash;
     use tide_testing::TideTestingExt;
 
     use crate::rpc::api::rpc_api_handler;
-    use crate::rpc::server::handle_http_request;
+    use crate::rpc::server::build_rpc_server;
     use crate::test_helpers::{initialize_db, rpc_request, rpc_response};
-    use p2panda_rs::atomic::Hash;
 
     #[async_std::test]
     async fn query_entries() {
         // Prepare test database
         let pool = initialize_db().await;
-        let rpc_api_handler = rpc_api_handler(pool);
 
-        // Create tider server with endpoints
-        let mut app = tide::with_state(rpc_api_handler);
-        app.at("/")
-            .get(|_| async { Ok("Used HTTP Method is not allowed. POST or OPTIONS is required") })
-            .post(handle_http_request);
+        // Create tide server with endpoints
+        let rpc_api_handler = rpc_api_handler(pool);
+        let app = build_rpc_server(rpc_api_handler);
 
         let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
 

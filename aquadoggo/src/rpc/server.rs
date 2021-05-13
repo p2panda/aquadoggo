@@ -9,8 +9,11 @@ use tide_websockets::{Message, WebSocket, WebSocketConnection};
 use crate::config::Configuration;
 use crate::rpc::RpcApiService;
 
+pub type RpcServer = tide::Server<RpcApiService>;
+pub type RpcServerRequest = tide::Request<RpcApiService>;
+
 /// Handle incoming HTTP JSON RPC requests.
-pub async fn handle_http_request(mut request: tide::Request<RpcApiService>) -> tide::Result {
+pub async fn handle_http_request(mut request: RpcServerRequest) -> tide::Result {
     // Parse RPC request
     let rpc_request: RequestObject = request.body_json().await?;
 
@@ -32,7 +35,7 @@ pub async fn handle_http_request(mut request: tide::Request<RpcApiService>) -> t
 
 /// Handle incoming WebSocket JSON RPC requests.
 pub async fn handle_ws_request(
-    request: tide::Request<RpcApiService>,
+    request: RpcServerRequest,
     mut stream: WebSocketConnection,
 ) -> Result<(), tide::Error> {
     while let Some(Ok(Message::Text(ws_input))) = stream.next().await {
@@ -53,10 +56,8 @@ pub async fn handle_ws_request(
     Ok(())
 }
 
-/// Start HTTP and WebSocket server both exposing a JSON RPC API.
-pub async fn start_rpc_server(config: &Configuration, api: RpcApiService) -> anyhow::Result<()> {
-    let http_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), config.http_port);
-
+/// Build HTTP and WebSocket server both exposing a JSON RPC API.
+pub fn build_rpc_server(api: RpcApiService) -> RpcServer {
     // Configure CORS middleware
     let cors = CorsMiddleware::new()
         .allow_methods("GET, POST, OPTIONS".parse::<HeaderValue>().unwrap())
@@ -71,8 +72,13 @@ pub async fn start_rpc_server(config: &Configuration, api: RpcApiService) -> any
         .get(|_| async { Ok("Used HTTP Method is not allowed. POST or OPTIONS is required") })
         .post(handle_http_request);
 
-    // Start server
-    app.listen(http_address).await?;
+    app
+}
 
+/// Start HTTP and WebSocket server.
+pub async fn start_rpc_server(config: &Configuration, api: RpcApiService) -> anyhow::Result<()> {
+    let http_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), config.http_port);
+    let server = build_rpc_server(api);
+    server.listen(http_address).await?;
     Ok(())
 }

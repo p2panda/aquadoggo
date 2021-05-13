@@ -133,17 +133,16 @@ pub async fn publish_entry(
 #[cfg(test)]
 mod tests {
     use std::convert::TryFrom;
-    use std::sync::Arc;
 
-    use jsonrpc_v2::MapRouter;
     use p2panda_rs::atomic::{
         Entry, EntrySigned, Hash, LogId, Message, MessageEncoded, MessageFields, MessageValue,
         SeqNum,
     };
     use p2panda_rs::key_pair::KeyPair;
+    use tide_testing::TideTestingExt;
 
     use crate::rpc::api::rpc_api_handler;
-    use crate::rpc::server::handle_http_request;
+    use crate::rpc::server::{build_rpc_server, RpcServer};
     use crate::test_helpers::{initialize_db, rpc_error, rpc_request, rpc_response};
 
     // Helper method to create encoded entries and messages
@@ -181,7 +180,7 @@ mod tests {
 
     // Helper method to compare expected API responses with what was returned
     async fn assert_request(
-        app: &tide::Server<Arc<jsonrpc_v2::Server<MapRouter>>>,
+        app: &RpcServer,
         entry_encoded: &EntrySigned,
         message_encoded: &MessageEncoded,
         entry_skiplink: Option<&EntrySigned>,
@@ -230,7 +229,6 @@ mod tests {
             .await
             .unwrap();
 
-        use tide_testing::TideTestingExt;
         assert_eq!(response_body.to_string(), response);
     }
 
@@ -241,13 +239,10 @@ mod tests {
 
         // Prepare test database
         let pool = initialize_db().await;
-        let rpc_api_handler = rpc_api_handler(pool);
 
-        // Create tider server with endpoints
-        let mut app = tide::with_state(rpc_api_handler);
-        app.at("/")
-            .get(|_| async { Ok("Used HTTP Method is not allowed. POST or OPTIONS is required") })
-            .post(handle_http_request);
+        // Create tide server with endpoints
+        let rpc_api_handler = rpc_api_handler(pool);
+        let app = build_rpc_server(rpc_api_handler);
 
         // Define schema and log id for entries
         let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
@@ -348,20 +343,15 @@ mod tests {
 
     #[async_std::test]
     async fn validate() {
-        use tide_testing::TideTestingExt;
-
         // Create key pair for author
         let key_pair = KeyPair::new();
 
         // Prepare test database
         let pool = initialize_db().await;
-        let rpc_api_handler = rpc_api_handler(pool);
 
-        // Create tider server with endpoints
-        let mut app = tide::with_state(rpc_api_handler);
-        app.at("/")
-            .get(|_| async { Ok("Used HTTP Method is not allowed. POST or OPTIONS is required") })
-            .post(handle_http_request);
+        // Create tide server with endpoints
+        let rpc_api_handler = rpc_api_handler(pool);
+        let app = build_rpc_server(rpc_api_handler);
 
         // Define schema and log id for entries
         let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
