@@ -37,7 +37,6 @@ pub fn random_entry_hash() -> String {
         .to_owned()
 }
 
-// @TODO
 // Helper method to generate valid JSON RPC request string
 pub fn rpc_request(method: &str, params: &str) -> String {
     format!(
