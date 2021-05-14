@@ -1,17 +1,29 @@
 use bamboo_rs_core::entry::is_lipmaa_required;
-use p2panda_rs::atomic::Hash;
+use jsonrpc_v2::{Data, Params};
+use p2panda_rs::atomic::{Hash, Validation};
 
 use crate::db::models::{Entry, Log};
 use crate::db::Pool;
 use crate::errors::Result;
 use crate::rpc::request::EntryArgsRequest;
 use crate::rpc::response::EntryArgsResponse;
+use crate::rpc::RpcApiState;
 
 /// Implementation of `panda_getEntryArguments` RPC method.
 ///
 /// Returns required data (backlink and skiplink entry hashes, last sequence number and the schemas
 /// log_id) to encode a new bamboo entry.
-pub async fn get_entry_args(pool: Pool, params: EntryArgsRequest) -> Result<EntryArgsResponse> {
+pub async fn get_entry_args(
+    data: Data<RpcApiState>,
+    Params(params): Params<EntryArgsRequest>,
+) -> Result<EntryArgsResponse> {
+    // Validate request parameters
+    params.author.validate()?;
+    params.schema.validate()?;
+
+    // Get database connection pool
+    let pool = data.pool.clone();
+
     // Determine log_id for author's schema
     let log_id = Log::find_schema_log_id(&pool, &params.author, &params.schema).await?;
 
@@ -63,15 +75,44 @@ pub async fn determine_skiplink(pool: Pool, entry: &Entry) -> Result<Option<Hash
 
 #[cfg(test)]
 mod tests {
-    use crate::rpc::ApiService;
-    use crate::test_helpers::{initialize_db, random_entry_hash, rpc_request, rpc_response};
+    use crate::rpc::api::build_rpc_api_service;
+    use crate::rpc::server::build_rpc_server;
+    use crate::test_helpers::{
+        handle_http, initialize_db, random_entry_hash, rpc_error, rpc_request, rpc_response,
+    };
 
     const TEST_AUTHOR: &str = "8b52ae153142288402382fd6d9619e018978e015e6bc372b1b0c7bd40c6a240a";
 
     #[async_std::test]
-    async fn get_entry_arguments() {
+    async fn respond_with_wrong_author_error() {
         let pool = initialize_db().await;
-        let io = ApiService::io_handler(pool);
+        let rpc_api = build_rpc_api_service(pool.clone());
+        let app = build_rpc_server(rpc_api);
+
+        let request = rpc_request(
+            "panda_getEntryArguments",
+            &format!(
+                r#"{{
+                    "author": "1234",
+                    "schema": "{}"
+                }}"#,
+                random_entry_hash()
+            ),
+        );
+
+        let response = rpc_error("invalid author key length");
+
+        assert_eq!(handle_http(&app, request).await, response);
+    }
+
+    #[async_std::test]
+    async fn get_entry_arguments() {
+        // Prepare test database
+        let pool = initialize_db().await;
+
+        // Create tide server with endpoints
+        let rpc_api = build_rpc_api_service(pool);
+        let app = build_rpc_server(rpc_api);
 
         let request = rpc_request(
             "panda_getEntryArguments",
@@ -94,6 +135,6 @@ mod tests {
             }"#,
         );
 
-        assert_eq!(io.handle_request_sync(&request), Some(response));
+        assert_eq!(handle_http(&app, request).await, response);
     }
 }

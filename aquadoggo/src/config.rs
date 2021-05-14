@@ -31,17 +31,8 @@ pub struct Configuration {
     /// Maximum number of database connections in pool.
     pub database_max_connections: u32,
 
-    /// Maximal size of RPC request body in bytes.
-    pub rpc_max_payload: usize,
-
     /// RPC API HTTP server port.
     pub http_port: u16,
-
-    /// Number of HTTP server threads to run.
-    pub http_threads: usize,
-
-    /// Maximum number of connections for WebSocket RPC server.
-    pub ws_max_connections: usize,
 
     /// RPC API WebSocket server port.
     pub ws_port: u16,
@@ -53,10 +44,7 @@ impl Default for Configuration {
             base_path: None,
             database_url: None,
             database_max_connections: 32,
-            rpc_max_payload: 512_000,
             http_port: 2020,
-            http_threads: 4,
-            ws_max_connections: 128,
             ws_port: 2022,
         }
     }

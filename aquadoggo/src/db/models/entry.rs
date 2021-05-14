@@ -65,7 +65,7 @@ impl Entry {
                     seq_num
                 )
             VALUES
-                (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                ($1, $2, $3, $4, $5, $6, $7)
             ",
         )
         .bind(author)
@@ -97,8 +97,8 @@ impl Entry {
             FROM
                 entries
             WHERE
-                author = ?1
-                AND log_id = ?2
+                author = $1
+                AND log_id = $2
             ORDER BY
                 seq_num DESC
             LIMIT
@@ -128,10 +128,10 @@ impl Entry {
             FROM
                 entries
             INNER JOIN logs
-                ON (entries.log_id == logs.log_id
-                    AND entries.author == logs.author)
+                ON (entries.log_id = logs.log_id
+                    AND entries.author = logs.author)
             WHERE
-                logs.schema == ?1
+                logs.schema = $1
             ",
         )
         .bind(schema)
@@ -161,9 +161,9 @@ impl Entry {
             FROM
                 entries
             WHERE
-                author = ?1
-                AND log_id = ?2
-                AND seq_num = ?3
+                author = $1
+                AND log_id = $2
+                AND seq_num = $3
             ",
         )
         .bind(author)

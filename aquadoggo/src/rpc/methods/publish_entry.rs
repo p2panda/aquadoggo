@@ -1,12 +1,13 @@
 use std::convert::TryFrom;
 
-use p2panda_rs::atomic::{Entry as EntryUnsigned, Message};
+use jsonrpc_v2::{Data, Params};
+use p2panda_rs::atomic::{Entry as EntryUnsigned, Message, Validation};
 
 use crate::db::models::{Entry, Log};
-use crate::db::Pool;
 use crate::errors::Result;
 use crate::rpc::request::PublishEntryRequest;
 use crate::rpc::response::PublishEntryResponse;
+use crate::rpc::RpcApiState;
 
 #[derive(thiserror::Error, Debug)]
 #[allow(missing_copy_implementations)]
@@ -25,9 +26,16 @@ pub enum PublishEntryError {
 ///
 /// Stores an author's Bamboo entry with message payload in database after validating it.
 pub async fn publish_entry(
-    pool: Pool,
-    params: PublishEntryRequest,
+    data: Data<RpcApiState>,
+    Params(params): Params<PublishEntryRequest>,
 ) -> Result<PublishEntryResponse> {
+    // Validate request parameters
+    params.entry_encoded.validate()?;
+    params.message_encoded.validate()?;
+
+    // Get database connection pool
+    let pool = data.pool.clone();
+
     // Handle error as this conversion validates message hash
     let entry = EntryUnsigned::try_from((&params.entry_encoded, Some(&params.message_encoded)))?;
     let message = Message::from(&params.message_encoded);
@@ -122,20 +130,19 @@ pub async fn publish_entry(
         log_id: entry.log_id().to_owned(),
     })
 }
-
 #[cfg(test)]
 mod tests {
     use std::convert::TryFrom;
 
-    use jsonrpc_core::{ErrorCode, IoHandler};
     use p2panda_rs::atomic::{
         Entry, EntrySigned, Hash, LogId, Message, MessageEncoded, MessageFields, MessageValue,
         SeqNum,
     };
     use p2panda_rs::key_pair::KeyPair;
 
-    use crate::rpc::ApiService;
-    use crate::test_helpers::{initialize_db, rpc_error, rpc_request, rpc_response};
+    use crate::rpc::api::build_rpc_api_service;
+    use crate::rpc::server::{build_rpc_server, RpcServer};
+    use crate::test_helpers::{handle_http, initialize_db, rpc_error, rpc_request, rpc_response};
 
     // Helper method to create encoded entries and messages
     fn create_test_entry(
@@ -171,8 +178,8 @@ mod tests {
     }
 
     // Helper method to compare expected API responses with what was returned
-    fn assert_request(
-        io: &IoHandler,
+    async fn assert_request(
+        app: &RpcServer,
         entry_encoded: &EntrySigned,
         message_encoded: &MessageEncoded,
         entry_skiplink: Option<&EntrySigned>,
@@ -213,8 +220,7 @@ mod tests {
             log_id.as_i64(),
         ));
 
-        // Send request to API and compare response with expected result
-        assert_eq!(io.handle_request_sync(&request), Some(response));
+        assert_eq!(handle_http(&app, request).await, response);
     }
 
     #[async_std::test]
@@ -224,7 +230,10 @@ mod tests {
 
         // Prepare test database
         let pool = initialize_db().await;
-        let io = ApiService::io_handler(pool);
+
+        // Create tide server with endpoints
+        let rpc_api = build_rpc_api_service(pool);
+        let app = build_rpc_server(rpc_api);
 
         // Define schema and log id for entries
         let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
@@ -235,13 +244,14 @@ mod tests {
         // [1] --
         let (entry_1, message_1) = create_test_entry(&key_pair, &schema, &log_id, None, None, None);
         assert_request(
-            &io,
+            &app,
             &entry_1,
             &message_1,
             None,
             &log_id,
             &SeqNum::new(1).unwrap(),
-        );
+        )
+        .await;
 
         // [1] <-- [2]
         let (entry_2, message_2) = create_test_entry(
@@ -253,13 +263,14 @@ mod tests {
             Some(&SeqNum::new(1).unwrap()),
         );
         assert_request(
-            &io,
+            &app,
             &entry_2,
             &message_2,
             None,
             &log_id,
             &SeqNum::new(2).unwrap(),
-        );
+        )
+        .await;
 
         // [1] <-- [2] <-- [3]
         let (entry_3, message_3) = create_test_entry(
@@ -271,13 +282,14 @@ mod tests {
             Some(&SeqNum::new(2).unwrap()),
         );
         assert_request(
-            &io,
+            &app,
             &entry_3,
             &message_3,
             Some(&entry_1),
             &log_id,
             &SeqNum::new(3).unwrap(),
-        );
+        )
+        .await;
 
         //  /------------------ [4]
         // [1] <-- [2] <-- [3]
@@ -290,13 +302,14 @@ mod tests {
             Some(&SeqNum::new(3).unwrap()),
         );
         assert_request(
-            &io,
+            &app,
             &entry_4,
             &message_4,
             None,
             &log_id,
             &SeqNum::new(4).unwrap(),
-        );
+        )
+        .await;
 
         //  /------------------ [4]
         // [1] <-- [2] <-- [3]   \-- [5] --
@@ -309,13 +322,14 @@ mod tests {
             Some(&SeqNum::new(4).unwrap()),
         );
         assert_request(
-            &io,
+            &app,
             &entry_5,
             &message_5,
             None,
             &log_id,
             &SeqNum::new(5).unwrap(),
-        );
+        )
+        .await;
     }
 
     #[async_std::test]
@@ -325,7 +339,10 @@ mod tests {
 
         // Prepare test database
         let pool = initialize_db().await;
-        let io = ApiService::io_handler(pool);
+
+        // Create tide server with endpoints
+        let rpc_api = build_rpc_api_service(pool);
+        let app = build_rpc_server(rpc_api);
 
         // Define schema and log id for entries
         let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
@@ -334,13 +351,14 @@ mod tests {
         // Create two valid entries for testing
         let (entry_1, message_1) = create_test_entry(&key_pair, &schema, &log_id, None, None, None);
         assert_request(
-            &io,
+            &app,
             &entry_1,
             &message_1,
             None,
             &log_id,
             &SeqNum::new(1).unwrap(),
-        );
+        )
+        .await;
 
         let (entry_2, message_2) = create_test_entry(
             &key_pair,
@@ -351,13 +369,14 @@ mod tests {
             Some(&SeqNum::new(1).unwrap()),
         );
         assert_request(
-            &io,
+            &app,
             &entry_2,
             &message_2,
             None,
             &log_id,
             &SeqNum::new(2).unwrap(),
-        );
+        )
+        .await;
 
         // Send invalid log id for this schema
         let (entry_wrong_log_id, _) = create_test_entry(
@@ -381,12 +400,9 @@ mod tests {
             ),
         );
 
-        let response = rpc_error(
-            ErrorCode::InvalidParams,
-            "Invalid params: Claimed log_id for schema not the same as in database.",
-        );
+        let response = rpc_error("Claimed log_id for schema not the same as in database");
 
-        assert_eq!(io.handle_request_sync(&request), Some(response));
+        assert_eq!(handle_http(&app, request).await, response);
 
         // Send invalid backlink entry / hash
         let (entry_wrong_hash, _) = create_test_entry(
@@ -411,11 +427,10 @@ mod tests {
         );
 
         let response = rpc_error(
-            ErrorCode::InvalidParams,
-            "Invalid params: The backlink hash encoded in the entry does not match the lipmaa entry provided.",
+            "The backlink hash encoded in the entry does not match the lipmaa entry provided",
         );
 
-        assert_eq!(io.handle_request_sync(&request), Some(response));
+        assert_eq!(handle_http(&app, request).await, response);
 
         // Send invalid seq num
         let (entry_wrong_seq_num, _) = create_test_entry(
@@ -439,11 +454,8 @@ mod tests {
             ),
         );
 
-        let response = rpc_error(
-            ErrorCode::InvalidParams,
-            "Invalid params: Could not find backlink entry in database.",
-        );
+        let response = rpc_error("Could not find backlink entry in database");
 
-        assert_eq!(io.handle_request_sync(&request), Some(response));
+        assert_eq!(handle_http(&app, request).await, response);
     }
 }

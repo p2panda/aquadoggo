@@ -1,10 +1,11 @@
-use jsonrpc_core::ErrorCode;
 use p2panda_rs::atomic::Hash;
 use rand::Rng;
 use sqlx::any::Any;
 use sqlx::migrate::MigrateDatabase;
+use tide_testing::TideTestingExt;
 
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
+use crate::rpc::RpcServer;
 
 const DB_URL: &str = "sqlite::memory:";
 
@@ -57,9 +58,9 @@ pub fn rpc_request(method: &str, params: &str) -> String {
 pub fn rpc_response(result: &str) -> String {
     format!(
         r#"{{
+            "id": 1,
             "jsonrpc": "2.0",
-            "result": {},
-            "id": 1
+            "result": {}
         }}"#,
         result
     )
@@ -68,19 +69,31 @@ pub fn rpc_response(result: &str) -> String {
 }
 
 // Helper method to generate valid JSON RPC error response string
-pub fn rpc_error(code: ErrorCode, message: &str) -> String {
+pub fn rpc_error(message: &str) -> String {
     format!(
         r#"{{
-            "jsonrpc": "2.0",
             "error": {{
-                "code": {},
+                "code": 0,
                 "message": "<message>"
             }},
-            "id": 1
-        }}"#,
-        code.code(),
+            "id": 1,
+            "jsonrpc": "2.0"
+        }}"#
     )
     .replace(" ", "")
     .replace("\n", "")
     .replace("<message>", message)
+}
+
+// Helper method to handle tide HTTP request and return response
+pub async fn handle_http(app: &RpcServer, request: String) -> String {
+    let response_body: serde_json::value::Value = app
+        .post("/")
+        .body(tide::Body::from_string(request.into()))
+        .content_type("application/json")
+        .recv_json()
+        .await
+        .unwrap();
+
+    response_body.to_string()
 }
