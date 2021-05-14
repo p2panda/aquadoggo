@@ -82,7 +82,7 @@ OPTIONS:
 
 ## Installation
 
-With [cargo-edit](https://github.com/killercup/cargo-edit) installed run:
+With [`cargo-edit`](https://github.com/killercup/cargo-edit) installed run:
 
 ```sh
 $ cargo add aquadoggo
