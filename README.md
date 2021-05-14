@@ -35,8 +35,10 @@
 
 <br/>
 
-Configurable node server implementation for the [`p2panda`] network running as a [command line application](/aquadoggo_cli) or embedded via the [library](/aquadoggo) inside your Rust program.
+Configurable node server implementation for the [`p2panda`] network running as a [`command line application`] or embedded via the [`library`] inside your Rust program.
 
+[`command line application`]: /aquadoggo_cli
+[`library`]: /aquadoggo
 [`p2panda`]: https://github.com/p2panda/design-document
 
 ## Features
@@ -56,7 +58,7 @@ Embed the node server in your Rust application or web container like [`Tauri`]:
 ```rust
 use aquadoggo::{Configuration, Runtime};
 
-let config = Configuration::new()?;
+let config = Configuration::new(None)?;
 let node = Runtime::start(config).await;
 ```
 
@@ -86,7 +88,7 @@ With [cargo-edit](https://github.com/killercup/cargo-edit) installed run:
 $ cargo add aquadoggo
 ```
 
-[cargo-edit]: https://github.com/killercup/cargo-edit
+[`cargo-edit`]: https://github.com/killercup/cargo-edit
 
 ## License
 
