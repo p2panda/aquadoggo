@@ -64,7 +64,7 @@ let node = Runtime::start(config).await;
 
 You can also run the node server simply as a command line application:
 
-```sh
+```
 $ aquadoggo --help
 
 USAGE:
