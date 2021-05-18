@@ -117,15 +117,17 @@ pub async fn publish_entry(
     .await?;
 
     // Already return arguments for next entry creation
-    let entry_latest = Entry::latest(&pool, &author, &entry.log_id())
+    let mut entry_latest = Entry::latest(&pool, &author, &entry.log_id())
         .await?
         .expect("Database does not contain any entries");
     let entry_hash_skiplink = super::entry_args::determine_skiplink(pool, &entry_latest).await?;
 
+    let next_seq_num = entry_latest.seq_num.next().unwrap();
+    
     Ok(PublishEntryResponse {
         entry_hash_backlink: Some(params.entry_encoded.hash()),
         entry_hash_skiplink,
-        seq_num: entry.seq_num().to_owned(),
+        seq_num: next_seq_num,
         log_id: entry.log_id().to_owned(),
     })
 }
