@@ -252,7 +252,7 @@ mod tests {
             &message_1,
             None,
             &log_id,
-            &SeqNum::new(1).unwrap(),
+            &SeqNum::new(2).unwrap(),
         )
         .await;
 
@@ -271,7 +271,7 @@ mod tests {
             &message_2,
             None,
             &log_id,
-            &SeqNum::new(2).unwrap(),
+            &SeqNum::new(3).unwrap(),
         )
         .await;
 
@@ -290,7 +290,7 @@ mod tests {
             &message_3,
             Some(&entry_1),
             &log_id,
-            &SeqNum::new(3).unwrap(),
+            &SeqNum::new(4).unwrap(),
         )
         .await;
 
@@ -310,7 +310,7 @@ mod tests {
             &message_4,
             None,
             &log_id,
-            &SeqNum::new(4).unwrap(),
+            &SeqNum::new(5).unwrap(),
         )
         .await;
 
@@ -330,7 +330,7 @@ mod tests {
             &message_5,
             None,
             &log_id,
-            &SeqNum::new(5).unwrap(),
+            &SeqNum::new(6).unwrap(),
         )
         .await;
     }
@@ -360,7 +360,7 @@ mod tests {
             &message_1,
             None,
             &log_id,
-            &SeqNum::new(1).unwrap(),
+            &SeqNum::new(2).unwrap(),
         )
         .await;
 
@@ -378,7 +378,7 @@ mod tests {
             &message_2,
             None,
             &log_id,
-            &SeqNum::new(2).unwrap(),
+            &SeqNum::new(3).unwrap(),
         )
         .await;
 
