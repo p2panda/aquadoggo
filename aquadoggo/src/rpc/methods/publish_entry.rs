@@ -125,7 +125,7 @@ pub async fn publish_entry(
     Ok(PublishEntryResponse {
         entry_hash_backlink: Some(params.entry_encoded.hash()),
         entry_hash_skiplink,
-        last_seq_num: Some(entry.seq_num().to_owned()),
+        seq_num: entry.seq_num().to_owned(),
         log_id: entry.log_id().to_owned(),
     })
 }
@@ -211,13 +211,13 @@ mod tests {
             r#"{{
                 "entryHashBacklink": "{}",
                 "entryHashSkiplink": {},
-                "lastSeqNum": {},
-                "logId": {}
+                "logId": {},
+                "seqNum": {}
             }}"#,
             entry_encoded.hash().as_hex(),
             skiplink_str,
-            seq_num.as_i64(),
             log_id.as_i64(),
+            seq_num.as_i64(),
         ));
 
         assert_eq!(handle_http(&app, request).await, response);

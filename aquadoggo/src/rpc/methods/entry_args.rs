@@ -31,21 +31,21 @@ pub async fn get_entry_args(
     let entry_latest = Entry::latest(&pool, &params.author, &log_id).await?;
     
     match entry_latest {
-        Some(entry_backlink) => {
+        Some(mut entry_backlink) => {
             // Determine skiplink ("lipmaa"-link) entry in this log
             let entry_hash_skiplink = determine_skiplink(pool.clone(), &entry_backlink).await?;
 
             Ok(EntryArgsResponse {
                 entry_hash_backlink: Some(entry_backlink.entry_hash),
                 entry_hash_skiplink,
-                seq_num: entry_backlink.seq_num.next(),
+                seq_num: entry_backlink.seq_num.next().unwrap(),
                 log_id,
             })
         }
         None => Ok(EntryArgsResponse {
             entry_hash_backlink: None,
             entry_hash_skiplink: None,
-            seq_num: SeqNum::new(1),
+            seq_num: SeqNum::default(),
             log_id,
         }),
     }
@@ -130,8 +130,8 @@ mod tests {
             r#"{
                 "entryHashBacklink": null,
                 "entryHashSkiplink": null,
-                "lastSeqNum": null,
-                "logId": 1
+                "logId": 1,
+                "seqNum": 1
             }"#,
         );
 
