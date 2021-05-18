@@ -1810,7 +1810,7 @@ checksum = "77af24da69f9d9341038eba93a073b1fdaaa1b788221b00a69bce9e762cb32de"
 [[package]]
 name = "p2panda-rs"
 version = "0.1.0"
-source = "git+https://github.com/p2panda/p2panda?branch=main#84a583eb58614e8c5ae76c80f2f04ee96db98713"
+source = "git+https://github.com/p2panda/p2panda?branch=sam-refactor-entry#b7d659b290fff402df7a96bbcbefce1c3016b9b3"
 dependencies = [
  "arrayvec",
  "bamboo-rs-core",

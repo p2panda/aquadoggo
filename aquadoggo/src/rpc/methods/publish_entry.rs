@@ -1,7 +1,6 @@
-use std::convert::TryFrom;
-
 use jsonrpc_v2::{Data, Params};
-use p2panda_rs::atomic::{Entry as EntryUnsigned, Message, Validation};
+use p2panda_rs::atomic::{Message, Validation};
+use p2panda_rs::encoder::decode_entry;
 
 use crate::db::models::{Entry, Log};
 use crate::errors::Result;
@@ -37,7 +36,7 @@ pub async fn publish_entry(
     let pool = data.pool.clone();
 
     // Handle error as this conversion validates message hash
-    let entry = EntryUnsigned::try_from((&params.entry_encoded, Some(&params.message_encoded)))?;
+    let entry = decode_entry(&params.entry_encoded, Some(&params.message_encoded))?;
     let message = Message::from(&params.message_encoded);
 
     // Retreive author and schema
@@ -118,15 +117,17 @@ pub async fn publish_entry(
     .await?;
 
     // Already return arguments for next entry creation
-    let entry_latest = Entry::latest(&pool, &author, &entry.log_id())
+    let mut entry_latest = Entry::latest(&pool, &author, &entry.log_id())
         .await?
         .expect("Database does not contain any entries");
     let entry_hash_skiplink = super::entry_args::determine_skiplink(pool, &entry_latest).await?;
 
+    let next_seq_num = entry_latest.seq_num.next().unwrap();
+    
     Ok(PublishEntryResponse {
         entry_hash_backlink: Some(params.entry_encoded.hash()),
         entry_hash_skiplink,
-        last_seq_num: Some(entry.seq_num().to_owned()),
+        seq_num: next_seq_num,
         log_id: entry.log_id().to_owned(),
     })
 }
@@ -139,6 +140,7 @@ mod tests {
         SeqNum,
     };
     use p2panda_rs::key_pair::KeyPair;
+    use p2panda_rs::encoder::sign_and_encode;
 
     use crate::rpc::api::build_rpc_api_service;
     use crate::rpc::server::{build_rpc_server, RpcServer};
@@ -151,7 +153,7 @@ mod tests {
         log_id: &LogId,
         skiplink: Option<&EntrySigned>,
         backlink: Option<&EntrySigned>,
-        previous_seq_num: Option<&SeqNum>,
+        seq_num: &SeqNum,
     ) -> (EntrySigned, MessageEncoded) {
         // Create message with dummy data
         let mut fields = MessageFields::new();
@@ -166,13 +168,13 @@ mod tests {
         // Create, sign and encode entry
         let entry = Entry::new(
             log_id,
-            &message,
+            Some(&message),
             skiplink.map(|e| e.hash()).as_ref(),
             backlink.map(|e| e.hash()).as_ref(),
-            previous_seq_num,
+            seq_num,
         )
         .unwrap();
-        let entry_encoded = EntrySigned::try_from((&entry, key_pair)).unwrap();
+        let entry_encoded = sign_and_encode(&entry, key_pair).unwrap();
 
         (entry_encoded, message_encoded)
     }
@@ -211,13 +213,13 @@ mod tests {
             r#"{{
                 "entryHashBacklink": "{}",
                 "entryHashSkiplink": {},
-                "lastSeqNum": {},
-                "logId": {}
+                "logId": {},
+                "seqNum": {}
             }}"#,
             entry_encoded.hash().as_hex(),
             skiplink_str,
-            seq_num.as_i64(),
             log_id.as_i64(),
+            seq_num.as_i64(),
         ));
 
         assert_eq!(handle_http(&app, request).await, response);
@@ -238,18 +240,19 @@ mod tests {
         // Define schema and log id for entries
         let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
         let log_id = LogId::new(5);
+        let seq_num = SeqNum::new(1).unwrap();
 
         // Create a couple of entries in the same log and check for consistency
         //
         // [1] --
-        let (entry_1, message_1) = create_test_entry(&key_pair, &schema, &log_id, None, None, None);
+        let (entry_1, message_1) = create_test_entry(&key_pair, &schema, &log_id, None, None, &seq_num);
         assert_request(
             &app,
             &entry_1,
             &message_1,
             None,
             &log_id,
-            &SeqNum::new(1).unwrap(),
+            &SeqNum::new(2).unwrap(),
         )
         .await;
 
@@ -260,7 +263,7 @@ mod tests {
             &log_id,
             None,
             Some(&entry_1),
-            Some(&SeqNum::new(1).unwrap()),
+            &SeqNum::new(2).unwrap(),
         );
         assert_request(
             &app,
@@ -268,7 +271,7 @@ mod tests {
             &message_2,
             None,
             &log_id,
-            &SeqNum::new(2).unwrap(),
+            &SeqNum::new(3).unwrap(),
         )
         .await;
 
@@ -279,7 +282,7 @@ mod tests {
             &log_id,
             None,
             Some(&entry_2),
-            Some(&SeqNum::new(2).unwrap()),
+            &SeqNum::new(3).unwrap(),
         );
         assert_request(
             &app,
@@ -287,7 +290,7 @@ mod tests {
             &message_3,
             Some(&entry_1),
             &log_id,
-            &SeqNum::new(3).unwrap(),
+            &SeqNum::new(4).unwrap(),
         )
         .await;
 
@@ -299,7 +302,7 @@ mod tests {
             &log_id,
             Some(&entry_1),
             Some(&entry_3),
-            Some(&SeqNum::new(3).unwrap()),
+            &SeqNum::new(4).unwrap(),
         );
         assert_request(
             &app,
@@ -307,7 +310,7 @@ mod tests {
             &message_4,
             None,
             &log_id,
-            &SeqNum::new(4).unwrap(),
+            &SeqNum::new(5).unwrap(),
         )
         .await;
 
@@ -319,7 +322,7 @@ mod tests {
             &log_id,
             None,
             Some(&entry_4),
-            Some(&SeqNum::new(4).unwrap()),
+            &SeqNum::new(5).unwrap(),
         );
         assert_request(
             &app,
@@ -327,7 +330,7 @@ mod tests {
             &message_5,
             None,
             &log_id,
-            &SeqNum::new(5).unwrap(),
+            &SeqNum::new(6).unwrap(),
         )
         .await;
     }
@@ -347,16 +350,17 @@ mod tests {
         // Define schema and log id for entries
         let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
         let log_id = LogId::new(5);
+        let seq_num = SeqNum::new(1).unwrap();
 
         // Create two valid entries for testing
-        let (entry_1, message_1) = create_test_entry(&key_pair, &schema, &log_id, None, None, None);
+        let (entry_1, message_1) = create_test_entry(&key_pair, &schema, &log_id, None, None, &seq_num);
         assert_request(
             &app,
             &entry_1,
             &message_1,
             None,
             &log_id,
-            &SeqNum::new(1).unwrap(),
+            &SeqNum::new(2).unwrap(),
         )
         .await;
 
@@ -366,7 +370,7 @@ mod tests {
             &log_id,
             None,
             Some(&entry_1),
-            Some(&SeqNum::new(1).unwrap()),
+            &SeqNum::new(2).unwrap(),
         );
         assert_request(
             &app,
@@ -374,7 +378,7 @@ mod tests {
             &message_2,
             None,
             &log_id,
-            &SeqNum::new(2).unwrap(),
+            &SeqNum::new(3).unwrap(),
         )
         .await;
 
@@ -385,7 +389,7 @@ mod tests {
             &LogId::new(1),
             None,
             Some(&entry_1),
-            Some(&SeqNum::new(1).unwrap()),
+            &SeqNum::new(2).unwrap(),
         );
 
         let request = rpc_request(
@@ -411,7 +415,7 @@ mod tests {
             &log_id,
             Some(&entry_2),
             Some(&entry_1),
-            Some(&SeqNum::new(2).unwrap()),
+            &SeqNum::new(3).unwrap(),
         );
 
         let request = rpc_request(
@@ -439,7 +443,7 @@ mod tests {
             &log_id,
             None,
             Some(&entry_2),
-            Some(&SeqNum::new(5).unwrap()),
+            &SeqNum::new(5).unwrap(),
         );
 
         let request = rpc_request(
