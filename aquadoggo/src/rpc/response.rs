@@ -9,7 +9,7 @@ use p2panda_rs::atomic::{Hash, LogId, SeqNum};
 pub struct EntryArgsResponse {
     pub entry_hash_backlink: Option<Hash>,
     pub entry_hash_skiplink: Option<Hash>,
-    pub last_seq_num: Option<SeqNum>,
+    pub seq_num: SeqNum,
     pub log_id: LogId,
 }
 
@@ -19,7 +19,7 @@ pub struct EntryArgsResponse {
 pub struct PublishEntryResponse {
     pub entry_hash_backlink: Option<Hash>,
     pub entry_hash_skiplink: Option<Hash>,
-    pub last_seq_num: Option<SeqNum>,
+    pub seq_num: SeqNum,
     pub log_id: LogId,
 }
 

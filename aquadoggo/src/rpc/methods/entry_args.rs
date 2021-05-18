@@ -1,6 +1,6 @@
 use bamboo_rs_core::entry::is_lipmaa_required;
 use jsonrpc_v2::{Data, Params};
-use p2panda_rs::atomic::{Hash, Validation};
+use p2panda_rs::atomic::{Hash, SeqNum, Validation};
 
 use crate::db::models::{Entry, Log};
 use crate::db::Pool;
@@ -29,7 +29,7 @@ pub async fn get_entry_args(
 
     // Find latest entry in this log
     let entry_latest = Entry::latest(&pool, &params.author, &log_id).await?;
-
+    
     match entry_latest {
         Some(entry_backlink) => {
             // Determine skiplink ("lipmaa"-link) entry in this log
@@ -38,14 +38,14 @@ pub async fn get_entry_args(
             Ok(EntryArgsResponse {
                 entry_hash_backlink: Some(entry_backlink.entry_hash),
                 entry_hash_skiplink,
-                last_seq_num: Some(entry_backlink.seq_num),
+                seq_num: entry_backlink.seq_num.next(),
                 log_id,
             })
         }
         None => Ok(EntryArgsResponse {
             entry_hash_backlink: None,
             entry_hash_skiplink: None,
-            last_seq_num: None,
+            seq_num: SeqNum::new(1),
             log_id,
         }),
     }
