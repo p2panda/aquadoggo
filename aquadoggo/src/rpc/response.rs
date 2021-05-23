@@ -1,7 +1,9 @@
 use serde::Serialize;
 
 use crate::db::models::Entry;
-use p2panda_rs::atomic::{Hash, LogId, SeqNum};
+use p2panda_rs::entry::{LogId, SeqNum};
+use p2panda_rs::hash::Hash;
+
 
 /// Response body of `panda_getEntryArguments`.
 #[derive(Serialize, Debug)]

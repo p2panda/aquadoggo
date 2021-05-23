@@ -1,4 +1,4 @@
-use p2panda_rs::atomic::Hash;
+use p2panda_rs::hash::Hash;
 use rand::Rng;
 use sqlx::any::Any;
 use sqlx::migrate::MigrateDatabase;
@@ -35,7 +35,7 @@ pub fn random_entry_hash() -> String {
 
     Hash::new_from_bytes(random_data)
         .unwrap()
-        .as_hex()
+        .as_str()
         .to_owned()
 }
 

@@ -1,6 +1,9 @@
 use serde::Deserialize;
 
-use p2panda_rs::atomic::{Author, EntrySigned, Hash, MessageEncoded};
+use p2panda_rs::entry::EntrySigned;
+use p2panda_rs::hash::Hash;
+use p2panda_rs::identity::Author;
+use p2panda_rs::message::MessageEncoded;
 
 /// Request body of `panda_getEntryArguments`.
 #[derive(Deserialize, Debug)]
