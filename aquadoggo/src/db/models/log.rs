@@ -1,4 +1,7 @@
-use p2panda_rs::atomic::{Author, Hash, LogId};
+use p2panda_rs::entry::LogId;
+use p2panda_rs::identity::Author;
+use p2panda_rs::hash::Hash;
+
 use sqlx::{query, query_as, FromRow};
 
 use crate::db::Pool;
@@ -136,8 +139,10 @@ impl Log {
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::atomic::{Author, Hash, LogId};
-
+    use p2panda_rs::entry::LogId;
+    use p2panda_rs::identity::Author;
+    use p2panda_rs::hash::Hash;
+    
     use super::Log;
 
     use crate::test_helpers::{initialize_db, random_entry_hash};

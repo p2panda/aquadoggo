@@ -1,6 +1,7 @@
-use p2panda_rs::atomic::error::{
-    AuthorError, EntryError, EntrySignedError, HashError, MessageEncodedError, MessageError,
-};
+use p2panda_rs::entry::{EntryError, EntrySignedError};
+use p2panda_rs::hash::HashError;
+use p2panda_rs::message::{MessageEncodedError, MessageError};
+use p2panda_rs::identity::AuthorError;
 
 /// A specialized `Result` type for the node.
 pub type Result<T> = anyhow::Result<T, Error>;

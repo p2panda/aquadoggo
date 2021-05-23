@@ -1,6 +1,7 @@
 use jsonrpc_v2::{Data, Params};
-use p2panda_rs::atomic::{Message, Validation};
-use p2panda_rs::encoder::decode_entry;
+use p2panda_rs::entry::decode_entry;
+use p2panda_rs::message::Message;
+use p2panda_rs::Validate;
 
 use crate::db::models::{Entry, Log};
 use crate::errors::Result;
@@ -135,12 +136,10 @@ pub async fn publish_entry(
 mod tests {
     use std::convert::TryFrom;
 
-    use p2panda_rs::atomic::{
-        Entry, EntrySigned, Hash, LogId, Message, MessageEncoded, MessageFields, MessageValue,
-        SeqNum,
-    };
-    use p2panda_rs::key_pair::KeyPair;
-    use p2panda_rs::encoder::sign_and_encode;
+    use p2panda_rs::entry::{Entry, EntrySigned, LogId, SeqNum, sign_and_encode};
+    use p2panda_rs::hash::Hash;
+    use p2panda_rs::identity::KeyPair;
+    use p2panda_rs::message::{Message, MessageEncoded, MessageFields, MessageValue};
 
     use crate::rpc::api::build_rpc_api_service;
     use crate::rpc::server::{build_rpc_server, RpcServer};
@@ -204,7 +203,7 @@ mod tests {
         // Prepare expected response result
         let skiplink_str = match entry_skiplink {
             Some(entry) => {
-                format!("\"{}\"", entry.hash().as_hex())
+                format!("\"{}\"", entry.hash().as_str())
             }
             None => "null".to_owned(),
         };
@@ -216,7 +215,7 @@ mod tests {
                 "logId": {},
                 "seqNum": {}
             }}"#,
-            entry_encoded.hash().as_hex(),
+            entry_encoded.hash().as_str(),
             skiplink_str,
             log_id.as_i64(),
             seq_num.as_i64(),

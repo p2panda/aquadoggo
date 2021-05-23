@@ -1,5 +1,5 @@
 use jsonrpc_v2::{Data, Params};
-use p2panda_rs::atomic::Validation;
+use p2panda_rs::Validate;
 
 use crate::db::models::Entry;
 use crate::errors::Result;
@@ -24,7 +24,7 @@ pub async fn query_entries(
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::atomic::Hash;
+    use p2panda_rs::hash::Hash;
 
     use crate::rpc::api::build_rpc_api_service;
     use crate::rpc::server::build_rpc_server;
@@ -47,7 +47,7 @@ mod tests {
                 r#"{{
                     "schema": "{}"
                 }}"#,
-                schema.as_hex(),
+                schema.as_str(),
             ),
         );
 

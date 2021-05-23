@@ -1,6 +1,8 @@
 use bamboo_rs_core::entry::is_lipmaa_required;
 use jsonrpc_v2::{Data, Params};
-use p2panda_rs::atomic::{Hash, SeqNum, Validation};
+use p2panda_rs::entry::SeqNum;
+use p2panda_rs::hash::Hash;
+use p2panda_rs::Validate;
 
 use crate::db::models::{Entry, Log};
 use crate::db::Pool;
