@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 use anyhow::{Error, Result};
 use sqlx::any::{Any, AnyPool, AnyPoolOptions};
 use sqlx::migrate;

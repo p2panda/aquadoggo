@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 use jsonrpc_v2::{Data, Params};
 use p2panda_rs::Validate;
 

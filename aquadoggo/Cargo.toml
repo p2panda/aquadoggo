@@ -7,7 +7,7 @@ authors = [
     "sandreae <contact@samandreae.com>",
     "cafca <cafca@001.land>"
 ]
-license = "AGPL-3.0-only"
+license = "AGPL-3.0-or-later"
 repository = "https://github.com/p2panda/aquadoggo"
 readme = "README.md"
 edition = "2018"

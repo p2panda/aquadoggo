@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 use bamboo_rs_core::entry::is_lipmaa_required;
 use jsonrpc_v2::{Data, Params};
 use p2panda_rs::entry::SeqNum;
