@@ -13,30 +13,26 @@ readme = "README.md"
 edition = "2018"
 
 [dependencies]
-anyhow = "1.0.40"
-async-std = { version = "1.9.0", features = ["attributes"] }
-directories = "3.0.1"
+anyhow = "1.0.43"
+async-std = { version = "1.10.0", features = ["attributes"] }
+bamboo-rs-core = "0.1.0"
+directories = "3.0.2"
 envy = "0.4.2"
 exit-future = "0.2.0"
-futures = "0.3.13"
+futures = "0.3.17"
 hex = "0.4.3"
-http-types = "2.11.0"
-jsonrpc-v2 = { version = "0.10.0", features = ["easy-errors", "bytes-v05"], default-features = false }
+http-types = "2.12.0"
+jsonrpc-v2 = { version = "0.10.1", features = ["easy-errors", "bytes-v05"], default-features = false }
 log = "0.4.14"
-openssl-probe = "0.1.2"
-rand = "0.8.3"
-serde = { version = "1.0.125", features = ["derive"] }
-serde_json = "1.0.64"
-sqlformat = "0.1.6"
-sqlx = { version = "0.5.2", features = ["runtime-async-std-rustls", "all-databases"] }
-thiserror = "1.0.24"
+openssl-probe = "0.1.4"
+rand = "0.8.4"
+serde = { version = "1.0.130", features = ["derive"] }
+serde_json = "1.0.67"
+sqlformat = "0.1.7"
+sqlx = { version = "0.5.7", features = ["runtime-async-std-rustls", "all-databases"] }
+thiserror = "1.0.29"
 tide = "0.16.0"
-tide-websockets = "0.3.0"
-
-# @TODO: Change this as soon as `bamboo-rs` gets published
-[dependencies.bamboo-rs-core]
-git = "https://github.com/pietgeursen/bamboo-rs"
-tag = "v0.1.0-pre-31"
+tide-websockets = "0.4.0"
 
 # @TODO: Since `bamboo-rs` is not published we're pulling in the `p2panda-rs`
 # crate via git. See: https://github.com/p2panda/p2panda/issues/38
