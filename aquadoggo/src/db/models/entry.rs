@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 use p2panda_rs::entry::{EntrySigned, LogId, SeqNum};
 use p2panda_rs::message::MessageEncoded;
 use p2panda_rs::hash::Hash;

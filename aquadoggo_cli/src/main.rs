@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 use async_ctrlc::CtrlC;
 use async_std::task;
 use structopt::StructOpt;
