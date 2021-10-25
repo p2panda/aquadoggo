@@ -25,6 +25,7 @@ http-types = "2.12.0"
 jsonrpc-v2 = { version = "0.10.1", features = ["easy-errors", "bytes-v05"], default-features = false }
 log = "0.4.14"
 openssl-probe = "0.1.4"
+p2panda-rs = { version = "0.2.0", features = ["db-sqlx"] }
 rand = "0.8.4"
 serde = { version = "1.0.130", features = ["derive"] }
 serde_json = "1.0.67"
@@ -33,13 +34,6 @@ sqlx = { version = "0.5.7", features = ["runtime-async-std-rustls", "all-databas
 thiserror = "1.0.29"
 tide = "0.16.0"
 tide-websockets = "0.4.0"
-
-# @TODO: Since `bamboo-rs` is not published we're pulling in the `p2panda-rs`
-# crate via git. See: https://github.com/p2panda/p2panda/issues/38
-[dependencies.p2panda-rs]
-git = "https://github.com/p2panda/p2panda"
-branch = "main"
-features = ["db-sqlx"]
 
 [dev-dependencies]
 tide-testing = "0.1.3"
