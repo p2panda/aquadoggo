@@ -23,6 +23,10 @@
       Installation
     </a>
     <span> | </span>
+    <a href="https://docs.rs/aquadoggo">
+      API
+    </a>
+    <span> | </span>
     <a href="https://github.com/p2panda/aquadoggo/releases">
       Releases
     </a>
