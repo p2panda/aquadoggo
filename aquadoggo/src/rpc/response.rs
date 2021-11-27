@@ -28,6 +28,6 @@ pub struct PublishEntryResponse {
 
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct QueryEntriesResponse {
+pub struct QuerytEntriesResponse {
     pub entries: Vec<Entry>,
 }

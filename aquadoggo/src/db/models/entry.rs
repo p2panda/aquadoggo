@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use p2panda_rs::entry::{EntrySigned, LogId, SeqNum};
-use p2panda_rs::message::MessageEncoded;
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
+use p2panda_rs::message::MessageEncoded;
 
 use serde::Serialize;
 use sqlx::{query, query_as, FromRow};
@@ -119,8 +119,8 @@ impl Entry {
         Ok(latest_entry)
     }
 
-    /// Return vector of all entries of a given schema
-    pub async fn by_schema(pool: &Pool, schema: &Hash) -> Result<Vec<Entry>> {
+    /// Return vector of all entries of a given document
+    pub async fn by_document(pool: &Pool, document: &Hash) -> Result<Vec<Entry>> {
         let entries = query_as::<_, Entry>(
             "
             SELECT
@@ -137,10 +137,10 @@ impl Entry {
                 ON (entries.log_id = logs.log_id
                     AND entries.author = logs.author)
             WHERE
-                logs.schema = $1
+                logs.document = $1
             ",
         )
-        .bind(schema)
+        .bind(document)
         .fetch_all(pool)
         .await?;
 
@@ -185,8 +185,8 @@ impl Entry {
 #[cfg(test)]
 mod tests {
     use p2panda_rs::entry::LogId;
-    use p2panda_rs::identity::Author;
     use p2panda_rs::hash::Hash;
+    use p2panda_rs::identity::Author;
 
     use super::Entry;
 
@@ -206,12 +206,12 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn entries_by_schema() {
+    async fn entries_by_document() {
         let pool = initialize_db().await;
 
-        let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
+        let document = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
 
-        let entries = Entry::by_schema(&pool, &schema).await.unwrap();
+        let entries = Entry::by_document(&pool, &document).await.unwrap();
         assert!(entries.len() == 0);
     }
 }

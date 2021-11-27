@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use p2panda_rs::entry::LogId;
-use p2panda_rs::identity::Author;
 use p2panda_rs::hash::Hash;
+use p2panda_rs::identity::Author;
 
 use sqlx::{query, query_as, FromRow};
 
 use crate::db::Pool;
 use crate::errors::Result;
 
-/// Keeps track of which log_id has been used for which schema per author.
+/// Keeps track of which log_id has been used for which document per author.
 ///
 /// This serves as an indexing layer on top of the lower-level bamboo entries. The node updates
 /// this data according to what it sees in the newly incoming entries.
@@ -18,36 +18,35 @@ pub struct Log {
     /// Public key of the author.
     author: Author,
 
-    /// Log id used for the author's schema.
+    /// Log id used for this document.
     log_id: LogId,
 
-    /// Schema hash used by author.
-    schema: Hash,
+    /// Hash that identifies the document this log is for.
+    document: Hash,
 }
 
 impl Log {
-    /// Register any new log_id for an author's schema.
+    /// Register any new log_id for a document.
     ///
     /// The database will reject duplicate entries.
-    #[allow(dead_code)]
     pub async fn insert(
         pool: &Pool,
         author: &Author,
-        schema: &Hash,
+        document: &Hash,
         log_id: &LogId,
     ) -> Result<bool> {
         assert!(log_id.is_user_log());
         let rows_affected = query(
             "
             INSERT INTO
-                logs (author, log_id, schema)
+                logs (author, log_id, document)
             VALUES
                 ($1, $2, $3)
             ",
         )
         .bind(author)
         .bind(log_id)
-        .bind(schema)
+        .bind(document)
         .execute(pool)
         .await?
         .rows_affected();
@@ -96,11 +95,11 @@ impl Log {
         Ok(next_log_id)
     }
 
-    /// Returns the registered log_id of an author's schema.
+    /// Returns the registered log_id for a document.
     ///
-    /// Messages are separated in different logs per schema and author. This method checks if a log
-    /// has already been registered for a certain schema and returns its id.
-    pub async fn get(pool: &Pool, author: &Author, schema: &Hash) -> Result<Option<LogId>> {
+    /// Messages are separated in different logs per document and author. This method checks if a log
+    /// has already been registered for a document and returns its id.
+    pub async fn get(pool: &Pool, author: &Author, document: &Hash) -> Result<Option<LogId>> {
         // @TODO: Look up if system schema was used and return regarding log id
         let result = query_as::<_, LogId>(
             "
@@ -110,27 +109,32 @@ impl Log {
                 logs
             WHERE
                 author = $1
-                AND schema = $2
+                AND document = $2
             ",
         )
         .bind(author)
-        .bind(schema)
+        .bind(document)
         .fetch_optional(pool)
         .await?;
 
         Ok(result)
     }
 
-    /// Returns registered or possible log_id of an author's schema.
+    /// Returns registered or possible log id for a document.
     ///
-    /// If no log has been found for a USER schema it automatically returns the next unused log_id.
+    /// If no log has been previously registered for this document automatically returns the next
+    /// unused log_id.
     /// SYSTEM schema log ids are pre-defined by the protocol specification.
-    pub async fn find_schema_log_id(pool: &Pool, author: &Author, schema: &Hash) -> Result<LogId> {
-        // Determine log_id for author's schema
-        let schema_log_id = Log::get(pool, author, schema).await?;
+    pub async fn find_document_log_id(
+        pool: &Pool,
+        author: &Author,
+        document: &Hash,
+    ) -> Result<LogId> {
+        // Determine log_id for this document
+        let document_log_id = Log::get(pool, author, document).await?;
 
         // Use result or find next possible log_id automatically
-        let log_id = match schema_log_id {
+        let log_id = match document_log_id {
             Some(value) => value,
             None => Log::next_user_schema_log_id(pool, author).await?,
         };
@@ -142,9 +146,9 @@ impl Log {
 #[cfg(test)]
 mod tests {
     use p2panda_rs::entry::LogId;
-    use p2panda_rs::identity::Author;
     use p2panda_rs::hash::Hash;
-    
+    use p2panda_rs::identity::Author;
+
     use super::Log;
 
     use crate::test_helpers::{initialize_db, random_entry_hash};
@@ -156,9 +160,9 @@ mod tests {
         let pool = initialize_db().await;
 
         let author = Author::new(TEST_AUTHOR).unwrap();
-        let schema = Hash::new(&random_entry_hash()).unwrap();
+        let document = Hash::new(&random_entry_hash()).unwrap();
 
-        let log_id = Log::find_schema_log_id(&pool, &author, &schema)
+        let log_id = Log::find_document_log_id(&pool, &author, &document)
             .await
             .unwrap();
 
@@ -170,13 +174,13 @@ mod tests {
         let pool = initialize_db().await;
 
         let author = Author::new(TEST_AUTHOR).unwrap();
-        let schema = Hash::new(&random_entry_hash()).unwrap();
+        let document = Hash::new(&random_entry_hash()).unwrap();
 
-        assert!(Log::insert(&pool, &author, &schema, &LogId::new(1))
+        assert!(Log::insert(&pool, &author, &document, &LogId::new(1))
             .await
             .is_ok());
 
-        assert!(Log::insert(&pool, &author, &schema, &LogId::new(1))
+        assert!(Log::insert(&pool, &author, &document, &LogId::new(1))
             .await
             .is_err());
     }
@@ -188,31 +192,31 @@ mod tests {
         // Mock author
         let author = Author::new(TEST_AUTHOR).unwrap();
 
-        // Mock four different scheme hashes
-        let schema_first = Hash::new(&random_entry_hash()).unwrap();
-        let schema_second = Hash::new(&random_entry_hash()).unwrap();
-        let schema_third = Hash::new(&random_entry_hash()).unwrap();
-        let schema_system = Hash::new(&random_entry_hash()).unwrap();
+        // Mock four different document hashes
+        let document_first = Hash::new(&random_entry_hash()).unwrap();
+        let document_second = Hash::new(&random_entry_hash()).unwrap();
+        let document_third = Hash::new(&random_entry_hash()).unwrap();
+        let document_system = Hash::new(&random_entry_hash()).unwrap();
 
         // Register two log ids at the beginning
-        Log::insert(&pool, &author, &schema_system, &LogId::new(9))
+        Log::insert(&pool, &author, &document_system, &LogId::new(9))
             .await
             .unwrap();
-        Log::insert(&pool, &author, &schema_first, &LogId::new(3))
+        Log::insert(&pool, &author, &document_first, &LogId::new(3))
             .await
             .unwrap();
 
         // Find next free user log id and register it
         let log_id = Log::next_user_schema_log_id(&pool, &author).await.unwrap();
         assert_eq!(log_id, LogId::new(1));
-        Log::insert(&pool, &author, &schema_second, &log_id)
+        Log::insert(&pool, &author, &document_second, &log_id)
             .await
             .unwrap();
 
         // Find next free user log id and register it
         let log_id = Log::next_user_schema_log_id(&pool, &author).await.unwrap();
         assert_eq!(log_id, LogId::new(5));
-        Log::insert(&pool, &author, &schema_third, &log_id)
+        Log::insert(&pool, &author, &document_third, &log_id)
             .await
             .unwrap();
 

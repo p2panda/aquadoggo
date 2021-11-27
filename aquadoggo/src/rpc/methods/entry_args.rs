@@ -15,25 +15,25 @@ use crate::rpc::RpcApiState;
 
 /// Implementation of `panda_getEntryArguments` RPC method.
 ///
-/// Returns required data (backlink and skiplink entry hashes, last sequence number and the schemas
-/// log_id) to encode a new bamboo entry.
+/// Returns required data (backlink and skiplink entry hashes, last sequence number and the
+/// document's log_id) to encode a new bamboo entry.
 pub async fn get_entry_args(
     data: Data<RpcApiState>,
     Params(params): Params<EntryArgsRequest>,
 ) -> Result<EntryArgsResponse> {
     // Validate request parameters
     params.author.validate()?;
-    params.schema.validate()?;
+    params.document.validate()?;
 
     // Get database connection pool
     let pool = data.pool.clone();
 
     // Determine log_id for author's schema
-    let log_id = Log::find_schema_log_id(&pool, &params.author, &params.schema).await?;
+    let log_id = Log::find_document_log_id(&pool, &params.author, &params.document).await?;
 
     // Find latest entry in this log
     let entry_latest = Entry::latest(&pool, &params.author, &log_id).await?;
-    
+
     match entry_latest {
         Some(mut entry_backlink) => {
             // Determine skiplink ("lipmaa"-link) entry in this log
@@ -98,7 +98,7 @@ mod tests {
             &format!(
                 r#"{{
                     "author": "1234",
-                    "schema": "{}"
+                    "document": "{}"
                 }}"#,
                 random_entry_hash()
             ),
@@ -123,7 +123,7 @@ mod tests {
             &format!(
                 r#"{{
                     "author": "{}",
-                    "schema": "{}"
+                    "document": "{}"
                 }}"#,
                 TEST_AUTHOR,
                 random_entry_hash(),
