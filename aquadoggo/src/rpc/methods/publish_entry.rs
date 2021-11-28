@@ -20,8 +20,11 @@ pub enum PublishEntryError {
     #[error("Could not find skiplink entry in database")]
     SkiplinkMissing,
 
-    #[error("Claimed log_id for schema not the same as in database")]
-    InvalidLogId,
+    #[error("Requested log id {0} does not match expected log id {1}")]
+    InvalidLogId(String, String),
+
+    #[error("The instance this message is referring to is unknown")]
+    InstanceMissing,
 }
 
 /// Implementation of `panda_publishEntry` RPC method.
@@ -42,16 +45,30 @@ pub async fn publish_entry(
     let entry = decode_entry(&params.entry_encoded, Some(&params.message_encoded))?;
     let message = Message::from(&params.message_encoded);
 
-    // Retreive author and schema
     let author = params.entry_encoded.author();
-    let schema = message.schema();
 
-    // Determine log_id for author's schema
-    let schema_log_id = Log::get(&pool, &author, &schema).await?;
+    // Determine expected log id for new entry
+    let document_log_id = match message.is_create() {
+        true => {
+            // A document is identified by the hash of its `CREATE` message
+            let document_hash = &params.entry_encoded.hash();
+            Log::find_document_log_id(&pool, &author, document_hash).await?
+        }
+        false => {
+            // An instance is identified by the hash of its previous operation
+            let instance_hash = message.id().unwrap();
+            Log::find_instance_log_id(&pool, &author, instance_hash)
+                .await?
+                .ok_or(PublishEntryError::InstanceMissing)?
+        }
+    };
 
-    // Check if log_id is the same as the previously claimed one (when given)
-    if schema_log_id.is_some() && schema_log_id.as_ref() != Some(entry.log_id()) {
-        Err(PublishEntryError::InvalidLogId)?;
+    // Check if provided log id matches expected log id
+    if &document_log_id != entry.log_id() {
+        Err(PublishEntryError::InvalidLogId(
+            entry.log_id().as_i64().to_string(),
+            document_log_id.as_i64().to_string(),
+        ))?;
     }
 
     // Get related bamboo backlink and skiplink entries
@@ -101,9 +118,9 @@ pub async fn publish_entry(
         entry_backlink_bytes.as_deref(),
     )?;
 
-    // Register used log id in database when not set yet
-    if schema_log_id.is_none() {
-        Log::insert(&pool, &author, &schema, entry.log_id()).await?;
+    // Register log in database when a new document is created
+    if message.is_create() {
+        Log::insert(&pool, &author, &params.entry_encoded.hash(), entry.log_id()).await?;
     }
 
     // Finally insert Entry in database
@@ -126,7 +143,7 @@ pub async fn publish_entry(
     let entry_hash_skiplink = super::entry_args::determine_skiplink(pool, &entry_latest).await?;
 
     let next_seq_num = entry_latest.seq_num.next().unwrap();
-    
+
     Ok(PublishEntryResponse {
         entry_hash_backlink: Some(params.entry_encoded.hash()),
         entry_hash_skiplink,
@@ -138,7 +155,7 @@ pub async fn publish_entry(
 mod tests {
     use std::convert::TryFrom;
 
-    use p2panda_rs::entry::{Entry, EntrySigned, LogId, SeqNum, sign_and_encode};
+    use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned, LogId, SeqNum};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::message::{Message, MessageEncoded, MessageFields, MessageValue};
@@ -147,11 +164,12 @@ mod tests {
     use crate::rpc::server::{build_rpc_server, RpcServer};
     use crate::test_helpers::{handle_http, initialize_db, rpc_error, rpc_request, rpc_response};
 
-    // Helper method to create encoded entries and messages
+    /// Create encoded entries and messages for testing.
     fn create_test_entry(
         key_pair: &KeyPair,
         schema: &Hash,
         log_id: &LogId,
+        instance: Option<&Hash>,
         skiplink: Option<&EntrySigned>,
         backlink: Option<&EntrySigned>,
         seq_num: &SeqNum,
@@ -161,7 +179,12 @@ mod tests {
         fields
             .add("test", MessageValue::Text("Hello".to_owned()))
             .unwrap();
-        let message = Message::new_create(schema.clone(), fields).unwrap();
+        let message = match instance {
+            Some(instance_id) => {
+                Message::new_update(schema.clone(), instance_id.clone(), fields).unwrap()
+            }
+            None => Message::new_create(schema.clone(), fields).unwrap(),
+        };
 
         // Encode message
         let message_encoded = MessageEncoded::try_from(&message).unwrap();
@@ -180,14 +203,15 @@ mod tests {
         (entry_encoded, message_encoded)
     }
 
-    // Helper method to compare expected API responses with what was returned
+    /// Compare API response from publishing an encoded entry and message to expected skiplink,
+    /// log id and sequence number.
     async fn assert_request(
         app: &RpcServer,
         entry_encoded: &EntrySigned,
         message_encoded: &MessageEncoded,
-        entry_skiplink: Option<&EntrySigned>,
-        log_id: &LogId,
-        seq_num: &SeqNum,
+        expect_skiplink: Option<&EntrySigned>,
+        expect_log_id: &LogId,
+        expect_seq_num: &SeqNum,
     ) {
         // Prepare request to API
         let request = rpc_request(
@@ -203,7 +227,7 @@ mod tests {
         );
 
         // Prepare expected response result
-        let skiplink_str = match entry_skiplink {
+        let skiplink_str = match expect_skiplink {
             Some(entry) => {
                 format!("\"{}\"", entry.hash().as_str())
             }
@@ -219,8 +243,8 @@ mod tests {
             }}"#,
             entry_encoded.hash().as_str(),
             skiplink_str,
-            log_id.as_i64(),
-            seq_num.as_i64(),
+            expect_log_id.as_i64(),
+            expect_seq_num.as_i64(),
         ));
 
         assert_eq!(handle_http(&app, request).await, response);
@@ -240,19 +264,21 @@ mod tests {
 
         // Define schema and log id for entries
         let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
-        let log_id = LogId::new(5);
-        let seq_num = SeqNum::new(1).unwrap();
+        let log_id_1 = LogId::new(1);
+        let seq_num_1 = SeqNum::new(1).unwrap();
 
-        // Create a couple of entries in the same log and check for consistency
+        // Create a couple of entries in the same log and check for consistency. The little diagrams
+        // show back links and skip links with all entries on one line sharing a skip link target.
         //
         // [1] --
-        let (entry_1, message_1) = create_test_entry(&key_pair, &schema, &log_id, None, None, &seq_num);
+        let (entry_1, message_1) =
+            create_test_entry(&key_pair, &schema, &log_id_1, None, None, None, &seq_num_1);
         assert_request(
             &app,
             &entry_1,
             &message_1,
             None,
-            &log_id,
+            &log_id_1,
             &SeqNum::new(2).unwrap(),
         )
         .await;
@@ -261,7 +287,8 @@ mod tests {
         let (entry_2, message_2) = create_test_entry(
             &key_pair,
             &schema,
-            &log_id,
+            &log_id_1,
+            Some(&entry_1.hash()),
             None,
             Some(&entry_1),
             &SeqNum::new(2).unwrap(),
@@ -271,7 +298,7 @@ mod tests {
             &entry_2,
             &message_2,
             None,
-            &log_id,
+            &log_id_1,
             &SeqNum::new(3).unwrap(),
         )
         .await;
@@ -280,7 +307,8 @@ mod tests {
         let (entry_3, message_3) = create_test_entry(
             &key_pair,
             &schema,
-            &log_id,
+            &log_id_1,
+            Some(&entry_2.hash()),
             None,
             Some(&entry_2),
             &SeqNum::new(3).unwrap(),
@@ -290,7 +318,7 @@ mod tests {
             &entry_3,
             &message_3,
             Some(&entry_1),
-            &log_id,
+            &log_id_1,
             &SeqNum::new(4).unwrap(),
         )
         .await;
@@ -300,7 +328,8 @@ mod tests {
         let (entry_4, message_4) = create_test_entry(
             &key_pair,
             &schema,
-            &log_id,
+            &log_id_1,
+            Some(&entry_3.hash()),
             Some(&entry_1),
             Some(&entry_3),
             &SeqNum::new(4).unwrap(),
@@ -310,7 +339,7 @@ mod tests {
             &entry_4,
             &message_4,
             None,
-            &log_id,
+            &log_id_1,
             &SeqNum::new(5).unwrap(),
         )
         .await;
@@ -320,7 +349,8 @@ mod tests {
         let (entry_5, message_5) = create_test_entry(
             &key_pair,
             &schema,
-            &log_id,
+            &log_id_1,
+            Some(&entry_4.hash()),
             None,
             Some(&entry_4),
             &SeqNum::new(5).unwrap(),
@@ -330,7 +360,7 @@ mod tests {
             &entry_5,
             &message_5,
             None,
-            &log_id,
+            &log_id_1,
             &SeqNum::new(6).unwrap(),
         )
         .await;
@@ -350,11 +380,12 @@ mod tests {
 
         // Define schema and log id for entries
         let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
-        let log_id = LogId::new(5);
+        let log_id = LogId::new(1);
         let seq_num = SeqNum::new(1).unwrap();
 
         // Create two valid entries for testing
-        let (entry_1, message_1) = create_test_entry(&key_pair, &schema, &log_id, None, None, &seq_num);
+        let (entry_1, message_1) =
+            create_test_entry(&key_pair, &schema, &log_id, None, None, None, &seq_num);
         assert_request(
             &app,
             &entry_1,
@@ -369,6 +400,7 @@ mod tests {
             &key_pair,
             &schema,
             &log_id,
+            Some(&entry_1.hash()),
             None,
             Some(&entry_1),
             &SeqNum::new(2).unwrap(),
@@ -383,14 +415,16 @@ mod tests {
         )
         .await;
 
-        // Send invalid log id for this schema
-        let (entry_wrong_log_id, _) = create_test_entry(
+        // Send invalid log id for a new document: The entries entry_1 and entry_2 are assigned to
+        // log 1, which makes log 3 the required log for the next new document.
+        let (entry_wrong_log_id, message_wrong_log_id) = create_test_entry(
             &key_pair,
             &schema,
-            &LogId::new(1),
+            &LogId::new(5),
             None,
-            Some(&entry_1),
-            &SeqNum::new(2).unwrap(),
+            None,
+            None,
+            &SeqNum::new(1).unwrap(),
         );
 
         let request = rpc_request(
@@ -401,19 +435,48 @@ mod tests {
                     "messageEncoded": "{}"
                 }}"#,
                 entry_wrong_log_id.as_str(),
-                message_2.as_str(),
+                message_wrong_log_id.as_str(),
             ),
         );
 
-        let response = rpc_error("Claimed log_id for schema not the same as in database");
+        let response = rpc_error("Requested log id 5 does not match expected log id 3");
+
+        assert_eq!(handle_http(&app, request).await, response);
+
+        // Send invalid log id for an existing document: This entry is an update for the existing
+        // document in log 1, however, we are trying to publish it in log 3.
+        let (entry_wrong_log_id, message_wrong_log_id) = create_test_entry(
+            &key_pair,
+            &schema,
+            &LogId::new(3),
+            Some(&entry_2.hash()),
+            None,
+            None,
+            &SeqNum::new(1).unwrap(),
+        );
+
+        let request = rpc_request(
+            "panda_publishEntry",
+            &format!(
+                r#"{{
+                    "entryEncoded": "{}",
+                    "messageEncoded": "{}"
+                }}"#,
+                entry_wrong_log_id.as_str(),
+                message_wrong_log_id.as_str(),
+            ),
+        );
+
+        let response = rpc_error("Requested log id 3 does not match expected log id 1");
 
         assert_eq!(handle_http(&app, request).await, response);
 
         // Send invalid backlink entry / hash
-        let (entry_wrong_hash, _) = create_test_entry(
+        let (entry_wrong_hash, message_wrong_hash) = create_test_entry(
             &key_pair,
             &schema,
             &log_id,
+            Some(&entry_1.hash()),
             Some(&entry_2),
             Some(&entry_1),
             &SeqNum::new(3).unwrap(),
@@ -427,7 +490,7 @@ mod tests {
                     "messageEncoded": "{}"
                 }}"#,
                 entry_wrong_hash.as_str(),
-                message_2.as_str(),
+                message_wrong_hash.as_str(),
             ),
         );
 
@@ -438,10 +501,11 @@ mod tests {
         assert_eq!(handle_http(&app, request).await, response);
 
         // Send invalid seq num
-        let (entry_wrong_seq_num, _) = create_test_entry(
+        let (entry_wrong_seq_num, message_wrong_seq_num) = create_test_entry(
             &key_pair,
             &schema,
             &log_id,
+            Some(&entry_2.hash()),
             None,
             Some(&entry_2),
             &SeqNum::new(5).unwrap(),
@@ -455,7 +519,7 @@ mod tests {
                     "messageEncoded": "{}"
                 }}"#,
                 entry_wrong_seq_num.as_str(),
-                message_2.as_str(),
+                message_wrong_seq_num.as_str(),
             ),
         );
 

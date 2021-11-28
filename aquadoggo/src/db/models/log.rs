@@ -120,6 +120,36 @@ impl Log {
         Ok(result)
     }
 
+    /// Returns the registered log_id for an instance.
+    ///
+    /// The log for an instance is identified by the log of that
+    /// instance's last operation.
+    pub async fn find_instance_log_id(
+        pool: &Pool,
+        author: &Author,
+        instance: &Hash,
+    ) -> Result<Option<LogId>> {
+        let result = query_as::<_, LogId>(
+            "
+            SELECT
+                logs.log_id
+            FROM
+                logs
+            INNER JOIN entries
+                ON (logs.log_id = entries.log_id
+                    AND entries.entry_hash = $2)
+            WHERE
+                logs.author = $1
+            ",
+        )
+        .bind(author)
+        .bind(instance)
+        .fetch_optional(pool)
+        .await?;
+
+        Ok(result)
+    }
+
     /// Returns registered or possible log id for a document.
     ///
     /// If no log has been previously registered for this document automatically returns the next
@@ -145,13 +175,18 @@ impl Log {
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::entry::LogId;
+    use p2panda_rs::entry::{sign_and_encode, Entry, LogId, SeqNum};
     use p2panda_rs::hash::Hash;
-    use p2panda_rs::identity::Author;
+    use p2panda_rs::identity::{Author, KeyPair};
+    use p2panda_rs::message::{Message, MessageEncoded, MessageFields, MessageValue};
+    use std::convert::TryFrom;
 
     use super::Log;
 
-    use crate::test_helpers::{initialize_db, random_entry_hash};
+    use crate::{
+        db::models::Entry as dbEntry,
+        test_helpers::{initialize_db, random_entry_hash},
+    };
 
     const TEST_AUTHOR: &str = "58223678ab378f1b07d1d8c789e6da01d16a06b1a4d17cc10119a0109181156c";
 
@@ -183,6 +218,62 @@ mod tests {
         assert!(Log::insert(&pool, &author, &document, &LogId::new(1))
             .await
             .is_err());
+    }
+
+    #[async_std::test]
+    async fn instance_log_id() {
+        let pool = initialize_db().await;
+
+        // Create an instance
+        // TODO: use p2panda-rs test utils once available
+        let key_pair = KeyPair::new();
+        let author = Author::try_from(key_pair.public_key().clone()).unwrap();
+        let log_id = LogId::new(1);
+        let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
+        let seq_num = SeqNum::new(1).unwrap();
+        let mut fields = MessageFields::new();
+        fields
+            .add("test", MessageValue::Text("Hello".to_owned()))
+            .unwrap();
+        let message = Message::new_create(schema.clone(), fields).unwrap();
+        let message_encoded = MessageEncoded::try_from(&message).unwrap();
+        let entry = Entry::new(&log_id, Some(&message), None, None, &seq_num).unwrap();
+        let entry_encoded = sign_and_encode(&entry, &key_pair).unwrap();
+
+        // Expect no log id when instance not in database
+        assert_eq!(
+            Log::find_instance_log_id(&pool, &author, &entry_encoded.hash())
+                .await
+                .unwrap(),
+            None
+        );
+
+        // Store instance in db
+        assert!(
+            Log::insert(&pool, &author, &entry_encoded.hash(), &LogId::new(1))
+                .await
+                .is_ok()
+        );
+        assert!(dbEntry::insert(
+            &pool,
+            &author,
+            &entry_encoded,
+            &entry_encoded.hash(),
+            &log_id,
+            &message_encoded,
+            &message_encoded.hash(),
+            &seq_num
+        )
+        .await
+        .is_ok());
+
+        // Expect to find a log id for the instance
+        assert_eq!(
+            Log::find_instance_log_id(&pool, &author, &entry_encoded.hash())
+                .await
+                .unwrap(),
+            Some(log_id)
+        );
     }
 
     #[async_std::test]
