@@ -268,7 +268,8 @@ mod tests {
         let seq_num_1 = SeqNum::new(1).unwrap();
 
         // Create a couple of entries in the same log and check for consistency. The little diagrams
-        // show back links and skip links with all entries on one line sharing a skip link target.
+        // show back links and skip links analogous to this diagram from the bamboo spec:
+        // https://github.com/AljoschaMeyer/bamboo/blob/61415747af34bfcb8f40a47ae3b02136083d3276/README.md#links-and-entry-verification
         //
         // [1] --
         let (entry_1, message_1) =
