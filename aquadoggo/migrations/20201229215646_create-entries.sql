@@ -1,3 +1,5 @@
+-- SPDX-License-Identifier: AGPL-3.0-or-later
+
 CREATE TABLE IF NOT EXISTS entries (
     author            VARCHAR(64)       NOT NULL,
     entry_bytes       TEXT              NOT NULL,

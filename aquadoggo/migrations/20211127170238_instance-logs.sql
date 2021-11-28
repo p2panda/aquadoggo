@@ -1,3 +1,5 @@
+-- SPDX-License-Identifier: AGPL-3.0-or-later
+
 -- The change from schema logs to document logs invalidates all entries so
 -- all logs and entries are deleted. The logs table is also dropped because its
 -- primary key changes.
