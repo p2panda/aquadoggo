@@ -9,7 +9,7 @@ use sqlx::{query, query_as, FromRow};
 use crate::db::Pool;
 use crate::errors::Result;
 
-/// Keeps track of which log_id has been used for which document per author.
+/// Tracks the assigment of an author's logs to documents and schema.
 ///
 /// This serves as an indexing layer on top of the lower-level bamboo entries. The node updates
 /// this data according to what it sees in the newly incoming entries.
