@@ -9,7 +9,7 @@ use sqlx::{query, query_as, FromRow};
 use crate::db::Pool;
 use crate::errors::Result;
 
-/// Tracks the assigment of an author's logs to documents and schema.
+/// Tracks the assigment of an author's logs to documents and records their schema.
 ///
 /// This serves as an indexing layer on top of the lower-level bamboo entries. The node updates
 /// this data according to what it sees in the newly incoming entries.
@@ -125,10 +125,31 @@ impl Log {
         Ok(result)
     }
 
+    /// Returns registered or possible log id for a document.
+    ///
+    /// If no log has been previously registered for this document automatically returns the next
+    /// unused log_id.
+    /// SYSTEM schema log ids are pre-defined by the protocol specification.
+    pub async fn find_document_log_id(
+        pool: &Pool,
+        author: &Author,
+        document: &Hash,
+    ) -> Result<LogId> {
+        // Determine log_id for this document
+        let document_log_id = Log::get(pool, author, document).await?;
+
+        // Use result or find next possible log_id automatically
+        let log_id = match document_log_id {
+            Some(value) => value,
+            None => Log::next_user_schema_log_id(pool, author).await?,
+        };
+
+        Ok(log_id)
+    }
+
     /// Returns the registered log_id for an instance.
     ///
-    /// The log for an instance is identified by the log of that
-    /// instance's last operation.
+    /// The log for an instance is identified by the log of that instance's last operation.
     pub async fn find_instance_log_id(
         pool: &Pool,
         author: &Author,
@@ -153,28 +174,6 @@ impl Log {
         .await?;
 
         Ok(result)
-    }
-
-    /// Returns registered or possible log id for a document.
-    ///
-    /// If no log has been previously registered for this document automatically returns the next
-    /// unused log_id.
-    /// SYSTEM schema log ids are pre-defined by the protocol specification.
-    pub async fn find_document_log_id(
-        pool: &Pool,
-        author: &Author,
-        document: &Hash,
-    ) -> Result<LogId> {
-        // Determine log_id for this document
-        let document_log_id = Log::get(pool, author, document).await?;
-
-        // Use result or find next possible log_id automatically
-        let log_id = match document_log_id {
-            Some(value) => value,
-            None => Log::next_user_schema_log_id(pool, author).await?,
-        };
-
-        Ok(log_id)
     }
 }
 

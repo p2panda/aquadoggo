@@ -28,7 +28,7 @@ pub async fn get_entry_args(
     // Get database connection pool
     let pool = data.pool.clone();
 
-    // Determine log_id for author's schema
+    // Determine log_id for this document
     let log_id = Log::find_document_log_id(&pool, &params.author, &params.document).await?;
 
     // Find latest entry in this log

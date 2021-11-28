@@ -47,7 +47,9 @@ pub async fn publish_entry(
 
     let author = params.entry_encoded.author();
 
-    // Determine expected log id for new entry
+    // Determine expected log id for new entry: a `CREATE` entry is always stored in the next free
+    // user log. An `UPDATE` or `DELETE` message is always stored in the same log that its original
+    // `CREATE` message was stored in.
     let document_log_id = match message.is_create() {
         true => {
             // A document is identified by the hash of its `CREATE` message
