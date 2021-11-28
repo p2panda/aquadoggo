@@ -6,22 +6,22 @@ use p2panda_rs::Validate;
 use crate::db::models::Entry;
 use crate::errors::Result;
 use crate::rpc::request::QueryEntriesRequest;
-use crate::rpc::response::QuerytEntriesResponse;
+use crate::rpc::response::QueryEntriesResponse;
 use crate::rpc::RpcApiState;
 
 pub async fn query_entries(
     data: Data<RpcApiState>,
     Params(params): Params<QueryEntriesRequest>,
-) -> Result<QuerytEntriesResponse> {
+) -> Result<QueryEntriesResponse> {
     // Validate request parameters
-    params.document.validate()?;
+    params.schema.validate()?;
 
     // Get database connection pool
     let pool = data.pool.clone();
 
     // Find and return raw entries from database
-    let entries = Entry::by_document(&pool, &params.document).await?;
-    Ok(QuerytEntriesResponse { entries })
+    let entries = Entry::by_schema(&pool, &params.schema).await?;
+    Ok(QueryEntriesResponse { entries })
 }
 
 #[cfg(test)]
@@ -33,7 +33,7 @@ mod tests {
     use crate::test_helpers::{handle_http, initialize_db, rpc_request, rpc_response};
 
     #[async_std::test]
-    async fn query_document_entries() {
+    async fn query_entries() {
         // Prepare test database
         let pool = initialize_db().await;
 
@@ -42,14 +42,14 @@ mod tests {
         let app = build_rpc_server(rpc_api);
 
         // Prepare request to API
-        let document = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
+        let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
         let request = rpc_request(
             "panda_queryEntries",
             &format!(
                 r#"{{
-                    "document": "{}"
+                    "schema": "{}"
                 }}"#,
-                document.as_str(),
+                schema.as_str(),
             ),
         );
 

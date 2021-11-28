@@ -23,6 +23,9 @@ pub struct Log {
 
     /// Hash that identifies the document this log is for.
     document: Hash,
+
+    /// Schema hash used by author.
+    schema: Hash,
 }
 
 impl Log {
@@ -33,20 +36,22 @@ impl Log {
         pool: &Pool,
         author: &Author,
         document: &Hash,
+        schema: &Hash,
         log_id: &LogId,
     ) -> Result<bool> {
         assert!(log_id.is_user_log());
         let rows_affected = query(
             "
             INSERT INTO
-                logs (author, log_id, document)
+                logs (author, log_id, document, schema)
             VALUES
-                ($1, $2, $3)
+                ($1, $2, $3, $4)
             ",
         )
         .bind(author)
         .bind(log_id)
         .bind(document)
+        .bind(schema)
         .execute(pool)
         .await?
         .rows_affected();
@@ -210,14 +215,19 @@ mod tests {
 
         let author = Author::new(TEST_AUTHOR).unwrap();
         let document = Hash::new(&random_entry_hash()).unwrap();
+        let schema = Hash::new(&random_entry_hash()).unwrap();
 
-        assert!(Log::insert(&pool, &author, &document, &LogId::new(1))
-            .await
-            .is_ok());
+        assert!(
+            Log::insert(&pool, &author, &document, &schema, &LogId::new(1))
+                .await
+                .is_ok()
+        );
 
-        assert!(Log::insert(&pool, &author, &document, &LogId::new(1))
-            .await
-            .is_err());
+        assert!(
+            Log::insert(&pool, &author, &document, &schema, &LogId::new(1))
+                .await
+                .is_err()
+        );
     }
 
     #[async_std::test]
@@ -249,11 +259,15 @@ mod tests {
         );
 
         // Store instance in db
-        assert!(
-            Log::insert(&pool, &author, &entry_encoded.hash(), &LogId::new(1))
-                .await
-                .is_ok()
-        );
+        assert!(Log::insert(
+            &pool,
+            &author,
+            &entry_encoded.hash(),
+            &schema,
+            &LogId::new(1)
+        )
+        .await
+        .is_ok());
         assert!(dbEntry::insert(
             &pool,
             &author,
@@ -283,6 +297,9 @@ mod tests {
         // Mock author
         let author = Author::new(TEST_AUTHOR).unwrap();
 
+        // Mock schema
+        let schema = Hash::new(&random_entry_hash()).unwrap();
+
         // Mock four different document hashes
         let document_first = Hash::new(&random_entry_hash()).unwrap();
         let document_second = Hash::new(&random_entry_hash()).unwrap();
@@ -290,24 +307,24 @@ mod tests {
         let document_system = Hash::new(&random_entry_hash()).unwrap();
 
         // Register two log ids at the beginning
-        Log::insert(&pool, &author, &document_system, &LogId::new(9))
+        Log::insert(&pool, &author, &document_system, &schema, &LogId::new(9))
             .await
             .unwrap();
-        Log::insert(&pool, &author, &document_first, &LogId::new(3))
+        Log::insert(&pool, &author, &document_first, &schema, &LogId::new(3))
             .await
             .unwrap();
 
         // Find next free user log id and register it
         let log_id = Log::next_user_schema_log_id(&pool, &author).await.unwrap();
         assert_eq!(log_id, LogId::new(1));
-        Log::insert(&pool, &author, &document_second, &log_id)
+        Log::insert(&pool, &author, &document_second, &schema, &log_id)
             .await
             .unwrap();
 
         // Find next free user log id and register it
         let log_id = Log::next_user_schema_log_id(&pool, &author).await.unwrap();
         assert_eq!(log_id, LogId::new(5));
-        Log::insert(&pool, &author, &document_third, &log_id)
+        Log::insert(&pool, &author, &document_third, &schema, &log_id)
             .await
             .unwrap();
 

@@ -120,7 +120,14 @@ pub async fn publish_entry(
 
     // Register log in database when a new document is created
     if message.is_create() {
-        Log::insert(&pool, &author, &params.entry_encoded.hash(), entry.log_id()).await?;
+        Log::insert(
+            &pool,
+            &author,
+            &params.entry_encoded.hash(),
+            &message.schema(),
+            entry.log_id(),
+        )
+        .await?;
     }
 
     // Finally insert Entry in database

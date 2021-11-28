@@ -1,1 +1,1 @@
-ALTER TABLE logs RENAME COLUMN schema TO document;
+ALTER TABLE logs ADD COLUMN document VARCHAR(132) NOT NULL;

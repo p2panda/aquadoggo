@@ -119,8 +119,8 @@ impl Entry {
         Ok(latest_entry)
     }
 
-    /// Return vector of all entries of a given document
-    pub async fn by_document(pool: &Pool, document: &Hash) -> Result<Vec<Entry>> {
+    /// Return vector of all entries of a given schema
+    pub async fn by_schema(pool: &Pool, schema: &Hash) -> Result<Vec<Entry>> {
         let entries = query_as::<_, Entry>(
             "
             SELECT
@@ -137,10 +137,10 @@ impl Entry {
                 ON (entries.log_id = logs.log_id
                     AND entries.author = logs.author)
             WHERE
-                logs.document = $1
+                logs.schema = $1
             ",
         )
-        .bind(document)
+        .bind(schema)
         .fetch_all(pool)
         .await?;
 
@@ -206,12 +206,12 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn entries_by_document() {
+    async fn entries_by_schema() {
         let pool = initialize_db().await;
 
-        let document = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
+        let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
 
-        let entries = Entry::by_document(&pool, &document).await.unwrap();
+        let entries = Entry::by_schema(&pool, &schema).await.unwrap();
         assert!(entries.len() == 0);
     }
 }
