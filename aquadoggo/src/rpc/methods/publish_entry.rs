@@ -21,7 +21,7 @@ pub enum PublishEntryError {
     SkiplinkMissing,
 
     #[error("Requested log id {0} does not match expected log id {1}")]
-    InvalidLogId(String, String),
+    InvalidLogId(i64, i64),
 
     #[error("The instance this message is referring to is unknown")]
     InstanceMissing,
@@ -68,8 +68,8 @@ pub async fn publish_entry(
     // Check if provided log id matches expected log id
     if &document_log_id != entry.log_id() {
         Err(PublishEntryError::InvalidLogId(
-            entry.log_id().as_i64().to_string(),
-            document_log_id.as_i64().to_string(),
+            entry.log_id().as_i64(),
+            document_log_id.as_i64(),
         ))?;
     }
 
