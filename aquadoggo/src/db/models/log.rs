@@ -147,28 +147,25 @@ impl Log {
         Ok(log_id)
     }
 
-    /// Returns the registered log_id for an instance.
+    /// Returns the registered log id for an instance.
     ///
-    /// The log for an instance is identified by the log of that instance's last operation.
-    pub async fn find_instance_log_id(
+    /// Every instance is part of a document and, through that, associated with a specific log id
+    /// of its author. This method returns that log id by looking up the log that the instance's
+    /// last operation was stored in.
+    pub async fn get_log_id_by_instance(
         pool: &Pool,
-        author: &Author,
         instance: &Hash,
     ) -> Result<Option<LogId>> {
         let result = query_as::<_, LogId>(
             "
             SELECT
-                logs.log_id
+                entries.log_id
             FROM
-                logs
-            INNER JOIN entries
-                ON (logs.log_id = entries.log_id
-                    AND entries.entry_hash = $2)
+                entries
             WHERE
-                logs.author = $1
+                entries.entry_hash = $1
             ",
         )
-        .bind(author)
         .bind(instance)
         .fetch_optional(pool)
         .await?;
@@ -251,22 +248,13 @@ mod tests {
 
         // Expect no log id when instance not in database
         assert_eq!(
-            Log::find_instance_log_id(&pool, &author, &entry_encoded.hash())
+            Log::get_log_id_by_instance(&pool, &entry_encoded.hash())
                 .await
                 .unwrap(),
             None
         );
 
         // Store instance in db
-        assert!(Log::insert(
-            &pool,
-            &author,
-            &entry_encoded.hash(),
-            &schema,
-            &LogId::new(1)
-        )
-        .await
-        .is_ok());
         assert!(dbEntry::insert(
             &pool,
             &author,
@@ -282,7 +270,7 @@ mod tests {
 
         // Expect to find a log id for the instance
         assert_eq!(
-            Log::find_instance_log_id(&pool, &author, &entry_encoded.hash())
+            Log::get_log_id_by_instance(&pool, &entry_encoded.hash())
                 .await
                 .unwrap(),
             Some(log_id)

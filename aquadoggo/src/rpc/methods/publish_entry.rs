@@ -59,7 +59,7 @@ pub async fn publish_entry(
         false => {
             // An instance is identified by the hash of its previous operation
             let instance_hash = message.id().unwrap();
-            Log::find_instance_log_id(&pool, &author, instance_hash)
+            Log::get_log_id_by_instance(&pool, instance_hash)
                 .await?
                 .ok_or(PublishEntryError::InstanceMissing)?
         }
