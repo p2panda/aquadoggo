@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking change**: Replace schema logs with document logs, changing the behavior the `nextEntryArgs` and `publishEntry` RPC methods, invalidating and deleting all previously published entries  [#44](https://github.com/p2panda/aquadoggo/pull/44)
 - Nicer looking `README.md` for crate [#42](https://github.com/p2panda/aquadoggo/42)
 
 ## [0.1.0]
