@@ -23,13 +23,19 @@ pub async fn get_entry_args(
 ) -> Result<EntryArgsResponse> {
     // Validate request parameters
     params.author.validate()?;
-    params.document.validate()?;
+    let document = match params.document {
+        Some(doc) => {
+            doc.validate()?;
+            Some(doc)
+        }
+        None => None,
+    };
 
     // Get database connection pool
     let pool = data.pool.clone();
 
     // Determine log_id for this document
-    let log_id = Log::find_document_log_id(&pool, &params.author, &params.document).await?;
+    let log_id = Log::find_document_log_id(&pool, &params.author, document.as_ref()).await?;
 
     // Find latest entry in this log
     let entry_latest = Entry::latest(&pool, &params.author, &log_id).await?;
@@ -123,10 +129,9 @@ mod tests {
             &format!(
                 r#"{{
                     "author": "{}",
-                    "document": "{}"
+                    "document": null
                 }}"#,
                 TEST_AUTHOR,
-                random_entry_hash(),
             ),
         );
 

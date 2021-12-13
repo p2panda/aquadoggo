@@ -22,9 +22,6 @@ pub enum PublishEntryError {
 
     #[error("Requested log id {0} does not match expected log id {1}")]
     InvalidLogId(i64, i64),
-
-    #[error("The instance this message is referring to is unknown")]
-    InstanceMissing,
 }
 
 /// Implementation of `panda_publishEntry` RPC method.
@@ -48,22 +45,10 @@ pub async fn publish_entry(
     let author = params.entry_encoded.author();
 
     // Determine expected log id for new entry: a `CREATE` entry is always stored in the next free
-    // user log. An `UPDATE` or `DELETE` message is always stored in the same log that its original
+    // log. An `UPDATE` or `DELETE` message is always stored in the same log that its original
     // `CREATE` message was stored in.
-    let document_log_id = match message.is_create() {
-        true => {
-            // A document is identified by the hash of its `CREATE` message
-            let document_hash = &params.entry_encoded.hash();
-            Log::find_document_log_id(&pool, &author, document_hash).await?
-        }
-        false => {
-            // An instance is identified by the hash of its previous operation
-            let instance_hash = message.id().unwrap();
-            Log::get_log_id_by_instance(&pool, instance_hash)
-                .await?
-                .ok_or(PublishEntryError::InstanceMissing)?
-        }
-    };
+    let document_hash = &params.entry_encoded.hash();
+    let document_log_id = Log::find_document_log_id(&pool, &author, Some(document_hash)).await?;
 
     // Check if provided log id matches expected log id
     if &document_log_id != entry.log_id() {
