@@ -44,10 +44,18 @@ pub async fn publish_entry(
 
     let author = params.entry_encoded.author();
 
+    // A document is identified by either the hash of its `CREATE` message or .. @TODO
+    let document_hash = if message.is_create() {
+        params.entry_encoded.hash()
+    } else {
+        // @TODO: Get this from database instead, we can't trust that the author doesn't lie to us
+        // about the id here
+        message.id().unwrap().to_owned()
+    };
+
     // Determine expected log id for new entry: a `CREATE` entry is always stored in the next free
     // log.
-    let document_hash = &params.entry_encoded.hash();
-    let document_log_id = Log::find_document_log_id(&pool, &author, Some(document_hash)).await?;
+    let document_log_id = Log::find_document_log_id(&pool, &author, Some(&document_hash)).await?;
 
     // Check if provided log id matches expected log id
     if &document_log_id != entry.log_id() {
@@ -257,7 +265,7 @@ mod tests {
 
         // Define schema and log id for entries
         let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
-        let log_id_1 = LogId::new(1);
+        let log_id_1 = LogId::default();
         let seq_num_1 = SeqNum::new(1).unwrap();
 
         // Create a couple of entries in the same log and check for consistency. The little diagrams
