@@ -45,8 +45,7 @@ pub async fn publish_entry(
     let author = params.entry_encoded.author();
 
     // Determine expected log id for new entry: a `CREATE` entry is always stored in the next free
-    // log. An `UPDATE` or `DELETE` message is always stored in the same log that its original
-    // `CREATE` message was stored in.
+    // log.
     let document_hash = &params.entry_encoded.hash();
     let document_log_id = Log::find_document_log_id(&pool, &author, Some(document_hash)).await?;
 
