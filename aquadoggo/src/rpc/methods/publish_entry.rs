@@ -97,7 +97,7 @@ pub async fn publish_entry(
     }?;
 
     // Verify bamboo entry integrity
-    bamboo_rs_core::verify(
+    bamboo_rs_core_ed25519_yasmf::verify(
         &params.entry_encoded.to_bytes(),
         Some(&params.message_encoded.to_bytes()),
         entry_skiplink_bytes.as_deref(),
