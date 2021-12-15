@@ -47,9 +47,9 @@ Configurable node server implementation for the [`p2panda`] network running as a
 
 ## Features
 
-- Awaits signed messages from clients via a JSON RPC API.
-- Verifies the consistency, format and signature of messages and rejects invalid ones.
-- Stores messages of the network in a SQL database of your choice (SQLite, PostgreSQL or MySQL).
+- Awaits signed operations from clients via a JSON RPC API.
+- Verifies the consistency, format and signature of operations and rejects invalid ones.
+- Stores operations of the network in a SQL database of your choice (SQLite, PostgreSQL or MySQL).
 - Materializes views on top of the known data.
 - Answers filterable and paginated data queries.
 - Discovers other nodes in local network and internet.
