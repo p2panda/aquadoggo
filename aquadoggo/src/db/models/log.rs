@@ -28,7 +28,7 @@ pub struct Log {
 }
 
 impl Log {
-    /// Register any new log_id for a document.
+    /// Register any new log_id for a document and author.
     ///
     /// The database will reject duplicate entries.
     pub async fn insert(
@@ -93,11 +93,12 @@ impl Log {
         Ok(next_log_id)
     }
 
-    /// Returns the registered log_id for a document.
+    /// Returns the registered log_id for a document identified by its hash.
     ///
-    /// Operations are separated in different logs per document and author. This method checks if a log
-    /// has already been registered for a document and returns its id.
-    pub async fn get(pool: &Pool, author: &Author, document: &Hash) -> Result<Option<LogId>> {
+    /// Operations are separated in different logs per document and author. This method checks if a
+    /// log has already been registered for a document and author and returns its regarding log id
+    /// or None.
+    pub async fn get(pool: &Pool, author: &Author, document_hash: &Hash) -> Result<Option<LogId>> {
         let result = query_as::<_, LogId>(
             "
             SELECT
@@ -110,7 +111,7 @@ impl Log {
             ",
         )
         .bind(author)
-        .bind(document)
+        .bind(document_hash)
         .fetch_optional(pool)
         .await?;
 
@@ -124,15 +125,15 @@ impl Log {
     pub async fn find_document_log_id(
         pool: &Pool,
         author: &Author,
-        document: Option<&Hash>,
+        document_hash: Option<&Hash>,
     ) -> Result<LogId> {
-        // Determine log_id for this document
-        let document_log_id = match document {
-            Some(doc) => Log::get(pool, author, doc).await?,
+        // Determine log_id for this document when a hash was given
+        let document_log_id = match document_hash {
+            Some(hash) => Log::get(pool, author, hash).await?,
             None => None,
         };
 
-        // Use result or find next possible log_id automatically
+        // Use result or find next possible log_id automatically when nothing was found yet
         let log_id = match document_log_id {
             Some(value) => value,
             None => Log::next_log_id(pool, author).await?,
@@ -143,10 +144,10 @@ impl Log {
 
     /// Returns the registered log id for any entry.
     ///
-    /// Every entry is part of a document and, through that, associated with a specific log id
-    /// of its author. This method returns that log id by looking up the log that the instance's
-    /// last operation was stored in.
-    pub async fn get_log_id_by_entry(pool: &Pool, instance: &Hash) -> Result<Option<LogId>> {
+    /// Every entry is part of a document and, through that, associated with a specific log id used
+    /// by this document and author. This method returns that log id by looking up the log that the
+    /// document's last operation was stored in.
+    pub async fn get_log_id_by_entry(pool: &Pool, entry_hash: &Hash) -> Result<Option<LogId>> {
         let result = query_as::<_, LogId>(
             "
             SELECT
@@ -157,7 +158,7 @@ impl Log {
                 entries.entry_hash = $1
             ",
         )
-        .bind(instance)
+        .bind(entry_hash)
         .fetch_optional(pool)
         .await?;
 

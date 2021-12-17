@@ -21,8 +21,10 @@ pub async fn get_entry_args(
     data: Data<RpcApiState>,
     Params(params): Params<EntryArgsRequest>,
 ) -> Result<EntryArgsResponse> {
-    // Validate request parameters
+    // Validate `author` request parameter
     params.author.validate()?;
+
+    // Validate `document` request parameter when it is set
     let document = match params.document {
         Some(doc) => {
             doc.validate()?;
@@ -34,13 +36,16 @@ pub async fn get_entry_args(
     // Get database connection pool
     let pool = data.pool.clone();
 
-    // Determine log_id for this document
+    // Determine log_id for this document. If this is the very first operation in the document
+    // graph, the `document` value is None and we will return the next free log id
     let log_id = Log::find_document_log_id(&pool, &params.author, document.as_ref()).await?;
 
-    // Find latest entry in this log
+    // Determine backlink and skiplink hashes for the next entry. To do this we need the latest
+    // entry in this log
     let entry_latest = Entry::latest(&pool, &params.author, &log_id).await?;
 
     match entry_latest {
+        // An entry was found which serves as the backlink for the upcoming entry
         Some(mut entry_backlink) => {
             // Determine skiplink ("lipmaa"-link) entry in this log
             let entry_hash_skiplink = determine_skiplink(pool.clone(), &entry_backlink).await?;
@@ -52,6 +57,7 @@ pub async fn get_entry_args(
                 log_id,
             })
         }
+        // No entry was given yet, we can assume this is the beginning of the log
         None => Ok(EntryArgsResponse {
             entry_hash_backlink: None,
             entry_hash_skiplink: None,
