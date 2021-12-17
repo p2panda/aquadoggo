@@ -5,7 +5,7 @@ use serde::Deserialize;
 use p2panda_rs::entry::EntrySigned;
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
-use p2panda_rs::message::MessageEncoded;
+use p2panda_rs::operation::OperationEncoded;
 
 /// Request body of `panda_getEntryArguments`.
 #[derive(Deserialize, Debug)]
@@ -19,7 +19,7 @@ pub struct EntryArgsRequest {
 #[serde(rename_all = "camelCase")]
 pub struct PublishEntryRequest {
     pub entry_encoded: EntrySigned,
-    pub message_encoded: MessageEncoded,
+    pub operation_encoded: OperationEncoded,
 }
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]

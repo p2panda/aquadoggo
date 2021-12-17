@@ -39,7 +39,6 @@ impl Log {
         schema: &Hash,
         log_id: &LogId,
     ) -> Result<bool> {
-        assert!(log_id.is_user_log());
         let rows_affected = query(
             "
             INSERT INTO
@@ -83,12 +82,6 @@ impl Log {
         let mut next_log_id = LogId::default();
 
         for log_id in log_ids.iter() {
-            // Ignore system schema log ids
-            if log_id.is_system_log() {
-                continue;
-            }
-
-            // Success! Found unused log id
             if next_log_id != *log_id {
                 break;
             }
@@ -102,7 +95,7 @@ impl Log {
 
     /// Returns the registered log_id for a document.
     ///
-    /// Messages are separated in different logs per document and author. This method checks if a log
+    /// Operations are separated in different logs per document and author. This method checks if a log
     /// has already been registered for a document and returns its id.
     pub async fn get(pool: &Pool, author: &Author, document: &Hash) -> Result<Option<LogId>> {
         // @TODO: Look up if system schema was used and return regarding log id
@@ -152,10 +145,7 @@ impl Log {
     /// Every instance is part of a document and, through that, associated with a specific log id
     /// of its author. This method returns that log id by looking up the log that the instance's
     /// last operation was stored in.
-    pub async fn get_log_id_by_instance(
-        pool: &Pool,
-        instance: &Hash,
-    ) -> Result<Option<LogId>> {
+    pub async fn get_log_id_by_instance(pool: &Pool, instance: &Hash) -> Result<Option<LogId>> {
         let result = query_as::<_, LogId>(
             "
             SELECT
@@ -179,7 +169,7 @@ mod tests {
     use p2panda_rs::entry::{sign_and_encode, Entry, LogId, SeqNum};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
-    use p2panda_rs::message::{Message, MessageEncoded, MessageFields, MessageValue};
+    use p2panda_rs::operation::{Operation, OperationEncoded, OperationFields, OperationValue};
     use std::convert::TryFrom;
 
     use super::Log;
@@ -237,13 +227,13 @@ mod tests {
         let log_id = LogId::new(1);
         let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
         let seq_num = SeqNum::new(1).unwrap();
-        let mut fields = MessageFields::new();
+        let mut fields = OperationFields::new();
         fields
-            .add("test", MessageValue::Text("Hello".to_owned()))
+            .add("test", OperationValue::Text("Hello".to_owned()))
             .unwrap();
-        let message = Message::new_create(schema.clone(), fields).unwrap();
-        let message_encoded = MessageEncoded::try_from(&message).unwrap();
-        let entry = Entry::new(&log_id, Some(&message), None, None, &seq_num).unwrap();
+        let operation = Operation::new_create(schema.clone(), fields).unwrap();
+        let operation_encoded = OperationEncoded::try_from(&operation).unwrap();
+        let entry = Entry::new(&log_id, Some(&operation), None, None, &seq_num).unwrap();
         let entry_encoded = sign_and_encode(&entry, &key_pair).unwrap();
 
         // Expect no log id when instance not in database
@@ -261,8 +251,8 @@ mod tests {
             &entry_encoded,
             &entry_encoded.hash(),
             &log_id,
-            &message_encoded,
-            &message_encoded.hash(),
+            &operation_encoded,
+            &operation_encoded.hash(),
             &seq_num
         )
         .await
@@ -294,7 +284,7 @@ mod tests {
         let document_system = Hash::new(&random_entry_hash()).unwrap();
 
         // Register two log ids at the beginning
-        Log::insert(&pool, &author, &document_system, &schema, &LogId::new(9))
+        Log::insert(&pool, &author, &document_system, &schema, &LogId::new(1))
             .await
             .unwrap();
         Log::insert(&pool, &author, &document_first, &schema, &LogId::new(3))
@@ -303,20 +293,20 @@ mod tests {
 
         // Find next free user log id and register it
         let log_id = Log::next_user_schema_log_id(&pool, &author).await.unwrap();
-        assert_eq!(log_id, LogId::new(1));
+        assert_eq!(log_id, LogId::new(2));
         Log::insert(&pool, &author, &document_second, &schema, &log_id)
             .await
             .unwrap();
 
         // Find next free user log id and register it
         let log_id = Log::next_user_schema_log_id(&pool, &author).await.unwrap();
-        assert_eq!(log_id, LogId::new(5));
+        assert_eq!(log_id, LogId::new(4));
         Log::insert(&pool, &author, &document_third, &schema, &log_id)
             .await
             .unwrap();
 
         // Find next free user log id
         let log_id = Log::next_user_schema_log_id(&pool, &author).await.unwrap();
-        assert_eq!(log_id, LogId::new(7));
+        assert_eq!(log_id, LogId::new(5));
     }
 }

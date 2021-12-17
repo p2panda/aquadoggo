@@ -3,7 +3,7 @@
 use p2panda_rs::entry::{EntrySigned, LogId, SeqNum};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
-use p2panda_rs::message::MessageEncoded;
+use p2panda_rs::operation::OperationEncoded;
 
 use serde::Serialize;
 use sqlx::{query, query_as, FromRow};
@@ -54,7 +54,7 @@ impl Entry {
         entry_bytes: &EntrySigned,
         entry_hash: &Hash,
         log_id: &LogId,
-        payload_bytes: &MessageEncoded,
+        payload_bytes: &OperationEncoded,
         payload_hash: &Hash,
         seq_num: &SeqNum,
     ) -> Result<bool> {
