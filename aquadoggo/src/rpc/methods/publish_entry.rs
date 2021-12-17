@@ -189,7 +189,7 @@ mod tests {
         key_pair: &KeyPair,
         schema: &Hash,
         log_id: &LogId,
-        instance: Option<&Hash>,
+        document: Option<&Hash>,
         skiplink: Option<&EntrySigned>,
         backlink: Option<&EntrySigned>,
         seq_num: &SeqNum,
@@ -199,9 +199,9 @@ mod tests {
         fields
             .add("test", OperationValue::Text("Hello".to_owned()))
             .unwrap();
-        let operation = match instance {
-            Some(instance_id) => {
-                Operation::new_update(schema.clone(), instance_id.clone(), fields).unwrap()
+        let operation = match document {
+            Some(document_id) => {
+                Operation::new_update(schema.clone(), document_id.clone(), fields).unwrap()
             }
             None => Operation::new_create(schema.clone(), fields).unwrap(),
         };

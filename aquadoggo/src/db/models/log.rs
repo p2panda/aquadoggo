@@ -178,10 +178,8 @@ mod tests {
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::{Operation, OperationEncoded, OperationFields, OperationValue};
 
-    use crate::{
-        db::models::Entry as dbEntry,
-        test_helpers::{initialize_db, random_entry_hash},
-    };
+    use crate::db::models::Entry as dbEntry;
+    use crate::test_helpers::{initialize_db, random_entry_hash};
 
     use super::Log;
 
@@ -222,10 +220,10 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn instance_log_id() {
+    async fn document_log_id() {
         let pool = initialize_db().await;
 
-        // Create an instance
+        // Create a new document
         // TODO: use p2panda-rs test utils once available
         let key_pair = KeyPair::new();
         let author = Author::try_from(key_pair.public_key().clone()).unwrap();
@@ -241,16 +239,15 @@ mod tests {
         let entry = Entry::new(&log_id, Some(&operation), None, None, &seq_num).unwrap();
         let entry_encoded = sign_and_encode(&entry, &key_pair).unwrap();
 
-        // Expect no log id when instance not in database
-        // @TODO
-        /* assert_eq!(
-            Log::get_log_id_by_entry(&pool, &entry_encoded.hash())
+        // Expect database to return nothing yet
+        assert_eq!(
+            Log::get_document_by_entry(&pool, &entry_encoded.hash())
                 .await
                 .unwrap(),
             None
-        ); */
+        );
 
-        // Store instance in db
+        // Store entry in database
         assert!(dbEntry::insert(
             &pool,
             &author,
@@ -264,14 +261,21 @@ mod tests {
         .await
         .is_ok());
 
-        // Expect to find a log id for the instance
-        // @TODO
-        /* assert_eq!(
-            Log::get_log_id_by_entry(&pool, &entry_encoded.hash())
+        // Store log in database
+        assert!(
+            Log::insert(&pool, &author, &entry_encoded.hash(), &schema, &log_id)
+                .await
+                .is_ok()
+        );
+
+        // Expect to find document in database. The document hash should be the same as the hash of
+        // the entry which referred to the `CREATE` operation.
+        assert_eq!(
+            Log::get_document_by_entry(&pool, &entry_encoded.hash())
                 .await
                 .unwrap(),
-            Some(log_id)
-        ); */
+            Some(entry_encoded.hash())
+        );
     }
 
     #[async_std::test]
