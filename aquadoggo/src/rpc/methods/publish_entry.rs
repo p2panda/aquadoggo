@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use jsonrpc_v2::{Data, Params};
-use p2panda_rs::Validate;
 use p2panda_rs::entry::decode_entry;
 use p2panda_rs::operation::Operation;
+use p2panda_rs::Validate;
 
 use crate::db::models::{Entry, Log};
 use crate::errors::Result;
-use crate::rpc::RpcApiState;
 use crate::rpc::request::PublishEntryRequest;
 use crate::rpc::response::PublishEntryResponse;
+use crate::rpc::RpcApiState;
 
 #[derive(thiserror::Error, Debug)]
 #[allow(missing_copy_implementations)]
