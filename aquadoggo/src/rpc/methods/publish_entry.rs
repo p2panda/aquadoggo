@@ -59,10 +59,10 @@ pub async fn publish_entry(
 
     // Check if provided log id matches expected log id
     if &document_log_id != entry.log_id() {
-        Err(PublishEntryError::InvalidLogId(
+        return Err(PublishEntryError::InvalidLogId(
             entry.log_id().as_i64(),
             document_log_id.as_i64(),
-        ))?;
+        ).into());
     }
 
     // Get related bamboo backlink and skiplink entries
@@ -70,7 +70,7 @@ pub async fn publish_entry(
         Entry::at_seq_num(
             &pool,
             &author,
-            &entry.log_id(),
+            entry.log_id(),
             &entry.seq_num_backlink().unwrap(),
         )
         .await?
@@ -89,7 +89,7 @@ pub async fn publish_entry(
         Entry::at_seq_num(
             &pool,
             &author,
-            &entry.log_id(),
+            entry.log_id(),
             &entry.seq_num_skiplink().unwrap(),
         )
         .await?
@@ -118,7 +118,7 @@ pub async fn publish_entry(
             &pool,
             &author,
             &params.entry_encoded.hash(),
-            &operation.schema(),
+            operation.schema(),
             entry.log_id(),
         )
         .await?;
@@ -130,15 +130,15 @@ pub async fn publish_entry(
         &author,
         &params.entry_encoded,
         &params.entry_encoded.hash(),
-        &entry.log_id(),
+        entry.log_id(),
         &params.operation_encoded,
         &params.operation_encoded.hash(),
-        &entry.seq_num(),
+        entry.seq_num(),
     )
     .await?;
 
     // Already return arguments for next entry creation
-    let mut entry_latest = Entry::latest(&pool, &author, &entry.log_id())
+    let mut entry_latest = Entry::latest(&pool, &author, entry.log_id())
         .await?
         .expect("Database does not contain any entries");
     let entry_hash_skiplink = super::entry_args::determine_skiplink(pool, &entry_latest).await?;
