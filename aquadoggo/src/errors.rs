@@ -2,8 +2,8 @@
 
 use p2panda_rs::entry::{EntryError, EntrySignedError};
 use p2panda_rs::hash::HashError;
-use p2panda_rs::message::{MessageEncodedError, MessageError};
 use p2panda_rs::identity::AuthorError;
+use p2panda_rs::operation::{OperationEncodedError, OperationError};
 
 /// A specialized `Result` type for the node.
 pub type Result<T> = anyhow::Result<T, Error>;
@@ -27,13 +27,13 @@ pub enum Error {
     #[error(transparent)]
     EntrySignedValidation(#[from] EntrySignedError),
 
-    /// Error returned from validating p2panda-rs `Message` data types.
+    /// Error returned from validating p2panda-rs `Operation` data types.
     #[error(transparent)]
-    MessageValidation(#[from] MessageError),
+    OperationValidation(#[from] OperationError),
 
-    /// Error returned from validating p2panda-rs `MessageEncoded` data types.
+    /// Error returned from validating p2panda-rs `OperationEncoded` data types.
     #[error(transparent)]
-    MessageEncodedValidation(#[from] MessageEncodedError),
+    OperationEncodedValidation(#[from] OperationEncodedError),
 
     /// Error returned from validating Bamboo entries.
     #[error(transparent)]

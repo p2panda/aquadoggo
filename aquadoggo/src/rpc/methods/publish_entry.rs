@@ -3,7 +3,7 @@
 use jsonrpc_v2::{Data, Params};
 use p2panda_rs::Validate;
 use p2panda_rs::entry::decode_entry;
-use p2panda_rs::message::Message;
+use p2panda_rs::operation::Operation;
 
 use crate::db::models::{Entry, Log};
 use crate::errors::Result;
@@ -26,31 +26,31 @@ pub enum PublishEntryError {
 
 /// Implementation of `panda_publishEntry` RPC method.
 ///
-/// Stores an author's Bamboo entry with message payload in database after validating it.
+/// Stores an author's Bamboo entry with operation payload in database after validating it.
 pub async fn publish_entry(
     data: Data<RpcApiState>,
     Params(params): Params<PublishEntryRequest>,
 ) -> Result<PublishEntryResponse> {
     // Validate request parameters
     params.entry_encoded.validate()?;
-    params.message_encoded.validate()?;
+    params.operation_encoded.validate()?;
 
     // Get database connection pool
     let pool = data.pool.clone();
 
-    // Handle error as this conversion validates message hash
-    let entry = decode_entry(&params.entry_encoded, Some(&params.message_encoded))?;
-    let message = Message::from(&params.message_encoded);
+    // Handle error as this conversion validates operation hash
+    let entry = decode_entry(&params.entry_encoded, Some(&params.operation_encoded))?;
+    let operation = Operation::from(&params.operation_encoded);
 
     let author = params.entry_encoded.author();
 
-    // A document is identified by either the hash of its `CREATE` message or .. @TODO
-    let document_hash = if message.is_create() {
+    // A document is identified by either the hash of its `CREATE` operation or .. @TODO
+    let document_hash = if operation.is_create() {
         params.entry_encoded.hash()
     } else {
         // @TODO: Get this from database instead, we can't trust that the author doesn't lie to us
         // about the id here
-        message.id().unwrap().to_owned()
+        operation.id().unwrap().to_owned()
     };
 
     // Determine expected log id for new entry: a `CREATE` entry is always stored in the next free
@@ -107,18 +107,18 @@ pub async fn publish_entry(
     // Verify bamboo entry integrity
     bamboo_rs_core_ed25519_yasmf::verify(
         &params.entry_encoded.to_bytes(),
-        Some(&params.message_encoded.to_bytes()),
+        Some(&params.operation_encoded.to_bytes()),
         entry_skiplink_bytes.as_deref(),
         entry_backlink_bytes.as_deref(),
     )?;
 
     // Register log in database when a new document is created
-    if message.is_create() {
+    if operation.is_create() {
         Log::insert(
             &pool,
             &author,
             &params.entry_encoded.hash(),
-            &message.schema(),
+            &operation.schema(),
             entry.log_id(),
         )
         .await?;
@@ -131,8 +131,8 @@ pub async fn publish_entry(
         &params.entry_encoded,
         &params.entry_encoded.hash(),
         &entry.log_id(),
-        &params.message_encoded,
-        &params.message_encoded.hash(),
+        &params.operation_encoded,
+        &params.operation_encoded.hash(),
         &entry.seq_num(),
     )
     .await?;
@@ -159,13 +159,13 @@ mod tests {
     use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned, LogId, SeqNum};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::KeyPair;
-    use p2panda_rs::message::{Message, MessageEncoded, MessageFields, MessageValue};
+    use p2panda_rs::operation::{Operation, OperationEncoded, OperationFields, OperationValue};
 
     use crate::rpc::api::build_rpc_api_service;
     use crate::rpc::server::{build_rpc_server, RpcServer};
     use crate::test_helpers::{handle_http, initialize_db, rpc_error, rpc_request, rpc_response};
 
-    /// Create encoded entries and messages for testing.
+    /// Create encoded entries and operations for testing.
     fn create_test_entry(
         key_pair: &KeyPair,
         schema: &Hash,
@@ -174,26 +174,26 @@ mod tests {
         skiplink: Option<&EntrySigned>,
         backlink: Option<&EntrySigned>,
         seq_num: &SeqNum,
-    ) -> (EntrySigned, MessageEncoded) {
-        // Create message with dummy data
-        let mut fields = MessageFields::new();
+    ) -> (EntrySigned, OperationEncoded) {
+        // Create operation with dummy data
+        let mut fields = OperationFields::new();
         fields
-            .add("test", MessageValue::Text("Hello".to_owned()))
+            .add("test", OperationValue::Text("Hello".to_owned()))
             .unwrap();
-        let message = match instance {
+        let operation = match instance {
             Some(instance_id) => {
-                Message::new_update(schema.clone(), instance_id.clone(), fields).unwrap()
+                Operation::new_update(schema.clone(), instance_id.clone(), fields).unwrap()
             }
-            None => Message::new_create(schema.clone(), fields).unwrap(),
+            None => Operation::new_create(schema.clone(), fields).unwrap(),
         };
 
-        // Encode message
-        let message_encoded = MessageEncoded::try_from(&message).unwrap();
+        // Encode operation
+        let operation_encoded = OperationEncoded::try_from(&operation).unwrap();
 
         // Create, sign and encode entry
         let entry = Entry::new(
             log_id,
-            Some(&message),
+            Some(&operation),
             skiplink.map(|e| e.hash()).as_ref(),
             backlink.map(|e| e.hash()).as_ref(),
             seq_num,
@@ -201,15 +201,15 @@ mod tests {
         .unwrap();
         let entry_encoded = sign_and_encode(&entry, key_pair).unwrap();
 
-        (entry_encoded, message_encoded)
+        (entry_encoded, operation_encoded)
     }
 
-    /// Compare API response from publishing an encoded entry and message to expected skiplink,
+    /// Compare API response from publishing an encoded entry and operation to expected skiplink,
     /// log id and sequence number.
     async fn assert_request(
         app: &RpcServer,
         entry_encoded: &EntrySigned,
-        message_encoded: &MessageEncoded,
+        operation_encoded: &OperationEncoded,
         expect_skiplink: Option<&EntrySigned>,
         expect_log_id: &LogId,
         expect_seq_num: &SeqNum,
@@ -220,10 +220,10 @@ mod tests {
             &format!(
                 r#"{{
                     "entryEncoded": "{}",
-                    "messageEncoded": "{}"
+                    "operationEncoded": "{}"
                 }}"#,
                 entry_encoded.as_str(),
-                message_encoded.as_str(),
+                operation_encoded.as_str(),
             ),
         );
 
@@ -273,12 +273,12 @@ mod tests {
         // https://github.com/AljoschaMeyer/bamboo/blob/61415747af34bfcb8f40a47ae3b02136083d3276/README.md#links-and-entry-verification
         //
         // [1] --
-        let (entry_1, message_1) =
+        let (entry_1, operation_1) =
             create_test_entry(&key_pair, &schema, &log_id_1, None, None, None, &seq_num_1);
         assert_request(
             &app,
             &entry_1,
-            &message_1,
+            &operation_1,
             None,
             &log_id_1,
             &SeqNum::new(2).unwrap(),
@@ -286,7 +286,7 @@ mod tests {
         .await;
 
         // [1] <-- [2]
-        let (entry_2, message_2) = create_test_entry(
+        let (entry_2, operation_2) = create_test_entry(
             &key_pair,
             &schema,
             &log_id_1,
@@ -298,7 +298,7 @@ mod tests {
         assert_request(
             &app,
             &entry_2,
-            &message_2,
+            &operation_2,
             None,
             &log_id_1,
             &SeqNum::new(3).unwrap(),
@@ -306,7 +306,7 @@ mod tests {
         .await;
 
         // [1] <-- [2] <-- [3]
-        let (entry_3, message_3) = create_test_entry(
+        let (entry_3, operation_3) = create_test_entry(
             &key_pair,
             &schema,
             &log_id_1,
@@ -318,7 +318,7 @@ mod tests {
         assert_request(
             &app,
             &entry_3,
-            &message_3,
+            &operation_3,
             Some(&entry_1),
             &log_id_1,
             &SeqNum::new(4).unwrap(),
@@ -327,7 +327,7 @@ mod tests {
 
         //  /------------------ [4]
         // [1] <-- [2] <-- [3]
-        let (entry_4, message_4) = create_test_entry(
+        let (entry_4, operation_4) = create_test_entry(
             &key_pair,
             &schema,
             &log_id_1,
@@ -339,7 +339,7 @@ mod tests {
         assert_request(
             &app,
             &entry_4,
-            &message_4,
+            &operation_4,
             None,
             &log_id_1,
             &SeqNum::new(5).unwrap(),
@@ -348,7 +348,7 @@ mod tests {
 
         //  /------------------ [4]
         // [1] <-- [2] <-- [3]   \-- [5] --
-        let (entry_5, message_5) = create_test_entry(
+        let (entry_5, operation_5) = create_test_entry(
             &key_pair,
             &schema,
             &log_id_1,
@@ -360,7 +360,7 @@ mod tests {
         assert_request(
             &app,
             &entry_5,
-            &message_5,
+            &operation_5,
             None,
             &log_id_1,
             &SeqNum::new(6).unwrap(),
@@ -386,19 +386,19 @@ mod tests {
         let seq_num = SeqNum::new(1).unwrap();
 
         // Create two valid entries for testing
-        let (entry_1, message_1) =
+        let (entry_1, operation_1) =
             create_test_entry(&key_pair, &schema, &log_id, None, None, None, &seq_num);
         assert_request(
             &app,
             &entry_1,
-            &message_1,
+            &operation_1,
             None,
             &log_id,
             &SeqNum::new(2).unwrap(),
         )
         .await;
 
-        let (entry_2, message_2) = create_test_entry(
+        let (entry_2, operation_2) = create_test_entry(
             &key_pair,
             &schema,
             &log_id,
@@ -410,7 +410,7 @@ mod tests {
         assert_request(
             &app,
             &entry_2,
-            &message_2,
+            &operation_2,
             None,
             &log_id,
             &SeqNum::new(3).unwrap(),
@@ -418,8 +418,8 @@ mod tests {
         .await;
 
         // Send invalid log id for a new document: The entries entry_1 and entry_2 are assigned to
-        // log 1, which makes log 3 the required log for the next new document.
-        let (entry_wrong_log_id, message_wrong_log_id) = create_test_entry(
+        // log 1, which makes log 2 the required log for the next new document.
+        let (entry_wrong_log_id, operation_wrong_log_id) = create_test_entry(
             &key_pair,
             &schema,
             &LogId::new(3),
@@ -434,10 +434,10 @@ mod tests {
             &format!(
                 r#"{{
                     "entryEncoded": "{}",
-                    "messageEncoded": "{}"
+                    "operationEncoded": "{}"
                 }}"#,
                 entry_wrong_log_id.as_str(),
-                message_wrong_log_id.as_str(),
+                operation_wrong_log_id.as_str(),
             ),
         );
 
@@ -447,7 +447,7 @@ mod tests {
 
         // Send invalid log id for an existing document: This entry is an update for the existing
         // document in log 1, however, we are trying to publish it in log 3.
-        let (entry_wrong_log_id, message_wrong_log_id) = create_test_entry(
+        let (entry_wrong_log_id, operation_wrong_log_id) = create_test_entry(
             &key_pair,
             &schema,
             &LogId::new(3),
@@ -462,10 +462,10 @@ mod tests {
             &format!(
                 r#"{{
                     "entryEncoded": "{}",
-                    "messageEncoded": "{}"
+                    "operationEncoded": "{}"
                 }}"#,
                 entry_wrong_log_id.as_str(),
-                message_wrong_log_id.as_str(),
+                operation_wrong_log_id.as_str(),
             ),
         );
 
@@ -474,7 +474,7 @@ mod tests {
         assert_eq!(handle_http(&app, request).await, response);
 
         // Send invalid backlink entry / hash
-        let (entry_wrong_hash, message_wrong_hash) = create_test_entry(
+        let (entry_wrong_hash, operation_wrong_hash) = create_test_entry(
             &key_pair,
             &schema,
             &log_id,
@@ -489,10 +489,10 @@ mod tests {
             &format!(
                 r#"{{
                     "entryEncoded": "{}",
-                    "messageEncoded": "{}"
+                    "operationEncoded": "{}"
                 }}"#,
                 entry_wrong_hash.as_str(),
-                message_wrong_hash.as_str(),
+                operation_wrong_hash.as_str(),
             ),
         );
 
@@ -503,7 +503,7 @@ mod tests {
         assert_eq!(handle_http(&app, request).await, response);
 
         // Send invalid seq num
-        let (entry_wrong_seq_num, message_wrong_seq_num) = create_test_entry(
+        let (entry_wrong_seq_num, operation_wrong_seq_num) = create_test_entry(
             &key_pair,
             &schema,
             &log_id,
@@ -518,10 +518,10 @@ mod tests {
             &format!(
                 r#"{{
                     "entryEncoded": "{}",
-                    "messageEncoded": "{}"
+                    "operationEncoded": "{}"
                 }}"#,
                 entry_wrong_seq_num.as_str(),
-                message_wrong_seq_num.as_str(),
+                operation_wrong_seq_num.as_str(),
             ),
         );
 
