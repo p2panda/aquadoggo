@@ -128,7 +128,7 @@ impl Log {
     ) -> Result<LogId> {
         // Determine log_id for this document
         let document_log_id = match document {
-            Some(document) => Log::get(pool, author, document).await?,
+            Some(doc) => Log::get(pool, author, doc).await?,
             None => None,
         };
 

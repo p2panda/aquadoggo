@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use jsonrpc_v2::{Data, Params};
+use p2panda_rs::Validate;
 use p2panda_rs::entry::decode_entry;
 use p2panda_rs::message::Message;
-use p2panda_rs::Validate;
 
 use crate::db::models::{Entry, Log};
 use crate::errors::Result;
+use crate::rpc::RpcApiState;
 use crate::rpc::request::PublishEntryRequest;
 use crate::rpc::response::PublishEntryResponse;
-use crate::rpc::RpcApiState;
 
 #[derive(thiserror::Error, Debug)]
 #[allow(missing_copy_implementations)]
@@ -310,7 +310,7 @@ mod tests {
             &key_pair,
             &schema,
             &log_id_1,
-            Some(&entry_2.hash()),
+            Some(&entry_1.hash()),
             None,
             Some(&entry_2),
             &SeqNum::new(3).unwrap(),
@@ -331,7 +331,7 @@ mod tests {
             &key_pair,
             &schema,
             &log_id_1,
-            Some(&entry_3.hash()),
+            Some(&entry_1.hash()),
             Some(&entry_1),
             Some(&entry_3),
             &SeqNum::new(4).unwrap(),
@@ -352,7 +352,7 @@ mod tests {
             &key_pair,
             &schema,
             &log_id_1,
-            Some(&entry_4.hash()),
+            Some(&entry_1.hash()),
             None,
             Some(&entry_4),
             &SeqNum::new(5).unwrap(),
@@ -422,7 +422,7 @@ mod tests {
         let (entry_wrong_log_id, message_wrong_log_id) = create_test_entry(
             &key_pair,
             &schema,
-            &LogId::new(5),
+            &LogId::new(3),
             None,
             None,
             None,
@@ -441,7 +441,7 @@ mod tests {
             ),
         );
 
-        let response = rpc_error("Requested log id 5 does not match expected log id 3");
+        let response = rpc_error("Requested log id 3 does not match expected log id 2");
 
         assert_eq!(handle_http(&app, request).await, response);
 
@@ -469,7 +469,7 @@ mod tests {
             ),
         );
 
-        let response = rpc_error("Requested log id 3 does not match expected log id 1");
+        let response = rpc_error("Requested log id 3 does not match expected log id 2");
 
         assert_eq!(handle_http(&app, request).await, response);
 
@@ -507,7 +507,7 @@ mod tests {
             &key_pair,
             &schema,
             &log_id,
-            Some(&entry_2.hash()),
+            Some(&entry_1.hash()),
             None,
             Some(&entry_2),
             &SeqNum::new(5).unwrap(),
