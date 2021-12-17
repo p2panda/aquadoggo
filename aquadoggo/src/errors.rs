@@ -37,7 +37,7 @@ pub enum Error {
 
     /// Error returned from validating Bamboo entries.
     #[error(transparent)]
-    BambooValidation(#[from] bamboo_rs_core::verify::Error),
+    BambooValidation(#[from] bamboo_rs_core_ed25519_yasmf::verify::Error),
 
     /// Error returned from `panda_publishEntry` RPC method.
     #[error(transparent)]

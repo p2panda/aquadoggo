@@ -132,7 +132,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-std",
- "bamboo-rs-core",
+ "bamboo-rs-core-ed25519-yasmf",
  "directories",
  "envy",
  "exit-future",
@@ -465,26 +465,6 @@ name = "autocfg"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdb031dd78e28731d87d56cc8ffef4a8f36ca26c38fe2de700543e627f8a464a"
-
-[[package]]
-name = "bamboo-rs-core"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef3e95e74e434d5708fdd6c1e7aea998df4fdb2a922a7410c7c87dc44e0ec3f9"
-dependencies = [
- "arrayvec 0.5.2",
- "blake2b_simd",
- "ed25519-dalek",
- "hex",
- "lipmaa-link",
- "rayon",
- "serde",
- "serde_derive",
- "snafu",
- "static_assertions 0.3.4",
- "varu64",
- "yamf-hash",
-]
 
 [[package]]
 name = "bamboo-rs-core-ed25519-yasmf"
@@ -2171,7 +2151,7 @@ dependencies = [
 [[package]]
 name = "p2panda-rs"
 version = "0.2.1"
-source = "git+https://github.com/p2panda/p2panda?branch=rename-message-operation#aea5a652f3c11fe1a04caed71f60c6d4316bb777"
+source = "git+https://github.com/p2panda/p2panda?branch=main#b9a5d74413b2e1eae412e8a8b4717b338dc9e61f"
 dependencies = [
  "arrayvec 0.5.2",
  "bamboo-rs-core-ed25519-yasmf",
@@ -2190,6 +2170,7 @@ dependencies = [
  "serde_cbor",
  "serde_json",
  "serde_repr",
+ "sqlx",
  "thiserror",
  "tls_codec",
  "wasm-bindgen",
@@ -3731,22 +3712,6 @@ dependencies = [
  "rand 0.8.4",
  "rand_core 0.6.3",
  "zeroize",
-]
-
-[[package]]
-name = "yamf-hash"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "702402e18caf3d1960249ecec2dfac9e75d55cbd073a7fbf4832a6bceb1d6413"
-dependencies = [
- "arrayvec 0.5.2",
- "blake2b_simd",
- "hex",
- "serde",
- "serde_derive",
- "snafu",
- "static_assertions 0.3.4",
- "varu64",
 ]
 
 [[package]]

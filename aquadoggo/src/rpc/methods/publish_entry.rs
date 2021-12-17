@@ -113,7 +113,7 @@ pub async fn publish_entry(
     }?;
 
     // Verify bamboo entry integrity
-    bamboo_rs_core::verify(
+    bamboo_rs_core_ed25519_yasmf::verify(
         &params.entry_encoded.to_bytes(),
         Some(&params.operation_encoded.to_bytes()),
         entry_skiplink_bytes.as_deref(),
@@ -426,7 +426,7 @@ mod tests {
         .await;
 
         // Send invalid log id for a new document: The entries entry_1 and entry_2 are assigned to
-        // log 1, which makes log 3 the required log for the next new document.
+        // log 1, which makes log 2 the required log for the next new document.
         let (entry_wrong_log_id, operation_wrong_log_id) = create_test_entry(
             &key_pair,
             &schema,
@@ -449,7 +449,7 @@ mod tests {
             ),
         );
 
-        let response = rpc_error("Requested log id 5 does not match expected log id 3");
+        let response = rpc_error("Requested log id 5 does not match expected log id 2");
 
         assert_eq!(handle_http(&app, request).await, response);
 

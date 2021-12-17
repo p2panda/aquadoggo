@@ -16,7 +16,7 @@ edition = "2018"
 [dependencies]
 anyhow = "1.0.43"
 async-std = { version = "1.10.0", features = ["attributes"] }
-bamboo-rs-core = "0.1.0"
+bamboo-rs-core-ed25519-yasmf = "0.1.0"
 directories = "3.0.2"
 envy = "0.4.2"
 exit-future = "0.2.0"
@@ -29,7 +29,7 @@ jsonrpc-v2 = { version = "0.10.1", features = [
 ], default-features = false }
 log = "0.4.14"
 openssl-probe = "0.1.4"
-p2panda-rs = { git = "https://github.com/p2panda/p2panda", branch = "rename-message-operation" }
+p2panda-rs = { git = "https://github.com/p2panda/p2panda", branch = "main", features = ["db-sqlx"] }
 rand = "0.8.4"
 serde = { version = "1.0.130", features = ["derive"] }
 serde_json = "1.0.67"

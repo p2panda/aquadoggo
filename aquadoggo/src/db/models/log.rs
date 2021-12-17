@@ -39,7 +39,6 @@ impl Log {
         schema: &Hash,
         log_id: &LogId,
     ) -> Result<bool> {
-        assert!(log_id.is_user_log());
         let rows_affected = query(
             "
             INSERT INTO
@@ -83,12 +82,6 @@ impl Log {
         let mut next_log_id = LogId::default();
 
         for log_id in log_ids.iter() {
-            // Ignore system schema log ids
-            if log_id.is_system_log() {
-                continue;
-            }
-
-            // Success! Found unused log id
             if next_log_id != *log_id {
                 break;
             }
@@ -291,7 +284,7 @@ mod tests {
         let document_system = Hash::new(&random_entry_hash()).unwrap();
 
         // Register two log ids at the beginning
-        Log::insert(&pool, &author, &document_system, &schema, &LogId::new(9))
+        Log::insert(&pool, &author, &document_system, &schema, &LogId::new(1))
             .await
             .unwrap();
         Log::insert(&pool, &author, &document_first, &schema, &LogId::new(3))
@@ -300,20 +293,20 @@ mod tests {
 
         // Find next free user log id and register it
         let log_id = Log::next_user_schema_log_id(&pool, &author).await.unwrap();
-        assert_eq!(log_id, LogId::new(1));
+        assert_eq!(log_id, LogId::new(2));
         Log::insert(&pool, &author, &document_second, &schema, &log_id)
             .await
             .unwrap();
 
         // Find next free user log id and register it
         let log_id = Log::next_user_schema_log_id(&pool, &author).await.unwrap();
-        assert_eq!(log_id, LogId::new(5));
+        assert_eq!(log_id, LogId::new(4));
         Log::insert(&pool, &author, &document_third, &schema, &log_id)
             .await
             .unwrap();
 
         // Find next free user log id
         let log_id = Log::next_user_schema_log_id(&pool, &author).await.unwrap();
-        assert_eq!(log_id, LogId::new(7));
+        assert_eq!(log_id, LogId::new(5));
     }
 }
