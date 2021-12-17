@@ -59,8 +59,12 @@ pub async fn publish_entry(
         // graph back to its `CREATE` operation or more easily look up the database since we keep track
         // of all log ids and documents there.
         //
-        // Through this we can determine the used document hash by looking at what we know about
-        // the previous entry in this author's log
+        // We can determine the used document hash by looking at what we know about the previous
+        // entry in this author's log.
+        //
+        // @TODO: This currently looks at the backlink, in the future we want to use
+        // "previousOperation", since in a multi-writer setting there might be no backlink for
+        // update operations! See: https://github.com/p2panda/aquadoggo/issues/49
         let backlink_hash = entry
             .backlink_hash()
             .ok_or(PublishEntryError::OperationWithoutBacklink)?;
