@@ -145,8 +145,8 @@ impl Log {
     /// Returns the related document for any entry.
     ///
     /// Every entry is part of a document and, through that, associated with a specific log id used
-    /// by this document and author. This method returns that document by looking up the log id
-    /// that the document's last operation was stored in.
+    /// by this document and author. This method returns that document id by looking up the log
+    /// that the entry was stored in.
     pub async fn get_document_by_entry(pool: &Pool, entry_hash: &Hash) -> Result<Option<Hash>> {
         let result = query_as::<_, Hash>(
             "
