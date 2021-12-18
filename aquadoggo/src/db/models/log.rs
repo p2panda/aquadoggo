@@ -98,7 +98,7 @@ impl Log {
     /// Operations are separated in different logs per document and author. This method checks if a
     /// log has already been registered for a document and author and returns its regarding log id
     /// or None.
-    pub async fn get(pool: &Pool, author: &Author, document_hash: &Hash) -> Result<Option<LogId>> {
+    pub async fn get(pool: &Pool, author: &Author, document_id: &Hash) -> Result<Option<LogId>> {
         let result = query_as::<_, LogId>(
             "
             SELECT
@@ -111,7 +111,7 @@ impl Log {
             ",
         )
         .bind(author)
-        .bind(document_hash)
+        .bind(document_id)
         .fetch_optional(pool)
         .await?;
 
@@ -125,11 +125,11 @@ impl Log {
     pub async fn find_document_log_id(
         pool: &Pool,
         author: &Author,
-        document_hash: Option<&Hash>,
+        document_id: Option<&Hash>,
     ) -> Result<LogId> {
         // Determine log_id for this document when a hash was given
-        let document_log_id = match document_hash {
-            Some(hash) => Log::get(pool, author, hash).await?,
+        let document_log_id = match document_id {
+            Some(id) => Log::get(pool, author, id).await?,
             None => None,
         };
 

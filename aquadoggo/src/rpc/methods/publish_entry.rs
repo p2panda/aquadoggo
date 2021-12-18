@@ -51,7 +51,7 @@ pub async fn publish_entry(
 
     // Every operation refers to a document we need to determine. A document is identified by the
     // hash of its first `CREATE` operation, it is the root operation of every document graph
-    let document_hash = if operation.is_create() {
+    let document_id = if operation.is_create() {
         // This is easy: We just use the entry hash directly to determine the document id
         params.entry_encoded.hash()
     } else {
@@ -65,17 +65,17 @@ pub async fn publish_entry(
         // @TODO: This currently looks at the backlink, in the future we want to use
         // "previousOperation", since in a multi-writer setting there might be no backlink for
         // update operations! See: https://github.com/p2panda/aquadoggo/issues/49
-        let backlink_hash = entry
+        let backlink_entry_hash = entry
             .backlink_hash()
             .ok_or(PublishEntryError::OperationWithoutBacklink)?;
 
-        Log::get_document_by_entry(&pool, backlink_hash)
+        Log::get_document_by_entry(&pool, backlink_entry_hash)
             .await?
             .ok_or(PublishEntryError::DocumentMissing)?
     };
 
     // Determine expected log id for new entry
-    let document_log_id = Log::find_document_log_id(&pool, &author, Some(&document_hash)).await?;
+    let document_log_id = Log::find_document_log_id(&pool, &author, Some(&document_id)).await?;
 
     // Check if provided log id matches expected log id
     if &document_log_id != entry.log_id() {
@@ -136,7 +136,7 @@ pub async fn publish_entry(
         Log::insert(
             &pool,
             &author,
-            &document_hash,
+            &document_id,
             operation.schema(),
             entry.log_id(),
         )
