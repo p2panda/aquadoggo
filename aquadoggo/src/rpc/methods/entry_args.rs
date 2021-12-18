@@ -2,16 +2,16 @@
 
 use bamboo_rs_core_ed25519_yasmf::entry::is_lipmaa_required;
 use jsonrpc_v2::{Data, Params};
-use p2panda_rs::Validate;
 use p2panda_rs::entry::SeqNum;
 use p2panda_rs::hash::Hash;
+use p2panda_rs::Validate;
 
-use crate::db::Pool;
 use crate::db::models::{Entry, Log};
+use crate::db::Pool;
 use crate::errors::Result;
-use crate::rpc::RpcApiState;
 use crate::rpc::request::EntryArgsRequest;
 use crate::rpc::response::EntryArgsResponse;
+use crate::rpc::RpcApiState;
 
 /// Implementation of `panda_getEntryArguments` RPC method.
 ///
@@ -21,20 +21,31 @@ pub async fn get_entry_args(
     data: Data<RpcApiState>,
     Params(params): Params<EntryArgsRequest>,
 ) -> Result<EntryArgsResponse> {
-    // Validate request parameters
+    // Validate `author` request parameter
     params.author.validate()?;
-    params.document.validate()?;
+
+    // Validate `document` request parameter when it is set
+    let document = match params.document {
+        Some(doc) => {
+            doc.validate()?;
+            Some(doc)
+        }
+        None => None,
+    };
 
     // Get database connection pool
     let pool = data.pool.clone();
 
-    // Determine log_id for this document
-    let log_id = Log::find_document_log_id(&pool, &params.author, &params.document).await?;
+    // Determine log_id for this document. If this is the very first operation in the document
+    // graph, the `document` value is None and we will return the next free log id
+    let log_id = Log::find_document_log_id(&pool, &params.author, document.as_ref()).await?;
 
-    // Find latest entry in this log
+    // Determine backlink and skiplink hashes for the next entry. To do this we need the latest
+    // entry in this log
     let entry_latest = Entry::latest(&pool, &params.author, &log_id).await?;
 
     match entry_latest {
+        // An entry was found which serves as the backlink for the upcoming entry
         Some(mut entry_backlink) => {
             // Determine skiplink ("lipmaa"-link) entry in this log
             let entry_hash_skiplink = determine_skiplink(pool.clone(), &entry_backlink).await?;
@@ -46,6 +57,7 @@ pub async fn get_entry_args(
                 log_id,
             })
         }
+        // No entry was given yet, we can assume this is the beginning of the log
         None => Ok(EntryArgsResponse {
             entry_hash_backlink: None,
             entry_hash_skiplink: None,
@@ -123,10 +135,9 @@ mod tests {
             &format!(
                 r#"{{
                     "author": "{}",
-                    "document": "{}"
+                    "document": null
                 }}"#,
                 TEST_AUTHOR,
-                random_entry_hash(),
             ),
         );
 

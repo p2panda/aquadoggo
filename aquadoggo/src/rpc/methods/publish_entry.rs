@@ -20,11 +20,14 @@ pub enum PublishEntryError {
     #[error("Could not find skiplink entry in database")]
     SkiplinkMissing,
 
+    #[error("Could not find document hash for entry in database")]
+    DocumentMissing,
+
+    #[error("UPDATE or DELETE operation came with an entry without backlink")]
+    OperationWithoutBacklink,
+
     #[error("Requested log id {0} does not match expected log id {1}")]
     InvalidLogId(i64, i64),
-
-    #[error("The instance this operation is referring to is unknown")]
-    InstanceMissing,
 }
 
 /// Implementation of `panda_publishEntry` RPC method.
@@ -41,36 +44,46 @@ pub async fn publish_entry(
     // Get database connection pool
     let pool = data.pool.clone();
 
-    // Handle error as this conversion validates operation hash
+    // Decode author, entry and operation. This conversion validates the operation hash
+    let author = params.entry_encoded.author();
     let entry = decode_entry(&params.entry_encoded, Some(&params.operation_encoded))?;
     let operation = Operation::from(&params.operation_encoded);
 
-    let author = params.entry_encoded.author();
+    // Every operation refers to a document we need to determine. A document is identified by the
+    // hash of its first `CREATE` operation, it is the root operation of every document graph
+    let document_id = if operation.is_create() {
+        // This is easy: We just use the entry hash directly to determine the document id
+        params.entry_encoded.hash()
+    } else {
+        // For any other operations which followed after creation we need to either walk the operation
+        // graph back to its `CREATE` operation or more easily look up the database since we keep track
+        // of all log ids and documents there.
+        //
+        // We can determine the used document hash by looking at what we know about the previous
+        // entry in this author's log.
+        //
+        // @TODO: This currently looks at the backlink, in the future we want to use
+        // "previousOperation", since in a multi-writer setting there might be no backlink for
+        // update operations! See: https://github.com/p2panda/aquadoggo/issues/49
+        let backlink_entry_hash = entry
+            .backlink_hash()
+            .ok_or(PublishEntryError::OperationWithoutBacklink)?;
 
-    // Determine expected log id for new entry: a `CREATE` entry is always stored in the next free
-    // user log. An `UPDATE` or `DELETE` operation is always stored in the same log that its original
-    // `CREATE` operation was stored in.
-    let document_log_id = match operation.is_create() {
-        true => {
-            // A document is identified by the hash of its `CREATE` operation
-            let document_hash = &params.entry_encoded.hash();
-            Log::find_document_log_id(&pool, &author, document_hash).await?
-        }
-        false => {
-            // An instance is identified by the hash of its previous operation
-            let instance_hash = operation.id().unwrap();
-            Log::get_log_id_by_instance(&pool, instance_hash)
-                .await?
-                .ok_or(PublishEntryError::InstanceMissing)?
-        }
+        Log::get_document_by_entry(&pool, backlink_entry_hash)
+            .await?
+            .ok_or(PublishEntryError::DocumentMissing)?
     };
+
+    // Determine expected log id for new entry
+    let document_log_id = Log::find_document_log_id(&pool, &author, Some(&document_id)).await?;
 
     // Check if provided log id matches expected log id
     if &document_log_id != entry.log_id() {
-        Err(PublishEntryError::InvalidLogId(
+        return Err(PublishEntryError::InvalidLogId(
             entry.log_id().as_i64(),
             document_log_id.as_i64(),
-        ))?;
+        )
+        .into());
     }
 
     // Get related bamboo backlink and skiplink entries
@@ -78,15 +91,14 @@ pub async fn publish_entry(
         Entry::at_seq_num(
             &pool,
             &author,
-            &entry.log_id(),
+            entry.log_id(),
             &entry.seq_num_backlink().unwrap(),
         )
         .await?
         .map(|link| {
-            Some(
-                hex::decode(link.entry_bytes)
-                    .expect("Backlink entry with invalid hex-encoding detected in database"),
-            )
+            let bytes = hex::decode(link.entry_bytes)
+                .expect("Backlink entry with invalid hex-encoding detected in database");
+            Some(bytes)
         })
         .ok_or(PublishEntryError::BacklinkMissing)
     } else {
@@ -97,15 +109,14 @@ pub async fn publish_entry(
         Entry::at_seq_num(
             &pool,
             &author,
-            &entry.log_id(),
+            entry.log_id(),
             &entry.seq_num_skiplink().unwrap(),
         )
         .await?
         .map(|link| {
-            Some(
-                hex::decode(link.entry_bytes)
-                    .expect("Skiplink entry with invalid hex-encoding detected in database"),
-            )
+            let bytes = hex::decode(link.entry_bytes)
+                .expect("Backlink entry with invalid hex-encoding detected in database");
+            Some(bytes)
         })
         .ok_or(PublishEntryError::SkiplinkMissing)
     } else {
@@ -125,8 +136,8 @@ pub async fn publish_entry(
         Log::insert(
             &pool,
             &author,
-            &params.entry_encoded.hash(),
-            &operation.schema(),
+            &document_id,
+            operation.schema(),
             entry.log_id(),
         )
         .await?;
@@ -138,19 +149,18 @@ pub async fn publish_entry(
         &author,
         &params.entry_encoded,
         &params.entry_encoded.hash(),
-        &entry.log_id(),
+        entry.log_id(),
         &params.operation_encoded,
         &params.operation_encoded.hash(),
-        &entry.seq_num(),
+        entry.seq_num(),
     )
     .await?;
 
     // Already return arguments for next entry creation
-    let mut entry_latest = Entry::latest(&pool, &author, &entry.log_id())
+    let mut entry_latest = Entry::latest(&pool, &author, entry.log_id())
         .await?
         .expect("Database does not contain any entries");
     let entry_hash_skiplink = super::entry_args::determine_skiplink(pool, &entry_latest).await?;
-
     let next_seq_num = entry_latest.seq_num.next().unwrap();
 
     Ok(PublishEntryResponse {
@@ -160,6 +170,7 @@ pub async fn publish_entry(
         log_id: entry.log_id().to_owned(),
     })
 }
+
 #[cfg(test)]
 mod tests {
     use std::convert::TryFrom;
@@ -178,7 +189,7 @@ mod tests {
         key_pair: &KeyPair,
         schema: &Hash,
         log_id: &LogId,
-        instance: Option<&Hash>,
+        document: Option<&Hash>,
         skiplink: Option<&EntrySigned>,
         backlink: Option<&EntrySigned>,
         seq_num: &SeqNum,
@@ -188,9 +199,9 @@ mod tests {
         fields
             .add("test", OperationValue::Text("Hello".to_owned()))
             .unwrap();
-        let operation = match instance {
-            Some(instance_id) => {
-                Operation::new_update(schema.clone(), instance_id.clone(), fields).unwrap()
+        let operation = match document {
+            Some(document_id) => {
+                Operation::new_update(schema.clone(), document_id.clone(), fields).unwrap()
             }
             None => Operation::new_create(schema.clone(), fields).unwrap(),
         };
@@ -273,22 +284,22 @@ mod tests {
 
         // Define schema and log id for entries
         let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
-        let log_id_1 = LogId::new(1);
+        let log_id = LogId::default();
         let seq_num_1 = SeqNum::new(1).unwrap();
 
         // Create a couple of entries in the same log and check for consistency. The little diagrams
         // show back links and skip links analogous to this diagram from the bamboo spec:
-        // https://github.com/AljoschaMeyer/bamboo/blob/61415747af34bfcb8f40a47ae3b02136083d3276/README.md#links-and-entry-verification
+        // https://github.com/AljoschaMeyer/bamboo#links-and-entry-verification
         //
         // [1] --
         let (entry_1, operation_1) =
-            create_test_entry(&key_pair, &schema, &log_id_1, None, None, None, &seq_num_1);
+            create_test_entry(&key_pair, &schema, &log_id, None, None, None, &seq_num_1);
         assert_request(
             &app,
             &entry_1,
             &operation_1,
             None,
-            &log_id_1,
+            &log_id,
             &SeqNum::new(2).unwrap(),
         )
         .await;
@@ -297,7 +308,7 @@ mod tests {
         let (entry_2, operation_2) = create_test_entry(
             &key_pair,
             &schema,
-            &log_id_1,
+            &log_id,
             Some(&entry_1.hash()),
             None,
             Some(&entry_1),
@@ -308,7 +319,7 @@ mod tests {
             &entry_2,
             &operation_2,
             None,
-            &log_id_1,
+            &log_id,
             &SeqNum::new(3).unwrap(),
         )
         .await;
@@ -317,8 +328,8 @@ mod tests {
         let (entry_3, operation_3) = create_test_entry(
             &key_pair,
             &schema,
-            &log_id_1,
-            Some(&entry_2.hash()),
+            &log_id,
+            Some(&entry_1.hash()),
             None,
             Some(&entry_2),
             &SeqNum::new(3).unwrap(),
@@ -328,7 +339,7 @@ mod tests {
             &entry_3,
             &operation_3,
             Some(&entry_1),
-            &log_id_1,
+            &log_id,
             &SeqNum::new(4).unwrap(),
         )
         .await;
@@ -338,8 +349,8 @@ mod tests {
         let (entry_4, operation_4) = create_test_entry(
             &key_pair,
             &schema,
-            &log_id_1,
-            Some(&entry_3.hash()),
+            &log_id,
+            Some(&entry_1.hash()),
             Some(&entry_1),
             Some(&entry_3),
             &SeqNum::new(4).unwrap(),
@@ -349,7 +360,7 @@ mod tests {
             &entry_4,
             &operation_4,
             None,
-            &log_id_1,
+            &log_id,
             &SeqNum::new(5).unwrap(),
         )
         .await;
@@ -359,8 +370,8 @@ mod tests {
         let (entry_5, operation_5) = create_test_entry(
             &key_pair,
             &schema,
-            &log_id_1,
-            Some(&entry_4.hash()),
+            &log_id,
+            Some(&entry_1.hash()),
             None,
             Some(&entry_4),
             &SeqNum::new(5).unwrap(),
@@ -370,7 +381,7 @@ mod tests {
             &entry_5,
             &operation_5,
             None,
-            &log_id_1,
+            &log_id,
             &SeqNum::new(6).unwrap(),
         )
         .await;
@@ -430,7 +441,7 @@ mod tests {
         let (entry_wrong_log_id, operation_wrong_log_id) = create_test_entry(
             &key_pair,
             &schema,
-            &LogId::new(5),
+            &LogId::new(3),
             None,
             None,
             None,
@@ -449,8 +460,7 @@ mod tests {
             ),
         );
 
-        let response = rpc_error("Requested log id 5 does not match expected log id 2");
-
+        let response = rpc_error("Requested log id 3 does not match expected log id 2");
         assert_eq!(handle_http(&app, request).await, response);
 
         // Send invalid log id for an existing document: This entry is an update for the existing
@@ -459,10 +469,10 @@ mod tests {
             &key_pair,
             &schema,
             &LogId::new(3),
-            Some(&entry_2.hash()),
+            Some(&entry_1.hash()),
             None,
-            None,
-            &SeqNum::new(1).unwrap(),
+            Some(&entry_1),
+            &SeqNum::new(2).unwrap(),
         );
 
         let request = rpc_request(
@@ -478,7 +488,6 @@ mod tests {
         );
 
         let response = rpc_error("Requested log id 3 does not match expected log id 1");
-
         assert_eq!(handle_http(&app, request).await, response);
 
         // Send invalid backlink entry / hash
@@ -487,7 +496,7 @@ mod tests {
             &schema,
             &log_id,
             Some(&entry_1.hash()),
-            Some(&entry_2),
+            None,
             Some(&entry_1),
             &SeqNum::new(3).unwrap(),
         );
@@ -507,15 +516,14 @@ mod tests {
         let response = rpc_error(
             "The backlink hash encoded in the entry does not match the lipmaa entry provided",
         );
-
         assert_eq!(handle_http(&app, request).await, response);
 
-        // Send invalid seq num
+        // Send invalid sequence number
         let (entry_wrong_seq_num, operation_wrong_seq_num) = create_test_entry(
             &key_pair,
             &schema,
             &log_id,
-            Some(&entry_2.hash()),
+            Some(&entry_1.hash()),
             None,
             Some(&entry_2),
             &SeqNum::new(5).unwrap(),
@@ -534,7 +542,6 @@ mod tests {
         );
 
         let response = rpc_error("Could not find backlink entry in database");
-
         assert_eq!(handle_http(&app, request).await, response);
     }
 }

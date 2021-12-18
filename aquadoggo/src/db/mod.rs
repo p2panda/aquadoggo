@@ -16,7 +16,7 @@ pub async fn create_database(url: &str) -> Result<()> {
         Any::create_database(url).await?;
     }
 
-    Any::drop_database(&url);
+    Any::drop_database(url);
 
     Ok(())
 }

@@ -11,7 +11,7 @@ use p2panda_rs::operation::OperationEncoded;
 #[derive(Deserialize, Debug)]
 pub struct EntryArgsRequest {
     pub author: Author,
-    pub document: Hash,
+    pub document: Option<Hash>,
 }
 
 /// Request body of `panda_publishEntry`.
