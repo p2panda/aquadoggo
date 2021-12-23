@@ -2151,7 +2151,7 @@ dependencies = [
 [[package]]
 name = "p2panda-rs"
 version = "0.2.1"
-source = "git+https://github.com/p2panda/p2panda?branch=main#b9a5d74413b2e1eae412e8a8b4717b338dc9e61f"
+source = "git+https://github.com/p2panda/p2panda?branch=main#8327f2b6eff44b5b8255417aa1e3e27d6049adac"
 dependencies = [
  "arrayvec 0.5.2",
  "bamboo-rs-core-ed25519-yasmf",
