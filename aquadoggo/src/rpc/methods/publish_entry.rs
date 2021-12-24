@@ -2,7 +2,7 @@
 
 use jsonrpc_v2::{Data, Params};
 use p2panda_rs::entry::decode_entry;
-use p2panda_rs::operation::Operation;
+use p2panda_rs::operation::{AsOperation, Operation};
 use p2panda_rs::Validate;
 
 use crate::db::models::{Entry, Log};
@@ -137,7 +137,7 @@ pub async fn publish_entry(
             &pool,
             &author,
             &document_id,
-            operation.schema(),
+            &operation.schema(),
             entry.log_id(),
         )
         .await?;
@@ -201,7 +201,13 @@ mod tests {
             .unwrap();
         let operation = match document {
             Some(document_id) => {
-                Operation::new_update(schema.clone(), document_id.clone(), fields).unwrap()
+                Operation::new_update(
+                    schema.clone(),
+                    document_id.clone(),
+                    vec![backlink.unwrap().hash()],
+                    fields,
+                )
+                .unwrap()
             }
             None => Operation::new_create(schema.clone(), fields).unwrap(),
         };
