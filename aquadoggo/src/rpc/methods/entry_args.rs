@@ -76,7 +76,7 @@ pub async fn determine_skiplink(pool: Pool, entry: &Entry) -> Result<Option<Hash
     let skiplink_seq_num = next_seq_num.skiplink_seq_num().unwrap();
 
     // Check if skiplink is required and return hash if so
-    let entry_skiplink_hash = if is_lipmaa_required(next_seq_num.as_i64() as u64) {
+    let entry_skiplink_hash = if is_lipmaa_required(next_seq_num.as_u64()) {
         let skiplink_entry =
             Entry::at_seq_num(&pool, &entry.author, &entry.log_id, &skiplink_seq_num)
                 .await?
