@@ -730,6 +730,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "ciborium"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0c137568cc60b904a7724001b35ce2630fd00d5d84805fbb608ab89509d788f"
+dependencies = [
+ "ciborium-io",
+ "ciborium-ll",
+ "serde",
+]
+
+[[package]]
+name = "ciborium-io"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "346de753af073cc87b52b2083a506b38ac176a44cfb05497b622e27be899b369"
+
+[[package]]
+name = "ciborium-ll"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "213030a2b5a4e0c0892b6652260cf6ccac84827b83a85a534e178e3906c4cf1b"
+dependencies = [
+ "ciborium-io",
+ "half",
+]
+
+[[package]]
 name = "cipher"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2176,11 +2203,13 @@ dependencies = [
 [[package]]
 name = "p2panda-rs"
 version = "0.2.1"
+source = "git+https://github.com/p2panda/p2panda?branch=u64-support#fbba00121000d187d0596b9843f66527db512dae"
 dependencies = [
  "aquamarine",
  "arrayvec 0.5.2",
  "bamboo-rs-core-ed25519-yasmf",
  "cddl",
+ "ciborium",
  "console_error_panic_hook",
  "ed25519",
  "ed25519-dalek",
@@ -2192,7 +2221,7 @@ dependencies = [
  "rand 0.7.3",
  "rust_crypto",
  "serde",
- "serde_cbor",
+ "serde-wasm-bindgen",
  "serde_json",
  "serde_repr",
  "thiserror",
@@ -2695,6 +2724,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b9875c23cf305cd1fd7eb77234cbb705f21ea6a72c637a5c6db5fe4b8e7f008"
 dependencies = [
  "serde_derive",
+]
+
+[[package]]
+name = "serde-wasm-bindgen"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d5cefe81e058ce25d1acbd79160e110d2eb4b9459024d46818d7553e4be6ff7e"
+dependencies = [
+ "fnv",
+ "js-sys",
+ "serde",
+ "wasm-bindgen",
 ]
 
 [[package]]

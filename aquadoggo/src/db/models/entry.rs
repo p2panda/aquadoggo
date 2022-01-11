@@ -240,11 +240,11 @@ impl TryFrom<&EntryRow> for Entry {
         Ok(Self {
             author: Author::try_from(row.author.as_ref())?,
             entry_bytes: row.entry_bytes.clone(),
-            entry_hash: Hash::try_from(row.entry_hash.as_ref())?,
-            log_id: LogId::try_from(row.log_id.as_ref())?,
+            entry_hash: row.entry_hash.parse()?,
+            log_id: row.log_id.parse()?,
             payload_bytes: row.payload_bytes.clone(),
-            payload_hash: Hash::try_from(row.payload_hash.as_ref())?,
-            seq_num: SeqNum::try_from(row.seq_num.as_ref())?,
+            payload_hash: row.payload_hash.parse()?,
+            seq_num: row.seq_num.parse()?,
         })
     }
 }

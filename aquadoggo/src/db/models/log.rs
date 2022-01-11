@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::convert::TryFrom;
-
 use p2panda_rs::entry::LogId;
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
@@ -84,9 +82,7 @@ impl Log {
         // Convert all strings representing u64 integers to `LogId` instances
         let log_ids: Vec<LogId> = result
             .iter_mut()
-            .map(|str| {
-                LogId::try_from(str.as_ref()).expect("Corrupt u64 integer found in database")
-            })
+            .map(|str| str.parse().expect("Corrupt u64 integer found in database"))
             .collect();
 
         // Find next unused schema log_id by comparing the sequence of known log ids with an
@@ -129,9 +125,7 @@ impl Log {
         .await?;
 
         // Wrap u64 inside of `LogId` instance
-        let log_id = result.map(|str| {
-            LogId::try_from(str.as_ref()).expect("Corrupt u64 integer found in database")
-        });
+        let log_id = result.map(|str| str.parse().expect("Corrupt u64 integer found in database"));
 
         Ok(log_id)
     }

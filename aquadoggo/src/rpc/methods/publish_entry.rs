@@ -200,13 +200,10 @@ mod tests {
             .add("test", OperationValue::Text("Hello".to_owned()))
             .unwrap();
         let operation = match document {
-            Some(document_id) => Operation::new_update(
-                schema.clone(),
-                document_id.clone(),
-                vec![backlink.unwrap().hash()],
-                fields,
-            )
-            .unwrap(),
+            Some(_) => {
+                Operation::new_update(schema.clone(), vec![backlink.unwrap().hash()], fields)
+                    .unwrap()
+            }
             None => Operation::new_create(schema.clone(), fields).unwrap(),
         };
 
