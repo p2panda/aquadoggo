@@ -166,8 +166,8 @@ pub async fn publish_entry(
     Ok(PublishEntryResponse {
         entry_hash_backlink: Some(params.entry_encoded.hash()),
         entry_hash_skiplink,
-        seq_num: next_seq_num,
-        log_id: entry.log_id().to_owned(),
+        seq_num: next_seq_num.as_u64().to_string(),
+        log_id: entry.log_id().as_u64().to_string(),
     })
 }
 
@@ -259,8 +259,8 @@ mod tests {
             r#"{{
                 "entryHashBacklink": "{}",
                 "entryHashSkiplink": {},
-                "logId": {},
-                "seqNum": {}
+                "logId": "{}",
+                "seqNum": "{}"
             }}"#,
             entry_encoded.hash().as_str(),
             skiplink_str,
