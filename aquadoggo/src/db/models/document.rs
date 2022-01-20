@@ -1,6 +1,6 @@
 use p2panda_rs::hash::Hash;
 use p2panda_rs::instance::Instance;
-use sqlx::{query, Encode};
+use sqlx::query;
 
 use crate::db::Pool;
 use crate::errors::Result;
@@ -25,7 +25,8 @@ fn build_insert_query(document_id: &Hash, instance: &Instance) -> String {
     format!(
         "
         INSERT INTO
-            entries (document{})
+            `bookmarks-0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b`
+            ({})
         VALUES
             ({})
         ",
