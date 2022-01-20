@@ -15,9 +15,13 @@ pub enum Error {
     #[error(transparent)]
     AuthorValidation(#[from] AuthorError),
 
-    /// Error returned from validating p2panda-rs `Hash` data types.
+    /// Error returned from validating Bamboo entries.
     #[error(transparent)]
-    HashValidation(#[from] HashError),
+    BambooValidation(#[from] bamboo_rs_core_ed25519_yasmf::verify::Error),
+
+    /// Error returned from the database.
+    #[error(transparent)]
+    Database(#[from] sqlx::Error),
 
     /// Error returned from validating p2panda-rs `Entry` data types.
     #[error(transparent)]
@@ -27,6 +31,10 @@ pub enum Error {
     #[error(transparent)]
     EntrySignedValidation(#[from] EntrySignedError),
 
+    /// Error returned from validating p2panda-rs `Hash` data types.
+    #[error(transparent)]
+    HashValidation(#[from] HashError),
+
     /// Error returned from validating p2panda-rs `Operation` data types.
     #[error(transparent)]
     OperationValidation(#[from] OperationError),
@@ -35,15 +43,7 @@ pub enum Error {
     #[error(transparent)]
     OperationEncodedValidation(#[from] OperationEncodedError),
 
-    /// Error returned from validating Bamboo entries.
-    #[error(transparent)]
-    BambooValidation(#[from] bamboo_rs_core_ed25519_yasmf::verify::Error),
-
     /// Error returned from `panda_publishEntry` RPC method.
     #[error(transparent)]
     PublishEntryValidation(#[from] crate::rpc::PublishEntryError),
-
-    /// Error returned from the database.
-    #[error(transparent)]
-    Database(#[from] sqlx::Error),
 }
