@@ -119,6 +119,34 @@ impl Entry {
         Ok(latest_entry)
     }
 
+    pub async fn by_document(pool: &Pool, document: &Hash) -> Result<Vec<Entry>> {
+        let entries = query_as::<_, Entry>(
+            "
+            SELECT
+                entries.author,
+                entries.entry_bytes,
+                entries.entry_hash,
+                entries.log_id,
+                entries.payload_bytes,
+                entries.payload_hash,
+                entries.seq_num
+            FROM
+                entries
+            INNER JOIN logs
+                ON (entries.log_id = logs.log_id
+                    AND entries.author = logs.author)
+            WHERE
+                logs.document = $1
+            ",
+        )
+        .bind(document)
+        .fetch_all(pool)
+        .await?;
+
+        Ok(entries)
+
+    }
+
     /// Return vector of all entries of a given schema
     pub async fn by_schema(pool: &Pool, schema: &Hash) -> Result<Vec<Entry>> {
         let entries = query_as::<_, Entry>(
@@ -212,6 +240,16 @@ mod tests {
         let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
 
         let entries = Entry::by_schema(&pool, &schema).await.unwrap();
-        assert!(entries.len() == 0);
+        assert!(entries.is_empty());
+    }
+
+    #[async_std::test]
+    async fn entries_by_document() {
+        let pool = initialize_db().await;
+
+        let document = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
+
+        let entries = Entry::by_document(&pool, &document).await.unwrap();
+        assert!(entries.is_empty());
     }
 }
