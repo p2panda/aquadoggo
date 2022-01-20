@@ -31,6 +31,8 @@ pub async fn materialise(pool: &Pool, document_id: &Hash) -> Result<Instance> {
     let instance = document.resolve()?;
 
     // Write document to db
-    write_document(pool, document_id, &instance).await?;
+    if document.schema() == Hash::new("0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b").unwrap() {
+        write_document(pool, document_id, &instance).await?;
+    }
     Ok(instance)
 }
