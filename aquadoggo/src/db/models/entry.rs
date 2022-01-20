@@ -17,8 +17,9 @@ use crate::errors::Result;
 ///
 /// We store the u64 integer values of `log_id` and `seq_num` as strings since not all database
 /// backend support large numbers.
-#[derive(FromRow, Debug)]
-struct EntryRow {
+#[derive(FromRow, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EntryRow {
     /// Public key of the author.
     pub author: String,
 
@@ -159,8 +160,13 @@ impl Entry {
     }
 
     /// Return vector of all entries of a given schema
-    pub async fn by_schema(pool: &Pool, schema: &Hash) -> Result<Vec<Entry>> {
-        let mut rows = query_as::<_, EntryRow>(
+    // @TODO: This currently returns `EntryRow`, a better API would return `Entry` instead as it is
+    // properly typed and `EntryRow` is only meant as an intermediate struct to deal with
+    // databases. Here we still return `EntryRow` for the `queryEntries` RPC response (we want
+    // `seq_num` and `log_id` to be strings). This should be changed as soon as we move over using
+    // a GraphQL API.
+    pub async fn by_schema(pool: &Pool, schema: &Hash) -> Result<Vec<EntryRow>> {
+        let entries = query_as::<_, EntryRow>(
             "
             SELECT
                 entries.author,
@@ -182,14 +188,6 @@ impl Entry {
         .bind(schema.as_str())
         .fetch_all(pool)
         .await?;
-
-        // Convert all internal `EntryRow` representations into `Entry`
-        let entries: Vec<Entry> = rows
-            .iter_mut()
-            .map(|row| {
-                Entry::try_from(row.as_ref()).expect("Corrupt entry values found in database")
-            })
-            .collect();
 
         Ok(entries)
     }
