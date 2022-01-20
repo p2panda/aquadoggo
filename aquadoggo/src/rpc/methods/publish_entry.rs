@@ -7,6 +7,7 @@ use p2panda_rs::Validate;
 
 use crate::db::models::{Entry, Log};
 use crate::errors::Result;
+use crate::materialisation::materialise;
 use crate::rpc::request::PublishEntryRequest;
 use crate::rpc::response::PublishEntryResponse;
 use crate::rpc::RpcApiState;
@@ -156,6 +157,8 @@ pub async fn publish_entry(
     )
     .await?;
 
+    materialise(&pool, &document_id);
+
     // Already return arguments for next entry creation
     let mut entry_latest = Entry::latest(&pool, &author, entry.log_id())
         .await?
@@ -200,10 +203,9 @@ mod tests {
             .add("test", OperationValue::Text("Hello".to_owned()))
             .unwrap();
         let operation = match document {
-            Some(document_id) => {
+            Some(_) => {
                 Operation::new_update(
                     schema.clone(),
-                    document_id.clone(),
                     vec![backlink.unwrap().hash()],
                     fields,
                 )

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use p2panda_rs::document::{DocumentError, DocumentBuilderError};
 use p2panda_rs::entry::{EntryError, EntrySignedError};
 use p2panda_rs::hash::HashError;
 use p2panda_rs::identity::AuthorError;
@@ -22,6 +23,13 @@ pub enum Error {
     /// Error returned from the database.
     #[error(transparent)]
     Database(#[from] sqlx::Error),
+
+    /// Error from resolving documents
+    #[error(transparent)]
+    DocumentError(#[from] DocumentError),
+
+    #[error(transparent)]
+    DocumentBuilderError(#[from] DocumentBuilderError),
 
     /// Error returned from validating p2panda-rs `Entry` data types.
     #[error(transparent)]

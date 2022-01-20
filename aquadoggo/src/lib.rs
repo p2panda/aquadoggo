@@ -16,6 +16,7 @@
 mod config;
 mod db;
 mod errors;
+mod materialisation;
 mod rpc;
 mod runtime;
 mod task;
