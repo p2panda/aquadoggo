@@ -36,8 +36,12 @@ fn build_insert_query(instance: &Instance) -> String {
             (document, {})
         VALUES
             ($1, {})
+        ON CONFLICT (document) DO UPDATE SET
+            created=$2,
+            title=$3,
+            url=$4,
         ",
-        field_spec, parameter_spec,
+        field_spec, parameter_spec
     )
 }
 
