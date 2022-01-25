@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use p2panda_rs::document::{DocumentError, DocumentBuilderError};
+use p2panda_rs::document::{DocumentBuilderError, DocumentError};
 use p2panda_rs::entry::{EntryError, EntrySignedError};
 use p2panda_rs::hash::HashError;
 use p2panda_rs::identity::AuthorError;

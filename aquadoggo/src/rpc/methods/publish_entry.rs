@@ -204,12 +204,8 @@ mod tests {
             .unwrap();
         let operation = match document {
             Some(_) => {
-                Operation::new_update(
-                    schema.clone(),
-                    vec![backlink.unwrap().hash()],
-                    fields,
-                )
-                .unwrap()
+                Operation::new_update(schema.clone(), vec![backlink.unwrap().hash()], fields)
+                    .unwrap()
             }
             None => Operation::new_create(schema.clone(), fields).unwrap(),
         };

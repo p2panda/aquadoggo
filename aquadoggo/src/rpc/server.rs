@@ -2,13 +2,17 @@
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
+use async_graphql::http::{playground_source, GraphQLPlaygroundConfig};
 use async_std::stream::StreamExt;
 use http_types::headers::HeaderValue;
 use jsonrpc_v2::RequestObject;
 use tide::security::{CorsMiddleware, Origin};
+use tide::{http::mime, Body, Response, StatusCode};
 use tide_websockets::{Message, WebSocket, WebSocketConnection};
 
 use crate::config::Configuration;
+use crate::db::Pool;
+use crate::graphql::build_schema;
 use crate::rpc::RpcApiService;
 
 pub type RpcServer = tide::Server<RpcApiService>;
@@ -59,7 +63,7 @@ pub async fn handle_ws_request(
 }
 
 /// Build HTTP and WebSocket server both exposing a JSON RPC API.
-pub fn build_rpc_server(api: RpcApiService) -> RpcServer {
+pub fn build_rpc_server(api: RpcApiService, pool: Pool) -> RpcServer {
     // Configure CORS middleware
     let cors = CorsMiddleware::new()
         .allow_methods("GET, POST, OPTIONS".parse::<HeaderValue>().unwrap())
@@ -73,13 +77,29 @@ pub fn build_rpc_server(api: RpcApiService) -> RpcServer {
         .with(WebSocket::new(handle_ws_request))
         .get(|_| async { Ok("Used HTTP Method is not allowed. POST or OPTIONS is required") })
         .post(handle_http_request);
+
+    // Add GraphQL routes
+    app.at("/graphql")
+        .get(|_| async move {
+            let mut resp = Response::new(StatusCode::Ok);
+            resp.set_body(Body::from_string(playground_source(
+                GraphQLPlaygroundConfig::new("/graphql"),
+            )));
+            resp.set_content_type(mime::HTML);
+            Ok(resp)
+        })
+        .post(async_graphql_tide::graphql(build_schema(pool)));
     app
 }
 
 /// Start HTTP and WebSocket server.
-pub async fn start_rpc_server(config: &Configuration, api: RpcApiService) -> anyhow::Result<()> {
+pub async fn start_rpc_server(
+    config: &Configuration,
+    api: RpcApiService,
+    pool: Pool,
+) -> anyhow::Result<()> {
     let http_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), config.http_port);
-    let server = build_rpc_server(api);
+    let server = build_rpc_server(api, pool);
     server.listen(http_address).await?;
     Ok(())
 }

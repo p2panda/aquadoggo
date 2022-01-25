@@ -5,5 +5,5 @@ mod entry;
 mod log;
 
 pub use self::log::Log;
+pub use document::{get_bookmarks, write_document};
 pub use entry::Entry;
-pub use document::write_document;

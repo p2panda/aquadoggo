@@ -144,7 +144,6 @@ impl Entry {
         .await?;
 
         Ok(entries)
-
     }
 
     /// Return vector of all entries of a given schema

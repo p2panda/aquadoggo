@@ -50,8 +50,9 @@ impl Runtime {
         let rpc_api = build_rpc_api_service(pool.clone());
 
         // Start JSON RPC API server
+        let pool_clone = pool.clone();
         task_manager.spawn("JSON RPC Server", async move {
-            start_rpc_server(&config, rpc_api).await?;
+            start_rpc_server(&config, rpc_api, pool_clone).await?;
             Ok(())
         });
 
