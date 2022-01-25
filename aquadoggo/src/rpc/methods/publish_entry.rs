@@ -157,7 +157,7 @@ pub async fn publish_entry(
     )
     .await?;
 
-    materialise(&pool, &document_id);
+    materialise(&pool, &document_id).await?;
 
     // Already return arguments for next entry creation
     let mut entry_latest = Entry::latest(&pool, &author, entry.log_id())
