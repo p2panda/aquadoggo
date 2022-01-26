@@ -116,7 +116,7 @@ mod tests {
     async fn respond_with_method_not_allowed() {
         let pool = initialize_db().await;
         let rpc_api = build_rpc_api_service(pool.clone());
-        let app = build_rpc_server(rpc_api);
+        let app = build_rpc_server(rpc_api, pool);
 
         assert_eq!(
             app.get("/").recv_string().await.unwrap(),
