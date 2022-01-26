@@ -283,8 +283,8 @@ mod tests {
         let pool = initialize_db().await;
 
         // Create tide server with endpoints
-        let rpc_api = build_rpc_api_service(pool);
-        let app = build_rpc_server(rpc_api);
+        let rpc_api = build_rpc_api_service(pool.clone());
+        let app = build_rpc_server(rpc_api, pool);
 
         // Define schema and log id for entries
         let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
@@ -400,8 +400,8 @@ mod tests {
         let pool = initialize_db().await;
 
         // Create tide server with endpoints
-        let rpc_api = build_rpc_api_service(pool);
-        let app = build_rpc_server(rpc_api);
+        let rpc_api = build_rpc_api_service(pool.clone());
+        let app = build_rpc_server(rpc_api, pool);
 
         // Define schema and log id for entries
         let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();

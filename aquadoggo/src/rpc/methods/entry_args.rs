@@ -103,7 +103,7 @@ mod tests {
     async fn respond_with_wrong_author_error() {
         let pool = initialize_db().await;
         let rpc_api = build_rpc_api_service(pool.clone());
-        let app = build_rpc_server(rpc_api);
+        let app = build_rpc_server(rpc_api, pool);
 
         let request = rpc_request(
             "panda_getEntryArguments",
@@ -127,8 +127,8 @@ mod tests {
         let pool = initialize_db().await;
 
         // Create tide server with endpoints
-        let rpc_api = build_rpc_api_service(pool);
-        let app = build_rpc_server(rpc_api);
+        let rpc_api = build_rpc_api_service(pool.clone());
+        let app = build_rpc_server(rpc_api, pool);
 
         let request = rpc_request(
             "panda_getEntryArguments",
