@@ -13,7 +13,7 @@ use crate::errors::Result;
 /// This serves as an indexing layer on top of the lower-level bamboo entries. The node updates
 /// this data according to what it sees in the newly incoming entries.
 ///
-/// We store the u64 integer values of `log_id` as a string here since not all database backend
+/// We store the u64 integer values of `log_id` as a string here since not all database backends
 /// support large numbers.
 #[derive(FromRow, Debug)]
 pub struct Log {
@@ -85,7 +85,7 @@ impl Log {
             .map(|str| str.parse().expect("Corrupt u64 integer found in database"))
             .collect();
 
-        // Find next unused schema log_id by comparing the sequence of known log ids with an
+        // Find next unused document log by comparing the sequence of known log ids with an
         // sequence of subsequent log ids until we find a gap.
         let mut next_log_id = LogId::default();
 

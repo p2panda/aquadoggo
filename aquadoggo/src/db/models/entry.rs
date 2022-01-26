@@ -230,7 +230,7 @@ impl Entry {
     }
 }
 
-/// Convert SQL row representation `EntryRow` with typed `Entry` one.
+/// Convert SQL row representation `EntryRow` to typed `Entry` one.
 impl TryFrom<&EntryRow> for Entry {
     type Error = crate::errors::Error;
 
