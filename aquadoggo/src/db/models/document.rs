@@ -17,14 +17,14 @@ pub struct Bookmark {
 fn build_insert_query(instance: &Instance) -> String {
     // The field spec enumerates all schema-specific vield names
     let field_spec = instance
-        .iter()
-        .map(|(fieldname, _)| fieldname.clone())
-        .reduce(|acc, val| format!("{}, `{}`", acc, val))
+        .keys()
+        .into_iter()
+        .reduce(|acc, val| format!("{}, {}", acc, val))
         .unwrap();
 
     // The parameter spec is a list of parameter placeholders with as many elements as there are
     // columns to insert
-    let parameter_spec = (0..instance.raw().len())
+    let parameter_spec = (0..instance.len())
         .map(|i| format!("${}", (i + 2)))
         .reduce(|acc, elem| format!("{}, {}", acc, elem))
         .unwrap();
@@ -72,13 +72,13 @@ pub async fn write_document(pool: &Pool, document_id: &Hash, instance: &Instance
     query = query.bind(document_id);
 
     // Bind values for schema-specific columns
-    for (key, value) in instance.raw() {
+    for (key, value) in instance.iter() {
         let string_value = match value {
             // OperationValue::Boolean(value) => value,
             // OperationValue::Integer(value) => value,
             // OperationValue::Float(value) => value,
             OperationValue::Text(value) => value,
-            OperationValue::Relation(value) => value.as_str().into(),
+            OperationValue::Relation(value) => value.as_str(),
             _ => todo!("Oh no it's not a texty thing"),
         };
         log::debug!("Now binding value '{}' = '{}'", key, string_value);
@@ -90,7 +90,7 @@ pub async fn write_document(pool: &Pool, document_id: &Hash, instance: &Instance
         Ok(result) => {
             log::info!("Successfully stored materialised view in db: {:?}", result);
             Ok(())
-        },
+        }
         Err(error) => {
             log::error!("Error storing document in db: {:?}", error);
             Err(error)
