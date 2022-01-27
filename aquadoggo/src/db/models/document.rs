@@ -25,8 +25,19 @@ fn build_insert_query(instance: &Instance) -> String {
     // The parameter spec is a list of parameter placeholders with as many elements as there are
     // columns to insert
     let parameter_spec = (0..instance.len())
+        // Add 2 because paramas are 1-indexed and "document" is
+        // a static parameter inserted before these dynamic ones
         .map(|i| format!("${}", (i + 2)))
         .reduce(|acc, elem| format!("{}, {}", acc, elem))
+        .unwrap();
+
+    let update_spec = instance
+        .iter()
+        .enumerate()
+        // Make key-binding pairs like "key=$2"
+        .map(|(i, (key, _))| format!("{}=${}", key, (i + 2)))
+        // Concatenate
+        .reduce(|acc, val| format!("{},\n{}", acc, val))
         .unwrap();
 
     format!(
@@ -36,12 +47,10 @@ fn build_insert_query(instance: &Instance) -> String {
             (document, {})
         VALUES
             ($1, {})
-        ON CONFLICT (document) DO UPDATE SET
-            created=$2,
-            title=$3,
-            url=$4,
+        ON CONFLICT (`document`) DO UPDATE SET
+            {}
         ",
-        field_spec, parameter_spec
+        field_spec, parameter_spec, update_spec
     )
 }
 
@@ -72,7 +81,7 @@ pub async fn write_document(pool: &Pool, document_id: &Hash, instance: &Instance
     query = query.bind(document_id);
 
     // Bind values for schema-specific columns
-    for (_, value) in instance.iter() {
+    for (key, value) in instance.iter() {
         let string_value = match value {
             // OperationValue::Boolean(value) => value,
             // OperationValue::Integer(value) => value,
@@ -81,10 +90,20 @@ pub async fn write_document(pool: &Pool, document_id: &Hash, instance: &Instance
             OperationValue::Relation(value) => value.as_str(),
             _ => todo!("Oh no it's not a texty thing"),
         };
+        log::debug!("Now binding value '{}' = '{}'", key, string_value);
         query = query.bind(string_value);
     }
 
     // Exectute query
-    query.execute(pool).await?;
+    match query.execute(pool).await {
+        Ok(result) => {
+            log::info!("Successfully stored materialised view in db: {:?}", result);
+            Ok(())
+        }
+        Err(error) => {
+            log::error!("Error storing document in db: {:?}", error);
+            Err(error)
+        }
+    }?;
     Ok(())
 }

@@ -11,6 +11,7 @@ use crate::errors::Result;
 /// Materialise given document by loading all its operations from db,
 /// resolving and writing the result to that schema's table
 pub async fn materialise(pool: &Pool, document_id: &Hash) -> Result<Instance> {
+    log::info!("Materialising document {}", document_id.as_str());
     // Load operations from db
     let entries = DatabaseEntry::by_document(pool, document_id).await?;
     let operations: Vec<OperationWithMeta> = entries
@@ -29,6 +30,8 @@ pub async fn materialise(pool: &Pool, document_id: &Hash) -> Result<Instance> {
     // Resolve document
     let document = DocumentBuilder::new(operations).build()?;
     let instance = document.resolve()?;
+
+    log::debug!("Materialisation yields {:?}", instance);
 
     // Write document to db
     if document.schema()
