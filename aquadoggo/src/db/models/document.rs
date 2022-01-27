@@ -19,7 +19,7 @@ fn build_insert_query(instance: &Instance) -> String {
     let field_spec = instance
         .iter()
         .map(|(fieldname, _)| fieldname.clone())
-        .reduce(|acc, val| format!("{}, {}", acc, val))
+        .reduce(|acc, val| format!("{}, `{}`", acc, val))
         .unwrap();
 
     // The parameter spec is a list of parameter placeholders with as many elements as there are
@@ -72,7 +72,7 @@ pub async fn write_document(pool: &Pool, document_id: &Hash, instance: &Instance
     query = query.bind(document_id);
 
     // Bind values for schema-specific columns
-    for (_, value) in instance.raw() {
+    for (key, value) in instance.raw() {
         let string_value = match value {
             // OperationValue::Boolean(value) => value,
             // OperationValue::Integer(value) => value,
@@ -81,10 +81,20 @@ pub async fn write_document(pool: &Pool, document_id: &Hash, instance: &Instance
             OperationValue::Relation(value) => value.as_str().into(),
             _ => todo!("Oh no it's not a texty thing"),
         };
+        log::info!("Now binding value '{}' = '{}'", key, string_value);
         query = query.bind(string_value);
     }
 
     // Exectute query
-    query.execute(pool).await?;
+    match query.execute(pool).await {
+        Ok(result) => {
+            log::info!("Successfully stored materialised view in db: {:?}", result);
+            Ok(())
+        },
+        Err(error) => {
+            log::error!("Error storing document in db: {:?}", error);
+            Err(error)
+        }
+    }?;
     Ok(())
 }
