@@ -29,6 +29,13 @@ fn build_insert_query(instance: &Instance) -> String {
         .reduce(|acc, elem| format!("{}, {}", acc, elem))
         .unwrap();
 
+    let update_spec = instance
+        .iter()
+        .enumerate()
+        .map(|(i, (key, _))| format!("{}=${}", key, (i + 2)))
+        .reduce(|acc, val| format!("{},\n{}", acc, val))
+        .unwrap();
+
     format!(
         "
         INSERT INTO
@@ -37,11 +44,9 @@ fn build_insert_query(instance: &Instance) -> String {
         VALUES
             ($1, {})
         ON CONFLICT (`document`) DO UPDATE SET
-            created=$2,
-            title=$3,
-            url=$4
+            {}
         ",
-        field_spec, parameter_spec
+        field_spec, parameter_spec, update_spec
     )
 }
 
