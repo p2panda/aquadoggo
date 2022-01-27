@@ -31,7 +31,7 @@ pub use runtime::Runtime;
 /// Several of our dependencies (`sqlx`, `p2panda_rs`, `tide`) emmit log messages
 /// which we can handle and print using `pretty_env_logger`. Logging ehaviour
 /// can be customised at runtime. With eg. `RUST_LOG=p2panda_rs=info cargo t` or
-/// `RUST_LOG=openmls=debug cargo t`.
+/// `RUST_LOG=debug cargo t`.
 ///
 /// The `ctor` crate is used to define a global constructor function. This method
 /// will be run before any of the test suites.
