@@ -165,6 +165,27 @@ impl Log {
         .fetch_optional(pool)
         .await?;
 
+        println!("{:?}", result);
+
+        Ok(result)
+    }
+
+    /// Returns the related schema for any document.
+    pub async fn get_schema_by_document(pool: &Pool, document_id: &Hash) -> Result<Option<Hash>> {
+        let result = query_as::<_, Hash>(
+            "
+            SELECT
+                logs.schema
+            FROM
+                logs
+            WHERE
+                logs.document = $1
+            ",
+        )
+        .bind(document_id)
+        .fetch_optional(pool)
+        .await?;
+
         Ok(result)
     }
 }
