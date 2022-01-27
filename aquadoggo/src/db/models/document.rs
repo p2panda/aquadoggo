@@ -81,7 +81,7 @@ pub async fn write_document(pool: &Pool, document_id: &Hash, instance: &Instance
             OperationValue::Relation(value) => value.as_str().into(),
             _ => todo!("Oh no it's not a texty thing"),
         };
-        log::info!("Now binding value '{}' = '{}'", key, string_value);
+        log::debug!("Now binding value '{}' = '{}'", key, string_value);
         query = query.bind(string_value);
     }
 
