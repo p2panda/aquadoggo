@@ -3,7 +3,7 @@
 use p2panda_rs::entry::LogId;
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
-use sqlx::{query, query_as, FromRow};
+use sqlx::{query, query_scalar, FromRow};
 
 use crate::db::Pool;
 use crate::errors::Result;
@@ -12,19 +12,22 @@ use crate::errors::Result;
 ///
 /// This serves as an indexing layer on top of the lower-level bamboo entries. The node updates
 /// this data according to what it sees in the newly incoming entries.
+///
+/// We store the u64 integer values of `log_id` as a string here since not all database backends
+/// support large numbers.
 #[derive(FromRow, Debug)]
 pub struct Log {
     /// Public key of the author.
-    author: Author,
+    author: String,
 
     /// Log id used for this document.
-    log_id: LogId,
+    log_id: String,
 
     /// Hash that identifies the document this log is for.
-    document: Hash,
+    document: String,
 
     /// Schema hash used by author.
-    schema: Hash,
+    schema: String,
 }
 
 impl Log {
@@ -46,10 +49,10 @@ impl Log {
                 ($1, $2, $3, $4)
             ",
         )
-        .bind(author)
-        .bind(log_id)
-        .bind(document)
-        .bind(schema)
+        .bind(author.as_str())
+        .bind(log_id.as_u64().to_string())
+        .bind(document.as_str())
+        .bind(schema.as_str())
         .execute(pool)
         .await?
         .rows_affected();
@@ -60,7 +63,7 @@ impl Log {
     /// Determines the next unused log_id of an author.
     pub async fn next_log_id(pool: &Pool, author: &Author) -> Result<LogId> {
         // Get all log ids from this author
-        let log_ids: Vec<LogId> = query_as::<_, LogId>(
+        let mut result: Vec<String> = query_scalar(
             "
             SELECT
                 log_id
@@ -72,11 +75,17 @@ impl Log {
                 log_id ASC
             ",
         )
-        .bind(author)
+        .bind(author.as_str())
         .fetch_all(pool)
         .await?;
 
-        // Find next unused schema log_id by comparing the sequence of known log ids with an
+        // Convert all strings representing u64 integers to `LogId` instances
+        let log_ids: Vec<LogId> = result
+            .iter_mut()
+            .map(|str| str.parse().expect("Corrupt u64 integer found in database"))
+            .collect();
+
+        // Find next unused document log by comparing the sequence of known log ids with an
         // sequence of subsequent log ids until we find a gap.
         let mut next_log_id = LogId::default();
 
@@ -99,7 +108,7 @@ impl Log {
     /// log has already been registered for a document and author and returns its regarding log id
     /// or None.
     pub async fn get(pool: &Pool, author: &Author, document_id: &Hash) -> Result<Option<LogId>> {
-        let result = query_as::<_, LogId>(
+        let result: Option<String> = query_scalar(
             "
             SELECT
                 log_id
@@ -110,12 +119,15 @@ impl Log {
                 AND document = $2
             ",
         )
-        .bind(author)
-        .bind(document_id)
+        .bind(author.as_str())
+        .bind(document_id.as_str())
         .fetch_optional(pool)
         .await?;
 
-        Ok(result)
+        // Wrap u64 inside of `LogId` instance
+        let log_id = result.map(|str| str.parse().expect("Corrupt u64 integer found in database"));
+
+        Ok(log_id)
     }
 
     /// Returns registered or possible log id for a document.
@@ -148,7 +160,7 @@ impl Log {
     /// by this document and author. This method returns that document id by looking up the log
     /// that the entry was stored in.
     pub async fn get_document_by_entry(pool: &Pool, entry_hash: &Hash) -> Result<Option<Hash>> {
-        let result = query_as::<_, Hash>(
+        let result: Option<String> = query_scalar(
             "
             SELECT
                 logs.document
@@ -161,11 +173,14 @@ impl Log {
                 entries.entry_hash = $1
             ",
         )
-        .bind(entry_hash)
+        .bind(entry_hash.as_str())
         .fetch_optional(pool)
         .await?;
 
-        Ok(result)
+        // Unwrap here since we already validated the hash
+        let hash = result.map(|str| Hash::new(&str).expect("Corrupt hash found in database"));
+
+        Ok(hash)
     }
 }
 

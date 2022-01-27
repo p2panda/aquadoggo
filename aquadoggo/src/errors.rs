@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use p2panda_rs::entry::{EntryError, EntrySignedError};
+use p2panda_rs::entry::{EntryError, EntrySignedError, LogIdError, SeqNumError};
 use p2panda_rs::hash::HashError;
 use p2panda_rs::identity::AuthorError;
 use p2panda_rs::operation::{OperationEncodedError, OperationError};
@@ -34,6 +34,14 @@ pub enum Error {
     /// Error returned from validating p2panda-rs `OperationEncoded` data types.
     #[error(transparent)]
     OperationEncodedValidation(#[from] OperationEncodedError),
+
+    /// Error returned from validating p2panda-rs `LogId` data types.
+    #[error(transparent)]
+    LogIdValidation(#[from] LogIdError),
+
+    /// Error returned from validating p2panda-rs `SeqNum` data types.
+    #[error(transparent)]
+    SeqNumValidation(#[from] SeqNumError),
 
     /// Error returned from validating Bamboo entries.
     #[error(transparent)]

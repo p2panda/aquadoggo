@@ -27,7 +27,7 @@ pub enum PublishEntryError {
     OperationWithoutBacklink,
 
     #[error("Requested log id {0} does not match expected log id {1}")]
-    InvalidLogId(i64, i64),
+    InvalidLogId(u64, u64),
 }
 
 /// Implementation of `panda_publishEntry` RPC method.
@@ -80,8 +80,8 @@ pub async fn publish_entry(
     // Check if provided log id matches expected log id
     if &document_log_id != entry.log_id() {
         return Err(PublishEntryError::InvalidLogId(
-            entry.log_id().as_i64(),
-            document_log_id.as_i64(),
+            entry.log_id().as_u64(),
+            document_log_id.as_u64(),
         )
         .into());
     }
@@ -166,8 +166,8 @@ pub async fn publish_entry(
     Ok(PublishEntryResponse {
         entry_hash_backlink: Some(params.entry_encoded.hash()),
         entry_hash_skiplink,
-        seq_num: next_seq_num,
-        log_id: entry.log_id().to_owned(),
+        seq_num: next_seq_num.as_u64().to_string(),
+        log_id: entry.log_id().as_u64().to_string(),
     })
 }
 
@@ -200,14 +200,9 @@ mod tests {
             .add("test", OperationValue::Text("Hello".to_owned()))
             .unwrap();
         let operation = match document {
-            Some(document_id) => {
-                Operation::new_update(
-                    schema.clone(),
-                    document_id.clone(),
-                    vec![backlink.unwrap().hash()],
-                    fields,
-                )
-                .unwrap()
+            Some(_) => {
+                Operation::new_update(schema.clone(), vec![backlink.unwrap().hash()], fields)
+                    .unwrap()
             }
             None => Operation::new_create(schema.clone(), fields).unwrap(),
         };
@@ -264,13 +259,13 @@ mod tests {
             r#"{{
                 "entryHashBacklink": "{}",
                 "entryHashSkiplink": {},
-                "logId": {},
-                "seqNum": {}
+                "logId": "{}",
+                "seqNum": "{}"
             }}"#,
             entry_encoded.hash().as_str(),
             skiplink_str,
-            expect_log_id.as_i64(),
-            expect_seq_num.as_i64(),
+            expect_log_id.as_u64(),
+            expect_seq_num.as_u64(),
         ));
 
         assert_eq!(handle_http(&app, request).await, response);

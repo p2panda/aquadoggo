@@ -53,16 +53,16 @@ pub async fn get_entry_args(
             Ok(EntryArgsResponse {
                 entry_hash_backlink: Some(entry_backlink.entry_hash),
                 entry_hash_skiplink,
-                seq_num: entry_backlink.seq_num.next().unwrap(),
-                log_id,
+                seq_num: entry_backlink.seq_num.next().unwrap().as_u64().to_string(),
+                log_id: log_id.as_u64().to_string(),
             })
         }
         // No entry was given yet, we can assume this is the beginning of the log
         None => Ok(EntryArgsResponse {
             entry_hash_backlink: None,
             entry_hash_skiplink: None,
-            seq_num: SeqNum::default(),
-            log_id,
+            seq_num: SeqNum::default().as_u64().to_string(),
+            log_id: log_id.as_u64().to_string(),
         }),
     }
 }
@@ -76,7 +76,7 @@ pub async fn determine_skiplink(pool: Pool, entry: &Entry) -> Result<Option<Hash
     let skiplink_seq_num = next_seq_num.skiplink_seq_num().unwrap();
 
     // Check if skiplink is required and return hash if so
-    let entry_skiplink_hash = if is_lipmaa_required(next_seq_num.as_i64() as u64) {
+    let entry_skiplink_hash = if is_lipmaa_required(next_seq_num.as_u64()) {
         let skiplink_entry =
             Entry::at_seq_num(&pool, &entry.author, &entry.log_id, &skiplink_seq_num)
                 .await?
@@ -145,8 +145,8 @@ mod tests {
             r#"{
                 "entryHashBacklink": null,
                 "entryHashSkiplink": null,
-                "logId": 1,
-                "seqNum": 1
+                "logId": "1",
+                "seqNum": "1"
             }"#,
         );
 
