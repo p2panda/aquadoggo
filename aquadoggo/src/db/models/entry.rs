@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::convert::TryFrom;
+
 use p2panda_rs::entry::{EntrySigned, LogId, SeqNum};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
@@ -10,6 +12,41 @@ use sqlx::{query, query_as, FromRow};
 
 use crate::db::Pool;
 use crate::errors::Result;
+
+/// Struct representing the actual SQL row of `Entry`.
+///
+/// We store the u64 integer values of `log_id` and `seq_num` as strings since not all database
+/// backend support large numbers.
+#[derive(FromRow, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EntryRow {
+    /// Public key of the author.
+    pub author: String,
+
+    /// Actual Bamboo entry data.
+    pub entry_bytes: String,
+
+    /// Hash of Bamboo entry data.
+    pub entry_hash: String,
+
+    /// Used log for this entry.
+    pub log_id: String,
+
+    /// Payload of entry, can be deleted.
+    pub payload_bytes: Option<String>,
+
+    /// Hash of payload data.
+    pub payload_hash: String,
+
+    /// Sequence number of this entry.
+    pub seq_num: String,
+}
+
+impl AsRef<Self> for EntryRow {
+    fn as_ref(&self) -> &Self {
+        self
+    }
+}
 
 /// Entry of an append-only log based on Bamboo specification. It describes the actual data in the
 /// p2p network and is shared between nodes.
@@ -22,7 +59,7 @@ use crate::errors::Result;
 /// payload can be deleted without affecting the data structures integrity. All other fields like
 /// `author`, `payload_hash` etc. can be retrieved from `entry_bytes` but are separately stored in
 /// the database for faster querying.
-#[derive(FromRow, Debug, Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Entry {
     /// Public key of the author.
@@ -74,13 +111,13 @@ impl Entry {
                 ($1, $2, $3, $4, $5, $6, $7)
             ",
         )
-        .bind(author)
-        .bind(entry_bytes)
-        .bind(entry_hash)
-        .bind(log_id)
-        .bind(payload_bytes)
-        .bind(payload_hash)
-        .bind(seq_num)
+        .bind(author.as_str())
+        .bind(entry_bytes.as_str())
+        .bind(entry_hash.as_str())
+        .bind(log_id.as_u64().to_string())
+        .bind(payload_bytes.as_str())
+        .bind(payload_hash.as_str())
+        .bind(seq_num.as_u64().to_string())
         .execute(pool)
         .await?
         .rows_affected();
@@ -90,7 +127,7 @@ impl Entry {
 
     /// Returns the latest Bamboo entry of an author's log.
     pub async fn latest(pool: &Pool, author: &Author, log_id: &LogId) -> Result<Option<Entry>> {
-        let latest_entry = query_as::<_, Entry>(
+        let row = query_as::<_, EntryRow>(
             "
             SELECT
                 author,
@@ -111,16 +148,19 @@ impl Entry {
                 1
             ",
         )
-        .bind(author)
-        .bind(log_id)
+        .bind(author.as_str())
+        .bind(log_id.as_u64().to_string())
         .fetch_optional(pool)
         .await?;
 
-        Ok(latest_entry)
+        // Convert internal `EntryRow` to `Entry` with correct types
+        let entry = row.map(|entry| Self::try_from(&entry).expect("Corrupt values found in entry"));
+
+        Ok(entry)
     }
 
-    pub async fn by_document(pool: &Pool, document: &Hash) -> Result<Vec<Entry>> {
-        let entries = query_as::<_, Entry>(
+    pub async fn by_document(pool: &Pool, document: &Hash) -> Result<Vec<EntryRow>> {
+        let entries = query_as::<_, EntryRow>(
             "
             SELECT
                 entries.author,
@@ -139,7 +179,7 @@ impl Entry {
                 logs.document = $1
             ",
         )
-        .bind(document)
+        .bind(document.as_str())
         .fetch_all(pool)
         .await?;
 
@@ -147,8 +187,13 @@ impl Entry {
     }
 
     /// Return vector of all entries of a given schema
-    pub async fn by_schema(pool: &Pool, schema: &Hash) -> Result<Vec<Entry>> {
-        let entries = query_as::<_, Entry>(
+    // @TODO: This currently returns `EntryRow`, a better API would return `Entry` instead as it is
+    // properly typed and `EntryRow` is only meant as an intermediate struct to deal with
+    // databases. Here we still return `EntryRow` for the `queryEntries` RPC response (we want
+    // `seq_num` and `log_id` to be strings). This should be changed as soon as we move over using
+    // a GraphQL API.
+    pub async fn by_schema(pool: &Pool, schema: &Hash) -> Result<Vec<EntryRow>> {
+        let entries = query_as::<_, EntryRow>(
             "
             SELECT
                 entries.author,
@@ -167,7 +212,7 @@ impl Entry {
                 logs.schema = $1
             ",
         )
-        .bind(schema)
+        .bind(schema.as_str())
         .fetch_all(pool)
         .await?;
 
@@ -181,7 +226,7 @@ impl Entry {
         log_id: &LogId,
         seq_num: &SeqNum,
     ) -> Result<Option<Entry>> {
-        let entry = query_as::<_, Entry>(
+        let row = query_as::<_, EntryRow>(
             "
             SELECT
                 author,
@@ -199,13 +244,33 @@ impl Entry {
                 AND seq_num = $3
             ",
         )
-        .bind(author)
-        .bind(log_id)
-        .bind(seq_num)
+        .bind(author.as_str())
+        .bind(log_id.as_u64().to_string())
+        .bind(seq_num.as_u64().to_string())
         .fetch_optional(pool)
         .await?;
 
+        // Convert internal `EntryRow` to `Entry` with correct types
+        let entry = row.map(|entry| Self::try_from(&entry).expect("Corrupt values found in entry"));
+
         Ok(entry)
+    }
+}
+
+/// Convert SQL row representation `EntryRow` to typed `Entry` one.
+impl TryFrom<&EntryRow> for Entry {
+    type Error = crate::errors::Error;
+
+    fn try_from(row: &EntryRow) -> std::result::Result<Self, Self::Error> {
+        Ok(Self {
+            author: Author::try_from(row.author.as_ref())?,
+            entry_bytes: row.entry_bytes.clone(),
+            entry_hash: row.entry_hash.parse()?,
+            log_id: row.log_id.parse()?,
+            payload_bytes: row.payload_bytes.clone(),
+            payload_hash: row.payload_hash.parse()?,
+            seq_num: row.seq_num.parse()?,
+        })
     }
 }
 

@@ -78,7 +78,7 @@ pub async fn write_document(pool: &Pool, document_id: &Hash, instance: &Instance
     let mut query = query(&query_string[..]);
 
     // Bind values for schema-independent columns
-    query = query.bind(document_id);
+    query = query.bind(document_id.as_str());
 
     // Bind values for schema-specific columns
     for (key, value) in instance.iter() {
