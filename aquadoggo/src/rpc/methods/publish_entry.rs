@@ -614,6 +614,9 @@ mod tests {
 
         // Panda publishes a create operation.
         // This instantiates a new document.
+        //
+        // PANDA  : [1]
+        // PENGUIN:
         let panda_entry_1_hash = send_to_node(
             &mut node,
             &panda,
@@ -641,6 +644,9 @@ mod tests {
 
         // Panda publishes an update operation.
         // It contains the hash of the current graph tip in it's `previous_operations`.
+        //
+        // PANDA  : [1] <-- [2]
+        // PENGUIN:
         let panda_entry_2_hash = send_to_node(
             &mut node,
             &panda,
@@ -669,6 +675,9 @@ mod tests {
 
         // Penguin publishes an update operation which refers to panda's last operation
         // as the graph tip.
+        //
+        // PANDA  : [1] <--[2]
+        // PENGUIN:           \--[1]
         let penguin_entry_1_hash = send_to_node(
             &mut node,
             &penguin,
@@ -697,6 +706,9 @@ mod tests {
 
         // Penguin publishes another update operation refering to their own previous operation
         // as the graph tip.
+        //
+        // PANDA  : [1] <--[2]
+        // PENGUIN:           \--[1] <--[2]
         let penguin_entry_2_hash = send_to_node(
             &mut node,
             &penguin,
@@ -724,6 +736,9 @@ mod tests {
         .await;
 
         // Panda publishes a new update operation which points at the current graph tip.
+        //
+        // PANDA  : [1] <--[2]             /--[3]
+        // PENGUIN:           \--[1] <--[2]
         let panda_entry_3_hash = send_to_node(
             &mut node,
             &panda,
