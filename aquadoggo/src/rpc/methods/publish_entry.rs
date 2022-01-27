@@ -34,7 +34,7 @@ pub enum PublishEntryError {
     InvalidSchema,
 
     #[error("Requested log id {0} does not match expected log id {1}")]
-    InvalidLogId(i64, i64),
+    InvalidLogId(u64, u64),
 }
 
 /// Implementation of `panda_publishEntry` RPC method.
@@ -98,8 +98,8 @@ pub async fn publish_entry(
     // Check if provided log id matches expected log id
     if &document_log_id != entry.log_id() {
         return Err(PublishEntryError::InvalidLogId(
-            entry.log_id().as_i64(),
-            document_log_id.as_i64(),
+            entry.log_id().as_u64(),
+            document_log_id.as_u64(),
         )
         .into());
     }
@@ -150,7 +150,7 @@ pub async fn publish_entry(
     )?;
 
     // Register log in database when entry is first item in a log.
-    if entry.seq_num().as_i64() == 1 {
+    if entry.seq_num().as_u64() == 1 {
         Log::insert(
             &pool,
             &author,
@@ -188,8 +188,8 @@ pub async fn publish_entry(
     Ok(PublishEntryResponse {
         entry_hash_backlink: Some(params.entry_encoded.hash()),
         entry_hash_skiplink,
-        seq_num: next_seq_num,
-        log_id: entry.log_id().to_owned(),
+        seq_num: next_seq_num.as_u64().to_string(),
+        log_id: entry.log_id().as_u64().to_string(),
     })
 }
 
@@ -297,13 +297,13 @@ mod tests {
             r#"{{
                 "entryHashBacklink": "{}",
                 "entryHashSkiplink": {},
-                "logId": {},
-                "seqNum": {}
+                "logId": "{}",
+                "seqNum": "{}"
             }}"#,
             entry_encoded.hash().as_str(),
             skiplink_str,
-            expect_log_id.as_i64(),
-            expect_seq_num.as_i64(),
+            expect_log_id.as_u64(),
+            expect_seq_num.as_u64(),
         ));
 
         assert_eq!(handle_http(&app, request).await, response);
@@ -617,7 +617,7 @@ mod tests {
         //
         // PANDA  : [1]
         // PENGUIN:
-        let panda_entry_1_hash = send_to_node(
+        let (panda_entry_1_hash, _) = send_to_node(
             &mut node,
             &panda,
             &create_operation(
@@ -647,7 +647,7 @@ mod tests {
         //
         // PANDA  : [1] <-- [2]
         // PENGUIN:
-        let panda_entry_2_hash = send_to_node(
+        let (panda_entry_2_hash, _) = send_to_node(
             &mut node,
             &panda,
             &update_operation(
@@ -678,7 +678,7 @@ mod tests {
         //
         // PANDA  : [1] <--[2]
         // PENGUIN:           \--[1]
-        let penguin_entry_1_hash = send_to_node(
+        let (penguin_entry_1_hash, _) = send_to_node(
             &mut node,
             &penguin,
             &update_operation(
@@ -709,7 +709,7 @@ mod tests {
         //
         // PANDA  : [1] <--[2]
         // PENGUIN:           \--[1] <--[2]
-        let penguin_entry_2_hash = send_to_node(
+        let (penguin_entry_2_hash, _) = send_to_node(
             &mut node,
             &penguin,
             &update_operation(
@@ -739,7 +739,7 @@ mod tests {
         //
         // PANDA  : [1] <--[2]             /--[3]
         // PENGUIN:           \--[1] <--[2]
-        let panda_entry_3_hash = send_to_node(
+        let (panda_entry_3_hash, _) = send_to_node(
             &mut node,
             &panda,
             &update_operation(
