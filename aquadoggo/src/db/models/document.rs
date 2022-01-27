@@ -25,6 +25,8 @@ fn build_insert_query(instance: &Instance) -> String {
     // The parameter spec is a list of parameter placeholders with as many elements as there are
     // columns to insert
     let parameter_spec = (0..instance.raw().len())
+        // Add 2 because paramas are 1-indexed and "document" is
+        // a static parameter inserted before these dynamic ones
         .map(|i| format!("${}", (i + 2)))
         .reduce(|acc, elem| format!("{}, {}", acc, elem))
         .unwrap();
@@ -32,7 +34,9 @@ fn build_insert_query(instance: &Instance) -> String {
     let update_spec = instance
         .iter()
         .enumerate()
+        // Make key-binding pairs like "key=$2"
         .map(|(i, (key, _))| format!("{}=${}", key, (i + 2)))
+        // Concatenate
         .reduce(|acc, val| format!("{},\n{}", acc, val))
         .unwrap();
 
