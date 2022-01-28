@@ -183,8 +183,7 @@ mod tests {
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::{Operation, OperationEncoded, OperationFields, OperationValue};
 
-    use crate::rpc::api::build_rpc_api_service;
-    use crate::rpc::server::{build_rpc_server, RpcServer};
+    use crate::server::{build_server, ApiServer, ApiState};
     use crate::test_helpers::{handle_http, initialize_db, rpc_error, rpc_request, rpc_response};
 
     /// Create encoded entries and operations for testing.
@@ -230,7 +229,7 @@ mod tests {
     /// Compare API response from publishing an encoded entry and operation to expected skiplink,
     /// log id and sequence number.
     async fn assert_request(
-        app: &RpcServer,
+        app: &ApiServer,
         entry_encoded: &EntrySigned,
         operation_encoded: &OperationEncoded,
         expect_skiplink: Option<&EntrySigned>,
@@ -283,8 +282,8 @@ mod tests {
         let pool = initialize_db().await;
 
         // Create tide server with endpoints
-        let rpc_api = build_rpc_api_service(pool.clone());
-        let app = build_rpc_server(rpc_api, pool);
+        let state = ApiState::new(pool.clone());
+        let app = build_server(state);
 
         // Define schema and log id for entries
         let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
@@ -400,8 +399,8 @@ mod tests {
         let pool = initialize_db().await;
 
         // Create tide server with endpoints
-        let rpc_api = build_rpc_api_service(pool.clone());
-        let app = build_rpc_server(rpc_api, pool);
+        let state = ApiState::new(pool.clone());
+        let app = build_server(state);
 
         // Define schema and log id for entries
         let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();

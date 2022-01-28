@@ -20,6 +20,7 @@ mod graphql;
 mod materialisation;
 mod rpc;
 mod runtime;
+mod server;
 mod task;
 
 #[cfg(test)]

@@ -1,4 +1,6 @@
-use async_graphql::{Context, EmptyMutation, EmptySubscription, Object, Schema, SimpleObject};
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+use async_graphql::{Context, Object, SimpleObject};
 
 use crate::db::models::get_bookmarks;
 use crate::db::Pool;
@@ -43,10 +45,4 @@ impl QueryRoot {
 
         Ok(results)
     }
-}
-
-pub fn build_schema(pool: Pool) -> Schema<QueryRoot, EmptyMutation, EmptySubscription> {
-    Schema::build(QueryRoot, EmptyMutation, EmptySubscription)
-        .data(pool)
-        .finish()
 }

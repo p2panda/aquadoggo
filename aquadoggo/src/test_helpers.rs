@@ -7,7 +7,7 @@ use sqlx::migrate::MigrateDatabase;
 use tide_testing::TideTestingExt;
 
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
-use crate::rpc::RpcServer;
+use crate::server::ApiServer;
 
 const DB_URL: &str = "sqlite::memory:";
 
@@ -88,7 +88,7 @@ pub fn rpc_error(message: &str) -> String {
 }
 
 // Helper method to handle tide HTTP request and return response
-pub async fn handle_http(app: &RpcServer, request: String) -> String {
+pub async fn handle_http(app: &ApiServer, request: String) -> String {
     let response_body: serde_json::value::Value = app
         .post("/")
         .body(tide::Body::from_string(request.into()))
