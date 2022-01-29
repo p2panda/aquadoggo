@@ -152,10 +152,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b26702f315f53b6071259e15dd9d64528213b44d61de1ec926eca7715d62203"
 
 [[package]]
+name = "apollo-parser"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b22f151e7fd55b164af009ae0e62893a40cf159ce73d23c11a6d708749030865"
+dependencies = [
+ "rowan",
+]
+
+[[package]]
 name = "aquadoggo"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "apollo-parser",
  "async-graphql",
  "async-graphql-tide",
  "async-std",
@@ -171,6 +181,7 @@ dependencies = [
  "openssl-probe",
  "p2panda-rs",
  "rand 0.8.4",
+ "sea-query",
  "serde",
  "serde_json",
  "sqlformat",
@@ -1036,6 +1047,12 @@ dependencies = [
  "time 0.2.27",
  "version_check",
 ]
+
+[[package]]
+name = "countme"
+version = "2.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "328b822bdcba4d4e402be8d9adb6eebf269f969f8eadef977a553ff3c4fbcb58"
 
 [[package]]
 name = "cpufeatures"
@@ -3030,6 +3047,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56770675ebc04927ded3e60633437841581c285dc6236109ea25fbf3beb7b59e"
 
 [[package]]
+name = "rowan"
+version = "0.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4a938f42b9c73aeece236481f37adb3debb7dfe3ae347cd6a45b5797d9ce4250"
+dependencies = [
+ "countme",
+ "hashbrown",
+ "memoffset",
+ "rustc-hash",
+ "text-size",
+]
+
+[[package]]
 name = "rsa"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3077,6 +3107,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ef03e0a2b150c7a90d01faf6254c9c48a41e95fb2a8c2ac1c6f0d2b9aefc342"
 
 [[package]]
+name = "rustc-hash"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
+
+[[package]]
 name = "rustc_version"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3118,6 +3154,28 @@ checksum = "b362b83898e0e69f38515b82ee15aa80636befe47c3b6d3d89a911e78fc228ce"
 dependencies = [
  "ring",
  "untrusted",
+]
+
+[[package]]
+name = "sea-query"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d83e4a0dd79545b61c6ca453a28d0a88829487869a8559a35a3192f1b6aacad8"
+dependencies = [
+ "sea-query-derive",
+]
+
+[[package]]
+name = "sea-query-derive"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "34cdc022b4f606353fe5dc85b09713a04e433323b70163e81513b141c6ae6eb5"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "syn",
+ "thiserror",
 ]
 
 [[package]]
@@ -3701,6 +3759,12 @@ checksum = "2dfed899f0eb03f32ee8c6a0aabdb8a7949659e3466561fc0adf54e26d88c5f4"
 dependencies = [
  "winapi-util",
 ]
+
+[[package]]
+name = "text-size"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "288cb548dbe72b652243ea797201f3d481a0609a967980fcc5b2315ea811560a"
 
 [[package]]
 name = "textwrap"

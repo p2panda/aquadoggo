@@ -5,7 +5,7 @@ use async_graphql::{EmptyMutation, EmptySubscription, Schema};
 use tide::{http::mime, Body, Response, StatusCode};
 
 use crate::db::Pool;
-use crate::graphql::QueryRoot;
+use crate::graphql::{gql_to_sql, QueryRoot};
 use crate::server::{ApiRequest, ApiResult, ApiState};
 
 /// GraphQL Endpoint from `async_graphql` crate handling statically defined GraphQL queries.
@@ -56,7 +56,11 @@ impl tide::Endpoint<ApiState> for Endpoint {
     ///
     /// This handler resolves all incoming GraphQL requests and answers them both for dynamically
     /// and statically generated schemas.
-    async fn call(&self, request: ApiRequest) -> ApiResult {
+    async fn call(&self, mut request: ApiRequest) -> ApiResult {
+        let graphql_request = request.body_json::<async_graphql::Request>().await?;
+        let sql = gql_to_sql(&graphql_request.query).unwrap();
+        println!("{:?}", sql);
+
         // @TODO: Implement handling of dynamic GraphQL requests. Route all GraphQL requests to
         // static handler for now.
         self.static_endpoint.call(request).await
