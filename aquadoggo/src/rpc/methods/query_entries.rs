@@ -28,7 +28,7 @@ pub async fn query_entries(
 mod tests {
     use p2panda_rs::hash::Hash;
 
-    use crate::server::{ApiState, build_server};
+    use crate::server::{build_server, ApiState};
     use crate::test_helpers::{handle_http, initialize_db, rpc_request, rpc_response};
 
     #[async_std::test]

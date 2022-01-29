@@ -2,7 +2,7 @@
 
 use apollo_parser::ast::{Argument as AstArgument, AstChildren, Definition, Document, Selection};
 use apollo_parser::Parser;
-use sea_query::{Alias, Query};
+use sea_query::{Alias, Expr, Query};
 
 use crate::errors::Result;
 
@@ -143,7 +143,6 @@ fn get_root(document: Document) -> Result<Root> {
             .nth(0)
             .expect("Needs to have one selection");
 
-        println!("{:?}", selection);
         if let Selection::Field(field) = selection {
             let schema = field
                 .name()
@@ -196,11 +195,17 @@ fn get_arguments(args: AstChildren<AstArgument>) -> Result<Vec<Argument>> {
     Ok(arguments)
 }
 
-pub fn gql_to_sql(query: &str) -> Result<String> {
+fn parse(query: &str) -> Result<Root> {
     let document = parse_graphql_query(query).unwrap();
-
     let root = get_root(document).unwrap();
+    Ok(root)
+}
 
+fn validate(root: &Root, schema: u64) -> Result<()> {
+    Ok(())
+}
+
+fn root_to_sql(root: Root) -> Result<String> {
     let mut query = Query::select();
 
     if root.fields.is_some() {
@@ -223,9 +228,35 @@ pub fn gql_to_sql(query: &str) -> Result<String> {
         }
     }
 
+    if root.arguments.is_some() {
+        for arg in root.arguments.unwrap() {
+            match arg {
+                Argument::DocumentHash(value) => {
+                    query.and_where(Expr::col(Alias::new("document")).eq(value));
+                }
+            }
+        }
+    }
+
     let sql = query
         .from(Alias::new(&root.schema))
         .to_string(sea_query::PostgresQueryBuilder);
+
+    Ok(sql)
+}
+
+pub fn gql_to_sql(query: &str) -> Result<String> {
+    // @TODO: We will pass in the schema later ..
+    let schema = 123;
+
+    // Parse GraphQL to our own abstract query representation
+    let root = parse(query).unwrap();
+
+    // Validate query with application schema
+    validate(&root, schema).unwrap();
+
+    // Convert to SQL query
+    let sql = root_to_sql(root).unwrap();
 
     Ok(sql)
 }
@@ -237,7 +268,7 @@ mod tests {
     #[test]
     fn parser() {
         let query = "{
-            festivalEvents(document: \"0x12\") {
+            festivalEvents(document: ABC123) {
                 document
                 fields {
                     title
@@ -250,7 +281,7 @@ mod tests {
 
         assert_eq!(
             sql,
-            "SELECT \"title\", \"description\", \"document\" FROM \"festivalEvents\""
+            "SELECT \"title\", \"description\", \"document\" FROM \"festivalEvents\" WHERE \"document\" = 'ABC123'"
         );
     }
 }
