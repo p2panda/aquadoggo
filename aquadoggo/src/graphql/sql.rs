@@ -150,6 +150,27 @@ pub enum AbstractQueryError {
 
     #[error("Root field is missing a selection set")]
     FieldSelectionSetMissing,
+
+    #[error("Argument has invalid name or value")]
+    ArgumentInvalid,
+
+    #[error("Unknown argument used: {0}")]
+    ArgumentUnknown(String),
+
+    #[error("Invalid argument value used for: {0}")]
+    ArgumentValueInvalid(String),
+
+    #[error("Meta field is invalid")]
+    MetaFieldInvalid,
+
+    #[error("Meta field 'fields' needs a selection set")]
+    MetaFieldNeedsSelectionSet,
+
+    #[error("Meta field is not known: {0}")]
+    MetaFieldUnknown(String),
+
+    #[error("Application field is invalid")]
+    ApplicationFieldInvalid,
 }
 
 #[derive(Debug)]
@@ -168,37 +189,64 @@ struct AbstractQuery {
 }
 
 impl AbstractQuery {
+    /// Convert fields to abstract query containing the names of the fields we want to query from
+    /// the application data.
+    ///
+    /// We do not make sure yet if these fields actually exist in the application schema, this
+    /// validation takes place after the query got converted.
     fn get_fields(selection_set: AstChildren<Selection>) -> Result<Vec<Field>, AbstractQueryError> {
         let mut fields = Vec::<Field>::new();
 
         for selection in selection_set {
             match selection {
                 Selection::Field(field) => {
-                    let field_name = field.name().expect("Needs a name").text().to_string();
+                    // Expect field to be simple
+                    if field.directives().is_some()
+                        || field.arguments().is_some()
+                        || field.alias().is_some()
+                    {
+                        return Err(AbstractQueryError::ApplicationFieldInvalid);
+                    }
+
+                    // Expect field to have a name
+                    let name = field
+                        .name()
+                        .ok_or(AbstractQueryError::ApplicationFieldInvalid)?
+                        .to_string();
 
                     match field.selection_set() {
+                        // Found a field with selection set which means we're querying a relation
+                        // to another document-view
                         Some(set) => {
                             let (meta_fields, relation_fields) =
-                                Self::get_meta_fields(set.selections()).unwrap();
+                                Self::get_meta_fields(set.selections())?;
+
+                            // Expect a valid schema
+                            let schema = Schema::parse(&name)?;
 
                             fields.push(Field::Relation(Relation {
-                                schema: Schema::parse(&field_name).expect("Invalid schema"),
+                                schema,
                                 meta_fields,
                                 fields: relation_fields,
                             }));
                         }
+                        // Found a regular application data field
                         None => {
-                            fields.push(Field::Name(field_name));
+                            fields.push(Field::Name(name));
                         }
                     };
                 }
-                _ => panic!("Needs a field"),
+                _ => return Err(AbstractQueryError::ApplicationFieldInvalid),
             };
         }
 
         Ok(fields)
     }
 
+    /// Convert fields of GraphQL document into abstract query.
+    ///
+    /// We call them "meta fields" since they do not relate to the application data fields but to
+    /// general (meta) data we can ask about any document views.
     fn get_meta_fields(
         selection_set: AstChildren<Selection>,
     ) -> Result<(MetaFields, Fields), AbstractQueryError> {
@@ -208,48 +256,83 @@ impl AbstractQuery {
         for selection in selection_set {
             match selection {
                 Selection::Field(field) => {
-                    let name = field.name().expect("Needs a name").text().to_string();
+                    // Expect field to be simple
+                    if field.directives().is_some()
+                        || field.arguments().is_some()
+                        || field.alias().is_some()
+                    {
+                        return Err(AbstractQueryError::MetaFieldInvalid);
+                    }
+
+                    // Expect field to have a name
+                    let name = field
+                        .name()
+                        .ok_or(AbstractQueryError::MetaFieldInvalid)?
+                        .to_string();
+
+                    // No meta fields should have a selection set, except of "fields"
+                    if field.selection_set().is_some() && name.as_str() == "fields" {
+                        return Err(AbstractQueryError::MetaFieldInvalid);
+                    }
 
                     match name.as_str() {
+                        // "fields" is a special meta field which allows us to query application
+                        // field data
                         "fields" => {
-                            let set = field.selection_set().expect("Needs selection set");
-                            fields = Some(Self::get_fields(set.selections()).unwrap());
+                            let selections = field
+                                .selection_set()
+                                .ok_or(AbstractQueryError::MetaFieldNeedsSelectionSet)?
+                                .selections();
+                            fields = Some(Self::get_fields(selections)?);
                         }
+                        // Query the document hash for each result
                         "document" => {
                             meta.push(MetaField::DocumentHash);
                         }
-                        _ => panic!("Unknown meta field"),
+                        _ => {
+                            return Err(AbstractQueryError::MetaFieldUnknown(name));
+                        }
                     };
                 }
-                _ => panic!("Needs a field"),
+                _ => return Err(AbstractQueryError::MetaFieldInvalid),
             };
         }
 
         let meta_option = if meta.is_empty() { None } else { Some(meta) };
-
         Ok((meta_option, fields))
     }
 
+    /// Convert field arguments of GraphQL document into abstract query arguments.
+    ///
+    /// Read more about GraphQL arguments here:
+    /// https://spec.graphql.org/June2018/#sec-Language.Arguments
     fn get_arguments(args: AstChildren<AstArgument>) -> Result<Vec<Argument>, AbstractQueryError> {
         let mut arguments = Vec::<Argument>::new();
 
         for arg in args {
-            let name = arg.name().expect("Needs a name").to_string();
-            let value = arg.value().expect("Needs a value");
+            // Expect a name and value for each argument
+            let name = arg
+                .name()
+                .ok_or(AbstractQueryError::ArgumentInvalid)?
+                .to_string();
+
+            // Expect arguments of known name and value type
+            let value = arg.value().ok_or(AbstractQueryError::ArgumentInvalid)?;
 
             let arg_value = match name.as_str() {
+                // Filter results by "document" hash
                 "document" => match value {
                     Value::StringValue(str_value) => {
-                        let str: String = str_value.into();
-                        let hash = str.try_into().expect("Invalid hash");
-                        Argument::DocumentHash(hash)
+                        let hash_str: String = str_value.into();
+                        let hash = hash_str
+                            .try_into()
+                            .map_err(|_| AbstractQueryError::ArgumentValueInvalid(name))?;
+                        Ok(Argument::DocumentHash(hash))
                     }
-                    _ => {
-                        panic!("Expected string");
-                    }
+                    _ => Err(AbstractQueryError::ArgumentValueInvalid(name)),
                 },
-                _ => panic!("Unknown argument"),
-            };
+                _ => Err(AbstractQueryError::ArgumentUnknown(name)),
+            }?;
 
             arguments.push(arg_value);
         }
@@ -401,7 +484,7 @@ pub fn gql_to_sql(query: &str) -> Result<String> {
     let document = parse_graphql_query(query).unwrap();
 
     // Convert GraphQL document to our own abstract query representation
-    let root = AbstractQuery::new_from_document(document).unwrap();
+    let root = AbstractQuery::new_from_document(document)?;
 
     // Convert to SQL query
     let sql = root_to_sql(root).unwrap();
