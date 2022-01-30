@@ -5,7 +5,8 @@ use async_graphql::{EmptyMutation, EmptySubscription, Schema};
 use tide::{http::mime, Body, Response, StatusCode};
 
 use crate::db::Pool;
-use crate::graphql::{gql_to_sql, QueryRoot};
+use crate::graphql::convert::gql_to_sql;
+use crate::graphql::QueryRoot;
 use crate::server::{ApiRequest, ApiResult, ApiState};
 
 /// GraphQL Endpoint from `async_graphql` crate handling statically defined GraphQL queries.
