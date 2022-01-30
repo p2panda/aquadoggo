@@ -413,9 +413,12 @@ mod tests {
         let query = "{ events { document } }";
         assert!(AbstractQuery::new(query).is_err());
 
-        let query = "query {
-            events_ab46293111c48fc78b {
-                document
+        let query = "{ events_ab46293111c48fc78b { document } }";
+        assert!(AbstractQuery::new(query).is_err());
+
+        let query = "{
+            events_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b {
+                document fields { invalid_relation_0020123 { document } }
             }
         }";
         assert!(AbstractQuery::new(query).is_err());
