@@ -51,6 +51,9 @@ pub struct Relation {
 #[derive(Error, Debug)]
 #[allow(missing_copy_implementations)]
 pub enum AbstractQueryError {
+    #[error("Invalid GraphQL query")]
+    ParserFailed,
+
     #[error(transparent)]
     InvalidSchema(#[from] SchemaParseError),
 
@@ -274,7 +277,7 @@ impl AbstractQuery {
 
         if ast.errors().len() > 0 {
             // @TODO: Handle parsing errors
-            panic!("Parsing failed");
+            return Err(AbstractQueryError::ParserFailed);
         }
 
         Self::new_from_document(ast.document())
@@ -372,5 +375,108 @@ impl AbstractQuery {
         } else {
             Err(AbstractQueryError::OperationMissing)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AbstractQuery;
+
+    #[test]
+    fn needs_shorthand_format() {
+        let query = "query {
+            events_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b {
+                document
+            }
+        }";
+
+        assert!(AbstractQuery::new(query).is_err());
+
+        let query = "mutation {
+            publishEntry(schema: \"Panda\") {
+                document
+            }
+        }";
+
+        assert!(AbstractQuery::new(query).is_err());
+    }
+
+    #[test]
+    fn unsupported_field_arguments() {
+        let query = "{
+            events_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b {
+                document
+                fields {
+                    image(width: 100, height: 50)
+                }
+            }
+        }";
+
+        assert!(AbstractQuery::new(query).is_err());
+    }
+
+    #[test]
+    fn unknown_arguments() {
+        let query = "{
+            events_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b(sort_by_panda: ASC){
+                document
+            }
+        }";
+
+        assert!(AbstractQuery::new(query).is_err());
+    }
+
+    #[test]
+    fn unknown_meta_fields() {
+        let query = "{
+            events_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b {
+                document
+                random_meta_field
+            }
+        }";
+
+        assert!(AbstractQuery::new(query).is_err());
+
+        let query = "{
+            events_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b {
+                document
+                some_relation {
+                    document
+                }
+                wrong_relation {
+                    blub
+                }
+            }
+        }";
+
+        assert!(AbstractQuery::new(query).is_err());
+    }
+
+    #[test]
+    fn empty_selection_sets() {
+        let query = "{
+            events_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b {}
+        }";
+
+        assert!(AbstractQuery::new(query).is_err());
+
+        let query = "{
+            events_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b {
+                fields {}
+            }
+        }";
+
+        assert!(AbstractQuery::new(query).is_err());
+
+        let query = "{
+            events_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b {
+                fields {
+                    name
+                    some_relation {}
+                }
+            }
+        }";
+
+        assert!(AbstractQuery::new(query).is_err());
     }
 }
