@@ -383,13 +383,51 @@ mod tests {
     use super::AbstractQuery;
 
     #[test]
+    fn graphql_to_abstract() {
+        let query = "{
+            events_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b(document: \"0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543\") {
+                document
+                fields {
+                    title
+                    content
+                    some_relation_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b {
+                        document
+                        fields {
+                            example
+                            url
+                            another_relation_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b {
+                                fields {
+                                    test
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }";
+        assert!(AbstractQuery::new(query).is_ok());
+    }
+
+    #[test]
+    fn invalid_schema() {
+        let query = "{ events { document } }";
+        assert!(AbstractQuery::new(query).is_err());
+
+        let query = "query {
+            events_ab46293111c48fc78b {
+                document
+            }
+        }";
+        assert!(AbstractQuery::new(query).is_err());
+    }
+
+    #[test]
     fn needs_shorthand_format() {
         let query = "query {
             events_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b {
                 document
             }
         }";
-
         assert!(AbstractQuery::new(query).is_err());
 
         let query = "mutation {
@@ -397,7 +435,6 @@ mod tests {
                 document
             }
         }";
-
         assert!(AbstractQuery::new(query).is_err());
     }
 
@@ -411,7 +448,23 @@ mod tests {
                 }
             }
         }";
+        assert!(AbstractQuery::new(query).is_err());
+    }
 
+    #[test]
+    fn unsupported_alias_fields() {
+        let query = "{
+            alias: events_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b {
+                document
+            }
+        }";
+        assert!(AbstractQuery::new(query).is_err());
+
+        let query = "{
+            events_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b {
+                alias: document
+            }
+        }";
         assert!(AbstractQuery::new(query).is_err());
     }
 
@@ -422,7 +475,6 @@ mod tests {
                 document
             }
         }";
-
         assert!(AbstractQuery::new(query).is_err());
     }
 
@@ -434,7 +486,6 @@ mod tests {
                 random_meta_field
             }
         }";
-
         assert!(AbstractQuery::new(query).is_err());
 
         let query = "{
@@ -448,7 +499,6 @@ mod tests {
                 }
             }
         }";
-
         assert!(AbstractQuery::new(query).is_err());
     }
 
@@ -457,7 +507,6 @@ mod tests {
         let query = "{
             events_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b {}
         }";
-
         assert!(AbstractQuery::new(query).is_err());
 
         let query = "{
@@ -465,7 +514,6 @@ mod tests {
                 fields {}
             }
         }";
-
         assert!(AbstractQuery::new(query).is_err());
 
         let query = "{
@@ -476,7 +524,6 @@ mod tests {
                 }
             }
         }";
-
         assert!(AbstractQuery::new(query).is_err());
     }
 }
