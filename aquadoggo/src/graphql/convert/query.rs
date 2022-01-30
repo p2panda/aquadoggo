@@ -5,6 +5,7 @@ use std::convert::TryInto;
 use apollo_parser::ast::{
     Argument as AstArgument, AstChildren, Definition, Document, Selection, Value,
 };
+use apollo_parser::Parser;
 use p2panda_rs::hash::Hash;
 use thiserror::Error;
 
@@ -263,8 +264,23 @@ impl AbstractQuery {
         Ok(arguments)
     }
 
-    /// Validates and converts an GraphQL document AST into an `AbstractQuery` instance which
-    /// represents a valid p2panda query to retreive document view data from the database.
+    /// Validates and converts a GraphQL query into an `AbstractQuery` instance.
+    ///
+    /// Abstract queries represent a valid p2panda query to retreive document-view data from the
+    /// database.
+    pub fn new(query: &str) -> Result<Self, AbstractQueryError> {
+        let parser = Parser::new(query);
+        let ast = parser.parse();
+
+        if ast.errors().len() > 0 {
+            // @TODO: Handle parsing errors
+            panic!("Parsing failed");
+        }
+
+        Self::new_from_document(ast.document())
+    }
+
+    /// Validates and converts a GraphQL document AST into an `AbstractQuery` instance.
     ///
     /// GraphQL is a fairly expressive query language and we do not need / support all of its
     /// features for p2panda queries: Directives, Variables, Mutations, Subscriptions, Alias Types
