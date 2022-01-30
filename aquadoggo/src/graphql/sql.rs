@@ -127,6 +127,31 @@ impl Schema {
     }
 }
 
+#[derive(Error, Debug)]
+#[allow(missing_copy_implementations)]
+pub enum AbstractQueryError {
+    #[error(transparent)]
+    InvalidSchema(#[from] ParseSchemaError),
+
+    #[error("Query needs to contain a root operation definition")]
+    OperationMissing,
+
+    #[error("Query definition needs to be in shorthand format")]
+    OperationShorthandRequired,
+
+    #[error("Selection set in root is invalid or missing")]
+    RootSelectionSetMissing,
+
+    #[error("Alias or directive types are not allowed in field")]
+    FieldInvalid,
+
+    #[error("Root field is missing a name")]
+    FieldNameMissing,
+
+    #[error("Root field is missing a selection set")]
+    FieldSelectionSetMissing,
+}
+
 #[derive(Debug)]
 struct AbstractQuery {
     /// Schema hash of the queried document view.
@@ -143,7 +168,7 @@ struct AbstractQuery {
 }
 
 impl AbstractQuery {
-    fn get_fields(selection_set: AstChildren<Selection>) -> Result<Vec<Field>> {
+    fn get_fields(selection_set: AstChildren<Selection>) -> Result<Vec<Field>, AbstractQueryError> {
         let mut fields = Vec::<Field>::new();
 
         for selection in selection_set {
@@ -174,7 +199,9 @@ impl AbstractQuery {
         Ok(fields)
     }
 
-    fn get_meta_fields(selection_set: AstChildren<Selection>) -> Result<(MetaFields, Fields)> {
+    fn get_meta_fields(
+        selection_set: AstChildren<Selection>,
+    ) -> Result<(MetaFields, Fields), AbstractQueryError> {
         let mut meta = Vec::<MetaField>::new();
         let mut fields = None;
 
@@ -203,7 +230,7 @@ impl AbstractQuery {
         Ok((meta_option, fields))
     }
 
-    fn get_arguments(args: AstChildren<AstArgument>) -> Result<Vec<Argument>> {
+    fn get_arguments(args: AstChildren<AstArgument>) -> Result<Vec<Argument>, AbstractQueryError> {
         let mut arguments = Vec::<Argument>::new();
 
         for arg in args {
@@ -230,45 +257,86 @@ impl AbstractQuery {
         Ok(arguments)
     }
 
-    pub fn new_from_query(query: &str) -> Result<Self> {
-        let document = parse_graphql_query(query).unwrap();
-        let root = Self::new_from_document(document).unwrap();
-        Ok(root)
-    }
+    /// Validates and converts an GraphQL document AST into an `AbstractQuery` instance which
+    /// represents a valid p2panda query to retreive document view data from the database.
+    ///
+    /// GraphQL is a fairly expressive query language and we do not need / support all of its
+    /// features for p2panda queries: Directives, Variables, Mutations, Subscriptions, Alias Types
+    /// and so on are not allowed.
+    ///
+    /// The supported GraphQL query needs to be in shorthand format and can be roughly described
+    /// like this:
+    ///
+    /// {
+    ///     field_name(some_argument: "value") {
+    ///         field
+    ///         another_field
+    ///         field_with_selection_set {
+    ///             some_field
+    ///         }
+    ///     }
+    /// }
+    pub fn new_from_document(document: Document) -> Result<Self, AbstractQueryError> {
+        // Expect an "OperationDefinition" in the root of this query
+        let root_definition = document.definitions().next();
 
-    pub fn new_from_document(document: Document) -> Result<Self> {
-        let definition = document
-            .definitions()
-            .next()
-            .expect("Needs to contain at least one definition");
+        if let Some(Definition::OperationDefinition(query_operation)) = root_definition {
+            // Expect this "OperationDefinition" to be in shorthand format.
+            //
+            // "If a document contains only one query operation, and that query defines no
+            // variables and contains no directives, that operation may be represented in a
+            // short‐hand form which omits the query keyword and query name."
+            //
+            // See: https://spec.graphql.org/June2018/#sec-Language.Operations
+            if query_operation.operation_type().is_some()
+                || query_operation.variable_definitions().is_some()
+                || query_operation.directives().is_some()
+                || query_operation.name().is_some()
+            {
+                return Err(AbstractQueryError::OperationShorthandRequired);
+            }
 
-        if let Definition::OperationDefinition(op_def) = definition {
-            let selection = op_def
+            // So far our query is empty in its shortform representation. As a first thing we
+            // expect a root "SelectionSet" (aka "curly braces") around the whole query.
+            //
+            // See: https://spec.graphql.org/June2018/#sec-Selection-Sets
+            let selection = query_operation
                 .selection_set()
-                .expect("Needs to have a selection set")
+                .ok_or(AbstractQueryError::RootSelectionSetMissing)?
                 .selections()
-                .next()
-                .expect("Needs to have one selection");
+                .next();
 
-            if let Selection::Field(field) = selection {
-                let schema = field
+            // We expect this root selection set to contain the actual query: A field with a name
+            // (the schema), optional arguments (filter and sorting) and the to-be-queried fields
+            // (meta data or application data).
+            //
+            // See: https://spec.graphql.org/June2018/#sec-Language.Fields
+            if let Some(Selection::Field(field)) = selection {
+                // Alias or directives are not supported
+                if field.alias().is_some() || field.directives().is_some() {
+                    return Err(AbstractQueryError::FieldInvalid);
+                }
+
+                // Expect a name describing the schema which should be queried
+                let name = field
                     .name()
-                    .expect("Needs to have a name")
+                    .ok_or(AbstractQueryError::FieldNameMissing)?
                     .text()
                     .to_string();
+                let schema = Schema::parse(&name)?;
 
-                let arguments = field
-                    .arguments()
-                    .map(|args| Self::get_arguments(args.arguments()).unwrap());
+                // Check for optional arguments
+                let arguments = match field.arguments() {
+                    Some(args) => Some(Self::get_arguments(args.arguments())?),
+                    None => None,
+                };
 
+                // Expect a selection set which holds the fields we want to query
                 let selections = field
                     .selection_set()
-                    .expect("Needs to have a selection set")
+                    .ok_or(AbstractQueryError::FieldSelectionSetMissing)?
                     .selections();
-
-                let (meta_fields, fields) = Self::get_meta_fields(selections).unwrap();
-
-                let schema = Schema::parse(&schema).expect("Invalid schema");
+                let (meta_fields, fields) = Self::get_meta_fields(selections)?;
 
                 Ok(Self {
                     schema,
@@ -277,10 +345,10 @@ impl AbstractQuery {
                     fields,
                 })
             } else {
-                panic!("Needs to be a field");
+                return Err(AbstractQueryError::RootSelectionSetMissing);
             }
         } else {
-            panic!("Needs to be an operation definition");
+            return Err(AbstractQueryError::OperationMissing);
         }
     }
 }
@@ -329,8 +397,11 @@ fn root_to_sql(root: AbstractQuery) -> Result<String> {
 }
 
 pub fn gql_to_sql(query: &str) -> Result<String> {
-    // Parse GraphQL to our own abstract query representation
-    let root = AbstractQuery::new_from_query(query).unwrap();
+    // Parse GraphQL
+    let document = parse_graphql_query(query).unwrap();
+
+    // Convert GraphQL document to our own abstract query representation
+    let root = AbstractQuery::new_from_document(document).unwrap();
 
     // Convert to SQL query
     let sql = root_to_sql(root).unwrap();
