@@ -45,10 +45,10 @@ enum MetaField {
 
 #[derive(Debug)]
 enum Field {
-    /// Materialized value of document view.
-    Value(String),
+    /// Name of the application data field to query.
+    Name(String),
 
-    /// Values of another related document view.
+    /// Values of another related document view to query.
     Relation(Relation),
 }
 
@@ -58,10 +58,10 @@ struct Relation {
     schema: Schema,
 
     /// Fields which give general information on the related document view.
-    meta_fields: Option<Vec<MetaField>>,
+    meta_fields: MetaFields,
 
     /// Materialized field values of the related document view.
-    fields: Option<Vec<Field>>,
+    fields: Fields,
 }
 
 #[derive(Debug)]
@@ -79,15 +79,16 @@ impl Schema {
             panic!("Too long");
         }
 
-        let mut separated = str.split(SCHEMA_NAME_SEPARATOR);
-
-        let name = separated.next().expect("Could not parse name").into();
+        let mut separated = str.rsplitn(2, SCHEMA_NAME_SEPARATOR);
 
         let hash = separated
             .next()
             .expect("Could not parse hash")
+            .to_string()
             .try_into()
             .expect("Invalid hash");
+
+        let name = separated.next().expect("Could not parse name").to_string();
 
         Ok(Self { name, hash })
     }
@@ -138,7 +139,7 @@ impl AbstractQuery {
                             }));
                         }
                         None => {
-                            fields.push(Field::Value(field_name));
+                            fields.push(Field::Name(field_name));
                         }
                     };
                 }
@@ -266,7 +267,7 @@ fn root_to_sql(root: AbstractQuery) -> Result<String> {
     if root.fields.is_some() {
         for field in root.fields.unwrap() {
             match field {
-                Field::Value(name) => {
+                Field::Name(name) => {
                     query.column(Alias::new(&name));
                 }
                 Field::Relation(_) => {
@@ -315,12 +316,53 @@ pub fn gql_to_sql(query: &str) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::gql_to_sql;
+    use super::{gql_to_sql, Schema};
+
+    #[test]
+    fn parse_schema() {
+        let schema = Schema::parse(
+            "festivalevents_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b",
+        )
+        .unwrap();
+        assert_eq!(schema.name, "festivalevents");
+        assert_eq!(
+            schema.hash.as_str(),
+            "0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
+        );
+
+        let schema = Schema::parse(
+            "mul_tiple_separators_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b",
+        )
+        .unwrap();
+        assert_eq!(schema.name, "mul_tiple_separators");
+        assert_eq!(
+            schema.hash.as_str(),
+            "0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
+        );
+    }
+
+    #[test]
+    fn invalid_schema() {
+        // Invalid hash (wrong encoding)
+        assert!(Schema::parse("test_thisisnotahash").is_err());
+
+        // Separator missing
+        assert!(Schema::parse(
+            "withoutseparator0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
+        )
+        .is_err());
+
+        // Invalid hash (too short)
+        assert!(Schema::parse("invalid_hash_0020c6f23dbdc3b5c7b9ab46293111c48fc78b").is_err());
+
+        // Schema name exceeds limit
+        assert!(Schema::parse("too_long_name_with_many_characters_breaking_the_64_characters_limit_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b").is_err());
+    }
 
     #[test]
     fn parser() {
         let query = "{
-            festivalevents_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b(document: \"0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543\") {
+            festival_events_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b(document: \"0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543\") {
                 document
                 fields {
                     title
@@ -333,7 +375,7 @@ mod tests {
 
         assert_eq!(
             sql,
-            "SELECT \"title\", \"description\", \"document\" FROM \"festivalevents_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b\" WHERE \"document\" = '0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543'"
+            "SELECT \"title\", \"description\", \"document\" FROM \"festival_events_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b\" WHERE \"document\" = '0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543'"
         );
     }
 }
