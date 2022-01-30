@@ -2,14 +2,14 @@
 
 use std::convert::TryInto;
 
+use anyhow::Result;
 use apollo_parser::ast::{
     Argument as AstArgument, AstChildren, Definition, Document, Selection, Value,
 };
 use apollo_parser::Parser;
 use p2panda_rs::hash::{Hash, HASH_SIZE};
 use sea_query::{Alias, Expr, Query};
-
-use crate::errors::Result;
+use thiserror::Error;
 
 const MAX_SCHEMA_NAME: usize = 64;
 const SCHEMA_NAME_SEPARATOR: &str = "_";
@@ -22,9 +22,7 @@ fn parse_graphql_query(query: &str) -> Result<Document> {
         panic!("Parsing failed");
     }
 
-    let document = ast.document();
-
-    Ok(document)
+    Ok(ast.document())
 }
 
 type MetaFields = Option<Vec<MetaField>>;
@@ -64,6 +62,9 @@ struct Relation {
     fields: Fields,
 }
 
+/// Parsed reference of a schema.
+///
+/// As per specification a schema is referenced by its name and hash in a query.
 #[derive(Debug)]
 struct Schema {
     /// Given name of this schema.
@@ -73,26 +74,49 @@ struct Schema {
     hash: Hash,
 }
 
+#[derive(Error, Debug)]
+#[allow(missing_copy_implementations)]
+pub enum ParseSchemaError {
+    #[error("Schema name is too long with {0} characters ({1} allowed)")]
+    TooLong(usize, usize),
+
+    #[error("Name and / or hash field is missing in string")]
+    MissingFields,
+
+    #[error(transparent)]
+    InvalidHash(#[from] p2panda_rs::hash::HashError),
+}
+
 impl Schema {
-    pub fn parse(str: &str) -> Result<Self> {
-        if str.len() > MAX_SCHEMA_NAME + SCHEMA_NAME_SEPARATOR.len() + (HASH_SIZE * 2) {
-            panic!("Too long");
+    /// Parsing a schema string.
+    pub fn parse(str: &str) -> Result<Self, ParseSchemaError> {
+        // Allowed schema length is the maximum length of the schema name defined by the p2panda
+        // specification, the length of the separator and hash size times two because of its
+        // hexadecimal encoding.
+        let max_len = MAX_SCHEMA_NAME + SCHEMA_NAME_SEPARATOR.len() + (HASH_SIZE * 2);
+        if str.len() > max_len {
+            return Err(ParseSchemaError::TooLong(str.len(), max_len));
         }
 
-        let mut separated = str.rsplitn(2, SCHEMA_NAME_SEPARATOR);
+        // Split the string by the separator and return the iterator in reversed form
+        let mut fields = str.rsplitn(2, SCHEMA_NAME_SEPARATOR);
 
-        let hash = separated
+        // Since we start parsing the string from the back, we look at the hash first
+        let hash = fields
             .next()
-            .expect("Could not parse hash")
-            .to_string()
-            .try_into()
-            .expect("Invalid hash");
+            .ok_or(ParseSchemaError::MissingFields)?
+            .try_into()?;
 
-        let name = separated.next().expect("Could not parse name").to_string();
+        // Finally parse the name of the given schema
+        let name = fields
+            .next()
+            .ok_or(ParseSchemaError::MissingFields)?
+            .to_string();
 
         Ok(Self { name, hash })
     }
 
+    /// Returns name of SQL table holding document views of this schema.
     pub fn table_name(&self) -> String {
         format!(
             "{}{}{}",
@@ -343,6 +367,9 @@ mod tests {
 
     #[test]
     fn invalid_schema() {
+        // Missing name
+        assert!(Schema::parse("_0020c6f23dbdc3b5c7b9ab46293111c48fc78b").is_err());
+
         // Invalid hash (wrong encoding)
         assert!(Schema::parse("test_thisisnotahash").is_err());
 
