@@ -205,6 +205,7 @@ mod tests {
     use p2panda_rs::test_utils::mocks::{send_to_node, Client, Node};
     use p2panda_rs::test_utils::utils::{create_operation, operation_fields, update_operation};
 
+    use crate::rpc::build_rpc_api_service;
     use crate::server::{build_server, ApiServer, ApiState};
     use crate::test_helpers::{handle_http, initialize_db, rpc_error, rpc_request, rpc_response};
 
@@ -600,8 +601,8 @@ mod tests {
         let pool = initialize_db().await;
 
         // Create tide server with endpoints
-        let rpc_api = build_rpc_api_service(pool.clone());
-        let app = build_rpc_server(rpc_api, pool);
+        let state = ApiState::new(pool.clone());
+        let app = build_server(state);
 
         // Create dummy node, this will be used for creating entries.
         let mut node = Node::new();
