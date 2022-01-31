@@ -150,7 +150,7 @@ pub async fn publish_entry(
     )?;
 
     // Register log in database when entry is first item in a log.
-    if entry.seq_num().as_u64() == 1 {
+    if entry.seq_num().is_first() {
         Log::insert(
             &pool,
             &author,
