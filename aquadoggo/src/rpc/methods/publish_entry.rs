@@ -24,8 +24,14 @@ pub enum PublishEntryError {
     #[error("Could not find document hash for entry in database")]
     DocumentMissing,
 
-    #[error("UPDATE or DELETE operation came with an entry without backlink")]
-    OperationWithoutBacklink,
+    #[error("UPDATE & DELETE operation must have at previous operations")]
+    PreviousOperationsMissing,
+
+    #[error("UPDATE & DELETE operation must have at least 1 previous operation")]
+    PreviousOperationsLengthZero,
+
+    #[error("The provided schema does not match this documents schema")]
+    InvalidSchema,
 
     #[error("Requested log id {0} does not match expected log id {1}")]
     InvalidLogId(u64, u64),
@@ -51,28 +57,39 @@ pub async fn publish_entry(
     let operation = Operation::from(&params.operation_encoded);
 
     // Every operation refers to a document we need to determine. A document is identified by the
-    // hash of its first `CREATE` operation, it is the root operation of every document graph
+    // hash of its first `CREATE` operation, it is the root operation of every document graph.
     let document_id = if operation.is_create() {
-        // This is easy: We just use the entry hash directly to determine the document id
+        // This is easy: We just use the entry hash directly to determine the document id.
         params.entry_encoded.hash()
     } else {
         // For any other operations which followed after creation we need to either walk the operation
         // graph back to its `CREATE` operation or more easily look up the database since we keep track
         // of all log ids and documents there.
         //
-        // We can determine the used document hash by looking at what we know about the previous
-        // entry in this author's log.
-        //
-        // @TODO: This currently looks at the backlink, in the future we want to use
-        // "previousOperation", since in a multi-writer setting there might be no backlink for
-        // update operations! See: https://github.com/p2panda/aquadoggo/issues/49
-        let backlink_entry_hash = entry
-            .backlink_hash()
-            .ok_or(PublishEntryError::OperationWithoutBacklink)?;
+        // We can determine the used document hash by looking at what we know about the log which contains the
+        // previous_operation which this operation refers to.
 
-        Log::get_document_by_entry(&pool, backlink_entry_hash)
+        let previous_operations = match operation.previous_operations() {
+            Some(ops) if !ops.is_empty() => Ok(ops),
+            Some(_) => Err(PublishEntryError::PreviousOperationsLengthZero),
+            None => Err(PublishEntryError::PreviousOperationsMissing),
+        }?;
+
+        // Here we determine the document id using the first graph tip this operation
+        // refers to in it's previous_operations.
+        let document_id = Log::get_document_by_entry(&pool, &previous_operations[0])
             .await?
-            .ok_or(PublishEntryError::DocumentMissing)?
+            .ok_or(PublishEntryError::DocumentMissing)?;
+
+        // Get the expected schema hash for this document
+        let schema = Log::get_schema_by_document(&pool, &document_id).await?;
+
+        // Check if provided schema matches the expected document schema
+        if schema.unwrap() != operation.schema() {
+            return Err(PublishEntryError::InvalidSchema.into());
+        };
+
+        document_id
     };
 
     // Determine expected log id for new entry
@@ -132,8 +149,8 @@ pub async fn publish_entry(
         entry_backlink_bytes.as_deref(),
     )?;
 
-    // Register log in database when a new document is created
-    if operation.is_create() {
+    // Register log in database when entry is first item in a log.
+    if entry.seq_num().is_first() {
         Log::insert(
             &pool,
             &author,
@@ -160,6 +177,8 @@ pub async fn publish_entry(
     materialise(&pool, &document_id).await?;
 
     // Already return arguments for next entry creation
+    //
+    // @TODO: Here we already want to return the graph tips/previous operations for this document.
     let mut entry_latest = Entry::latest(&pool, &author, entry.log_id())
         .await?
         .expect("Database does not contain any entries");
@@ -182,9 +201,22 @@ mod tests {
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::{Operation, OperationEncoded, OperationFields, OperationValue};
+    use p2panda_rs::test_utils::mocks::logs::LogEntry;
+    use p2panda_rs::test_utils::mocks::{send_to_node, Client, Node};
+    use p2panda_rs::test_utils::utils::{create_operation, operation_fields, update_operation};
 
     use crate::server::{build_server, ApiServer, ApiState};
     use crate::test_helpers::{handle_http, initialize_db, rpc_error, rpc_request, rpc_response};
+
+    /// Get an entry from an array by it's hash.
+    /// Helper method for retrieving entries from the mock node db.
+    fn get_entry_by_hash(node: &Node, entry_hash: &Hash) -> LogEntry {
+        node.all_entries()
+            .iter()
+            .find(|entry| entry.hash() == entry_hash.clone())
+            .unwrap()
+            .clone()
+    }
 
     /// Create encoded entries and operations for testing.
     fn create_test_entry(
@@ -194,6 +226,7 @@ mod tests {
         document: Option<&Hash>,
         skiplink: Option<&EntrySigned>,
         backlink: Option<&EntrySigned>,
+        previous_operations: Option<&[Hash]>,
         seq_num: &SeqNum,
     ) -> (EntrySigned, OperationEncoded) {
         // Create operation with dummy data
@@ -202,10 +235,12 @@ mod tests {
             .add("test", OperationValue::Text("Hello".to_owned()))
             .unwrap();
         let operation = match document {
-            Some(_) => {
-                Operation::new_update(schema.clone(), vec![backlink.unwrap().hash()], fields)
-                    .unwrap()
-            }
+            Some(_) => Operation::new_update(
+                schema.clone(),
+                previous_operations.unwrap().to_owned(),
+                fields,
+            )
+            .unwrap(),
             None => Operation::new_create(schema.clone(), fields).unwrap(),
         };
 
@@ -295,8 +330,9 @@ mod tests {
         // https://github.com/AljoschaMeyer/bamboo#links-and-entry-verification
         //
         // [1] --
-        let (entry_1, operation_1) =
-            create_test_entry(&key_pair, &schema, &log_id, None, None, None, &seq_num_1);
+        let (entry_1, operation_1) = create_test_entry(
+            &key_pair, &schema, &log_id, None, None, None, None, &seq_num_1,
+        );
         assert_request(
             &app,
             &entry_1,
@@ -315,6 +351,7 @@ mod tests {
             Some(&entry_1.hash()),
             None,
             Some(&entry_1),
+            Some(&[entry_1.hash()]),
             &SeqNum::new(2).unwrap(),
         );
         assert_request(
@@ -335,6 +372,7 @@ mod tests {
             Some(&entry_1.hash()),
             None,
             Some(&entry_2),
+            Some(&[entry_2.hash()]),
             &SeqNum::new(3).unwrap(),
         );
         assert_request(
@@ -356,6 +394,7 @@ mod tests {
             Some(&entry_1.hash()),
             Some(&entry_1),
             Some(&entry_3),
+            Some(&[entry_3.hash()]),
             &SeqNum::new(4).unwrap(),
         );
         assert_request(
@@ -377,6 +416,7 @@ mod tests {
             Some(&entry_1.hash()),
             None,
             Some(&entry_4),
+            Some(&[entry_4.hash()]),
             &SeqNum::new(5).unwrap(),
         );
         assert_request(
@@ -408,8 +448,9 @@ mod tests {
         let seq_num = SeqNum::new(1).unwrap();
 
         // Create two valid entries for testing
-        let (entry_1, operation_1) =
-            create_test_entry(&key_pair, &schema, &log_id, None, None, None, &seq_num);
+        let (entry_1, operation_1) = create_test_entry(
+            &key_pair, &schema, &log_id, None, None, None, None, &seq_num,
+        );
         assert_request(
             &app,
             &entry_1,
@@ -427,6 +468,7 @@ mod tests {
             Some(&entry_1.hash()),
             None,
             Some(&entry_1),
+            Some(&[entry_1.hash()]),
             &SeqNum::new(2).unwrap(),
         );
         assert_request(
@@ -445,6 +487,7 @@ mod tests {
             &key_pair,
             &schema,
             &LogId::new(3),
+            None,
             None,
             None,
             None,
@@ -475,6 +518,7 @@ mod tests {
             Some(&entry_1.hash()),
             None,
             Some(&entry_1),
+            Some(&[entry_1.hash()]),
             &SeqNum::new(2).unwrap(),
         );
 
@@ -501,6 +545,7 @@ mod tests {
             Some(&entry_1.hash()),
             None,
             Some(&entry_1),
+            Some(&[entry_1.hash()]),
             &SeqNum::new(3).unwrap(),
         );
 
@@ -529,6 +574,7 @@ mod tests {
             Some(&entry_1.hash()),
             None,
             Some(&entry_2),
+            Some(&[entry_2.hash()]),
             &SeqNum::new(5).unwrap(),
         );
 
@@ -546,5 +592,176 @@ mod tests {
 
         let response = rpc_error("Could not find backlink entry in database");
         assert_eq!(handle_http(&app, request).await, response);
+    }
+
+    #[async_std::test]
+    async fn validate_publish_multiwriter() {
+        // Prepare test database
+        let pool = initialize_db().await;
+
+        // Create tide server with endpoints
+        let rpc_api = build_rpc_api_service(pool.clone());
+        let app = build_rpc_server(rpc_api, pool);
+
+        // Create dummy node, this will be used for creating entries.
+        let mut node = Node::new();
+
+        // Create some clients and a schema.
+        let panda = Client::new("panda".to_string(), KeyPair::new());
+        let penguin = Client::new("penguin".to_string(), KeyPair::new());
+        let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
+
+        // Panda publishes a create operation.
+        // This instantiates a new document.
+        //
+        // PANDA  : [1]
+        // PENGUIN:
+        let (panda_entry_1_hash, _) = send_to_node(
+            &mut node,
+            &panda,
+            &create_operation(
+                schema.clone(),
+                operation_fields(vec![(
+                    "name",
+                    OperationValue::Text("Panda Cafe".to_string()),
+                )]),
+            ),
+        )
+        .unwrap();
+
+        let panda_entry_1 = get_entry_by_hash(&node, &panda_entry_1_hash);
+
+        assert_request(
+            &app,
+            &panda_entry_1.entry_encoded(),
+            &panda_entry_1.operation_encoded(),
+            None,
+            &LogId::new(1),
+            &SeqNum::new(2).unwrap(),
+        )
+        .await;
+
+        // Panda publishes an update operation.
+        // It contains the hash of the current graph tip in it's `previous_operations`.
+        //
+        // PANDA  : [1] <-- [2]
+        // PENGUIN:
+        let (panda_entry_2_hash, _) = send_to_node(
+            &mut node,
+            &panda,
+            &update_operation(
+                schema.clone(),
+                vec![panda_entry_1_hash.clone()],
+                operation_fields(vec![(
+                    "name",
+                    OperationValue::Text("Panda Cafe!".to_string()),
+                )]),
+            ),
+        )
+        .unwrap();
+
+        let panda_entry_2 = get_entry_by_hash(&node, &panda_entry_2_hash);
+
+        assert_request(
+            &app,
+            &panda_entry_2.entry_encoded(),
+            &panda_entry_2.operation_encoded(),
+            None,
+            &LogId::new(1),
+            &SeqNum::new(3).unwrap(),
+        )
+        .await;
+
+        // Penguin publishes an update operation which refers to panda's last operation
+        // as the graph tip.
+        //
+        // PANDA  : [1] <--[2]
+        // PENGUIN:           \--[1]
+        let (penguin_entry_1_hash, _) = send_to_node(
+            &mut node,
+            &penguin,
+            &update_operation(
+                schema.clone(),
+                vec![panda_entry_2_hash.clone()],
+                operation_fields(vec![(
+                    "name",
+                    OperationValue::Text("Penguin Cafe".to_string()),
+                )]),
+            ),
+        )
+        .unwrap();
+
+        let penguin_entry_1 = get_entry_by_hash(&node, &penguin_entry_1_hash);
+
+        assert_request(
+            &app,
+            &penguin_entry_1.entry_encoded(),
+            &penguin_entry_1.operation_encoded(),
+            None,
+            &LogId::new(1),
+            &SeqNum::new(2).unwrap(),
+        )
+        .await;
+
+        // Penguin publishes another update operation refering to their own previous operation
+        // as the graph tip.
+        //
+        // PANDA  : [1] <--[2]
+        // PENGUIN:           \--[1] <--[2]
+        let (penguin_entry_2_hash, _) = send_to_node(
+            &mut node,
+            &penguin,
+            &update_operation(
+                schema.clone(),
+                vec![penguin_entry_1_hash],
+                operation_fields(vec![(
+                    "name",
+                    OperationValue::Text("Polar Bear Cafe".to_string()),
+                )]),
+            ),
+        )
+        .unwrap();
+
+        let penguin_entry_2 = get_entry_by_hash(&node, &penguin_entry_2_hash);
+
+        assert_request(
+            &app,
+            &penguin_entry_2.entry_encoded(),
+            &penguin_entry_2.operation_encoded(),
+            None,
+            &LogId::new(1),
+            &SeqNum::new(3).unwrap(),
+        )
+        .await;
+
+        // Panda publishes a new update operation which points at the current graph tip.
+        //
+        // PANDA  : [1] <--[2]             /--[3]
+        // PENGUIN:           \--[1] <--[2]
+        let (panda_entry_3_hash, _) = send_to_node(
+            &mut node,
+            &panda,
+            &update_operation(
+                schema,
+                vec![penguin_entry_2_hash],
+                operation_fields(vec![(
+                    "name",
+                    OperationValue::Text("Polar Bear Cafe!!!!!!!!!!".to_string()),
+                )]),
+            ),
+        )
+        .unwrap();
+
+        let panda_entry_3 = get_entry_by_hash(&node, &panda_entry_3_hash);
+
+        assert_request(
+            &app,
+            &panda_entry_3.entry_encoded(),
+            &panda_entry_3.operation_encoded(),
+            Some(&panda_entry_1.entry_encoded()),
+            &LogId::new(1),
+            &SeqNum::new(4).unwrap(),
+        )
+        .await;
     }
 }

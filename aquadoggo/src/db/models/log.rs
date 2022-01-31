@@ -182,6 +182,28 @@ impl Log {
 
         Ok(hash)
     }
+
+    /// Returns the related schema for any document.
+    pub async fn get_schema_by_document(pool: &Pool, document_id: &Hash) -> Result<Option<Hash>> {
+        let result: Option<String> = query_scalar(
+            "
+            SELECT
+                logs.schema
+            FROM
+                logs
+            WHERE
+                logs.document = $1
+            ",
+        )
+        .bind(document_id.as_str())
+        .fetch_optional(pool)
+        .await?;
+
+        // Unwrap here since we already validated the hash
+        let hash = result.map(|str| Hash::new(&str).expect("Corrupt hash found in database"));
+
+        Ok(hash)
+    }
 }
 
 #[cfg(test)]
