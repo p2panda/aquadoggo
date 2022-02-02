@@ -6,7 +6,8 @@ CREATE TABLE IF NOT EXISTS logs (
     -- Store u64 integer as 20 character string
     log_id            VARCHAR(20)       NOT NULL,
     schema            VARCHAR(68)       NOT NULL,
-    PRIMARY KEY (author, document, log_id)
+    PRIMARY KEY (author, document, log_id),
+    UNIQUE(author, log_id)
 );
 
 -- Create an index for querying by schema
