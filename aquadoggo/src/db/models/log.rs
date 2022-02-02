@@ -71,8 +71,6 @@ impl Log {
                 logs
             WHERE
                 author = $1
-            ORDER BY
-                log_id ASC
             ",
         )
         .bind(author.as_str())
@@ -80,10 +78,12 @@ impl Log {
         .await?;
 
         // Convert all strings representing u64 integers to `LogId` instances
-        let log_ids: Vec<LogId> = result
+        let mut log_ids: Vec<LogId> = result
             .iter_mut()
             .map(|str| str.parse().expect("Corrupt u64 integer found in database"))
             .collect();
+
+        log_ids.sort();
 
         // Find next unused document log by comparing the sequence of known log ids with an
         // sequence of subsequent log ids until we find a gap.
