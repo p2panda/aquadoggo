@@ -29,16 +29,16 @@ pub async fn materialise(pool: &Pool, document_id: &Hash) -> Result<Instance> {
 
     // Resolve document
     let document = DocumentBuilder::new(operations).build()?;
-    let instance = document.resolve()?;
+    let instance = document.view();
 
     log::debug!("Materialisation yields {:?}", instance);
 
     // Write document to db
-    if document.schema()
+    if *document.schema()
         == Hash::new("0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b")
             .unwrap()
     {
         write_document(pool, document_id, &instance).await?;
     }
-    Ok(instance)
+    Ok(instance.to_owned())
 }
