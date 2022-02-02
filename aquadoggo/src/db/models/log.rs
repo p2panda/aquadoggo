@@ -83,6 +83,10 @@ impl Log {
             .map(|str| str.parse().expect("Corrupt u64 integer found in database"))
             .collect();
 
+        // The log id selection below expects log ids in sorted order. We can't easily use SQL
+        // for this because log IDs are stored as `VARCHAR`, which doesn't sort numbers correctly.
+        // A good solution would not require reading all existing log ids to find the next
+        // available one. See this issue: https://github.com/p2panda/aquadoggo/issues/67
         log_ids.sort();
 
         // Find next unused document log by comparing the sequence of known log ids with an
