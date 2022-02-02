@@ -138,7 +138,7 @@ checksum = "94a45b455c14666b85fc40a019e8ab9eb75e3a124e05494f5397122bc9eb06e0"
 
 [[package]]
 name = "aquadoggo"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-graphql",
@@ -2599,8 +2599,8 @@ dependencies = [
 
 [[package]]
 name = "p2panda-rs"
-version = "0.2.1"
-source = "git+https://github.com/p2panda/p2panda?branch=document#696844a8763840e971a84661e0ed375cacd5f521"
+version = "0.3.0"
+source = "git+https://github.com/p2panda/p2panda?branch=document#51ff3a8e17a88877e8f21aadbaefe3080d28fab9"
 dependencies = [
  "aquamarine",
  "arrayvec 0.5.2",
