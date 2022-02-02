@@ -2203,7 +2203,7 @@ dependencies = [
 [[package]]
 name = "p2panda-rs"
 version = "0.3.0"
-source = "git+https://github.com/p2panda/p2panda?branch=main#7ccc65b5cd5d22690e357cabe7be00f9fdd92a7b"
+source = "git+https://github.com/p2panda/p2panda?rev=7ccc65b5cd5d22690e357cabe7be00f9fdd92a7b#7ccc65b5cd5d22690e357cabe7be00f9fdd92a7b"
 dependencies = [
  "aquamarine",
  "arrayvec 0.5.2",
