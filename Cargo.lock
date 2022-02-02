@@ -2202,8 +2202,8 @@ dependencies = [
 
 [[package]]
 name = "p2panda-rs"
-version = "0.2.1"
-source = "git+https://github.com/p2panda/p2panda?branch=main#566df75892c4f8d91918354996a6cb98984e9ad9"
+version = "0.3.0"
+source = "git+https://github.com/p2panda/p2panda?tag=v0.3.0#714cc5c9f517c8c06d02c9b9184941cd69afff7e"
 dependencies = [
  "aquamarine",
  "arrayvec 0.5.2",
@@ -2215,6 +2215,7 @@ dependencies = [
  "ed25519-dalek",
  "hex",
  "js-sys",
+ "log",
  "memory_keystore",
  "openmls",
  "openmls_traits",
