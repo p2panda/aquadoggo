@@ -235,6 +235,37 @@ mod tests {
     }
 
     #[async_std::test]
+    async fn selecting_next_log_id() {
+        let pool = initialize_db().await;
+        let key_pair = KeyPair::new();
+        let author = Author::try_from(*key_pair.public_key()).unwrap();
+        let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
+        let document = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
+
+        // We expect to be given the next log id when asking for a possible log id for a new
+        // document by the same author
+        assert_eq!(
+            Log::find_document_log_id(&pool, &author, Some(&document))
+                .await
+                .unwrap(),
+            LogId::default()
+        );
+
+        // Starting with an empty db, we expect to be able to count up from 1 and expect each
+        // inserted document's log id to be euqal to the count index
+        for n in 1..12 {
+            let doc = Hash::new_from_bytes(vec![1,2,n]).unwrap();
+            let log_id = Log::find_document_log_id(&pool, &author, None)
+                .await
+                .unwrap();
+            assert_eq!(LogId::new(n.into()), log_id);
+            Log::insert(&pool, &author, &doc, &schema, &log_id)
+                .await
+                .unwrap();
+        }
+    }
+
+    #[async_std::test]
     async fn document_log_id() {
         let pool = initialize_db().await;
 
@@ -298,15 +329,6 @@ mod tests {
                 .await
                 .unwrap(),
             LogId::default()
-        );
-
-        // We expect to be given the next log id when asking for a possible log id for a new
-        // document by the same author
-        assert_eq!(
-            Log::find_document_log_id(&pool, &author, None)
-                .await
-                .unwrap(),
-            LogId::default().next().unwrap()
         );
     }
 
