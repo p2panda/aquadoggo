@@ -291,6 +291,23 @@ mod tests {
                 .unwrap(),
             Some(entry_encoded.hash())
         );
+
+        // We expect to find this document in the default log
+        assert_eq!(
+            Log::find_document_log_id(&pool, &author, Some(&entry_encoded.hash()))
+                .await
+                .unwrap(),
+            LogId::default()
+        );
+
+        // We expect to be given the next log id when asking for a possible log id for a new
+        // document by the same author
+        assert_eq!(
+            Log::find_document_log_id(&pool, &author, None)
+                .await
+                .unwrap(),
+            LogId::default().next().unwrap()
+        );
     }
 
     #[async_std::test]

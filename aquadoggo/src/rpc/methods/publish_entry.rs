@@ -123,7 +123,8 @@ pub async fn publish_entry(
         Ok(None)
     }?;
 
-    // Verify bamboo entry integrity
+    // Verify bamboo entry integrity, including encoding, signature of the entry correct back- and
+    // skiplinks.
     bamboo_rs_core_ed25519_yasmf::verify(
         &params.entry_encoded.to_bytes(),
         Some(&params.operation_encoded.to_bytes()),
