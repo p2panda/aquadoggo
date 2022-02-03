@@ -71,8 +71,6 @@ impl Log {
                 logs
             WHERE
                 author = $1
-            ORDER BY
-                log_id ASC
             ",
         )
         .bind(author.as_str())
@@ -80,10 +78,16 @@ impl Log {
         .await?;
 
         // Convert all strings representing u64 integers to `LogId` instances
-        let log_ids: Vec<LogId> = result
+        let mut log_ids: Vec<LogId> = result
             .iter_mut()
             .map(|str| str.parse().expect("Corrupt u64 integer found in database"))
             .collect();
+
+        // The log id selection below expects log ids in sorted order. We can't easily use SQL
+        // for this because log IDs are stored as `VARCHAR`, which doesn't sort numbers correctly.
+        // A good solution would not require reading all existing log ids to find the next
+        // available one. See this issue: https://github.com/p2panda/aquadoggo/issues/67
+        log_ids.sort();
 
         // Find next unused document log by comparing the sequence of known log ids with an
         // sequence of subsequent log ids until we find a gap.
@@ -257,6 +261,37 @@ mod tests {
     }
 
     #[async_std::test]
+    async fn selecting_next_log_id() {
+        let pool = initialize_db().await;
+        let key_pair = KeyPair::new();
+        let author = Author::try_from(*key_pair.public_key()).unwrap();
+        let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
+        let document = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
+
+        // We expect to be given the next log id when asking for a possible log id for a new
+        // document by the same author
+        assert_eq!(
+            Log::find_document_log_id(&pool, &author, Some(&document))
+                .await
+                .unwrap(),
+            LogId::default()
+        );
+
+        // Starting with an empty db, we expect to be able to count up from 1 and expect each
+        // inserted document's log id to be euqal to the count index
+        for n in 1..12 {
+            let doc = Hash::new_from_bytes(vec![1,2,n]).unwrap();
+            let log_id = Log::find_document_log_id(&pool, &author, None)
+                .await
+                .unwrap();
+            assert_eq!(LogId::new(n.into()), log_id);
+            Log::insert(&pool, &author, &doc, &schema, &log_id)
+                .await
+                .unwrap();
+        }
+    }
+
+    #[async_std::test]
     async fn document_log_id() {
         let pool = initialize_db().await;
 
@@ -312,6 +347,14 @@ mod tests {
                 .await
                 .unwrap(),
             Some(entry_encoded.hash())
+        );
+
+        // We expect to find this document in the default log
+        assert_eq!(
+            Log::find_document_log_id(&pool, &author, Some(&entry_encoded.hash()))
+                .await
+                .unwrap(),
+            LogId::default()
         );
     }
 
