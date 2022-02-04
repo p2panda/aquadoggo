@@ -143,7 +143,7 @@ impl Entry {
                 author = $1
                 AND log_id = $2
             ORDER BY
-                seq_num DESC
+                cast(seq_num as unsigned) DESC
             LIMIT
                 1
             ",
