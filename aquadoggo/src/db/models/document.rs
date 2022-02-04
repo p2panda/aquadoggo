@@ -1,4 +1,4 @@
-use p2panda_rs::document::Document;
+use p2panda_rs::document::{Document, DocumentView};
 use p2panda_rs::operation::OperationValue;
 use sqlx::{query, query_as, FromRow};
 
@@ -36,15 +36,29 @@ fn build_insert_query(document: &Document) -> String {
         .reduce(|acc, elem| format!("{}, {}", acc, elem))
         .unwrap();
 
-    let update_spec = document
-        .view()
-        .iter()
-        .enumerate()
-        // Make key-binding pairs like "key=$2"
-        .map(|(i, (key, _))| format!("{}=${}", key, (i + NUM_FIXED_ARGS + 1)))
-        // Concatenate
-        .reduce(|acc, val| format!("{},\n{}", acc, val))
-        .unwrap();
+    let update_spec = match document.view() {
+        DocumentView::Available(fields) => {
+            fields
+            .iter()
+            .enumerate()
+            // Make key-binding pairs like "key=$2"
+            .map(|(i, (key, _))| format!("{}=${}", key, (i + NUM_FIXED_ARGS + 1)))
+            // Concatenate
+            .reduce(|acc, val| format!("{},\n{}", acc, val))
+            .unwrap()
+        },
+        DocumentView::Deleted(fields) => {
+            fields
+            .iter()
+            .enumerate()
+            // Make key-binding pairs like "key=$2"
+            .map(|(i, key)| format!("{}=${}", key, (i + NUM_FIXED_ARGS + 1)))
+            // Concatenate
+            .reduce(|acc, val| format!("{},\n{}", acc, val))
+            .unwrap()
+        }
+    };
+
 
     format!(
         "
@@ -97,19 +111,28 @@ pub async fn write_document(pool: &Pool, document: &Document) -> Result<()> {
     query = query.bind(graph_tips_param);
 
     // Bind values for schema-specific columns
-    for (key, value) in document.view().iter() {
-        let string_value = match value {
-            // OperationValue::Boolean(value) => value,
-            // OperationValue::Integer(value) => value,
-            // OperationValue::Float(value) => value,
-            Some(OperationValue::Text(value)) => value,
-            Some(OperationValue::Relation(value)) => value.as_str(),
-            Some(_) => todo!("Oh no it's not a texty thing"),
-            None => "",
-        };
-        log::debug!("Now binding value '{}' = '{}'", key, string_value);
-        query = query.bind(string_value);
-    }
+    match document.view() {
+        DocumentView::Available(fields) => {
+            for (key, value) in fields.iter() {
+                let string_value = match value {
+                    // OperationValue::Boolean(value) => value,
+                    // OperationValue::Integer(value) => value,
+                    // OperationValue::Float(value) => value,
+                    OperationValue::Text(value) => value,
+                    OperationValue::Relation(value) => value.as_str(),
+                    _ => todo!("Oh no it's not a texty thing"),
+                };
+                log::debug!("Now binding value '{}' = '{}'", key, string_value);
+                query = query.bind(string_value);
+            }
+        },
+        DocumentView::Deleted(fields) => {
+            log::debug!("Setting all values to '' for deleted document");
+            for _ in fields.iter() {
+                query = query.bind("");
+            }
+        }
+    };
 
     // Exectute query
     match query.execute(pool).await {
