@@ -1,7 +1,6 @@
-use p2panda_rs::document::DocumentBuilder;
+use p2panda_rs::document::{Document, DocumentBuilder};
 use p2panda_rs::entry::EntrySigned;
 use p2panda_rs::hash::Hash;
-use p2panda_rs::instance::Instance;
 use p2panda_rs::operation::{OperationEncoded, OperationWithMeta};
 
 use crate::db::models::{write_document, Entry as DatabaseEntry};
@@ -10,7 +9,7 @@ use crate::errors::Result;
 
 /// Materialise given document by loading all its operations from db,
 /// resolving and writing the result to that schema's table
-pub async fn materialise(pool: &Pool, document_id: &Hash) -> Result<Instance> {
+pub async fn materialise(pool: &Pool, document_id: &Hash) -> Result<Document> {
     log::info!("Materialising document {}", document_id.as_str());
     // Load operations from db
     let entries = DatabaseEntry::by_document(pool, document_id).await?;
@@ -29,16 +28,14 @@ pub async fn materialise(pool: &Pool, document_id: &Hash) -> Result<Instance> {
 
     // Resolve document
     let document = DocumentBuilder::new(operations).build()?;
-    let instance = document.view();
-
-    log::debug!("Materialisation yields {:?}", instance);
+    log::debug!("Materialisation yields {:?}", document.view());
 
     // Write document to db
     if *document.schema()
         == Hash::new("0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b")
             .unwrap()
     {
-        write_document(pool, document_id, &instance).await?;
+        write_document(pool, &document).await?;
     }
-    Ok(instance.to_owned())
+    Ok(document.to_owned())
 }
