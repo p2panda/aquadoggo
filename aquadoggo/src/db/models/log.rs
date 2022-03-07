@@ -204,7 +204,7 @@ mod tests {
 
     const TEST_AUTHOR: &str = "58223678ab378f1b07d1d8c789e6da01d16a06b1a4d17cc10119a0109181156c";
 
-    #[async_std::test]
+    #[tokio::test]
     async fn initial_log_id() {
         let pool = initialize_db().await;
 
@@ -217,7 +217,7 @@ mod tests {
         assert_eq!(log_id, LogId::new(1));
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn prevent_duplicate_log_ids() {
         let pool = initialize_db().await;
 
@@ -238,7 +238,7 @@ mod tests {
         );
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn selecting_next_log_id() {
         let pool = initialize_db().await;
         let key_pair = KeyPair::new();
@@ -269,7 +269,7 @@ mod tests {
         }
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn document_log_id() {
         let pool = initialize_db().await;
 
@@ -336,7 +336,7 @@ mod tests {
         );
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn log_ids() {
         let pool = initialize_db().await;
 

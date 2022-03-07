@@ -99,7 +99,7 @@ mod tests {
 
     const TEST_AUTHOR: &str = "8b52ae153142288402382fd6d9619e018978e015e6bc372b1b0c7bd40c6a240a";
 
-    #[async_std::test]
+    #[tokio::test]
     async fn respond_with_wrong_author_error() {
         let pool = initialize_db().await;
         let rpc_api = build_rpc_api_service(pool.clone());
@@ -121,7 +121,7 @@ mod tests {
         assert_eq!(handle_http(&app, request).await, response);
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn get_entry_arguments() {
         // Prepare test database
         let pool = initialize_db().await;

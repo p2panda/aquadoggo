@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::error::Error;
+use std::future::Future;
 
-use async_std::{future::Future, task};
 use futures::future;
 use log::{debug, error};
+use tokio::task;
 
 /// Generic Result type for all async tasks used by TaskManager.
 pub type FutureResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
@@ -66,12 +67,12 @@ impl TaskManager {
 
 #[cfg(test)]
 mod tests {
-    use super::{FutureResult, TaskManager};
-
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
 
-    use async_std::task;
+    use tokio::time;
+
+    use super::{FutureResult, TaskManager};
 
     #[derive(Clone, Debug)]
     struct DropTester(Arc<Mutex<usize>>);
@@ -102,7 +103,7 @@ mod tests {
 
     async fn run_background_task(_keep_alive: impl std::any::Any) -> FutureResult<()> {
         loop {
-            task::sleep(Duration::from_millis(1000)).await;
+            time::sleep(Duration::from_millis(1000)).await;
         }
     }
 
@@ -122,8 +123,8 @@ mod tests {
         assert_eq!(drop_tester, 0);
     }
 
-    #[test]
-    fn drop_running_tasks_on_shutdown() {
+    #[tokio::test]
+    async fn drop_running_tasks_on_shutdown() {
         let mut task_manager = TaskManager::new();
         let drop_tester = DropTester::new();
 
@@ -131,7 +132,7 @@ mod tests {
         task_manager.spawn("task2", run_background_task(drop_tester.new_ref()));
         assert_eq!(drop_tester, 2);
 
-        task::block_on(task_manager.shutdown());
+        task_manager.shutdown().await;
         assert_eq!(drop_tester, 0);
     }
 }

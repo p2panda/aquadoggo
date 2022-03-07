@@ -32,7 +32,7 @@ mod tests {
     use crate::rpc::server::build_rpc_server;
     use crate::test_helpers::{handle_http, initialize_db, rpc_request, rpc_response};
 
-    #[async_std::test]
+    #[tokio::test]
     async fn query_entries() {
         // Prepare test database
         let pool = initialize_db().await;

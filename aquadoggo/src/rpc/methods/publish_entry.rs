@@ -272,7 +272,7 @@ mod tests {
         assert_eq!(handle_http(&app, request).await, response);
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn publish_entry() {
         // Create key pair for author
         let key_pair = KeyPair::new();
@@ -389,7 +389,7 @@ mod tests {
         .await;
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn validate() {
         // Create key pair for author
         let key_pair = KeyPair::new();
