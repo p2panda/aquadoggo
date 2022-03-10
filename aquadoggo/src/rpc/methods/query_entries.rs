@@ -24,7 +24,7 @@ pub async fn query_entries(
     Ok(QueryEntriesResponse { entries })
 }
 
-#[cfg(test)]
+/* #[cfg(test)]
 mod tests {
     use p2panda_rs::hash::Hash;
 
@@ -62,4 +62,4 @@ mod tests {
 
         assert_eq!(handle_http(&app, request).await, response);
     }
-}
+} */

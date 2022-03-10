@@ -172,7 +172,7 @@ pub async fn publish_entry(
     })
 }
 
-#[cfg(test)]
+/* #[cfg(test)]
 mod tests {
     use std::convert::TryFrom;
 
@@ -546,4 +546,4 @@ mod tests {
         let response = rpc_error("Could not find backlink entry in database");
         assert_eq!(handle_http(&app, request).await, response);
     }
-}
+} */

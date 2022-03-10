@@ -54,11 +54,9 @@ pub async fn start_rpc_server(config: &Configuration, api: RpcApiService) -> any
 
 #[cfg(test)]
 mod tests {
-    use tower::ServiceExt;
-
     use crate::rpc::api::build_rpc_api_service;
     use crate::rpc::server::build_rpc_server;
-    use crate::test_helpers::initialize_db;
+    use crate::test_helpers::{initialize_db, TestClient};
 
     #[tokio::test]
     async fn respond_with_method_not_allowed() {
@@ -67,22 +65,11 @@ mod tests {
         let app = build_rpc_server(rpc_api);
 
         let client = TestClient::new(app);
+        let response = client.get("/").send().await;
 
         assert_eq!(
-            app.get("/").recv_string().await.unwrap(),
+            response.text().await,
             "Used HTTP Method is not allowed. POST or OPTIONS is required"
         );
-    }
-
-    #[tokio::test]
-    async fn nest_at_capture() {
-        let api_routes = Router::new().route("/:b", get(|| async {})).boxed_clone();
-
-        let app = Router::new().nest("/:a", api_routes);
-
-        let client = TestClient::new(app);
-
-        let res = client.get("/foo/bar").send().await;
-        assert_eq!(res.status(), StatusCode::OK);
     }
 }

@@ -258,7 +258,7 @@ mod tests {
         // Starting with an empty db, we expect to be able to count up from 1 and expect each
         // inserted document's log id to be euqal to the count index
         for n in 1..12 {
-            let doc = Hash::new_from_bytes(vec![1,2,n]).unwrap();
+            let doc = Hash::new_from_bytes(vec![1, 2, n]).unwrap();
             let log_id = Log::find_document_log_id(&pool, &author, None)
                 .await
                 .unwrap();

@@ -27,8 +27,8 @@ jsonrpc-v2 = { version = "0.10.1", features = [ "easy-errors", "bytes-v05", ], d
 log = "0.4.14"
 openssl-probe = "0.1.4"
 # We can not publish the `aquadoggo` crate yet, since `p2panda-rs` is an
-# unpublished dependency. To still release something without publishing it, we
 # tag the dependency here with a git commit.
+# unpublished dependency. To still release something without publishing it, we
 p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "7ccc65b5cd5d22690e357cabe7be00f9fdd92a7b" }
 rand = "0.8.4"
 serde = { version = "1.0.130", features = ["derive"] }
@@ -37,6 +37,11 @@ sqlformat = "0.1.7"
 sqlx = { version = "0.5.7", features = [ "runtime-async-std-rustls", "all-databases", ] }
 thiserror = "1.0.29"
 tokio = { version = "1.17.0", features = ["sync", "rt", "net", "time", "macros"] }
+tower-http = { version = "0.2.4", default-features = false, features = ["cors"] }
+
+[dev-dependencies]
+reqwest = { version = "0.11.9", default-features = false, features = ["json", "stream"] }
+tower-service = "0.3.1"
+hyper = "0.14.17"
+http = "0.2.6"
 tower = "0.4.12"
-tower-http = { version = "0.2.4", features = ["cors"] }
-warp = "0.3.2"
