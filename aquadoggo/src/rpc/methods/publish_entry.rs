@@ -180,6 +180,7 @@ mod tests {
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::{Operation, OperationEncoded, OperationFields, OperationValue};
+    use p2panda_rs::schema::SchemaId;
 
     use crate::rpc::api::build_rpc_api_service;
     use crate::rpc::server::{build_rpc_server, RpcServer};
@@ -188,7 +189,7 @@ mod tests {
     /// Create encoded entries and operations for testing.
     fn create_test_entry(
         key_pair: &KeyPair,
-        schema: &Hash,
+        schema: &SchemaId,
         log_id: &LogId,
         document: Option<&Hash>,
         skiplink: Option<&EntrySigned>,
@@ -285,7 +286,7 @@ mod tests {
         let app = build_rpc_server(rpc_api);
 
         // Define schema and log id for entries
-        let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
+        let schema = SchemaId::try_from(Hash::new_from_bytes(vec![1, 2, 3]).unwrap()).unwrap();
         let log_id = LogId::default();
         let seq_num_1 = SeqNum::new(1).unwrap();
 
@@ -402,7 +403,7 @@ mod tests {
         let app = build_rpc_server(rpc_api);
 
         // Define schema and log id for entries
-        let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
+        let schema = SchemaId::try_from(Hash::new_from_bytes(vec![1, 2, 3]).unwrap()).unwrap();
         let log_id = LogId::new(1);
         let seq_num = SeqNum::new(1).unwrap();
 

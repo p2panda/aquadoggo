@@ -3,6 +3,7 @@
 use p2panda_rs::entry::LogId;
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
+use p2panda_rs::schema::SchemaId;
 use sqlx::{query, query_scalar, FromRow};
 
 use crate::db::Pool;
@@ -26,7 +27,7 @@ pub struct Log {
     /// Hash that identifies the document this log is for.
     document: String,
 
-    /// Schema hash used by author.
+    /// SchemaId which identifies the schema for operations in this log.
     schema: String,
 }
 
@@ -38,9 +39,25 @@ impl Log {
         pool: &Pool,
         author: &Author,
         document: &Hash,
-        schema: &Hash,
+        schema: &SchemaId,
         log_id: &LogId,
     ) -> Result<bool> {
+        let schema_id = match schema {
+            SchemaId::Application(pinned_relation) => {
+                let mut id_str = "".to_string();
+                let mut relation_iter = pinned_relation.clone().into_iter().peekable();
+                while let Some(hash) = relation_iter.next() {
+                    id_str += hash.as_str();
+                    if relation_iter.peek().is_none() {
+                        id_str += "_"
+                    }
+                }
+                id_str
+            }
+            SchemaId::Schema => "schema_v1".to_string(),
+            SchemaId::SchemaField => "schema_field_v1".to_string(),
+        };
+
         let rows_affected = query(
             "
             INSERT INTO
@@ -52,7 +69,7 @@ impl Log {
         .bind(author.as_str())
         .bind(log_id.as_u64().to_string())
         .bind(document.as_str())
-        .bind(schema.as_str())
+        .bind(schema_id)
         .execute(pool)
         .await?
         .rows_affected();
@@ -192,10 +209,12 @@ impl Log {
 mod tests {
     use std::convert::TryFrom;
 
+    use p2panda_rs::document::DocumentViewId;
     use p2panda_rs::entry::{sign_and_encode, Entry, LogId, SeqNum};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::{Operation, OperationEncoded, OperationFields, OperationValue};
+    use p2panda_rs::schema::SchemaId;
 
     use crate::db::models::Entry as dbEntry;
     use crate::test_helpers::{initialize_db, random_entry_hash};
@@ -223,7 +242,7 @@ mod tests {
 
         let author = Author::new(TEST_AUTHOR).unwrap();
         let document = Hash::new(&random_entry_hash()).unwrap();
-        let schema = Hash::new(&random_entry_hash()).unwrap();
+        let schema = SchemaId::new(&random_entry_hash()).unwrap();
 
         assert!(
             Log::insert(&pool, &author, &document, &schema, &LogId::new(1))
@@ -239,11 +258,30 @@ mod tests {
     }
 
     #[async_std::test]
+    async fn with_multi_hash_schema_id() {
+        let pool = initialize_db().await;
+
+        let author = Author::new(TEST_AUTHOR).unwrap();
+        let document = Hash::new(&random_entry_hash()).unwrap();
+        let schema = SchemaId::try_from(DocumentViewId::new(vec![
+            Hash::new(&random_entry_hash()).unwrap(),
+            Hash::new(&random_entry_hash()).unwrap(),
+        ]))
+        .unwrap();
+
+        assert!(
+            Log::insert(&pool, &author, &document, &schema, &LogId::new(1))
+                .await
+                .is_ok()
+        );
+    }
+
+    #[async_std::test]
     async fn selecting_next_log_id() {
         let pool = initialize_db().await;
         let key_pair = KeyPair::new();
         let author = Author::try_from(*key_pair.public_key()).unwrap();
-        let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
+        let schema = SchemaId::try_from(Hash::new_from_bytes(vec![1, 2, 3]).unwrap()).unwrap();
         let document = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
 
         // We expect to be given the next log id when asking for a possible log id for a new
@@ -258,7 +296,7 @@ mod tests {
         // Starting with an empty db, we expect to be able to count up from 1 and expect each
         // inserted document's log id to be euqal to the count index
         for n in 1..12 {
-            let doc = Hash::new_from_bytes(vec![1,2,n]).unwrap();
+            let doc = Hash::new_from_bytes(vec![1, 2, n]).unwrap();
             let log_id = Log::find_document_log_id(&pool, &author, None)
                 .await
                 .unwrap();
@@ -278,7 +316,7 @@ mod tests {
         let key_pair = KeyPair::new();
         let author = Author::try_from(key_pair.public_key().clone()).unwrap();
         let log_id = LogId::new(1);
-        let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
+        let schema = SchemaId::try_from(Hash::new_from_bytes(vec![1, 2, 3]).unwrap()).unwrap();
         let seq_num = SeqNum::new(1).unwrap();
         let mut fields = OperationFields::new();
         fields
@@ -344,7 +382,7 @@ mod tests {
         let author = Author::new(TEST_AUTHOR).unwrap();
 
         // Mock schema
-        let schema = Hash::new(&random_entry_hash()).unwrap();
+        let schema = SchemaId::new(&random_entry_hash()).unwrap();
 
         // Mock four different document hashes
         let document_first = Hash::new(&random_entry_hash()).unwrap();
