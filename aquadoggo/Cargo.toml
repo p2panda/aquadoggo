@@ -27,8 +27,8 @@ jsonrpc-v2 = { version = "0.10.1", features = [ "easy-errors", "bytes-v05", ], d
 log = "0.4.14"
 openssl-probe = "0.1.4"
 # We can not publish the `aquadoggo` crate yet, since `p2panda-rs` is an
-# tag the dependency here with a git commit.
 # unpublished dependency. To still release something without publishing it, we
+# tag the dependency here with a git commit.
 p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "7ccc65b5cd5d22690e357cabe7be00f9fdd92a7b" }
 rand = "0.8.4"
 serde = { version = "1.0.130", features = ["derive"] }
