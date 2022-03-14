@@ -4,7 +4,7 @@ use crate::db::models::{Entry, Log};
 use p2panda_rs::entry::{EntrySigned, LogId};
 use p2panda_rs::operation::OperationEncoded;
 use p2panda_rs::storage_provider::conversions::{FromStorage, ToStorage};
-use p2panda_rs::storage_provider::models::AsEntry;
+use p2panda_rs::storage_provider::models::{AsEntry, AsLog};
 
 use crate::errors::Error;
 
@@ -44,5 +44,31 @@ impl AsEntry<EntryWithOperation> for Entry {
 
     fn entry(&self) -> Result<p2panda_rs::entry::Entry, p2panda_rs::entry::EntrySignedError> {
         p2panda_rs::entry::decode_entry(&self.entry_encoded(), self.operation_encoded().as_ref())
+    }
+}
+
+pub struct P2PandaLog(Log);
+
+impl ToStorage<P2PandaLog> for Log {
+    type ToMemoryStoreError = Error;
+
+    fn to_store_value(&self, input: P2PandaLog) -> Result<Self, Self::ToMemoryStoreError> {
+        Ok(Self { ..self.clone() })
+    }
+}
+
+impl FromStorage<P2PandaLog> for Log {
+    type FromStorageError = Error;
+
+    fn from_store_value(&self) -> Result<P2PandaLog, Self::FromStorageError> {
+        Ok(P2PandaLog(self.clone()))
+    }
+}
+
+impl AsLog<P2PandaLog> for Log {
+    type Error = Error;
+
+    fn id(&self) -> &LogId {
+        &self.log_id
     }
 }
