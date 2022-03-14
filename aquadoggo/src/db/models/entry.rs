@@ -8,9 +8,8 @@ use p2panda_rs::identity::Author;
 use p2panda_rs::operation::OperationEncoded;
 
 use serde::Serialize;
-use sqlx::{query, query_as, FromRow};
+use sqlx::FromRow;
 
-use crate::db::Pool;
 use crate::errors::Result;
 
 /// Struct representing the actual SQL row of `Entry`.

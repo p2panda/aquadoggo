@@ -1,18 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::convert::{TryFrom, TryInto};
-
 use jsonrpc_v2::{Data, Params};
-use p2panda_rs::storage_provider::conversions::ToStorage;
 use p2panda_rs::storage_provider::traits::EntryStore;
 use p2panda_rs::Validate;
 
-use crate::db::models::{Entry, EntryRow};
 use crate::db::sql_storage::SqlStorage;
 use crate::errors::Result;
 use crate::rpc::request::QueryEntriesRequest;
 use crate::rpc::response::QueryEntriesResponse;
-use crate::rpc::RpcApiState;
 
 pub async fn query_entries(
     storage_provider: Data<SqlStorage>,

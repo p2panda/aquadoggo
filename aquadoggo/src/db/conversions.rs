@@ -61,7 +61,7 @@ impl AsEntry<EntryWithOperation> for Entry {
     }
 
     fn operation_encoded(&self) -> Option<OperationEncoded> {
-        self.from_store_value().unwrap().1.clone()
+        self.from_store_value().unwrap().1
     }
 }
 
@@ -90,7 +90,7 @@ impl AsLog<P2PandaLog> for Log {
         let schema_id = match schema {
             SchemaId::Application(pinned_relation) => {
                 let mut id_str = "".to_string();
-                let mut relation_iter = pinned_relation.clone().into_iter().peekable();
+                let mut relation_iter = pinned_relation.into_iter().peekable();
                 while let Some(hash) = relation_iter.next() {
                     id_str += hash.as_str();
                     if relation_iter.peek().is_none() {
@@ -106,7 +106,7 @@ impl AsLog<P2PandaLog> for Log {
         Self {
             author: author.as_str().to_string(),
             log_id: log_id.as_u64().to_string(),
-            document: document.to_owned().as_str().to_string(),
+            document: document.as_str().to_string(),
             schema: schema_id,
         }
     }

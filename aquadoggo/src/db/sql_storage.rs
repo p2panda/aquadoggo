@@ -1,14 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_trait::async_trait;
-use bamboo_rs_core_ed25519_yasmf::entry::is_lipmaa_required;
 use p2panda_rs::entry::SeqNum;
 use p2panda_rs::hash::Hash;
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::storage_provider::conversions::ToStorage;
 use p2panda_rs::storage_provider::models::{AsEntry, AsLog};
-use p2panda_rs::storage_provider::requests::AsEntryArgsRequest;
-use p2panda_rs::storage_provider::responses::AsEntryArgsResponse;
 use p2panda_rs::storage_provider::traits::{EntryStore, LogStore, StorageProvider};
 use p2panda_rs::{entry::LogId, identity::Author};
 use sqlx::{query, query_as, query_scalar};
@@ -42,7 +38,7 @@ impl LogStore<P2PandaLog> for SqlStorage {
         let schema_id = match log.schema() {
             SchemaId::Application(pinned_relation) => {
                 let mut id_str = "".to_string();
-                let mut relation_iter = pinned_relation.clone().into_iter().peekable();
+                let mut relation_iter = pinned_relation.into_iter().peekable();
                 while let Some(hash) = relation_iter.next() {
                     id_str += hash.as_str();
                     if relation_iter.peek().is_none() {
