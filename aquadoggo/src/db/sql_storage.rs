@@ -15,6 +15,7 @@ use sqlx::{query, query_as, query_scalar};
 use crate::db::models::Log;
 use crate::db::Pool;
 use crate::errors::Error;
+use crate::rpc::EntryArgsResponse;
 
 use super::conversions::{EntryWithOperation, P2PandaLog};
 use super::models::{Entry, EntryRow};
@@ -117,7 +118,7 @@ impl LogStore<P2PandaLog> for SqlStorage {
 
 /// Trait which handles all storage actions relating to `Entries`.
 #[async_trait]
-impl EntryStore<EntryWithOperation> for Entry {
+impl EntryStore<EntryWithOperation> for SqlStorage {
     /// Type representing an entry, must implement the `AsEntry` trait.
     type Entry = Entry;
     /// The error type
@@ -266,16 +267,39 @@ impl EntryStore<EntryWithOperation> for Entry {
     }
 }
 
-// /// All other methods needed to be implemented by a p2panda `StorageProvider`
-// #[async_trait]
-// pub trait StorageProvider<T>: LogStore + EntryStore<T> {
-//     /// The error type
-//     type Error: Debug + Send + Sync;
+/// All other methods needed to be implemented by a p2panda `StorageProvider`
+#[async_trait]
+impl StorageProvider<EntryWithOperation, P2PandaLog> for SqlStorage {
+    /// The error type
+    type Error = Error;
+    type EntryArgsResponse = EntryArgsResponse;
 
-//     /// Returns the related document for any entry.
-//     ///
-//     /// Every entry is part of a document and, through that, associated with a specific log id used
-//     /// by this document and author. This method returns that document id by looking up the log
-//     /// that the entry was stored in.
-//     async fn get_document_by_entry(&self, entry_hash: &Hash) -> Result<Option<Hash>, Self::Error>;
-// }
+    /// Returns the related document for any entry.
+    ///
+    /// Every entry is part of a document and, through that, associated with a specific log id used
+    /// by this document and author. This method returns that document id by looking up the log
+    /// that the entry was stored in.
+    async fn get_document_by_entry(&self, entry_hash: &Hash) -> Result<Option<Hash>, Self::Error> {
+        let result: Option<String> = query_scalar(
+            "
+            SELECT
+                logs.document
+            FROM
+                logs
+            INNER JOIN entries
+                ON (logs.log_id = entries.log_id
+                    AND logs.author = entries.author)
+            WHERE
+                entries.entry_hash = $1
+            ",
+        )
+        .bind(entry_hash.as_str())
+        .fetch_optional(&self.pool)
+        .await?;
+
+        // Unwrap here since we already validated the hash
+        let hash = result.map(|str| Hash::new(&str).expect("Corrupt hash found in database"));
+
+        Ok(hash)
+    }
+}

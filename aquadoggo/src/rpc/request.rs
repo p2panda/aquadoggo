@@ -15,32 +15,12 @@ pub struct EntryArgsRequest {
     pub document: Option<Hash>,
 }
 
-impl AsEntryArgsRequest for EntryArgsRequest {
-    fn author(&self) -> &Author {
-        &self.author
-    }
-
-    fn document(&self) -> &Option<Hash> {
-        &self.document
-    }
-}
-
 /// Request body of `panda_publishEntry`.
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct PublishEntryRequest {
     pub entry_encoded: EntrySigned,
     pub operation_encoded: OperationEncoded,
-}
-
-impl AsPublishEntryRequest for PublishEntryRequest {
-    fn entry_encoded(&self) -> &EntrySigned {
-        &self.entry_encoded
-    }
-
-    fn operation_encoded(&self) -> Option<&OperationEncoded> {
-        Some(&self.operation_encoded)
-    }
 }
 
 #[derive(Deserialize, Debug)]
