@@ -144,7 +144,6 @@ dependencies = [
  "log",
  "openssl-probe",
  "p2panda-rs",
- "rand 0.8.5",
  "serde",
  "serde_json",
  "sqlformat",
@@ -2252,6 +2251,7 @@ dependencies = [
 [[package]]
 name = "p2panda-rs"
 version = "0.3.0"
+source = "git+https://github.com/p2panda/p2panda?branch=memory-store-traits#7e34b62f5ce992338a306dcf33ed37d15a66c60b"
 dependencies = [
  "aquamarine",
  "arrayvec 0.5.2",
