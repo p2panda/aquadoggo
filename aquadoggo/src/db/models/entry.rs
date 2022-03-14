@@ -2,7 +2,7 @@
 
 use std::convert::TryFrom;
 
-use p2panda_rs::entry::{EntrySigned, LogId, SeqNum};
+use p2panda_rs::entry::{decode_entry, EntrySigned, LogId, SeqNum};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::OperationEncoded;
@@ -82,6 +82,28 @@ pub struct Entry {
 
     /// Sequence number of this entry.
     pub seq_num: SeqNum,
+}
+
+impl Entry {
+    pub fn new(
+        entry_encoded: &EntrySigned,
+        operation_encoded: Option<&OperationEncoded>,
+    ) -> Result<Self> {
+        let entry = decode_entry(entry_encoded, operation_encoded).unwrap();
+        let payload_bytes =
+            operation_encoded.map(|operation_encoded| operation_encoded.as_str().to_string());
+        let payload_hash = entry_encoded.payload_hash();
+
+        Ok(Self {
+            author: entry_encoded.author(),
+            entry_bytes: entry_encoded.as_str().into(),
+            entry_hash: entry_encoded.hash(),
+            log_id: *entry.log_id(),
+            payload_bytes,
+            payload_hash,
+            seq_num: *entry.seq_num(),
+        })
+    }
 }
 
 impl Entry {
