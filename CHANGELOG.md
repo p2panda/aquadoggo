@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Make JSON RPC methods compatible with new document logs flow [#47](https://github.com/p2panda/aquadoggo/pull/47)
 - Nicer looking `README.md` for crate [#42](https://github.com/p2panda/aquadoggo/42)
 - Support u64 integers [#54](https://github.com/p2panda/aquadoggo/pull/54)
+- Move to `tokio` async runtime [#75](https://github.com/p2panda/aquadoggo/pull/75)
 
 ### Fixed
 
