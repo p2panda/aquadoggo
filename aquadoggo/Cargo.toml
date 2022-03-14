@@ -16,6 +16,7 @@ edition = "2018"
 [dependencies]
 anyhow = "1.0.43"
 async-std = { version = "1.10.0", features = ["attributes"] }
+async-trait = "0.1.52"
 bamboo-rs-core-ed25519-yasmf = "0.1.0"
 directories = "3.0.2"
 envy = "0.4.2"

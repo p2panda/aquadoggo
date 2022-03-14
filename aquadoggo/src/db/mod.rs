@@ -7,6 +7,7 @@ use sqlx::migrate::MigrateDatabase;
 
 pub mod conversions;
 pub mod models;
+pub mod sql_storage;
 
 /// Re-export of generic connection pool type.
 pub type Pool = AnyPool;
