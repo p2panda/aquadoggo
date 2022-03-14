@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::convert::TryFrom;
 use std::net::{SocketAddr, TcpListener};
 
 use axum::body::HttpBody;
 use axum::BoxError;
+use http::header::{HeaderName, HeaderValue};
 use http::{Request, StatusCode};
 use hyper::{Body, Server};
 use p2panda_rs::hash::Hash;
@@ -79,11 +81,23 @@ impl RequestBuilder {
         self
     }
 
+    #[allow(dead_code)]
     pub(crate) fn json<T>(mut self, json: &T) -> Self
     where
         T: serde::Serialize,
     {
         self.builder = self.builder.json(json);
+        self
+    }
+
+    pub(crate) fn header<K, V>(mut self, key: K, value: V) -> Self
+    where
+        HeaderName: TryFrom<K>,
+        <HeaderName as TryFrom<K>>::Error: Into<http::Error>,
+        HeaderValue: TryFrom<V>,
+        <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
+    {
+        self.builder = self.builder.header(key, value);
         self
     }
 }
@@ -97,6 +111,7 @@ impl TestResponse {
         self.response.text().await.unwrap()
     }
 
+    #[allow(dead_code)]
     pub(crate) async fn json<T>(self) -> T
     where
         T: serde::de::DeserializeOwned,
@@ -104,6 +119,7 @@ impl TestResponse {
         self.response.json().await.unwrap()
     }
 
+    #[allow(dead_code)]
     pub(crate) fn status(&self) -> StatusCode {
         self.response.status()
     }
@@ -140,7 +156,7 @@ pub fn random_entry_hash() -> String {
 }
 
 // Helper method to generate valid JSON RPC request string
-pub fn rpc_request(method: &str, params: &str) -> String {
+pub(crate) fn rpc_request(method: &str, params: &str) -> String {
     format!(
         r#"{{
             "jsonrpc": "2.0",
@@ -155,12 +171,12 @@ pub fn rpc_request(method: &str, params: &str) -> String {
 }
 
 // Helper method to generate valid JSON RPC response string
-pub fn rpc_response(result: &str) -> String {
+pub(crate) fn rpc_response(result: &str) -> String {
     format!(
         r#"{{
-            "id": 1,
             "jsonrpc": "2.0",
-            "result": {}
+            "result": {},
+            "id": 1
         }}"#,
         result
     )
@@ -169,18 +185,29 @@ pub fn rpc_response(result: &str) -> String {
 }
 
 // Helper method to generate valid JSON RPC error response string
-pub fn rpc_error(message: &str) -> String {
+pub(crate) fn rpc_error(message: &str) -> String {
     format!(
         r#"{{
+            "jsonrpc": "2.0",
             "error": {{
                 "code": 0,
                 "message": "<message>"
             }},
-            "id": 1,
-            "jsonrpc": "2.0"
+            "id": 1
         }}"#
     )
     .replace(" ", "")
     .replace("\n", "")
     .replace("<message>", message)
+}
+
+// Helper method to handle JSON RPC HTTP request and return response
+pub(crate) async fn handle_http(client: &TestClient, request: String) -> String {
+    let response = client
+        .post("/")
+        .body(request)
+        .header("content-type", HeaderValue::from_static("application/json"))
+        .send()
+        .await;
+    response.text().await
 }

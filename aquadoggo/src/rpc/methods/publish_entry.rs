@@ -172,7 +172,7 @@ pub async fn publish_entry(
     })
 }
 
-/* #[cfg(test)]
+#[cfg(test)]
 mod tests {
     use std::convert::TryFrom;
 
@@ -182,8 +182,10 @@ mod tests {
     use p2panda_rs::operation::{Operation, OperationEncoded, OperationFields, OperationValue};
 
     use crate::rpc::api::build_rpc_api_service;
-    use crate::rpc::server::{build_rpc_server, RpcServer};
-    use crate::test_helpers::{handle_http, initialize_db, rpc_error, rpc_request, rpc_response};
+    use crate::rpc::server::build_rpc_server;
+    use crate::test_helpers::{
+        handle_http, initialize_db, rpc_error, rpc_request, rpc_response, TestClient,
+    };
 
     /// Create encoded entries and operations for testing.
     fn create_test_entry(
@@ -228,7 +230,7 @@ mod tests {
     /// Compare API response from publishing an encoded entry and operation to expected skiplink,
     /// log id and sequence number.
     async fn assert_request(
-        app: &RpcServer,
+        client: &TestClient,
         entry_encoded: &EntrySigned,
         operation_encoded: &OperationEncoded,
         expect_skiplink: Option<&EntrySigned>,
@@ -260,16 +262,16 @@ mod tests {
             r#"{{
                 "entryHashBacklink": "{}",
                 "entryHashSkiplink": {},
-                "logId": "{}",
-                "seqNum": "{}"
+                "seqNum": "{}",
+                "logId": "{}"
             }}"#,
             entry_encoded.hash().as_str(),
             skiplink_str,
-            expect_log_id.as_u64(),
             expect_seq_num.as_u64(),
+            expect_log_id.as_u64(),
         ));
 
-        assert_eq!(handle_http(&app, request).await, response);
+        assert_eq!(handle_http(&client, request).await, response);
     }
 
     #[tokio::test]
@@ -283,6 +285,7 @@ mod tests {
         // Create tide server with endpoints
         let rpc_api = build_rpc_api_service(pool);
         let app = build_rpc_server(rpc_api);
+        let client = TestClient::new(app);
 
         // Define schema and log id for entries
         let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
@@ -297,7 +300,7 @@ mod tests {
         let (entry_1, operation_1) =
             create_test_entry(&key_pair, &schema, &log_id, None, None, None, &seq_num_1);
         assert_request(
-            &app,
+            &client,
             &entry_1,
             &operation_1,
             None,
@@ -317,7 +320,7 @@ mod tests {
             &SeqNum::new(2).unwrap(),
         );
         assert_request(
-            &app,
+            &client,
             &entry_2,
             &operation_2,
             None,
@@ -337,7 +340,7 @@ mod tests {
             &SeqNum::new(3).unwrap(),
         );
         assert_request(
-            &app,
+            &client,
             &entry_3,
             &operation_3,
             Some(&entry_1),
@@ -358,7 +361,7 @@ mod tests {
             &SeqNum::new(4).unwrap(),
         );
         assert_request(
-            &app,
+            &client,
             &entry_4,
             &operation_4,
             None,
@@ -379,7 +382,7 @@ mod tests {
             &SeqNum::new(5).unwrap(),
         );
         assert_request(
-            &app,
+            &client,
             &entry_5,
             &operation_5,
             None,
@@ -400,6 +403,7 @@ mod tests {
         // Create tide server with endpoints
         let rpc_api = build_rpc_api_service(pool);
         let app = build_rpc_server(rpc_api);
+        let client = TestClient::new(app);
 
         // Define schema and log id for entries
         let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
@@ -410,7 +414,7 @@ mod tests {
         let (entry_1, operation_1) =
             create_test_entry(&key_pair, &schema, &log_id, None, None, None, &seq_num);
         assert_request(
-            &app,
+            &client,
             &entry_1,
             &operation_1,
             None,
@@ -429,7 +433,7 @@ mod tests {
             &SeqNum::new(2).unwrap(),
         );
         assert_request(
-            &app,
+            &client,
             &entry_2,
             &operation_2,
             None,
@@ -463,7 +467,7 @@ mod tests {
         );
 
         let response = rpc_error("Requested log id 3 does not match expected log id 2");
-        assert_eq!(handle_http(&app, request).await, response);
+        assert_eq!(handle_http(&client, request).await, response);
 
         // Send invalid log id for an existing document: This entry is an update for the existing
         // document in log 1, however, we are trying to publish it in log 3.
@@ -490,7 +494,7 @@ mod tests {
         );
 
         let response = rpc_error("Requested log id 3 does not match expected log id 1");
-        assert_eq!(handle_http(&app, request).await, response);
+        assert_eq!(handle_http(&client, request).await, response);
 
         // Send invalid backlink entry / hash
         let (entry_wrong_hash, operation_wrong_hash) = create_test_entry(
@@ -518,7 +522,7 @@ mod tests {
         let response = rpc_error(
             "The backlink hash encoded in the entry does not match the lipmaa entry provided",
         );
-        assert_eq!(handle_http(&app, request).await, response);
+        assert_eq!(handle_http(&client, request).await, response);
 
         // Send invalid sequence number
         let (entry_wrong_seq_num, operation_wrong_seq_num) = create_test_entry(
@@ -544,6 +548,6 @@ mod tests {
         );
 
         let response = rpc_error("Could not find backlink entry in database");
-        assert_eq!(handle_http(&app, request).await, response);
+        assert_eq!(handle_http(&client, request).await, response);
     }
-} */
+}
