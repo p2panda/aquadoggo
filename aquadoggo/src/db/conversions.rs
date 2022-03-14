@@ -38,12 +38,8 @@ impl AsEntry<EntryWithOperation> for Entry {
         self.from_store_value().unwrap().0
     }
 
-    fn operation_encoded(&self) -> Option<OperationEncoded> {
-        self.from_store_value().unwrap().1
-    }
-
-    fn entry(&self) -> Result<p2panda_rs::entry::Entry, p2panda_rs::entry::EntrySignedError> {
-        p2panda_rs::entry::decode_entry(&self.entry_encoded(), self.operation_encoded().as_ref())
+    fn operation_encoded(&self) -> Option<&OperationEncoded> {
+        self.from_store_value().unwrap().1.as_ref()
     }
 }
 

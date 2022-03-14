@@ -2,19 +2,22 @@
 
 use async_trait::async_trait;
 
+use bamboo_rs_core_ed25519_yasmf::entry::is_lipmaa_required;
+use p2panda_rs::entry::SeqNum;
 use p2panda_rs::hash::Hash;
 use p2panda_rs::storage_provider::models::AsEntry;
 use p2panda_rs::storage_provider::requests::AsEntryArgsRequest;
 use p2panda_rs::storage_provider::responses::AsEntryArgsResponse;
-use p2panda_rs::storage_provider::traits::{LogStore, StorageProvider};
+use p2panda_rs::storage_provider::traits::{EntryStore, LogStore, StorageProvider};
 use p2panda_rs::{entry::LogId, identity::Author};
-use sqlx::{query, query_scalar};
+use sqlx::{query, query_as, query_scalar};
 
 use crate::db::models::Log;
 use crate::db::Pool;
 use crate::errors::Error;
 
-use super::conversions::P2PandaLog;
+use super::conversions::{EntryWithOperation, P2PandaLog};
+use super::models::{Entry, EntryRow};
 
 pub struct SqlStorage {
     pool: Pool,
@@ -112,42 +115,156 @@ impl LogStore<P2PandaLog> for SqlStorage {
     }
 }
 
-// /// Trait which handles all storage actions relating to `Entries`.
-// #[async_trait]
-// pub trait EntryStore<T> {
-//     /// Type representing an entry, must implement the `AsEntry` trait.
-//     type Entry: AsEntry<T>;
-//     /// The error type
-//     type EntryError: Debug;
+/// Trait which handles all storage actions relating to `Entries`.
+#[async_trait]
+impl EntryStore<EntryWithOperation> for Entry {
+    /// Type representing an entry, must implement the `AsEntry` trait.
+    type Entry = Entry;
+    /// The error type
+    type EntryError = Error;
 
-//     /// Insert an entry into storage.
-//     async fn insert(&self, value: Self::Entry) -> Result<bool, Self::EntryError>;
+    /// Insert an entry into storage.
+    async fn insert(&self, entry: Self::Entry) -> Result<bool, Self::EntryError> {
+        let db_entry: Self::Entry = entry.to_store_value().unwrap();
+        let rows_affected = query(
+            "
+            INSERT INTO
+                entries (
+                    author,
+                    entry_bytes,
+                    entry_hash,
+                    log_id,
+                    payload_bytes,
+                    payload_hash,
+                    seq_num
+                )
+            VALUES
+                ($1, $2, $3, $4, $5, $6, $7)
+            ",
+        )
+        .bind(db_entry.author.as_str())
+        .bind(db_entry.entry_bytes.as_str())
+        .bind(db_entry.entry_hash.as_str())
+        .bind(db_entry.log_id.as_u64().to_string())
+        .bind(db_entry.payload_bytes.unwrap().as_str())
+        .bind(db_entry.payload_hash.as_str())
+        .bind(db_entry.seq_num.as_u64().to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(|_| StorageProvider::Error)?
+        .rows_affected();
 
-//     /// Returns entry at sequence position within an author's log.
-//     async fn entry_at_seq_num(
-//         &self,
-//         author: &Author,
-//         log_id: &LogId,
-//         seq_num: &SeqNum,
-//     ) -> Result<Option<Self::Entry>, Self::EntryError>;
+        Ok(rows_affected == 1)
+    }
 
-//     /// Returns the latest Bamboo entry of an author's log.
-//     async fn latest_entry(
-//         &self,
-//         author: &Author,
-//         log_id: &LogId,
-//     ) -> Result<Option<Self::Entry>, Self::EntryError>;
+    /// Returns entry at sequence position within an author's log.
+    async fn entry_at_seq_num(
+        &self,
+        author: &Author,
+        log_id: &LogId,
+        seq_num: &SeqNum,
+    ) -> Result<Option<Self::Entry>, Self::EntryError> {
+        let row = query_as::<_, EntryRow>(
+            "
+            SELECT
+                author,
+                entry_bytes,
+                entry_hash,
+                log_id,
+                payload_bytes,
+                payload_hash,
+                seq_num
+            FROM
+                entries
+            WHERE
+                author = $1
+                AND log_id = $2
+                AND seq_num = $3
+            ",
+        )
+        .bind(author.as_str())
+        .bind(log_id.as_u64().to_string())
+        .bind(seq_num.as_u64().to_string())
+        .fetch_optional(&self.pool)
+        .await?;
 
-//     /// Return vector of all entries of a given schema
-//     async fn by_schema(&self, schema: &Hash) -> Result<Vec<Self::Entry>, Self::EntryError>;
+        // Convert internal `EntryRow` to `Entry` with correct types
+        let entry =
+            row.map(|entry| Self::Entry::try_from(entry).expect("Corrupt values found in entry"));
 
-//     /// Determine skiplink entry hash ("lipmaa"-link) for entry in this log, return `None` when no
-//     /// skiplink is required for the next entry.
-//     async fn determine_skiplink(
-//         &self,
-//         entry: &Self::Entry,
-//     ) -> Result<Option<Hash>, Self::EntryError>;
-// }
+        Ok(entry)
+    }
+
+    /// Returns the latest Bamboo entry of an author's log.
+    async fn latest_entry(
+        &self,
+        author: &Author,
+        log_id: &LogId,
+    ) -> Result<Option<Self::Entry>, Self::EntryError> {
+        let row = query_as::<_, EntryRow>(
+            "
+            SELECT
+                author,
+                entry_bytes,
+                entry_hash,
+                log_id,
+                payload_bytes,
+                payload_hash,
+                seq_num
+            FROM
+                entries
+            WHERE
+                author = $1
+                AND log_id = $2
+            ORDER BY
+                seq_num DESC
+            LIMIT
+                1
+            ",
+        )
+        .bind(author.as_str())
+        .bind(log_id.as_u64().to_string())
+        .fetch_optional(&self.pool)
+        .await?;
+
+        // Convert internal `EntryRow` to `Entry` with correct types
+        let entry = row.map(|entry: EntryRow| {
+            Entry::try_from(entry)
+                .map_err(|_| StorageProvider::Error)
+                .unwrap()
+        });
+
+        Ok(entry)
+    }
+
+    /// Return vector of all entries of a given schema
+    async fn by_schema(&self, schema: &Hash) -> Result<Vec<Self::Entry>, Self::EntryError> {
+        let entries = query_as::<_, EntryRow>(
+            "
+            SELECT
+                entries.author,
+                entries.entry_bytes,
+                entries.entry_hash,
+                entries.log_id,
+                entries.payload_bytes,
+                entries.payload_hash,
+                entries.seq_num
+            FROM
+                entries
+            INNER JOIN logs
+                ON (entries.log_id = logs.log_id
+                    AND entries.author = logs.author)
+            WHERE
+                logs.schema = $1
+            ",
+        )
+        .bind(schema.as_str())
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(entries)
+    }
+}
 
 // /// All other methods needed to be implemented by a p2panda `StorageProvider`
 // #[async_trait]
