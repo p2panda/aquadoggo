@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_trait::async_trait;
-
 use bamboo_rs_core_ed25519_yasmf::entry::is_lipmaa_required;
 use p2panda_rs::entry::SeqNum;
 use p2panda_rs::hash::Hash;
-use p2panda_rs::storage_provider::models::AsEntry;
+use p2panda_rs::schema::SchemaId;
+use p2panda_rs::storage_provider::conversions::ToStorage;
+use p2panda_rs::storage_provider::models::{AsEntry, AsLog};
 use p2panda_rs::storage_provider::requests::AsEntryArgsRequest;
 use p2panda_rs::storage_provider::responses::AsEntryArgsResponse;
 use p2panda_rs::storage_provider::traits::{EntryStore, LogStore, StorageProvider};
 use p2panda_rs::{entry::LogId, identity::Author};
 use sqlx::{query, query_as, query_scalar};
+use std::convert::TryFrom;
 
 use crate::db::models::Log;
 use crate::db::Pool;
@@ -21,7 +23,7 @@ use super::conversions::{EntryWithOperation, P2PandaLog};
 use super::models::{Entry, EntryRow};
 
 pub struct SqlStorage {
-    pool: Pool,
+    pub(crate) pool: Pool,
 }
 
 /// Trait which handles all storage actions relating to `Log`s.
@@ -36,8 +38,40 @@ impl LogStore<P2PandaLog> for SqlStorage {
     type Log = Log;
 
     /// Insert a log into storage.
-    async fn insert(&self, value: Self::Log) -> Result<bool, Self::LogError> {
-        todo!()
+    async fn insert_log(&self, log: Self::Log) -> Result<bool, Self::LogError> {
+        let schema_id = match log.schema() {
+            SchemaId::Application(pinned_relation) => {
+                let mut id_str = "".to_string();
+                let mut relation_iter = pinned_relation.clone().into_iter().peekable();
+                while let Some(hash) = relation_iter.next() {
+                    id_str += hash.as_str();
+                    if relation_iter.peek().is_none() {
+                        id_str += "_"
+                    }
+                }
+                id_str
+            }
+            SchemaId::Schema => "schema_v1".to_string(),
+            SchemaId::SchemaField => "schema_field_v1".to_string(),
+        };
+
+        let rows_affected = query(
+            "
+            INSERT INTO
+                logs (author, log_id, document, schema)
+            VALUES
+                ($1, $2, $3, $4)
+            ",
+        )
+        .bind(log.author().as_str())
+        .bind(log.log_id().as_u64().to_string())
+        .bind(log.document().as_str())
+        .bind(schema_id)
+        .execute(&self.pool)
+        .await?
+        .rows_affected();
+
+        Ok(rows_affected == 1)
     }
 
     /// Get a log from storage
@@ -45,7 +79,7 @@ impl LogStore<P2PandaLog> for SqlStorage {
         &self,
         author: &Author,
         document_id: &Hash,
-    ) -> Result<Option<Self::Log>, Self::LogError> {
+    ) -> Result<Option<LogId>, Self::LogError> {
         let result: Option<String> = query_scalar(
             "
             SELECT
@@ -63,14 +97,14 @@ impl LogStore<P2PandaLog> for SqlStorage {
         .await?;
 
         // Wrap u64 inside of `P2PandaLog` instance
-        let log_id: Option<Self::Log> =
+        let log_id: Option<LogId> =
             result.map(|str| str.parse().expect("Corrupt u64 integer found in database"));
 
         Ok(log_id)
     }
 
     /// Determines the next unused log_id of an author.
-    async fn next_log_id(&self, author: &Author) -> Result<Self::Log, Self::LogError> {
+    async fn next_log_id(&self, author: &Author) -> Result<LogId, Self::LogError> {
         // Get all log ids from this author
         let mut result: Vec<String> = query_scalar(
             "
@@ -125,8 +159,7 @@ impl EntryStore<EntryWithOperation> for SqlStorage {
     type EntryError = Error;
 
     /// Insert an entry into storage.
-    async fn insert(&self, entry: Self::Entry) -> Result<bool, Self::EntryError> {
-        let db_entry: Self::Entry = entry.to_store_value().unwrap();
+    async fn insert_entry(&self, entry: Self::Entry) -> Result<bool, Self::EntryError> {
         let rows_affected = query(
             "
             INSERT INTO
@@ -143,16 +176,15 @@ impl EntryStore<EntryWithOperation> for SqlStorage {
                 ($1, $2, $3, $4, $5, $6, $7)
             ",
         )
-        .bind(db_entry.author.as_str())
-        .bind(db_entry.entry_bytes.as_str())
-        .bind(db_entry.entry_hash.as_str())
-        .bind(db_entry.log_id.as_u64().to_string())
-        .bind(db_entry.payload_bytes.unwrap().as_str())
-        .bind(db_entry.payload_hash.as_str())
-        .bind(db_entry.seq_num.as_u64().to_string())
+        .bind(entry.author().as_str())
+        .bind(entry.entry_encoded().as_str())
+        .bind(entry.entry_hash().as_str())
+        .bind(entry.log_id().as_u64().to_string())
+        .bind(entry.operation_encoded().unwrap().as_str())
+        .bind(entry.operation_encoded().unwrap().hash().as_str())
+        .bind(entry.seq_num().as_u64().to_string())
         .execute(&self.pool)
-        .await
-        .map_err(|_| StorageProvider::Error)?
+        .await?
         .rows_affected();
 
         Ok(rows_affected == 1)
@@ -229,11 +261,7 @@ impl EntryStore<EntryWithOperation> for SqlStorage {
         .await?;
 
         // Convert internal `EntryRow` to `Entry` with correct types
-        let entry = row.map(|entry: EntryRow| {
-            Entry::try_from(entry)
-                .map_err(|_| StorageProvider::Error)
-                .unwrap()
-        });
+        let entry = row.map(|entry: EntryRow| Entry::try_from(entry).unwrap());
 
         Ok(entry)
     }
@@ -262,6 +290,11 @@ impl EntryStore<EntryWithOperation> for SqlStorage {
         .bind(schema.as_str())
         .fetch_all(&self.pool)
         .await?;
+
+        let entries = entries
+            .into_iter()
+            .map(|entry: EntryRow| Entry::try_from(entry).unwrap())
+            .collect();
 
         Ok(entries)
     }

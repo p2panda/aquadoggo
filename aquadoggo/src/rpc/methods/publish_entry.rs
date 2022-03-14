@@ -30,147 +30,147 @@ pub enum PublishEntryError {
     InvalidLogId(u64, u64),
 }
 
-/// Implementation of `panda_publishEntry` RPC method.
-///
-/// Stores an author's Bamboo entry with operation payload in database after validating it.
-pub async fn publish_entry(
-    data: Data<RpcApiState>,
-    Params(params): Params<PublishEntryRequest>,
-) -> Result<PublishEntryResponse> {
-    // Validate request parameters
-    params.entry_encoded.validate()?;
-    params.operation_encoded.validate()?;
+// /// Implementation of `panda_publishEntry` RPC method.
+// ///
+// /// Stores an author's Bamboo entry with operation payload in database after validating it.
+// pub async fn publish_entry(
+//     data: Data<RpcApiState>,
+//     Params(params): Params<PublishEntryRequest>,
+// ) -> Result<PublishEntryResponse> {
+//     // Validate request parameters
+//     params.entry_encoded.validate()?;
+//     params.operation_encoded.validate()?;
 
-    // Get database connection pool
-    let pool = data.pool.clone();
+//     // Get database connection pool
+//     let pool = data.pool.clone();
 
-    // Decode author, entry and operation. This conversion validates the operation hash
-    let author = params.entry_encoded.author();
-    let entry = decode_entry(&params.entry_encoded, Some(&params.operation_encoded))?;
-    let operation = Operation::from(&params.operation_encoded);
+//     // Decode author, entry and operation. This conversion validates the operation hash
+//     let author = params.entry_encoded.author();
+//     let entry = decode_entry(&params.entry_encoded, Some(&params.operation_encoded))?;
+//     let operation = Operation::from(&params.operation_encoded);
 
-    // Every operation refers to a document we need to determine. A document is identified by the
-    // hash of its first `CREATE` operation, it is the root operation of every document graph
-    let document_id = if operation.is_create() {
-        // This is easy: We just use the entry hash directly to determine the document id
-        params.entry_encoded.hash()
-    } else {
-        // For any other operations which followed after creation we need to either walk the operation
-        // graph back to its `CREATE` operation or more easily look up the database since we keep track
-        // of all log ids and documents there.
-        //
-        // We can determine the used document hash by looking at what we know about the previous
-        // entry in this author's log.
-        //
-        // @TODO: This currently looks at the backlink, in the future we want to use
-        // "previousOperation", since in a multi-writer setting there might be no backlink for
-        // update operations! See: https://github.com/p2panda/aquadoggo/issues/49
-        let backlink_entry_hash = entry
-            .backlink_hash()
-            .ok_or(PublishEntryError::OperationWithoutBacklink)?;
+//     // Every operation refers to a document we need to determine. A document is identified by the
+//     // hash of its first `CREATE` operation, it is the root operation of every document graph
+//     let document_id = if operation.is_create() {
+//         // This is easy: We just use the entry hash directly to determine the document id
+//         params.entry_encoded.hash()
+//     } else {
+//         // For any other operations which followed after creation we need to either walk the operation
+//         // graph back to its `CREATE` operation or more easily look up the database since we keep track
+//         // of all log ids and documents there.
+//         //
+//         // We can determine the used document hash by looking at what we know about the previous
+//         // entry in this author's log.
+//         //
+//         // @TODO: This currently looks at the backlink, in the future we want to use
+//         // "previousOperation", since in a multi-writer setting there might be no backlink for
+//         // update operations! See: https://github.com/p2panda/aquadoggo/issues/49
+//         let backlink_entry_hash = entry
+//             .backlink_hash()
+//             .ok_or(PublishEntryError::OperationWithoutBacklink)?;
 
-        Log::get_document_by_entry(&pool, backlink_entry_hash)
-            .await?
-            .ok_or(PublishEntryError::DocumentMissing)?
-    };
+//         Log::get_document_by_entry(&pool, backlink_entry_hash)
+//             .await?
+//             .ok_or(PublishEntryError::DocumentMissing)?
+//     };
 
-    // Determine expected log id for new entry
-    let document_log_id = Log::find_document_log_id(&pool, &author, Some(&document_id)).await?;
+//     // Determine expected log id for new entry
+//     let document_log_id = Log::find_document_log_id(&pool, &author, Some(&document_id)).await?;
 
-    // Check if provided log id matches expected log id
-    if &document_log_id != entry.log_id() {
-        return Err(PublishEntryError::InvalidLogId(
-            entry.log_id().as_u64(),
-            document_log_id.as_u64(),
-        )
-        .into());
-    }
+//     // Check if provided log id matches expected log id
+//     if &document_log_id != entry.log_id() {
+//         return Err(PublishEntryError::InvalidLogId(
+//             entry.log_id().as_u64(),
+//             document_log_id.as_u64(),
+//         )
+//         .into());
+//     }
 
-    // Get related bamboo backlink and skiplink entries
-    let entry_backlink_bytes = if !entry.seq_num().is_first() {
-        Entry::at_seq_num(
-            &pool,
-            &author,
-            entry.log_id(),
-            &entry.seq_num_backlink().unwrap(),
-        )
-        .await?
-        .map(|link| {
-            let bytes = hex::decode(link.entry_bytes)
-                .expect("Backlink entry with invalid hex-encoding detected in database");
-            Some(bytes)
-        })
-        .ok_or(PublishEntryError::BacklinkMissing)
-    } else {
-        Ok(None)
-    }?;
+//     // Get related bamboo backlink and skiplink entries
+//     let entry_backlink_bytes = if !entry.seq_num().is_first() {
+//         Entry::at_seq_num(
+//             &pool,
+//             &author,
+//             entry.log_id(),
+//             &entry.seq_num_backlink().unwrap(),
+//         )
+//         .await?
+//         .map(|link| {
+//             let bytes = hex::decode(link.entry_bytes)
+//                 .expect("Backlink entry with invalid hex-encoding detected in database");
+//             Some(bytes)
+//         })
+//         .ok_or(PublishEntryError::BacklinkMissing)
+//     } else {
+//         Ok(None)
+//     }?;
 
-    let entry_skiplink_bytes = if !entry.seq_num().is_first() {
-        Entry::at_seq_num(
-            &pool,
-            &author,
-            entry.log_id(),
-            &entry.seq_num_skiplink().unwrap(),
-        )
-        .await?
-        .map(|link| {
-            let bytes = hex::decode(link.entry_bytes)
-                .expect("Backlink entry with invalid hex-encoding detected in database");
-            Some(bytes)
-        })
-        .ok_or(PublishEntryError::SkiplinkMissing)
-    } else {
-        Ok(None)
-    }?;
+//     let entry_skiplink_bytes = if !entry.seq_num().is_first() {
+//         Entry::at_seq_num(
+//             &pool,
+//             &author,
+//             entry.log_id(),
+//             &entry.seq_num_skiplink().unwrap(),
+//         )
+//         .await?
+//         .map(|link| {
+//             let bytes = hex::decode(link.entry_bytes)
+//                 .expect("Backlink entry with invalid hex-encoding detected in database");
+//             Some(bytes)
+//         })
+//         .ok_or(PublishEntryError::SkiplinkMissing)
+//     } else {
+//         Ok(None)
+//     }?;
 
-    // Verify bamboo entry integrity, including encoding, signature of the entry correct back- and
-    // skiplinks.
-    bamboo_rs_core_ed25519_yasmf::verify(
-        &params.entry_encoded.to_bytes(),
-        Some(&params.operation_encoded.to_bytes()),
-        entry_skiplink_bytes.as_deref(),
-        entry_backlink_bytes.as_deref(),
-    )?;
+//     // Verify bamboo entry integrity, including encoding, signature of the entry correct back- and
+//     // skiplinks.
+//     bamboo_rs_core_ed25519_yasmf::verify(
+//         &params.entry_encoded.to_bytes(),
+//         Some(&params.operation_encoded.to_bytes()),
+//         entry_skiplink_bytes.as_deref(),
+//         entry_backlink_bytes.as_deref(),
+//     )?;
 
-    // Register log in database when a new document is created
-    if operation.is_create() {
-        Log::insert(
-            &pool,
-            &author,
-            &document_id,
-            &operation.schema(),
-            entry.log_id(),
-        )
-        .await?;
-    }
+//     // Register log in database when a new document is created
+//     if operation.is_create() {
+//         Log::insert(
+//             &pool,
+//             &author,
+//             &document_id,
+//             &operation.schema(),
+//             entry.log_id(),
+//         )
+//         .await?;
+//     }
 
-    // Finally insert Entry in database
-    Entry::insert(
-        &pool,
-        &author,
-        &params.entry_encoded,
-        &params.entry_encoded.hash(),
-        entry.log_id(),
-        &params.operation_encoded,
-        &params.operation_encoded.hash(),
-        entry.seq_num(),
-    )
-    .await?;
+//     // Finally insert Entry in database
+//     Entry::insert(
+//         &pool,
+//         &author,
+//         &params.entry_encoded,
+//         &params.entry_encoded.hash(),
+//         entry.log_id(),
+//         &params.operation_encoded,
+//         &params.operation_encoded.hash(),
+//         entry.seq_num(),
+//     )
+//     .await?;
 
-    // Already return arguments for next entry creation
-    let mut entry_latest = Entry::latest(&pool, &author, entry.log_id())
-        .await?
-        .expect("Database does not contain any entries");
-    let entry_hash_skiplink = super::entry_args::determine_skiplink(pool, &entry_latest).await?;
-    let next_seq_num = entry_latest.seq_num.next().unwrap();
+//     // Already return arguments for next entry creation
+//     let mut entry_latest = Entry::latest(&pool, &author, entry.log_id())
+//         .await?
+//         .expect("Database does not contain any entries");
+//     let entry_hash_skiplink = super::entry_args::determine_skiplink(pool, &entry_latest).await?;
+//     let next_seq_num = entry_latest.seq_num.next().unwrap();
 
-    Ok(PublishEntryResponse {
-        entry_hash_backlink: Some(params.entry_encoded.hash()),
-        entry_hash_skiplink,
-        seq_num: next_seq_num.as_u64().to_string(),
-        log_id: entry.log_id().as_u64().to_string(),
-    })
-}
+//     Ok(PublishEntryResponse {
+//         entry_hash_backlink: Some(params.entry_encoded.hash()),
+//         entry_hash_skiplink,
+//         seq_num: next_seq_num.as_u64().to_string(),
+//         log_id: entry.log_id().as_u64().to_string(),
+//     })
+// }
 
 #[cfg(test)]
 mod tests {

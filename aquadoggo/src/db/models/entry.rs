@@ -106,6 +106,23 @@ impl Entry {
     }
 }
 
+/// Convert SQL row representation `EntryRow` to typed `Entry` one.
+impl TryFrom<EntryRow> for Entry {
+    type Error = crate::errors::Error;
+
+    fn try_from(row: EntryRow) -> std::result::Result<Self, Self::Error> {
+        Ok(Self {
+            author: Author::try_from(row.author.as_ref())?,
+            entry_bytes: row.entry_bytes.clone(),
+            entry_hash: row.entry_hash.parse()?,
+            log_id: row.log_id.parse()?,
+            payload_bytes: row.payload_bytes.clone(),
+            payload_hash: row.payload_hash.parse()?,
+            seq_num: row.seq_num.parse()?,
+        })
+    }
+}
+
 impl Entry {
     pub async fn insert(
         pool: &Pool,
