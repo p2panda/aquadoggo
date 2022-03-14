@@ -9,5 +9,5 @@ pub mod error {
 }
 
 pub use entry_args::get_entry_args;
-// pub use publish_entry::publish_entry;
+pub use publish_entry::publish_entry;
 pub use query_entries::query_entries;

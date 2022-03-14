@@ -4,7 +4,7 @@ use std::str::FromStr;
 
 use crate::db::models::{Entry, Log};
 use p2panda_rs::document::DocumentId;
-use p2panda_rs::entry::{EntrySigned, LogId};
+use p2panda_rs::entry::{decode_entry, EntrySigned, LogId};
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::OperationEncoded;
 use p2panda_rs::schema::SchemaId;
@@ -39,6 +39,23 @@ impl FromStorage<EntryWithOperation> for Entry {
 impl AsEntry<EntryWithOperation> for Entry {
     type Error = Error;
 
+    fn new(entry_encoded: &EntrySigned, operation_encoded: Option<&OperationEncoded>) -> Self {
+        let entry = decode_entry(entry_encoded, operation_encoded).unwrap();
+        let payload_bytes =
+            operation_encoded.map(|operation_encoded| operation_encoded.as_str().to_string());
+        let payload_hash = entry_encoded.payload_hash();
+
+        Self {
+            author: entry_encoded.author(),
+            entry_bytes: entry_encoded.as_str().into(),
+            entry_hash: entry_encoded.hash(),
+            log_id: *entry.log_id(),
+            payload_bytes,
+            payload_hash,
+            seq_num: *entry.seq_num(),
+        }
+    }
+
     fn entry_encoded(&self) -> EntrySigned {
         self.from_store_value().unwrap().0
     }
@@ -68,6 +85,31 @@ impl FromStorage<P2PandaLog> for Log {
 
 impl AsLog<P2PandaLog> for Log {
     type Error = Error;
+
+    fn new(author: Author, document: DocumentId, schema: SchemaId, log_id: LogId) -> Self {
+        let schema_id = match schema {
+            SchemaId::Application(pinned_relation) => {
+                let mut id_str = "".to_string();
+                let mut relation_iter = pinned_relation.clone().into_iter().peekable();
+                while let Some(hash) = relation_iter.next() {
+                    id_str += hash.as_str();
+                    if relation_iter.peek().is_none() {
+                        id_str += "_"
+                    }
+                }
+                id_str
+            }
+            SchemaId::Schema => "schema_v1".to_string(),
+            SchemaId::SchemaField => "schema_field_v1".to_string(),
+        };
+
+        Self {
+            author: author.as_str().to_string(),
+            log_id: log_id.as_u64().to_string(),
+            document: document.to_owned().as_str().to_string(),
+            schema: schema_id,
+        }
+    }
 
     fn author(&self) -> Author {
         Author::new(&self.author).unwrap()

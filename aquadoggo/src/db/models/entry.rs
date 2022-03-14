@@ -123,152 +123,6 @@ impl TryFrom<EntryRow> for Entry {
     }
 }
 
-impl Entry {
-    pub async fn insert(
-        pool: &Pool,
-        author: &Author,
-        entry_bytes: &EntrySigned,
-        entry_hash: &Hash,
-        log_id: &LogId,
-        payload_bytes: &OperationEncoded,
-        payload_hash: &Hash,
-        seq_num: &SeqNum,
-    ) -> Result<bool> {
-        let rows_affected = query(
-            "
-            INSERT INTO
-                entries (
-                    author,
-                    entry_bytes,
-                    entry_hash,
-                    log_id,
-                    payload_bytes,
-                    payload_hash,
-                    seq_num
-                )
-            VALUES
-                ($1, $2, $3, $4, $5, $6, $7)
-            ",
-        )
-        .bind(author.as_str())
-        .bind(entry_bytes.as_str())
-        .bind(entry_hash.as_str())
-        .bind(log_id.as_u64().to_string())
-        .bind(payload_bytes.as_str())
-        .bind(payload_hash.as_str())
-        .bind(seq_num.as_u64().to_string())
-        .execute(pool)
-        .await?
-        .rows_affected();
-
-        Ok(rows_affected == 1)
-    }
-
-    /// Returns the latest Bamboo entry of an author's log.
-    pub async fn latest(pool: &Pool, author: &Author, log_id: &LogId) -> Result<Option<Entry>> {
-        let row = query_as::<_, EntryRow>(
-            "
-            SELECT
-                author,
-                entry_bytes,
-                entry_hash,
-                log_id,
-                payload_bytes,
-                payload_hash,
-                seq_num
-            FROM
-                entries
-            WHERE
-                author = $1
-                AND log_id = $2
-            ORDER BY
-                seq_num DESC
-            LIMIT
-                1
-            ",
-        )
-        .bind(author.as_str())
-        .bind(log_id.as_u64().to_string())
-        .fetch_optional(pool)
-        .await?;
-
-        // Convert internal `EntryRow` to `Entry` with correct types
-        let entry = row.map(|entry| Self::try_from(&entry).expect("Corrupt values found in entry"));
-
-        Ok(entry)
-    }
-
-    /// Return vector of all entries of a given schema
-    // @TODO: This currently returns `EntryRow`, a better API would return `Entry` instead as it is
-    // properly typed and `EntryRow` is only meant as an intermediate struct to deal with
-    // databases. Here we still return `EntryRow` for the `queryEntries` RPC response (we want
-    // `seq_num` and `log_id` to be strings). This should be changed as soon as we move over using
-    // a GraphQL API.
-    pub async fn by_schema(pool: &Pool, schema: &Hash) -> Result<Vec<EntryRow>> {
-        let entries = query_as::<_, EntryRow>(
-            "
-            SELECT
-                entries.author,
-                entries.entry_bytes,
-                entries.entry_hash,
-                entries.log_id,
-                entries.payload_bytes,
-                entries.payload_hash,
-                entries.seq_num
-            FROM
-                entries
-            INNER JOIN logs
-                ON (entries.log_id = logs.log_id
-                    AND entries.author = logs.author)
-            WHERE
-                logs.schema = $1
-            ",
-        )
-        .bind(schema.as_str())
-        .fetch_all(pool)
-        .await?;
-
-        Ok(entries)
-    }
-
-    /// Returns entry at sequence position within an author's log.
-    pub async fn at_seq_num(
-        pool: &Pool,
-        author: &Author,
-        log_id: &LogId,
-        seq_num: &SeqNum,
-    ) -> Result<Option<Entry>> {
-        let row = query_as::<_, EntryRow>(
-            "
-            SELECT
-                author,
-                entry_bytes,
-                entry_hash,
-                log_id,
-                payload_bytes,
-                payload_hash,
-                seq_num
-            FROM
-                entries
-            WHERE
-                author = $1
-                AND log_id = $2
-                AND seq_num = $3
-            ",
-        )
-        .bind(author.as_str())
-        .bind(log_id.as_u64().to_string())
-        .bind(seq_num.as_u64().to_string())
-        .fetch_optional(pool)
-        .await?;
-
-        // Convert internal `EntryRow` to `Entry` with correct types
-        let entry = row.map(|entry| Self::try_from(&entry).expect("Corrupt values found in entry"));
-
-        Ok(entry)
-    }
-}
-
 /// Convert SQL row representation `EntryRow` to typed `Entry` one.
 impl TryFrom<&EntryRow> for Entry {
     type Error = crate::errors::Error;
@@ -291,9 +145,9 @@ mod tests {
     use p2panda_rs::entry::LogId;
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::Author;
+    use p2panda_rs::storage_provider::traits::EntryStore;
 
-    use super::Entry;
-
+    use crate::db::sql_storage::SqlStorage;
     use crate::test_helpers::initialize_db;
 
     const TEST_AUTHOR: &str = "1a8a62c5f64eed987326513ea15a6ea2682c256ac57a418c1c92d96787c8b36e";
@@ -301,21 +155,26 @@ mod tests {
     #[async_std::test]
     async fn latest_entry() {
         let pool = initialize_db().await;
+        let storage_provider = SqlStorage { pool };
 
         let author = Author::new(TEST_AUTHOR).unwrap();
         let log_id = LogId::new(1);
 
-        let latest_entry = Entry::latest(&pool, &author, &log_id).await.unwrap();
+        let latest_entry = storage_provider
+            .latest_entry(&author, &log_id)
+            .await
+            .unwrap();
         assert!(latest_entry.is_none());
     }
 
     #[async_std::test]
     async fn entries_by_schema() {
         let pool = initialize_db().await;
+        let storage_provider = SqlStorage { pool };
 
         let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
 
-        let entries = Entry::by_schema(&pool, &schema).await.unwrap();
+        let entries = storage_provider.by_schema(&schema).await.unwrap();
         assert!(entries.len() == 0);
     }
 }

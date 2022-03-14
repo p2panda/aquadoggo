@@ -1,26 +1,29 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::convert::{TryFrom, TryInto};
+
 use jsonrpc_v2::{Data, Params};
+use p2panda_rs::storage_provider::conversions::ToStorage;
+use p2panda_rs::storage_provider::traits::EntryStore;
 use p2panda_rs::Validate;
 
-use crate::db::models::Entry;
+use crate::db::models::{Entry, EntryRow};
+use crate::db::sql_storage::SqlStorage;
 use crate::errors::Result;
 use crate::rpc::request::QueryEntriesRequest;
 use crate::rpc::response::QueryEntriesResponse;
 use crate::rpc::RpcApiState;
 
 pub async fn query_entries(
-    data: Data<RpcApiState>,
+    storage_provider: Data<SqlStorage>,
     Params(params): Params<QueryEntriesRequest>,
 ) -> Result<QueryEntriesResponse> {
     // Validate request parameters
     params.schema.validate()?;
 
-    // Get database connection pool
-    let pool = data.pool.clone();
-
     // Find and return raw entries from database
-    let entries = Entry::by_schema(&pool, &params.schema).await?;
+    let entries = storage_provider.by_schema(&params.schema).await?;
+
     Ok(QueryEntriesResponse { entries })
 }
 

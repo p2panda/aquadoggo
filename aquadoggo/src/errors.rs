@@ -12,6 +12,10 @@ pub type Result<T> = anyhow::Result<T, Error>;
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     /// Error returned from validating p2panda-rs `Author` data types.
+    #[error("Not a very useful StorageProvider error")]
+    StorageProviderError,
+
+    /// Error returned from validating p2panda-rs `Author` data types.
     #[error(transparent)]
     AuthorValidation(#[from] AuthorError),
 

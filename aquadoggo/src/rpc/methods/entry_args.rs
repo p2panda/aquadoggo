@@ -19,7 +19,7 @@ pub async fn get_entry_args(
     let response = storage_provider
         .get_entry_args(&params.author, params.document.as_ref())
         .await
-        .unwrap();
+        .map_err(|_| crate::errors::Error::StorageProviderError)?;
     Ok(response)
 }
 
@@ -36,6 +36,7 @@ mod tests {
     #[async_std::test]
     async fn respond_with_wrong_author_error() {
         let pool = initialize_db().await;
+
         let rpc_api = build_rpc_api_service(pool.clone());
         let app = build_rpc_server(rpc_api);
 
@@ -50,7 +51,7 @@ mod tests {
             ),
         );
 
-        let response = rpc_error("invalid author key length");
+        let response = rpc_error(&crate::errors::Error::StorageProviderError.to_string());
 
         assert_eq!(handle_http(&app, request).await, response);
     }
