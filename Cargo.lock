@@ -144,6 +144,7 @@ dependencies = [
  "log",
  "openssl-probe",
  "p2panda-rs",
+ "rand 0.8.5",
  "serde",
  "serde_json",
  "sqlformat",
