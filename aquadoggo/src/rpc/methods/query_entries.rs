@@ -5,14 +5,14 @@ use p2panda_rs::storage_provider::traits::EntryStore;
 use p2panda_rs::Validate;
 
 use crate::db::sql_storage::SqlStorage;
-use crate::errors::Result;
+use crate::errors::StorageProviderResult;
 use crate::rpc::request::QueryEntriesRequest;
 use crate::rpc::response::QueryEntriesResponse;
 
 pub async fn query_entries(
     storage_provider: Data<SqlStorage>,
     Params(params): Params<QueryEntriesRequest>,
-) -> Result<QueryEntriesResponse> {
+) -> StorageProviderResult<QueryEntriesResponse> {
     // Validate request parameters
     params.schema.validate()?;
 

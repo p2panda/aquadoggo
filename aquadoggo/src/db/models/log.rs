@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::str::FromStr;
+
 use p2panda_rs::document::DocumentId;
 use p2panda_rs::entry::LogId;
 use p2panda_rs::identity::Author;
 use p2panda_rs::schema::SchemaId;
+use p2panda_rs::storage_provider::traits::AsStorageLog;
 use sqlx::FromRow;
 
 /// Tracks the assigment of an author's logs to documents and records their schema.
@@ -28,12 +31,12 @@ pub struct Log {
     pub schema: String,
 }
 
-impl Log {
-    pub fn new(author: &Author, document: &DocumentId, schema: &SchemaId, log_id: &LogId) -> Self {
-        let schema_id = match schema {
+impl AsStorageLog for Log {
+    fn new(author: &Author, document: &DocumentId, schema: &SchemaId, log_id: &LogId) -> Self {
+        let schema_id = match schema.clone() {
             SchemaId::Application(pinned_relation) => {
                 let mut id_str = "".to_string();
-                let mut relation_iter = pinned_relation.clone().into_iter().peekable();
+                let mut relation_iter = pinned_relation.into_iter().peekable();
                 while let Some(hash) = relation_iter.next() {
                     id_str += hash.as_str();
                     if relation_iter.peek().is_none() {
@@ -49,9 +52,24 @@ impl Log {
         Self {
             author: author.as_str().to_string(),
             log_id: log_id.as_u64().to_string(),
-            document: document.to_owned().as_str().to_string(),
+            document: document.as_str().to_string(),
             schema: schema_id,
         }
+    }
+
+    fn author(&self) -> Author {
+        Author::new(&self.author).unwrap()
+    }
+    fn log_id(&self) -> LogId {
+        LogId::from_str(&self.log_id).unwrap()
+    }
+    fn document(&self) -> DocumentId {
+        let document_id: DocumentId = self.document.parse().unwrap();
+        document_id
+    }
+    fn schema(&self) -> SchemaId {
+        let schema_id: SchemaId = self.document.parse().unwrap();
+        schema_id
     }
 }
 
@@ -65,10 +83,11 @@ mod tests {
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::{Operation, OperationEncoded, OperationFields, OperationValue};
     use p2panda_rs::schema::SchemaId;
-    use p2panda_rs::storage_provider::conversions::ToStorage;
-    use p2panda_rs::storage_provider::traits::{EntryStore, LogStore, StorageProvider};
+    use p2panda_rs::storage_provider::models::EntryWithOperation;
+    use p2panda_rs::storage_provider::traits::{
+        AsStorageLog, EntryStore, LogStore, StorageProvider,
+    };
 
-    use crate::db::conversions::EntryWithOperation;
     use crate::db::models::Entry;
     use crate::db::sql_storage::SqlStorage;
     use crate::test_helpers::{initialize_db, random_entry_hash};
@@ -196,15 +215,13 @@ mod tests {
             None
         );
 
+        let entry_with_operation =
+            EntryWithOperation::new(entry_encoded.clone(), operation_encoded).unwrap();
+
+        let entry = Entry::try_from(entry_with_operation).unwrap();
+
         // Store entry in database
-        assert!(storage_provider
-            .insert_entry(
-                EntryWithOperation(entry_encoded.clone(), Some(operation_encoded))
-                    .to_store_value()
-                    .unwrap()
-            )
-            .await
-            .is_ok());
+        assert!(storage_provider.insert_entry(entry).await.is_ok());
 
         let log = Log::new(
             &author,

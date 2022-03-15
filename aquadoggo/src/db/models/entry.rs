@@ -1,22 +1,23 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 
 use p2panda_rs::entry::{decode_entry, EntrySigned, LogId, SeqNum};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::OperationEncoded;
 
+use p2panda_rs::storage_provider::models::EntryWithOperation;
+use p2panda_rs::storage_provider::traits::AsStorageEntry;
+use p2panda_rs::storage_provider::StorageProviderError;
 use serde::Serialize;
 use sqlx::FromRow;
-
-use crate::errors::Result;
 
 /// Struct representing the actual SQL row of `Entry`.
 ///
 /// We store the u64 integer values of `log_id` and `seq_num` as strings since not all database
 /// backend support large numbers.
-#[derive(FromRow, Debug, Serialize)]
+#[derive(FromRow, Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct EntryRow {
     /// Public key of the author.
@@ -58,7 +59,7 @@ impl AsRef<Self> for EntryRow {
 /// payload can be deleted without affecting the data structures integrity. All other fields like
 /// `author`, `payload_hash` etc. can be retrieved from `entry_bytes` but are separately stored in
 /// the database for faster querying.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Entry {
     /// Public key of the author.
@@ -83,33 +84,11 @@ pub struct Entry {
     pub seq_num: SeqNum,
 }
 
-impl Entry {
-    pub fn new(
-        entry_encoded: &EntrySigned,
-        operation_encoded: Option<&OperationEncoded>,
-    ) -> Result<Self> {
-        let entry = decode_entry(entry_encoded, operation_encoded).unwrap();
-        let payload_bytes =
-            operation_encoded.map(|operation_encoded| operation_encoded.as_str().to_string());
-        let payload_hash = entry_encoded.payload_hash();
-
-        Ok(Self {
-            author: entry_encoded.author(),
-            entry_bytes: entry_encoded.as_str().into(),
-            entry_hash: entry_encoded.hash(),
-            log_id: *entry.log_id(),
-            payload_bytes,
-            payload_hash,
-            seq_num: *entry.seq_num(),
-        })
-    }
-}
-
 /// Convert SQL row representation `EntryRow` to typed `Entry` one.
 impl TryFrom<EntryRow> for Entry {
-    type Error = crate::errors::Error;
+    type Error = crate::errors::ValidationErrors;
 
-    fn try_from(row: EntryRow) -> std::result::Result<Self, Self::Error> {
+    fn try_from(row: EntryRow) -> Result<Self, Self::Error> {
         Ok(Self {
             author: Author::try_from(row.author.as_ref())?,
             entry_bytes: row.entry_bytes.clone(),
@@ -124,9 +103,9 @@ impl TryFrom<EntryRow> for Entry {
 
 /// Convert SQL row representation `EntryRow` to typed `Entry` one.
 impl TryFrom<&EntryRow> for Entry {
-    type Error = crate::errors::Error;
+    type Error = crate::errors::ValidationErrors;
 
-    fn try_from(row: &EntryRow) -> std::result::Result<Self, Self::Error> {
+    fn try_from(row: &EntryRow) -> Result<Self, Self::Error> {
         Ok(Self {
             author: Author::try_from(row.author.as_ref())?,
             entry_bytes: row.entry_bytes.clone(),
@@ -136,6 +115,53 @@ impl TryFrom<&EntryRow> for Entry {
             payload_hash: row.payload_hash.parse()?,
             seq_num: row.seq_num.parse()?,
         })
+    }
+}
+
+impl TryFrom<EntryWithOperation> for Entry {
+    type Error = StorageProviderError;
+
+    fn try_from(entry_with_operation: EntryWithOperation) -> Result<Self, Self::Error> {
+        let entry = decode_entry(
+            entry_with_operation.entry_encoded(),
+            Some(entry_with_operation.operation_encoded()),
+        )
+        .unwrap();
+        let payload_bytes = entry_with_operation
+            .operation_encoded()
+            .as_str()
+            .to_string();
+        let payload_hash = &entry_with_operation.entry_encoded().payload_hash();
+
+        Ok(Entry {
+            author: entry_with_operation.entry_encoded().author(),
+            entry_bytes: entry_with_operation.entry_encoded().as_str().into(),
+            entry_hash: entry_with_operation.entry_encoded().hash(),
+            log_id: *entry.log_id(),
+            payload_bytes: Some(payload_bytes),
+            payload_hash: payload_hash.clone(),
+            seq_num: *entry.seq_num(),
+        })
+    }
+}
+
+impl TryInto<EntryWithOperation> for Entry {
+    type Error = StorageProviderError;
+
+    fn try_into(self) -> Result<EntryWithOperation, Self::Error> {
+        EntryWithOperation::new(self.entry_encoded(), self.operation_encoded().unwrap())
+    }
+}
+
+impl AsStorageEntry for Entry {
+    type AsStorageEntryError = StorageProviderError;
+
+    fn entry_encoded(&self) -> EntrySigned {
+        EntrySigned::new(&self.entry_bytes).unwrap()
+    }
+
+    fn operation_encoded(&self) -> Option<OperationEncoded> {
+        Some(OperationEncoded::new(&self.payload_bytes.clone().unwrap()).unwrap())
     }
 }
 

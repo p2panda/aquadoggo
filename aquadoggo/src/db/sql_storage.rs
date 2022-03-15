@@ -1,22 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+use std::convert::TryFrom;
 
 use async_trait::async_trait;
+use sqlx::{query, query_as, query_scalar};
+
 use p2panda_rs::entry::SeqNum;
 use p2panda_rs::hash::Hash;
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::storage_provider::models::{AsEntry, AsLog};
-use p2panda_rs::storage_provider::traits::{EntryStore, LogStore, StorageProvider};
+use p2panda_rs::storage_provider::errors as p2panda_errors;
+use p2panda_rs::storage_provider::traits::{
+    AsStorageEntry, AsStorageLog, EntryStore, LogStore, StorageProvider,
+};
 use p2panda_rs::{entry::LogId, identity::Author};
-use sqlx::{query, query_as, query_scalar};
-use std::convert::TryFrom;
 
-use crate::db::models::Log;
+use crate::db::models::{Entry, EntryRow, Log};
 use crate::db::Pool;
-use crate::errors::Error;
-use crate::rpc::EntryArgsResponse;
-
-use super::conversions::{EntryWithOperation, P2PandaLog};
-use super::models::{Entry, EntryRow};
+use crate::rpc::{EntryArgsRequest, EntryArgsResponse, PublishEntryRequest, PublishEntryResponse};
 
 pub struct SqlStorage {
     pub(crate) pool: Pool,
@@ -24,13 +23,9 @@ pub struct SqlStorage {
 
 /// Trait which handles all storage actions relating to `Log`s.
 #[async_trait]
-impl LogStore<Log, P2PandaLog> for SqlStorage {
-    /// The error type
-    type LogError = Error;
-    /// The type representing a Log
-
+impl LogStore<Log> for SqlStorage {
     /// Insert a log into storage.
-    async fn insert_log(&self, log: Log) -> Result<bool, Self::LogError> {
+    async fn insert_log(&self, log: Log) -> Result<bool, p2panda_errors::LogStorageError> {
         let schema_id = match log.schema() {
             SchemaId::Application(pinned_relation) => {
                 let mut id_str = "".to_string();
@@ -60,7 +55,8 @@ impl LogStore<Log, P2PandaLog> for SqlStorage {
         .bind(log.document().as_str())
         .bind(schema_id)
         .execute(&self.pool)
-        .await?
+        .await
+        .map_err(|e| p2panda_errors::LogStorageError::Error(e.to_string()))?
         .rows_affected();
 
         Ok(rows_affected == 1)
@@ -71,7 +67,7 @@ impl LogStore<Log, P2PandaLog> for SqlStorage {
         &self,
         author: &Author,
         document_id: &Hash,
-    ) -> Result<Option<LogId>, Self::LogError> {
+    ) -> Result<Option<LogId>, p2panda_errors::LogStorageError> {
         let result: Option<String> = query_scalar(
             "
             SELECT
@@ -86,7 +82,8 @@ impl LogStore<Log, P2PandaLog> for SqlStorage {
         .bind(author.as_str())
         .bind(document_id.as_str())
         .fetch_optional(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| p2panda_errors::LogStorageError::Error(e.to_string()))?;
 
         // Wrap u64 inside of `P2PandaLog` instance
         let log_id: Option<LogId> =
@@ -96,7 +93,7 @@ impl LogStore<Log, P2PandaLog> for SqlStorage {
     }
 
     /// Determines the next unused log_id of an author.
-    async fn next_log_id(&self, author: &Author) -> Result<LogId, Self::LogError> {
+    async fn next_log_id(&self, author: &Author) -> Result<LogId, p2panda_errors::LogStorageError> {
         // Get all log ids from this author
         let mut result: Vec<String> = query_scalar(
             "
@@ -110,7 +107,8 @@ impl LogStore<Log, P2PandaLog> for SqlStorage {
         )
         .bind(author.as_str())
         .fetch_all(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| p2panda_errors::LogStorageError::Error(e.to_string()))?;
 
         // Convert all strings representing u64 integers to `LogId` instances
         let mut log_ids: Vec<LogId> = result
@@ -144,12 +142,10 @@ impl LogStore<Log, P2PandaLog> for SqlStorage {
 
 /// Trait which handles all storage actions relating to `Entries`.
 #[async_trait]
-impl EntryStore<Entry, EntryWithOperation> for SqlStorage {
-    /// The error type
-    type EntryError = Error;
-
+impl EntryStore<Entry> for SqlStorage {
     /// Insert an entry into storage.
-    async fn insert_entry(&self, entry: Entry) -> Result<bool, Self::EntryError> {
+    async fn insert_entry(&self, entry: Entry) -> Result<bool, p2panda_errors::EntryStorageError> {
+        println!("{:?}", entry);
         let rows_affected = query(
             "
             INSERT INTO
@@ -166,15 +162,16 @@ impl EntryStore<Entry, EntryWithOperation> for SqlStorage {
                 ($1, $2, $3, $4, $5, $6, $7)
             ",
         )
-        .bind(entry.author().as_str())
+        .bind(entry.entry_encoded().author().as_str())
         .bind(entry.entry_encoded().as_str())
-        .bind(entry.entry_hash().as_str())
-        .bind(entry.log_id().as_u64().to_string())
+        .bind(entry.entry_encoded().hash().as_str())
+        .bind(entry.entry_decoded().log_id().as_u64().to_string())
         .bind(entry.operation_encoded().unwrap().as_str())
         .bind(entry.operation_encoded().unwrap().hash().as_str())
-        .bind(entry.seq_num().as_u64().to_string())
+        .bind(entry.entry_decoded().seq_num().as_u64().to_string())
         .execute(&self.pool)
-        .await?
+        .await
+        .map_err(|e| p2panda_errors::EntryStorageError::Error(e.to_string()))?
         .rows_affected();
 
         Ok(rows_affected == 1)
@@ -186,7 +183,7 @@ impl EntryStore<Entry, EntryWithOperation> for SqlStorage {
         author: &Author,
         log_id: &LogId,
         seq_num: &SeqNum,
-    ) -> Result<Option<Entry>, Self::EntryError> {
+    ) -> Result<Option<Entry>, p2panda_errors::EntryStorageError> {
         let row = query_as::<_, EntryRow>(
             "
             SELECT
@@ -209,7 +206,8 @@ impl EntryStore<Entry, EntryWithOperation> for SqlStorage {
         .bind(log_id.as_u64().to_string())
         .bind(seq_num.as_u64().to_string())
         .fetch_optional(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| p2panda_errors::EntryStorageError::Error(e.to_string()))?;
 
         // Convert internal `EntryRow` to `Entry` with correct types
         let entry = row.map(|entry| Entry::try_from(entry).expect("Corrupt values found in entry"));
@@ -222,7 +220,7 @@ impl EntryStore<Entry, EntryWithOperation> for SqlStorage {
         &self,
         author: &Author,
         log_id: &LogId,
-    ) -> Result<Option<Entry>, Self::EntryError> {
+    ) -> Result<Option<Entry>, p2panda_errors::EntryStorageError> {
         let row = query_as::<_, EntryRow>(
             "
             SELECT
@@ -247,7 +245,8 @@ impl EntryStore<Entry, EntryWithOperation> for SqlStorage {
         .bind(author.as_str())
         .bind(log_id.as_u64().to_string())
         .fetch_optional(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| p2panda_errors::EntryStorageError::Error(e.to_string()))?;
 
         // Convert internal `EntryRow` to `Entry` with correct types
         let entry = row.map(|entry: EntryRow| Entry::try_from(entry).unwrap());
@@ -256,7 +255,10 @@ impl EntryStore<Entry, EntryWithOperation> for SqlStorage {
     }
 
     /// Return vector of all entries of a given schema
-    async fn by_schema(&self, schema: &Hash) -> Result<Vec<Entry>, Self::EntryError> {
+    async fn by_schema(
+        &self,
+        schema: &Hash,
+    ) -> Result<Vec<Entry>, p2panda_errors::EntryStorageError> {
         let entries = query_as::<_, EntryRow>(
             "
             SELECT
@@ -278,7 +280,8 @@ impl EntryStore<Entry, EntryWithOperation> for SqlStorage {
         )
         .bind(schema.as_str())
         .fetch_all(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| p2panda_errors::EntryStorageError::Error(e.to_string()))?;
 
         let entries = entries
             .into_iter()
@@ -291,18 +294,21 @@ impl EntryStore<Entry, EntryWithOperation> for SqlStorage {
 
 /// All other methods needed to be implemented by a p2panda `StorageProvider`
 #[async_trait]
-impl StorageProvider<Entry, EntryWithOperation, Log, P2PandaLog> for SqlStorage {
-    /// The error type
-    type Error = Error;
+impl StorageProvider<Entry, Log> for SqlStorage {
     type EntryArgsResponse = EntryArgsResponse;
-    type PublishEntryResponse = EntryArgsResponse;
+    type EntryArgsRequest = EntryArgsRequest;
+    type PublishEntryResponse = PublishEntryResponse;
+    type PublishEntryRequest = PublishEntryRequest;
 
     /// Returns the related document for any entry.
     ///
     /// Every entry is part of a document and, through that, associated with a specific log id used
     /// by this document and author. This method returns that document id by looking up the log
     /// that the entry was stored in.
-    async fn get_document_by_entry(&self, entry_hash: &Hash) -> Result<Option<Hash>, Self::Error> {
+    async fn get_document_by_entry(
+        &self,
+        entry_hash: &Hash,
+    ) -> Result<Option<Hash>, p2panda_errors::StorageProviderError> {
         let result: Option<String> = query_scalar(
             "
             SELECT
@@ -318,7 +324,8 @@ impl StorageProvider<Entry, EntryWithOperation, Log, P2PandaLog> for SqlStorage 
         )
         .bind(entry_hash.as_str())
         .fetch_optional(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| p2panda_errors::StorageProviderError::Error(e.to_string()))?;
 
         // Unwrap here since we already validated the hash
         let hash = result.map(|str| Hash::new(&str).expect("Corrupt hash found in database"));

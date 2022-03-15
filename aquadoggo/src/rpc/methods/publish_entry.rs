@@ -4,28 +4,8 @@ use jsonrpc_v2::{Data, Params};
 use p2panda_rs::storage_provider::traits::StorageProvider;
 
 use crate::db::sql_storage::SqlStorage;
-use crate::errors::Result;
-use crate::rpc::request::PublishEntryRequest;
-use crate::rpc::EntryArgsResponse;
-
-#[derive(thiserror::Error, Debug)]
-#[allow(missing_copy_implementations)]
-pub enum PublishEntryError {
-    #[error("Could not find backlink entry in database")]
-    BacklinkMissing,
-
-    #[error("Could not find skiplink entry in database")]
-    SkiplinkMissing,
-
-    #[error("Could not find document hash for entry in database")]
-    DocumentMissing,
-
-    #[error("UPDATE or DELETE operation came with an entry without backlink")]
-    OperationWithoutBacklink,
-
-    #[error("Requested log id {0} does not match expected log id {1}")]
-    InvalidLogId(u64, u64),
-}
+use crate::errors::StorageProviderResult;
+use crate::rpc::{PublishEntryRequest, PublishEntryResponse};
 
 /// Implementation of `panda_publishEntry` RPC method.
 ///
@@ -33,11 +13,8 @@ pub enum PublishEntryError {
 pub async fn publish_entry(
     storage_provider: Data<SqlStorage>,
     Params(params): Params<PublishEntryRequest>,
-) -> Result<EntryArgsResponse> {
-    let response = storage_provider
-        .publish_entry(params.entry_encoded, params.operation_encoded)
-        .await
-        .map_err(|_| crate::errors::Error::StorageProviderError)?;
+) -> StorageProviderResult<PublishEntryResponse> {
+    let response = storage_provider.publish_entry(&params).await?;
     Ok(response)
 }
 #[cfg(test)]
@@ -331,7 +308,7 @@ mod tests {
             ),
         );
 
-        let response = rpc_error(&crate::errors::Error::StorageProviderError.to_string());
+        let response = rpc_error("Requested log id 3 does not match expected log id 2");
         assert_eq!(handle_http(&app, request).await, response);
 
         // Send invalid log id for an existing document: This entry is an update for the existing
@@ -358,7 +335,7 @@ mod tests {
             ),
         );
 
-        let response = rpc_error(&crate::errors::Error::StorageProviderError.to_string());
+        let response = rpc_error("Requested log id 3 does not match expected log id 1");
         assert_eq!(handle_http(&app, request).await, response);
 
         // Send invalid backlink entry / hash
@@ -384,7 +361,9 @@ mod tests {
             ),
         );
 
-        let response = rpc_error(&crate::errors::Error::StorageProviderError.to_string());
+        let response = rpc_error(
+            "The backlink hash encoded in the entry does not match the lipmaa entry provided",
+        );
         assert_eq!(handle_http(&app, request).await, response);
 
         // Send invalid sequence number
@@ -410,7 +389,7 @@ mod tests {
             ),
         );
 
-        let response = rpc_error(&crate::errors::Error::StorageProviderError.to_string());
+        let response = rpc_error("Could not find backlink entry in database");
         assert_eq!(handle_http(&app, request).await, response);
     }
 }

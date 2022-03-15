@@ -33,7 +33,7 @@ openssl-probe = "0.1.4"
 # We can not publish the `aquadoggo` crate yet, since `p2panda-rs` is an
 # unpublished dependency. To still release something without publishing it, we
 # tag the dependency here with a git commit.
-p2panda-rs = { path = "../../p2panda/p2panda-rs" }
+p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "beb5b669357ff353b796d56cc63c6947980153e6" }
 rand = "0.8.4"
 serde = { version = "1.0.130", features = ["derive"] }
 serde_json = "1.0.67"

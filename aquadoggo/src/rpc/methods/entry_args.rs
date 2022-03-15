@@ -4,7 +4,7 @@ use jsonrpc_v2::{Data, Params};
 use p2panda_rs::storage_provider::traits::StorageProvider;
 
 use crate::db::sql_storage::SqlStorage;
-use crate::errors::Result;
+use crate::errors::StorageProviderResult;
 use crate::rpc::request::EntryArgsRequest;
 use crate::rpc::response::EntryArgsResponse;
 
@@ -15,11 +15,8 @@ use crate::rpc::response::EntryArgsResponse;
 pub async fn get_entry_args(
     storage_provider: Data<SqlStorage>,
     Params(params): Params<EntryArgsRequest>,
-) -> Result<EntryArgsResponse> {
-    let response = storage_provider
-        .get_entry_args(&params.author, params.document.as_ref())
-        .await
-        .map_err(|_| crate::errors::Error::StorageProviderError)?;
+) -> StorageProviderResult<EntryArgsResponse> {
+    let response = storage_provider.get_entry_args(&params).await?;
     Ok(response)
 }
 
@@ -51,7 +48,7 @@ mod tests {
             ),
         );
 
-        let response = rpc_error(&crate::errors::Error::StorageProviderError.to_string());
+        let response = rpc_error("invalid author key length");
 
         assert_eq!(handle_http(&app, request).await, response);
     }
