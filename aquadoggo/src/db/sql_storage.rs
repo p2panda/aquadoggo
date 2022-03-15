@@ -24,17 +24,13 @@ pub struct SqlStorage {
 
 /// Trait which handles all storage actions relating to `Log`s.
 #[async_trait]
-impl LogStore<P2PandaLog> for SqlStorage {
+impl LogStore<Log, P2PandaLog> for SqlStorage {
     /// The error type
     type LogError = Error;
     /// The type representing a Log
-    ///
-    /// NB: Interestingly, there is no struct representing this in p2panda_rs,
-    /// but that is all cool, thank you generics ;-p
-    type Log = Log;
 
     /// Insert a log into storage.
-    async fn insert_log(&self, log: Self::Log) -> Result<bool, Self::LogError> {
+    async fn insert_log(&self, log: Log) -> Result<bool, Self::LogError> {
         let schema_id = match log.schema() {
             SchemaId::Application(pinned_relation) => {
                 let mut id_str = "".to_string();
@@ -148,14 +144,12 @@ impl LogStore<P2PandaLog> for SqlStorage {
 
 /// Trait which handles all storage actions relating to `Entries`.
 #[async_trait]
-impl EntryStore<EntryWithOperation> for SqlStorage {
-    /// Type representing an entry, must implement the `AsEntry` trait.
-    type Entry = Entry;
+impl EntryStore<Entry, EntryWithOperation> for SqlStorage {
     /// The error type
     type EntryError = Error;
 
     /// Insert an entry into storage.
-    async fn insert_entry(&self, entry: Self::Entry) -> Result<bool, Self::EntryError> {
+    async fn insert_entry(&self, entry: Entry) -> Result<bool, Self::EntryError> {
         let rows_affected = query(
             "
             INSERT INTO
@@ -192,7 +186,7 @@ impl EntryStore<EntryWithOperation> for SqlStorage {
         author: &Author,
         log_id: &LogId,
         seq_num: &SeqNum,
-    ) -> Result<Option<Self::Entry>, Self::EntryError> {
+    ) -> Result<Option<Entry>, Self::EntryError> {
         let row = query_as::<_, EntryRow>(
             "
             SELECT
@@ -218,8 +212,7 @@ impl EntryStore<EntryWithOperation> for SqlStorage {
         .await?;
 
         // Convert internal `EntryRow` to `Entry` with correct types
-        let entry =
-            row.map(|entry| Self::Entry::try_from(entry).expect("Corrupt values found in entry"));
+        let entry = row.map(|entry| Entry::try_from(entry).expect("Corrupt values found in entry"));
 
         Ok(entry)
     }
@@ -229,7 +222,7 @@ impl EntryStore<EntryWithOperation> for SqlStorage {
         &self,
         author: &Author,
         log_id: &LogId,
-    ) -> Result<Option<Self::Entry>, Self::EntryError> {
+    ) -> Result<Option<Entry>, Self::EntryError> {
         let row = query_as::<_, EntryRow>(
             "
             SELECT
@@ -263,7 +256,7 @@ impl EntryStore<EntryWithOperation> for SqlStorage {
     }
 
     /// Return vector of all entries of a given schema
-    async fn by_schema(&self, schema: &Hash) -> Result<Vec<Self::Entry>, Self::EntryError> {
+    async fn by_schema(&self, schema: &Hash) -> Result<Vec<Entry>, Self::EntryError> {
         let entries = query_as::<_, EntryRow>(
             "
             SELECT
@@ -298,10 +291,11 @@ impl EntryStore<EntryWithOperation> for SqlStorage {
 
 /// All other methods needed to be implemented by a p2panda `StorageProvider`
 #[async_trait]
-impl StorageProvider<EntryWithOperation, P2PandaLog> for SqlStorage {
+impl StorageProvider<Entry, EntryWithOperation, Log, P2PandaLog> for SqlStorage {
     /// The error type
     type Error = Error;
     type EntryArgsResponse = EntryArgsResponse;
+    type PublishEntryResponse = EntryArgsResponse;
 
     /// Returns the related document for any entry.
     ///

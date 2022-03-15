@@ -15,16 +15,33 @@ use crate::errors::Error;
 
 pub struct EntryWithOperation(pub EntrySigned, pub Option<OperationEncoded>);
 
-impl ToStorage<EntryWithOperation> for Entry {
+impl ToStorage<Entry> for EntryWithOperation {
     type ToMemoryStoreError = Error;
 
-    fn to_store_value(input: EntryWithOperation) -> Result<Self, Self::ToMemoryStoreError> {
-        Entry::new(&input.0, input.1.as_ref())
+    fn to_store_value(&self) -> Result<Entry, Self::ToMemoryStoreError> {
+        let entry = decode_entry(&self.0, self.1.as_ref()).unwrap();
+        let payload_bytes = self
+            .1
+            .as_ref()
+            .map(|operation_encoded| operation_encoded.as_str().to_string());
+        let payload_hash = &self.0.payload_hash();
+
+        Ok(Entry {
+            author: self.0.author(),
+            entry_bytes: self.0.as_str().into(),
+            entry_hash: self.0.hash(),
+            log_id: *entry.log_id(),
+            payload_bytes,
+            payload_hash: payload_hash.clone(),
+            seq_num: *entry.seq_num(),
+        })
     }
 }
 
-impl FromStorage<EntryWithOperation> for Entry {
+impl FromStorage for Entry {
     type FromStorageError = Error;
+
+    type Output = EntryWithOperation;
 
     fn from_store_value(&self) -> Result<EntryWithOperation, Self::FromStorageError> {
         let operation_encoded = self
@@ -39,21 +56,10 @@ impl FromStorage<EntryWithOperation> for Entry {
 impl AsEntry<EntryWithOperation> for Entry {
     type Error = Error;
 
-    fn new(entry_encoded: &EntrySigned, operation_encoded: Option<&OperationEncoded>) -> Self {
-        let entry = decode_entry(entry_encoded, operation_encoded).unwrap();
-        let payload_bytes =
-            operation_encoded.map(|operation_encoded| operation_encoded.as_str().to_string());
-        let payload_hash = entry_encoded.payload_hash();
-
-        Self {
-            author: entry_encoded.author(),
-            entry_bytes: entry_encoded.as_str().into(),
-            entry_hash: entry_encoded.hash(),
-            log_id: *entry.log_id(),
-            payload_bytes,
-            payload_hash,
-            seq_num: *entry.seq_num(),
-        }
+    fn new(entry_encoded: EntrySigned, operation_encoded: Option<OperationEncoded>) -> Self {
+        EntryWithOperation(entry_encoded, operation_encoded)
+            .to_store_value()
+            .unwrap()
     }
 
     fn entry_encoded(&self) -> EntrySigned {
@@ -67,16 +73,18 @@ impl AsEntry<EntryWithOperation> for Entry {
 
 pub struct P2PandaLog(Log);
 
-impl ToStorage<P2PandaLog> for Log {
+impl ToStorage<Log> for P2PandaLog {
     type ToMemoryStoreError = Error;
 
-    fn to_store_value(input: P2PandaLog) -> Result<Self, Self::ToMemoryStoreError> {
-        Ok(Self { ..input.0 })
+    fn to_store_value(&self) -> Result<Log, Self::ToMemoryStoreError> {
+        // Ok(Log { ..&self.0 })
+        todo!()
     }
 }
 
-impl FromStorage<P2PandaLog> for Log {
+impl FromStorage for Log {
     type FromStorageError = Error;
+    type Output = P2PandaLog;
 
     fn from_store_value(&self) -> Result<P2PandaLog, Self::FromStorageError> {
         Ok(P2PandaLog(self.clone()))

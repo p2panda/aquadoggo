@@ -199,11 +199,9 @@ mod tests {
         // Store entry in database
         assert!(storage_provider
             .insert_entry(
-                Entry::to_store_value(EntryWithOperation(
-                    entry_encoded.clone(),
-                    Some(operation_encoded)
-                ))
-                .unwrap()
+                EntryWithOperation(entry_encoded.clone(), Some(operation_encoded))
+                    .to_store_value()
+                    .unwrap()
             )
             .await
             .is_ok());
