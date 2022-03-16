@@ -18,6 +18,7 @@ mod db;
 mod errors;
 mod rpc;
 mod runtime;
+mod server;
 mod task;
 
 #[cfg(test)]

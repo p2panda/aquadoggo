@@ -181,8 +181,7 @@ mod tests {
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::{Operation, OperationEncoded, OperationFields, OperationValue};
 
-    use crate::rpc::api::build_rpc_api_service;
-    use crate::rpc::server::build_rpc_server;
+    use crate::server::{build_server, ApiState};
     use crate::test_helpers::{
         handle_http, initialize_db, rpc_error, rpc_request, rpc_response, TestClient,
     };
@@ -283,8 +282,8 @@ mod tests {
         let pool = initialize_db().await;
 
         // Create tide server with endpoints
-        let rpc_api = build_rpc_api_service(pool);
-        let app = build_rpc_server(rpc_api);
+        let state = ApiState::new(pool.clone());
+        let app = build_server(state);
         let client = TestClient::new(app);
 
         // Define schema and log id for entries
@@ -401,8 +400,8 @@ mod tests {
         let pool = initialize_db().await;
 
         // Create tide server with endpoints
-        let rpc_api = build_rpc_api_service(pool);
-        let app = build_rpc_server(rpc_api);
+        let state = ApiState::new(pool.clone());
+        let app = build_server(state);
         let client = TestClient::new(app);
 
         // Define schema and log id for entries

@@ -91,8 +91,7 @@ pub async fn determine_skiplink(pool: Pool, entry: &Entry) -> Result<Option<Hash
 
 #[cfg(test)]
 mod tests {
-    use crate::rpc::api::build_rpc_api_service;
-    use crate::rpc::server::build_rpc_server;
+    use crate::server::{build_server, ApiState};
     use crate::test_helpers::{
         handle_http, initialize_db, random_entry_hash, rpc_error, rpc_request, rpc_response,
         TestClient,
@@ -103,8 +102,8 @@ mod tests {
     #[tokio::test]
     async fn respond_with_wrong_author_error() {
         let pool = initialize_db().await;
-        let rpc_api = build_rpc_api_service(pool.clone());
-        let app = build_rpc_server(rpc_api);
+        let state = ApiState::new(pool.clone());
+        let app = build_server(state);
         let client = TestClient::new(app);
 
         let request = rpc_request(
@@ -124,12 +123,9 @@ mod tests {
 
     #[tokio::test]
     async fn get_entry_arguments() {
-        // Prepare test database
         let pool = initialize_db().await;
-
-        // Create tide server with endpoints
-        let rpc_api = build_rpc_api_service(pool);
-        let app = build_rpc_server(rpc_api);
+        let state = ApiState::new(pool.clone());
+        let app = build_server(state);
         let client = TestClient::new(app);
 
         let request = rpc_request(

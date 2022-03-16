@@ -8,4 +8,4 @@ mod server;
 
 pub use api::{build_rpc_api_service, RpcApiService, RpcApiState};
 pub use methods::error::PublishEntryError;
-pub use server::{build_rpc_server, start_rpc_server};
+pub use server::{handle_get_http_request, handle_http_request};
