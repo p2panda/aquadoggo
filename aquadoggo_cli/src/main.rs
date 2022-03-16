@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use async_ctrlc::CtrlC;
-use async_std::task;
 use structopt::StructOpt;
 
 use aquadoggo::{Configuration, Runtime};
@@ -14,7 +12,7 @@ struct Opt {
     data_dir: Option<std::path::PathBuf>,
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     env_logger::init();
 
@@ -26,11 +24,8 @@ async fn main() {
     let node = Runtime::start(config).await;
 
     // Run this until [CTRL] + [C] got pressed
-    task::block_on(async {
-        let ctrlc = CtrlC::new().unwrap();
-        ctrlc.await;
-    });
+    tokio::signal::ctrl_c().await.unwrap();
 
     // Wait until all tasks are gracefully shut down and exit
-    task::block_on(node.shutdown());
+    node.shutdown().await
 }

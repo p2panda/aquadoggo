@@ -259,7 +259,7 @@ mod tests {
 
     const TEST_AUTHOR: &str = "1a8a62c5f64eed987326513ea15a6ea2682c256ac57a418c1c92d96787c8b36e";
 
-    #[async_std::test]
+    #[tokio::test]
     async fn latest_entry() {
         let pool = initialize_db().await;
 
@@ -270,7 +270,7 @@ mod tests {
         assert!(latest_entry.is_none());
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn entries_by_schema() {
         let pool = initialize_db().await;
 

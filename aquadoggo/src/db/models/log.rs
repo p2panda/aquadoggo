@@ -204,7 +204,7 @@ mod tests {
 
     const TEST_AUTHOR: &str = "58223678ab378f1b07d1d8c789e6da01d16a06b1a4d17cc10119a0109181156c";
 
-    #[async_std::test]
+    #[tokio::test]
     async fn initial_log_id() {
         let pool = initialize_db().await;
 
@@ -217,7 +217,7 @@ mod tests {
         assert_eq!(log_id, LogId::new(1));
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn prevent_duplicate_log_ids() {
         let pool = initialize_db().await;
 
@@ -238,7 +238,7 @@ mod tests {
         );
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn selecting_next_log_id() {
         let pool = initialize_db().await;
         let key_pair = KeyPair::new();
@@ -258,7 +258,7 @@ mod tests {
         // Starting with an empty db, we expect to be able to count up from 1 and expect each
         // inserted document's log id to be euqal to the count index
         for n in 1..12 {
-            let doc = Hash::new_from_bytes(vec![1,2,n]).unwrap();
+            let doc = Hash::new_from_bytes(vec![1, 2, n]).unwrap();
             let log_id = Log::find_document_log_id(&pool, &author, None)
                 .await
                 .unwrap();
@@ -269,7 +269,7 @@ mod tests {
         }
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn document_log_id() {
         let pool = initialize_db().await;
 
@@ -336,7 +336,7 @@ mod tests {
         );
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn log_ids() {
         let pool = initialize_db().await;
 

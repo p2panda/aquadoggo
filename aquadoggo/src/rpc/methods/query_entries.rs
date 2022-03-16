@@ -30,9 +30,9 @@ mod tests {
 
     use crate::rpc::api::build_rpc_api_service;
     use crate::rpc::server::build_rpc_server;
-    use crate::test_helpers::{handle_http, initialize_db, rpc_request, rpc_response};
+    use crate::test_helpers::{handle_http, initialize_db, rpc_request, rpc_response, TestClient};
 
-    #[async_std::test]
+    #[tokio::test]
     async fn query_entries() {
         // Prepare test database
         let pool = initialize_db().await;
@@ -40,6 +40,7 @@ mod tests {
         // Create tide server with endpoints
         let rpc_api = build_rpc_api_service(pool);
         let app = build_rpc_server(rpc_api);
+        let client = TestClient::new(app);
 
         // Prepare request to API
         let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
@@ -60,6 +61,6 @@ mod tests {
             }}"#,
         ));
 
-        assert_eq!(handle_http(&app, request).await, response);
+        assert_eq!(handle_http(&client, request).await, response);
     }
 }
