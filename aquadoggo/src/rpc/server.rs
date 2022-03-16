@@ -35,11 +35,10 @@ pub fn build_rpc_server(api: RpcApiService) -> Router {
         .allow_origin(Any);
 
     // Prepare HTTP server with RPC route
-    let app = Router::new()
+    Router::new()
         .route("/", get(handle_get_http_request).post(handle_http_request))
         .layer(cors)
-        .layer(Extension(api));
-    app
+        .layer(Extension(api))
 }
 
 /// Start HTTP server.
