@@ -34,6 +34,7 @@ impl TestClient {
         S::Future: Send,
         S::Error: Into<BoxError>,
     {
+        // Setting the port to zero asks the operating system to find one for us
         let listener = TcpListener::bind("127.0.0.1:0").expect("Could not bind ephemeral socket");
         let addr = listener.local_addr().unwrap();
 
