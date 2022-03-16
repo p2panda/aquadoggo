@@ -16,6 +16,7 @@
 mod config;
 mod db;
 mod errors;
+mod graphql;
 mod rpc;
 mod runtime;
 mod server;

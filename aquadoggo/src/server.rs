@@ -10,6 +10,9 @@ use tower_http::cors::{Any, CorsLayer};
 
 use crate::config::Configuration;
 use crate::db::Pool;
+use crate::graphql::{
+    build_static_schema, handle_graphql_playground, handle_graphql_query, StaticSchema,
+};
 use crate::rpc::{
     build_rpc_api_service, handle_get_http_request, handle_http_request, RpcApiService,
 };
@@ -17,19 +20,27 @@ use crate::rpc::{
 /// Shared state for incoming API requests.
 #[derive(Clone)]
 pub struct ApiState {
-    /// JSON RPC service with RPC handlers
+    /// JSON RPC service with RPC handlers.
     // @TODO: This will be removed soon. See: https://github.com/p2panda/aquadoggo/issues/60
     pub rpc_service: RpcApiService,
 
-    /// Database connection pool
+    /// Database connection pool.
     pub pool: Pool,
+
+    /// Static GraphQL schema.
+    pub schema: StaticSchema,
 }
 
 impl ApiState {
     /// Initialize new state with shared connection pool for API requests.
     pub fn new(pool: Pool) -> Self {
         let rpc_service = build_rpc_api_service(pool.clone());
-        Self { rpc_service, pool }
+        let schema = build_static_schema(pool.clone());
+        Self {
+            rpc_service,
+            pool,
+            schema,
+        }
     }
 }
 
@@ -47,7 +58,7 @@ pub fn build_server(state: ApiState) -> Router {
         // https://github.com/p2panda/aquadoggo/issues/60
         .route("/", get(handle_get_http_request).post(handle_http_request))
         // Add GraphQL routes
-        // app.route("/graphql", get(Endpoint::handle_playground_request).post(handle_graphql_request))
+        .route("/graphql", get(handle_graphql_playground).post(handle_graphql_query))
         // Add middlewares
         .layer(cors)
         // Add shared state
