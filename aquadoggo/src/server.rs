@@ -54,7 +54,7 @@ pub fn build_server(state: ApiState) -> Router {
 
     Router::new()
         // Add JSON RPC routes
-        // @TODO: The JSON RPC is deprecated and will be removed soon with GraphQL. See:
+        // @TODO: The JSON RPC is deprecated and will be replaced soon by GraphQL. See:
         // https://github.com/p2panda/aquadoggo/issues/60
         .route("/", get(handle_get_http_request).post(handle_http_request))
         // Add GraphQL routes
