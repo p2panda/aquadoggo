@@ -10,9 +10,9 @@ pub struct QueryRoot;
 
 #[Object]
 impl QueryRoot {
-    // @TODO: Remove this
-    async fn example<'a>(&self) -> String {
-        String::from_str("example").unwrap()
+    // @TODO: Remove this example.
+    async fn ping(&self) -> String {
+        String::from_str("pong").unwrap()
     }
 }
 

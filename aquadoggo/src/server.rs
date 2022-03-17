@@ -58,7 +58,10 @@ pub fn build_server(state: ApiState) -> Router {
         // https://github.com/p2panda/aquadoggo/issues/60
         .route("/", get(handle_get_http_request).post(handle_http_request))
         // Add GraphQL routes
-        .route("/graphql", get(handle_graphql_playground).post(handle_graphql_query))
+        .route(
+            "/graphql",
+            get(handle_graphql_playground).post(handle_graphql_query),
+        )
         // Add middlewares
         .layer(cors)
         // Add shared state
@@ -77,12 +80,14 @@ pub async fn start_server(config: &Configuration, state: ApiState) -> anyhow::Re
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use crate::test_helpers::{initialize_db, TestClient};
 
     use super::{build_server, ApiState};
 
     #[tokio::test]
-    async fn respond_with_method_not_allowed() {
+    async fn rpc_respond_with_method_not_allowed() {
         let pool = initialize_db().await;
         let state = ApiState::new(pool.clone());
         let client = TestClient::new(build_server(state));
@@ -92,6 +97,31 @@ mod tests {
         assert_eq!(
             response.text().await,
             "Used HTTP Method is not allowed. POST or OPTIONS is required"
+        );
+    }
+
+    #[tokio::test]
+    async fn graphql_endpoint() {
+        let pool = initialize_db().await;
+        let state = ApiState::new(pool.clone());
+        let client = TestClient::new(build_server(state));
+
+        let response = client
+            .post("/graphql")
+            .json(&json!({
+                "query": "{ ping }",
+            }))
+            .send()
+            .await;
+
+        assert_eq!(
+            response.text().await,
+            json!({
+                "data": {
+                    "ping": "pong"
+                }
+            })
+            .to_string()
         );
     }
 }

@@ -15,5 +15,6 @@ pub async fn handle_graphql_query(
     request: GraphQLRequest,
     Extension(state): Extension<ApiState>,
 ) -> GraphQLResponse {
+    println!("{:?}", request.0);
     state.schema.execute(request.into_inner()).await.into()
 }
