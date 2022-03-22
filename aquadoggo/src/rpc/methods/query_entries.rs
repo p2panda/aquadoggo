@@ -28,8 +28,7 @@ pub async fn query_entries(
 mod tests {
     use p2panda_rs::hash::Hash;
 
-    use crate::rpc::api::build_rpc_api_service;
-    use crate::rpc::server::build_rpc_server;
+    use crate::server::{build_server, ApiState};
     use crate::test_helpers::{handle_http, initialize_db, rpc_request, rpc_response, TestClient};
 
     #[tokio::test]
@@ -38,8 +37,8 @@ mod tests {
         let pool = initialize_db().await;
 
         // Create tide server with endpoints
-        let rpc_api = build_rpc_api_service(pool);
-        let app = build_rpc_server(rpc_api);
+        let state = ApiState::new(pool.clone());
+        let app = build_server(state);
         let client = TestClient::new(app);
 
         // Prepare request to API

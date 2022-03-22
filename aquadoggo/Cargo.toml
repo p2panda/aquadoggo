@@ -15,6 +15,8 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1.0.43"
+async-graphql = "3.0.35"
+async-graphql-axum = "3.0.35"
 axum = "0.4.8"
 bamboo-rs-core-ed25519-yasmf = "0.1.0"
 directories = "3.0.2"
