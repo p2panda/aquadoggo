@@ -16,6 +16,7 @@ impl QueryRoot {
     }
 }
 
+/// GraphQL schema for p2panda node.
 pub type StaticSchema = Schema<QueryRoot, EmptyMutation, EmptySubscription>;
 
 pub fn build_static_schema(pool: Pool) -> StaticSchema {
