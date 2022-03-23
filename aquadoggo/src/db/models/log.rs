@@ -146,7 +146,7 @@ mod tests {
         assert!(storage_provider.insert_log(log.into()).await.is_err());
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn with_multi_hash_schema_id() {
         let pool = initialize_db().await;
         let storage_provider = SqlStorage { pool };
