@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use jsonrpc_v2::{Data, Params};
+use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::EntryStore;
 use p2panda_rs::Validate;
 
@@ -16,8 +17,12 @@ pub async fn query_entries(
     // Validate request parameters
     params.schema.validate()?;
 
+    // Convert the hash into a schema id, we want to actually pass schema id here,
+    // see comment in rc/request.rs
+    let schema_id = SchemaId::new(params.schema.as_str()).unwrap();
+
     // Find and return raw entries from database
-    let entries = storage_provider.by_schema(&params.schema).await?;
+    let entries = storage_provider.by_schema(&schema_id).await?;
 
     Ok(QueryEntriesResponse { entries })
 }
@@ -50,6 +55,8 @@ mod tests {
                 schema.as_str(),
             ),
         );
+
+        println!("{}", request);
 
         // Prepare expected response result
         let response = rpc_response(&format!(

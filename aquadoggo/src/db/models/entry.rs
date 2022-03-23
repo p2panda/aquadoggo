@@ -118,10 +118,16 @@ impl TryFrom<&EntryRow> for Entry {
     }
 }
 
-impl TryFrom<EntryWithOperation> for Entry {
+impl TryInto<EntryWithOperation> for Entry {
     type Error = StorageProviderError;
 
-    fn try_from(entry_with_operation: EntryWithOperation) -> Result<Self, Self::Error> {
+    fn try_into(self) -> Result<EntryWithOperation, Self::Error> {
+        EntryWithOperation::new(&self.entry_encoded(), &self.operation_encoded().unwrap())
+    }
+}
+
+impl From<EntryWithOperation> for Entry {
+    fn from(entry_with_operation: EntryWithOperation) -> Self {
         let entry = decode_entry(
             entry_with_operation.entry_encoded(),
             Some(entry_with_operation.operation_encoded()),
@@ -133,7 +139,7 @@ impl TryFrom<EntryWithOperation> for Entry {
             .to_string();
         let payload_hash = &entry_with_operation.entry_encoded().payload_hash();
 
-        Ok(Entry {
+        Entry {
             author: entry_with_operation.entry_encoded().author(),
             entry_bytes: entry_with_operation.entry_encoded().as_str().into(),
             entry_hash: entry_with_operation.entry_encoded().hash(),
@@ -141,15 +147,7 @@ impl TryFrom<EntryWithOperation> for Entry {
             payload_bytes: Some(payload_bytes),
             payload_hash: payload_hash.clone(),
             seq_num: *entry.seq_num(),
-        })
-    }
-}
-
-impl TryInto<EntryWithOperation> for Entry {
-    type Error = StorageProviderError;
-
-    fn try_into(self) -> Result<EntryWithOperation, Self::Error> {
-        EntryWithOperation::new(self.entry_encoded(), self.operation_encoded().unwrap())
+        }
     }
 }
 
@@ -170,6 +168,7 @@ mod tests {
     use p2panda_rs::entry::LogId;
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::Author;
+    use p2panda_rs::schema::SchemaId;
     use p2panda_rs::storage_provider::traits::EntryStore;
 
     use crate::db::sql_storage::SqlStorage;
@@ -197,7 +196,7 @@ mod tests {
         let pool = initialize_db().await;
         let storage_provider = SqlStorage { pool };
 
-        let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
+        let schema = SchemaId::new(Hash::new_from_bytes(vec![1, 2, 3]).unwrap().as_str()).unwrap();
 
         let entries = storage_provider.by_schema(&schema).await.unwrap();
         assert!(entries.len() == 0);

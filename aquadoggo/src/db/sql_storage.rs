@@ -2,6 +2,7 @@
 use std::convert::TryFrom;
 
 use async_trait::async_trait;
+use p2panda_rs::document::DocumentId;
 use sqlx::{query, query_as, query_scalar};
 
 use p2panda_rs::entry::SeqNum;
@@ -66,7 +67,7 @@ impl LogStore<Log> for SqlStorage {
     async fn get(
         &self,
         author: &Author,
-        document_id: &Hash,
+        document_id: &DocumentId,
     ) -> Result<Option<LogId>, p2panda_errors::LogStorageError> {
         let result: Option<String> = query_scalar(
             "
@@ -257,8 +258,25 @@ impl EntryStore<Entry> for SqlStorage {
     /// Return vector of all entries of a given schema
     async fn by_schema(
         &self,
-        schema: &Hash,
+        schema: &SchemaId,
     ) -> Result<Vec<Entry>, p2panda_errors::EntryStorageError> {
+        // Convert SchemaId into a string
+        let schema_id = match schema.clone() {
+            SchemaId::Application(pinned_relation) => {
+                let mut id_str = "".to_string();
+                let mut relation_iter = pinned_relation.into_iter().peekable();
+                while let Some(hash) = relation_iter.next() {
+                    id_str += hash.as_str();
+                    if relation_iter.peek().is_some() {
+                        id_str += "_"
+                    }
+                }
+                id_str
+            }
+            SchemaId::Schema => "schema_v1".to_string(),
+            SchemaId::SchemaField => "schema_field_v1".to_string(),
+        };
+
         let entries = query_as::<_, EntryRow>(
             "
             SELECT
@@ -278,7 +296,7 @@ impl EntryStore<Entry> for SqlStorage {
                 logs.schema = $1
             ",
         )
-        .bind(schema.as_str())
+        .bind(schema_id)
         .fetch_all(&self.pool)
         .await
         .map_err(|e| p2panda_errors::EntryStorageError::Error(e.to_string()))?;
@@ -308,7 +326,7 @@ impl StorageProvider<Entry, Log> for SqlStorage {
     async fn get_document_by_entry(
         &self,
         entry_hash: &Hash,
-    ) -> Result<Option<Hash>, p2panda_errors::StorageProviderError> {
+    ) -> Result<Option<DocumentId>, p2panda_errors::StorageProviderError> {
         let result: Option<String> = query_scalar(
             "
             SELECT
@@ -328,7 +346,11 @@ impl StorageProvider<Entry, Log> for SqlStorage {
         .map_err(|e| p2panda_errors::StorageProviderError::Error(e.to_string()))?;
 
         // Unwrap here since we already validated the hash
-        let hash = result.map(|str| Hash::new(&str).expect("Corrupt hash found in database"));
+        let hash = result.map(|str| {
+            Hash::new(&str)
+                .expect("Corrupt hash found in database")
+                .into()
+        });
 
         Ok(hash)
     }

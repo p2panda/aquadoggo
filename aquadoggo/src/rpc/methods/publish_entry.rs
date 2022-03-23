@@ -47,10 +47,12 @@ mod tests {
             .add("test", OperationValue::Text("Hello".to_owned()))
             .unwrap();
         let operation = match document {
-            Some(_) => {
-                Operation::new_update(schema.clone(), vec![backlink.unwrap().hash()], fields)
-                    .unwrap()
-            }
+            Some(_) => Operation::new_update(
+                schema.clone(),
+                vec![backlink.unwrap().hash().into()],
+                fields,
+            )
+            .unwrap(),
             None => Operation::new_create(schema.clone(), fields).unwrap(),
         };
 
@@ -131,7 +133,7 @@ mod tests {
         let app = build_rpc_server(rpc_api);
 
         // Define schema and log id for entries
-        let schema = SchemaId::try_from(Hash::new_from_bytes(vec![1, 2, 3]).unwrap()).unwrap();
+        let schema = SchemaId::new(Hash::new_from_bytes(vec![1, 2, 3]).unwrap().as_str()).unwrap();
         let log_id = LogId::default();
         let seq_num_1 = SeqNum::new(1).unwrap();
 
@@ -248,7 +250,7 @@ mod tests {
         let app = build_rpc_server(rpc_api);
 
         // Define schema and log id for entries
-        let schema = SchemaId::try_from(Hash::new_from_bytes(vec![1, 2, 3]).unwrap()).unwrap();
+        let schema = SchemaId::new(Hash::new_from_bytes(vec![1, 2, 3]).unwrap().as_str()).unwrap();
         let log_id = LogId::new(1);
         let seq_num = SeqNum::new(1).unwrap();
 
