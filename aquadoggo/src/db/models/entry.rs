@@ -2,16 +2,16 @@
 
 use std::convert::{TryFrom, TryInto};
 
+use serde::Serialize;
+use sqlx::FromRow;
+
 use p2panda_rs::entry::{decode_entry, EntrySigned, LogId, SeqNum};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::OperationEncoded;
-
 use p2panda_rs::storage_provider::models::EntryWithOperation;
 use p2panda_rs::storage_provider::traits::AsStorageEntry;
 use p2panda_rs::storage_provider::StorageProviderError;
-use serde::Serialize;
-use sqlx::FromRow;
 
 /// Struct representing the actual SQL row of `Entry`.
 ///

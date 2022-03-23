@@ -3,6 +3,8 @@
 use std::convert::TryInto;
 use std::str::FromStr;
 
+use sqlx::FromRow;
+
 use p2panda_rs::document::DocumentId;
 use p2panda_rs::entry::LogId;
 use p2panda_rs::identity::Author;
@@ -10,7 +12,6 @@ use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::errors::LogStorageError;
 use p2panda_rs::storage_provider::models::Log as P2PandaLog;
 use p2panda_rs::storage_provider::traits::AsStorageLog;
-use sqlx::FromRow;
 
 /// Tracks the assigment of an author's logs to documents and records their schema.
 ///

@@ -2,9 +2,9 @@
 use std::convert::TryFrom;
 
 use async_trait::async_trait;
-use p2panda_rs::document::DocumentId;
 use sqlx::{query, query_as, query_scalar};
 
+use p2panda_rs::document::DocumentId;
 use p2panda_rs::entry::SeqNum;
 use p2panda_rs::hash::Hash;
 use p2panda_rs::schema::SchemaId;
