@@ -9,4 +9,4 @@ mod server;
 pub use api::{build_rpc_api_service, RpcApiService, RpcApiState};
 pub use request::{EntryArgsRequest, PublishEntryRequest};
 pub use response::{EntryArgsResponse, PublishEntryResponse};
-pub use server::{build_rpc_server, start_rpc_server, RpcServer, RpcServerRequest};
+pub use server::{handle_get_http_request, handle_http_request};

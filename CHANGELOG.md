@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Introduce GraphQL endpoint [#81](https://github.com/p2panda/aquadoggo/pull/81)
+
+### Changed
+
+- Move to `tokio` async runtime [#75](https://github.com/p2panda/aquadoggo/pull/75)
+
 ## [0.2.0]
 
 *Please note: `aquadoggo-rs` crate is not published yet, due to unpublished dependencies.*
