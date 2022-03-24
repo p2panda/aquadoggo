@@ -35,7 +35,7 @@ pub struct PublishEntryRequest {
 }
 
 impl AsPublishEntryRequest for PublishEntryRequest {
-    fn entry_encoded(&self) -> &EntrySigned {
+    fn entry_signed(&self) -> &EntrySigned {
         &self.entry_encoded
     }
 

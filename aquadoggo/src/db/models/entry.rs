@@ -11,7 +11,6 @@ use p2panda_rs::identity::Author;
 use p2panda_rs::operation::OperationEncoded;
 use p2panda_rs::storage_provider::models::EntryWithOperation;
 use p2panda_rs::storage_provider::traits::AsStorageEntry;
-use p2panda_rs::storage_provider::StorageProviderError;
 
 /// Struct representing the actual SQL row of `Entry`.
 ///
@@ -86,7 +85,7 @@ pub struct Entry {
 
 /// Convert SQL row representation `EntryRow` to typed `Entry` one.
 impl TryFrom<EntryRow> for Entry {
-    type Error = crate::errors::ValidationErrors;
+    type Error = p2panda_rs::storage_provider::errors::ValidationError;
 
     fn try_from(row: EntryRow) -> Result<Self, Self::Error> {
         Ok(Self {
@@ -103,7 +102,7 @@ impl TryFrom<EntryRow> for Entry {
 
 /// Convert SQL row representation `EntryRow` to typed `Entry` one.
 impl TryFrom<&EntryRow> for Entry {
-    type Error = crate::errors::ValidationErrors;
+    type Error = p2panda_rs::storage_provider::errors::ValidationError;
 
     fn try_from(row: &EntryRow) -> Result<Self, Self::Error> {
         Ok(Self {
@@ -119,17 +118,17 @@ impl TryFrom<&EntryRow> for Entry {
 }
 
 impl TryInto<EntryWithOperation> for Entry {
-    type Error = StorageProviderError;
+    type Error = p2panda_rs::storage_provider::errors::ValidationError;
 
     fn try_into(self) -> Result<EntryWithOperation, Self::Error> {
-        EntryWithOperation::new(&self.entry_encoded(), &self.operation_encoded().unwrap())
+        EntryWithOperation::new(&self.entry_signed(), &self.operation_encoded().unwrap())
     }
 }
 
 impl From<EntryWithOperation> for Entry {
     fn from(entry_with_operation: EntryWithOperation) -> Self {
         let entry = decode_entry(
-            entry_with_operation.entry_encoded(),
+            entry_with_operation.entry_signed(),
             Some(entry_with_operation.operation_encoded()),
         )
         .unwrap();
@@ -137,12 +136,12 @@ impl From<EntryWithOperation> for Entry {
             .operation_encoded()
             .as_str()
             .to_string();
-        let payload_hash = &entry_with_operation.entry_encoded().payload_hash();
+        let payload_hash = &entry_with_operation.entry_signed().payload_hash();
 
         Entry {
-            author: entry_with_operation.entry_encoded().author(),
-            entry_bytes: entry_with_operation.entry_encoded().as_str().into(),
-            entry_hash: entry_with_operation.entry_encoded().hash(),
+            author: entry_with_operation.entry_signed().author(),
+            entry_bytes: entry_with_operation.entry_signed().as_str().into(),
+            entry_hash: entry_with_operation.entry_signed().hash(),
             log_id: *entry.log_id(),
             payload_bytes: Some(payload_bytes),
             payload_hash: payload_hash.clone(),
@@ -152,9 +151,9 @@ impl From<EntryWithOperation> for Entry {
 }
 
 impl AsStorageEntry for Entry {
-    type AsStorageEntryError = StorageProviderError;
+    type AsStorageEntryError = p2panda_rs::storage_provider::errors::ValidationError;
 
-    fn entry_encoded(&self) -> EntrySigned {
+    fn entry_signed(&self) -> EntrySigned {
         EntrySigned::new(&self.entry_bytes).unwrap()
     }
 

@@ -37,6 +37,7 @@ pub struct Log {
 
 impl AsStorageLog for Log {
     fn new(log: P2PandaLog) -> Self {
+        // Need to do this until we have a string representation method for schema id.
         let schema_id = match log.schema().clone() {
             SchemaId::Application(pinned_relation) => {
                 let mut id_str = "".to_string();
@@ -154,7 +155,7 @@ mod tests {
 
         let author = Author::new(TEST_AUTHOR).unwrap();
         let document = Hash::new(&random_entry_hash()).unwrap();
-        let schema = SchemaId::try_from(DocumentViewId::new(vec![
+        let schema = SchemaId::try_from(DocumentViewId::new(&[
             Hash::new(&random_entry_hash()).unwrap().into(),
             Hash::new(&random_entry_hash()).unwrap().into(),
         ]))

@@ -16,6 +16,7 @@ use p2panda_rs::{entry::LogId, identity::Author};
 
 use crate::db::models::{Entry, EntryRow, Log};
 use crate::db::Pool;
+use crate::errors::StorageProviderResult;
 use crate::rpc::{EntryArgsRequest, EntryArgsResponse, PublishEntryRequest, PublishEntryResponse};
 
 pub struct SqlStorage {
@@ -57,7 +58,7 @@ impl LogStore<Log> for SqlStorage {
         .bind(schema_id)
         .execute(&self.pool)
         .await
-        .map_err(|e| p2panda_errors::LogStorageError::Error(e.to_string()))?
+        .map_err(|e| p2panda_errors::LogStorageError::Custom(e.to_string()))?
         .rows_affected();
 
         Ok(rows_affected == 1)
@@ -84,7 +85,7 @@ impl LogStore<Log> for SqlStorage {
         .bind(document_id.as_str())
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| p2panda_errors::LogStorageError::Error(e.to_string()))?;
+        .map_err(|e| p2panda_errors::LogStorageError::Custom(e.to_string()))?;
 
         // Wrap u64 inside of `P2PandaLog` instance
         let log_id: Option<LogId> =
@@ -109,7 +110,7 @@ impl LogStore<Log> for SqlStorage {
         .bind(author.as_str())
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| p2panda_errors::LogStorageError::Error(e.to_string()))?;
+        .map_err(|e| p2panda_errors::LogStorageError::Custom(e.to_string()))?;
 
         // Convert all strings representing u64 integers to `LogId` instances
         let mut log_ids: Vec<LogId> = result
@@ -163,16 +164,16 @@ impl EntryStore<Entry> for SqlStorage {
                 ($1, $2, $3, $4, $5, $6, $7)
             ",
         )
-        .bind(entry.entry_encoded().author().as_str())
-        .bind(entry.entry_encoded().as_str())
-        .bind(entry.entry_encoded().hash().as_str())
+        .bind(entry.entry_signed().author().as_str())
+        .bind(entry.entry_signed().as_str())
+        .bind(entry.entry_signed().hash().as_str())
         .bind(entry.entry_decoded().log_id().as_u64().to_string())
         .bind(entry.operation_encoded().unwrap().as_str())
         .bind(entry.operation_encoded().unwrap().hash().as_str())
         .bind(entry.entry_decoded().seq_num().as_u64().to_string())
         .execute(&self.pool)
         .await
-        .map_err(|e| p2panda_errors::EntryStorageError::Error(e.to_string()))?
+        .map_err(|e| p2panda_errors::EntryStorageError::Custom(e.to_string()))?
         .rows_affected();
 
         Ok(rows_affected == 1)
@@ -208,7 +209,7 @@ impl EntryStore<Entry> for SqlStorage {
         .bind(seq_num.as_u64().to_string())
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| p2panda_errors::EntryStorageError::Error(e.to_string()))?;
+        .map_err(|e| p2panda_errors::EntryStorageError::Custom(e.to_string()))?;
 
         // Convert internal `EntryRow` to `Entry` with correct types
         let entry = row.map(|entry| Entry::try_from(entry).expect("Corrupt values found in entry"));
@@ -247,7 +248,7 @@ impl EntryStore<Entry> for SqlStorage {
         .bind(log_id.as_u64().to_string())
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| p2panda_errors::EntryStorageError::Error(e.to_string()))?;
+        .map_err(|e| p2panda_errors::EntryStorageError::Custom(e.to_string()))?;
 
         // Convert internal `EntryRow` to `Entry` with correct types
         let entry = row.map(|entry: EntryRow| Entry::try_from(entry).unwrap());
@@ -299,7 +300,7 @@ impl EntryStore<Entry> for SqlStorage {
         .bind(schema_id)
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| p2panda_errors::EntryStorageError::Error(e.to_string()))?;
+        .map_err(|e| p2panda_errors::EntryStorageError::Custom(e.to_string()))?;
 
         let entries = entries
             .into_iter()
@@ -326,7 +327,7 @@ impl StorageProvider<Entry, Log> for SqlStorage {
     async fn get_document_by_entry(
         &self,
         entry_hash: &Hash,
-    ) -> Result<Option<DocumentId>, p2panda_errors::StorageProviderError> {
+    ) -> StorageProviderResult<Option<DocumentId>> {
         let result: Option<String> = query_scalar(
             "
             SELECT
@@ -342,8 +343,7 @@ impl StorageProvider<Entry, Log> for SqlStorage {
         )
         .bind(entry_hash.as_str())
         .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| p2panda_errors::StorageProviderError::Error(e.to_string()))?;
+        .await?;
 
         // Unwrap here since we already validated the hash
         let hash = result.map(|str| {
