@@ -37,44 +37,26 @@ pub struct Log {
 
 impl AsStorageLog for Log {
     fn new(log: P2PandaLog) -> Self {
-        // Need to do this until we have a string representation method for schema id.
-        let schema_id = match log.schema().clone() {
-            SchemaId::Application(pinned_relation) => {
-                let mut id_str = "".to_string();
-                let mut relation_iter = pinned_relation.into_iter().peekable();
-                while let Some(hash) = relation_iter.next() {
-                    id_str += hash.as_str();
-                    if relation_iter.peek().is_none() {
-                        id_str += "_"
-                    }
-                }
-                id_str
-            }
-            SchemaId::Schema => "schema_v1".to_string(),
-            SchemaId::SchemaField => "schema_field_v1".to_string(),
-        };
-
         Self {
             author: log.author().as_str().to_string(),
             log_id: log.log_id().as_u64().to_string(),
             document: log.document().as_str().to_string(),
-            schema: schema_id,
+            schema: log.schema().as_str(),
         }
     }
 
     fn author(&self) -> Author {
         Author::new(&self.author).unwrap()
     }
-    fn log_id(&self) -> LogId {
+    fn id(&self) -> LogId {
         LogId::from_str(&self.log_id).unwrap()
     }
-    fn document(&self) -> DocumentId {
+    fn document_id(&self) -> DocumentId {
         let document_id: DocumentId = self.document.parse().unwrap();
         document_id
     }
-    fn schema(&self) -> SchemaId {
-        let schema_id: SchemaId = self.document.parse().unwrap();
-        schema_id
+    fn schema_id(&self) -> SchemaId {
+        SchemaId::new(&self.schema).unwrap()
     }
 }
 
@@ -90,9 +72,9 @@ impl TryInto<P2PandaLog> for Log {
     fn try_into(self) -> Result<P2PandaLog, Self::Error> {
         Ok(P2PandaLog {
             author: self.author(),
-            log_id: self.log_id(),
-            document: self.document(),
-            schema: self.schema(),
+            log_id: self.id(),
+            document: self.document_id(),
+            schema: self.schema_id(),
         })
     }
 }
@@ -139,7 +121,8 @@ mod tests {
 
         let author = Author::new(TEST_AUTHOR).unwrap();
         let document = Hash::new(&random_entry_hash()).unwrap();
-        let schema = SchemaId::new(&random_entry_hash()).unwrap();
+        let schema =
+            SchemaId::new_application("venue", &Hash::new(&random_entry_hash()).unwrap().into());
 
         let log = P2PandaLog::new(&author, &schema, &document.clone().into(), &LogId::new(1));
         assert!(storage_provider.insert_log(log.into()).await.is_ok());
@@ -155,11 +138,13 @@ mod tests {
 
         let author = Author::new(TEST_AUTHOR).unwrap();
         let document = Hash::new(&random_entry_hash()).unwrap();
-        let schema = SchemaId::try_from(DocumentViewId::new(&[
-            Hash::new(&random_entry_hash()).unwrap().into(),
-            Hash::new(&random_entry_hash()).unwrap().into(),
-        ]))
-        .unwrap();
+        let schema = SchemaId::new_application(
+            "venue",
+            &DocumentViewId::new(&[
+                Hash::new(&random_entry_hash()).unwrap().into(),
+                Hash::new(&random_entry_hash()).unwrap().into(),
+            ]),
+        );
 
         let log = P2PandaLog::new(&author, &schema, &document.into(), &LogId::new(1));
 
@@ -171,7 +156,10 @@ mod tests {
         let pool = initialize_db().await;
         let key_pair = KeyPair::new();
         let author = Author::try_from(*key_pair.public_key()).unwrap();
-        let schema = SchemaId::new(Hash::new_from_bytes(vec![1, 2, 3]).unwrap().as_str()).unwrap();
+        let schema = SchemaId::new_application(
+            "venue",
+            &Hash::new_from_bytes(vec![1, 2, 3]).unwrap().into(),
+        );
 
         let storage_provider = SqlStorage { pool };
 
@@ -208,7 +196,10 @@ mod tests {
         let key_pair = KeyPair::new();
         let author = Author::try_from(*key_pair.public_key()).unwrap();
         let log_id = LogId::new(1);
-        let schema = SchemaId::new(Hash::new_from_bytes(vec![1, 2, 3]).unwrap().as_str()).unwrap();
+        let schema = SchemaId::new_application(
+            "venue",
+            &Hash::new_from_bytes(vec![1, 2, 3]).unwrap().into(),
+        );
         let seq_num = SeqNum::new(1).unwrap();
         let mut fields = OperationFields::new();
         fields
@@ -276,7 +267,8 @@ mod tests {
         let author = Author::new(TEST_AUTHOR).unwrap();
 
         // Mock schema
-        let schema = SchemaId::new(&random_entry_hash()).unwrap();
+        let schema =
+            SchemaId::new_application("venue", &Hash::new(&random_entry_hash()).unwrap().into());
 
         // Mock four different document hashes
         let document_first = Hash::new(&random_entry_hash()).unwrap();

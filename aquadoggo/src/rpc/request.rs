@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use p2panda_rs::document::DocumentId;
+use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::{AsEntryArgsRequest, AsPublishEntryRequest};
 use serde::Deserialize;
 
 use p2panda_rs::entry::EntrySigned;
-use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::OperationEncoded;
 
@@ -21,7 +21,7 @@ impl AsEntryArgsRequest for EntryArgsRequest {
         &self.author
     }
 
-    fn document(&self) -> &Option<DocumentId> {
+    fn document_id(&self) -> &Option<DocumentId> {
         &self.document
     }
 }
@@ -47,8 +47,5 @@ impl AsPublishEntryRequest for PublishEntryRequest {
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct QueryEntriesRequest {
-    /// I get an "Invalid params" error from json rpc if I ass in `SchemaId` here.
-    /// Not sure why, I think it's to do with de/serialising the schema_id as a string.
-    /// For now passing in a hash and converting in the query method is my hacky solution.
-    pub schema: Hash,
+    pub schema: SchemaId,
 }

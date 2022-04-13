@@ -28,22 +28,6 @@ pub struct SqlStorage {
 impl LogStore<Log> for SqlStorage {
     /// Insert a log into storage.
     async fn insert_log(&self, log: Log) -> Result<bool, p2panda_errors::LogStorageError> {
-        let schema_id = match log.schema() {
-            SchemaId::Application(pinned_relation) => {
-                let mut id_str = "".to_string();
-                let mut relation_iter = pinned_relation.into_iter().peekable();
-                while let Some(hash) = relation_iter.next() {
-                    id_str += hash.as_str();
-                    if relation_iter.peek().is_none() {
-                        id_str += "_"
-                    }
-                }
-                id_str
-            }
-            SchemaId::Schema => "schema_v1".to_string(),
-            SchemaId::SchemaField => "schema_field_v1".to_string(),
-        };
-
         let rows_affected = query(
             "
             INSERT INTO
@@ -53,9 +37,9 @@ impl LogStore<Log> for SqlStorage {
             ",
         )
         .bind(log.author().as_str())
-        .bind(log.log_id().as_u64().to_string())
-        .bind(log.document().as_str())
-        .bind(schema_id)
+        .bind(log.id().as_u64().to_string())
+        .bind(log.document_id().as_str())
+        .bind(log.schema_id().as_str())
         .execute(&self.pool)
         .await
         .map_err(|e| p2panda_errors::LogStorageError::Custom(e.to_string()))?
@@ -164,13 +148,13 @@ impl EntryStore<Entry> for SqlStorage {
                 ($1, $2, $3, $4, $5, $6, $7)
             ",
         )
-        .bind(entry.entry_signed().author().as_str())
+        .bind(entry.author().as_str())
         .bind(entry.entry_signed().as_str())
-        .bind(entry.entry_signed().hash().as_str())
-        .bind(entry.entry_decoded().log_id().as_u64().to_string())
+        .bind(entry.hash().as_str())
+        .bind(entry.log_id().as_u64().to_string())
         .bind(entry.operation_encoded().unwrap().as_str())
         .bind(entry.operation_encoded().unwrap().hash().as_str())
-        .bind(entry.entry_decoded().seq_num().as_u64().to_string())
+        .bind(entry.seq_num().as_u64().to_string())
         .execute(&self.pool)
         .await
         .map_err(|e| p2panda_errors::EntryStorageError::Custom(e.to_string()))?
@@ -261,23 +245,6 @@ impl EntryStore<Entry> for SqlStorage {
         &self,
         schema: &SchemaId,
     ) -> Result<Vec<Entry>, p2panda_errors::EntryStorageError> {
-        // Convert SchemaId into a string
-        let schema_id = match schema.clone() {
-            SchemaId::Application(pinned_relation) => {
-                let mut id_str = "".to_string();
-                let mut relation_iter = pinned_relation.into_iter().peekable();
-                while let Some(hash) = relation_iter.next() {
-                    id_str += hash.as_str();
-                    if relation_iter.peek().is_some() {
-                        id_str += "_"
-                    }
-                }
-                id_str
-            }
-            SchemaId::Schema => "schema_v1".to_string(),
-            SchemaId::SchemaField => "schema_field_v1".to_string(),
-        };
-
         let entries = query_as::<_, EntryRow>(
             "
             SELECT
@@ -297,7 +264,7 @@ impl EntryStore<Entry> for SqlStorage {
                 logs.schema = $1
             ",
         )
-        .bind(schema_id)
+        .bind(schema.as_str())
         .fetch_all(&self.pool)
         .await
         .map_err(|e| p2panda_errors::EntryStorageError::Custom(e.to_string()))?;

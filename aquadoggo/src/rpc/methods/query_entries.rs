@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use jsonrpc_v2::{Data, Params};
-use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::EntryStore;
-use p2panda_rs::Validate;
 
 use crate::db::sql_storage::SqlStorage;
 use crate::errors::StorageProviderResult;
@@ -14,15 +12,8 @@ pub async fn query_entries(
     storage_provider: Data<SqlStorage>,
     Params(params): Params<QueryEntriesRequest>,
 ) -> StorageProviderResult<QueryEntriesResponse> {
-    // Validate request parameters
-    params.schema.validate()?;
-
-    // Convert the hash into a schema id, we want to actually pass schema id here,
-    // see comment in rc/request.rs
-    let schema_id = SchemaId::new(params.schema.as_str()).unwrap();
-
     // Find and return raw entries from database
-    let entries = storage_provider.by_schema(&schema_id).await?;
+    let entries = storage_provider.by_schema(&params.schema).await?;
 
     Ok(QueryEntriesResponse { entries })
 }
@@ -30,6 +21,7 @@ pub async fn query_entries(
 #[cfg(test)]
 mod tests {
     use p2panda_rs::hash::Hash;
+    use p2panda_rs::schema::SchemaId;
 
     use crate::server::{build_server, ApiState};
     use crate::test_helpers::{handle_http, initialize_db, rpc_request, rpc_response, TestClient};
@@ -45,7 +37,11 @@ mod tests {
         let client = TestClient::new(app);
 
         // Prepare request to API
-        let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
+        let schema = SchemaId::new_application(
+            "venue",
+            &Hash::new_from_bytes(vec![1, 2, 3]).unwrap().into(),
+        );
+
         let request = rpc_request(
             "panda_queryEntries",
             &format!(

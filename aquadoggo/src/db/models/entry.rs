@@ -2,13 +2,14 @@
 
 use std::convert::{TryFrom, TryInto};
 
+use p2panda_rs::storage_provider::errors::EntryStorageError;
 use serde::Serialize;
 use sqlx::FromRow;
 
-use p2panda_rs::entry::{decode_entry, EntrySigned, LogId, SeqNum};
+use p2panda_rs::entry::{decode_entry, Entry as P2PandaEntry, EntrySigned, LogId, SeqNum};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
-use p2panda_rs::operation::OperationEncoded;
+use p2panda_rs::operation::{Operation, OperationEncoded};
 use p2panda_rs::storage_provider::models::EntryWithOperation;
 use p2panda_rs::storage_provider::traits::AsStorageEntry;
 
@@ -89,7 +90,7 @@ impl TryFrom<EntryRow> for Entry {
 
     fn try_from(row: EntryRow) -> Result<Self, Self::Error> {
         Ok(Self {
-            author: Author::try_from(row.author.as_ref())?,
+            author: Author::new(row.author.as_ref())?,
             entry_bytes: row.entry_bytes.clone(),
             entry_hash: row.entry_hash.parse()?,
             log_id: row.log_id.parse()?,
@@ -106,7 +107,7 @@ impl TryFrom<&EntryRow> for Entry {
 
     fn try_from(row: &EntryRow) -> Result<Self, Self::Error> {
         Ok(Self {
-            author: Author::try_from(row.author.as_ref())?,
+            author: Author::new(row.author.as_ref())?,
             entry_bytes: row.entry_bytes.clone(),
             entry_hash: row.entry_hash.parse()?,
             log_id: row.log_id.parse()?,
@@ -150,18 +151,58 @@ impl From<EntryWithOperation> for Entry {
     }
 }
 
-impl AsStorageEntry for Entry {
-    type AsStorageEntryError = p2panda_rs::storage_provider::errors::ValidationError;
+impl Entry {
+    fn entry_decoded(&self) -> P2PandaEntry {
+        // Unwrapping as validation occurs in `EntryWithOperation`.
+        decode_entry(&self.entry_signed(), self.operation_encoded().as_ref()).unwrap()
+    }
 
-    fn entry_signed(&self) -> EntrySigned {
+    pub fn entry_signed(&self) -> EntrySigned {
         EntrySigned::new(&self.entry_bytes).unwrap()
     }
 
-    fn operation_encoded(&self) -> Option<OperationEncoded> {
+    pub fn operation_encoded(&self) -> Option<OperationEncoded> {
         Some(OperationEncoded::new(&self.payload_bytes.clone().unwrap()).unwrap())
     }
 }
 
+/// Implement `AsStorageEntry` trait for `Entry`
+impl AsStorageEntry for Entry {
+    type AsStorageEntryError = EntryStorageError;
+
+    fn author(&self) -> Author {
+        self.author.clone()
+    }
+
+    fn hash(&self) -> Hash {
+        self.entry_hash.clone()
+    }
+
+    fn entry_bytes(&self) -> Vec<u8> {
+        self.entry_bytes.as_bytes().to_vec()
+    }
+
+    fn backlink_hash(&self) -> Option<Hash> {
+        self.entry_decoded().backlink_hash().cloned()
+    }
+
+    fn skiplink_hash(&self) -> Option<Hash> {
+        self.entry_decoded().skiplink_hash().cloned()
+    }
+
+    fn seq_num(&self) -> SeqNum {
+        *self.entry_decoded().seq_num()
+    }
+
+    fn log_id(&self) -> LogId {
+        *self.entry_decoded().log_id()
+    }
+
+    fn operation(&self) -> Operation {
+        let operation_encoded = self.operation_encoded().unwrap();
+        Operation::from(&operation_encoded)
+    }
+}
 #[cfg(test)]
 mod tests {
     use p2panda_rs::entry::LogId;
@@ -195,7 +236,10 @@ mod tests {
         let pool = initialize_db().await;
         let storage_provider = SqlStorage { pool };
 
-        let schema = SchemaId::new(Hash::new_from_bytes(vec![1, 2, 3]).unwrap().as_str()).unwrap();
+        let schema = SchemaId::new_application(
+            "venue",
+            &Hash::new_from_bytes(vec![1, 2, 3]).unwrap().into(),
+        );
 
         let entries = storage_provider.by_schema(&schema).await.unwrap();
         assert!(entries.len() == 0);
