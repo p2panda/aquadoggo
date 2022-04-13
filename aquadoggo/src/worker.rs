@@ -12,7 +12,7 @@ use tokio::sync::broadcast::{channel, Sender};
 use tokio::task;
 
 #[derive(Debug, Clone)]
-struct Task<IN>(TaskFunctionName, IN);
+pub struct Task<IN>(TaskFunctionName, IN);
 
 impl<IN> Task<IN> {
     pub fn new(name: &str, input: IN) -> Self {
@@ -20,16 +20,16 @@ impl<IN> Task<IN> {
     }
 }
 
-type TaskFunctionName = String;
+pub type TaskFunctionName = String;
 
 pub enum JobError {
     Critical,
     Failure,
 }
 
-type JobResult<IN> = Result<Option<Vec<Task<IN>>>, JobError>;
+pub type JobResult<IN> = Result<Option<Vec<Task<IN>>>, JobError>;
 
-struct Context<D: Send + Sync + 'static>(Arc<D>);
+pub struct Context<D: Send + Sync + 'static>(Arc<D>);
 
 impl<D: Send + Sync + 'static> Clone for Context<D> {
     fn clone(&self) -> Self {
@@ -58,7 +58,7 @@ where
 }
 
 #[async_trait::async_trait]
-trait Factory<IN, D>
+pub trait Factory<IN, D>
 where
     IN: Send + Sync + Clone + 'static,
     D: Send + Sync + 'static,
@@ -80,7 +80,7 @@ where
 }
 
 #[derive(Debug)]
-struct QueueItem<IN>
+pub struct QueueItem<IN>
 where
     IN: Send + Sync + Clone + 'static,
 {
@@ -105,7 +105,7 @@ where
     }
 }
 
-struct Scheduler<IN, D>
+pub struct Scheduler<IN, D>
 where
     IN: Send + Sync + Clone + Hash + Eq + Debug + 'static,
     D: Send + Sync + 'static,
@@ -239,16 +239,18 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
+    use std::sync::{Arc, Mutex};
+    use std::time::Duration;
 
     use super::{Context, JobResult, Scheduler, Task};
 
     #[tokio::test]
     async fn scheduler() {
         type Input = usize;
-        type Data = Mutex<Vec<String>>;
+        type Data = Arc<Mutex<Vec<String>>>;
 
-        let mut scheduler = Scheduler::<Input, Data>::new(Data::new(Vec::new()));
+        let database = Arc::new(Mutex::new(Vec::new()));
+        let mut scheduler = Scheduler::<Input, Data>::new(database.clone());
 
         async fn dumdum_task(database: Context<Data>, input: Input) -> JobResult<Input> {
             let mut db = database.0.lock().unwrap();
@@ -268,5 +270,10 @@ mod tests {
         for i in 0..10 {
             scheduler.queue("poopy", i);
         }
+
+        // Wait until work was done ..
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        assert_eq!(database.lock().unwrap().len(), 20);
     }
 }
