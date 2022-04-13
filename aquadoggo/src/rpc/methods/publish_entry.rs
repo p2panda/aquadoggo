@@ -21,16 +21,14 @@ pub async fn publish_entry(
 mod tests {
     use std::convert::TryFrom;
 
-    use p2panda_rs::entry::{decode_entry, sign_and_encode, Entry, EntrySigned, LogId, SeqNum};
+    use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned, LogId, SeqNum};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::{Operation, OperationEncoded, OperationFields, OperationValue};
     use p2panda_rs::schema::SchemaId;
 
     use crate::server::{build_server, ApiState};
-    use crate::test_helpers::{
-        handle_http, initialize_db, rpc_error, rpc_request, rpc_response, TestClient,
-    };
+    use crate::test_helpers::{handle_http, initialize_db, rpc_request, rpc_response, TestClient};
 
     /// Create encoded entries and operations for testing.
     fn create_test_entry(
