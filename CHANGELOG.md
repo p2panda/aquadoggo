@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Move to `tokio` async runtime [#75](https://github.com/p2panda/aquadoggo/pull/75)
+- Implement SQL storage using `p2panda_rs` storage provider traits [#80](https://github.com/p2panda/aquadoggo/pull/80)
 
 ## [0.2.0]
 
