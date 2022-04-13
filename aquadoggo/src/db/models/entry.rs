@@ -179,7 +179,7 @@ impl AsStorageEntry for Entry {
     }
 
     fn entry_bytes(&self) -> Vec<u8> {
-        self.entry_bytes.as_bytes().to_vec()
+        self.entry_signed().to_bytes()
     }
 
     fn backlink_hash(&self) -> Option<Hash> {
