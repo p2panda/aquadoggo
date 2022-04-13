@@ -2458,7 +2458,7 @@ dependencies = [
 [[package]]
 name = "p2panda-rs"
 version = "0.3.0"
-source = "git+https://github.com/p2panda/p2panda?branch=memory-store-traits#58a4fb13bcfb538b955112f79255853a7f414d87"
+source = "git+https://github.com/p2panda/p2panda?branch=memory-store-traits#d77caca3d577e4fdf418b3930ae3194a188776c4"
 dependencies = [
  "aquamarine",
  "arrayvec 0.5.2",
