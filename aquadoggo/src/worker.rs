@@ -149,6 +149,12 @@ where
         self.spawn_workers(name, pool_size, work);
     }
 
+    pub fn queue(&mut self, name: &str, input: IN) {
+        self.tx
+            .send(Task::new(name, input))
+            .expect("Critical system error: Cant broadcast task");
+    }
+
     fn spawn_dispatcher(&self, name: &str) {
         let manager = self.work_managers.get(name).unwrap();
 
@@ -228,12 +234,6 @@ where
                 }
             });
         }
-    }
-
-    pub fn queue(&mut self, name: &str, input: IN) {
-        self.tx
-            .send(Task::new(name, input))
-            .expect("Critical system error: Cant broadcast task");
     }
 }
 
