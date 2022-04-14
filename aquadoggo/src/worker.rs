@@ -155,6 +155,13 @@ where
             .expect("Critical system error: Cant broadcast task");
     }
 
+    pub fn is_empty(&self, name: &str) -> bool {
+        match self.work_managers.get(name) {
+            Some(manager) => manager.queue.is_empty(),
+            None => false,
+        }
+    }
+
     fn spawn_dispatcher(&self, name: &str) {
         let manager = self.work_managers.get(name).unwrap();
 
@@ -249,31 +256,40 @@ mod tests {
         type Input = usize;
         type Data = Arc<Mutex<Vec<String>>>;
 
+        // Test database which stores a list of strings
         let database = Arc::new(Mutex::new(Vec::new()));
+
+        // Initialise scheduler
         let mut scheduler = Scheduler::<Input, Data>::new(database.clone());
 
-        async fn dumdum_task(database: Context<Data>, input: Input) -> JobResult<Input> {
+        // Define two tasks
+        async fn first(database: Context<Data>, input: Input) -> JobResult<Input> {
             let mut db = database.0.lock().unwrap();
-            db.push(format!("DUMDUM: {}", input));
+            db.push(format!("first-{}", input));
             Ok(None)
         }
 
-        async fn poopy_task(database: Context<Data>, input: Input) -> JobResult<Input> {
+        // .. the second task dispatches the first at the end
+        async fn second(database: Context<Data>, input: Input) -> JobResult<Input> {
             let mut db = database.0.lock().unwrap();
-            db.push(format!("POOOPY: {}", input));
-            Ok(Some(vec![Task::new("dumdum", input)]))
+            db.push(format!("second-{}", input));
+            Ok(Some(vec![Task::new("first", input)]))
         }
 
-        scheduler.add("dumdum", 2, dumdum_task);
-        scheduler.add("poopy", 2, poopy_task);
+        // Register both tasks
+        scheduler.add("first", 2, first);
+        scheduler.add("second", 2, second);
 
-        for i in 0..10 {
-            scheduler.queue("poopy", i);
+        // Queue a couple of jobs
+        for i in 0..4 {
+            scheduler.queue("second", i);
         }
 
         // Wait until work was done ..
         tokio::time::sleep(Duration::from_millis(100)).await;
 
-        assert_eq!(database.lock().unwrap().len(), 20);
+        assert_eq!(database.lock().unwrap().len(), 8);
+        assert!(scheduler.is_empty("first"));
+        assert!(scheduler.is_empty("second"));
     }
 }
