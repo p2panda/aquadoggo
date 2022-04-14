@@ -12,7 +12,7 @@ use tokio::sync::broadcast::{channel, Sender};
 use tokio::task;
 
 #[derive(Debug, Clone)]
-pub struct Task<IN>(TaskFunctionName, IN);
+pub struct Task<IN>(WorkerName, IN);
 
 impl<IN> Task<IN> {
     pub fn new(name: &str, input: IN) -> Self {
@@ -20,14 +20,14 @@ impl<IN> Task<IN> {
     }
 }
 
-pub type TaskFunctionName = String;
+pub type WorkerName = String;
 
-pub enum JobError {
+pub enum TaskError {
     Critical,
     Failure,
 }
 
-pub type JobResult<IN> = Result<Option<Vec<Task<IN>>>, JobError>;
+pub type TaskResult<IN> = Result<Option<Vec<Task<IN>>>, TaskError>;
 
 pub struct Context<D: Send + Sync + 'static>(Arc<D>);
 
@@ -37,7 +37,7 @@ impl<D: Send + Sync + 'static> Clone for Context<D> {
     }
 }
 
-struct WorkManager<IN>
+struct WorkerManager<IN>
 where
     IN: Send + Sync + Clone + Hash + Eq + 'static,
 {
@@ -45,7 +45,7 @@ where
     queue: Arc<SegQueue<QueueItem<IN>>>,
 }
 
-impl<IN> WorkManager<IN>
+impl<IN> WorkerManager<IN>
 where
     IN: Send + Sync + Clone + Hash + Eq + 'static,
 {
@@ -58,23 +58,23 @@ where
 }
 
 #[async_trait::async_trait]
-pub trait Factory<IN, D>
+pub trait Workable<IN, D>
 where
     IN: Send + Sync + Clone + 'static,
     D: Send + Sync + 'static,
 {
-    async fn call(&self, context: Context<D>, input: IN) -> JobResult<IN>;
+    async fn call(&self, context: Context<D>, input: IN) -> TaskResult<IN>;
 }
 
 #[async_trait::async_trait]
-impl<FN, F, IN, D> Factory<IN, D> for FN
+impl<FN, F, IN, D> Workable<IN, D> for FN
 where
     FN: Fn(Context<D>, IN) -> F + Sync,
-    F: Future<Output = JobResult<IN>> + Send + 'static,
+    F: Future<Output = TaskResult<IN>> + Send + 'static,
     IN: Send + Sync + Clone + 'static,
     D: Sync + Send + 'static,
 {
-    async fn call(&self, context: Context<D>, input: IN) -> JobResult<IN> {
+    async fn call(&self, context: Context<D>, input: IN) -> TaskResult<IN> {
         (self)(context, input).await
     }
 }
@@ -105,17 +105,17 @@ where
     }
 }
 
-pub struct Scheduler<IN, D>
+pub struct Factory<IN, D>
 where
     IN: Send + Sync + Clone + Hash + Eq + Debug + 'static,
     D: Send + Sync + 'static,
 {
     context: Context<D>,
-    work_managers: HashMap<TaskFunctionName, WorkManager<IN>>,
+    managers: HashMap<WorkerName, WorkerManager<IN>>,
     tx: Sender<Task<IN>>,
 }
 
-impl<IN, D> Scheduler<IN, D>
+impl<IN, D> Factory<IN, D>
 where
     IN: Send + Sync + Clone + Hash + Eq + Debug + 'static,
     D: Send + Sync + 'static,
@@ -125,45 +125,45 @@ where
 
         Self {
             context: Context(Arc::new(data)),
-            work_managers: HashMap::new(),
+            managers: HashMap::new(),
             tx,
         }
     }
 
     /// Ideally task functions should be idempotent: meaning the function won’t cause unintended
     /// effects even if called multiple times with the same arguments.
-    pub fn add<FC: Factory<IN, D> + Send + Sync + Copy + 'static>(
+    pub fn register<W: Workable<IN, D> + Send + Sync + Copy + 'static>(
         &mut self,
         name: &str,
         pool_size: usize,
-        work: FC,
+        work: W,
     ) {
-        if self.work_managers.contains_key(name) {
+        if self.managers.contains_key(name) {
             panic!("Can not create task manager twice");
         } else {
-            let new_manager = WorkManager::new();
-            self.work_managers.insert(name.into(), new_manager);
+            let new_manager = WorkerManager::new();
+            self.managers.insert(name.into(), new_manager);
         }
 
         self.spawn_dispatcher(name);
         self.spawn_workers(name, pool_size, work);
     }
 
-    pub fn queue(&mut self, name: &str, input: IN) {
+    pub fn queue(&mut self, task: Task<IN>) {
         self.tx
-            .send(Task::new(name, input))
+            .send(task)
             .expect("Critical system error: Cant broadcast task");
     }
 
     pub fn is_empty(&self, name: &str) -> bool {
-        match self.work_managers.get(name) {
+        match self.managers.get(name) {
             Some(manager) => manager.queue.is_empty(),
             None => false,
         }
     }
 
     fn spawn_dispatcher(&self, name: &str) {
-        let manager = self.work_managers.get(name).unwrap();
+        let manager = self.managers.get(name).unwrap();
 
         let input_index = manager.input_index.clone();
         let mut rx = self.tx.subscribe();
@@ -190,13 +190,13 @@ where
         });
     }
 
-    fn spawn_workers<FC: Factory<IN, D> + Send + Sync + Copy + 'static>(
+    fn spawn_workers<W: Workable<IN, D> + Send + Sync + Copy + 'static>(
         &self,
         name: &str,
         pool_size: usize,
-        work: FC,
+        work: W,
     ) {
-        let manager = self.work_managers.get(name).unwrap();
+        let manager = self.managers.get(name).unwrap();
 
         for _ in 0..pool_size {
             let context = self.context.clone();
@@ -219,14 +219,14 @@ where
                                             .expect("Critical system error: Cant broadcast task");
                                     }
                                 }
-                                Err(JobError::Critical) => {
+                                Err(TaskError::Critical) => {
                                     // Something really horrible happened, we need to crash!
                                     //
                                     // @TODO: Does this only crash within the thread or the whole
                                     // program? We want the latter ..
                                     panic!("Critical system error: Task {:?} failed", job.id(),);
                                 }
-                                Err(JobError::Failure) => {
+                                Err(TaskError::Failure) => {
                                     // Silently fail .. maybe write something to the log or retry?
                                 }
                                 _ => (), // Nothing to dispatch
@@ -249,47 +249,47 @@ mod tests {
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
 
-    use super::{Context, JobResult, Scheduler, Task};
+    use super::{Context, Factory, Task, TaskResult};
 
     #[tokio::test]
-    async fn scheduler() {
+    async fn factory() {
         type Input = usize;
         type Data = Arc<Mutex<Vec<String>>>;
 
         // Test database which stores a list of strings
         let database = Arc::new(Mutex::new(Vec::new()));
 
-        // Initialise scheduler
-        let mut scheduler = Scheduler::<Input, Data>::new(database.clone());
+        // Initialise factory
+        let mut factory = Factory::<Input, Data>::new(database.clone());
 
-        // Define two tasks
-        async fn first(database: Context<Data>, input: Input) -> JobResult<Input> {
+        // Define two workers
+        async fn first(database: Context<Data>, input: Input) -> TaskResult<Input> {
             let mut db = database.0.lock().unwrap();
             db.push(format!("first-{}", input));
             Ok(None)
         }
 
-        // .. the second task dispatches the first at the end
-        async fn second(database: Context<Data>, input: Input) -> JobResult<Input> {
+        // .. the second worker dispatches a task for "first" at the end
+        async fn second(database: Context<Data>, input: Input) -> TaskResult<Input> {
             let mut db = database.0.lock().unwrap();
             db.push(format!("second-{}", input));
             Ok(Some(vec![Task::new("first", input)]))
         }
 
-        // Register both tasks
-        scheduler.add("first", 2, first);
-        scheduler.add("second", 2, second);
+        // Register both workers
+        factory.register("first", 2, first);
+        factory.register("second", 2, second);
 
-        // Queue a couple of jobs
+        // Queue a couple of tasks
         for i in 0..4 {
-            scheduler.queue("second", i);
+            factory.queue(Task::new("second", i));
         }
 
         // Wait until work was done ..
         tokio::time::sleep(Duration::from_millis(100)).await;
 
         assert_eq!(database.lock().unwrap().len(), 8);
-        assert!(scheduler.is_empty("first"));
-        assert!(scheduler.is_empty("second"));
+        assert!(factory.is_empty("first"));
+        assert!(factory.is_empty("second"));
     }
 }
