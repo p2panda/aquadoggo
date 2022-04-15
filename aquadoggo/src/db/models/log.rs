@@ -92,7 +92,7 @@ mod tests {
     use p2panda_rs::storage_provider::models::{EntryWithOperation, Log as P2PandaLog};
     use p2panda_rs::storage_provider::traits::{EntryStore, LogStore, StorageProvider};
 
-    use crate::db::models::Entry;
+    use crate::db::models::EntryRow;
     use crate::db::sql_storage::SqlStorage;
     use crate::test_helpers::{initialize_db, random_entry_hash};
 
@@ -224,7 +224,7 @@ mod tests {
         let entry_with_operation =
             EntryWithOperation::new(&entry_encoded.clone(), &operation_encoded).unwrap();
 
-        let entry = Entry::try_from(entry_with_operation).unwrap();
+        let entry = EntryRow::try_from(entry_with_operation).unwrap();
 
         // Store entry in database
         assert!(storage_provider.insert_entry(entry).await.is_ok());

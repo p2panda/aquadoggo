@@ -48,77 +48,7 @@ impl AsRef<Self> for EntryRow {
     }
 }
 
-/// Entry of an append-only log based on Bamboo specification. It describes the actual data in the
-/// p2p network and is shared between nodes.
-///
-/// Bamboo entries are the main data type of p2panda. Entries are organized in a distributed,
-/// single-writer append-only log structure, created and signed by holders of private keys and
-/// stored inside the node database.
-///
-/// The actual entry data is kept in `entry_bytes` and separated from the `payload_bytes` as the
-/// payload can be deleted without affecting the data structures integrity. All other fields like
-/// `author`, `payload_hash` etc. can be retrieved from `entry_bytes` but are separately stored in
-/// the database for faster querying.
-#[derive(Debug, Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct Entry {
-    /// Public key of the author.
-    pub author: Author,
-
-    /// Actual Bamboo entry data.
-    pub entry_bytes: String,
-
-    /// Hash of Bamboo entry data.
-    pub entry_hash: Hash,
-
-    /// Used log for this entry.
-    pub log_id: LogId,
-
-    /// Payload of entry, can be deleted.
-    pub payload_bytes: Option<String>,
-
-    /// Hash of payload data.
-    pub payload_hash: Hash,
-
-    /// Sequence number of this entry.
-    pub seq_num: SeqNum,
-}
-
-/// Convert SQL row representation `EntryRow` to typed `Entry` one.
-impl TryFrom<EntryRow> for Entry {
-    type Error = p2panda_rs::storage_provider::errors::ValidationError;
-
-    fn try_from(row: EntryRow) -> Result<Self, Self::Error> {
-        Ok(Self {
-            author: Author::new(row.author.as_ref())?,
-            entry_bytes: row.entry_bytes.clone(),
-            entry_hash: row.entry_hash.parse()?,
-            log_id: row.log_id.parse()?,
-            payload_bytes: row.payload_bytes.clone(),
-            payload_hash: row.payload_hash.parse()?,
-            seq_num: row.seq_num.parse()?,
-        })
-    }
-}
-
-/// Convert SQL row representation `EntryRow` to typed `Entry` one.
-impl TryFrom<&EntryRow> for Entry {
-    type Error = p2panda_rs::storage_provider::errors::ValidationError;
-
-    fn try_from(row: &EntryRow) -> Result<Self, Self::Error> {
-        Ok(Self {
-            author: Author::new(row.author.as_ref())?,
-            entry_bytes: row.entry_bytes.clone(),
-            entry_hash: row.entry_hash.parse()?,
-            log_id: row.log_id.parse()?,
-            payload_bytes: row.payload_bytes.clone(),
-            payload_hash: row.payload_hash.parse()?,
-            seq_num: row.seq_num.parse()?,
-        })
-    }
-}
-
-impl TryInto<EntryWithOperation> for Entry {
+impl TryInto<EntryWithOperation> for EntryRow {
     type Error = p2panda_rs::storage_provider::errors::ValidationError;
 
     fn try_into(self) -> Result<EntryWithOperation, Self::Error> {
@@ -126,7 +56,7 @@ impl TryInto<EntryWithOperation> for Entry {
     }
 }
 
-impl From<EntryWithOperation> for Entry {
+impl From<EntryWithOperation> for EntryRow {
     fn from(entry_with_operation: EntryWithOperation) -> Self {
         let entry = decode_entry(
             entry_with_operation.entry_signed(),
@@ -139,19 +69,19 @@ impl From<EntryWithOperation> for Entry {
             .to_string();
         let payload_hash = &entry_with_operation.entry_signed().payload_hash();
 
-        Entry {
-            author: entry_with_operation.entry_signed().author(),
+        EntryRow {
+            author: entry_with_operation.entry_signed().author().as_str().into(),
             entry_bytes: entry_with_operation.entry_signed().as_str().into(),
-            entry_hash: entry_with_operation.entry_signed().hash(),
-            log_id: *entry.log_id(),
+            entry_hash: entry_with_operation.entry_signed().hash().as_str().into(),
+            log_id: entry.log_id().as_u64().to_string(),
             payload_bytes: Some(payload_bytes),
-            payload_hash: payload_hash.clone(),
-            seq_num: *entry.seq_num(),
+            payload_hash: payload_hash.as_str().into(),
+            seq_num: entry.seq_num().as_u64().to_string(),
         }
     }
 }
 
-impl Entry {
+impl EntryRow {
     fn entry_decoded(&self) -> P2PandaEntry {
         // Unwrapping as validation occurs in `EntryWithOperation`.
         decode_entry(&self.entry_signed(), self.operation_encoded().as_ref()).unwrap()
@@ -167,15 +97,15 @@ impl Entry {
 }
 
 /// Implement `AsStorageEntry` trait for `Entry`
-impl AsStorageEntry for Entry {
+impl AsStorageEntry for EntryRow {
     type AsStorageEntryError = EntryStorageError;
 
     fn author(&self) -> Author {
-        self.author.clone()
+        Author::new(self.author.as_ref()).unwrap()
     }
 
     fn hash(&self) -> Hash {
-        self.entry_hash.clone()
+        self.entry_signed().hash()
     }
 
     fn entry_bytes(&self) -> Vec<u8> {
@@ -203,6 +133,7 @@ impl AsStorageEntry for Entry {
         Operation::from(&operation_encoded)
     }
 }
+
 #[cfg(test)]
 mod tests {
     use p2panda_rs::entry::LogId;

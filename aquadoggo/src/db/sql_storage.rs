@@ -14,7 +14,7 @@ use p2panda_rs::storage_provider::traits::{
 };
 use p2panda_rs::{entry::LogId, identity::Author};
 
-use crate::db::models::{Entry, EntryRow, Log};
+use crate::db::models::{EntryRow, Log};
 use crate::db::Pool;
 use crate::errors::StorageProviderResult;
 use crate::rpc::{EntryArgsRequest, EntryArgsResponse, PublishEntryRequest, PublishEntryResponse};
@@ -128,9 +128,12 @@ impl LogStore<Log> for SqlStorage {
 
 /// Trait which handles all storage actions relating to `Entries`.
 #[async_trait]
-impl EntryStore<Entry> for SqlStorage {
+impl EntryStore<EntryRow> for SqlStorage {
     /// Insert an entry into storage.
-    async fn insert_entry(&self, entry: Entry) -> Result<bool, p2panda_errors::EntryStorageError> {
+    async fn insert_entry(
+        &self,
+        entry: EntryRow,
+    ) -> Result<bool, p2panda_errors::EntryStorageError> {
         println!("{:?}", entry);
         let rows_affected = query(
             "
@@ -169,8 +172,8 @@ impl EntryStore<Entry> for SqlStorage {
         author: &Author,
         log_id: &LogId,
         seq_num: &SeqNum,
-    ) -> Result<Option<Entry>, p2panda_errors::EntryStorageError> {
-        let row = query_as::<_, EntryRow>(
+    ) -> Result<Option<EntryRow>, p2panda_errors::EntryStorageError> {
+        let entry_row = query_as::<_, EntryRow>(
             "
             SELECT
                 author,
@@ -195,10 +198,7 @@ impl EntryStore<Entry> for SqlStorage {
         .await
         .map_err(|e| p2panda_errors::EntryStorageError::Custom(e.to_string()))?;
 
-        // Convert internal `EntryRow` to `Entry` with correct types
-        let entry = row.map(|entry| Entry::try_from(entry).expect("Corrupt values found in entry"));
-
-        Ok(entry)
+        Ok(entry_row)
     }
 
     /// Returns the latest Bamboo entry of an author's log.
@@ -206,8 +206,8 @@ impl EntryStore<Entry> for SqlStorage {
         &self,
         author: &Author,
         log_id: &LogId,
-    ) -> Result<Option<Entry>, p2panda_errors::EntryStorageError> {
-        let row = query_as::<_, EntryRow>(
+    ) -> Result<Option<EntryRow>, p2panda_errors::EntryStorageError> {
+        let entry_row = query_as::<_, EntryRow>(
             "
             SELECT
                 author,
@@ -234,17 +234,14 @@ impl EntryStore<Entry> for SqlStorage {
         .await
         .map_err(|e| p2panda_errors::EntryStorageError::Custom(e.to_string()))?;
 
-        // Convert internal `EntryRow` to `Entry` with correct types
-        let entry = row.map(|entry: EntryRow| Entry::try_from(entry).unwrap());
-
-        Ok(entry)
+        Ok(entry_row)
     }
 
     /// Return vector of all entries of a given schema
     async fn by_schema(
         &self,
         schema: &SchemaId,
-    ) -> Result<Vec<Entry>, p2panda_errors::EntryStorageError> {
+    ) -> Result<Vec<EntryRow>, p2panda_errors::EntryStorageError> {
         let entries = query_as::<_, EntryRow>(
             "
             SELECT
@@ -269,18 +266,13 @@ impl EntryStore<Entry> for SqlStorage {
         .await
         .map_err(|e| p2panda_errors::EntryStorageError::Custom(e.to_string()))?;
 
-        let entries = entries
-            .into_iter()
-            .map(|entry: EntryRow| Entry::try_from(entry).unwrap())
-            .collect();
-
         Ok(entries)
     }
 }
 
 /// All other methods needed to be implemented by a p2panda `StorageProvider`
 #[async_trait]
-impl StorageProvider<Entry, Log> for SqlStorage {
+impl StorageProvider<EntryRow, Log> for SqlStorage {
     type EntryArgsResponse = EntryArgsResponse;
     type EntryArgsRequest = EntryArgsRequest;
     type PublishEntryResponse = PublishEntryResponse;
