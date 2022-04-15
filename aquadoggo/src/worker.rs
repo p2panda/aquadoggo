@@ -121,7 +121,7 @@ where
     D: Send + Sync + 'static,
 {
     pub fn new(data: D) -> Self {
-        let (tx, _) = channel(1024);
+        let (tx, _) = channel(1024); // @TODO: Revisit channel size
 
         Self {
             context: Context(Arc::new(data)),
@@ -187,6 +187,8 @@ where
                 queue.push(QueueItem::new(next_id, task.1.clone()));
                 input_index.insert(task.1);
             }
+
+            // @TODO: Handle errors here
         });
     }
 
@@ -211,7 +213,6 @@ where
                         Some(item) => {
                             // Do work ..
                             let result = work.call(context.clone(), item.input()).await;
-                            println!("Finished {} w. {:?}", name, item.input());
 
                             match result {
                                 Ok(Some(list)) => {
@@ -339,10 +340,7 @@ mod tests {
                 .relations
                 .iter()
                 .filter_map(|id| match db.pieces.get(&id) {
-                    Some(piece) => {
-                        println!("found relation {:?}", id);
-                        Some(Task::new("find", piece.clone()))
-                    }
+                    Some(piece) => Some(Task::new("find", piece.clone())),
                     None => None,
                 })
                 .collect();
@@ -354,16 +352,27 @@ mod tests {
             let mut db = database.0.lock().unwrap();
 
             // 1. Identify which related pieces we already have for this puzzle piece
-            let ids: Vec<usize> = input
-                .relations
-                .iter()
-                .filter_map(|id| match db.pieces.get(id) {
-                    Some(_) => Some(id.clone()),
-                    None => None,
-                })
-                .collect();
+            let mut ids: Vec<usize> = Vec::new();
+            let mut candidates: Vec<usize> = input.relations.clone();
+            loop {
+                if candidates.is_empty() {
+                    break;
+                }
 
-            println!("-- input {:?}", ids);
+                let id = candidates.pop().unwrap();
+                ids.push(id.clone());
+
+                match db.pieces.get(&id) {
+                    Some(piece) => {
+                        for relation_id in &piece.relations {
+                            if !ids.contains(relation_id) && !candidates.contains(relation_id) {
+                                candidates.push(relation_id.clone());
+                            }
+                        }
+                    }
+                    None => continue,
+                };
+            }
 
             // The puzzle which will contain these pieces
             let mut puzzle_id: Option<usize> = None;
@@ -382,21 +391,18 @@ mod tests {
                 // 3. Remove all these pieces from all puzzles first as we don't know if we
                 //    accidentially sorted them into separate puzzles even though they belong
                 //    together at one point
-                println!("-- before {:?}", puzzle);
                 puzzle.piece_ids.retain(|&id| !ids.contains(&id));
-                println!("-- after {:?}", puzzle);
             }
 
             // 4. Finally move all pieces into one puzzle
             match puzzle_id {
                 None => {
                     // If there is no puzzle yet, create a new one
-                    let id = match db.puzzles.keys().last() {
+                    let id = match db.puzzles.keys().max() {
                         None => 1,
                         Some(id) => id + 1,
                     };
 
-                    println!("---- create new puzzle {:?}", id);
                     db.puzzles.insert(
                         id,
                         JigsawPuzzle {
@@ -410,15 +416,10 @@ mod tests {
                     // Add to existing puzzle
                     let puzzle = db.puzzles.get_mut(&id).unwrap();
                     puzzle.piece_ids.extend_from_slice(&ids);
-                    println!("---- add to puzzle {:?}", puzzle);
                 }
             };
 
-            if input.relations.len() == ids.len() {
-                Ok(Some(vec![Task::new("finish", input)]))
-            } else {
-                Ok(None)
-            }
+            Ok(Some(vec![Task::new("finish", input)]))
         }
 
         async fn finish(database: Context<Data>, input: JigsawPiece) -> TaskResult<JigsawPiece> {
@@ -433,23 +434,16 @@ mod tests {
 
             // 2. Check if all piece dependencies are met
             match puzzle {
-                None => {
-                    println!("could not find puzzle");
-                    Ok(None)
-                }
+                None => Ok(None),
                 Some(mut puzzle) => {
-                    println!("-------- {:?}", puzzle);
-
                     for piece_id in &puzzle.piece_ids {
                         match db.pieces.get(&piece_id) {
                             None => {
-                                println!("could not find piece");
                                 return Ok(None);
                             }
                             Some(piece) => {
                                 for relation_piece_id in &piece.relations {
                                     if !puzzle.piece_ids.contains(&relation_piece_id) {
-                                        println!("Missing relation");
                                         return Ok(None);
                                     }
                                 }
@@ -460,30 +454,34 @@ mod tests {
                     // Mark puzzle as complete! We are done here!
                     puzzle.complete = true;
                     db.puzzles.insert(puzzle.id, puzzle.clone());
-                    println!("------------- DONE!! {:?}", puzzle);
 
                     Ok(None)
                 }
             }
         }
 
-        factory.register("pick", 2, pick);
-        factory.register("find", 2, find);
-        factory.register("finish", 2, finish);
+        // Register workers
+        factory.register("pick", 3, pick);
+        factory.register("find", 3, find);
+        factory.register("finish", 3, finish);
 
-        let puzzles_count = 1;
+        // Generate a number of puzzles to solve
+        let puzzles_count = 10;
+        let min_size = 3;
+        let max_size = 10;
+
         let mut pieces: Vec<JigsawPiece> = Vec::new();
         let mut offset: isize = 0;
 
         for _ in 0..puzzles_count {
-            let size = 3; // rand::thread_rng().gen_range(3..10);
+            let size = rand::thread_rng().gen_range(min_size..max_size);
             let mut id: isize = 0;
 
             for _ in 0..size {
                 for _ in 0..size {
-                    id = id + 1;
-
                     let mut relations: Vec<usize> = Vec::new();
+
+                    id = id + 1;
 
                     if id % size != 0 {
                         relations.push((offset + id + 1) as usize);
@@ -501,12 +499,10 @@ mod tests {
                         relations.push((offset + id - size) as usize);
                     }
 
-                    let piece_id = (offset + id) as usize;
-
                     pieces.push(JigsawPiece {
-                        id: piece_id,
+                        id: (offset + id) as usize,
                         relations,
-                    })
+                    });
                 }
             }
 
@@ -519,8 +515,24 @@ mod tests {
 
         for piece in pieces {
             factory.queue(Task::new("pick", piece));
+
+            // Add a little bit of a random delay between dispatching tasks
+            let random_delay = rand::thread_rng().gen_range(1..5);
+            tokio::time::sleep(Duration::from_millis(random_delay)).await;
         }
 
-        tokio::time::sleep(Duration::from_millis(3000)).await;
+        // Wait until work is done
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Check if all puzzles have been solved correctly
+        let completed: Vec<JigsawPuzzle> = database
+            .lock()
+            .unwrap()
+            .puzzles
+            .values()
+            .filter(|puzzle| puzzle.complete)
+            .map(|puzzle| puzzle.clone())
+            .collect();
+        assert_eq!(completed.len(), puzzles_count);
     }
 }
