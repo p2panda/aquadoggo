@@ -180,6 +180,7 @@ where
                             continue; // This is not for us
                         }
 
+                        // @TODO: Unwind panic
                         let mut input_index = input_index.lock().unwrap();
 
                         if input_index.contains(&task.1) {
@@ -226,6 +227,7 @@ where
                                     // Dispatch new tasks
                                     for task in list {
                                         tx.send(task)
+                                            // @TODO: Unwind panic
                                             .expect("Critical system error: Cant broadcast task");
                                     }
                                 }
@@ -242,6 +244,7 @@ where
                             }
 
                             // Remove input index from queue
+                            // @TODO: Unwind panic
                             let mut input_index = input_index.lock().unwrap();
                             input_index.remove(&item.input());
                         }
@@ -367,7 +370,7 @@ mod tests {
                     break;
                 }
 
-                // Add another piece to list of ids
+                // Add another piece to list of ids. Unwrap as we know the list is not empty.
                 let id = candidates.pop().unwrap();
                 ids.push(id.clone());
 
@@ -426,7 +429,7 @@ mod tests {
                     );
                 }
                 Some(id) => {
-                    // Add all pieces to existing puzzle
+                    // Add all pieces to existing puzzle. Unwrap as we know that item exists.
                     let puzzle = db.puzzles.get_mut(&id).unwrap();
                     puzzle.piece_ids.extend_from_slice(&ids);
                 }
