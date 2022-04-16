@@ -447,17 +447,15 @@ mod tests {
 
             // 2. Check if all piece dependencies are met
             match puzzle {
-                None => Ok(None),
+                None => Err(TaskError::Failure),
                 Some(mut puzzle) => {
                     for piece_id in &puzzle.piece_ids {
                         match db.pieces.get(&piece_id) {
-                            None => {
-                                return Ok(None);
-                            }
+                            None => return Err(TaskError::Failure),
                             Some(piece) => {
                                 for relation_piece_id in &piece.relations {
                                     if !puzzle.piece_ids.contains(&relation_piece_id) {
-                                        return Ok(None);
+                                        return Err(TaskError::Failure);
                                     }
                                 }
                             }
@@ -467,7 +465,6 @@ mod tests {
                     // Mark puzzle as complete! We are done here!
                     puzzle.complete = true;
                     db.puzzles.insert(puzzle.id, puzzle.clone());
-
                     Ok(None)
                 }
             }
