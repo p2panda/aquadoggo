@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crossbeam_queue::SegQueue;
+use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::broadcast::{channel, Sender};
 use tokio::task;
 
@@ -120,8 +121,8 @@ where
     IN: Send + Sync + Clone + Hash + Eq + Debug + 'static,
     D: Send + Sync + 'static,
 {
-    pub fn new(data: D) -> Self {
-        let (tx, _) = channel(1024); // @TODO: Revisit channel size
+    pub fn new(data: D, capacity: usize) -> Self {
+        let (tx, _) = channel(capacity);
 
         Self {
             context: Context(Arc::new(data)),
@@ -172,23 +173,30 @@ where
         let counter = AtomicU64::new(0);
 
         task::spawn(async move {
-            while let Ok(task) = rx.recv().await {
-                if task.0 != name {
-                    continue; // This is not for us
+            loop {
+                match rx.recv().await {
+                    Ok(task) => {
+                        if task.0 != name {
+                            continue; // This is not for us
+                        }
+
+                        let mut input_index = input_index.lock().unwrap();
+
+                        if input_index.contains(&task.1) {
+                            continue; // Task already exists
+                        }
+
+                        let next_id = counter.fetch_add(1, Ordering::Relaxed);
+                        queue.push(QueueItem::new(next_id, task.1.clone()));
+                        input_index.insert(task.1);
+                    }
+                    Err(RecvError::Lagged(skipped_messages)) => {
+                        // @TODO: Unwind panic
+                        panic!("Lagging! {}", skipped_messages);
+                    }
+                    Err(RecvError::Closed) => (),
                 }
-
-                let mut input_index = input_index.lock().unwrap();
-
-                if input_index.contains(&task.1) {
-                    continue; // Task already exists
-                }
-
-                let next_id = counter.fetch_add(1, Ordering::Relaxed);
-                queue.push(QueueItem::new(next_id, task.1.clone()));
-                input_index.insert(task.1);
             }
-
-            // @TODO: Handle errors here
         });
     }
 
@@ -205,7 +213,6 @@ where
             let queue = manager.queue.clone();
             let input_index = manager.input_index.clone();
             let tx = self.tx.clone();
-            let name = String::from(name);
 
             task::spawn(async move {
                 loop {
@@ -225,8 +232,7 @@ where
                                 Err(TaskError::Critical) => {
                                     // Something really horrible happened, we need to crash!
                                     //
-                                    // @TODO: Does this only crash within the thread or the whole
-                                    // program? We want the latter ..
+                                    // @TODO: Unwind panic
                                     panic!("Critical system error: Task {:?} failed", item.id(),);
                                 }
                                 Err(TaskError::Failure) => {
@@ -267,7 +273,7 @@ mod tests {
         let database = Arc::new(Mutex::new(Vec::new()));
 
         // Initialise factory
-        let mut factory = Factory::<Input, Data>::new(database.clone());
+        let mut factory = Factory::<Input, Data>::new(database.clone(), 1024);
 
         // Define two workers
         async fn first(database: Context<Data>, input: Input) -> TaskResult<Input> {
@@ -327,7 +333,7 @@ mod tests {
             puzzles: HashMap::new(),
         }));
 
-        let mut factory = Factory::<JigsawPiece, Data>::new(database.clone());
+        let mut factory = Factory::<JigsawPiece, Data>::new(database.clone(), 1024);
 
         async fn pick(database: Context<Data>, input: JigsawPiece) -> TaskResult<JigsawPiece> {
             let mut db = database.0.lock().unwrap();
@@ -351,20 +357,26 @@ mod tests {
         async fn find(database: Context<Data>, input: JigsawPiece) -> TaskResult<JigsawPiece> {
             let mut db = database.0.lock().unwrap();
 
-            // 1. Identify which related pieces we already have for this puzzle piece
+            // 1. Merge all known and related pieces into one large list
             let mut ids: Vec<usize> = Vec::new();
             let mut candidates: Vec<usize> = input.relations.clone();
+
             loop {
+                // Iterate over all relations until there is none
                 if candidates.is_empty() {
                     break;
                 }
 
+                // Add another piece to list of ids
                 let id = candidates.pop().unwrap();
                 ids.push(id.clone());
 
+                // Get all related pieces of this piece
                 match db.pieces.get(&id) {
                     Some(piece) => {
                         for relation_id in &piece.relations {
+                            // Check if we have already visited all relations of this piece,
+                            // otherwise add them to list
                             if !ids.contains(relation_id) && !candidates.contains(relation_id) {
                                 candidates.push(relation_id.clone());
                             }
@@ -374,12 +386,13 @@ mod tests {
                 };
             }
 
-            // The puzzle which will contain these pieces
+            // The future puzzle which will contain this list of pieces. We still need to find out
+            // which puzzle exactly it will be ..
             let mut puzzle_id: Option<usize> = None;
 
             for (_, puzzle) in db.puzzles.iter_mut() {
                 // 2. Find out if we already have a piece belonging to a puzzle and just take any
-                //    of them as the future puzzle id
+                //    of them as the future puzzle!
                 if puzzle_id.is_none() {
                     for id in &ids {
                         if puzzle.piece_ids.contains(&id) {
@@ -390,7 +403,7 @@ mod tests {
 
                 // 3. Remove all these pieces from all puzzles first as we don't know if we
                 //    accidentially sorted them into separate puzzles even though they belong
-                //    together at one point
+                //    together at one point.
                 puzzle.piece_ids.retain(|&id| !ids.contains(&id));
             }
 
@@ -413,7 +426,7 @@ mod tests {
                     );
                 }
                 Some(id) => {
-                    // Add to existing puzzle
+                    // Add all pieces to existing puzzle
                     let puzzle = db.puzzles.get_mut(&id).unwrap();
                     puzzle.piece_ids.extend_from_slice(&ids);
                 }
@@ -520,9 +533,6 @@ mod tests {
             let random_delay = rand::thread_rng().gen_range(1..5);
             tokio::time::sleep(Duration::from_millis(random_delay)).await;
         }
-
-        // Wait until work is done
-        tokio::time::sleep(Duration::from_millis(50)).await;
 
         // Check if all puzzles have been solved correctly
         let completed: Vec<JigsawPuzzle> = database
