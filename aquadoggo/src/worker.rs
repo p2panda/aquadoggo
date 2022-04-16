@@ -262,7 +262,7 @@ mod tests {
     use rand::seq::SliceRandom;
     use rand::Rng;
 
-    use super::{Context, Factory, Task, TaskResult};
+    use super::{Context, Factory, Task, TaskError, TaskResult};
 
     #[tokio::test]
     async fn factory() {
@@ -277,14 +277,14 @@ mod tests {
 
         // Define two workers
         async fn first(database: Context<Data>, input: Input) -> TaskResult<Input> {
-            let mut db = database.0.lock().unwrap();
+            let mut db = database.0.lock().map_err(|_| TaskError::Critical)?;
             db.push(format!("first-{}", input));
             Ok(None)
         }
 
         // .. the second worker dispatches a task for "first" at the end
         async fn second(database: Context<Data>, input: Input) -> TaskResult<Input> {
-            let mut db = database.0.lock().unwrap();
+            let mut db = database.0.lock().map_err(|_| TaskError::Critical)?;
             db.push(format!("second-{}", input));
             Ok(Some(vec![Task::new("first", input)]))
         }
@@ -336,7 +336,7 @@ mod tests {
         let mut factory = Factory::<JigsawPiece, Data>::new(database.clone(), 1024);
 
         async fn pick(database: Context<Data>, input: JigsawPiece) -> TaskResult<JigsawPiece> {
-            let mut db = database.0.lock().unwrap();
+            let mut db = database.0.lock().map_err(|_| TaskError::Critical)?;
 
             // 1. Take incoming puzzle piece from box and move it into the database first
             db.pieces.insert(input.id, input.clone());
@@ -355,7 +355,7 @@ mod tests {
         }
 
         async fn find(database: Context<Data>, input: JigsawPiece) -> TaskResult<JigsawPiece> {
-            let mut db = database.0.lock().unwrap();
+            let mut db = database.0.lock().map_err(|_| TaskError::Critical)?;
 
             // 1. Merge all known and related pieces into one large list
             let mut ids: Vec<usize> = Vec::new();
@@ -436,7 +436,7 @@ mod tests {
         }
 
         async fn finish(database: Context<Data>, input: JigsawPiece) -> TaskResult<JigsawPiece> {
-            let mut db = database.0.lock().unwrap();
+            let mut db = database.0.lock().map_err(|_| TaskError::Critical)?;
 
             // 1. Identify unfinished puzzle related to this piece
             let puzzle: Option<JigsawPuzzle> = db
