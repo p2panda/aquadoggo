@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::convert::{TryFrom, TryInto};
-
 use p2panda_rs::storage_provider::errors::EntryStorageError;
+use p2panda_rs::storage_provider::ValidationError;
+use p2panda_rs::Validate;
 use serde::Serialize;
 use sqlx::FromRow;
 
@@ -10,7 +10,6 @@ use p2panda_rs::entry::{decode_entry, Entry as P2PandaEntry, EntrySigned, LogId,
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{Operation, OperationEncoded};
-use p2panda_rs::storage_provider::models::EntryWithOperation;
 use p2panda_rs::storage_provider::traits::AsStorageEntry;
 
 /// Struct representing the actual SQL row of `Entry`.
@@ -48,39 +47,6 @@ impl AsRef<Self> for EntryRow {
     }
 }
 
-impl TryInto<EntryWithOperation> for EntryRow {
-    type Error = p2panda_rs::storage_provider::errors::ValidationError;
-
-    fn try_into(self) -> Result<EntryWithOperation, Self::Error> {
-        EntryWithOperation::new(&self.entry_signed(), &self.operation_encoded().unwrap())
-    }
-}
-
-impl From<EntryWithOperation> for EntryRow {
-    fn from(entry_with_operation: EntryWithOperation) -> Self {
-        let entry = decode_entry(
-            entry_with_operation.entry_signed(),
-            Some(entry_with_operation.operation_encoded()),
-        )
-        .unwrap();
-        let payload_bytes = entry_with_operation
-            .operation_encoded()
-            .as_str()
-            .to_string();
-        let payload_hash = &entry_with_operation.entry_signed().payload_hash();
-
-        EntryRow {
-            author: entry_with_operation.entry_signed().author().as_str().into(),
-            entry_bytes: entry_with_operation.entry_signed().as_str().into(),
-            entry_hash: entry_with_operation.entry_signed().hash().as_str().into(),
-            log_id: entry.log_id().as_u64().to_string(),
-            payload_bytes: Some(payload_bytes),
-            payload_hash: payload_hash.as_str().into(),
-            seq_num: entry.seq_num().as_u64().to_string(),
-        }
-    }
-}
-
 impl EntryRow {
     fn entry_decoded(&self) -> P2PandaEntry {
         // Unwrapping as validation occurs in `EntryWithOperation`.
@@ -99,6 +65,23 @@ impl EntryRow {
 /// Implement `AsStorageEntry` trait for `Entry`
 impl AsStorageEntry for EntryRow {
     type AsStorageEntryError = EntryStorageError;
+
+    fn new(
+        entry_signed: &EntrySigned,
+        operation_encoded: &OperationEncoded,
+    ) -> Result<Self, Self::AsStorageEntryError> {
+        let entry = decode_entry(entry_signed, Some(operation_encoded))?;
+
+        Ok(Self {
+            author: entry_signed.author().as_str().into(),
+            entry_bytes: entry_signed.as_str().into(),
+            entry_hash: entry_signed.hash().as_str().into(),
+            log_id: entry.log_id().as_u64().to_string(),
+            payload_bytes: Some(operation_encoded.as_str().to_string()),
+            payload_hash: entry_signed.payload_hash().as_str().into(),
+            seq_num: entry.seq_num().as_u64().to_string(),
+        })
+    }
 
     fn author(&self) -> Author {
         Author::new(self.author.as_ref()).unwrap()
@@ -131,6 +114,19 @@ impl AsStorageEntry for EntryRow {
     fn operation(&self) -> Operation {
         let operation_encoded = self.operation_encoded().unwrap();
         Operation::from(&operation_encoded)
+    }
+}
+
+impl Validate for EntryRow {
+    type Error = ValidationError;
+
+    fn validate(&self) -> Result<(), Self::Error> {
+        self.entry_signed().validate()?;
+        if let Some(operation) = self.operation_encoded() {
+            operation.validate()?;
+        }
+        decode_entry(&self.entry_signed(), self.operation_encoded().as_ref())?;
+        Ok(())
     }
 }
 

@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::convert::TryInto;
 use std::str::FromStr;
 
 use sqlx::FromRow;
@@ -9,8 +8,6 @@ use p2panda_rs::document::DocumentId;
 use p2panda_rs::entry::LogId;
 use p2panda_rs::identity::Author;
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::storage_provider::errors::LogStorageError;
-use p2panda_rs::storage_provider::models::Log as P2PandaLog;
 use p2panda_rs::storage_provider::traits::AsStorageLog;
 
 /// Tracks the assigment of an author's logs to documents and records their schema.
@@ -36,12 +33,12 @@ pub struct Log {
 }
 
 impl AsStorageLog for Log {
-    fn new(log: P2PandaLog) -> Self {
+    fn new(author: &Author, schema: &SchemaId, document: &DocumentId, log_id: &LogId) -> Self {
         Self {
-            author: log.author().as_str().to_string(),
-            log_id: log.log_id().as_u64().to_string(),
-            document: log.document().as_str().to_string(),
-            schema: log.schema().as_str(),
+            author: author.as_str().to_string(),
+            log_id: log_id.as_u64().to_string(),
+            document: document.as_str().to_string(),
+            schema: schema.as_str(),
         }
     }
 
@@ -60,25 +57,6 @@ impl AsStorageLog for Log {
     }
 }
 
-impl From<P2PandaLog> for Log {
-    fn from(log: P2PandaLog) -> Self {
-        Log::new(log)
-    }
-}
-
-impl TryInto<P2PandaLog> for Log {
-    type Error = LogStorageError;
-
-    fn try_into(self) -> Result<P2PandaLog, Self::Error> {
-        Ok(P2PandaLog {
-            author: self.author(),
-            log_id: self.id(),
-            document: self.document_id(),
-            schema: self.schema_id(),
-        })
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::convert::TryFrom;
@@ -89,10 +67,11 @@ mod tests {
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::{Operation, OperationEncoded, OperationFields, OperationValue};
     use p2panda_rs::schema::SchemaId;
-    use p2panda_rs::storage_provider::models::{EntryWithOperation, Log as P2PandaLog};
-    use p2panda_rs::storage_provider::traits::{EntryStore, LogStore, StorageProvider};
+    use p2panda_rs::storage_provider::traits::{
+        AsStorageEntry, AsStorageLog, EntryStore, LogStore, StorageProvider,
+    };
 
-    use crate::db::models::EntryRow;
+    use crate::db::models::{EntryRow, Log};
     use crate::db::sql_storage::SqlStorage;
     use crate::test_helpers::{initialize_db, random_entry_hash};
 
@@ -124,11 +103,11 @@ mod tests {
         let schema =
             SchemaId::new_application("venue", &Hash::new(&random_entry_hash()).unwrap().into());
 
-        let log = P2PandaLog::new(&author, &schema, &document.clone().into(), &LogId::new(1));
-        assert!(storage_provider.insert_log(log.into()).await.is_ok());
+        let log = Log::new(&author, &schema, &document.clone().into(), &LogId::new(1));
+        assert!(storage_provider.insert_log(log).await.is_ok());
 
-        let log = P2PandaLog::new(&author, &schema, &document.into(), &LogId::new(1));
-        assert!(storage_provider.insert_log(log.into()).await.is_err());
+        let log = Log::new(&author, &schema, &document.into(), &LogId::new(1));
+        assert!(storage_provider.insert_log(log).await.is_err());
     }
 
     #[tokio::test]
@@ -146,9 +125,9 @@ mod tests {
             ]),
         );
 
-        let log = P2PandaLog::new(&author, &schema, &document.into(), &LogId::new(1));
+        let log = Log::new(&author, &schema, &document.into(), &LogId::new(1));
 
-        assert!(storage_provider.insert_log(log.into()).await.is_ok());
+        assert!(storage_provider.insert_log(log).await.is_ok());
     }
 
     #[tokio::test]
@@ -182,8 +161,8 @@ mod tests {
                 .await
                 .unwrap();
             assert_eq!(LogId::new(n.into()), log_id);
-            let log = P2PandaLog::new(&author, &schema, &doc, &log_id);
-            storage_provider.insert_log(log.into()).await.unwrap();
+            let log = Log::new(&author, &schema, &doc, &log_id);
+            storage_provider.insert_log(log).await.unwrap();
         }
     }
 
@@ -221,15 +200,12 @@ mod tests {
             None
         );
 
-        let entry_with_operation =
-            EntryWithOperation::new(&entry_encoded.clone(), &operation_encoded).unwrap();
-
-        let entry = EntryRow::try_from(entry_with_operation).unwrap();
+        let entry = EntryRow::new(&entry_encoded.clone(), &operation_encoded).unwrap();
 
         // Store entry in database
         assert!(storage_provider.insert_entry(entry).await.is_ok());
 
-        let log = P2PandaLog::new(
+        let log = Log::new(
             &author,
             &schema,
             &entry_encoded.hash().into(),
@@ -237,7 +213,7 @@ mod tests {
         );
 
         // Store log in database
-        assert!(storage_provider.insert_log(log.into()).await.is_ok());
+        assert!(storage_provider.insert_log(log).await.is_ok());
 
         // Expect to find document in database. The document hash should be the same as the hash of
         // the entry which referred to the `CREATE` operation.
@@ -279,27 +255,27 @@ mod tests {
         let storage_provider = SqlStorage { pool };
 
         // Register two log ids at the beginning
-        let log_1 = P2PandaLog::new(&author, &schema, &document_first.into(), &LogId::new(1));
-        let log_2 = P2PandaLog::new(&author, &schema, &document_second.into(), &LogId::new(2));
+        let log_1 = Log::new(&author, &schema, &document_first.into(), &LogId::new(1));
+        let log_2 = Log::new(&author, &schema, &document_second.into(), &LogId::new(2));
 
-        storage_provider.insert_log(log_1.into()).await.unwrap();
-        storage_provider.insert_log(log_2.into()).await.unwrap();
+        storage_provider.insert_log(log_1).await.unwrap();
+        storage_provider.insert_log(log_2).await.unwrap();
 
         // Find next free log id and register it
         let log_id = storage_provider.next_log_id(&author).await.unwrap();
         assert_eq!(log_id, LogId::new(3));
 
-        let log_3 = P2PandaLog::new(&author, &schema, &document_third.into(), &log_id);
+        let log_3 = Log::new(&author, &schema, &document_third.into(), &log_id);
 
-        storage_provider.insert_log(log_3.into()).await.unwrap();
+        storage_provider.insert_log(log_3).await.unwrap();
 
         // Find next free log id and register it
         let log_id = storage_provider.next_log_id(&author).await.unwrap();
         assert_eq!(log_id, LogId::new(4));
 
-        let log_4 = P2PandaLog::new(&author, &schema, &document_forth.into(), &log_id);
+        let log_4 = Log::new(&author, &schema, &document_forth.into(), &log_id);
 
-        storage_provider.insert_log(log_4.into()).await.unwrap();
+        storage_provider.insert_log(log_4).await.unwrap();
 
         // Find next free log id
         let log_id = storage_provider.next_log_id(&author).await.unwrap();

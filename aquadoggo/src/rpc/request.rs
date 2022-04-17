@@ -3,9 +3,11 @@
 use p2panda_rs::document::DocumentId;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::{AsEntryArgsRequest, AsPublishEntryRequest};
+use p2panda_rs::storage_provider::ValidationError;
+use p2panda_rs::Validate;
 use serde::Deserialize;
 
-use p2panda_rs::entry::EntrySigned;
+use p2panda_rs::entry::{decode_entry, EntrySigned};
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::OperationEncoded;
 
@@ -26,6 +28,24 @@ impl AsEntryArgsRequest for EntryArgsRequest {
     }
 }
 
+impl Validate for EntryArgsRequest {
+    type Error = ValidationError;
+
+    fn validate(&self) -> Result<(), Self::Error> {
+        // Validate `author` request parameter
+        self.author().validate()?;
+
+        // Validate `document` request parameter when it is set
+        match self.document_id() {
+            None => (),
+            Some(doc) => {
+                doc.validate()?;
+            }
+        };
+        Ok(())
+    }
+}
+
 /// Request body of `panda_publishEntry`.
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -41,6 +61,17 @@ impl AsPublishEntryRequest for PublishEntryRequest {
 
     fn operation_encoded(&self) -> &OperationEncoded {
         &self.operation_encoded
+    }
+}
+
+impl Validate for PublishEntryRequest {
+    type Error = ValidationError;
+
+    fn validate(&self) -> Result<(), Self::Error> {
+        self.entry_signed().validate()?;
+        self.operation_encoded().validate()?;
+        decode_entry(self.entry_signed(), Some(self.operation_encoded()))?;
+        Ok(())
     }
 }
 
