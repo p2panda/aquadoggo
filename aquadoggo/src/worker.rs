@@ -1,17 +1,81 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! The purpose of this module is to provide tools for managing small tasks of computational work
-//! in separate queues.
+//! Task queue for organising units of computational work in separate queues which concurrently get
+//! processed by workers.
 //!
-//! A task can be any sort of async function which returns a result, indicating if it succeeded,
-//! failed or crashed critically. Tasks can also dispatch subsequent tasks as soon as they finished
-//! successfully.
+//! A task queue allows control over a) order of operations and b) amount of work being done per
+//! time c) avoiding duplicate work.
 //!
-//! Every dispatched task is moved into a queue (FIFO) where it waits until it processed in a
-//! worker pool with a configurable amount of separate workers.
+//! The last point is a special feature of this particular task queue implementation as we reject
+//! tasks with duplicate input values already waiting in the queue (which would result in doing the
+//! same work again).
 //!
-//! The `Factory` struct in this module managing all workers and tasks. It registers worker pools,
-//! the regarding work functions and adds new task to the queues.
+//! A worker can be defined by any sort of async function which returns a result, indicating if it
+//! succeeded, failed or crashed critically.
+//!
+//! Tasks are smaller work units which hold individual input values used as function arguments for
+//! the worker. Every dispatched task is moved into a queue (FIFO) where it waits until it gets
+//! processed in a worker pool.
+//!
+//! Tasks can also dispatch subsequent tasks as soon as they finished successfully.
+//!
+//! The `Factory` struct is the main interface in this module, managing all workers and tasks. It
+//! registers worker pools with the regarding worker functions, adds new task to queues, schedules
+//! and processes them.
+//!
+//! This is a simplified overview of how this task queue functions:
+//!
+//! ```text
+//! 1. Register worker pool "square" with two workers
+//!
+//! --------------------------------------
+//! - Name: "square"                     -
+//! - Function: (input) => input * input -
+//! - Pool Size: 2                       -
+//! --------------------------------------
+//!
+//! This will result in a worker pool named "square", consisting of two workers we call now "a" and
+//! "b". The worker function takes an integer to return the square function of it.
+//!
+//! As soon as we registered the worker pool once, we're ready to go!
+//!
+//! 2. Queue new tasks
+//!
+//! --------------------
+//! - Id: Task 1       -
+//! - Input: 5         -
+//! - Worker: "square" -
+//! --------------------
+//!
+//! --------------------
+//! - Id: Task 2       -
+//! - Input: 8         -
+//! - Worker: "square" -
+//! --------------------
+//!
+//! --------------------
+//! - Id: Task 3       -
+//! - Input: 5         -
+//! - Worker: "square" -
+//! --------------------
+//!
+//! --------------------
+//! - Id: Task 4       -
+//! - Input: 3         -
+//! - Worker: "square" -
+//! --------------------
+//!
+//! The internal queue of "square" contains now: [{Task 1}, {Task 2}, {Task 4}]. Task 3 got
+//! rejected silently as it contains the same input data.
+//!
+//! 3. Process tasks
+//!
+//! Worker "a" takes Task 1, worker "b" takes Task 2 from the queue. They both get processed
+//! concurrently. After one of them finishes, the next free worker will eventually take Task 4 from
+//! the queue and process it.
+//!
+//! Task 1 results in "25", Task 2 in "64", Task 4 in "9".
+//! ```
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::future::Future;
