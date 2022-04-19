@@ -483,12 +483,26 @@ mod tests {
 
     #[tokio::test]
     async fn jigsaw() {
+        // This test solves multiple jigsaw puzzles with our task queue implementation.
+        //
+        // The idea here is that we have a random, mixed "box" of puzzle pieces of multiple
+        // jigsaws. We pick one puzzle piece at a time, deciding each time if we can connect this
+        // piece to other fitting pieces we already know about. If not, we put the piece "aside"
+        // and look at it later.
+        //
+        // We repeat these steps until the box is empty, eventually we will end up with a couple of
+        // solved jigsaw puzzles!
+
+        // This is the puzzle piece with an unique id and a list of other pieces which fit to this
+        // one, also identified by their id.
         #[derive(Hash, PartialEq, Eq, Clone, Debug)]
         struct JigsawPiece {
             id: usize,
             relations: Vec<usize>,
         }
 
+        // This is a whole puzzle, which is simply a list of puzzle pieces. It has a "complete"
+        // flag, which turns true as soon as we finished the puzzle!
         #[derive(Hash, Clone, Debug)]
         struct JigsawPuzzle {
             id: usize,
@@ -496,6 +510,7 @@ mod tests {
             complete: bool,
         }
 
+        // Our "database" containing all pieces we've collected and puzzles we've completed.
         struct Jigsaw {
             pieces: HashMap<usize, JigsawPiece>,
             puzzles: HashMap<usize, JigsawPuzzle>,
@@ -510,6 +525,7 @@ mod tests {
 
         let mut factory = Factory::<JigsawPiece, Data>::new(database.clone(), 1024);
 
+        // This tasks "picks" a single piece out of the box and sorts it into the database.
         async fn pick(database: Context<Data>, input: JigsawPiece) -> TaskResult<JigsawPiece> {
             let mut db = database.0.lock().map_err(|_| TaskError::Critical)?;
 
@@ -529,6 +545,7 @@ mod tests {
             Ok(Some(tasks))
         }
 
+        // This task finds fitting pieces and tries to combine them to a puzzle.
         async fn find(database: Context<Data>, input: JigsawPiece) -> TaskResult<JigsawPiece> {
             let mut db = database.0.lock().map_err(|_| TaskError::Critical)?;
 
@@ -610,6 +627,7 @@ mod tests {
             Ok(Some(vec![Task::new("finish", input)]))
         }
 
+        // This task checks if a puzzle was completed.
         async fn finish(database: Context<Data>, input: JigsawPiece) -> TaskResult<JigsawPiece> {
             let mut db = database.0.lock().map_err(|_| TaskError::Critical)?;
 
