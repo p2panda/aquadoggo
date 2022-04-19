@@ -1,5 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+//! The purpose of this module is to provide tools for managing small tasks of computational work
+//! in separate queues.
+//!
+//! A task can be any sort of async function which returns a result, indicating if it succeeded,
+//! failed or crashed critically. Tasks can also dispatch subsequent tasks as soon as they finished
+//! successfully.
+//!
+//! Every dispatched task is moved into a queue (FIFO) where it waits until it processed in a
+//! worker pool with a configurable amount of separate workers.
+//!
+//! The `Factory` struct in this module managing all workers and tasks. It registers worker pools,
+//! the regarding work functions and adds new task to the queues.
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::future::Future;
@@ -12,37 +24,60 @@ use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::broadcast::{channel, Sender};
 use tokio::task;
 
+/// A task holding a generic input value and the name of the worker which will process it
+/// eventually.
 #[derive(Debug, Clone)]
 pub struct Task<IN>(WorkerName, IN);
 
 impl<IN> Task<IN> {
-    pub fn new(name: &str, input: IN) -> Self {
-        Self(name.into(), input)
+    /// Returns a new task.
+    pub fn new(worker_name: &str, input: IN) -> Self {
+        Self(worker_name.into(), input)
     }
 }
 
-pub type WorkerName = String;
+/// Return value of every processed task indicating if it succeeded or failed.
+///
+/// When a task succeeds it has the option to dispatch subsequent tasks.
+pub type TaskResult<IN> = Result<Option<Vec<Task<IN>>>, TaskError>;
 
+/// Possible return values of a failed task.
 pub enum TaskError {
+    /// This tasks failed critically and will cause the whole program to panic.
     Critical,
+
+    /// This task failed silently without any further effects.
     Failure,
 }
 
-pub type TaskResult<IN> = Result<Option<Vec<Task<IN>>>, TaskError>;
+/// Workers are identified by simple string values.
+pub type WorkerName = String;
 
+/// A context object can be shared with each processed task across threads to gain access to common
+/// services like a datbase.
 pub struct Context<D: Send + Sync + 'static>(Arc<D>);
 
 impl<D: Send + Sync + 'static> Clone for Context<D> {
+    /// This `clone` implementation efficiently increments the reference counter to the inner
+    /// object instead of actually cloning it.
     fn clone(&self) -> Self {
         Self(Arc::clone(&self.0))
     }
 }
 
+/// Every registered worker pool is managed by a `WorkerManager` which holds the task queue for
+/// this registered work and an index of all current inputs in the task queue.
 struct WorkerManager<IN>
 where
     IN: Send + Sync + Clone + Hash + Eq + 'static,
 {
+    /// Index of all current inputs inside the task queue organized in a hash set.
+    ///
+    /// This allows us to avoid duplicate tasks by detecting if there is already a task in our
+    /// queue with the same input hash.
     input_index: Arc<Mutex<HashSet<IN>>>,
+
+    /// FIFO queue of all tasks for this worker pool.
     queue: Arc<SegQueue<QueueItem<IN>>>,
 }
 
@@ -50,6 +85,7 @@ impl<IN> WorkerManager<IN>
 where
     IN: Send + Sync + Clone + Hash + Eq + 'static,
 {
+    /// Returns a new worker manager.
     pub fn new() -> Self {
         Self {
             input_index: Arc::new(Mutex::new(HashSet::new())),
@@ -58,6 +94,11 @@ where
     }
 }
 
+/// This trait defines a generic async worker function receiving the task input and shared context
+/// and returning a task result
+///
+/// It is also using the `async_trait` macro as a trick to avoid a more ugly trait signature as
+/// working with generic, static, pinned and boxed async functions can look quite messy.
 #[async_trait::async_trait]
 pub trait Workable<IN, D>
 where
@@ -67,25 +108,39 @@ where
     async fn call(&self, context: Context<D>, input: IN) -> TaskResult<IN>;
 }
 
+/// Implements our `Workable` trait for a generic async function.
 #[async_trait::async_trait]
 impl<FN, F, IN, D> Workable<IN, D> for FN
 where
+    // Function accepting a context and generic input value, returning a future.
     FN: Fn(Context<D>, IN) -> F + Sync,
+    // Future returning a `TaskResult`.
     F: Future<Output = TaskResult<IN>> + Send + 'static,
+    // Generic input type.
     IN: Send + Sync + Clone + 'static,
-    D: Sync + Send + 'static,
+    // Generic context type.
+    D: Send + Sync + 'static,
 {
+    /// Internal method which calls our generic async function, passing in the context and input
+    /// value.
+    ///
+    /// This gets automatically wrapped in a static, boxed and pinned function signature by the
+    /// `async_trait` macro so we don't need to do it ourselves.
     async fn call(&self, context: Context<D>, input: IN) -> TaskResult<IN> {
         (self)(context, input).await
     }
 }
 
+/// Every queue consists of items which hold an unique identifier and the task input value.
 #[derive(Debug)]
 pub struct QueueItem<IN>
 where
     IN: Send + Sync + Clone + 'static,
 {
+    /// Unique task identifier.
     id: u64,
+
+    /// Task input values which get passed over to the worker function.
     input: IN,
 }
 
@@ -93,26 +148,35 @@ impl<IN> QueueItem<IN>
 where
     IN: Send + Sync + Clone + 'static,
 {
+    /// Returns a new queue item.
     pub fn new(id: u64, input: IN) -> Self {
         Self { id, input }
     }
 
+    /// Returns unique identifier of this queue item.
     pub fn id(&self) -> u64 {
         self.id
     }
 
+    /// Returns generic input values of this queue item.
     pub fn input(&self) -> IN {
         self.input.clone()
     }
 }
 
+/// This factory serves as a main entry interface to dispatch, schedule and process tasks.
 pub struct Factory<IN, D>
 where
     IN: Send + Sync + Clone + Hash + Eq + Debug + 'static,
     D: Send + Sync + 'static,
 {
+    /// Shared context between all tasks.
     context: Context<D>,
+
+    /// Map of all registered worker pools.
     managers: HashMap<WorkerName, WorkerManager<IN>>,
+
+    /// Broadcast channel to inform worker pools about new tasks.
     tx: Sender<Task<IN>>,
 }
 
@@ -121,6 +185,14 @@ where
     IN: Send + Sync + Clone + Hash + Eq + Debug + 'static,
     D: Send + Sync + 'static,
 {
+    /// Initialises a new factory.
+    ///
+    /// The capacity argument defines the maximum bound of incoming new tasks which get broadcasted
+    /// across all worker pools which accordingly will pick up the task. Use a higher value if your
+    /// factory expects a large amount of tasks within short time.
+    ///
+    /// Factories will panic if the capacity limit was reached as it will cause the workers to miss
+    /// incoming tasks.
     pub fn new(data: D, capacity: usize) -> Self {
         let (tx, _) = channel(capacity);
 
@@ -131,6 +203,14 @@ where
         }
     }
 
+    /// Registers a new worker pool with a dedicated worker function.
+    ///
+    /// Choose a worker pool size fitting the work and computational resources you have at hand to
+    /// conduct it.
+    ///
+    /// As soon as a worker pool got registered it is ready to receive incoming tasks which get
+    /// queued up and eventually processed by the regarding worker function.
+    ///
     /// Ideally worker functions should be idempotent: meaning the function won’t cause unintended
     /// effects even if called multiple times with the same arguments.
     pub fn register<W: Workable<IN, D> + Send + Sync + Copy + 'static>(
@@ -150,12 +230,17 @@ where
         self.spawn_workers(name, pool_size, work);
     }
 
+    /// Queues up a new task in the regarding worker queue.
+    ///
+    /// Tasks with duplicate input values which already exist in the queue will be silently
+    /// rejected.
     pub fn queue(&mut self, task: Task<IN>) {
         self.tx
             .send(task)
             .expect("Critical system error: Cant broadcast task");
     }
 
+    /// Returns true if there are no more tasks given for this worker pool.
     pub fn is_empty(&self, name: &str) -> bool {
         match self.managers.get(name) {
             Some(manager) => manager.queue.is_empty(),
@@ -163,52 +248,71 @@ where
         }
     }
 
+    /// Spawns a task which listens to broadcast channel for incoming new tasks which might be
+    /// added to the worker queue.
     fn spawn_dispatcher(&self, name: &str) {
+        // At this point we should already have a worker pool with this name
         let manager = self.managers.get(name).expect("Unknown worker name");
 
-        let input_index = manager.input_index.clone();
+        // Subscribe to the broadcast channel
         let mut rx = self.tx.subscribe();
+
+        // Initialise a new counter to provide unique task ids
+        let counter = AtomicU64::new(0);
+
+        // Increment references to move worker data safely into the async task
+        let input_index = manager.input_index.clone();
         let name = String::from(name);
         let queue = manager.queue.clone();
-        let counter = AtomicU64::new(0);
 
         task::spawn(async move {
             loop {
                 match rx.recv().await {
+                    // A new task got announced in the broadcast channel!
                     Ok(task) => {
                         if task.0 != name {
-                            continue; // This is not for us
+                            continue; // This is not for us ..
                         }
 
+                        // Check if a task with the same input values already exists in queue
                         // @TODO: Unwind panic
                         let mut input_index = input_index.lock().unwrap();
-
                         if input_index.contains(&task.1) {
                             continue; // Task already exists
                         }
 
+                        // Generate a unique id for this new task and add it to queue
                         let next_id = counter.fetch_add(1, Ordering::Relaxed);
                         queue.push(QueueItem::new(next_id, task.1.clone()));
                         input_index.insert(task.1);
                     }
+                    // The capacity of the broadcast channel is full, we're lagging behind and miss
+                    // out on incoming tasks
                     Err(RecvError::Lagged(skipped_messages)) => {
                         // @TODO: Unwind panic
                         panic!("Lagging! {}", skipped_messages);
                     }
+                    // The channel got closed, nothing anymore to do here
                     Err(RecvError::Closed) => (),
                 }
             }
         });
     }
 
+    /// Spawns a worker pool of given size with a unique name and worker function.
+    ///
+    /// Every worker waits for a task inside the queue and processes its input values accordingly
+    /// with the given worker function.
     fn spawn_workers<W: Workable<IN, D> + Send + Sync + Copy + 'static>(
         &self,
         name: &str,
         pool_size: usize,
         work: W,
     ) {
+        // At this point we should already have a worker pool with this name
         let manager = self.managers.get(name).expect("Unknown worker name");
 
+        // Spawn task for each worker inside the pool
         for _ in 0..pool_size {
             let context = self.context.clone();
             let queue = manager.queue.clone();
@@ -217,14 +321,21 @@ where
 
             task::spawn(async move {
                 loop {
+                    // Wait until there is a new task arriving in the queue
                     match queue.pop() {
                         Some(item) => {
-                            // Do work ..
+                            // Take this task and do work ..
                             let result = work.call(context.clone(), item.input()).await;
 
+                            // Remove input index from queue
+                            // @TODO: Unwind panic
+                            let mut input_index = input_index.lock().unwrap();
+                            input_index.remove(&item.input());
+
+                            // .. check the task result ..
                             match result {
                                 Ok(Some(list)) => {
-                                    // Dispatch new tasks
+                                    // Tasks succeeded and dispatches new, subsequent tasks
                                     for task in list {
                                         tx.send(task)
                                             // @TODO: Unwind panic
@@ -240,14 +351,11 @@ where
                                 Err(TaskError::Failure) => {
                                     // Silently fail .. maybe write something to the log or retry?
                                 }
-                                _ => (), // Nothing to dispatch
+                                _ => (), // Task succeeded, but nothing to dispatch
                             }
-
-                            // Remove input index from queue
-                            // @TODO: Unwind panic
-                            let mut input_index = input_index.lock().unwrap();
-                            input_index.remove(&item.input());
                         }
+                        // Call the waker to avoid async runtime starvation when this loop runs
+                        // forever ..
                         None => task::yield_now().await,
                     }
                 }
