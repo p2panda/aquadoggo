@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_trait::async_trait;
-use p2panda_rs::storage_provider::errors::EntryStorageError;
-use p2panda_rs::storage_provider::ValidationError;
-use p2panda_rs::Validate;
 use serde::Serialize;
 use sqlx::FromRow;
 use sqlx::{query, query_as, query_scalar};
@@ -14,9 +11,9 @@ use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{Operation, OperationEncoded};
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::storage_provider::errors as p2panda_errors;
-use p2panda_rs::storage_provider::traits::AsStorageEntry;
-use p2panda_rs::storage_provider::traits::{EntryStore, StorageProvider};
+use p2panda_rs::storage_provider::errors::{EntryStorageError, ValidationError};
+use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, StorageProvider};
+use p2panda_rs::Validate;
 
 use crate::db::models::Log;
 use crate::db::store::SqlStorage;
@@ -145,10 +142,7 @@ impl Validate for EntryRow {
 #[async_trait]
 impl EntryStore<EntryRow> for SqlStorage {
     /// Insert an entry into storage.
-    async fn insert_entry(
-        &self,
-        entry: EntryRow,
-    ) -> Result<bool, p2panda_errors::EntryStorageError> {
+    async fn insert_entry(&self, entry: EntryRow) -> Result<bool, EntryStorageError> {
         println!("{:?}", entry);
         let rows_affected = query(
             "
@@ -175,7 +169,7 @@ impl EntryStore<EntryRow> for SqlStorage {
         .bind(entry.seq_num().as_u64().to_string())
         .execute(&self.pool)
         .await
-        .map_err(|e| p2panda_errors::EntryStorageError::Custom(e.to_string()))?
+        .map_err(|e| EntryStorageError::Custom(e.to_string()))?
         .rows_affected();
 
         Ok(rows_affected == 1)
@@ -187,7 +181,7 @@ impl EntryStore<EntryRow> for SqlStorage {
         author: &Author,
         log_id: &LogId,
         seq_num: &SeqNum,
-    ) -> Result<Option<EntryRow>, p2panda_errors::EntryStorageError> {
+    ) -> Result<Option<EntryRow>, EntryStorageError> {
         let entry_row = query_as::<_, EntryRow>(
             "
             SELECT
@@ -211,7 +205,7 @@ impl EntryStore<EntryRow> for SqlStorage {
         .bind(seq_num.as_u64().to_string())
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| p2panda_errors::EntryStorageError::Custom(e.to_string()))?;
+        .map_err(|e| EntryStorageError::Custom(e.to_string()))?;
 
         Ok(entry_row)
     }
@@ -221,7 +215,7 @@ impl EntryStore<EntryRow> for SqlStorage {
         &self,
         author: &Author,
         log_id: &LogId,
-    ) -> Result<Option<EntryRow>, p2panda_errors::EntryStorageError> {
+    ) -> Result<Option<EntryRow>, EntryStorageError> {
         let entry_row = query_as::<_, EntryRow>(
             "
             SELECT
@@ -247,16 +241,13 @@ impl EntryStore<EntryRow> for SqlStorage {
         .bind(log_id.as_u64().to_string())
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| p2panda_errors::EntryStorageError::Custom(e.to_string()))?;
+        .map_err(|e| EntryStorageError::Custom(e.to_string()))?;
 
         Ok(entry_row)
     }
 
     /// Return vector of all entries of a given schema
-    async fn by_schema(
-        &self,
-        schema: &SchemaId,
-    ) -> Result<Vec<EntryRow>, p2panda_errors::EntryStorageError> {
+    async fn by_schema(&self, schema: &SchemaId) -> Result<Vec<EntryRow>, EntryStorageError> {
         let entries = query_as::<_, EntryRow>(
             "
             SELECT
@@ -279,7 +270,7 @@ impl EntryStore<EntryRow> for SqlStorage {
         .bind(schema.as_str())
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| p2panda_errors::EntryStorageError::Custom(e.to_string()))?;
+        .map_err(|e| EntryStorageError::Custom(e.to_string()))?;
 
         Ok(entries)
     }

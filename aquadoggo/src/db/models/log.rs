@@ -10,9 +10,8 @@ use p2panda_rs::document::DocumentId;
 use p2panda_rs::entry::LogId;
 use p2panda_rs::identity::Author;
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::storage_provider::errors as p2panda_errors;
-use p2panda_rs::storage_provider::traits::AsStorageLog;
-use p2panda_rs::storage_provider::traits::LogStore;
+use p2panda_rs::storage_provider::errors::LogStorageError;
+use p2panda_rs::storage_provider::traits::{AsStorageLog, LogStore};
 
 use crate::db::store::SqlStorage;
 
@@ -67,7 +66,7 @@ impl AsStorageLog for Log {
 #[async_trait]
 impl LogStore<Log> for SqlStorage {
     /// Insert a log into storage.
-    async fn insert_log(&self, log: Log) -> Result<bool, p2panda_errors::LogStorageError> {
+    async fn insert_log(&self, log: Log) -> Result<bool, LogStorageError> {
         let rows_affected = query(
             "
             INSERT INTO
@@ -82,7 +81,7 @@ impl LogStore<Log> for SqlStorage {
         .bind(log.schema_id().as_str())
         .execute(&self.pool)
         .await
-        .map_err(|e| p2panda_errors::LogStorageError::Custom(e.to_string()))?
+        .map_err(|e| LogStorageError::Custom(e.to_string()))?
         .rows_affected();
 
         Ok(rows_affected == 1)
@@ -93,7 +92,7 @@ impl LogStore<Log> for SqlStorage {
         &self,
         author: &Author,
         document_id: &DocumentId,
-    ) -> Result<Option<LogId>, p2panda_errors::LogStorageError> {
+    ) -> Result<Option<LogId>, LogStorageError> {
         let result: Option<String> = query_scalar(
             "
             SELECT
@@ -109,7 +108,7 @@ impl LogStore<Log> for SqlStorage {
         .bind(document_id.as_str())
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| p2panda_errors::LogStorageError::Custom(e.to_string()))?;
+        .map_err(|e| LogStorageError::Custom(e.to_string()))?;
 
         // Wrap u64 inside of `P2PandaLog` instance
         let log_id: Option<LogId> =
@@ -119,7 +118,7 @@ impl LogStore<Log> for SqlStorage {
     }
 
     /// Determines the next unused log_id of an author.
-    async fn next_log_id(&self, author: &Author) -> Result<LogId, p2panda_errors::LogStorageError> {
+    async fn next_log_id(&self, author: &Author) -> Result<LogId, LogStorageError> {
         // Get all log ids from this author
         let mut result: Vec<String> = query_scalar(
             "
@@ -134,7 +133,7 @@ impl LogStore<Log> for SqlStorage {
         .bind(author.as_str())
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| p2panda_errors::LogStorageError::Custom(e.to_string()))?;
+        .map_err(|e| LogStorageError::Custom(e.to_string()))?;
 
         // Convert all strings representing u64 integers to `LogId` instances
         let mut log_ids: Vec<LogId> = result
