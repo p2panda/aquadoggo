@@ -2,13 +2,19 @@
 
 use std::str::FromStr;
 
+use async_trait::async_trait;
 use sqlx::FromRow;
+use sqlx::{query, query_scalar};
 
 use p2panda_rs::document::DocumentId;
 use p2panda_rs::entry::LogId;
 use p2panda_rs::identity::Author;
 use p2panda_rs::schema::SchemaId;
+use p2panda_rs::storage_provider::errors as p2panda_errors;
 use p2panda_rs::storage_provider::traits::AsStorageLog;
+use p2panda_rs::storage_provider::traits::LogStore;
+
+use crate::db::store::SqlStorage;
 
 /// Tracks the assigment of an author's logs to documents and records their schema.
 ///
@@ -57,6 +63,109 @@ impl AsStorageLog for Log {
     }
 }
 
+/// Trait which handles all storage actions relating to `Log`s.
+#[async_trait]
+impl LogStore<Log> for SqlStorage {
+    /// Insert a log into storage.
+    async fn insert_log(&self, log: Log) -> Result<bool, p2panda_errors::LogStorageError> {
+        let rows_affected = query(
+            "
+            INSERT INTO
+                logs (author, log_id, document, schema)
+            VALUES
+                ($1, $2, $3, $4)
+            ",
+        )
+        .bind(log.author().as_str())
+        .bind(log.id().as_u64().to_string())
+        .bind(log.document_id().as_str())
+        .bind(log.schema_id().as_str())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| p2panda_errors::LogStorageError::Custom(e.to_string()))?
+        .rows_affected();
+
+        Ok(rows_affected == 1)
+    }
+
+    /// Get a log from storage
+    async fn get(
+        &self,
+        author: &Author,
+        document_id: &DocumentId,
+    ) -> Result<Option<LogId>, p2panda_errors::LogStorageError> {
+        let result: Option<String> = query_scalar(
+            "
+            SELECT
+                log_id
+            FROM
+                logs
+            WHERE
+                author = $1
+                AND document = $2
+            ",
+        )
+        .bind(author.as_str())
+        .bind(document_id.as_str())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| p2panda_errors::LogStorageError::Custom(e.to_string()))?;
+
+        // Wrap u64 inside of `P2PandaLog` instance
+        let log_id: Option<LogId> =
+            result.map(|str| str.parse().expect("Corrupt u64 integer found in database"));
+
+        Ok(log_id)
+    }
+
+    /// Determines the next unused log_id of an author.
+    async fn next_log_id(&self, author: &Author) -> Result<LogId, p2panda_errors::LogStorageError> {
+        // Get all log ids from this author
+        let mut result: Vec<String> = query_scalar(
+            "
+                    SELECT
+                        log_id
+                    FROM
+                        logs
+                    WHERE
+                        author = $1
+                    ",
+        )
+        .bind(author.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| p2panda_errors::LogStorageError::Custom(e.to_string()))?;
+
+        // Convert all strings representing u64 integers to `LogId` instances
+        let mut log_ids: Vec<LogId> = result
+            .iter_mut()
+            .map(|str| str.parse().expect("Corrupt u64 integer found in database"))
+            .collect();
+
+        // The log id selection below expects log ids in sorted order. We can't easily use SQL
+        // for this because log IDs are stored as `VARCHAR`, which doesn't sort numbers correctly.
+        // A good solution would not require reading all existing log ids to find the next
+        // available one. See this issue: https://github.com/p2panda/aquadoggo/issues/67
+        log_ids.sort();
+
+        // Find next unused document log by comparing the sequence of known log ids with an
+        // sequence of subsequent log ids until we find a gap.
+        let mut next_log_id = LogId::default();
+
+        for log_id in log_ids.iter() {
+            // Success! Found unused log id
+            if next_log_id != *log_id {
+                break;
+            }
+
+            // Otherwise, try next possible log id
+            next_log_id = next_log_id.next().unwrap();
+        }
+
+        Ok(next_log_id)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::convert::TryFrom;
@@ -72,7 +181,7 @@ mod tests {
     };
 
     use crate::db::models::{EntryRow, Log};
-    use crate::db::sql_storage::SqlStorage;
+    use crate::db::store::SqlStorage;
     use crate::test_helpers::{initialize_db, random_entry_hash};
 
     const TEST_AUTHOR: &str = "58223678ab378f1b07d1d8c789e6da01d16a06b1a4d17cc10119a0109181156c";

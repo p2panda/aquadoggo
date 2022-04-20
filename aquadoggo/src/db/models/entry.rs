@@ -1,16 +1,27 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use async_trait::async_trait;
 use p2panda_rs::storage_provider::errors::EntryStorageError;
 use p2panda_rs::storage_provider::ValidationError;
 use p2panda_rs::Validate;
 use serde::Serialize;
 use sqlx::FromRow;
+use sqlx::{query, query_as, query_scalar};
 
+use p2panda_rs::document::DocumentId;
 use p2panda_rs::entry::{decode_entry, Entry as P2PandaEntry, EntrySigned, LogId, SeqNum};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{Operation, OperationEncoded};
+use p2panda_rs::schema::SchemaId;
+use p2panda_rs::storage_provider::errors as p2panda_errors;
 use p2panda_rs::storage_provider::traits::AsStorageEntry;
+use p2panda_rs::storage_provider::traits::{EntryStore, StorageProvider};
+
+use crate::db::models::Log;
+use crate::db::store::SqlStorage;
+use crate::errors::StorageProviderResult;
+use crate::rpc::{EntryArgsRequest, EntryArgsResponse, PublishEntryRequest, PublishEntryResponse};
 
 /// Struct representing the actual SQL row of `Entry`.
 ///
@@ -130,6 +141,195 @@ impl Validate for EntryRow {
     }
 }
 
+/// Trait which handles all storage actions relating to `Entries`.
+#[async_trait]
+impl EntryStore<EntryRow> for SqlStorage {
+    /// Insert an entry into storage.
+    async fn insert_entry(
+        &self,
+        entry: EntryRow,
+    ) -> Result<bool, p2panda_errors::EntryStorageError> {
+        println!("{:?}", entry);
+        let rows_affected = query(
+            "
+            INSERT INTO
+                entries (
+                    author,
+                    entry_bytes,
+                    entry_hash,
+                    log_id,
+                    payload_bytes,
+                    payload_hash,
+                    seq_num
+                )
+            VALUES
+                ($1, $2, $3, $4, $5, $6, $7)
+            ",
+        )
+        .bind(entry.author().as_str())
+        .bind(entry.entry_signed().as_str())
+        .bind(entry.hash().as_str())
+        .bind(entry.log_id().as_u64().to_string())
+        .bind(entry.operation_encoded().unwrap().as_str())
+        .bind(entry.operation_encoded().unwrap().hash().as_str())
+        .bind(entry.seq_num().as_u64().to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| p2panda_errors::EntryStorageError::Custom(e.to_string()))?
+        .rows_affected();
+
+        Ok(rows_affected == 1)
+    }
+
+    /// Returns entry at sequence position within an author's log.
+    async fn entry_at_seq_num(
+        &self,
+        author: &Author,
+        log_id: &LogId,
+        seq_num: &SeqNum,
+    ) -> Result<Option<EntryRow>, p2panda_errors::EntryStorageError> {
+        let entry_row = query_as::<_, EntryRow>(
+            "
+            SELECT
+                author,
+                entry_bytes,
+                entry_hash,
+                log_id,
+                payload_bytes,
+                payload_hash,
+                seq_num
+            FROM
+                entries
+            WHERE
+                author = $1
+                AND log_id = $2
+                AND seq_num = $3
+            ",
+        )
+        .bind(author.as_str())
+        .bind(log_id.as_u64().to_string())
+        .bind(seq_num.as_u64().to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| p2panda_errors::EntryStorageError::Custom(e.to_string()))?;
+
+        Ok(entry_row)
+    }
+
+    /// Returns the latest Bamboo entry of an author's log.
+    async fn latest_entry(
+        &self,
+        author: &Author,
+        log_id: &LogId,
+    ) -> Result<Option<EntryRow>, p2panda_errors::EntryStorageError> {
+        let entry_row = query_as::<_, EntryRow>(
+            "
+            SELECT
+                author,
+                entry_bytes,
+                entry_hash,
+                log_id,
+                payload_bytes,
+                payload_hash,
+                seq_num
+            FROM
+                entries
+            WHERE
+                author = $1
+                AND log_id = $2
+            ORDER BY
+                seq_num DESC
+            LIMIT
+                1
+            ",
+        )
+        .bind(author.as_str())
+        .bind(log_id.as_u64().to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| p2panda_errors::EntryStorageError::Custom(e.to_string()))?;
+
+        Ok(entry_row)
+    }
+
+    /// Return vector of all entries of a given schema
+    async fn by_schema(
+        &self,
+        schema: &SchemaId,
+    ) -> Result<Vec<EntryRow>, p2panda_errors::EntryStorageError> {
+        let entries = query_as::<_, EntryRow>(
+            "
+            SELECT
+                entries.author,
+                entries.entry_bytes,
+                entries.entry_hash,
+                entries.log_id,
+                entries.payload_bytes,
+                entries.payload_hash,
+                entries.seq_num
+            FROM
+                entries
+            INNER JOIN logs
+                ON (entries.log_id = logs.log_id
+                    AND entries.author = logs.author)
+            WHERE
+                logs.schema = $1
+            ",
+        )
+        .bind(schema.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| p2panda_errors::EntryStorageError::Custom(e.to_string()))?;
+
+        Ok(entries)
+    }
+}
+
+/// All other methods needed to be implemented by a p2panda `StorageProvider`
+#[async_trait]
+impl StorageProvider<EntryRow, Log> for SqlStorage {
+    type EntryArgsResponse = EntryArgsResponse;
+    type EntryArgsRequest = EntryArgsRequest;
+    type PublishEntryResponse = PublishEntryResponse;
+    type PublishEntryRequest = PublishEntryRequest;
+
+    /// Returns the related document for any entry.
+    ///
+    /// Every entry is part of a document and, through that, associated with a specific log id used
+    /// by this document and author. This method returns that document id by looking up the log
+    /// that the entry was stored in.
+    async fn get_document_by_entry(
+        &self,
+        entry_hash: &Hash,
+    ) -> StorageProviderResult<Option<DocumentId>> {
+        let result: Option<String> = query_scalar(
+            "
+            SELECT
+                logs.document
+            FROM
+                logs
+            INNER JOIN entries
+                ON (logs.log_id = entries.log_id
+                    AND logs.author = entries.author)
+            WHERE
+                entries.entry_hash = $1
+            ",
+        )
+        .bind(entry_hash.as_str())
+        .fetch_optional(&self.pool)
+        .await?;
+
+        // Unwrap here since we already validated the hash
+        let hash = result.map(|str| {
+            Hash::new(&str)
+                .expect("Corrupt hash found in database")
+                .into()
+        });
+
+        Ok(hash)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use p2panda_rs::entry::LogId;
@@ -138,7 +338,7 @@ mod tests {
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::storage_provider::traits::EntryStore;
 
-    use crate::db::sql_storage::SqlStorage;
+    use crate::db::store::SqlStorage;
     use crate::test_helpers::initialize_db;
 
     const TEST_AUTHOR: &str = "1a8a62c5f64eed987326513ea15a6ea2682c256ac57a418c1c92d96787c8b36e";
