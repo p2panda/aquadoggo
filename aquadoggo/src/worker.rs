@@ -443,26 +443,8 @@ mod tests {
 
     use rand::seq::SliceRandom;
     use rand::Rng;
-    use tokio::task;
 
     use super::{Context, Factory, Task, TaskError, TaskResult};
-
-    #[tokio::test]
-    async fn avoid_duplicate_tasks() {
-        let mut factory = Factory::<u64, Vec<u64>>::new(Vec::new(), 32);
-        factory.register("worker", 1, |_, _| async { Ok(None) });
-
-        // Add two queue items
-        assert_eq!(factory.len("worker"), 0);
-        factory.queue(Task::new("worker", 1));
-        assert_eq!(factory.len("worker"), 1);
-        factory.queue(Task::new("worker", 2));
-        assert_eq!(factory.len("worker"), 2);
-
-        // Try adding an item again with the same input
-        factory.queue(Task::new("worker", 2));
-        assert_eq!(factory.len("worker"), 2);
-    }
 
     #[tokio::test]
     async fn factory() {
