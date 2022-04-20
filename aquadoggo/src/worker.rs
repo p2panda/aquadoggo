@@ -311,14 +311,6 @@ where
         }
     }
 
-    /// Returns the number of queue items in this worker pool.
-    pub fn len(&self, name: &str) -> usize {
-        match self.managers.get(name) {
-            Some(manager) => manager.queue.len(),
-            None => 0,
-        }
-    }
-
     /// Spawns a task which listens to broadcast channel for incoming new tasks which might be
     /// added to the worker queue.
     fn spawn_dispatcher(&self, name: &str) {
