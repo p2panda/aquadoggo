@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! Task queue for organising units of computational work in separate queues which concurrently get
-//! processed by workers.
+//! Task queue for executing work in the background. Tasks get queued up and eventually get
+//! processed in worker pools where one worker executes the task.
 //!
 //! A task queue allows control over a) order of operations and b) amount of work being done per
 //! time c) avoiding duplicate work.
 //!
-//! The last point is a special feature of this particular task queue implementation as we reject
-//! tasks with duplicate input values already waiting in the queue (which would result in doing the
-//! same work again).
+//! This particular task queue implementation rejects tasks with duplicate input values already
+//! waiting in the queue (which would result in doing the same work again).
 //!
 //! A worker can be defined by any sort of async function which returns a result, indicating if it
 //! succeeded, failed or crashed critically.
@@ -312,6 +311,14 @@ where
         }
     }
 
+    /// Returns the number of queue items in this worker pool.
+    pub fn len(&self, name: &str) -> usize {
+        match self.managers.get(name) {
+            Some(manager) => manager.queue.len(),
+            None => 0,
+        }
+    }
+
     /// Spawns a task which listens to broadcast channel for incoming new tasks which might be
     /// added to the worker queue.
     fn spawn_dispatcher(&self, name: &str) {
@@ -436,8 +443,26 @@ mod tests {
 
     use rand::seq::SliceRandom;
     use rand::Rng;
+    use tokio::task;
 
     use super::{Context, Factory, Task, TaskError, TaskResult};
+
+    #[tokio::test]
+    async fn avoid_duplicate_tasks() {
+        let mut factory = Factory::<u64, Vec<u64>>::new(Vec::new(), 32);
+        factory.register("worker", 1, |_, _| async { Ok(None) });
+
+        // Add two queue items
+        assert_eq!(factory.len("worker"), 0);
+        factory.queue(Task::new("worker", 1));
+        assert_eq!(factory.len("worker"), 1);
+        factory.queue(Task::new("worker", 2));
+        assert_eq!(factory.len("worker"), 2);
+
+        // Try adding an item again with the same input
+        factory.queue(Task::new("worker", 2));
+        assert_eq!(factory.len("worker"), 2);
+    }
 
     #[tokio::test]
     async fn factory() {
@@ -494,7 +519,7 @@ mod tests {
         // solved jigsaw puzzles!
 
         // This is the puzzle piece with an unique id and a list of other pieces which fit to this
-        // one, also identified by their id.
+        // one, identified by their id.
         #[derive(Hash, PartialEq, Eq, Clone, Debug)]
         struct JigsawPiece {
             id: usize,
@@ -510,7 +535,7 @@ mod tests {
             complete: bool,
         }
 
-        // Our "database" containing all pieces we've collected and puzzles we've completed.
+        // Our "database" containing all pieces we've collected and puzzles we've completed
         struct Jigsaw {
             pieces: HashMap<usize, JigsawPiece>,
             puzzles: HashMap<usize, JigsawPuzzle>,
@@ -525,7 +550,7 @@ mod tests {
 
         let mut factory = Factory::<JigsawPiece, Data>::new(database.clone(), 1024);
 
-        // This tasks "picks" a single piece out of the box and sorts it into the database.
+        // This tasks "picks" a single piece out of the box and sorts it into the database
         async fn pick(database: Context<Data>, input: JigsawPiece) -> TaskResult<JigsawPiece> {
             let mut db = database.0.lock().map_err(|_| TaskError::Critical)?;
 
@@ -545,7 +570,7 @@ mod tests {
             Ok(Some(tasks))
         }
 
-        // This task finds fitting pieces and tries to combine them to a puzzle.
+        // This task finds fitting pieces and tries to combine them to a puzzle
         async fn find(database: Context<Data>, input: JigsawPiece) -> TaskResult<JigsawPiece> {
             let mut db = database.0.lock().map_err(|_| TaskError::Critical)?;
 
@@ -627,7 +652,7 @@ mod tests {
             Ok(Some(vec![Task::new("finish", input)]))
         }
 
-        // This task checks if a puzzle was completed.
+        // This task checks if a puzzle was completed
         async fn finish(database: Context<Data>, input: JigsawPiece) -> TaskResult<JigsawPiece> {
             let mut db = database.0.lock().map_err(|_| TaskError::Critical)?;
 
