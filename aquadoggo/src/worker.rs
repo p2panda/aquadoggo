@@ -676,9 +676,31 @@ mod tests {
         let mut offset: isize = 0;
 
         for _ in 0..puzzles_count {
+            // Every puzzle has a random, square dimension of x * x pieces
             let size = rand::thread_rng().gen_range(min_size..max_size);
+
+            // Every piece is identified by an unique number
             let mut id: isize = 0;
 
+            // Create all pieces for this square puzzle and connect neighboring pieces, so that an
+            // puzzle with the size of 3 * 3 would look like that:
+            //
+            // [1] [2] [3]
+            // [4] [5] [6]
+            // [7] [8] [9]
+            //
+            // Piece 1 would be connected to 2 and 4, Piece 2 would be connected to 1, 3 and 5 and
+            // so on .., the relations for all pieces would become:
+            //
+            // 1: 2, 4
+            // 2: 1, 3, 5
+            // 3: 2, 6
+            // 4: 1, 5, 6
+            // 5: 2, 4, 6, 8
+            // 6: 3, 5, 9
+            // 7: 4, 8
+            // 8: 5, 7, 9
+            // 9: 6, 8
             for _ in 0..size {
                 for _ in 0..size {
                     let mut relations: Vec<usize> = Vec::new();
@@ -686,18 +708,22 @@ mod tests {
                     id = id + 1;
 
                     if id % size != 0 {
+                        // Add related piece to the right
                         relations.push((offset + id + 1) as usize);
                     }
 
                     if id % size != 1 {
+                        // Add related piece to the left
                         relations.push((offset + id - 1) as usize);
                     }
 
                     if id + size <= size * size {
+                        // Add related piece to the bottom
                         relations.push((offset + id + size) as usize);
                     }
 
                     if id - size > 0 {
+                        // Add related piece to the top
                         relations.push((offset + id - size) as usize);
                     }
 
