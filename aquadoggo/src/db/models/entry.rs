@@ -78,7 +78,8 @@ impl AsStorageEntry for EntryRow {
         entry_signed: &EntrySigned,
         operation_encoded: &OperationEncoded,
     ) -> Result<Self, Self::AsStorageEntryError> {
-        let entry = decode_entry(entry_signed, Some(operation_encoded))?;
+        let entry = decode_entry(entry_signed, Some(operation_encoded))
+            .map_err(|e| EntryStorageError::Custom(e.to_string()))?;
 
         Ok(Self {
             author: entry_signed.author().as_str().into(),

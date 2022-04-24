@@ -48,7 +48,7 @@ mod tests {
             ),
         );
 
-        let response = rpc_error("AuthorValidation(InvalidLength)");
+        let response = rpc_error("invalid author key length");
         assert_eq!(handle_http(&client, request).await, response);
     }
 
