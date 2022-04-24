@@ -21,6 +21,7 @@ mod rpc;
 mod runtime;
 mod server;
 mod task;
+mod worker;
 
 #[cfg(test)]
 mod test_helpers;
