@@ -143,7 +143,6 @@ impl Validate for EntryRow {
 impl EntryStore<EntryRow> for SqlStorage {
     /// Insert an entry into storage.
     async fn insert_entry(&self, entry: EntryRow) -> Result<bool, EntryStorageError> {
-        println!("{:?}", entry);
         let rows_affected = query(
             "
             INSERT INTO

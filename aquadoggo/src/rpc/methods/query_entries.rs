@@ -52,8 +52,6 @@ mod tests {
             ),
         );
 
-        println!("{}", request);
-
         // Prepare expected response result
         let response = rpc_response(&format!(
             r#"{{
