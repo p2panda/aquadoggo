@@ -97,4 +97,7 @@ pub trait OperationStore<StorageOperation: AsStorageOperation> {
         .await?;
         Ok(true)
     }
+
+    async fn get_operation(&self, id: OperationId)
+        -> Result<StorageOperation, OperationStoreError>;
 }
