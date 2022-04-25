@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS previous_operations_v1 (
 CREATE TABLE IF NOT EXISTS operation_fields_v1 (
     operation_id                    VARCHAR(64)       NOT NULL,
     name                            VARCHAR(128)      NOT NULL,
-    type                            TEXT              NOT NULL,
+    field_type                      TEXT              NOT NULL,
     value                           BLOB              NULL,
     relation_document_id            VARCHAR(64)       NULL,
     relation_document_view_id_hash  VARCHAR(64)       NULL,

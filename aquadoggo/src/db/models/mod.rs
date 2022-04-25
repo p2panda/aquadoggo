@@ -2,6 +2,7 @@
 
 mod entry;
 mod log;
+mod operation;
 
 pub use self::log::Log;
 pub use entry::EntryRow;
