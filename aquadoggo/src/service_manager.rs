@@ -3,22 +3,22 @@
 use std::future::Future;
 
 use tokio::sync::broadcast::error::RecvError;
-use tokio::sync::broadcast::{channel, Sender};
+use tokio::sync::broadcast::{channel, Receiver, Sender};
 use tokio::task;
 
 #[async_trait::async_trait]
 pub trait Service {
-    async fn call(&self, tx: Sender<Message>);
+    async fn call(&self, tx: Sender<Message>, rx: Receiver<Message>);
 }
 
 #[async_trait::async_trait]
 impl<FN, F> Service for FN
 where
-    FN: Fn(Sender<Message>) -> F + Sync,
+    FN: Fn(Sender<Message>, Receiver<Message>) -> F + Sync,
     F: Future<Output = ()> + Send + 'static,
 {
-    async fn call(&self, tx: Sender<Message>) {
-        (self)(tx).await
+    async fn call(&self, tx: Sender<Message>, rx: Receiver<Message>) {
+        (self)(tx, rx).await
     }
 }
 
@@ -29,7 +29,7 @@ pub enum Message {
 
 pub struct ServiceManager {
     services: Vec<task::JoinHandle<()>>,
-    tx: Box<Sender<Message>>,
+    tx: Sender<Message>,
 }
 
 impl ServiceManager {
@@ -38,15 +38,16 @@ impl ServiceManager {
 
         Self {
             services: Vec::new(),
-            tx: Box::new(tx),
+            tx,
         }
     }
 
     pub fn add<F: Service + Send + Sync + Copy + 'static>(&mut self, service: F) {
-        let tx = (*self.tx).clone();
+        let tx = self.tx.clone();
+        let rx = tx.subscribe();
 
         task::spawn(async move {
-            service.call(tx).await;
+            service.call(tx, rx).await;
         });
     }
 
@@ -74,7 +75,7 @@ impl ServiceManager {
 
 #[cfg(test)]
 mod tests {
-    use tokio::sync::broadcast::Sender;
+    use tokio::sync::broadcast::{Receiver, Sender};
 
     use super::{Message, ServiceManager};
 
@@ -82,35 +83,34 @@ mod tests {
     async fn test() {
         let mut manager = ServiceManager::new(1024);
 
-        manager.add(|tx: Sender<Message>| async move {
-            let mut rx = tx.subscribe();
+        manager.add(
+            |tx: Sender<Message>, mut rx: Receiver<Message>| async move {
+                let handle = tokio::task::spawn(async {
+                    loop {
+                        // Doing some very important work here
+                        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                        println!("Important work");
+                    }
+                });
 
-            let handle = tokio::task::spawn(async {
-                loop {
-                    // Doing some very important work here
-                    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-                }
-            });
+                tokio::select! {
+                    _ = handle => {
+                        println!("Important work finished");
+                    }
+                    Ok(Message::GracefulShutdown) = rx.recv() => {
+                        println!("Received shutdown signal");
+                    }
+                };
 
-            tokio::select! {
-                _ = handle => {
-                    println!("Important work finished");
-                }
-                Ok(Message::GracefulShutdown) = rx.recv() => {
-                    println!("Received shutdown signal");
-                }
-            }
+                println!("Exit ..");
 
-            println!("Exit ..");
+                // Some "work" we have to do before we can actually close this service
+                tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
+                println!("Done ..!");
 
-            // Some "work" we have to do before we can actually close this service
-            tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
-
-            println!("Done ..!");
-        });
-
-        // @TODO THIS MAKES IT ALL WORK. NOT SURE WHY.
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                drop(tx);
+            },
+        );
 
         manager.shutdown().await;
     }
