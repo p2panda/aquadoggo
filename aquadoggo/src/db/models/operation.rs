@@ -284,7 +284,8 @@ impl OperationStore<DoggoOperation> for SqlStorage {
                 .bind(operation.id().as_str().to_owned())
                 .bind(name.to_owned())
                 .bind(value.field_type())
-                .bind(stringify!(value))
+                // This needs some thought.....
+                .bind("Yelp!")
                 .bind(operation.document_id().as_str().to_owned())
                 .bind(operation.document_view_id_hash().as_str().to_owned())
                 .execute(&self.pool)
