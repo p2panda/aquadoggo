@@ -7,7 +7,9 @@ use sqlx::query;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
-use p2panda_rs::operation::{OperationAction, OperationFields, OperationId};
+use p2panda_rs::operation::{
+    AsOperation, Operation, OperationAction, OperationEncoded, OperationFields, OperationId,
+};
 use p2panda_rs::schema::{FieldType, SchemaId};
 use p2panda_rs::Validate;
 
@@ -59,7 +61,7 @@ pub trait AsStorageOperation: Sized + Clone + Send + Sync + Validate {
 
     fn document_view_id_hash(&self) -> DocumentViewIdHash;
 
-    fn fields(&self) -> OperationFields;
+    fn fields(&self) -> Option<OperationFields>;
 
     fn id(&self) -> OperationId;
 
@@ -74,8 +76,8 @@ pub trait AsStorageOperation: Sized + Clone + Send + Sync + Validate {
 #[derive(thiserror::Error, Debug)]
 pub enum OperationStorageError {
     /// Catch all error which implementers can use for passing their own errors up the chain.
-    #[error("Ahhhhh!!!!")]
-    Error,
+    #[error("Ahhhhh!!!!: {0}")]
+    Custom(String),
 }
 
 #[async_trait]
@@ -99,10 +101,35 @@ pub struct DoggoOperation {
     author: Author,
     document_id: DocumentId,
     document_view_id_hash: DocumentViewIdHash,
-    fields: OperationFields,
+    fields: Option<OperationFields>,
     id: OperationId,
     previous_operations: Vec<OperationId>,
     schema_id: SchemaId,
+}
+
+impl DoggoOperation {
+    pub fn new(
+        operation_encoded: &OperationEncoded,
+        document_id: &DocumentId,
+        author: &Author,
+    ) -> Self {
+        let decoded_operation = Operation::from(operation_encoded);
+        let document_view_id = match decoded_operation.previous_operations() {
+            Some(ops) => DocumentViewId::new(&ops),
+            None => DocumentViewId::from(operation_encoded.hash()),
+        };
+        let operation_id = OperationId::from(operation_encoded.hash());
+        Self {
+            action: decoded_operation.action(),
+            author: author.clone(),
+            document_id: document_id.clone(),
+            document_view_id_hash: document_view_id.hash(),
+            fields: decoded_operation.fields(),
+            id: operation_id,
+            previous_operations: decoded_operation.previous_operations().unwrap_or_default(),
+            schema_id: decoded_operation.schema(),
+        }
+    }
 }
 
 impl Validate for DoggoOperation {
@@ -140,7 +167,7 @@ impl AsStorageOperation for DoggoOperation {
         self.schema_id.clone()
     }
 
-    fn fields(&self) -> OperationFields {
+    fn fields(&self) -> Option<OperationFields> {
         self.fields.clone()
     }
 
@@ -177,7 +204,7 @@ impl OperationStore<DoggoOperation> for SqlStorage {
                     operation_id,
                     entry_hash,
                     action,
-                    schema_id_short,
+                    schema_id_short
                 )
             VALUES
                 ($1, $2, $3, $4, $5)
@@ -190,7 +217,7 @@ impl OperationStore<DoggoOperation> for SqlStorage {
         .bind(operation.schema_id_short().as_str())
         .execute(&self.pool)
         .await
-        .map_err(|e| OperationStorageError::Error)?
+        .map_err(|e| OperationStorageError::Custom(e.to_string()))?
         .rows_affected()
             == 1;
 
@@ -201,7 +228,7 @@ impl OperationStore<DoggoOperation> for SqlStorage {
             INSERT INTO
                 previous_operations_v1 (
                     parent_operation_id,
-                    child_operation_id,
+                    child_operation_id
                  )
             VALUES
                 ($1, $2)
@@ -212,52 +239,112 @@ impl OperationStore<DoggoOperation> for SqlStorage {
                 .execute(&self.pool)
             }))
             .await
-            .map_err(|e| OperationStorageError::Error)? // Coerce error here
+            .map_err(|e| OperationStorageError::Custom(e.to_string()))? // Coerce error here
             .iter()
             .try_for_each(|result| {
                 if result.rows_affected() == 1 {
                     Ok(())
                 } else {
-                    Err(OperationStorageError::Error)
+                    Err(OperationStorageError::Custom(format!(
+                        "Incorrect rows affected: {}",
+                        result.rows_affected()
+                    )))
                 }
             })
             .is_ok();
 
-        let fields_inserted = try_join_all(operation.fields().iter().map(|field| {
-            query(
-                "
-                INSERT INTO
-                    operation_fields_v1 (
-                        operation_id,
-                        name,
-                        field_type,
-                        value,
-                        relation_document_id,
-                        relation_document_view_id_hash,
-                    )
-                VALUES
-                    ($1, $2, $3, $4, $5)
-            ",
-            )
-            .bind(operation.id().as_str().to_owned())
-            .bind(field.0.to_owned())
-            .bind(field.1.field_type())
-            .bind(operation.document_id().as_str().to_owned())
-            .bind(operation.document_view_id_hash().as_str().to_owned())
-            .execute(&self.pool)
-        }))
-        .await
-        .map_err(|e| OperationStorageError::Error)? // Coerce error here
-        .iter()
-        .try_for_each(|result| {
-            if result.rows_affected() == 1 {
-                Ok(())
-            } else {
-                Err(OperationStorageError::Error)
-            }
-        })
-        .is_ok();
+        let mut fields_inserted = true;
+        if let Some(fields) = operation.fields() {
+            fields_inserted = try_join_all(fields.iter().map(|(name, value)| {
+                query(
+                    "
+                    INSERT INTO
+                        operation_fields_v1 (
+                            operation_id,
+                            name,
+                            field_type,
+                            value,
+                            relation_document_id,
+                            relation_document_view_id_hash
+                        )
+                    VALUES
+                        ($1, $2, $3, $4, $5, $6)
+                ",
+                )
+                .bind(operation.id().as_str().to_owned())
+                .bind(name.to_owned())
+                .bind(value.field_type())
+                .bind(stringify!(value))
+                .bind(operation.document_id().as_str().to_owned())
+                .bind(operation.document_view_id_hash().as_str().to_owned())
+                .execute(&self.pool)
+            }))
+            .await
+            .map_err(|e| OperationStorageError::Custom(e.to_string()))? // Coerce error here
+            .iter()
+            .try_for_each(|result| {
+                if result.rows_affected() == 1 {
+                    Ok(())
+                } else {
+                    Err(OperationStorageError::Custom(format!(
+                        "Incorrect rows affected: {}",
+                        result.rows_affected()
+                    )))
+                }
+            })
+            .is_ok();
+        };
 
         Ok(operation_inserted && previous_operations_inserted && fields_inserted)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::convert::TryFrom;
+    use std::str::FromStr;
+
+    use p2panda_rs::document::DocumentId;
+    use p2panda_rs::identity::Author;
+    use p2panda_rs::operation::{Operation, OperationEncoded, OperationFields, OperationValue};
+    use p2panda_rs::schema::SchemaId;
+    use p2panda_rs::test_utils::constants::{DEFAULT_HASH, TEST_SCHEMA_ID};
+
+    use crate::db::store::SqlStorage;
+    use crate::test_helpers::initialize_db;
+
+    use super::{DoggoOperation, OperationStore};
+
+    const TEST_AUTHOR: &str = "1a8a62c5f64eed987326513ea15a6ea2682c256ac57a418c1c92d96787c8b36e";
+
+    #[tokio::test]
+    async fn insert_operation() {
+        let pool = initialize_db().await;
+        let storage_provider = SqlStorage { pool };
+
+        let author = Author::new(TEST_AUTHOR).unwrap();
+
+        let mut fields = OperationFields::new();
+        fields
+            .add(
+                "venue_name",
+                OperationValue::Text("Shirokuma Cafe".to_string()),
+            )
+            .unwrap();
+        let operation =
+            Operation::new_create(SchemaId::from_str(TEST_SCHEMA_ID).unwrap(), fields).unwrap();
+
+        let document_id = DocumentId::new(DEFAULT_HASH.parse().unwrap());
+
+        let doggo_operation = DoggoOperation::new(
+            &OperationEncoded::try_from(&operation).unwrap(),
+            &document_id,
+            &author,
+        );
+        let result = storage_provider
+            .insert_operation(&doggo_operation)
+            .await
+            .unwrap();
+        assert!(result)
     }
 }
