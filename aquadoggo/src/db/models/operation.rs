@@ -114,10 +114,7 @@ impl DoggoOperation {
         author: &Author,
     ) -> Self {
         let decoded_operation = Operation::from(operation_encoded);
-        let document_view_id = match decoded_operation.previous_operations() {
-            Some(ops) => DocumentViewId::new(&ops),
-            None => DocumentViewId::from(operation_encoded.hash()),
-        };
+        let document_view_id = DocumentViewId::from(operation_encoded.hash());
         let operation_id = OperationId::from(operation_encoded.hash());
         Self {
             action: decoded_operation.action(),
