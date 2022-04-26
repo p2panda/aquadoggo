@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS operations_v1 (
     operation_id      VARCHAR(64)       NOT NULL UNIQUE,
     entry_hash        VARCHAR(68)       NOT NULL UNIQUE,
     action            VARCHAR(16)       NOT NULL,
-    schema_id_hash    VARCHAR(68)       NOT NULL,
+    schema_id_short   VARCHAR(68)       NOT NULL,
     PRIMARY KEY (operation_id)
 );
 
