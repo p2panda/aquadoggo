@@ -2,7 +2,7 @@
 use async_trait::async_trait;
 use futures::future::try_join_all;
 use serde::{Serialize, Serializer};
-use sqlx::query;
+use sqlx::{query, query_as, FromRow};
 
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::hash::Hash;
@@ -17,19 +17,22 @@ use crate::db::store::SqlStorage;
 
 /////// DB ROWS ///////
 // Structs representing data as it is stored in rows in the db
+#[derive(FromRow, Debug)]
 pub struct OperationRow {
-    id: String,
+    operation_id: String,
     author: String,
     action: String,
     entry_hash: String,
     schema_id_short: String,
 }
 
+#[derive(FromRow, Debug)]
 pub struct PreviousOperationRelationRow {
     parent_operation_id: String,
     child_operation_id: String,
 }
 
+#[derive(FromRow, Debug)]
 pub struct OperationFieldRow {
     operation_id: String,
     name: String,
@@ -65,7 +68,7 @@ pub trait AsStorageOperation: Sized + Clone + Send + Sync + Validate {
 
     fn id(&self) -> OperationId;
 
-    fn previous_operations(&self) -> Vec<OperationId>;
+    fn previous_operations(&self) -> PreviousOperations;
 
     fn schema_id(&self) -> SchemaId;
 
@@ -80,6 +83,8 @@ pub enum OperationStorageError {
     Custom(String),
 }
 
+type PreviousOperations = Vec<OperationId>;
+
 #[async_trait]
 pub trait OperationStore<StorageOperation: AsStorageOperation> {
     async fn insert_operation(
@@ -87,10 +92,17 @@ pub trait OperationStore<StorageOperation: AsStorageOperation> {
         operation: &StorageOperation,
     ) -> Result<bool, OperationStorageError>;
 
-    // async fn get_operation(
-    //     &self,
-    //     id: OperationId,
-    // ) -> Result<StorageOperation, OperationStorageError>;
+    async fn get_operation_by_id(
+        &self,
+        id: OperationId,
+    ) -> Result<
+        (
+            Option<OperationRow>,
+            Vec<PreviousOperationRelationRow>,
+            Vec<OperationFieldRow>,
+        ),
+        OperationStorageError,
+    >;
 }
 
 ////// IMPLEMENT THE STORAGE TRAITS //////
@@ -103,7 +115,7 @@ pub struct DoggoOperation {
     document_view_id_hash: DocumentViewIdHash,
     fields: Option<OperationFields>,
     id: OperationId,
-    previous_operations: Vec<OperationId>,
+    previous_operations: PreviousOperations,
     schema_id: SchemaId,
 }
 
@@ -143,6 +155,7 @@ impl AsStorageOperation for DoggoOperation {
     fn action(&self) -> OperationAction {
         self.action.clone()
     }
+
     fn author(&self) -> Author {
         self.author.clone()
     }
@@ -168,7 +181,7 @@ impl AsStorageOperation for DoggoOperation {
         self.fields.clone()
     }
 
-    fn previous_operations(&self) -> Vec<OperationId> {
+    fn previous_operations(&self) -> PreviousOperations {
         self.previous_operations.clone()
     }
 
@@ -294,6 +307,75 @@ impl OperationStore<DoggoOperation> for SqlStorage {
 
         Ok(operation_inserted && previous_operations_inserted && fields_inserted)
     }
+
+    async fn get_operation_by_id(
+        &self,
+        id: OperationId,
+    ) -> Result<
+        (
+            Option<OperationRow>,
+            Vec<PreviousOperationRelationRow>,
+            Vec<OperationFieldRow>,
+        ),
+        OperationStorageError,
+    > {
+        let operation_row = query_as::<_, OperationRow>(
+            "
+            SELECT
+                author,
+                operation_id,
+                entry_hash,
+                action,
+                schema_id_short
+            FROM
+                operations_v1
+            WHERE
+                operation_id = $1
+            ",
+        )
+        .bind(id.as_str())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| OperationStorageError::Custom(e.to_string()))?;
+
+        let previous_operation_rows = query_as::<_, PreviousOperationRelationRow>(
+            "
+            SELECT
+                parent_operation_id,
+                child_operation_id
+            FROM
+                previous_operations_v1
+            WHERE
+                child_operation_id = $1
+            ",
+        )
+        .bind(id.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| OperationStorageError::Custom(e.to_string()))?;
+
+        let operation_field_rows = query_as::<_, OperationFieldRow>(
+            "
+            SELECT
+                operation_id,
+                name,
+                field_type,
+                value,
+                relation_document_id,
+                relation_document_view_id_hash
+            FROM
+                operation_fields_v1
+            WHERE
+                operation_id = $1
+            ",
+        )
+        .bind(id.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| OperationStorageError::Custom(e.to_string()))?;
+
+        Ok((operation_row, previous_operation_rows, operation_field_rows))
+    }
 }
 
 #[cfg(test)]
@@ -342,6 +424,18 @@ mod tests {
             .insert_operation(&doggo_operation)
             .await
             .unwrap();
-        assert!(result)
+        assert!(result);
+
+        let result = storage_provider
+            .get_operation_by_id(
+                OperationEncoded::try_from(&operation)
+                    .unwrap()
+                    .hash()
+                    .into(),
+            )
+            .await
+            .unwrap();
+
+        println!("{:#?}", result);
     }
 }
