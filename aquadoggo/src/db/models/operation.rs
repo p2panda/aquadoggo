@@ -109,6 +109,7 @@ pub trait OperationStore<StorageOperation: AsStorageOperation> {
 
 #[derive(Debug, Clone)]
 pub struct DoggoOperation {
+    // We don't need all these fields, we could just store the encoded operation, author, and document_id for example
     action: OperationAction,
     author: Author,
     document_id: DocumentId,
@@ -284,7 +285,7 @@ impl OperationStore<DoggoOperation> for SqlStorage {
                 .bind(operation.id().as_str().to_owned())
                 .bind(name.to_owned())
                 .bind(value.field_type())
-                // This needs some thought.....
+                // This needs some thought..... how to store the value as a string?
                 .bind("Yelp!")
                 .bind(operation.document_id().as_str().to_owned())
                 .bind(operation.document_view_id_hash().as_str().to_owned())
