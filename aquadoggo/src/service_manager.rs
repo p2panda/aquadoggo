@@ -10,7 +10,6 @@ use std::sync::Arc;
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::task;
-use tokio::task::JoinHandle;
 
 /// Sends messages through the communication bus between services.
 pub type Sender<T> = broadcast::Sender<T>;
