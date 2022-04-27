@@ -252,8 +252,15 @@ impl OperationStore<DoggoOperation> for SqlStorage {
 
         let mut fields_inserted = true;
         if let Some(fields) = operation.fields() {
+            // Iterate over all fields in this operation. The queries are composed and then their futures returned
+            // to be collected in a single `TryJoinAll` and then executed.
             fields_inserted = try_join_all(fields.iter().flat_map(|(name, value)| {
+                // Extract the field type.
                 let field_type = value.field_type();
+
+                // If the value is a relation_list or pinned_relation_list we need to insert a new field row for
+                // every item in the list. Here we collect these items and return them in a vector. If this operation
+                // value is anything except for the above list types, we will return a vec containing a single item.
                 let values = match value {
                     OperationValue::Boolean(bool) => vec![(Some(bool.to_string()), None, None)],
                     OperationValue::Integer(int) => vec![(Some(int.to_string()), None, None)],
@@ -314,7 +321,6 @@ impl OperationStore<DoggoOperation> for SqlStorage {
                         .bind(operation.id().as_str().to_owned())
                         .bind(name.to_owned())
                         .bind(field_type.to_string())
-                        // Storing the whole encoded operation until solution for storing values is known
                         .bind(value)
                         .bind(relation)
                         .bind(pinned_relation)
