@@ -57,8 +57,6 @@ pub trait AsStorageOperation: Sized + Clone + Send + Sync + Validate {
 
     fn author(&self) -> Author;
 
-    fn document_id(&self) -> DocumentId;
-
     fn document_view_id_hash(&self) -> DocumentViewIdHash;
 
     fn fields(&self) -> Option<OperationFields>;
@@ -107,21 +105,14 @@ pub trait OperationStore<StorageOperation: AsStorageOperation> {
 #[derive(Debug, Clone)]
 pub struct DoggoOperation {
     author: Author,
-    document_id: DocumentId,
     id: OperationId,
     operation: Operation,
 }
 
 impl DoggoOperation {
-    pub fn new(
-        operation: &Operation,
-        operation_id: &OperationId,
-        document_id: &DocumentId,
-        author: &Author,
-    ) -> Self {
+    pub fn new(operation: &Operation, operation_id: &OperationId, author: &Author) -> Self {
         Self {
             author: author.clone(),
-            document_id: document_id.clone(),
             id: operation_id.clone(),
             operation: operation.clone(),
         }
@@ -170,10 +161,6 @@ impl AsStorageOperation for DoggoOperation {
 
     fn previous_operations(&self) -> PreviousOperations {
         self.operation.previous_operations().unwrap_or_default()
-    }
-
-    fn document_id(&self) -> DocumentId {
-        self.document_id.clone()
     }
 
     fn document_view_id_hash(&self) -> DocumentViewIdHash {
@@ -509,9 +496,8 @@ mod tests {
         let operation =
             Operation::new_create(SchemaId::from_str(TEST_SCHEMA_ID).unwrap(), fields).unwrap();
         let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
-        let document_id = DocumentId::new(DEFAULT_HASH.parse().unwrap());
 
-        let doggo_operation = DoggoOperation::new(&operation, &operation_id, &document_id, &author);
+        let doggo_operation = DoggoOperation::new(&operation, &operation_id, &author);
 
         let result = storage_provider
             .insert_operation(&doggo_operation)
