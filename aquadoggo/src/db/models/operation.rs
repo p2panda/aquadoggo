@@ -301,6 +301,8 @@ impl OperationStore<DoggoOperation> for SqlStorage {
         Ok(operation_inserted && previous_operations_inserted && fields_inserted)
     }
 
+    // What do we actually want to get here? Right now, if we want to retrieve a complete operation, it's easier to do it
+    // via `EntryStore` by getting the encoded operation. We may want more atomic getters here for field_type, value, action etc..
     async fn get_operation_by_id(
         &self,
         id: OperationId,
