@@ -7,7 +7,7 @@ use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{
-    AsOperation, Operation, OperationAction, OperationEncoded, OperationFields, OperationId,
+    AsOperation, Operation, OperationAction, OperationFields, OperationId,
 };
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::Validate;
@@ -55,11 +55,6 @@ pub trait AsStorageOperation: Sized + Clone + Send + Sync + Validate {
     fn author(&self) -> Author;
 
     fn document_id(&self) -> DocumentId;
-
-    // // and the operation id graph tips in order to reconstruct the
-    // // complete DocumentViewId if it's needed (is it needed?).
-    // // We could store relations between document view id hashes
-    // fn document_view_id(&self) -> DocumentViewId;
 
     fn document_view_id_hash(&self) -> DocumentViewIdHash;
 
@@ -109,34 +104,24 @@ pub trait OperationStore<StorageOperation: AsStorageOperation> {
 #[derive(Debug, Clone)]
 pub struct DoggoOperation {
     // We don't need all these fields, we could just store the encoded operation, author, and document_id for example
-    action: OperationAction,
     author: Author,
     document_id: DocumentId,
-    document_view_id_hash: DocumentViewIdHash,
-    fields: Option<OperationFields>,
     id: OperationId,
-    previous_operations: PreviousOperations,
-    schema_id: SchemaId,
+    operation: Operation,
 }
 
 impl DoggoOperation {
     pub fn new(
-        operation_encoded: &OperationEncoded,
+        operation: &Operation,
+        operation_id: &OperationId,
         document_id: &DocumentId,
         author: &Author,
     ) -> Self {
-        let decoded_operation = Operation::from(operation_encoded);
-        let document_view_id = DocumentViewId::from(operation_encoded.hash());
-        let operation_id = OperationId::from(operation_encoded.hash());
         Self {
-            action: decoded_operation.action(),
             author: author.clone(),
             document_id: document_id.clone(),
-            document_view_id_hash: document_view_id.hash(),
-            fields: decoded_operation.fields(),
-            id: operation_id,
-            previous_operations: decoded_operation.previous_operations().unwrap_or_default(),
-            schema_id: decoded_operation.schema(),
+            id: operation_id.clone(),
+            operation: operation.clone(),
         }
     }
 }
@@ -153,7 +138,7 @@ impl AsStorageOperation for DoggoOperation {
     type AsStorageOperationError = OperationStorageError;
 
     fn action(&self) -> OperationAction {
-        self.action
+        self.operation.action()
     }
 
     fn author(&self) -> Author {
@@ -165,24 +150,24 @@ impl AsStorageOperation for DoggoOperation {
     }
 
     fn schema_id_short(&self) -> SchemaIdShort {
-        match &self.schema_id {
+        match &self.operation.schema() {
             SchemaId::Application(name, document_view_id) => {
                 format!("{}__{}", name, document_view_id.hash().as_str())
             }
-            _ => self.schema_id.as_str(),
+            _ => self.operation.schema().as_str(),
         }
     }
 
     fn schema_id(&self) -> SchemaId {
-        self.schema_id.clone()
+        self.operation.schema()
     }
 
     fn fields(&self) -> Option<OperationFields> {
-        self.fields.clone()
+        self.operation.fields()
     }
 
     fn previous_operations(&self) -> PreviousOperations {
-        self.previous_operations.clone()
+        self.operation.previous_operations().unwrap_or_default()
     }
 
     fn document_id(&self) -> DocumentId {
@@ -190,7 +175,7 @@ impl AsStorageOperation for DoggoOperation {
     }
 
     fn document_view_id_hash(&self) -> DocumentViewIdHash {
-        self.document_view_id_hash.clone()
+        DocumentViewId::from(self.id.as_hash().clone()).hash()
     }
 }
 
@@ -381,12 +366,11 @@ impl OperationStore<DoggoOperation> for SqlStorage {
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryFrom;
     use std::str::FromStr;
 
     use p2panda_rs::document::DocumentId;
     use p2panda_rs::identity::Author;
-    use p2panda_rs::operation::{Operation, OperationEncoded, OperationFields, OperationValue};
+    use p2panda_rs::operation::{Operation, OperationFields, OperationId, OperationValue};
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::test_utils::constants::{DEFAULT_HASH, TEST_SCHEMA_ID};
 
@@ -413,14 +397,11 @@ mod tests {
             .unwrap();
         let operation =
             Operation::new_create(SchemaId::from_str(TEST_SCHEMA_ID).unwrap(), fields).unwrap();
-
+        let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
         let document_id = DocumentId::new(DEFAULT_HASH.parse().unwrap());
 
-        let doggo_operation = DoggoOperation::new(
-            &OperationEncoded::try_from(&operation).unwrap(),
-            &document_id,
-            &author,
-        );
+        let doggo_operation = DoggoOperation::new(&operation, &operation_id, &document_id, &author);
+
         let result = storage_provider
             .insert_operation(&doggo_operation)
             .await
@@ -428,12 +409,7 @@ mod tests {
         assert!(result);
 
         let result = storage_provider
-            .get_operation_by_id(
-                OperationEncoded::try_from(&operation)
-                    .unwrap()
-                    .hash()
-                    .into(),
-            )
+            .get_operation_by_id(operation_id)
             .await
             .unwrap();
 
