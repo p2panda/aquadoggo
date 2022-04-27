@@ -50,7 +50,6 @@ impl ServiceManager {
 
     pub fn add<F: Service + Send + Sync + Copy + 'static>(&mut self, service: F) {
         let tx = self.tx.clone();
-        let rx = tx.subscribe();
         let shutdown_tx = self.shutdown.clone();
         let shutdown_rx = shutdown_tx.subscribe();
 
@@ -84,7 +83,7 @@ impl ServiceManager {
 
 #[cfg(test)]
 mod tests {
-    use super::{Message, Sender, ServiceManager, Shutdown};
+    use super::{ServiceManager, Shutdown};
 
     #[tokio::test]
     async fn test() {
