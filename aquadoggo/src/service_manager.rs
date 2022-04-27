@@ -10,12 +10,13 @@ use std::sync::Arc;
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::task;
+use tokio::task::JoinHandle;
 
 /// Sends messages through the communication bus between services.
 pub type Sender<T> = broadcast::Sender<T>;
 
 /// Receives shutdown signal for services so they can react accordingly.
-pub type Shutdown = broadcast::Receiver<bool>;
+pub type Shutdown = JoinHandle<()>;
 
 /// Data shared across services, for example a database.
 pub struct Context<D: Send + Sync + 'static>(Arc<D>);
@@ -112,14 +113,19 @@ where
 
         // Sender and receiver for shutdown channel
         let shutdown_tx = self.shutdown.clone();
-        let shutdown_rx = shutdown_tx.subscribe();
+        let mut shutdown_rx = shutdown_tx.subscribe();
+
+        // Wait for any signal from the shutdown channel
+        let signal = task::spawn(async move {
+            let _ = shutdown_rx.recv().await;
+        });
 
         // Reference to shared context
         let context = self.context.clone();
 
         task::spawn(async move {
             // Run the service!
-            service.call(context, shutdown_rx, tx).await;
+            service.call(context, signal, tx).await;
 
             // Drop the shutdown sender of this service when we're done, this signals the shutdown
             // process that this service has finally stopped
@@ -161,7 +167,7 @@ mod tests {
     async fn service_manager() {
         let mut manager = ServiceManager::<usize, usize>::new(16, 0);
 
-        manager.add(|_, mut signal: Shutdown, _| async move {
+        manager.add(|_, signal: Shutdown, _| async move {
             let work = tokio::task::spawn(async {
                 loop {
                     // Doing some very important work here ..
@@ -170,7 +176,7 @@ mod tests {
             });
 
             // Stop when we received shutdown signal or when work was done
-            tokio::select! { _ = work => (), _ = signal.recv() => () };
+            tokio::select! { _ = work => (), _ = signal => () };
 
             // Some "tidying" we have to do before we can actually close this service
             tokio::time::sleep(std::time::Duration::from_millis(250)).await;
