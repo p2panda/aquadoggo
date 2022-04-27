@@ -1,3 +1,5 @@
+use std::convert::TryFrom;
+
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use async_trait::async_trait;
 use futures::future::try_join_all;
@@ -7,7 +9,7 @@ use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{
-    AsOperation, Operation, OperationAction, OperationFields, OperationId,
+    AsOperation, Operation, OperationAction, OperationEncoded, OperationFields, OperationId,
 };
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::Validate;
@@ -269,8 +271,13 @@ impl OperationStore<DoggoOperation> for SqlStorage {
                 .bind(operation.id().as_str().to_owned())
                 .bind(name.to_owned())
                 .bind(value.field_type())
-                // This needs some thought..... how to store the value as a blob?
-                .bind("Yelp!")
+                // Storing the whole encoded operation until solution for storing values is known
+                .bind(
+                    OperationEncoded::try_from(&operation.operation)
+                        .unwrap()
+                        .as_str()
+                        .to_string(),
+                )
                 .bind(operation.document_id().as_str().to_owned())
                 .bind(operation.document_view_id_hash().as_str().to_owned())
                 .execute(&self.pool)
