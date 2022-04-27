@@ -74,9 +74,6 @@ where
     /// Shared, thread-safe context between services.
     context: Context<D>,
 
-    /// List of all currently running services.
-    services: Vec<JoinHandle<()>>,
-
     /// Sender of our communication bus.
     ///
     /// This is a broadcast channel where any amount of senders and receivers can be derived from.
@@ -104,7 +101,6 @@ where
 
         Self {
             context: Context(Arc::new(context)),
-            services: Vec::new(),
             tx,
             shutdown,
         }
