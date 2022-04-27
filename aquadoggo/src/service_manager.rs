@@ -5,6 +5,7 @@ use std::future::Future;
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::task;
+use tokio::task::JoinHandle;
 
 pub type Sender = broadcast::Sender<Message>;
 pub type Shutdown = broadcast::Receiver<bool>;
@@ -39,7 +40,7 @@ pub struct ServiceManager {
 impl ServiceManager {
     pub fn new(capacity: usize) -> Self {
         let (tx, _) = broadcast::channel(capacity);
-        let (shutdown, _) = broadcast::channel(capacity);
+        let (shutdown, _) = broadcast::channel(16);
 
         Self {
             services: Vec::new(),
@@ -54,7 +55,10 @@ impl ServiceManager {
         let shutdown_rx = shutdown_tx.subscribe();
 
         task::spawn(async move {
+            // Run the service!
             service.call(shutdown_rx, tx).await;
+
+            // Drop the sender of this service when we're done
             drop(shutdown_tx);
         });
     }
@@ -81,34 +85,36 @@ impl ServiceManager {
     }
 }
 
+pub async fn done_or_shutdown<T>(handle: JoinHandle<T>, mut shutdown: Shutdown) {
+    tokio::select! {
+        _ = handle => {
+            // Service work finished
+        }
+        _ = shutdown.recv() => {
+            // Received shutdown signal
+        }
+    };
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{ServiceManager, Shutdown};
+    use super::{done_or_shutdown, ServiceManager, Shutdown};
 
     #[tokio::test]
-    async fn test() {
+    async fn service_manager() {
         let mut manager = ServiceManager::new(1024);
 
-        manager.add(|mut shutdown: Shutdown, _| async move {
-            let handle = tokio::task::spawn(async {
+        manager.add(|signal: Shutdown, _| async move {
+            let work = tokio::task::spawn(async {
                 loop {
                     // Doing some very important work here
-                    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
                 }
             });
 
-            tokio::select! {
-                _ = handle => {
-                    println!("Important work finished");
-                }
-                _ = shutdown.recv() => {
-                    println!("Received shutdown signal");
-                }
-            };
+            done_or_shutdown(work, signal).await;
 
-            // Some "work" we have to do before we can actually close this service
-            tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
-            println!("Done ..!");
+            // Some "tidying" we have to do before we can actually close this service
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
         });
 
         manager.shutdown().await;
