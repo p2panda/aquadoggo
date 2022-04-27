@@ -424,8 +424,12 @@ mod tests {
     use std::str::FromStr;
 
     use p2panda_rs::document::DocumentId;
+    use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::Author;
-    use p2panda_rs::operation::{Operation, OperationFields, OperationId, OperationValue};
+    use p2panda_rs::operation::{
+        Operation, OperationFields, OperationId, OperationValue, PinnedRelation,
+        PinnedRelationList, Relation, RelationList,
+    };
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::test_utils::constants::{DEFAULT_HASH, TEST_SCHEMA_ID};
 
@@ -445,9 +449,61 @@ mod tests {
 
         let mut fields = OperationFields::new();
         fields
+            .add("username", OperationValue::Text("bubu".to_owned()))
+            .unwrap();
+
+        fields.add("height", OperationValue::Float(3.5)).unwrap();
+
+        fields.add("age", OperationValue::Integer(28)).unwrap();
+
+        fields
+            .add("is_admin", OperationValue::Boolean(false))
+            .unwrap();
+
+        fields
             .add(
-                "venue_name",
-                OperationValue::Text("Shirokuma Cafe".to_string()),
+                "profile_picture",
+                OperationValue::Relation(Relation::new(DEFAULT_HASH.parse().unwrap())),
+            )
+            .unwrap();
+        fields
+            .add(
+                "special_profile_picture",
+                OperationValue::PinnedRelation(PinnedRelation::new(DEFAULT_HASH.parse().unwrap())),
+            )
+            .unwrap();
+        fields
+            .add(
+                "many_profile_pictures",
+                OperationValue::RelationList(RelationList::new(vec![
+                    Hash::new(
+                        "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    )
+                    .unwrap()
+                    .into(),
+                    Hash::new(
+                        "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    )
+                    .unwrap()
+                    .into(),
+                ])),
+            )
+            .unwrap();
+        fields
+            .add(
+                "many_special_profile_pictures",
+                OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
+                    Hash::new(
+                        "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    )
+                    .unwrap()
+                    .into(),
+                    Hash::new(
+                        "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    )
+                    .unwrap()
+                    .into(),
+                ])),
             )
             .unwrap();
         let operation =
@@ -468,6 +524,9 @@ mod tests {
             .await
             .unwrap();
 
-        println!("{:#?}", result);
+        let (operation_row, previous_operation_relation_rows, field_rows) = result;
+        assert!(operation_row.is_some());
+        assert_eq!(previous_operation_relation_rows.len(), 0);
+        assert_eq!(field_rows.len(), 10);
     }
 }
