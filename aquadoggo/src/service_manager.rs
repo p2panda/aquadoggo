@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+//! Service manager for orchestration of long-running concurrent processes.
+//!
+//! This manager offers a message bus between services for cross-service communication. It also
+//! sends a shutdown signal to allow services to react to it gracefully.
 use std::future::Future;
 use std::sync::Arc;
 
@@ -25,6 +29,11 @@ impl<D: Send + Sync + 'static> Clone for Context<D> {
     }
 }
 
+/// This trait defines a generic async service function receiving a shared context and access to
+/// the communication bus and shutdown signal handler.
+///
+/// It is also using the `async_trait` macro as a trick to avoid a more ugly trait signature as
+/// working with generic, static, pinned and boxed async functions can look quite messy.
 #[async_trait::async_trait]
 pub trait Service<D, M>
 where
@@ -34,14 +43,24 @@ where
     async fn call(&self, context: Context<D>, shutdown: Shutdown, tx: Sender<M>);
 }
 
+/// Implements our `Service` trait for a generic async function.
 #[async_trait::async_trait]
 impl<FN, F, D, M> Service<D, M> for FN
 where
+    // Function accepting a context and our communication channels, returning a future.
     FN: Fn(Context<D>, Shutdown, Sender<M>) -> F + Sync,
+    // A future
     F: Future<Output = ()> + Send + 'static,
+    // Generic context type.
     D: Send + Sync + 'static,
+    // Generic message type for the communication bus.
     M: Clone + Send + Sync + 'static,
 {
+    /// Internal method which calls our generic async function, passing in the context and channels
+    /// for communication.
+    ///
+    /// This gets automatically wrapped in a static, boxed and pinned function signature by the
+    /// `async_trait` macro so we don't need to do it ourselves.
     async fn call(&self, context: Context<D>, shutdown: Shutdown, tx: Sender<M>) {
         (self)(context, shutdown, tx).await
     }
@@ -52,9 +71,21 @@ where
     D: Send + Sync + 'static,
     M: Clone + Send + Sync + 'static,
 {
+    /// Shared, thread-safe context between services.
     context: Context<D>,
+
+    /// List of all currently running services.
     services: Vec<JoinHandle<()>>,
+
+    /// Sender of our communication bus.
+    ///
+    /// This is a broadcast channel where any amount of senders and receivers can be derived from.
     tx: Sender<M>,
+
+    /// Sender of the shutdown signal.
+    ///
+    /// All services can subscribe to this broadcast channel and accordingly react to it if they
+    /// need to.
     shutdown: broadcast::Sender<bool>,
 }
 
@@ -63,6 +94,10 @@ where
     D: Send + Sync + 'static,
     M: Clone + Send + Sync + 'static,
 {
+    /// Returns a new instance of a service manager.
+    ///
+    /// The capacity argument defines the maximum bound of messages on the communication bus which
+    /// get broadcasted across all services.
     pub fn new(capacity: usize, context: D) -> Self {
         let (tx, _) = broadcast::channel(capacity);
         let (shutdown, _) = broadcast::channel(16);
@@ -75,6 +110,7 @@ where
         }
     }
 
+    /// Adds a new service to the manager.
     pub fn add<F: Service<D, M> + Send + Sync + Copy + 'static>(&mut self, service: F) {
         // Sender for communication bus
         let tx = self.tx.clone();
@@ -96,6 +132,7 @@ where
         });
     }
 
+    /// Informs all services about graceful shutdown and waits for them until they all stopped.
     pub async fn shutdown(self) {
         let mut rx = self.shutdown.subscribe();
 
