@@ -21,7 +21,7 @@ const DEFAULT_SQLITE_NAME: &str = "aquadoggo-node.sqlite3";
 /// When no custom directory path is set it reads the process environment $XDG_DATA_HOME variable
 /// to determine the XDG data directory path which is $HOME/.local/share/aquadoggo on Linux by
 /// default.
-#[derive(Deserialize, Debug)]
+#[derive(Clone, Deserialize, Debug)]
 #[serde(default)]
 pub struct Configuration {
     /// Path to data directory.

@@ -5,7 +5,7 @@ use anyhow::Result;
 use crate::config::Configuration;
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
 use crate::server::{start_server, ApiState};
-use crate::task::TaskManager;
+use crate::service_manager::ServiceManager;
 
 /// Makes sure database is created and migrated before returning connection pool.
 async fn initialize_db(config: &Configuration) -> Result<Pool> {
@@ -32,30 +32,27 @@ async fn initialize_db(config: &Configuration) -> Result<Pool> {
 #[allow(missing_debug_implementations)]
 pub struct Runtime {
     pool: Pool,
-    task_manager: TaskManager,
+    manager: ServiceManager<ApiState, usize>,
 }
 
 impl Runtime {
     /// Start p2panda node with your configuration. This method can be used to run the node within
     /// other applications.
     pub async fn start(config: Configuration) -> Self {
-        let mut task_manager = TaskManager::new();
-
         // Initialize database and get connection pool
         let pool = initialize_db(&config)
             .await
             .expect("Could not initialize database");
 
         // Initialize API state with shared connection pool
-        let api_state = ApiState::new(pool.clone());
+        let api_state = ApiState::new(pool.clone(), config);
+
+        let mut manager = ServiceManager::<ApiState, usize>::new(1024, api_state);
 
         // Start JSON RPC API server
-        task_manager.spawn("API Server", async move {
-            start_server(&config, api_state).await?;
-            Ok(())
-        });
+        manager.add(start_server);
 
-        Self { pool, task_manager }
+        Self { pool, manager }
     }
 
     /// Close all running concurrent tasks and wait until they are fully shut down.
@@ -64,6 +61,6 @@ impl Runtime {
         self.pool.close().await;
 
         // Wait until all tasks are shut down
-        self.task_manager.shutdown().await;
+        self.manager.shutdown().await;
     }
 }
