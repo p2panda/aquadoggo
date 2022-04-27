@@ -1,64 +1,93 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::future::Future;
+use std::sync::Arc;
 
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::task;
 use tokio::task::JoinHandle;
 
-pub type Sender = broadcast::Sender<Message>;
+pub type Sender<T> = broadcast::Sender<T>;
 pub type Shutdown = broadcast::Receiver<bool>;
 
-#[async_trait::async_trait]
-pub trait Service {
-    async fn call(&self, shutdown: Shutdown, tx: Sender);
-}
+pub struct Context<D: Send + Sync + 'static>(Arc<D>);
 
-#[async_trait::async_trait]
-impl<FN, F> Service for FN
-where
-    FN: Fn(Shutdown, Sender) -> F + Sync,
-    F: Future<Output = ()> + Send + 'static,
-{
-    async fn call(&self, shutdown: Shutdown, tx: Sender) {
-        (self)(shutdown, tx).await
+impl<D: Send + Sync + 'static> Clone for Context<D> {
+    /// This `clone` implementation efficiently increments the reference counter to the inner
+    /// object instead of actually cloning it.
+    fn clone(&self) -> Self {
+        Self(Arc::clone(&self.0))
     }
 }
 
-#[derive(Clone, Debug)]
-pub enum Message {
-    GracefulShutdown,
+#[async_trait::async_trait]
+pub trait Service<D, T>
+where
+    D: Send + Sync + 'static,
+    T: Clone + Send + Sync + 'static,
+{
+    async fn call(&self, context: Context<D>, shutdown: Shutdown, tx: Sender<T>);
 }
 
-pub struct ServiceManager {
-    services: Vec<task::JoinHandle<()>>,
-    tx: Sender,
+#[async_trait::async_trait]
+impl<FN, F, D, T> Service<D, T> for FN
+where
+    FN: Fn(Context<D>, Shutdown, Sender<T>) -> F + Sync,
+    F: Future<Output = ()> + Send + 'static,
+    D: Send + Sync + 'static,
+    T: Clone + Send + Sync + 'static,
+{
+    async fn call(&self, context: Context<D>, shutdown: Shutdown, tx: Sender<T>) {
+        (self)(context, shutdown, tx).await
+    }
+}
+
+pub struct ServiceManager<D, T>
+where
+    D: Send + Sync + 'static,
+    T: Send + Sync + 'static,
+{
+    context: Context<D>,
+    services: Vec<JoinHandle<()>>,
+    tx: Sender<T>,
     shutdown: broadcast::Sender<bool>,
 }
 
-impl ServiceManager {
-    pub fn new(capacity: usize) -> Self {
+impl<D, T> ServiceManager<D, T>
+where
+    D: Send + Sync + 'static,
+    T: Clone + Send + Sync + 'static,
+{
+    pub fn new(capacity: usize, context: D) -> Self {
         let (tx, _) = broadcast::channel(capacity);
         let (shutdown, _) = broadcast::channel(16);
 
         Self {
+            context: Context(Arc::new(context)),
             services: Vec::new(),
             tx,
             shutdown,
         }
     }
 
-    pub fn add<F: Service + Send + Sync + Copy + 'static>(&mut self, service: F) {
+    pub fn add<F: Service<D, T> + Send + Sync + Copy + 'static>(&mut self, service: F) {
+        // Sender for communication bus
         let tx = self.tx.clone();
+
+        // Sender and receiver for shutdown channel
         let shutdown_tx = self.shutdown.clone();
         let shutdown_rx = shutdown_tx.subscribe();
 
+        // Reference to shared context
+        let context = self.context.clone();
+
         task::spawn(async move {
             // Run the service!
-            service.call(shutdown_rx, tx).await;
+            service.call(context, shutdown_rx, tx).await;
 
-            // Drop the sender of this service when we're done
+            // Drop the shutdown sender of this service when we're done, this signals the shutdown
+            // process that this service has finally stopped
             drop(shutdown_tx);
         });
     }
@@ -85,38 +114,72 @@ impl ServiceManager {
     }
 }
 
-pub async fn done_or_shutdown<T>(handle: JoinHandle<T>, mut shutdown: Shutdown) {
-    tokio::select! {
-        _ = handle => {
-            // Service work finished
-        }
-        _ = shutdown.recv() => {
-            // Received shutdown signal
-        }
-    };
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{done_or_shutdown, ServiceManager, Shutdown};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    use super::{Context, Sender, ServiceManager, Shutdown};
 
     #[tokio::test]
     async fn service_manager() {
-        let mut manager = ServiceManager::new(1024);
+        let mut manager = ServiceManager::<usize, usize>::new(16, 0);
 
-        manager.add(|signal: Shutdown, _| async move {
+        manager.add(|_, mut signal: Shutdown, _| async move {
             let work = tokio::task::spawn(async {
                 loop {
-                    // Doing some very important work here
+                    // Doing some very important work here ..
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                 }
             });
 
-            done_or_shutdown(work, signal).await;
+            // Stop when we received shutdown signal or when work was done
+            tokio::select! { _ = work => (), _ = signal.recv() => () };
 
             // Some "tidying" we have to do before we can actually close this service
             tokio::time::sleep(std::time::Duration::from_millis(250)).await;
         });
 
         manager.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn communication_bus() {
+        // Messages we can send through the communication bus
+        #[derive(Clone, Debug)]
+        enum Message {
+            Hello,
+        }
+
+        // Counter which is shared between services
+        type Counter = Arc<AtomicUsize>;
+        let counter: Counter = Arc::new(AtomicUsize::new(0));
+
+        let mut manager = ServiceManager::<Counter, Message>::new(32, counter.clone());
+
+        // Create five services waiting for message
+        for _ in 0..5 {
+            manager.add(
+                |data: Context<Counter>, _, tx: Sender<Message>| async move {
+                    let mut rx = tx.subscribe();
+                    let message = rx.recv().await.unwrap();
+
+                    // Increment counter as soon as we received the right message
+                    if matches!(message, Message::Hello) {
+                        data.0.fetch_add(1, Ordering::Relaxed);
+                    }
+                },
+            );
+        }
+
+        // Create another service sending message over communication bus
+        manager.add(|_, _, tx: Sender<Message>| async move {
+            tx.send(Message::Hello).unwrap();
+        });
+
+        manager.shutdown().await;
+
+        // Check if we received the message in all services
+        assert_eq!(counter.load(Ordering::Relaxed), 5);
     }
 }
