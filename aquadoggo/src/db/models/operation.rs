@@ -105,7 +105,6 @@ pub trait OperationStore<StorageOperation: AsStorageOperation> {
 
 #[derive(Debug, Clone)]
 pub struct DoggoOperation {
-    // We don't need all these fields, we could just store the encoded operation, author, and document_id for example
     author: Author,
     document_id: DocumentId,
     id: OperationId,
