@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use async_trait::async_trait;
 use futures::future::try_join_all;
-use serde::{Serialize, Serializer};
 use sqlx::{query, query_as, FromRow};
 
 use p2panda_rs::document::{DocumentId, DocumentViewId};
@@ -10,7 +9,7 @@ use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{
     AsOperation, Operation, OperationAction, OperationEncoded, OperationFields, OperationId,
 };
-use p2panda_rs::schema::{FieldType, SchemaId};
+use p2panda_rs::schema::SchemaId;
 use p2panda_rs::Validate;
 
 use crate::db::store::SqlStorage;
@@ -154,7 +153,7 @@ impl AsStorageOperation for DoggoOperation {
     type AsStorageOperationError = OperationStorageError;
 
     fn action(&self) -> OperationAction {
-        self.action.clone()
+        self.action
     }
 
     fn author(&self) -> Author {
