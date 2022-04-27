@@ -5,7 +5,7 @@
 //! This manager offers a message bus between services for cross-service communication. It also
 //! sends a shutdown signal to allow services to react to it gracefully.
 use std::future::Future;
-use std::sync::Arc;
+use std::ops::Deref;
 
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::error::RecvError;
@@ -19,13 +19,14 @@ pub type Sender<T> = broadcast::Sender<T>;
 pub type Shutdown = JoinHandle<()>;
 
 /// Data shared across services, for example a database.
-pub struct Context<D: Send + Sync + 'static>(Arc<D>);
+#[derive(Debug, Clone, Copy)]
+pub struct Context<D: Clone + Send + Sync + 'static>(pub D);
 
-impl<D: Send + Sync + 'static> Clone for Context<D> {
-    /// This `clone` implementation efficiently increments the reference counter to the inner
-    /// object instead of actually cloning it.
-    fn clone(&self) -> Self {
-        Self(Arc::clone(&self.0))
+impl<D: Clone + Send + Sync + 'static> Deref for Context<D> {
+    type Target = D;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
@@ -37,7 +38,7 @@ impl<D: Send + Sync + 'static> Clone for Context<D> {
 #[async_trait::async_trait]
 pub trait Service<D, M>
 where
-    D: Send + Sync + 'static,
+    D: Clone + Send + Sync + 'static,
     M: Clone + Send + Sync + 'static,
 {
     async fn call(&self, context: Context<D>, shutdown: Shutdown, tx: Sender<M>);
@@ -52,7 +53,7 @@ where
     // A future
     F: Future<Output = ()> + Send + 'static,
     // Generic context type.
-    D: Send + Sync + 'static,
+    D: Clone + Send + Sync + 'static,
     // Generic message type for the communication bus.
     M: Clone + Send + Sync + 'static,
 {
@@ -68,7 +69,7 @@ where
 
 pub struct ServiceManager<D, M>
 where
-    D: Send + Sync + 'static,
+    D: Clone + Send + Sync + 'static,
     M: Clone + Send + Sync + 'static,
 {
     /// Shared, thread-safe context between services.
@@ -88,7 +89,7 @@ where
 
 impl<D, M> ServiceManager<D, M>
 where
-    D: Send + Sync + 'static,
+    D: Clone + Send + Sync + 'static,
     M: Clone + Send + Sync + 'static,
 {
     /// Returns a new instance of a service manager.
@@ -100,7 +101,7 @@ where
         let (shutdown, _) = broadcast::channel(16);
 
         Self {
-            context: Context(Arc::new(context)),
+            context: Context(context),
             tx,
             shutdown,
         }
@@ -202,13 +203,13 @@ mod tests {
         // Create five services waiting for message
         for _ in 0..5 {
             manager.add(
-                |data: Context<Counter>, _, tx: Sender<Message>| async move {
+                |Context(data): Context<Counter>, _, tx: Sender<Message>| async move {
                     let mut rx = tx.subscribe();
                     let message = rx.recv().await.unwrap();
 
                     // Increment counter as soon as we received the right message
                     if matches!(message, Message::Hello) {
-                        data.0.fetch_add(1, Ordering::Relaxed);
+                        data.fetch_add(1, Ordering::Relaxed);
                     }
                 },
             );
