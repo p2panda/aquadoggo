@@ -8,9 +8,13 @@ use tokio::sync::broadcast::error::RecvError;
 use tokio::task;
 use tokio::task::JoinHandle;
 
+/// Sends messages through the communication bus between services.
 pub type Sender<T> = broadcast::Sender<T>;
+
+/// Receives shutdown signal for services so they can react accordingly.
 pub type Shutdown = broadcast::Receiver<bool>;
 
+/// Data shared across services, for example a database.
 pub struct Context<D: Send + Sync + 'static>(Arc<D>);
 
 impl<D: Send + Sync + 'static> Clone for Context<D> {
@@ -22,42 +26,42 @@ impl<D: Send + Sync + 'static> Clone for Context<D> {
 }
 
 #[async_trait::async_trait]
-pub trait Service<D, T>
+pub trait Service<D, M>
 where
     D: Send + Sync + 'static,
-    T: Clone + Send + Sync + 'static,
+    M: Clone + Send + Sync + 'static,
 {
-    async fn call(&self, context: Context<D>, shutdown: Shutdown, tx: Sender<T>);
+    async fn call(&self, context: Context<D>, shutdown: Shutdown, tx: Sender<M>);
 }
 
 #[async_trait::async_trait]
-impl<FN, F, D, T> Service<D, T> for FN
+impl<FN, F, D, M> Service<D, M> for FN
 where
-    FN: Fn(Context<D>, Shutdown, Sender<T>) -> F + Sync,
+    FN: Fn(Context<D>, Shutdown, Sender<M>) -> F + Sync,
     F: Future<Output = ()> + Send + 'static,
     D: Send + Sync + 'static,
-    T: Clone + Send + Sync + 'static,
+    M: Clone + Send + Sync + 'static,
 {
-    async fn call(&self, context: Context<D>, shutdown: Shutdown, tx: Sender<T>) {
+    async fn call(&self, context: Context<D>, shutdown: Shutdown, tx: Sender<M>) {
         (self)(context, shutdown, tx).await
     }
 }
 
-pub struct ServiceManager<D, T>
+pub struct ServiceManager<D, M>
 where
     D: Send + Sync + 'static,
-    T: Send + Sync + 'static,
+    M: Clone + Send + Sync + 'static,
 {
     context: Context<D>,
     services: Vec<JoinHandle<()>>,
-    tx: Sender<T>,
+    tx: Sender<M>,
     shutdown: broadcast::Sender<bool>,
 }
 
-impl<D, T> ServiceManager<D, T>
+impl<D, M> ServiceManager<D, M>
 where
     D: Send + Sync + 'static,
-    T: Clone + Send + Sync + 'static,
+    M: Clone + Send + Sync + 'static,
 {
     pub fn new(capacity: usize, context: D) -> Self {
         let (tx, _) = broadcast::channel(capacity);
@@ -71,7 +75,7 @@ where
         }
     }
 
-    pub fn add<F: Service<D, T> + Send + Sync + Copy + 'static>(&mut self, service: F) {
+    pub fn add<F: Service<D, M> + Send + Sync + Copy + 'static>(&mut self, service: F) {
         // Sender for communication bus
         let tx = self.tx.clone();
 
