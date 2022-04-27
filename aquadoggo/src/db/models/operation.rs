@@ -10,6 +10,7 @@ use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{
     AsOperation, Operation, OperationAction, OperationEncoded, OperationFields, OperationId,
+    OperationValue,
 };
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::Validate;
@@ -251,9 +252,52 @@ impl OperationStore<DoggoOperation> for SqlStorage {
 
         let mut fields_inserted = true;
         if let Some(fields) = operation.fields() {
-            fields_inserted = try_join_all(fields.iter().map(|(name, value)| {
-                query(
-                    "
+            fields_inserted = try_join_all(fields.iter().flat_map(|(name, value)| {
+                let field_type = value.field_type();
+                let values = match value {
+                    OperationValue::Boolean(bool) => vec![(Some(bool.to_string()), None, None)],
+                    OperationValue::Integer(int) => vec![(Some(int.to_string()), None, None)],
+                    OperationValue::Float(float) => vec![(Some(float.to_string()), None, None)],
+                    OperationValue::Text(str) => vec![(Some(str.to_string()), None, None)],
+                    OperationValue::Relation(relation) => {
+                        vec![(
+                            None,
+                            Some(relation.document_id().as_str().to_string()),
+                            None,
+                        )]
+                    }
+                    OperationValue::RelationList(relation_list) => {
+                        let mut values = Vec::new();
+                        for document_id in relation_list.iter() {
+                            values.push((None, Some(document_id.as_str().to_string()), None))
+                        }
+                        values
+                    }
+                    OperationValue::PinnedRelation(pinned_relation) => {
+                        vec![(
+                            None,
+                            None,
+                            Some(pinned_relation.view_id().hash().as_str().to_string()),
+                        )]
+                    }
+                    OperationValue::PinnedRelationList(pinned_relation_list) => {
+                        let mut values = Vec::new();
+                        for document_view_id in pinned_relation_list.iter() {
+                            values.push((
+                                None,
+                                None,
+                                Some(document_view_id.hash().as_str().to_string()),
+                            ))
+                        }
+                        values
+                    }
+                };
+
+                values
+                    .into_iter()
+                    .map(|(value, relation, pinned_relation)| {
+                        query(
+                            "
                     INSERT INTO
                         operation_fields_v1 (
                             operation_id,
@@ -266,20 +310,17 @@ impl OperationStore<DoggoOperation> for SqlStorage {
                     VALUES
                         ($1, $2, $3, $4, $5, $6)
                 ",
-                )
-                .bind(operation.id().as_str().to_owned())
-                .bind(name.to_owned())
-                .bind(value.field_type())
-                // Storing the whole encoded operation until solution for storing values is known
-                .bind(
-                    OperationEncoded::try_from(&operation.operation)
-                        .unwrap()
-                        .as_str()
-                        .to_string(),
-                )
-                .bind(operation.document_id().as_str().to_owned())
-                .bind(operation.document_view_id_hash().as_str().to_owned())
-                .execute(&self.pool)
+                        )
+                        .bind(operation.id().as_str().to_owned())
+                        .bind(name.to_owned())
+                        .bind(field_type.to_string())
+                        // Storing the whole encoded operation until solution for storing values is known
+                        .bind(value)
+                        .bind(relation)
+                        .bind(pinned_relation)
+                        .execute(&self.pool)
+                    })
+                    .collect::<Vec<_>>()
             }))
             .await
             .map_err(|e| OperationStorageError::Custom(e.to_string()))? // Coerce error here
