@@ -23,9 +23,12 @@ async fn main() {
     // Start p2panda node in async runtime
     let node = Runtime::start(config).await;
 
-    // Run this until [CTRL] + [C] got pressed
-    tokio::signal::ctrl_c().await.unwrap();
+    // Run this until [CTRL] + [C] got pressed or something went wrong
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => (),
+        _ = node.on_exit() => (),
+    }
 
     // Wait until all tasks are gracefully shut down and exit
-    node.shutdown().await
+    node.shutdown().await;
 }

@@ -2,6 +2,7 @@
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
+use anyhow::Result;
 use axum::extract::Extension;
 use axum::http::Method;
 use axum::routing::get;
@@ -39,19 +40,18 @@ pub fn build_server(context: Context) -> Router {
 }
 
 /// Start HTTP server.
-pub async fn http_service(context: Context, signal: Shutdown, _tx: ServiceSender) {
+pub async fn http_service(context: Context, signal: Shutdown, _tx: ServiceSender) -> Result<()> {
     let http_port = context.config.http_port;
     let http_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), http_port);
-    let server = build_server(context);
 
-    axum::Server::bind(&http_address)
-        .serve(server.into_make_service())
+    axum::Server::try_bind(&http_address)?
+        .serve(build_server(context).into_make_service())
         .with_graceful_shutdown(async {
             signal.await.ok();
         })
-        .await
-        // @TODO: Do not panic here
-        .unwrap();
+        .await?;
+
+    Ok(())
 }
 
 #[cfg(test)]

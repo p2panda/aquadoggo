@@ -51,9 +51,17 @@ impl Runtime {
         let mut manager = ServiceManager::<Context, ServiceMessage>::new(1024, context);
 
         // Start HTTP server with GraphQL API
-        manager.add(http_service);
+        manager.add("http", http_service);
 
         Self { pool, manager }
+    }
+
+    /// This future resolves when at least one system service stopped.
+    ///
+    /// It can be used to exit the application as a stopped service usually means that something
+    /// went wrong.
+    pub async fn on_exit(&self) {
+        self.manager.on_exit().await;
     }
 
     /// Close all running concurrent tasks and wait until they are fully shut down.
