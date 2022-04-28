@@ -16,36 +16,60 @@ use p2panda_rs::Validate;
 
 use crate::db::store::SqlStorage;
 
-/////// DB ROWS ///////
-// Structs representing data as it is stored in rows in the db
+/// A struct representing a single operation row as it is inserted in the database.
 #[derive(FromRow, Debug)]
 pub struct OperationRow {
+    /// The id of this operation.
     operation_id: String,
+
+    /// The author of this operation.
     author: String,
+
+    /// The action type this operation is performing.
     action: String,
+
+    /// The hash of the entry this operation is associated with.
     entry_hash: String,
+
+    /// The id of the schema this operation follows.
     schema_id_short: String,
 }
 
+/// A struct representing a single previous operation relation row as it is inserted in the database.
 #[derive(FromRow, Debug)]
 pub struct PreviousOperationRelationRow {
+    /// The parent in this operation relation. This is the operation
+    /// being appended to, it lies nearer the root in a graph structure.
     parent_operation_id: String,
+
+    /// The child in this operation relation. This is the operation
+    /// which has a depenency on the parent, it lies nearer the tip/leaves
+    /// in a graph structure.
     child_operation_id: String,
 }
 
+/// A struct representing a single operation field row as it is inserted in the database.
 #[derive(FromRow, Debug)]
 pub struct OperationFieldRow {
+    /// The id of the operation this field was published on.
     operation_id: String,
+
+    /// The name of this field.
     name: String,
+
+    /// The type of this field.
     field_type: String,
+
+    /// The actual value contained in this field.
     value: String,
+
+    /// The index of this value if it is a list item.
     list_index: i64,
 }
 
+type PreviousOperations = Vec<OperationId>;
 type DocumentViewIdHash = Hash;
 type SchemaIdShort = String;
-
-////// OPERATION STORAGE TRAITS ///////
 
 pub trait AsStorageOperation: Sized + Clone + Send + Sync + Validate {
     /// The error type returned by this traits' methods.
@@ -75,8 +99,6 @@ pub enum OperationStorageError {
     #[error("Ahhhhh!!!!: {0}")]
     Custom(String),
 }
-
-type PreviousOperations = Vec<OperationId>;
 
 #[async_trait]
 pub trait OperationStore<StorageOperation: AsStorageOperation> {
