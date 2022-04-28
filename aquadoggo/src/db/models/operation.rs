@@ -60,7 +60,7 @@ pub struct OperationFieldRow {
     value: String,
 
     /// The index of this value if it is a list item.
-    list_index: i64,
+    list_index: Option<i64>,
 }
 
 type PreviousOperations = Vec<OperationId>;
@@ -218,14 +218,14 @@ impl OperationStore<DoggoOperation> for SqlStorage {
             try_join_all(operation.previous_operations().iter().map(|prev_op_id| {
                 query(
                     "
-            INSERT INTO
-                previous_operations_v1 (
-                    parent_operation_id,
-                    child_operation_id
-                 )
-            VALUES
-                ($1, $2)
-            ",
+                    INSERT INTO
+                        previous_operations_v1 (
+                            parent_operation_id,
+                            child_operation_id
+                        )
+                    VALUES
+                        ($1, $2)
+                    ",
                 )
                 .bind(prev_op_id.as_str())
                 .bind(operation.id().as_str().to_owned())
@@ -284,35 +284,44 @@ impl OperationStore<DoggoOperation> for SqlStorage {
                     }
                 };
 
-                let mut index = 0;
+                // Optional index for if we are dealing with list items.
+                let mut index: Option<i64> = None;
 
                 values
                     .into_iter()
                     .map(|value| {
-                        let query = query(
+                        // Instantiate the list index if this is a pinned_relation_list or
+                        // relation_list field, if it is already instantiated, increment it
+                        index = match index {
+                            Some(index) => Some(index + 1),
+                            None if field_type == "pinned_relation_list"
+                                || field_type == "relation_list" =>
+                            {
+                                Some(0)
+                            }
+                            None => None,
+                        };
+
+                        query(
                             "
-                    INSERT INTO
-                        operation_fields_v1 (
-                            operation_id,
-                            name,
-                            field_type,
-                            value,
-                            list_index
-                        )
-                    VALUES
-                        ($1, $2, $3, $4, $5)
-                ",
+                                INSERT INTO
+                                    operation_fields_v1 (
+                                        operation_id,
+                                        name,
+                                        field_type,
+                                        value,
+                                        list_index
+                                    )
+                                VALUES
+                                    ($1, $2, $3, $4, $5)
+                            ",
                         )
                         .bind(operation.id().as_str().to_owned())
                         .bind(name.to_owned())
                         .bind(field_type.to_string())
                         .bind(value)
                         .bind(index)
-                        .execute(&self.pool);
-
-                        index += 1;
-
-                        query
+                        .execute(&self.pool)
                     })
                     .collect::<Vec<_>>()
             }))
@@ -510,8 +519,14 @@ mod tests {
             .unwrap();
 
         let (operation_row, previous_operation_relation_rows, field_rows) = result;
+
         assert!(operation_row.is_some());
         assert_eq!(previous_operation_relation_rows.len(), 0);
         assert_eq!(field_rows.len(), 10);
+
+        println!(
+            "{:#?}",
+            (operation_row, previous_operation_relation_rows, field_rows)
+        );
     }
 }
