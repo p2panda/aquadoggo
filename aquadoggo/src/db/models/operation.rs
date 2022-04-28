@@ -183,12 +183,15 @@ impl OperationStore<DoggoOperation> for SqlStorage {
         &self,
         operation: &DoggoOperation,
     ) -> Result<bool, OperationStorageError> {
-        // We need `as_str()` for OperationAction
+        // Convert the action to a string.
         let action = match operation.action() {
             OperationAction::Create => "create",
             OperationAction::Update => "update",
             OperationAction::Delete => "delete",
         };
+
+        // Consruct query for inserting operation row, execute it
+        // and check exactly one row was affected.
         let operation_inserted = query(
             "
             INSERT INTO
@@ -214,6 +217,9 @@ impl OperationStore<DoggoOperation> for SqlStorage {
         .rows_affected()
             == 1;
 
+        // Loop over all previous operations and insert one row for
+        // each, construct and execute the queries, return their futures
+        // and execute all of them with `try_join_all()`.
         let previous_operations_inserted =
             try_join_all(operation.previous_operations().iter().map(|prev_op_id| {
                 query(
@@ -232,8 +238,10 @@ impl OperationStore<DoggoOperation> for SqlStorage {
                 .execute(&self.pool)
             }))
             .await
-            .map_err(|e| OperationStorageError::Custom(e.to_string()))? // Coerce error here
+            // If any of the queries error we will catch that here.
+            .map_err(|e| OperationStorageError::Custom(e.to_string()))?
             .iter()
+            // Here we check that each query inserted exactly one row.
             .try_for_each(|result| {
                 if result.rows_affected() == 1 {
                     Ok(())
@@ -246,10 +254,10 @@ impl OperationStore<DoggoOperation> for SqlStorage {
             })
             .is_ok();
 
+        // Same pattern as above, construct and execute the queries, return their futures
+        // and execute all of them with `try_join_all()`.
         let mut fields_inserted = true;
         if let Some(fields) = operation.fields() {
-            // Iterate over all fields in this operation. The queries are composed and then their futures returned
-            // to be collected in a single `TryJoinAll` and then executed.
             fields_inserted = try_join_all(fields.iter().flat_map(|(name, value)| {
                 // Extract the field type.
                 let field_type = value.field_type();
@@ -257,7 +265,7 @@ impl OperationStore<DoggoOperation> for SqlStorage {
                 // If the value is a relation_list or pinned_relation_list we need to insert a new field row for
                 // every item in the list. Here we collect these items and return them in a vector. If this operation
                 // value is anything except for the above list types, we will return a vec containing a single item.
-                let values = match value {
+                let db_values = match value {
                     OperationValue::Boolean(bool) => vec![Some(bool.to_string())],
                     OperationValue::Integer(int) => vec![Some(int.to_string())],
                     OperationValue::Float(float) => vec![Some(float.to_string())],
@@ -266,30 +274,31 @@ impl OperationStore<DoggoOperation> for SqlStorage {
                         vec![Some(relation.document_id().as_str().to_string())]
                     }
                     OperationValue::RelationList(relation_list) => {
-                        let mut values = Vec::new();
+                        let mut db_values = Vec::new();
                         for document_id in relation_list.iter() {
-                            values.push(Some(document_id.as_str().to_string()))
+                            db_values.push(Some(document_id.as_str().to_string()))
                         }
-                        values
+                        db_values
                     }
                     OperationValue::PinnedRelation(pinned_relation) => {
                         vec![Some(pinned_relation.view_id().hash().as_str().to_string())]
                     }
                     OperationValue::PinnedRelationList(pinned_relation_list) => {
-                        let mut values = Vec::new();
+                        let mut db_values = Vec::new();
                         for document_view_id in pinned_relation_list.iter() {
-                            values.push(Some(document_view_id.hash().as_str().to_string()))
+                            db_values.push(Some(document_view_id.hash().as_str().to_string()))
                         }
-                        values
+                        db_values
                     }
                 };
 
                 // Optional index for if we are dealing with list items.
                 let mut index: Option<i64> = None;
 
-                values
+                // Collect all query futures.
+                db_values
                     .into_iter()
-                    .map(|value| {
+                    .map(|db_value| {
                         // Instantiate the list index if this is a pinned_relation_list or
                         // relation_list field, if it is already instantiated, increment it
                         index = match index {
@@ -302,6 +311,7 @@ impl OperationStore<DoggoOperation> for SqlStorage {
                             None => None,
                         };
 
+                        // Compose the query and return it's future.
                         query(
                             "
                                 INSERT INTO
@@ -319,15 +329,17 @@ impl OperationStore<DoggoOperation> for SqlStorage {
                         .bind(operation.id().as_str().to_owned())
                         .bind(name.to_owned())
                         .bind(field_type.to_string())
-                        .bind(value)
+                        .bind(db_value)
                         .bind(index)
                         .execute(&self.pool)
                     })
                     .collect::<Vec<_>>()
             }))
             .await
+            // If any queries error, we catch that here.
             .map_err(|e| OperationStorageError::Custom(e.to_string()))? // Coerce error here
             .iter()
+            // All queries should perform exactly one insertion, we check that here.
             .try_for_each(|result| {
                 if result.rows_affected() == 1 {
                     Ok(())
@@ -344,7 +356,7 @@ impl OperationStore<DoggoOperation> for SqlStorage {
         Ok(operation_inserted && previous_operations_inserted && fields_inserted)
     }
 
-    // What do we actually want to get here? Right now, if we want to retrieve a complete operation, it's easier to do it
+    // Which getters do we actually want here? Right now, if we want to retrieve a complete operation, it's easier to do it
     // via `EntryStore` by getting the encoded operation. We may want more atomic getters here for field_type, value, action etc..
     async fn get_operation_by_id(
         &self,
