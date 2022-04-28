@@ -20,7 +20,9 @@ mod graphql;
 mod rpc;
 mod runtime;
 mod server;
+mod service_manager;
 mod task;
+mod worker;
 
 #[cfg(test)]
 mod test_helpers;
