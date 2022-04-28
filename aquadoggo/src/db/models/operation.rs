@@ -1,12 +1,8 @@
-use std::convert::TryFrom;
-
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use async_trait::async_trait;
 use futures::future::try_join_all;
 use sqlx::{query, query_as, FromRow};
 
-use p2panda_rs::document::DocumentViewId;
-use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{
     AsOperation, Operation, OperationAction, OperationFields, OperationId, OperationValue,
@@ -68,7 +64,6 @@ pub struct OperationFieldRow {
 }
 
 type PreviousOperations = Vec<OperationId>;
-type DocumentViewIdHash = Hash;
 type SchemaIdShort = String;
 
 pub trait AsStorageOperation: Sized + Clone + Send + Sync + Validate {
@@ -78,8 +73,6 @@ pub trait AsStorageOperation: Sized + Clone + Send + Sync + Validate {
     fn action(&self) -> OperationAction;
 
     fn author(&self) -> Author;
-
-    fn document_view_id_hash(&self) -> DocumentViewIdHash;
 
     fn fields(&self) -> Option<OperationFields>;
 
@@ -181,10 +174,6 @@ impl AsStorageOperation for DoggoOperation {
 
     fn previous_operations(&self) -> PreviousOperations {
         self.operation.previous_operations().unwrap_or_default()
-    }
-
-    fn document_view_id_hash(&self) -> DocumentViewIdHash {
-        DocumentViewId::from(self.id.as_hash().clone()).hash()
     }
 }
 
