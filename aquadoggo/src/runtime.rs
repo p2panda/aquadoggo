@@ -3,9 +3,11 @@
 use anyhow::Result;
 
 use crate::config::Configuration;
+use crate::context::Context;
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
-use crate::server::{start_server, ApiState};
+use crate::server::http_service;
 use crate::service_manager::ServiceManager;
+use crate::service_message::ServiceMessage;
 
 /// Makes sure database is created and migrated before returning connection pool.
 async fn initialize_db(config: &Configuration) -> Result<Pool> {
@@ -32,7 +34,7 @@ async fn initialize_db(config: &Configuration) -> Result<Pool> {
 #[allow(missing_debug_implementations)]
 pub struct Runtime {
     pool: Pool,
-    manager: ServiceManager<ApiState, usize>,
+    manager: ServiceManager<Context, ServiceMessage>,
 }
 
 impl Runtime {
@@ -44,13 +46,12 @@ impl Runtime {
             .await
             .expect("Could not initialize database");
 
-        // Initialize API state with shared connection pool
-        let api_state = ApiState::new(pool.clone(), config);
+        // Create service manager with shared data between services
+        let context = Context::new(pool.clone(), config);
+        let mut manager = ServiceManager::<Context, ServiceMessage>::new(1024, context);
 
-        let mut manager = ServiceManager::<ApiState, usize>::new(1024, api_state);
-
-        // Start JSON RPC API server
-        manager.add(start_server);
+        // Start HTTP server with GraphQL API
+        manager.add(http_service);
 
         Self { pool, manager }
     }

@@ -5,7 +5,6 @@
 //! This manager offers a message bus between services for cross-service communication. It also
 //! sends a shutdown signal to allow services to react to it gracefully.
 use std::future::Future;
-use std::ops::Deref;
 
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::error::RecvError;
@@ -18,18 +17,6 @@ pub type Sender<T> = broadcast::Sender<T>;
 /// Receives shutdown signal for services so they can react accordingly.
 pub type Shutdown = JoinHandle<()>;
 
-/// Data shared across services, for example a database.
-#[derive(Debug, Clone, Copy)]
-pub struct Context<D: Clone + Send + Sync + 'static>(pub D);
-
-impl<D: Clone + Send + Sync + 'static> Deref for Context<D> {
-    type Target = D;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
 /// This trait defines a generic async service function receiving a shared context and access to
 /// the communication bus and shutdown signal handler.
 ///
@@ -41,7 +28,7 @@ where
     D: Clone + Send + Sync + 'static,
     M: Clone + Send + Sync + 'static,
 {
-    async fn call(&self, context: Context<D>, shutdown: Shutdown, tx: Sender<M>);
+    async fn call(&self, context: D, shutdown: Shutdown, tx: Sender<M>);
 }
 
 /// Implements our `Service` trait for a generic async function.
@@ -49,7 +36,7 @@ where
 impl<FN, F, D, M> Service<D, M> for FN
 where
     // Function accepting a context and our communication channels, returning a future.
-    FN: Fn(Context<D>, Shutdown, Sender<M>) -> F + Sync,
+    FN: Fn(D, Shutdown, Sender<M>) -> F + Sync,
     // A future
     F: Future<Output = ()> + Send + 'static,
     // Generic context type.
@@ -62,7 +49,7 @@ where
     ///
     /// This gets automatically wrapped in a static, boxed and pinned function signature by the
     /// `async_trait` macro so we don't need to do it ourselves.
-    async fn call(&self, context: Context<D>, shutdown: Shutdown, tx: Sender<M>) {
+    async fn call(&self, context: D, shutdown: Shutdown, tx: Sender<M>) {
         (self)(context, shutdown, tx).await
     }
 }
@@ -73,7 +60,7 @@ where
     M: Clone + Send + Sync + 'static,
 {
     /// Shared, thread-safe context between services.
-    context: Context<D>,
+    context: D,
 
     /// Sender of our communication bus.
     ///
@@ -101,7 +88,7 @@ where
         let (shutdown, _) = broadcast::channel(16);
 
         Self {
-            context: Context(context),
+            context,
             tx,
             shutdown,
         }
@@ -162,7 +149,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
 
-    use super::{Context, Sender, ServiceManager, Shutdown};
+    use super::{Sender, ServiceManager, Shutdown};
 
     #[tokio::test]
     async fn service_manager() {
@@ -202,17 +189,15 @@ mod tests {
 
         // Create five services waiting for message
         for _ in 0..5 {
-            manager.add(
-                |Context(data): Context<Counter>, _, tx: Sender<Message>| async move {
-                    let mut rx = tx.subscribe();
-                    let message = rx.recv().await.unwrap();
+            manager.add(|data: Counter, _, tx: Sender<Message>| async move {
+                let mut rx = tx.subscribe();
+                let message = rx.recv().await.unwrap();
 
-                    // Increment counter as soon as we received the right message
-                    if matches!(message, Message::Hello) {
-                        data.fetch_add(1, Ordering::Relaxed);
-                    }
-                },
-            );
+                // Increment counter as soon as we received the right message
+                if matches!(message, Message::Hello) {
+                    data.fetch_add(1, Ordering::Relaxed);
+                }
+            });
         }
 
         // Create another service sending message over communication bus

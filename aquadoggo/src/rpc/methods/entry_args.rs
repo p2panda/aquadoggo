@@ -23,7 +23,8 @@ pub async fn get_entry_args(
 #[cfg(test)]
 mod tests {
     use crate::config::Configuration;
-    use crate::server::{build_server, ApiState};
+    use crate::context::Context;
+    use crate::server::build_server;
     use crate::test_helpers::{
         handle_http, initialize_db, random_entry_hash, rpc_error, rpc_request, rpc_response,
         TestClient,
@@ -33,10 +34,9 @@ mod tests {
 
     #[tokio::test]
     async fn respond_with_wrong_author_error() {
-        let config = Configuration::default();
         let pool = initialize_db().await;
-        let state = ApiState::new(pool, config);
-        let app = build_server(state);
+        let context = Context::new(pool, Configuration::default());
+        let app = build_server(context);
         let client = TestClient::new(app);
 
         let request = rpc_request(
@@ -56,10 +56,9 @@ mod tests {
 
     #[tokio::test]
     async fn get_entry_arguments() {
-        let config = Configuration::default();
         let pool = initialize_db().await;
-        let state = ApiState::new(pool, config);
-        let app = build_server(state);
+        let context = Context::new(pool, Configuration::default());
+        let app = build_server(context);
         let client = TestClient::new(app);
 
         let request = rpc_request(

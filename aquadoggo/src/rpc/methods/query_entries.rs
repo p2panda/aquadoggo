@@ -24,7 +24,8 @@ mod tests {
     use p2panda_rs::schema::SchemaId;
 
     use crate::config::Configuration;
-    use crate::server::{build_server, ApiState};
+    use crate::context::Context;
+    use crate::server::build_server;
     use crate::test_helpers::{handle_http, initialize_db, rpc_request, rpc_response, TestClient};
 
     #[tokio::test]
@@ -33,9 +34,8 @@ mod tests {
         let pool = initialize_db().await;
 
         // Create tide server with endpoints
-        let config = Configuration::default();
-        let state = ApiState::new(pool, config);
-        let app = build_server(state);
+        let context = Context::new(pool, Configuration::default());
+        let app = build_server(context);
         let client = TestClient::new(app);
 
         // Prepare request to API
