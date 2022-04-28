@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Introduce GraphQL endpoint [#81](https://github.com/p2panda/aquadoggo/pull/81)
 - Generic task queue with worker pool [#82](https://github.com/p2panda/aquadoggo/pull/82)
+- Service manager [#90](https://github.com/p2panda/aquadoggo/pull/90)
 
 ### Changed
 
