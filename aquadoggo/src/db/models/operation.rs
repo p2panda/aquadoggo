@@ -5,12 +5,11 @@ use async_trait::async_trait;
 use futures::future::try_join_all;
 use sqlx::{query, query_as, FromRow};
 
-use p2panda_rs::document::{DocumentId, DocumentViewId};
+use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{
-    AsOperation, Operation, OperationAction, OperationEncoded, OperationFields, OperationId,
-    OperationValue,
+    AsOperation, Operation, OperationAction, OperationFields, OperationId, OperationValue,
 };
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::Validate;
@@ -40,8 +39,6 @@ pub struct OperationFieldRow {
     name: String,
     field_type: String,
     value: String,
-    relation_document_id: String,
-    relation_document_view_id_hash: String,
 }
 
 type DocumentViewIdHash = Hash;
@@ -249,39 +246,27 @@ impl OperationStore<DoggoOperation> for SqlStorage {
                 // every item in the list. Here we collect these items and return them in a vector. If this operation
                 // value is anything except for the above list types, we will return a vec containing a single item.
                 let values = match value {
-                    OperationValue::Boolean(bool) => vec![(Some(bool.to_string()), None, None)],
-                    OperationValue::Integer(int) => vec![(Some(int.to_string()), None, None)],
-                    OperationValue::Float(float) => vec![(Some(float.to_string()), None, None)],
-                    OperationValue::Text(str) => vec![(Some(str.to_string()), None, None)],
+                    OperationValue::Boolean(bool) => vec![Some(bool.to_string())],
+                    OperationValue::Integer(int) => vec![Some(int.to_string())],
+                    OperationValue::Float(float) => vec![Some(float.to_string())],
+                    OperationValue::Text(str) => vec![Some(str.to_string())],
                     OperationValue::Relation(relation) => {
-                        vec![(
-                            None,
-                            Some(relation.document_id().as_str().to_string()),
-                            None,
-                        )]
+                        vec![Some(relation.document_id().as_str().to_string())]
                     }
                     OperationValue::RelationList(relation_list) => {
                         let mut values = Vec::new();
                         for document_id in relation_list.iter() {
-                            values.push((None, Some(document_id.as_str().to_string()), None))
+                            values.push(Some(document_id.as_str().to_string()))
                         }
                         values
                     }
                     OperationValue::PinnedRelation(pinned_relation) => {
-                        vec![(
-                            None,
-                            None,
-                            Some(pinned_relation.view_id().hash().as_str().to_string()),
-                        )]
+                        vec![Some(pinned_relation.view_id().hash().as_str().to_string())]
                     }
                     OperationValue::PinnedRelationList(pinned_relation_list) => {
                         let mut values = Vec::new();
                         for document_view_id in pinned_relation_list.iter() {
-                            values.push((
-                                None,
-                                None,
-                                Some(document_view_id.hash().as_str().to_string()),
-                            ))
+                            values.push(Some(document_view_id.hash().as_str().to_string()))
                         }
                         values
                     }
@@ -289,7 +274,7 @@ impl OperationStore<DoggoOperation> for SqlStorage {
 
                 values
                     .into_iter()
-                    .map(|(value, relation, pinned_relation)| {
+                    .map(|value| {
                         query(
                             "
                     INSERT INTO
@@ -297,20 +282,16 @@ impl OperationStore<DoggoOperation> for SqlStorage {
                             operation_id,
                             name,
                             field_type,
-                            value,
-                            relation_document_id,
-                            relation_document_view_id_hash
+                            value
                         )
                     VALUES
-                        ($1, $2, $3, $4, $5, $6)
+                        ($1, $2, $3, $4)
                 ",
                         )
                         .bind(operation.id().as_str().to_owned())
                         .bind(name.to_owned())
                         .bind(field_type.to_string())
                         .bind(value)
-                        .bind(relation)
-                        .bind(pinned_relation)
                         .execute(&self.pool)
                     })
                     .collect::<Vec<_>>()
@@ -388,9 +369,7 @@ impl OperationStore<DoggoOperation> for SqlStorage {
                 operation_id,
                 name,
                 field_type,
-                value,
-                relation_document_id,
-                relation_document_view_id_hash
+                value
             FROM
                 operation_fields_v1
             WHERE
@@ -410,7 +389,6 @@ impl OperationStore<DoggoOperation> for SqlStorage {
 mod tests {
     use std::str::FromStr;
 
-    use p2panda_rs::document::DocumentId;
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::Author;
     use p2panda_rs::operation::{
