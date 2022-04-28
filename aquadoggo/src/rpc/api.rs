@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use jsonrpc_v2::{Data, MapRouter, Server as Service};
 
+use crate::db::store::SqlStorage;
 use crate::db::Pool;
 use crate::rpc::methods::{get_entry_args, publish_entry, query_entries};
 
@@ -15,7 +16,7 @@ pub struct RpcApiState {
 }
 
 pub fn build_rpc_api_service(pool: Pool) -> RpcApiService {
-    let state = RpcApiState { pool };
+    let state = SqlStorage { pool };
 
     Service::new()
         .with_data(Data(Arc::new(state)))

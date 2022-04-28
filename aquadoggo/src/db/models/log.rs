@@ -1,12 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use p2panda_rs::entry::LogId;
-use p2panda_rs::hash::Hash;
-use p2panda_rs::identity::Author;
-use sqlx::{query, query_scalar, FromRow};
+use std::str::FromStr;
 
-use crate::db::Pool;
-use crate::errors::Result;
+use async_trait::async_trait;
+use sqlx::FromRow;
+use sqlx::{query, query_scalar};
+
+use p2panda_rs::document::DocumentId;
+use p2panda_rs::entry::LogId;
+use p2panda_rs::identity::Author;
+use p2panda_rs::schema::SchemaId;
+use p2panda_rs::storage_provider::errors::LogStorageError;
+use p2panda_rs::storage_provider::traits::{AsStorageLog, LogStore};
+
+use crate::db::store::SqlStorage;
 
 /// Tracks the assigment of an author's logs to documents and records their schema.
 ///
@@ -15,32 +22,51 @@ use crate::errors::Result;
 ///
 /// We store the u64 integer values of `log_id` as a string here since not all database backends
 /// support large numbers.
-#[derive(FromRow, Debug)]
+#[derive(FromRow, Debug, Clone)]
 pub struct Log {
     /// Public key of the author.
-    author: String,
+    pub author: String,
 
     /// Log id used for this document.
-    log_id: String,
+    pub log_id: String,
 
     /// Hash that identifies the document this log is for.
-    document: String,
+    pub document: String,
 
-    /// Schema hash used by author.
-    schema: String,
+    /// SchemaId which identifies the schema for operations in this log.
+    pub schema: String,
 }
 
-impl Log {
-    /// Register any new log_id for a document and author.
-    ///
-    /// The database will reject duplicate entries.
-    pub async fn insert(
-        pool: &Pool,
-        author: &Author,
-        document: &Hash,
-        schema: &Hash,
-        log_id: &LogId,
-    ) -> Result<bool> {
+impl AsStorageLog for Log {
+    fn new(author: &Author, schema: &SchemaId, document: &DocumentId, log_id: &LogId) -> Self {
+        Self {
+            author: author.as_str().to_string(),
+            log_id: log_id.as_u64().to_string(),
+            document: document.as_str().to_string(),
+            schema: schema.as_str(),
+        }
+    }
+
+    fn author(&self) -> Author {
+        Author::new(&self.author).unwrap()
+    }
+    fn id(&self) -> LogId {
+        LogId::from_str(&self.log_id).unwrap()
+    }
+    fn document_id(&self) -> DocumentId {
+        let document_id: DocumentId = self.document.parse().unwrap();
+        document_id
+    }
+    fn schema_id(&self) -> SchemaId {
+        SchemaId::new(&self.schema).unwrap()
+    }
+}
+
+/// Trait which handles all storage actions relating to `Log`s.
+#[async_trait]
+impl LogStore<Log> for SqlStorage {
+    /// Insert a log into storage.
+    async fn insert_log(&self, log: Log) -> Result<bool, LogStorageError> {
         let rows_affected = query(
             "
             INSERT INTO
@@ -49,21 +75,25 @@ impl Log {
                 ($1, $2, $3, $4)
             ",
         )
-        .bind(author.as_str())
-        .bind(log_id.as_u64().to_string())
-        .bind(document.as_str())
-        .bind(schema.as_str())
-        .execute(pool)
-        .await?
+        .bind(log.author().as_str())
+        .bind(log.id().as_u64().to_string())
+        .bind(log.document_id().as_str())
+        .bind(log.schema_id().as_str())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| LogStorageError::Custom(e.to_string()))?
         .rows_affected();
 
         Ok(rows_affected == 1)
     }
 
-    /// Determines the next unused log_id of an author.
-    pub async fn next_log_id(pool: &Pool, author: &Author) -> Result<LogId> {
-        // Get all log ids from this author
-        let mut result: Vec<String> = query_scalar(
+    /// Get a log from storage
+    async fn get(
+        &self,
+        author: &Author,
+        document_id: &DocumentId,
+    ) -> Result<Option<LogId>, LogStorageError> {
+        let result: Option<String> = query_scalar(
             "
             SELECT
                 log_id
@@ -71,11 +101,39 @@ impl Log {
                 logs
             WHERE
                 author = $1
+                AND document = $2
             ",
         )
         .bind(author.as_str())
-        .fetch_all(pool)
-        .await?;
+        .bind(document_id.as_str())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| LogStorageError::Custom(e.to_string()))?;
+
+        // Wrap u64 inside of `P2PandaLog` instance
+        let log_id: Option<LogId> =
+            result.map(|str| str.parse().expect("Corrupt u64 integer found in database"));
+
+        Ok(log_id)
+    }
+
+    /// Determines the next unused log_id of an author.
+    async fn next_log_id(&self, author: &Author) -> Result<LogId, LogStorageError> {
+        // Get all log ids from this author
+        let mut result: Vec<String> = query_scalar(
+            "
+                    SELECT
+                        log_id
+                    FROM
+                        logs
+                    WHERE
+                        author = $1
+                    ",
+        )
+        .bind(author.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| LogStorageError::Custom(e.to_string()))?;
 
         // Convert all strings representing u64 integers to `LogId` instances
         let mut log_ids: Vec<LogId> = result
@@ -105,102 +163,25 @@ impl Log {
 
         Ok(next_log_id)
     }
-
-    /// Returns the registered log_id for a document identified by its hash.
-    ///
-    /// Operations are separated in different logs per document and author. This method checks if a
-    /// log has already been registered for a document and author and returns its regarding log id
-    /// or None.
-    pub async fn get(pool: &Pool, author: &Author, document_id: &Hash) -> Result<Option<LogId>> {
-        let result: Option<String> = query_scalar(
-            "
-            SELECT
-                log_id
-            FROM
-                logs
-            WHERE
-                author = $1
-                AND document = $2
-            ",
-        )
-        .bind(author.as_str())
-        .bind(document_id.as_str())
-        .fetch_optional(pool)
-        .await?;
-
-        // Wrap u64 inside of `LogId` instance
-        let log_id = result.map(|str| str.parse().expect("Corrupt u64 integer found in database"));
-
-        Ok(log_id)
-    }
-
-    /// Returns registered or possible log id for a document.
-    ///
-    /// If no log has been previously registered for this document it automatically returns the
-    /// next unused log_id.
-    pub async fn find_document_log_id(
-        pool: &Pool,
-        author: &Author,
-        document_id: Option<&Hash>,
-    ) -> Result<LogId> {
-        // Determine log_id for this document when a hash was given
-        let document_log_id = match document_id {
-            Some(id) => Log::get(pool, author, id).await?,
-            None => None,
-        };
-
-        // Use result or find next possible log_id automatically when nothing was found yet
-        let log_id = match document_log_id {
-            Some(value) => value,
-            None => Log::next_log_id(pool, author).await?,
-        };
-
-        Ok(log_id)
-    }
-
-    /// Returns the related document for any entry.
-    ///
-    /// Every entry is part of a document and, through that, associated with a specific log id used
-    /// by this document and author. This method returns that document id by looking up the log
-    /// that the entry was stored in.
-    pub async fn get_document_by_entry(pool: &Pool, entry_hash: &Hash) -> Result<Option<Hash>> {
-        let result: Option<String> = query_scalar(
-            "
-            SELECT
-                logs.document
-            FROM
-                logs
-            INNER JOIN entries
-                ON (logs.log_id = entries.log_id
-                    AND logs.author = entries.author)
-            WHERE
-                entries.entry_hash = $1
-            ",
-        )
-        .bind(entry_hash.as_str())
-        .fetch_optional(pool)
-        .await?;
-
-        // Unwrap here since we already validated the hash
-        let hash = result.map(|str| Hash::new(&str).expect("Corrupt hash found in database"));
-
-        Ok(hash)
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use std::convert::TryFrom;
 
-    use p2panda_rs::entry::{sign_and_encode, Entry, LogId, SeqNum};
+    use p2panda_rs::document::DocumentViewId;
+    use p2panda_rs::entry::{sign_and_encode, Entry as P2PandaEntry, LogId, SeqNum};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::{Operation, OperationEncoded, OperationFields, OperationValue};
+    use p2panda_rs::schema::SchemaId;
+    use p2panda_rs::storage_provider::traits::{
+        AsStorageEntry, AsStorageLog, EntryStore, LogStore, StorageProvider,
+    };
 
-    use crate::db::models::Entry as dbEntry;
+    use crate::db::models::{EntryRow, Log};
+    use crate::db::store::SqlStorage;
     use crate::test_helpers::{initialize_db, random_entry_hash};
-
-    use super::Log;
 
     const TEST_AUTHOR: &str = "58223678ab378f1b07d1d8c789e6da01d16a06b1a4d17cc10119a0109181156c";
 
@@ -210,7 +191,10 @@ mod tests {
 
         let author = Author::new(TEST_AUTHOR).unwrap();
 
-        let log_id = Log::find_document_log_id(&pool, &author, None)
+        let storage_provider = SqlStorage { pool };
+
+        let log_id = storage_provider
+            .find_document_log_id(&author, None)
             .await
             .unwrap();
 
@@ -220,22 +204,38 @@ mod tests {
     #[tokio::test]
     async fn prevent_duplicate_log_ids() {
         let pool = initialize_db().await;
+        let storage_provider = SqlStorage { pool };
 
         let author = Author::new(TEST_AUTHOR).unwrap();
         let document = Hash::new(&random_entry_hash()).unwrap();
-        let schema = Hash::new(&random_entry_hash()).unwrap();
+        let schema =
+            SchemaId::new_application("venue", &Hash::new(&random_entry_hash()).unwrap().into());
 
-        assert!(
-            Log::insert(&pool, &author, &document, &schema, &LogId::new(1))
-                .await
-                .is_ok()
+        let log = Log::new(&author, &schema, &document.clone().into(), &LogId::new(1));
+        assert!(storage_provider.insert_log(log).await.is_ok());
+
+        let log = Log::new(&author, &schema, &document.into(), &LogId::new(1));
+        assert!(storage_provider.insert_log(log).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn with_multi_hash_schema_id() {
+        let pool = initialize_db().await;
+        let storage_provider = SqlStorage { pool };
+
+        let author = Author::new(TEST_AUTHOR).unwrap();
+        let document = Hash::new(&random_entry_hash()).unwrap();
+        let schema = SchemaId::new_application(
+            "venue",
+            &DocumentViewId::new(&[
+                Hash::new(&random_entry_hash()).unwrap().into(),
+                Hash::new(&random_entry_hash()).unwrap().into(),
+            ]),
         );
 
-        assert!(
-            Log::insert(&pool, &author, &document, &schema, &LogId::new(1))
-                .await
-                .is_err()
-        );
+        let log = Log::new(&author, &schema, &document.into(), &LogId::new(1));
+
+        assert!(storage_provider.insert_log(log).await.is_ok());
     }
 
     #[tokio::test]
@@ -243,29 +243,34 @@ mod tests {
         let pool = initialize_db().await;
         let key_pair = KeyPair::new();
         let author = Author::try_from(*key_pair.public_key()).unwrap();
-        let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
-        let document = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
+        let schema = SchemaId::new_application(
+            "venue",
+            &Hash::new_from_bytes(vec![1, 2, 3]).unwrap().into(),
+        );
+
+        let storage_provider = SqlStorage { pool };
+
+        let log_id = storage_provider
+            .find_document_log_id(&author, None)
+            .await
+            .unwrap();
 
         // We expect to be given the next log id when asking for a possible log id for a new
         // document by the same author
-        assert_eq!(
-            Log::find_document_log_id(&pool, &author, Some(&document))
-                .await
-                .unwrap(),
-            LogId::default()
-        );
+        assert_eq!(log_id, LogId::default());
 
         // Starting with an empty db, we expect to be able to count up from 1 and expect each
         // inserted document's log id to be euqal to the count index
         for n in 1..12 {
-            let doc = Hash::new_from_bytes(vec![1, 2, n]).unwrap();
-            let log_id = Log::find_document_log_id(&pool, &author, None)
+            let doc = Hash::new_from_bytes(vec![1, 2, n]).unwrap().into();
+
+            let log_id = storage_provider
+                .find_document_log_id(&author, None)
                 .await
                 .unwrap();
             assert_eq!(LogId::new(n.into()), log_id);
-            Log::insert(&pool, &author, &doc, &schema, &log_id)
-                .await
-                .unwrap();
+            let log = Log::new(&author, &schema, &doc, &log_id);
+            storage_provider.insert_log(log).await.unwrap();
         }
     }
 
@@ -276,9 +281,12 @@ mod tests {
         // Create a new document
         // TODO: use p2panda-rs test utils once available
         let key_pair = KeyPair::new();
-        let author = Author::try_from(key_pair.public_key().clone()).unwrap();
+        let author = Author::try_from(*key_pair.public_key()).unwrap();
         let log_id = LogId::new(1);
-        let schema = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
+        let schema = SchemaId::new_application(
+            "venue",
+            &Hash::new_from_bytes(vec![1, 2, 3]).unwrap().into(),
+        );
         let seq_num = SeqNum::new(1).unwrap();
         let mut fields = OperationFields::new();
         fields
@@ -286,50 +294,49 @@ mod tests {
             .unwrap();
         let operation = Operation::new_create(schema.clone(), fields).unwrap();
         let operation_encoded = OperationEncoded::try_from(&operation).unwrap();
-        let entry = Entry::new(&log_id, Some(&operation), None, None, &seq_num).unwrap();
+        let entry = P2PandaEntry::new(&log_id, Some(&operation), None, None, &seq_num).unwrap();
         let entry_encoded = sign_and_encode(&entry, &key_pair).unwrap();
+
+        let storage_provider = SqlStorage { pool };
 
         // Expect database to return nothing yet
         assert_eq!(
-            Log::get_document_by_entry(&pool, &entry_encoded.hash())
+            storage_provider
+                .get_document_by_entry(&entry_encoded.hash())
                 .await
                 .unwrap(),
             None
         );
 
+        let entry = EntryRow::new(&entry_encoded.clone(), &operation_encoded).unwrap();
+
         // Store entry in database
-        assert!(dbEntry::insert(
-            &pool,
+        assert!(storage_provider.insert_entry(entry).await.is_ok());
+
+        let log = Log::new(
             &author,
-            &entry_encoded,
-            &entry_encoded.hash(),
-            &log_id,
-            &operation_encoded,
-            &operation_encoded.hash(),
-            &seq_num
-        )
-        .await
-        .is_ok());
+            &schema,
+            &entry_encoded.hash().into(),
+            &LogId::new(1),
+        );
 
         // Store log in database
-        assert!(
-            Log::insert(&pool, &author, &entry_encoded.hash(), &schema, &log_id)
-                .await
-                .is_ok()
-        );
+        assert!(storage_provider.insert_log(log).await.is_ok());
 
         // Expect to find document in database. The document hash should be the same as the hash of
         // the entry which referred to the `CREATE` operation.
         assert_eq!(
-            Log::get_document_by_entry(&pool, &entry_encoded.hash())
+            storage_provider
+                .get_document_by_entry(&entry_encoded.hash())
                 .await
                 .unwrap(),
-            Some(entry_encoded.hash())
+            Some(entry_encoded.hash().into())
         );
 
         // We expect to find this document in the default log
         assert_eq!(
-            Log::find_document_log_id(&pool, &author, Some(&entry_encoded.hash()))
+            storage_provider
+                .find_document_log_id(&author, Some(&entry_encoded.hash().into()))
                 .await
                 .unwrap(),
             LogId::default()
@@ -344,38 +351,42 @@ mod tests {
         let author = Author::new(TEST_AUTHOR).unwrap();
 
         // Mock schema
-        let schema = Hash::new(&random_entry_hash()).unwrap();
+        let schema =
+            SchemaId::new_application("venue", &Hash::new(&random_entry_hash()).unwrap().into());
 
         // Mock four different document hashes
         let document_first = Hash::new(&random_entry_hash()).unwrap();
         let document_second = Hash::new(&random_entry_hash()).unwrap();
         let document_third = Hash::new(&random_entry_hash()).unwrap();
-        let document_system = Hash::new(&random_entry_hash()).unwrap();
+        let document_forth = Hash::new(&random_entry_hash()).unwrap();
+
+        let storage_provider = SqlStorage { pool };
 
         // Register two log ids at the beginning
-        Log::insert(&pool, &author, &document_system, &schema, &LogId::new(1))
-            .await
-            .unwrap();
-        Log::insert(&pool, &author, &document_first, &schema, &LogId::new(3))
-            .await
-            .unwrap();
+        let log_1 = Log::new(&author, &schema, &document_first.into(), &LogId::new(1));
+        let log_2 = Log::new(&author, &schema, &document_second.into(), &LogId::new(2));
+
+        storage_provider.insert_log(log_1).await.unwrap();
+        storage_provider.insert_log(log_2).await.unwrap();
 
         // Find next free log id and register it
-        let log_id = Log::next_log_id(&pool, &author).await.unwrap();
-        assert_eq!(log_id, LogId::new(2));
-        Log::insert(&pool, &author, &document_second, &schema, &log_id)
-            .await
-            .unwrap();
+        let log_id = storage_provider.next_log_id(&author).await.unwrap();
+        assert_eq!(log_id, LogId::new(3));
+
+        let log_3 = Log::new(&author, &schema, &document_third.into(), &log_id);
+
+        storage_provider.insert_log(log_3).await.unwrap();
 
         // Find next free log id and register it
-        let log_id = Log::next_log_id(&pool, &author).await.unwrap();
+        let log_id = storage_provider.next_log_id(&author).await.unwrap();
         assert_eq!(log_id, LogId::new(4));
-        Log::insert(&pool, &author, &document_third, &schema, &log_id)
-            .await
-            .unwrap();
+
+        let log_4 = Log::new(&author, &schema, &document_forth.into(), &log_id);
+
+        storage_provider.insert_log(log_4).await.unwrap();
 
         // Find next free log id
-        let log_id = Log::next_log_id(&pool, &author).await.unwrap();
+        let log_id = storage_provider.next_log_id(&author).await.unwrap();
         assert_eq!(log_id, LogId::new(5));
     }
 }

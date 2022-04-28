@@ -7,5 +7,6 @@ mod response;
 mod server;
 
 pub use api::{build_rpc_api_service, RpcApiService, RpcApiState};
-pub use methods::error::PublishEntryError;
+pub use request::{EntryArgsRequest, PublishEntryRequest};
+pub use response::{EntryArgsResponse, PublishEntryResponse};
 pub use server::{handle_get_http_request, handle_http_request};

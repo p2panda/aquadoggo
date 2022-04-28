@@ -2,8 +2,10 @@
 
 use serde::Serialize;
 
-use crate::db::models::EntryRow;
 use p2panda_rs::hash::Hash;
+use p2panda_rs::storage_provider::traits::{AsEntryArgsResponse, AsPublishEntryResponse};
+
+use crate::db::models::EntryRow;
 
 /// Response body of `panda_getEntryArguments`.
 ///
@@ -17,6 +19,22 @@ pub struct EntryArgsResponse {
     pub log_id: String,
 }
 
+impl AsEntryArgsResponse for EntryArgsResponse {
+    fn new(
+        entry_hash_backlink: Option<Hash>,
+        entry_hash_skiplink: Option<Hash>,
+        seq_num: p2panda_rs::entry::SeqNum,
+        log_id: p2panda_rs::entry::LogId,
+    ) -> Self {
+        EntryArgsResponse {
+            entry_hash_backlink,
+            entry_hash_skiplink,
+            seq_num: seq_num.as_u64().to_string(),
+            log_id: log_id.as_u64().to_string(),
+        }
+    }
+}
+
 /// Response body of `panda_publishEntry`.
 ///
 /// `seq_num` and `log_id` are returned as strings to be able to represent large integers in JSON.
@@ -27,6 +45,22 @@ pub struct PublishEntryResponse {
     pub entry_hash_skiplink: Option<Hash>,
     pub seq_num: String,
     pub log_id: String,
+}
+
+impl AsPublishEntryResponse for PublishEntryResponse {
+    fn new(
+        entry_hash_backlink: Option<Hash>,
+        entry_hash_skiplink: Option<Hash>,
+        seq_num: p2panda_rs::entry::SeqNum,
+        log_id: p2panda_rs::entry::LogId,
+    ) -> Self {
+        PublishEntryResponse {
+            entry_hash_backlink,
+            entry_hash_skiplink,
+            seq_num: seq_num.as_u64().to_string(),
+            log_id: log_id.as_u64().to_string(),
+        }
+    }
 }
 
 #[derive(Serialize, Debug)]
