@@ -39,6 +39,7 @@ pub struct OperationFieldRow {
     name: String,
     field_type: String,
     value: String,
+    list_index: i64,
 }
 
 type DocumentViewIdHash = Hash;
@@ -272,27 +273,35 @@ impl OperationStore<DoggoOperation> for SqlStorage {
                     }
                 };
 
+                let mut index = 0;
+
                 values
                     .into_iter()
                     .map(|value| {
-                        query(
+                        let query = query(
                             "
                     INSERT INTO
                         operation_fields_v1 (
                             operation_id,
                             name,
                             field_type,
-                            value
+                            value,
+                            list_index
                         )
                     VALUES
-                        ($1, $2, $3, $4)
+                        ($1, $2, $3, $4, $5)
                 ",
                         )
                         .bind(operation.id().as_str().to_owned())
                         .bind(name.to_owned())
                         .bind(field_type.to_string())
                         .bind(value)
-                        .execute(&self.pool)
+                        .bind(index)
+                        .execute(&self.pool);
+
+                        index += 1;
+
+                        query
                     })
                     .collect::<Vec<_>>()
             }))
@@ -369,7 +378,8 @@ impl OperationStore<DoggoOperation> for SqlStorage {
                 operation_id,
                 name,
                 field_type,
-                value
+                value,
+                list_index
             FROM
                 operation_fields_v1
             WHERE
