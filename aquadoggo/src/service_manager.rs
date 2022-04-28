@@ -7,6 +7,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use anyhow::Result;
+use log::{error, info};
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::task;
@@ -56,6 +57,9 @@ where
 }
 
 /// Future which resolves as soon as the internal boolean flag gets flipped to "true".
+///
+/// The flag can be manually set with the `fire` method or automatically whenever the signal
+/// instance gets dropped. The latter is a trick to fire a signal when something panics.
 struct Signal(Arc<AtomicBool>);
 
 impl Signal {
@@ -87,6 +91,16 @@ impl Future for Signal {
 impl Clone for Signal {
     fn clone(&self) -> Self {
         Self(self.0.clone())
+    }
+}
+
+impl Drop for Signal {
+    fn drop(&mut self) {
+        // Fire signal whenever signal handler goes out of scope
+        self.fire();
+
+        // Drop object
+        drop(self)
     }
 }
 
@@ -167,10 +181,15 @@ where
             let _ = shutdown_rx.recv().await;
         });
 
+        // Sender for exit signal
+        let mut exit_signal = self.exit_signal.clone();
+
         // Reference to shared context
         let context = self.context.clone();
 
         task::spawn(async move {
+            info!("Start {} service", name);
+
             // Run the service!
             let handle = service.call(context, signal, tx).await;
 
@@ -178,16 +197,16 @@ where
             // process that this service has finally stopped
             drop(shutdown_tx);
 
-            // Handle potential errors which have been returned by the service and panic in case
-            // something went wrong
+            // Handle potential errors which have been returned by the service.
             if let Some(err) = handle.err() {
-                println!("{}", err);
+                error!("Error in {} service: {}", name, err);
+                exit_signal.fire();
             }
-        });
 
-        // We arrive here when the above task has errored, panicked or ended. In any case, this
-        // should lead to an exit signal
-        self.exit_signal.fire();
+            // `exit_signal` will go out of scope now and drops here. Since we also implemented the
+            // `Drop` trait on `Signal` we will be able to fire a signal also when this task panics
+            // or stops.
+        });
     }
 
     /// Future which resolves as soon as a service returned an error, panicked or stopped.
@@ -197,6 +216,8 @@ where
 
     /// Informs all services about graceful shutdown and waits for them until they all stopped.
     pub async fn shutdown(self) {
+        info!("Received shutdown signal");
+
         let mut rx = self.shutdown_signal.subscribe();
 
         // Broadcast graceful shutdown messages to all services
@@ -327,7 +348,7 @@ mod tests {
         // Wait for panic to take place ..
         manager.on_exit().await;
 
-        // .. to then shut everything down
+        // .. then shut everything down
         manager.shutdown().await;
 
         // Check if we could do our work and shutdown procedure
