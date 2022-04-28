@@ -27,6 +27,7 @@ mod tests {
     use p2panda_rs::operation::{Operation, OperationEncoded, OperationFields, OperationValue};
     use p2panda_rs::schema::SchemaId;
 
+    use crate::config::Configuration;
     use crate::server::{build_server, ApiState};
     use crate::test_helpers::{
         handle_http, initialize_db, rpc_error, rpc_request, rpc_response, TestClient,
@@ -130,7 +131,8 @@ mod tests {
         let pool = initialize_db().await;
 
         // Create tide server with endpoints
-        let state = ApiState::new(pool.clone());
+        let config = Configuration::default();
+        let state = ApiState::new(pool, config);
         let app = build_server(state);
         let client = TestClient::new(app);
 
@@ -251,7 +253,8 @@ mod tests {
         let pool = initialize_db().await;
 
         // Create tide server with endpoints
-        let state = ApiState::new(pool.clone());
+        let config = Configuration::default();
+        let state = ApiState::new(pool, config);
         let app = build_server(state);
         let client = TestClient::new(app);
 

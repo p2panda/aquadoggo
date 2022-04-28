@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::sync::Arc;
 
 use axum::extract::Extension;
 use axum::http::Method;
@@ -52,7 +51,7 @@ impl ApiState {
 }
 
 /// Build HTTP server exposing JSON RPC and GraphQL API.
-pub fn build_server(state: Arc<ApiState>) -> Router {
+pub fn build_server(state: ApiState) -> Router {
     // Configure CORS middleware
     let cors = CorsLayer::new()
         .allow_methods(vec![Method::GET, Method::POST, Method::OPTIONS])
@@ -76,10 +75,10 @@ pub fn build_server(state: Arc<ApiState>) -> Router {
 }
 
 /// Start HTTP server.
-pub async fn start_server(Context(state): Context<ApiState>, signal: Shutdown, tx: Sender<usize>) {
+pub async fn start_server(Context(state): Context<ApiState>, signal: Shutdown, _tx: Sender<usize>) {
     let http_port = state.config.http_port;
     let http_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), http_port);
-    let server = build_server(state.clone());
+    let server = build_server(state);
 
     axum::Server::bind(&http_address)
         .serve(server.into_make_service())
@@ -92,16 +91,18 @@ pub async fn start_server(Context(state): Context<ApiState>, signal: Shutdown, t
 
 #[cfg(test)]
 mod tests {
-    /* use serde_json::json;
+    use serde_json::json;
 
     use crate::test_helpers::{initialize_db, TestClient};
+    use crate::config::Configuration;
 
     use super::{build_server, ApiState};
 
-    #[tokio::test] */
-    /* async fn rpc_respond_with_method_not_allowed() {
+    #[tokio::test]
+    async fn rpc_respond_with_method_not_allowed() {
+        let config = Configuration::default();
         let pool = initialize_db().await;
-        let state = ApiState::new(pool.clone());
+        let state = ApiState::new(pool, config);
         let client = TestClient::new(build_server(state));
 
         let response = client.get("/").send().await;
@@ -114,8 +115,9 @@ mod tests {
 
     #[tokio::test]
     async fn graphql_endpoint() {
+        let config = Configuration::default();
         let pool = initialize_db().await;
-        let state = ApiState::new(pool.clone());
+        let state = ApiState::new(pool, config);
         let client = TestClient::new(build_server(state));
 
         let response = client
@@ -135,5 +137,5 @@ mod tests {
             })
             .to_string()
         );
-    } */
+    }
 }
