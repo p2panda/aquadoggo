@@ -125,10 +125,11 @@ where
     /// This is a broadcast channel where any amount of senders and receivers can be derived from.
     tx: Sender<M>,
 
-    /// Sender of service error signal.
+    /// Sender of exit signal.
     ///
-    /// The manager catches returned errors from services and notifies this channel. This can be
-    /// used to listen to incoming errors and react to them, for example by quitting the program.
+    /// The manager catches returned errors and panics from services and notifies this channel.
+    /// This can be used to listen to incoming errors and react to them, for example by quitting
+    /// the program.
     exit_signal: Signal,
 
     /// Sender of the shutdown signal.
