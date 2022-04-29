@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use async_trait::async_trait;
 use futures::future::try_join_all;
+use p2panda_rs::document::{DocumentId, DocumentViewId};
 use sqlx::{query, query_as, FromRow};
 
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{
     AsOperation, Operation, OperationAction, OperationFields, OperationId, OperationValue,
+    PinnedRelation, PinnedRelationList, Relation, RelationList,
 };
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::Validate;
@@ -108,9 +110,12 @@ pub trait OperationStore<StorageOperation: AsStorageOperation> {
         ),
         OperationStorageError,
     >;
-}
 
-////// IMPLEMENT THE STORAGE TRAITS //////
+    async fn get_operation_fields_by_operation_id(
+        &self,
+        id: OperationId,
+    ) -> Result<Option<OperationFields>, OperationStorageError>;
+}
 
 #[derive(Debug, Clone)]
 pub struct DoggoOperation {
@@ -404,6 +409,113 @@ impl OperationStore<DoggoOperation> for SqlStorage {
 
         Ok((operation_row, previous_operation_rows, operation_field_rows))
     }
+
+    async fn get_operation_fields_by_operation_id(
+        &self,
+        id: OperationId,
+    ) -> Result<Option<OperationFields>, OperationStorageError> {
+        let operation_field_rows = query_as::<_, OperationFieldRow>(
+            "
+            SELECT
+                operation_id,
+                name,
+                field_type,
+                value
+            FROM
+                operation_fields_v1
+            WHERE
+                operation_id = $1
+            ",
+        )
+        .bind(id.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| OperationStorageError::Custom(e.to_string()))?;
+
+        let mut relation_list: Vec<DocumentId> = Vec::new();
+        let mut pinned_relation_list: Vec<DocumentViewId> = Vec::new();
+
+        let mut operation_fields = OperationFields::new();
+
+        operation_field_rows.iter().for_each(|row| {
+            match row.field_type.as_str() {
+                "bool" => operation_fields
+                    .add(
+                        &row.name,
+                        OperationValue::Boolean(row.value.parse::<bool>().unwrap()),
+                    )
+                    .unwrap(),
+                "int" => operation_fields
+                    .add(
+                        &row.name,
+                        OperationValue::Integer(row.value.parse::<i64>().unwrap()),
+                    )
+                    .unwrap(),
+                "float" => operation_fields
+                    .add(
+                        &row.name,
+                        OperationValue::Float(row.value.parse::<f64>().unwrap()),
+                    )
+                    .unwrap(),
+                "str" => operation_fields
+                    .add(&row.name, OperationValue::Text(row.value.clone()))
+                    .unwrap(),
+                "relation" => operation_fields
+                    .add(
+                        &row.name,
+                        OperationValue::Relation(Relation::new(
+                            row.value.parse::<DocumentId>().unwrap(),
+                        )),
+                    )
+                    .unwrap(),
+                "relation_list" => relation_list.push(row.value.parse::<DocumentId>().unwrap()),
+                "pinned_relation" => operation_fields
+                    .add(
+                        &row.name,
+                        OperationValue::PinnedRelation(PinnedRelation::new(
+                            row.value.parse::<DocumentViewId>().unwrap(),
+                        )),
+                    )
+                    .unwrap(),
+                "pinned_relation_list" => {
+                    pinned_relation_list.push(row.value.parse::<DocumentViewId>().unwrap())
+                }
+                _ => (),
+            };
+        });
+
+        if !relation_list.is_empty() {
+            let name = &operation_field_rows
+                .iter()
+                .find(|row| row.field_type == "relation_list")
+                .unwrap()
+                .name;
+            operation_fields
+                .add(
+                    &name,
+                    OperationValue::RelationList(RelationList::new(relation_list)),
+                )
+                .unwrap();
+        }
+
+        if !pinned_relation_list.is_empty() {
+            let name = &operation_field_rows
+                .iter()
+                .find(|row| row.field_type == "pinned_relation_list")
+                .unwrap()
+                .name;
+            operation_fields
+                .add(
+                    &name,
+                    OperationValue::PinnedRelationList(PinnedRelationList::new(
+                        pinned_relation_list,
+                    )),
+                )
+                .unwrap();
+        }
+
+        Ok(Some(operation_fields))
+    }
 }
 
 #[cfg(test)]
@@ -505,7 +617,7 @@ mod tests {
         assert!(result);
 
         let result = storage_provider
-            .get_operation_by_id(operation_id)
+            .get_operation_by_id(operation_id.clone())
             .await
             .unwrap();
 
@@ -519,5 +631,12 @@ mod tests {
             "{:#?}",
             (operation_row, previous_operation_relation_rows, field_rows)
         );
+
+        let result = storage_provider
+            .get_operation_fields_by_operation_id(operation_id)
+            .await
+            .unwrap();
+
+        println!("{:#?}", result);
     }
 }
