@@ -58,9 +58,6 @@ pub struct OperationFieldRow {
 
     /// The actual value contained in this field.
     value: String,
-
-    /// The index of this value if it is a list item.
-    list_index: Option<i64>,
 }
 
 type PreviousOperations = Vec<OperationId>;
@@ -292,25 +289,10 @@ impl OperationStore<DoggoOperation> for SqlStorage {
                     }
                 };
 
-                // Optional index for if we are dealing with list items.
-                let mut index: Option<i64> = None;
-
                 // Collect all query futures.
                 db_values
                     .into_iter()
                     .map(|db_value| {
-                        // Instantiate the list index if this is a pinned_relation_list or
-                        // relation_list field, if it is already instantiated, increment it
-                        index = match index {
-                            Some(index) => Some(index + 1),
-                            None if field_type == "pinned_relation_list"
-                                || field_type == "relation_list" =>
-                            {
-                                Some(0)
-                            }
-                            None => None,
-                        };
-
                         // Compose the query and return it's future.
                         query(
                             "
@@ -319,18 +301,16 @@ impl OperationStore<DoggoOperation> for SqlStorage {
                                         operation_id,
                                         name,
                                         field_type,
-                                        value,
-                                        list_index
+                                        value
                                     )
                                 VALUES
-                                    ($1, $2, $3, $4, $5)
+                                    ($1, $2, $3, $4)
                             ",
                         )
                         .bind(operation.id().as_str().to_owned())
                         .bind(name.to_owned())
                         .bind(field_type.to_string())
                         .bind(db_value)
-                        .bind(index)
                         .execute(&self.pool)
                     })
                     .collect::<Vec<_>>()
@@ -410,8 +390,7 @@ impl OperationStore<DoggoOperation> for SqlStorage {
                 operation_id,
                 name,
                 field_type,
-                value,
-                list_index
+                value
             FROM
                 operation_fields_v1
             WHERE
