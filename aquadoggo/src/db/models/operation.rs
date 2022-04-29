@@ -111,7 +111,7 @@ pub trait OperationStore<StorageOperation: AsStorageOperation> {
         OperationStorageError,
     >;
 
-    async fn get_operation_fields_by_operation_id(
+    async fn get_fields_by_operation_id(
         &self,
         id: OperationId,
     ) -> Result<Option<OperationFields>, OperationStorageError>;
@@ -410,7 +410,7 @@ impl OperationStore<DoggoOperation> for SqlStorage {
         Ok((operation_row, previous_operation_rows, operation_field_rows))
     }
 
-    async fn get_operation_fields_by_operation_id(
+    async fn get_fields_by_operation_id(
         &self,
         id: OperationId,
     ) -> Result<Option<OperationFields>, OperationStorageError> {
@@ -644,7 +644,7 @@ mod tests {
         );
 
         let result = storage_provider
-            .get_operation_fields_by_operation_id(operation_id)
+            .get_fields_by_operation_id(operation_id)
             .await
             .unwrap();
 
