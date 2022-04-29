@@ -414,6 +414,7 @@ impl OperationStore<DoggoOperation> for SqlStorage {
         &self,
         id: OperationId,
     ) -> Result<Option<OperationFields>, OperationStorageError> {
+        // Query the db for all operation fields by operation id
         let operation_field_rows = query_as::<_, OperationFieldRow>(
             "
             SELECT
@@ -437,6 +438,10 @@ impl OperationStore<DoggoOperation> for SqlStorage {
 
         let mut operation_fields = OperationFields::new();
 
+        // Iterate over returned field values, for each value:
+        //  - if it is a simple value type, parse it into an OperationValue and add it to the operation_fields
+        //  - if it is a relation list value type parse each item into a DocumentId/DocumentViewId and push to
+        //    the suitable vec (instantiated above)
         operation_field_rows.iter().for_each(|row| {
             match row.field_type.as_str() {
                 "bool" => operation_fields
@@ -468,6 +473,8 @@ impl OperationStore<DoggoOperation> for SqlStorage {
                         )),
                     )
                     .unwrap(),
+                // A special case, this is a list item, so we push it to a vec but _don't_ add it
+                // to the operation_fields yet.
                 "relation_list" => relation_list.push(row.value.parse::<DocumentId>().unwrap()),
                 "pinned_relation" => operation_fields
                     .add(
@@ -477,6 +484,8 @@ impl OperationStore<DoggoOperation> for SqlStorage {
                         )),
                     )
                     .unwrap(),
+                // A special case, this is a list item, so we push it to a vec but _don't_ add it
+                // to the operation_fields yet.
                 "pinned_relation_list" => {
                     pinned_relation_list.push(row.value.parse::<DocumentViewId>().unwrap())
                 }
@@ -484,29 +493,31 @@ impl OperationStore<DoggoOperation> for SqlStorage {
             };
         });
 
-        if !relation_list.is_empty() {
-            let name = &operation_field_rows
-                .iter()
-                .find(|row| row.field_type == "relation_list")
-                .unwrap()
-                .name;
+        // Find if there is at least one field containing a "relation_list" type
+        let relation_list_field = &operation_field_rows
+            .iter()
+            .find(|row| row.field_type == "relation_list");
+
+        // If so, then parse the `relation_list` vec into an operation value and add it to the operation fields
+        if let Some(relation_list_field) = relation_list_field {
             operation_fields
                 .add(
-                    &name,
+                    &relation_list_field.name,
                     OperationValue::RelationList(RelationList::new(relation_list)),
                 )
                 .unwrap();
         }
 
-        if !pinned_relation_list.is_empty() {
-            let name = &operation_field_rows
-                .iter()
-                .find(|row| row.field_type == "pinned_relation_list")
-                .unwrap()
-                .name;
+        // Find if there is at least one field containing a "pinned_relation_list" type
+        let pinned_relation_list_field = &operation_field_rows
+            .iter()
+            .find(|row| row.field_type == "pinned_relation_list");
+
+        // If so, then parse the `pinned_relation_list` vec into an operation value and add it to the operation fields
+        if let Some(pinned_relation_list_field) = pinned_relation_list_field {
             operation_fields
                 .add(
-                    &name,
+                    &pinned_relation_list_field.name,
                     OperationValue::PinnedRelationList(PinnedRelationList::new(
                         pinned_relation_list,
                     )),
