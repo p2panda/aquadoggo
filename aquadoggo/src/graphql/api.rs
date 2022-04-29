@@ -5,7 +5,7 @@ use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use axum::extract::Extension;
 use axum::response::{self, IntoResponse};
 
-use crate::server::ApiState;
+use crate::context::Context;
 
 pub async fn handle_graphql_playground() -> impl IntoResponse {
     response::Html(playground_source(GraphQLPlaygroundConfig::new("/")))
@@ -13,7 +13,7 @@ pub async fn handle_graphql_playground() -> impl IntoResponse {
 
 pub async fn handle_graphql_query(
     request: GraphQLRequest,
-    Extension(state): Extension<ApiState>,
+    Extension(context): Extension<Context>,
 ) -> GraphQLResponse {
-    state.schema.execute(request.into_inner()).await.into()
+    context.schema.execute(request.into_inner()).await.into()
 }

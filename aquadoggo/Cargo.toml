@@ -23,10 +23,7 @@ bamboo-rs-core-ed25519-yasmf = "0.1.1"
 crossbeam-queue = "0.3.5"
 directories = "3.0.2"
 envy = "0.4.2"
-exit-future = "0.2.0"
-futures = "0.3.17"
 hex = "0.4.3"
-http-types = "2.12.0"
 jsonrpc-v2 = { version = "0.10.1", features = [
     "easy-errors",
     "bytes-v05",
@@ -34,24 +31,23 @@ jsonrpc-v2 = { version = "0.10.1", features = [
 log = "0.4.14"
 openssl-probe = "0.1.4"
 # We can not publish the `aquadoggo` crate yet, since `p2panda-rs` is an
-# unpublished dependency. To still release something without publishing it, we
-# tag the dependency here with a git commit.
+# unpublished dependency.
 p2panda-rs = { git = "https://github.com/p2panda/p2panda", branch = "main" }
 rand = "0.8.4"
 serde = { version = "1.0.130", features = ["derive"] }
 serde_json = "1.0.67"
 sqlformat = "0.1.7"
 sqlx = { version = "0.5.7", features = [
-    "runtime-async-std-rustls",
     "all-databases",
+    "runtime-async-std-rustls",
 ] }
 thiserror = "1.0.29"
 tokio = { version = "1.17.0", features = [
-    "sync",
-    "rt",
-    "net",
-    "time",
     "macros",
+    "net",
+    "rt",
+    "sync",
+    "time",
 ] }
 tower-http = { version = "0.2.4", default-features = false, features = [
     "cors",

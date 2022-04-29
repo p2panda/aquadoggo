@@ -4,14 +4,14 @@ use axum::extract::Extension;
 use axum::Json;
 use jsonrpc_v2::{RequestObject, ResponseObjects};
 
-use crate::server::ApiState;
+use crate::context::Context;
 
 /// Handle incoming HTTP JSON RPC requests.
 pub async fn handle_http_request(
     Json(rpc_request): Json<RequestObject>,
-    Extension(state): Extension<ApiState>,
+    Extension(context): Extension<Context>,
 ) -> Json<ResponseObjects> {
-    let response = state.rpc_service.handle(rpc_request).await;
+    let response = context.rpc_service.handle(rpc_request).await;
     Json(response)
 }
 

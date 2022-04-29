@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! Service manager for orchestration of long-running concurrent processes.
-//!
-//! This manager offers a message bus between services for cross-service communication. It also
-//! sends a shutdown signal to allow services to react to it gracefully.
 use std::future::Future;
-use std::ops::Deref;
+use std::pin::Pin;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::task::{Context, Poll};
 
+use anyhow::Result;
+use log::{error, info};
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::task;
@@ -17,18 +18,6 @@ pub type Sender<T> = broadcast::Sender<T>;
 
 /// Receives shutdown signal for services so they can react accordingly.
 pub type Shutdown = JoinHandle<()>;
-
-/// Data shared across services, for example a database.
-#[derive(Debug, Clone, Copy)]
-pub struct Context<D: Clone + Send + Sync + 'static>(pub D);
-
-impl<D: Clone + Send + Sync + 'static> Deref for Context<D> {
-    type Target = D;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
 
 /// This trait defines a generic async service function receiving a shared context and access to
 /// the communication bus and shutdown signal handler.
@@ -41,7 +30,7 @@ where
     D: Clone + Send + Sync + 'static,
     M: Clone + Send + Sync + 'static,
 {
-    async fn call(&self, context: Context<D>, shutdown: Shutdown, tx: Sender<M>);
+    async fn call(&self, context: D, shutdown: Shutdown, tx: Sender<M>) -> Result<()>;
 }
 
 /// Implements our `Service` trait for a generic async function.
@@ -49,9 +38,9 @@ where
 impl<FN, F, D, M> Service<D, M> for FN
 where
     // Function accepting a context and our communication channels, returning a future.
-    FN: Fn(Context<D>, Shutdown, Sender<M>) -> F + Sync,
+    FN: Fn(D, Shutdown, Sender<M>) -> F + Sync,
     // A future
-    F: Future<Output = ()> + Send + 'static,
+    F: Future<Output = Result<()>> + Send + 'static,
     // Generic context type.
     D: Clone + Send + Sync + 'static,
     // Generic message type for the communication bus.
@@ -62,29 +51,92 @@ where
     ///
     /// This gets automatically wrapped in a static, boxed and pinned function signature by the
     /// `async_trait` macro so we don't need to do it ourselves.
-    async fn call(&self, context: Context<D>, shutdown: Shutdown, tx: Sender<M>) {
+    async fn call(&self, context: D, shutdown: Shutdown, tx: Sender<M>) -> Result<()> {
         (self)(context, shutdown, tx).await
     }
 }
 
+/// Future which resolves as soon as the internal boolean flag gets flipped to "true".
+///
+/// The flag can be manually set with the `fire` method or automatically whenever the signal
+/// instance gets dropped. The latter is a trick to fire a signal when something panics.
+struct Signal(Arc<AtomicBool>);
+
+impl Signal {
+    /// Returns a new signal instance.
+    pub fn new() -> Self {
+        Self(Arc::new(AtomicBool::new(false)))
+    }
+
+    /// Sets the boolean flag to "true" which will resolve the future.
+    pub fn fire(&mut self) {
+        self.0.swap(true, Ordering::Relaxed);
+    }
+}
+
+impl Future for Signal {
+    type Output = ();
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match self.0.load(Ordering::Relaxed) {
+            true => Poll::Ready(()),
+            false => {
+                cx.waker().clone().wake();
+                Poll::Pending
+            }
+        }
+    }
+}
+
+impl Clone for Signal {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl Drop for Signal {
+    fn drop(&mut self) {
+        // Fire signal whenever signal handler goes out of scope
+        self.fire();
+
+        // Drop object
+        drop(self)
+    }
+}
+
+// Service manager for orchestration of long-running concurrent processes.
+//
+// This manager offers a message bus between services for cross-service communication. It also
+// sends a shutdown signal to allow services to react to it gracefully.
+//
+// Stopped services (because of a panic, error or successful return) will send an exit signal which
+// can be subscribed to via the `on_exit` method. Usually stopped services indicate system failure
+// and it is recommended to stop the application when this events occurs.
 pub struct ServiceManager<D, M>
 where
     D: Clone + Send + Sync + 'static,
     M: Clone + Send + Sync + 'static,
 {
     /// Shared, thread-safe context between services.
-    context: Context<D>,
+    context: D,
 
     /// Sender of our communication bus.
     ///
     /// This is a broadcast channel where any amount of senders and receivers can be derived from.
     tx: Sender<M>,
 
+    /// Sender of exit signal.
+    ///
+    /// The manager catches returned errors and panics from services and notifies this channel.
+    /// This can be used to listen to incoming errors and react to them, for example by quitting
+    /// the program.
+    exit_signal: Signal,
+
     /// Sender of the shutdown signal.
     ///
     /// All services can subscribe to this broadcast channel and accordingly react to it if they
     /// need to.
-    shutdown: broadcast::Sender<bool>,
+    shutdown_signal: broadcast::Sender<bool>,
 }
 
 impl<D, M> ServiceManager<D, M>
@@ -98,22 +150,31 @@ where
     /// get broadcasted across all services.
     pub fn new(capacity: usize, context: D) -> Self {
         let (tx, _) = broadcast::channel(capacity);
-        let (shutdown, _) = broadcast::channel(16);
+        let (shutdown_signal, _) = broadcast::channel(16);
+        let exit_signal = Signal::new();
 
         Self {
-            context: Context(context),
+            context,
             tx,
-            shutdown,
+            exit_signal,
+            shutdown_signal,
         }
     }
 
     /// Adds a new service to the manager.
-    pub fn add<F: Service<D, M> + Send + Sync + Copy + 'static>(&mut self, service: F) {
+    ///
+    /// Errors returned and panics by the service will send an exit signal which can be subscribed
+    /// to via the `on_exit` method.
+    pub fn add<F: Service<D, M> + Send + Sync + Copy + 'static>(
+        &mut self,
+        name: &'static str,
+        service: F,
+    ) {
         // Sender for communication bus
         let tx = self.tx.clone();
 
         // Sender and receiver for shutdown channel
-        let shutdown_tx = self.shutdown.clone();
+        let shutdown_tx = self.shutdown_signal.clone();
         let mut shutdown_rx = shutdown_tx.subscribe();
 
         // Wait for any signal from the shutdown channel
@@ -121,29 +182,51 @@ where
             let _ = shutdown_rx.recv().await;
         });
 
+        // Sender for exit signal
+        let mut exit_signal = self.exit_signal.clone();
+
         // Reference to shared context
         let context = self.context.clone();
 
         task::spawn(async move {
+            info!("Start {} service", name);
+
             // Run the service!
-            service.call(context, signal, tx).await;
+            let handle = service.call(context, signal, tx).await;
 
             // Drop the shutdown sender of this service when we're done, this signals the shutdown
             // process that this service has finally stopped
             drop(shutdown_tx);
+
+            // Handle potential errors which have been returned by the service.
+            if let Some(err) = handle.err() {
+                error!("Error in {} service: {}", name, err);
+                exit_signal.fire();
+            }
+
+            // `exit_signal` will go out of scope now and drops here. Since we also implemented the
+            // `Drop` trait on `Signal` we will be able to fire a signal also when this task panics
+            // or stops.
         });
+    }
+
+    /// Future which resolves as soon as a service returned an error, panicked or stopped.
+    pub async fn on_exit(&self) {
+        self.exit_signal.clone().await;
     }
 
     /// Informs all services about graceful shutdown and waits for them until they all stopped.
     pub async fn shutdown(self) {
-        let mut rx = self.shutdown.subscribe();
+        info!("Received shutdown signal");
+
+        let mut rx = self.shutdown_signal.subscribe();
 
         // Broadcast graceful shutdown messages to all services
-        self.shutdown.send(true).unwrap();
+        self.shutdown_signal.send(true).unwrap();
 
         // We drop our sender first to make sure _all_ senders get eventually closed, because the
         // recv() call otherwise sleeps forever.
-        drop(self.shutdown);
+        drop(self.shutdown_signal);
 
         // When every sender has gone out of scope, the recv call will return with a `Closed`
         // error. This is our signal that all services have been finally shut down and we are done
@@ -162,13 +245,15 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
 
-    use super::{Context, Sender, ServiceManager, Shutdown};
+    use super::{Sender, ServiceManager, Shutdown};
+
+    type Counter = Arc<AtomicUsize>;
 
     #[tokio::test]
     async fn service_manager() {
         let mut manager = ServiceManager::<usize, usize>::new(16, 0);
 
-        manager.add(|_, signal: Shutdown, _| async move {
+        manager.add("test", |_, signal: Shutdown, _| async move {
             let work = tokio::task::spawn(async {
                 loop {
                     // Doing some very important work here ..
@@ -181,6 +266,8 @@ mod tests {
 
             // Some "tidying" we have to do before we can actually close this service
             tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+
+            Ok(())
         });
 
         manager.shutdown().await;
@@ -195,34 +282,77 @@ mod tests {
         }
 
         // Counter which is shared between services
-        type Counter = Arc<AtomicUsize>;
         let counter: Counter = Arc::new(AtomicUsize::new(0));
 
         let mut manager = ServiceManager::<Counter, Message>::new(32, counter.clone());
 
         // Create five services waiting for message
         for _ in 0..5 {
-            manager.add(
-                |Context(data): Context<Counter>, _, tx: Sender<Message>| async move {
-                    let mut rx = tx.subscribe();
-                    let message = rx.recv().await.unwrap();
+            manager.add("rx", |data: Counter, _, tx: Sender<Message>| async move {
+                let mut rx = tx.subscribe();
+                let message = rx.recv().await.unwrap();
 
-                    // Increment counter as soon as we received the right message
-                    if matches!(message, Message::Hello) {
-                        data.fetch_add(1, Ordering::Relaxed);
-                    }
-                },
-            );
+                // Increment counter as soon as we received the right message
+                if matches!(message, Message::Hello) {
+                    data.fetch_add(1, Ordering::Relaxed);
+                }
+
+                Ok(())
+            });
         }
 
         // Create another service sending message over communication bus
-        manager.add(|_, _, tx: Sender<Message>| async move {
+        manager.add("tx", |_, _, tx: Sender<Message>| async move {
             tx.send(Message::Hello).unwrap();
+            Ok(())
         });
 
         manager.shutdown().await;
 
         // Check if we received the message in all services
         assert_eq!(counter.load(Ordering::Relaxed), 5);
+    }
+
+    #[tokio::test]
+    async fn on_exit() {
+        let counter: Counter = Arc::new(AtomicUsize::new(0));
+        let mut manager = ServiceManager::<Counter, usize>::new(32, counter.clone());
+
+        manager.add("one", |counter: Counter, signal: Shutdown, _| async move {
+            let counter_clone = counter.clone();
+
+            let work = tokio::task::spawn(async move {
+                // Increment counter once within the work task
+                counter_clone.fetch_add(1, Ordering::Relaxed);
+
+                loop {
+                    // We stay here forever now and make sure this task will not stop until we
+                    // receive the shutdown signal
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                }
+            });
+
+            tokio::select! { _ = work => (), _ = signal => () };
+
+            // Increment counter another time during shutdown
+            counter.fetch_add(1, Ordering::Relaxed);
+
+            Ok(())
+        });
+
+        manager.add("two", |_, _, _| async move {
+            // Wait a little bit for the first task to do its work
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            panic!("This went wrong");
+        });
+
+        // Wait for panic to take place ..
+        manager.on_exit().await;
+
+        // .. then shut everything down
+        manager.shutdown().await;
+
+        // Check if we could do our work and shutdown procedure
+        assert_eq!(counter.load(Ordering::Relaxed), 2);
     }
 }

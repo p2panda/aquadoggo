@@ -14,6 +14,7 @@
 )]
 
 mod config;
+mod context;
 mod db;
 mod errors;
 mod graphql;
@@ -21,7 +22,7 @@ mod rpc;
 mod runtime;
 mod server;
 mod service_manager;
-mod task;
+mod service_message;
 mod worker;
 
 #[cfg(test)]
