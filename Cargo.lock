@@ -95,6 +95,7 @@ dependencies = [
  "crossbeam-queue",
  "directories",
  "envy",
+ "futures",
  "hex",
  "http",
  "hyper",
