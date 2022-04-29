@@ -116,18 +116,6 @@ pub enum TaskError {
 /// Workers are identified by simple string values.
 pub type WorkerName = String;
 
-/// A context object can be shared with each processed task across threads to gain access to common
-/// services like a datbase.
-pub struct Context<D: Send + Sync + 'static>(Arc<D>);
-
-impl<D: Send + Sync + 'static> Clone for Context<D> {
-    /// This `clone` implementation efficiently increments the reference counter to the inner
-    /// object instead of actually cloning it.
-    fn clone(&self) -> Self {
-        Self(Arc::clone(&self.0))
-    }
-}
-
 /// Every registered worker pool is managed by a `WorkerManager` which holds the task queue for
 /// this registered work and an index of all current inputs in the task queue.
 struct WorkerManager<IN>
@@ -168,7 +156,7 @@ where
     IN: Send + Sync + Clone + 'static,
     D: Send + Sync + 'static,
 {
-    async fn call(&self, context: Context<D>, input: IN) -> TaskResult<IN>;
+    async fn call(&self, context: D, input: IN) -> TaskResult<IN>;
 }
 
 /// Implements our `Workable` trait for a generic async function.
@@ -176,7 +164,7 @@ where
 impl<FN, F, IN, D> Workable<IN, D> for FN
 where
     // Function accepting a context and generic input value, returning a future.
-    FN: Fn(Context<D>, IN) -> F + Sync,
+    FN: Fn(D, IN) -> F + Sync,
     // Future returning a `TaskResult`.
     F: Future<Output = TaskResult<IN>> + Send + 'static,
     // Generic input type.
@@ -189,7 +177,7 @@ where
     ///
     /// This gets automatically wrapped in a static, boxed and pinned function signature by the
     /// `async_trait` macro so we don't need to do it ourselves.
-    async fn call(&self, context: Context<D>, input: IN) -> TaskResult<IN> {
+    async fn call(&self, context: D, input: IN) -> TaskResult<IN> {
         (self)(context, input).await
     }
 }
@@ -231,10 +219,10 @@ where
 pub struct Factory<IN, D>
 where
     IN: Send + Sync + Clone + Hash + Eq + Debug + 'static,
-    D: Send + Sync + 'static,
+    D: Send + Sync + Clone + 'static,
 {
     /// Shared context between all tasks.
-    context: Context<D>,
+    context: D,
 
     /// Map of all registered worker pools.
     managers: HashMap<WorkerName, WorkerManager<IN>>,
@@ -246,7 +234,7 @@ where
 impl<IN, D> Factory<IN, D>
 where
     IN: Send + Sync + Clone + Hash + Eq + Debug + 'static,
-    D: Send + Sync + 'static,
+    D: Send + Sync + Clone + 'static,
 {
     /// Initialises a new factory.
     ///
@@ -256,11 +244,11 @@ where
     ///
     /// Factories will panic if the capacity limit was reached as it will cause the workers to miss
     /// incoming tasks.
-    pub fn new(data: D, capacity: usize) -> Self {
+    pub fn new(context: D, capacity: usize) -> Self {
         let (tx, _) = channel(capacity);
 
         Self {
-            context: Context(Arc::new(data)),
+            context,
             managers: HashMap::new(),
             tx,
         }
@@ -436,7 +424,7 @@ mod tests {
     use rand::seq::SliceRandom;
     use rand::Rng;
 
-    use super::{Context, Factory, Task, TaskError, TaskResult};
+    use super::{Factory, Task, TaskError, TaskResult};
 
     #[tokio::test]
     async fn factory() {
@@ -450,15 +438,15 @@ mod tests {
         let mut factory = Factory::<Input, Data>::new(database.clone(), 1024);
 
         // Define two workers
-        async fn first(database: Context<Data>, input: Input) -> TaskResult<Input> {
-            let mut db = database.0.lock().map_err(|_| TaskError::Critical)?;
+        async fn first(database: Data, input: Input) -> TaskResult<Input> {
+            let mut db = database.lock().map_err(|_| TaskError::Critical)?;
             db.push(format!("first-{}", input));
             Ok(None)
         }
 
         // .. the second worker dispatches a task for "first" at the end
-        async fn second(database: Context<Data>, input: Input) -> TaskResult<Input> {
-            let mut db = database.0.lock().map_err(|_| TaskError::Critical)?;
+        async fn second(database: Data, input: Input) -> TaskResult<Input> {
+            let mut db = database.lock().map_err(|_| TaskError::Critical)?;
             db.push(format!("second-{}", input));
             Ok(Some(vec![Task::new("first", input)]))
         }
@@ -525,8 +513,8 @@ mod tests {
         let mut factory = Factory::<JigsawPiece, Data>::new(database.clone(), 1024);
 
         // This tasks "picks" a single piece out of the box and sorts it into the database
-        async fn pick(database: Context<Data>, input: JigsawPiece) -> TaskResult<JigsawPiece> {
-            let mut db = database.0.lock().map_err(|_| TaskError::Critical)?;
+        async fn pick(database: Data, input: JigsawPiece) -> TaskResult<JigsawPiece> {
+            let mut db = database.lock().map_err(|_| TaskError::Critical)?;
 
             // 1. Take incoming puzzle piece from box and move it into the database first
             db.pieces.insert(input.id, input.clone());
@@ -545,8 +533,8 @@ mod tests {
         }
 
         // This task finds fitting pieces and tries to combine them to a puzzle
-        async fn find(database: Context<Data>, input: JigsawPiece) -> TaskResult<JigsawPiece> {
-            let mut db = database.0.lock().map_err(|_| TaskError::Critical)?;
+        async fn find(database: Data, input: JigsawPiece) -> TaskResult<JigsawPiece> {
+            let mut db = database.lock().map_err(|_| TaskError::Critical)?;
 
             // 1. Merge all known and related pieces into one large list
             let mut ids: Vec<usize> = Vec::new();
@@ -627,8 +615,8 @@ mod tests {
         }
 
         // This task checks if a puzzle was completed
-        async fn finish(database: Context<Data>, input: JigsawPiece) -> TaskResult<JigsawPiece> {
-            let mut db = database.0.lock().map_err(|_| TaskError::Critical)?;
+        async fn finish(database: Data, input: JigsawPiece) -> TaskResult<JigsawPiece> {
+            let mut db = database.lock().map_err(|_| TaskError::Critical)?;
 
             // 1. Identify unfinished puzzle related to this piece
             let puzzle: Option<JigsawPuzzle> = db
