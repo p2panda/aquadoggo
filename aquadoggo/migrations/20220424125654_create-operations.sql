@@ -21,4 +21,4 @@ CREATE TABLE IF NOT EXISTS operation_fields_v1 (
     value                           BLOB              NULL
 );
 
-CREATE INDEX idx_operation_fields_v1 ON operation_fields_v1 (operation_id, name, field_type);
+CREATE INDEX idx_operation_fields_v1 ON operation_fields_v1 (operation_id, name);
