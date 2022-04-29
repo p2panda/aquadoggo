@@ -1,10 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::future::Future;
-use std::pin::Pin;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use std::task::{Context, Poll};
 
 use anyhow::Result;
 use log::{error, info};
@@ -12,6 +8,7 @@ use tokio::sync::broadcast;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::task;
 use tokio::task::JoinHandle;
+use triggered::{Listener, Trigger};
 
 /// Sends messages through the communication bus between services.
 pub type Sender<T> = broadcast::Sender<T>;
@@ -56,51 +53,24 @@ where
     }
 }
 
-/// Future which resolves as soon as the internal boolean flag gets flipped to "true".
-///
-/// The flag can be manually set with the `fire` method or automatically whenever the signal
-/// instance gets dropped. The latter is a trick to fire a signal when something panics.
-struct Signal(Arc<AtomicBool>);
+/// Wrapper around `Trigger` which sends a signal as soon as `Signal` gets dropped.
+#[derive(Clone)]
+struct Signal(Trigger);
 
 impl Signal {
-    /// Returns a new signal instance.
-    pub fn new() -> Self {
-        Self(Arc::new(AtomicBool::new(false)))
-    }
-
-    /// Sets the boolean flag to "true" which will resolve the future.
-    pub fn fire(&mut self) {
-        self.0.swap(true, Ordering::Relaxed);
-    }
-}
-
-impl Future for Signal {
-    type Output = ();
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.0.load(Ordering::Relaxed) {
-            true => Poll::Ready(()),
-            false => {
-                cx.waker().clone().wake();
-                Poll::Pending
-            }
-        }
-    }
-}
-
-impl Clone for Signal {
-    fn clone(&self) -> Self {
-        Self(self.0.clone())
+    /// Fires the signal manually.
+    pub fn trigger(&self) {
+        self.0.trigger();
     }
 }
 
 impl Drop for Signal {
     fn drop(&mut self) {
-        // Fire signal whenever signal handler goes out of scope
-        self.fire();
+        // Fires the signal automatically on drop
+        self.trigger();
 
-        // Drop object
-        drop(self)
+        // And now, drop it!
+        drop(self);
     }
 }
 
@@ -121,21 +91,24 @@ where
     context: D,
 
     /// Sender of our communication bus.
-    ///
-    /// This is a broadcast channel where any amount of senders and receivers can be derived from.
     tx: Sender<M>,
 
     /// Sender of exit signal.
     ///
-    /// The manager catches returned errors and panics from services and notifies this channel.
-    /// This can be used to listen to incoming errors and react to them, for example by quitting
-    /// the program.
+    /// The manager catches returned errors or panics from services and sends the exit signal.
     exit_signal: Signal,
 
-    /// Sender of the shutdown signal.
+    /// Receiver of exit signal.
     ///
-    /// All services can subscribe to this broadcast channel and accordingly react to it if they
-    /// need to.
+    /// This can be used to react to service errors, for example by quitting the program.
+    exit_handle: Listener,
+
+    /// Sender of shutdown signal.
+    ///
+    /// All services can subscribe to this broadcast channel and accordingly react to it.
+    ///
+    /// This needs to be a broadcast channel as we keep count of the subscribers and stop the
+    /// service manager as soon as all of them have been dropped.
     shutdown_signal: broadcast::Sender<bool>,
 }
 
@@ -146,17 +119,18 @@ where
 {
     /// Returns a new instance of a service manager.
     ///
-    /// The capacity argument defines the maximum bound of messages on the communication bus which
-    /// get broadcasted across all services.
+    /// The `capacity` argument defines the maximum bound of messages on the communication bus
+    /// which get broadcasted across all services.
     pub fn new(capacity: usize, context: D) -> Self {
         let (tx, _) = broadcast::channel(capacity);
         let (shutdown_signal, _) = broadcast::channel(16);
-        let exit_signal = Signal::new();
+        let (exit_signal, exit_handle) = triggered::trigger();
 
         Self {
             context,
             tx,
-            exit_signal,
+            exit_signal: Signal(exit_signal),
+            exit_handle,
             shutdown_signal,
         }
     }
@@ -183,7 +157,7 @@ where
         });
 
         // Sender for exit signal
-        let mut exit_signal = self.exit_signal.clone();
+        let exit_signal = self.exit_signal.clone();
 
         // Reference to shared context
         let context = self.context.clone();
@@ -201,7 +175,7 @@ where
             // Handle potential errors which have been returned by the service.
             if let Some(err) = handle.err() {
                 error!("Error in {} service: {}", name, err);
-                exit_signal.fire();
+                exit_signal.trigger();
             }
 
             // `exit_signal` will go out of scope now and drops here. Since we also implemented the
@@ -212,7 +186,7 @@ where
 
     /// Future which resolves as soon as a service returned an error, panicked or stopped.
     pub async fn on_exit(&self) {
-        self.exit_signal.clone().await;
+        self.exit_handle.clone().await;
     }
 
     /// Informs all services about graceful shutdown and waits for them until they all stopped.

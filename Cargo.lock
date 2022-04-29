@@ -113,6 +113,7 @@ dependencies = [
  "tower",
  "tower-http 0.2.5",
  "tower-service",
+ "triggered",
 ]
 
 [[package]]
@@ -3604,6 +3605,12 @@ checksum = "f54c8ca710e81886d498c2fd3331b56c93aa248d49de2222ad2742247c60072f"
 dependencies = [
  "lazy_static",
 ]
+
+[[package]]
+name = "triggered"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce148eae0d1a376c1b94ae651fc3261d9cb8294788b962b7382066376503a2d1"
 
 [[package]]
 name = "try-lock"
