@@ -66,10 +66,10 @@ impl Runtime {
 
     /// Close all running concurrent tasks and wait until they are fully shut down.
     pub async fn shutdown(self) {
-        // Close connection pool
-        self.pool.close().await;
-
         // Wait until all tasks are shut down
         self.manager.shutdown().await;
+
+        // Close connection pool
+        self.pool.close().await;
     }
 }
