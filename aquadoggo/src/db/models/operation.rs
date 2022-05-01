@@ -84,7 +84,7 @@ pub trait AsStorageOperation: Sized + Clone + Send + Sync + Validate {
     fn schema_id_short(&self) -> SchemaIdShort;
 }
 
-/// `LogStorage` errors.
+/// `OperationStore` errors.
 #[derive(thiserror::Error, Debug)]
 pub enum OperationStorageError {
     /// Catch all error which implementers can use for passing their own errors up the chain.
