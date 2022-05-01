@@ -288,6 +288,8 @@ impl OperationStore<DoggoOperation> for SqlStorage {
                     OperationValue::PinnedRelationList(pinned_relation_list) => {
                         let mut db_values = Vec::new();
                         for document_view_id in pinned_relation_list.iter() {
+                            // I think we'd prefer to store the full id here, not the hash, don't think there's
+                            // a string method for that yet though.
                             db_values.push(Some(document_view_id.hash().as_str().to_string()))
                         }
                         db_values
