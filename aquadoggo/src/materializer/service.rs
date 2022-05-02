@@ -26,6 +26,9 @@ pub async fn materializer_service(
     factory.register("dependency", pool_size, dependency_task);
     factory.register("schema", pool_size, schema_task);
 
+    // Get a listener for error signal from factory
+    let on_error = factory.on_error();
+
     // Subscribe to communication bus
     let mut rx = tx.subscribe();
 
@@ -38,7 +41,11 @@ pub async fn materializer_service(
     });
 
     // Wait until we received the application shutdown signal or handle closed
-    tokio::select! { _ = handle => (), _ = shutdown => () };
+    tokio::select! {
+        _ = handle => (),
+        _ = shutdown => (),
+        _ = on_error => (),
+    }
 
     Ok(())
 }

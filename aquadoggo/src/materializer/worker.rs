@@ -83,9 +83,11 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crossbeam_queue::SegQueue;
+use log::{error, info};
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::broadcast::{channel, Sender};
 use tokio::task;
+use triggered::{Listener, Trigger};
 
 /// A task holding a generic input value and the name of the worker which will process it
 /// eventually.
@@ -229,6 +231,14 @@ where
 
     /// Broadcast channel to inform worker pools about new tasks.
     tx: Sender<Task<IN>>,
+
+    /// Sender of error signal.
+    error_signal: Trigger,
+
+    /// Receiver of error signal.
+    ///
+    /// This can be used to react to factory errors, for example by quitting the program.
+    error_handle: Listener,
 }
 
 impl<IN, D> Factory<IN, D>
@@ -246,11 +256,14 @@ where
     /// incoming tasks.
     pub fn new(context: D, capacity: usize) -> Self {
         let (tx, _) = channel(capacity);
+        let (error_signal, error_handle) = triggered::trigger();
 
         Self {
             context,
             managers: HashMap::new(),
             tx,
+            error_signal,
+            error_handle,
         }
     }
 
@@ -277,6 +290,8 @@ where
             self.managers.insert(name.into(), new_manager);
         }
 
+        info!("Register {} worker with pool size {}", name, pool_size);
+
         self.spawn_dispatcher(name);
         self.spawn_workers(name, pool_size, work);
     }
@@ -286,9 +301,13 @@ where
     /// Tasks with duplicate input values which already exist in the queue will be silently
     /// rejected.
     pub fn queue(&mut self, task: Task<IN>) {
-        self.tx
-            .send(task)
-            .expect("Critical system error: Cant broadcast task");
+        match self.tx.send(task) {
+            Err(err) => {
+                error!("Error while broadcasting task: {}", err);
+                self.error_signal.trigger();
+            }
+            _ => (),
+        }
     }
 
     /// Returns true if there are no more tasks given for this worker pool.
@@ -297,6 +316,11 @@ where
             Some(manager) => manager.queue.is_empty(),
             None => false,
         }
+    }
+
+    /// Future which resolves as soon as factory returned a critical error.
+    pub fn on_error(&self) -> Listener {
+        self.error_handle.clone()
     }
 
     /// Spawns a task which listens to broadcast channel for incoming new tasks which might be
@@ -316,6 +340,9 @@ where
         let name = String::from(name);
         let queue = manager.queue.clone();
 
+        // Create handle for error signal
+        let error_signal = self.error_signal.clone();
+
         task::spawn(async move {
             loop {
                 match rx.recv().await {
@@ -326,22 +353,28 @@ where
                         }
 
                         // Check if a task with the same input values already exists in queue
-                        // @TODO: Unwind panic
-                        let mut input_index = input_index.lock().unwrap();
-                        if input_index.contains(&task.1) {
-                            continue; // Task already exists
+                        match input_index.lock() {
+                            Ok(mut index) => {
+                                if index.contains(&task.1) {
+                                    continue; // Task already exists
+                                } else {
+                                    // Generate a unique id for this new task and add it to queue
+                                    let next_id = counter.fetch_add(1, Ordering::Relaxed);
+                                    queue.push(QueueItem::new(next_id, task.1.clone()));
+                                    index.insert(task.1);
+                                }
+                            }
+                            Err(err) => {
+                                error!("Error while locking input index: {}", err);
+                                error_signal.trigger();
+                            }
                         }
-
-                        // Generate a unique id for this new task and add it to queue
-                        let next_id = counter.fetch_add(1, Ordering::Relaxed);
-                        queue.push(QueueItem::new(next_id, task.1.clone()));
-                        input_index.insert(task.1);
                     }
                     // The capacity of the broadcast channel is full, we're lagging behind and miss
                     // out on incoming tasks
                     Err(RecvError::Lagged(skipped_messages)) => {
-                        // @TODO: Unwind panic
-                        panic!("Lagging! {}", skipped_messages);
+                        error!("Channel lagging behind {} messages", skipped_messages);
+                        error_signal.trigger();
                     }
                     // The channel got closed, nothing anymore to do here
                     Err(RecvError::Closed) => (),
@@ -370,6 +403,9 @@ where
             let input_index = manager.input_index.clone();
             let tx = self.tx.clone();
 
+            // Create handle for error signal
+            let error_signal = self.error_signal.clone();
+
             task::spawn(async move {
                 loop {
                     // Wait until there is a new task arriving in the queue
@@ -379,25 +415,34 @@ where
                             let result = work.call(context.clone(), item.input()).await;
 
                             // Remove input index from queue
-                            // @TODO: Unwind panic
-                            let mut input_index = input_index.lock().unwrap();
-                            input_index.remove(&item.input());
+                            match input_index.lock() {
+                                Ok(mut index) => {
+                                    index.remove(&item.input());
+                                }
+                                Err(err) => {
+                                    error!("Error while locking input index: {}", err);
+                                    error_signal.trigger();
+                                }
+                            }
 
                             // .. check the task result ..
                             match result {
                                 Ok(Some(list)) => {
                                     // Tasks succeeded and dispatches new, subsequent tasks
                                     for task in list {
-                                        tx.send(task)
-                                            // @TODO: Unwind panic
-                                            .expect("Critical system error: Cant broadcast task");
+                                        match tx.send(task) {
+                                            Err(err) => {
+                                                error!("Error while broadcasting task: {}", err);
+                                                error_signal.trigger();
+                                            }
+                                            _ => (),
+                                        }
                                     }
                                 }
                                 Err(TaskError::Critical) => {
                                     // Something really horrible happened, we need to crash!
-                                    //
-                                    // @TODO: Unwind panic
-                                    panic!("Critical system error: Task {:?} failed", item.id(),);
+                                    error!("Critical error in task {:?}", item);
+                                    error_signal.trigger();
                                 }
                                 Err(TaskError::Failure) => {
                                     // Silently fail .. maybe write something to the log or retry?
