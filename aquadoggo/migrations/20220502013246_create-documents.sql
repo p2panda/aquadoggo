@@ -1,20 +1,20 @@
 -- SPDX-License-Identifier: AGPL-3.0-or-later
 CREATE TABLE IF NOT EXISTS document_view_fields (
-    document_view_hash VARCHAR(64) NOT NULL,
+    document_view_id_hash VARCHAR(64) NOT NULL,
     operation_id VARCHAR(64) NOT NULL,
     name VARCHAR(128) NOT NULL
 );
 
-CREATE INDEX idx_document_view_fields ON document_view_fields (document_view_hash, operation_id, name);
+CREATE INDEX idx_document_view_fields ON document_view_fields (document_view_id_hash, operation_id, name);
 
 CREATE TABLE IF NOT EXISTS document_views (
-    document_view_hash VARCHAR(64) NOT NULL UNIQUE,
+    document_view_id_hash VARCHAR(64) NOT NULL UNIQUE,
     schema_id_short VARCHAR(64) NOT NULL,
-    PRIMARY KEY (document_view_hash)
+    PRIMARY KEY (document_view_id_hash)
 );
 
 CREATE TABLE IF NOT EXISTS documents (
     document_id VARCHAR(64) NOT NULL UNIQUE,
-    document_view_hash VARCHAR(64) NOT NULL,
+    document_view_id_hash VARCHAR(64) NOT NULL,
     PRIMARY KEY (document_id)
 );
