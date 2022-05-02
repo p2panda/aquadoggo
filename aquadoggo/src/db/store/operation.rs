@@ -8,7 +8,6 @@ use p2panda_rs::operation::{
     AsOperation, Operation, OperationAction, OperationFields, OperationId, OperationValue,
 };
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::Validate;
 
 use crate::db::db_types::{OperationFieldRow, OperationRow, PreviousOperationRelationRow};
 use crate::db::errors::OperationStorageError;
@@ -75,8 +74,6 @@ impl OperationStore<DoggoOperation> for SqlStorage {
         &self,
         operation: &DoggoOperation,
     ) -> Result<bool, OperationStorageError> {
-        // CHECK transactions in SQL!
-
         // Convert the action to a string.
         let action = match operation.action() {
             OperationAction::Create => "create",
@@ -160,7 +157,6 @@ impl OperationStore<DoggoOperation> for SqlStorage {
                 // every item in the list. Here we collect these items and return them in a vector. If this operation
                 // value is anything except for the above list types, we will return a vec containing a single item.
 
-                // QUESTION: What is the sqlx pattern for inserting BLOBs? These don't need to be strings.
                 let db_values = match value {
                     OperationValue::Boolean(bool) => vec![Some(bool.to_string())],
                     OperationValue::Integer(int) => vec![Some(int.to_string())],
@@ -233,8 +229,6 @@ impl OperationStore<DoggoOperation> for SqlStorage {
             })
             .is_ok();
         };
-
-        // QUESTION: When do we actually want an Error and when do we want a true/false success?
         Ok(operation_inserted && previous_operations_inserted && fields_inserted)
     }
 
