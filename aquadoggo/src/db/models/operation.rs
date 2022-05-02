@@ -533,17 +533,11 @@ impl OperationStore<DoggoOperation> for SqlStorage {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
-    use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::Author;
-    use p2panda_rs::operation::{
-        Operation, OperationFields, OperationId, OperationValue, PinnedRelation,
-        PinnedRelationList, Relation, RelationList,
-    };
-    use p2panda_rs::schema::SchemaId;
-    use p2panda_rs::test_utils::constants::{DEFAULT_HASH, TEST_SCHEMA_ID};
+    use p2panda_rs::operation::OperationId;
+    use p2panda_rs::test_utils::constants::DEFAULT_HASH;
 
+    use crate::db::models::test_utils::test_operation;
     use crate::db::store::SqlStorage;
     use crate::test_helpers::initialize_db;
 
@@ -558,70 +552,9 @@ mod tests {
 
         let author = Author::new(TEST_AUTHOR).unwrap();
 
-        let mut fields = OperationFields::new();
-        fields
-            .add("username", OperationValue::Text("bubu".to_owned()))
-            .unwrap();
-
-        fields.add("height", OperationValue::Float(3.5)).unwrap();
-
-        fields.add("age", OperationValue::Integer(28)).unwrap();
-
-        fields
-            .add("is_admin", OperationValue::Boolean(false))
-            .unwrap();
-
-        fields
-            .add(
-                "profile_picture",
-                OperationValue::Relation(Relation::new(DEFAULT_HASH.parse().unwrap())),
-            )
-            .unwrap();
-        fields
-            .add(
-                "special_profile_picture",
-                OperationValue::PinnedRelation(PinnedRelation::new(DEFAULT_HASH.parse().unwrap())),
-            )
-            .unwrap();
-        fields
-            .add(
-                "many_profile_pictures",
-                OperationValue::RelationList(RelationList::new(vec![
-                    Hash::new(
-                        "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                    )
-                    .unwrap()
-                    .into(),
-                    Hash::new(
-                        "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                    )
-                    .unwrap()
-                    .into(),
-                ])),
-            )
-            .unwrap();
-        fields
-            .add(
-                "many_special_profile_pictures",
-                OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
-                    Hash::new(
-                        "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                    )
-                    .unwrap()
-                    .into(),
-                    Hash::new(
-                        "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                    )
-                    .unwrap()
-                    .into(),
-                ])),
-            )
-            .unwrap();
-        let operation =
-            Operation::new_create(SchemaId::from_str(TEST_SCHEMA_ID).unwrap(), fields).unwrap();
         let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
 
-        let doggo_operation = DoggoOperation::new(&operation, &operation_id, &author);
+        let doggo_operation = DoggoOperation::new(&test_operation(), &operation_id, &author);
 
         let result = storage_provider
             .insert_operation(&doggo_operation)

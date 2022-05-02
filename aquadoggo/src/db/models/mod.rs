@@ -4,6 +4,7 @@ mod document_view;
 mod entry;
 mod log;
 mod operation;
+mod test_utils;
 
 pub use self::log::Log;
 pub use entry::EntryRow;
