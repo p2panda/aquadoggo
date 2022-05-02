@@ -21,12 +21,7 @@ use super::operation::OperationStore;
 
 type FieldName = String;
 type DocumentViewFields = BTreeMap<FieldName, OperationValue>;
-
-// We can derive this quite simply from a sorted list of operations by visiting
-// each operation from the end of the list until we have found the id for every
-// field in this view/schema.
-#[derive(FromRow, Debug, Clone)]
-pub struct FieldIds(BTreeMap<FieldName, OperationId>);
+type FieldIds = BTreeMap<FieldName, OperationId>;
 
 #[derive(FromRow, Debug)]
 pub struct DocumentViewRow {
@@ -145,7 +140,7 @@ impl DocumentStore<DoggoDocumentView> for SqlStorage {
         // - we could also pass in a full list of already sorted operations,
         // these are already stored on `Document` so could be re-used from
         // there.
-        let field_relations_inserted = try_join_all(field_ids.0.iter().map(|field| {
+        let field_relations_inserted = try_join_all(field_ids.iter().map(|field| {
             query(
                 "
                     INSERT INTO
@@ -332,11 +327,13 @@ mod tests {
 
     use p2panda_rs::document::DocumentViewId;
     use p2panda_rs::identity::Author;
-    use p2panda_rs::operation::{AsOperation, OperationId};
+    use p2panda_rs::operation::{
+        AsOperation, Operation, OperationFields, OperationId, OperationValue,
+    };
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::test_utils::constants::{DEFAULT_HASH, TEST_SCHEMA_ID};
 
-    use crate::db::models::operation::{DoggoOperation, OperationStore};
+    use crate::db::models::operation::{AsStorageOperation, DoggoOperation, OperationStore};
     use crate::db::models::test_utils::test_operation;
     use crate::db::store::SqlStorage;
     use crate::test_helpers::initialize_db;
@@ -355,12 +352,11 @@ mod tests {
         let document_view_id: DocumentViewId = operation_id.clone().into();
         let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
 
-        let mut field_ids = BTreeMap::new();
+        let mut field_ids = FieldIds::new();
 
         operation.fields().unwrap().keys().iter().for_each(|key| {
             field_ids.insert(key.clone(), operation_id.clone());
         });
-        let field_ids = FieldIds(field_ids);
 
         let result = storage_provider
             .insert_document_view(&document_view_id, &field_ids, &schema_id)
@@ -380,12 +376,11 @@ mod tests {
         let document_view_id: DocumentViewId = operation_id.clone().into();
         let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
 
-        let mut field_ids = BTreeMap::new();
+        let mut field_ids = FieldIds::new();
 
         operation.fields().unwrap().keys().iter().for_each(|key| {
             field_ids.insert(key.clone(), operation_id.clone());
         });
-        let field_ids = FieldIds(field_ids);
 
         let doggo_operation = DoggoOperation::new(&operation, &operation_id, &author);
 
@@ -401,6 +396,43 @@ mod tests {
 
         let result = storage_provider
             .get_document_view_by_id(&document_view_id)
+            .await;
+
+        println!("{:#?}", result);
+
+        let mut fields = OperationFields::new();
+        fields
+            .add("username", OperationValue::Text("yahoooo".to_owned()))
+            .unwrap();
+
+        let update_operation = Operation::new_update(
+            SchemaId::from_str(TEST_SCHEMA_ID).unwrap(),
+            vec![operation_id],
+            fields,
+        )
+        .unwrap();
+
+        let update_operation_id = OperationId::new(
+            "0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                .parse()
+                .unwrap(),
+        );
+        field_ids.insert("username".to_string(), update_operation_id.clone());
+        let doggo_update_operation =
+            DoggoOperation::new(&update_operation, &update_operation_id, &author);
+
+        storage_provider
+            .insert_operation(&doggo_update_operation)
+            .await
+            .unwrap();
+
+        storage_provider
+            .insert_document_view(&update_operation_id.clone().into(), &field_ids, &schema_id)
+            .await
+            .unwrap();
+
+        let result = storage_provider
+            .get_document_view_by_id(&update_operation_id.into())
             .await;
 
         println!("{:#?}", result)
