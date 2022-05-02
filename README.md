@@ -60,10 +60,10 @@ Configurable node server implementation for the [`p2panda`] network running as a
 Embed the node server in your Rust application or web container like [`Tauri`]:
 
 ```rust
-use aquadoggo::{Configuration, Runtime};
+use aquadoggo::{Configuration, Node};
 
 let config = Configuration::new(None)?;
-let node = Runtime::start(config).await;
+let node = Node::start(config).await;
 ```
 
 You can also run the node server simply as a command line application:

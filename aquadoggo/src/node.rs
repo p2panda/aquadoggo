@@ -2,12 +2,12 @@
 
 use anyhow::Result;
 
+use crate::bus::ServiceMessage;
 use crate::config::Configuration;
 use crate::context::Context;
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
+use crate::manager::ServiceManager;
 use crate::server::http_service;
-use crate::service_manager::ServiceManager;
-use crate::service_message::ServiceMessage;
 
 /// Makes sure database is created and migrated before returning connection pool.
 async fn initialize_db(config: &Configuration) -> Result<Pool> {
@@ -32,12 +32,12 @@ async fn initialize_db(config: &Configuration) -> Result<Pool> {
 
 /// Main runtime managing the p2panda node process.
 #[allow(missing_debug_implementations)]
-pub struct Runtime {
+pub struct Node {
     pool: Pool,
     manager: ServiceManager<Context, ServiceMessage>,
 }
 
-impl Runtime {
+impl Node {
     /// Start p2panda node with your configuration. This method can be used to run the node within
     /// other applications.
     pub async fn start(config: Configuration) -> Self {

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use crate::service_manager::Sender;
+use crate::manager::Sender;
 
 /// Sender for cross-service communication bus.
 pub type ServiceSender = Sender<ServiceMessage>;
