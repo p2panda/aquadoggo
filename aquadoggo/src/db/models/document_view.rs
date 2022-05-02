@@ -203,20 +203,20 @@ impl DocumentStore<DoggoDocumentView> for SqlStorage {
     ) -> Result<DocumentViewFields, DocumentViewStorageError> {
         let document_view_field_rows = query_as::<_, DocumentViewFieldRow>(
             "
-SELECT
-    document_view_fields.name,
-    operation_fields_v1.field_type,
-    operation_fields_v1.value
-FROM
-    document_view_fields
-LEFT JOIN operation_fields_v1
-    ON
-        operation_fields_v1.operation_id = document_view_fields.operation_id
-    AND 
-        operation_fields_v1.name = document_view_fields.name
-WHERE
-    document_view_id_hash = $1
-            ",
+                    SELECT
+                        document_view_fields.name,
+                        operation_fields_v1.field_type,
+                        operation_fields_v1.value
+                    FROM
+                        document_view_fields
+                    LEFT JOIN operation_fields_v1
+                        ON
+                            operation_fields_v1.operation_id = document_view_fields.operation_id
+                        AND 
+                            operation_fields_v1.name = document_view_fields.name
+                    WHERE
+                        document_view_id_hash = $1
+                ",
         )
         .bind(id.hash().as_str())
         .fetch_all(&self.pool)
