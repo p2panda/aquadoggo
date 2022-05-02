@@ -15,14 +15,17 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1.0.43"
+arrayvec = "0.5.2"
 async-trait = "0.1.53"
-async-graphql = "3.0.35"
+async-graphql = "3.0.38"
 async-graphql-axum = "3.0.35"
 axum = "0.5.1"
 bamboo-rs-core-ed25519-yasmf = "0.1.1"
+base64 = "0.13"
 crossbeam-queue = "0.3.5"
 directories = "3.0.2"
 envy = "0.4.2"
+graphql_client = "0.10"
 hex = "0.4.3"
 jsonrpc-v2 = { version = "0.10.1", features = [
     "easy-errors",
@@ -36,6 +39,7 @@ p2panda-rs = { git = "https://github.com/p2panda/p2panda", branch = "main" }
 rand = "0.8.4"
 serde = { version = "1.0.130", features = ["derive"] }
 serde_json = "1.0.67"
+snafu = "0.7"
 sqlformat = "0.1.7"
 sqlx = { version = "0.5.7", features = [
     "all-databases",

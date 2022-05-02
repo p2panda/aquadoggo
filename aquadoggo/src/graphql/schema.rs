@@ -1,26 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::str::FromStr;
-
-use async_graphql::{EmptyMutation, EmptySubscription, Object, Schema};
-
 use crate::db::Pool;
 
-pub struct QueryRoot;
+use async_graphql::{EmptyMutation, EmptySubscription, Schema, MergedObject};
+use super::replication::ReplicationRoot;
+use super::ping::PingRoot;
 
-#[Object]
-impl QueryRoot {
-    // @TODO: Remove this example.
-    async fn ping(&self) -> String {
-        String::from_str("pong").unwrap()
-    }
-}
+#[derive(MergedObject, Default)]
+pub struct QueryRoot(PingRoot, ReplicationRoot);
 
 /// GraphQL schema for p2panda node.
-pub type StaticSchema = Schema<QueryRoot, EmptyMutation, EmptySubscription>;
+pub type RootSchema = Schema<QueryRoot, EmptyMutation, EmptySubscription>;
 
-pub fn build_static_schema(pool: Pool) -> StaticSchema {
-    Schema::build(QueryRoot, EmptyMutation, EmptySubscription)
+pub fn build_root_schema(pool: Pool) -> RootSchema {
+    Schema::build(QueryRoot::default(), EmptyMutation, EmptySubscription)
         .data(pool)
         .finish()
 }

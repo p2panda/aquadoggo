@@ -1,0 +1,23 @@
+type AliasedAuthor {
+	publicKey: PublicKey!
+	alias: ID!
+}
+scalar BambooEntry
+type EntryAndPayload {
+	entry: BambooEntry!
+	payload: Payload!
+}
+scalar EntryHash
+scalar LogId
+scalar Payload
+scalar PublicKey
+type QueryRoot {
+	entryByHash(hash: EntryHash!): EntryAndPayload
+	entryByLogIdAndSequence(logId: LogId!, sequenceNumber: SequenceNumber!, authorId: ID!): EntryAndPayload
+	authorAliases(publicKeys: [PublicKey!]!): [AliasedAuthor!]!
+}
+scalar SequenceNumber
+schema {
+	query: QueryRoot
+}
+

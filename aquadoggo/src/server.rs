@@ -15,6 +15,8 @@ use crate::rpc::{handle_get_http_request, handle_http_request};
 use crate::service_manager::Shutdown;
 use crate::service_message::ServiceSender;
 
+const GRAPHQL_ROUTE: &str = "/graphql";
+
 /// Build HTTP server with GraphQL API.
 pub fn build_server(context: Context) -> Router {
     // Configure CORS middleware
@@ -30,8 +32,8 @@ pub fn build_server(context: Context) -> Router {
         .route("/", get(handle_get_http_request).post(handle_http_request))
         // Add GraphQL routes
         .route(
-            "/graphql",
-            get(handle_graphql_playground).post(handle_graphql_query),
+            GRAPHQL_ROUTE,
+            get(|| handle_graphql_playground(GRAPHQL_ROUTE)).post(handle_graphql_query),
         )
         // Add middlewares
         .layer(cors)
