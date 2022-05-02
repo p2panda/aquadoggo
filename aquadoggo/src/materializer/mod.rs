@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-mod worker;
+mod service;
 mod tasks;
+mod worker;
+
+pub use service::{materializer_service, Input};

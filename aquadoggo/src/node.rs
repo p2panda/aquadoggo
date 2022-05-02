@@ -7,6 +7,7 @@ use crate::config::Configuration;
 use crate::context::Context;
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
 use crate::manager::ServiceManager;
+use crate::materializer::materializer_service;
 use crate::server::http_service;
 
 /// Makes sure database is created and migrated before returning connection pool.
@@ -49,6 +50,9 @@ impl Node {
         // Create service manager with shared data between services
         let context = Context::new(pool.clone(), config);
         let mut manager = ServiceManager::<Context, ServiceMessage>::new(1024, context);
+
+        // Start materializer service
+        manager.add("materializer", materializer_service);
 
         // Start HTTP server with GraphQL API
         manager.add("http", http_service);

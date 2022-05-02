@@ -4,6 +4,6 @@ use crate::context::Context;
 use crate::materializer::worker::TaskResult;
 use crate::materializer::Input;
 
-pub async fn reduce_task(context: Context, input: Input) -> TaskResult<Input> {
+pub async fn dependency_task(context: Context, input: Input) -> TaskResult<Input> {
     Ok(None)
 }

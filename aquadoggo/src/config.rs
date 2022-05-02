@@ -38,6 +38,9 @@ pub struct Configuration {
 
     /// RPC API WebSocket server port.
     pub ws_port: u16,
+
+    /// Materializer worker pool size.
+    pub worker_pool_size: u32,
 }
 
 impl Default for Configuration {
@@ -48,6 +51,7 @@ impl Default for Configuration {
             database_max_connections: 32,
             http_port: 2020,
             ws_port: 2022,
+            worker_pool_size: 16,
         }
     }
 }
