@@ -5,15 +5,22 @@ use std::collections::BTreeMap;
 use async_trait::async_trait;
 use futures::future::try_join_all;
 use p2panda_rs::schema::SchemaId;
-use sqlx::{query, FromRow};
+use sqlx::any::AnyRow;
+use sqlx::{query, query_as, FromRow};
 
-use p2panda_rs::document::{DocumentView, DocumentViewId};
-use p2panda_rs::operation::{OperationId, OperationValue};
+use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId};
+use p2panda_rs::operation::{
+    OperationFields, OperationId, OperationValue, PinnedRelation, PinnedRelationList, Relation,
+    RelationList,
+};
 use p2panda_rs::Validate;
 
 use crate::db::store::SqlStorage;
 
+use super::operation::OperationStore;
+
 type FieldName = String;
+type DocumentViewFields = BTreeMap<FieldName, OperationValue>;
 
 // We can derive this quite simply from a sorted list of operations by visiting
 // each operation from the end of the list until we have found the id for every
@@ -30,11 +37,11 @@ pub struct DocumentViewRow {
 
 #[derive(FromRow, Debug)]
 pub struct DocumentViewFieldRow {
-    document_view_id_hash: String,
-
-    operation_id: String,
-
     name: String,
+
+    field_type: String,
+
+    value: String,
 }
 
 #[derive(Debug, Clone)]
@@ -109,6 +116,11 @@ pub trait DocumentStore<StorageDocumentView: AsStorageDocumentView> {
         field_ids: &FieldIds,
         schema_id: &SchemaId,
     ) -> Result<bool, DocumentViewStorageError>;
+
+    async fn get_document_view_by_id(
+        &self,
+        id: &DocumentViewId,
+    ) -> Result<DocumentViewFields, DocumentViewStorageError>;
 }
 
 #[async_trait]
@@ -193,6 +205,124 @@ impl DocumentStore<DoggoDocumentView> for SqlStorage {
             == 1;
         Ok(field_relations_inserted && operation_inserted)
     }
+
+    async fn get_document_view_by_id(
+        &self,
+        id: &DocumentViewId,
+    ) -> Result<DocumentViewFields, DocumentViewStorageError> {
+        let document_view_field_rows = query_as::<_, DocumentViewFieldRow>(
+            "
+            SELECT
+                document_view_fields.name,
+                operation_fields_v1.field_type,
+                operation_fields_v1.value
+            FROM
+                document_view_fields
+            LEFT JOIN operation_fields_v1
+                ON
+                    operation_fields_v1.operation_id = document_view_fields.operation_id
+                AND 
+                    operation_fields_v1.name = document_view_fields.name
+            WHERE
+                document_view_id_hash = $1
+            ",
+        )
+        .bind(id.hash().as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DocumentViewStorageError::Custom(e.to_string()))?;
+
+        let mut relation_list: Vec<DocumentId> = Vec::new();
+        let mut pinned_relation_list: Vec<DocumentViewId> = Vec::new();
+
+        let mut document_view_fields = DocumentViewFields::new();
+
+        // Iterate over returned field values, for each value:
+        //  - if it is a simple value type, parse it into an OperationValue and add it to the operation_fields
+        //  - if it is a relation list value type parse each item into a DocumentId/DocumentViewId and push to
+        //    the suitable vec (instantiated above)
+        document_view_field_rows.iter().for_each(|row| {
+            match row.field_type.as_str() {
+                "bool" => {
+                    document_view_fields.insert(
+                        row.name.to_string(),
+                        OperationValue::Boolean(row.value.parse::<bool>().unwrap()),
+                    );
+                }
+                "int" => {
+                    document_view_fields.insert(
+                        row.name.to_string(),
+                        OperationValue::Integer(row.value.parse::<i64>().unwrap()),
+                    );
+                }
+                "float" => {
+                    document_view_fields.insert(
+                        row.name.to_string(),
+                        OperationValue::Float(row.value.parse::<f64>().unwrap()),
+                    );
+                }
+                "str" => {
+                    document_view_fields.insert(
+                        row.name.to_string(),
+                        OperationValue::Text(row.value.clone()),
+                    );
+                }
+                "relation" => {
+                    document_view_fields.insert(
+                        row.name.to_string(),
+                        OperationValue::Relation(Relation::new(
+                            row.value.parse::<DocumentId>().unwrap(),
+                        )),
+                    );
+                }
+                // A special case, this is a list item, so we push it to a vec but _don't_ add it
+                // to the document_view_fields yet.
+                "relation_list" => relation_list.push(row.value.parse::<DocumentId>().unwrap()),
+                "pinned_relation" => {
+                    document_view_fields.insert(
+                        row.name.to_string(),
+                        OperationValue::PinnedRelation(PinnedRelation::new(
+                            row.value.parse::<DocumentViewId>().unwrap(),
+                        )),
+                    );
+                }
+                // A special case, this is a list item, so we push it to a vec but _don't_ add it
+                // to the document_view_fields yet.
+                "pinned_relation_list" => {
+                    pinned_relation_list.push(row.value.parse::<DocumentViewId>().unwrap())
+                }
+                _ => (),
+            };
+        });
+
+        // Find if there is at least one field containing a "relation_list" type
+        let relation_list_field = &document_view_field_rows
+            .iter()
+            .find(|row| row.field_type == "relation_list");
+
+        // If so, then parse the `relation_list` vec into an operation value and add it to the document view fields
+        if let Some(relation_list_field) = relation_list_field {
+            document_view_fields.insert(
+                relation_list_field.name.to_string(),
+                OperationValue::RelationList(RelationList::new(relation_list)),
+            );
+        }
+
+        // Find if there is at least one field containing a "pinned_relation_list" type
+        let pinned_relation_list_field = &document_view_field_rows
+            .iter()
+            .find(|row| row.field_type == "pinned_relation_list");
+
+        // If so, then parse the `pinned_relation_list` vec into an operation value and add it to the document view fields
+        if let Some(pinned_relation_list_field) = pinned_relation_list_field {
+            document_view_fields.insert(
+                pinned_relation_list_field.name.to_string(),
+                OperationValue::PinnedRelationList(PinnedRelationList::new(pinned_relation_list)),
+            );
+        }
+
+        Ok(document_view_fields)
+    }
 }
 
 #[cfg(test)]
@@ -201,15 +331,17 @@ mod tests {
     use std::str::FromStr;
 
     use p2panda_rs::document::DocumentViewId;
+    use p2panda_rs::identity::Author;
     use p2panda_rs::operation::{AsOperation, OperationId};
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::test_utils::constants::{DEFAULT_HASH, TEST_SCHEMA_ID};
 
+    use crate::db::models::operation::{DoggoOperation, OperationStore};
     use crate::db::models::test_utils::test_operation;
     use crate::db::store::SqlStorage;
     use crate::test_helpers::initialize_db;
 
-    use super::{DocumentStore, DoggoDocumentView, FieldIds};
+    use super::{DocumentStore, FieldIds};
 
     const TEST_AUTHOR: &str = "1a8a62c5f64eed987326513ea15a6ea2682c256ac57a418c1c92d96787c8b36e";
 
@@ -235,5 +367,42 @@ mod tests {
             .await;
 
         assert!(result.unwrap());
+    }
+
+    #[tokio::test]
+    async fn get_document_view() {
+        let pool = initialize_db().await;
+        let storage_provider = SqlStorage { pool };
+        let author = Author::new(TEST_AUTHOR).unwrap();
+
+        let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
+        let operation = test_operation();
+        let document_view_id: DocumentViewId = operation_id.clone().into();
+        let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
+
+        let mut field_ids = BTreeMap::new();
+
+        operation.fields().unwrap().keys().iter().for_each(|key| {
+            field_ids.insert(key.clone(), operation_id.clone());
+        });
+        let field_ids = FieldIds(field_ids);
+
+        let doggo_operation = DoggoOperation::new(&operation, &operation_id, &author);
+
+        storage_provider
+            .insert_operation(&doggo_operation)
+            .await
+            .unwrap();
+
+        storage_provider
+            .insert_document_view(&document_view_id, &field_ids, &schema_id)
+            .await
+            .unwrap();
+
+        let result = storage_provider
+            .get_document_view_by_id(&document_view_id)
+            .await;
+
+        println!("{:#?}", result)
     }
 }
