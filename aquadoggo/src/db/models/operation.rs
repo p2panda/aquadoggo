@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use async_trait::async_trait;
 use futures::future::try_join_all;
-use p2panda_rs::document::{DocumentId, DocumentViewId};
 use sqlx::{query, query_as, FromRow};
 
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{
     AsOperation, Operation, OperationAction, OperationFields, OperationId, OperationValue,
-    PinnedRelation, PinnedRelationList, Relation, RelationList,
 };
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::Validate;

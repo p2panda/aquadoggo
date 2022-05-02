@@ -4,20 +4,16 @@ use std::collections::BTreeMap;
 
 use async_trait::async_trait;
 use futures::future::try_join_all;
-use p2panda_rs::schema::SchemaId;
-use sqlx::any::AnyRow;
 use sqlx::{query, query_as, FromRow};
 
 use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::operation::{
-    OperationFields, OperationId, OperationValue, PinnedRelation, PinnedRelationList, Relation,
-    RelationList,
+    OperationId, OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList,
 };
+use p2panda_rs::schema::SchemaId;
 use p2panda_rs::Validate;
 
 use crate::db::store::SqlStorage;
-
-use super::operation::OperationStore;
 
 type FieldName = String;
 type DocumentViewFields = BTreeMap<FieldName, OperationValue>;
@@ -207,19 +203,19 @@ impl DocumentStore<DoggoDocumentView> for SqlStorage {
     ) -> Result<DocumentViewFields, DocumentViewStorageError> {
         let document_view_field_rows = query_as::<_, DocumentViewFieldRow>(
             "
-            SELECT
-                document_view_fields.name,
-                operation_fields_v1.field_type,
-                operation_fields_v1.value
-            FROM
-                document_view_fields
-            LEFT JOIN operation_fields_v1
-                ON
-                    operation_fields_v1.operation_id = document_view_fields.operation_id
-                AND 
-                    operation_fields_v1.name = document_view_fields.name
-            WHERE
-                document_view_id_hash = $1
+SELECT
+    document_view_fields.name,
+    operation_fields_v1.field_type,
+    operation_fields_v1.value
+FROM
+    document_view_fields
+LEFT JOIN operation_fields_v1
+    ON
+        operation_fields_v1.operation_id = document_view_fields.operation_id
+    AND 
+        operation_fields_v1.name = document_view_fields.name
+WHERE
+    document_view_id_hash = $1
             ",
         )
         .bind(id.hash().as_str())
@@ -322,7 +318,6 @@ impl DocumentStore<DoggoDocumentView> for SqlStorage {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
     use std::str::FromStr;
 
     use p2panda_rs::document::DocumentViewId;
@@ -333,7 +328,7 @@ mod tests {
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::test_utils::constants::{DEFAULT_HASH, TEST_SCHEMA_ID};
 
-    use crate::db::models::operation::{AsStorageOperation, DoggoOperation, OperationStore};
+    use crate::db::models::operation::{DoggoOperation, OperationStore};
     use crate::db::models::test_utils::test_operation;
     use crate::db::store::SqlStorage;
     use crate::test_helpers::initialize_db;
