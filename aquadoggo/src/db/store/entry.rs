@@ -15,8 +15,8 @@ use p2panda_rs::storage_provider::errors::{EntryStorageError, ValidationError};
 use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, StorageProvider};
 use p2panda_rs::Validate;
 
-use crate::db::models::Log;
-use crate::db::store::SqlStorage;
+use crate::db::store::Log;
+use crate::db::sql_store::SqlStorage;
 use crate::errors::StorageProviderResult;
 use crate::rpc::{EntryArgsRequest, EntryArgsResponse, PublishEntryRequest, PublishEntryResponse};
 
@@ -329,7 +329,7 @@ mod tests {
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::storage_provider::traits::EntryStore;
 
-    use crate::db::store::SqlStorage;
+    use crate::db::sql_store::SqlStorage;
     use crate::test_helpers::initialize_db;
 
     const TEST_AUTHOR: &str = "1a8a62c5f64eed987326513ea15a6ea2682c256ac57a418c1c92d96787c8b36e";

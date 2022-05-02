@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use async_trait::async_trait;
 use futures::future::try_join_all;
-use sqlx::{query, query_as, FromRow};
+use sqlx::{query, query_as};
 
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{
@@ -10,105 +10,10 @@ use p2panda_rs::operation::{
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::Validate;
 
-use crate::db::store::SqlStorage;
-
-/// A struct representing a single operation row as it is inserted in the database.
-#[derive(FromRow, Debug)]
-pub struct OperationRow {
-    /// The id of this operation.
-    operation_id: String,
-
-    /// The author of this operation.
-    author: String,
-
-    /// The action type this operation is performing.
-    action: String,
-
-    /// The hash of the entry this operation is associated with.
-    entry_hash: String,
-
-    /// The id of the schema this operation follows.
-    schema_id_short: String,
-}
-
-/// A struct representing a single previous operation relation row as it is inserted in the database.
-#[derive(FromRow, Debug)]
-pub struct PreviousOperationRelationRow {
-    /// The parent in this operation relation. This is the operation
-    /// being appended to, it lies nearer the root in a graph structure.
-    parent_operation_id: String,
-
-    /// The child in this operation relation. This is the operation
-    /// which has a depenency on the parent, it lies nearer the tip/leaves
-    /// in a graph structure.
-    child_operation_id: String,
-}
-
-/// A struct representing a single operation field row as it is inserted in the database.
-#[derive(FromRow, Debug)]
-pub struct OperationFieldRow {
-    /// The id of the operation this field was published on.
-    operation_id: String,
-
-    /// The name of this field.
-    name: String,
-
-    /// The type of this field.
-    field_type: String,
-
-    /// The actual value contained in this field.
-    value: String,
-}
-
-type PreviousOperations = Vec<OperationId>;
-type SchemaIdShort = String;
-
-pub trait AsStorageOperation: Sized + Clone + Send + Sync + Validate {
-    /// The error type returned by this traits' methods.
-    type AsStorageOperationError: 'static + std::error::Error;
-
-    fn action(&self) -> OperationAction;
-
-    fn author(&self) -> Author;
-
-    fn fields(&self) -> Option<OperationFields>;
-
-    fn id(&self) -> OperationId;
-
-    fn previous_operations(&self) -> PreviousOperations;
-
-    fn schema_id(&self) -> SchemaId;
-
-    fn schema_id_short(&self) -> SchemaIdShort;
-}
-
-/// `OperationStore` errors.
-#[derive(thiserror::Error, Debug)]
-pub enum OperationStorageError {
-    /// Catch all error which implementers can use for passing their own errors up the chain.
-    #[error("Ahhhhh!!!!: {0}")]
-    Custom(String),
-}
-
-#[async_trait]
-pub trait OperationStore<StorageOperation: AsStorageOperation> {
-    async fn insert_operation(
-        &self,
-        operation: &StorageOperation,
-    ) -> Result<bool, OperationStorageError>;
-
-    async fn get_operation_by_id(
-        &self,
-        id: OperationId,
-    ) -> Result<
-        (
-            Option<OperationRow>,
-            Vec<PreviousOperationRelationRow>,
-            Vec<OperationFieldRow>,
-        ),
-        OperationStorageError,
-    >;
-}
+use crate::db::db_types::{OperationFieldRow, OperationRow, PreviousOperationRelationRow};
+use crate::db::errors::OperationStorageError;
+use crate::db::sql_store::SqlStorage;
+use crate::db::traits::{AsStorageOperation, OperationStore, PreviousOperations};
 
 #[derive(Debug, Clone)]
 pub struct DoggoOperation {
@@ -127,14 +32,6 @@ impl DoggoOperation {
     }
 }
 
-impl Validate for DoggoOperation {
-    type Error = OperationStorageError;
-
-    fn validate(&self) -> Result<(), Self::Error> {
-        Ok(())
-    }
-}
-
 impl AsStorageOperation for DoggoOperation {
     type AsStorageOperationError = OperationStorageError;
 
@@ -150,7 +47,7 @@ impl AsStorageOperation for DoggoOperation {
         self.id.clone()
     }
 
-    fn schema_id_short(&self) -> SchemaIdShort {
+    fn schema_id_short(&self) -> String {
         match &self.operation.schema() {
             SchemaId::Application(name, document_view_id) => {
                 format!("{}__{}", name, document_view_id.hash().as_str())
@@ -178,6 +75,8 @@ impl OperationStore<DoggoOperation> for SqlStorage {
         &self,
         operation: &DoggoOperation,
     ) -> Result<bool, OperationStorageError> {
+        // CHECK transactions in SQL!
+
         // Convert the action to a string.
         let action = match operation.action() {
             OperationAction::Create => "create",
@@ -260,6 +159,8 @@ impl OperationStore<DoggoOperation> for SqlStorage {
                 // If the value is a relation_list or pinned_relation_list we need to insert a new field row for
                 // every item in the list. Here we collect these items and return them in a vector. If this operation
                 // value is anything except for the above list types, we will return a vec containing a single item.
+
+                // QUESTION: What is the sqlx pattern for inserting BLOBs? These don't need to be strings.
                 let db_values = match value {
                     OperationValue::Boolean(bool) => vec![Some(bool.to_string())],
                     OperationValue::Integer(int) => vec![Some(int.to_string())],
@@ -333,6 +234,7 @@ impl OperationStore<DoggoOperation> for SqlStorage {
             .is_ok();
         };
 
+        // QUESTION: When do we actually want an Error and when do we want a true/false success?
         Ok(operation_inserted && previous_operations_inserted && fields_inserted)
     }
 
@@ -412,8 +314,8 @@ mod tests {
     use p2panda_rs::operation::OperationId;
     use p2panda_rs::test_utils::constants::DEFAULT_HASH;
 
-    use crate::db::models::test_utils::test_operation;
-    use crate::db::store::SqlStorage;
+    use crate::db::sql_store::SqlStorage;
+    use crate::db::store::test_utils::test_operation;
     use crate::test_helpers::initialize_db;
 
     use super::{DoggoOperation, OperationStore};

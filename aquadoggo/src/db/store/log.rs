@@ -13,7 +13,7 @@ use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::errors::LogStorageError;
 use p2panda_rs::storage_provider::traits::{AsStorageLog, LogStore};
 
-use crate::db::store::SqlStorage;
+use crate::db::sql_store::SqlStorage;
 
 /// Tracks the assigment of an author's logs to documents and records their schema.
 ///
@@ -179,8 +179,8 @@ mod tests {
         AsStorageEntry, AsStorageLog, EntryStore, LogStore, StorageProvider,
     };
 
-    use crate::db::models::{EntryRow, Log};
-    use crate::db::store::SqlStorage;
+    use crate::db::store::{EntryRow, Log};
+    use crate::db::sql_store::SqlStorage;
     use crate::test_helpers::{initialize_db, random_entry_hash};
 
     const TEST_AUTHOR: &str = "58223678ab378f1b07d1d8c789e6da01d16a06b1a4d17cc10119a0109181156c";

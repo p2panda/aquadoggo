@@ -1,54 +1,24 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use std::collections::btree_map::Iter;
-use std::collections::BTreeMap;
 
 use async_trait::async_trait;
 use futures::future::try_join_all;
-use sqlx::{query, query_as, FromRow};
+use sqlx::{query, query_as};
 
 use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::operation::{
-    OperationId, OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList,
+    OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList,
 };
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::Validate;
 
-use crate::db::store::SqlStorage;
+use crate::db::db_types::DocumentViewFieldRow;
+use crate::db::errors::DocumentViewStorageError;
+use crate::db::sql_store::SqlStorage;
+use crate::db::traits::{
+    AsStorageDocumentView, DocumentStore, DocumentViewFields, FieldIds, FieldName,
+};
 
-/// The string name of a documents field
-type FieldName = String;
-
-/// A map associating fields identified by their name with an operation which
-/// conatins this fields value(s).
-type FieldIds = BTreeMap<FieldName, OperationId>;
-
-/// The fields of a document view.
-type DocumentViewFields = BTreeMap<FieldName, OperationValue>;
-
-/// A row in the DB which expresses a document view field. If the field type
-/// is a relation list, then a record for each item in the list will be recorded
-#[derive(FromRow, Debug)]
-pub struct DocumentViewFieldRow {
-    name: String,
-
-    field_type: String,
-
-    value: String,
-}
-
-/// WIP: Storage trait representing a document view.
-pub trait AsStorageDocumentView: Sized + Clone + Send + Sync + Validate {
-    /// The error type returned by this traits' methods.
-    type AsStorageDocumentViewError: 'static + std::error::Error;
-
-    fn id(&self) -> DocumentViewId;
-    fn iter(&self) -> Iter<FieldName, OperationValue>;
-    fn get(&self, key: &str) -> Option<&OperationValue>;
-    fn schema_id(&self) -> SchemaId;
-    fn field_ids(&self) -> FieldIds;
-}
-
-/// WIP: Aquadoggo struct which will implement the above trait
+/// WIP: Aquadoggo struct which will implements AsStorageDocumentView trait.
 #[derive(Debug, Clone)]
 pub struct DoggoDocumentView {
     document_view: DocumentView,
@@ -85,38 +55,6 @@ impl AsStorageDocumentView for DoggoDocumentView {
     fn field_ids(&self) -> FieldIds {
         self.field_ids.clone()
     }
-}
-
-impl Validate for DoggoDocumentView {
-    type Error = DocumentViewStorageError;
-
-    fn validate(&self) -> Result<(), Self::Error> {
-        Ok(()) // lolz
-    }
-}
-
-/// `DocumentStore` errors.
-#[derive(thiserror::Error, Debug)]
-pub enum DocumentViewStorageError {
-    /// Catch all error which implementers can use for passing their own errors up the chain.
-    #[error("Ahhhhh!!!!: {0}")]
-    Custom(String),
-}
-
-/// Storage traits for documents and document views.
-#[async_trait]
-pub trait DocumentStore<StorageDocumentView: AsStorageDocumentView> {
-    async fn insert_document_view(
-        &self,
-        document_view: &DocumentViewId,
-        field_ids: &FieldIds,
-        schema_id: &SchemaId,
-    ) -> Result<bool, DocumentViewStorageError>;
-
-    async fn get_document_view_by_id(
-        &self,
-        id: &DocumentViewId,
-    ) -> Result<DocumentViewFields, DocumentViewStorageError>;
 }
 
 #[async_trait]
@@ -347,9 +285,10 @@ mod tests {
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::test_utils::constants::{DEFAULT_HASH, TEST_SCHEMA_ID};
 
-    use crate::db::models::operation::{DoggoOperation, OperationStore};
-    use crate::db::models::test_utils::test_operation;
-    use crate::db::store::SqlStorage;
+    use crate::db::sql_store::SqlStorage;
+    use crate::db::store::operation::DoggoOperation;
+    use crate::db::store::test_utils::test_operation;
+    use crate::db::traits::OperationStore;
     use crate::test_helpers::initialize_db;
 
     use super::{DocumentStore, FieldIds};

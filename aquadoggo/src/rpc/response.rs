@@ -5,7 +5,7 @@ use serde::Serialize;
 use p2panda_rs::hash::Hash;
 use p2panda_rs::storage_provider::traits::{AsEntryArgsResponse, AsPublishEntryResponse};
 
-use crate::db::models::EntryRow;
+use crate::db::store::EntryRow;
 
 /// Response body of `panda_getEntryArguments`.
 ///

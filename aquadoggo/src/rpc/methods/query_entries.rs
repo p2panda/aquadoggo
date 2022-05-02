@@ -3,7 +3,7 @@
 use jsonrpc_v2::{Data, Params};
 use p2panda_rs::storage_provider::traits::EntryStore;
 
-use crate::db::store::SqlStorage;
+use crate::db::sql_store::SqlStorage;
 use crate::errors::StorageProviderResult;
 use crate::rpc::request::QueryEntriesRequest;
 use crate::rpc::response::QueryEntriesResponse;

@@ -5,8 +5,11 @@ use sqlx::any::{Any, AnyPool, AnyPoolOptions};
 use sqlx::migrate;
 use sqlx::migrate::MigrateDatabase;
 
-pub mod models;
+pub mod db_types;
+pub mod errors;
+pub mod sql_store;
 pub mod store;
+pub mod traits;
 
 /// Re-export of generic connection pool type.
 pub type Pool = AnyPool;
