@@ -15,15 +15,17 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1.0.43"
+arrayvec = "0.5.2"
 async-trait = "0.1.53"
-async-graphql = "3.0.35"
+async-graphql = "3.0.38"
 async-graphql-axum = "3.0.35"
 axum = "0.5.1"
 bamboo-rs-core-ed25519-yasmf = "0.1.1"
+base64 = "0.13"
 crossbeam-queue = "0.3.5"
 directories = "3.0.2"
 envy = "0.4.2"
-futures = "0.3.17"
+graphql_client = "0.10"
 hex = "0.4.3"
 jsonrpc-v2 = { version = "0.10.1", features = [
     "easy-errors",
@@ -31,6 +33,7 @@ jsonrpc-v2 = { version = "0.10.1", features = [
 ], default-features = false }
 lipmaa-link = "0.2.2"
 log = "0.4.14"
+lru = "0.7.5"
 openssl-probe = "0.1.4"
 # We can not publish the `aquadoggo` crate yet, since `p2panda-rs` is an
 # unpublished dependency.
@@ -58,12 +61,13 @@ tower-http = { version = "0.2.4", default-features = false, features = [
 triggered = "0.1.2"
 
 [dev-dependencies]
+hyper = "0.14.17"
+http = "0.2.6"
+mockall = "0.11.0"
 reqwest = { version = "0.11.9", default-features = false, features = [
     "json",
     "stream",
 ] }
 rstest = "0.12.0"
 tower-service = "0.3.1"
-hyper = "0.14.17"
-http = "0.2.6"
 tower = "0.4.12"

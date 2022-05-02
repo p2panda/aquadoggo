@@ -76,6 +76,16 @@ $ cargo add aquadoggo
 
 [`cargo-edit`]: https://github.com/killercup/cargo-edit
 
+## Development
+
+### Regenerate graphql schema
+
+When you update the graphql code you'll need to manually regenerate the schema files used to create the replication graphql client
+
+```sh
+cargo run --bin dump_gql_schema > aquadoggo/src/graphql/replication/client/schema.graphql
+```
+
 ## License
 
 GNU Affero General Public License v3.0 [`AGPL-3.0-or-later`](LICENSE)

@@ -1,18 +1,35 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use async_graphql::{EmptySubscription, Schema};
+use super::ping::PingRoot;
+use super::replication::ReplicationRoot;
+use super::client::{Query as ClientQueryRoot, Mutation as ClientMutationRoot };
+use super::Context;
+use crate::db::provider::SqlStorage;
+use async_graphql::{EmptySubscription, MergedObject, Schema};
 
-use crate::db::Pool;
-use crate::graphql::client::{Mutation, Query};
+/// All of the graphql sub modules merged into one top level root
+#[derive(MergedObject, Debug)]
+pub struct QueryRoot(pub PingRoot, pub ReplicationRoot<SqlStorage>, pub ClientQueryRoot);
+
+#[derive(MergedObject, Debug, Copy, Clone)]
+pub struct MutationRoot(pub ClientMutationRoot);
 
 /// GraphQL schema for p2panda node.
-pub type RootSchema = Schema<Query, Mutation, EmptySubscription>;
+pub type RootSchema = Schema<QueryRoot, MutationRoot, EmptySubscription>;
 
-pub fn build_root_schema(pool: Pool) -> RootSchema {
-    let query = Query::default();
-    let mutation = Mutation::default();
+/// Build the root graphql schema that can handle graphql requests.
+pub fn build_root_schema(context: Context) -> RootSchema {
+    let ping_root: PingRoot = Default::default();
+    let replication_root = ReplicationRoot::<SqlStorage>::new();
+    let client_query_root = ClientQueryRoot::default();
+    let query_root = QueryRoot(ping_root, replication_root, client_query_root);
 
-    Schema::build(query, mutation, EmptySubscription)
-        .data(pool)
+    let client_mutation_root = Default::default();
+    let mutation_root = MutationRoot(client_mutation_root);
+    Schema::build(query_root, mutation_root, EmptySubscription)
+        .data(context.replication_context)
+        .data(context.pool)
+        // Add more contexts here if you need, eg:
+        //.data(context.ping_context)
         .finish()
 }

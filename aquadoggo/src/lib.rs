@@ -16,9 +16,9 @@
 mod bus;
 mod config;
 mod context;
-mod db;
+pub mod db;
 mod errors;
-mod graphql;
+pub mod graphql;
 mod manager;
 mod materializer;
 mod node;

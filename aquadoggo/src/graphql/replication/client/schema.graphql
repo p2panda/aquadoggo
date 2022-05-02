@@ -1,0 +1,128 @@
+type AliasedAuthor {
+	"""
+	The author's public key
+	"""
+	publicKey: PublicKey!
+	"""
+	The author alias
+	"""
+	alias: ID!
+}
+"""
+Either the `public_key` or the `alias` of that author.
+"""
+input Author {
+	"""
+	The author's public key
+	"""
+	publicKey: PublicKey
+	"""
+	The author alias
+	"""
+	alias: ID
+}
+scalar Entry
+"""
+An and entry with an optional payload
+"""
+type EntryAndPayload {
+	"""
+	Get the entry
+	"""
+	entry: Entry!
+	"""
+	Get the payload
+	"""
+	payload: Payload
+}
+type EntryAndPayloadConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [EntryAndPayloadEdge]
+}
+"""
+An edge in a connection.
+"""
+type EntryAndPayloadEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: EntryAndPayload!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
+}
+scalar EntryHash
+scalar LogId
+"""
+Information about pagination in a connection
+"""
+type PageInfo {
+	"""
+	When paginating backwards, are there more items?
+	"""
+	hasPreviousPage: Boolean!
+	"""
+	When paginating forwards, are there more items?
+	"""
+	hasNextPage: Boolean!
+	"""
+	When paginating backwards, the cursor to continue.
+	"""
+	startCursor: String
+	"""
+	When paginating forwards, the cursor to continue.
+	"""
+	endCursor: String
+}
+scalar Payload
+scalar PublicKey
+"""
+All of the graphql sub modules merged into one top level root
+"""
+type QueryRoot {
+	ping: String!
+	"""
+	Get an entry by its hash
+	"""
+	entryByHash(hash: EntryHash!): SingleEntryAndPayload
+	"""
+	Get any entries that are newer than the provided sequence_number for a given author and
+	log_id
+	"""
+	getEntriesNewerThanSeq(logId: LogId!, sequenceNumber: SequenceNumber!, first: Int, after: String): EntryAndPayloadConnection!
+	"""
+	Get a single entry by its log_id, sequence_number and author
+	"""
+	entryByLogIdAndSequence(logId: LogId!, sequenceNumber: SequenceNumber!, author: Author!): SingleEntryAndPayload
+	"""
+	Get aliases of the provided `public_keys` that you can use in future requests to save
+	bandwidth.
+	"""
+	authorAliases(publicKeys: [PublicKey!]!): [AliasedAuthor!]!
+}
+scalar SequenceNumber
+type SingleEntryAndPayload {
+	"""
+	The entry
+	"""
+	entry: Entry!
+	"""
+	The payload
+	"""
+	payload: Payload
+	"""
+	Get all the skiplinks for this entry that are required to verify the entry is valid
+	"""
+	skiplinks: [Entry!]!
+}
+schema {
+	query: QueryRoot
+}
+

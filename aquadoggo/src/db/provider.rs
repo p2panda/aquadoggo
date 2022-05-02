@@ -14,6 +14,7 @@ use crate::graphql::client::{
     EntryArgsRequest, EntryArgsResponse, PublishEntryRequest, PublishEntryResponse,
 };
 
+#[derive(Debug)]
 pub struct SqlStorage {
     pub(crate) pool: Pool,
 }
@@ -50,7 +51,7 @@ impl StorageProvider<StorageEntry, StorageLog> for SqlStorage {
         )
         .bind(entry_hash.as_str())
         .fetch_optional(&self.pool)
-        .await?;
+        .await.unwrap();
 
         // Unwrap here since we validate hashes before storing them in the db.
         let hash = result.map(|str| {
