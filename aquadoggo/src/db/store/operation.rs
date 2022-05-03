@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use async_trait::async_trait;
 use futures::future::try_join_all;
-use p2panda_rs::document::{DocumentId, DocumentViewId};
-use p2panda_rs::storage_provider::traits::StorageProvider;
 use sqlx::{query, query_as, query_scalar};
 
+use p2panda_rs::document::{DocumentId, DocumentViewId};
+use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{
     AsOperation, Operation, OperationAction, OperationFields, OperationId, OperationValue,
@@ -302,7 +302,7 @@ impl OperationStore<DoggoOperation> for SqlStorage {
     async fn get_operation_by_id(
         &self,
         id: OperationId,
-    ) -> Result<(Option<OperationRow>, Vec<OperationFieldRow>), OperationStorageError> {
+    ) -> Result<Option<DoggoOperation>, OperationStorageError> {
         let operation_row = query_as::<_, OperationRow>(
             "
             SELECT
@@ -322,27 +322,36 @@ impl OperationStore<DoggoOperation> for SqlStorage {
         .bind(id.as_str())
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| OperationStorageError::Custom(e.to_string()))?;
+        .map_err(|e| OperationStorageError::Custom(e.to_string()))?
+        .unwrap();
 
-        let operation_field_rows = query_as::<_, OperationFieldRow>(
-            "
-            SELECT
-                operation_id,
-                name,
-                field_type,
-                value
-            FROM
-                operation_fields_v1
-            WHERE
-                operation_id = $1
-            ",
-        )
-        .bind(id.as_str())
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| OperationStorageError::Custom(e.to_string()))?;
+        let operation_fields = self.get_operation_fields_by_id(id).await?;
+        let schema: SchemaId = operation_row.schema_id.parse().unwrap();
 
-        Ok((operation_row, operation_field_rows))
+        // Need some more tooling around prev_ops in p2panda-rs
+        let mut previous_operations: Vec<OperationId> = Vec::new();
+        if operation_row.action != "create" {
+            previous_operations = operation_row
+                .previous_operations
+                .rsplit('_')
+                .map(|id_str| Hash::new(id_str).unwrap().into())
+                .collect();
+        }
+
+        let operation = match operation_row.action.as_str() {
+            "create" => Operation::new_create(schema, operation_fields),
+            "update" => Operation::new_update(schema, previous_operations, operation_fields),
+            "delete" => Operation::new_delete(schema, previous_operations),
+            _ => panic!(),
+        }
+        .unwrap();
+
+        Ok(Some(DoggoOperation::new(
+            &Author::new(&operation_row.author).unwrap(),
+            &operation,
+            &operation_row.operation_id.parse().unwrap(),
+            &operation_row.document_id.parse().unwrap(),
+        )))
     }
 
     async fn get_operation_fields_by_id(
@@ -509,17 +518,21 @@ mod tests {
             .unwrap();
         assert!(result);
 
-        let result = storage_provider
+        let returned_doggo_operation = storage_provider
             .get_operation_by_id(operation_id.clone())
             .await
+            .unwrap()
             .unwrap();
 
-        let (operation_row, field_rows) = result;
+        assert_eq!(returned_doggo_operation.author(), doggo_operation.author());
+        assert_eq!(returned_doggo_operation.fields(), doggo_operation.fields());
+        assert_eq!(returned_doggo_operation.id(), doggo_operation.id());
+        assert_eq!(
+            returned_doggo_operation.document_id(),
+            doggo_operation.document_id()
+        );
 
-        assert!(operation_row.is_some());
-        assert_eq!(field_rows.len(), 10);
-
-        println!("{:#?}", (operation_row, field_rows));
+        println!("{:#?}", doggo_operation);
 
         let result = storage_provider
             .get_operation_fields_by_id(operation_id.clone())

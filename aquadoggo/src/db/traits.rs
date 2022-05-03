@@ -86,7 +86,7 @@ pub trait OperationStore<StorageOperation: AsStorageOperation> {
     async fn get_operation_by_id(
         &self,
         id: OperationId,
-    ) -> Result<(Option<OperationRow>, Vec<OperationFieldRow>), OperationStorageError>;
+    ) -> Result<(Option<StorageOperation>), OperationStorageError>;
 
     async fn get_document_by_operation_id(
         &self,
