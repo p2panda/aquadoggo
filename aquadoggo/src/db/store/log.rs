@@ -179,8 +179,8 @@ mod tests {
         AsStorageEntry, AsStorageLog, EntryStore, LogStore, StorageProvider,
     };
 
-    use crate::db::store::{EntryRow, Log};
     use crate::db::sql_store::SqlStorage;
+    use crate::db::store::{EntryRow, Log};
     use crate::test_helpers::{initialize_db, random_entry_hash};
 
     const TEST_AUTHOR: &str = "58223678ab378f1b07d1d8c789e6da01d16a06b1a4d17cc10119a0109181156c";
