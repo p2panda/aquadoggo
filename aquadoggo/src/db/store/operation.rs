@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use async_trait::async_trait;
 use futures::future::try_join_all;
+use p2panda_rs::document::DocumentId;
+use p2panda_rs::storage_provider::traits::StorageProvider;
 use sqlx::{query, query_as};
 
 use p2panda_rs::identity::Author;
@@ -17,16 +19,23 @@ use crate::db::traits::{AsStorageOperation, OperationStore, PreviousOperations};
 #[derive(Debug, Clone)]
 pub struct DoggoOperation {
     author: Author,
-    id: OperationId,
     operation: Operation,
+    id: OperationId,
+    document_id: DocumentId,
 }
 
 impl DoggoOperation {
-    pub fn new(operation: &Operation, operation_id: &OperationId, author: &Author) -> Self {
+    pub fn new(
+        author: &Author,
+        operation: &Operation,
+        operation_id: &OperationId,
+        document_id: &DocumentId,
+    ) -> Self {
         Self {
             author: author.clone(),
-            id: operation_id.clone(),
             operation: operation.clone(),
+            id: operation_id.clone(),
+            document_id: document_id.clone(),
         }
     }
 }
@@ -44,6 +53,10 @@ impl AsStorageOperation for DoggoOperation {
 
     fn id(&self) -> OperationId {
         self.id.clone()
+    }
+
+    fn document_id(&self) -> DocumentId {
+        self.document_id.clone()
     }
 
     fn schema_id(&self) -> SchemaId {
@@ -72,6 +85,43 @@ impl OperationStore<DoggoOperation> for SqlStorage {
             OperationAction::Delete => "delete",
         };
 
+        let mut prev_op_string = "".to_string();
+        for (i, operation_id) in operation.previous_operations().iter().enumerate() {
+            let separator = if i == 0 { "" } else { "_" };
+            prev_op_string += format!("{}{}", separator, operation_id.as_hash().as_str()).as_str();
+        }
+
+        let document_id = if action == "create" {
+            DocumentId::new(operation.id())
+        } else {
+            // Unwrap as we know any "UPDATE" or "DELETE" operation should have previous operations
+            let previous_operation_id = operation.previous_operations().get(0).unwrap().clone();
+
+            let operation_row = query_as::<_, OperationRow>(
+                "
+            SELECT
+                author,
+                document_id,
+                operation_id,
+                entry_hash,
+                action,
+                schema_id,
+                previous_operations
+            FROM
+                operations_v1
+            WHERE
+                operation_id = $1
+            ",
+            )
+            .bind(previous_operation_id.as_str())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| OperationStorageError::Custom(e.to_string()))?
+            .ok_or_else(|| OperationStorageError::Custom("Document missing".to_string()))?;
+
+            operation_row.document_id.parse().unwrap()
+        };
+
         // Consruct query for inserting operation row, execute it
         // and check exactly one row was affected.
         let operation_inserted = query(
@@ -79,20 +129,24 @@ impl OperationStore<DoggoOperation> for SqlStorage {
             INSERT INTO
                 operations_v1 (
                     author,
+                    document_id,
                     operation_id,
                     entry_hash,
                     action,
-                    schema_id
+                    schema_id,
+                    previous_operations
                 )
             VALUES
-                ($1, $2, $3, $4, $5)
+                ($1, $2, $3, $4, $5, $6, $7)
             ",
         )
         .bind(operation.author().as_str())
+        .bind(document_id.as_str())
         .bind(operation.id().as_str())
         .bind(operation.id().as_hash().as_str())
         .bind(action)
         .bind(operation.schema_id().as_str())
+        .bind(prev_op_string.as_str())
         .execute(&self.pool)
         .await
         .map_err(|e| OperationStorageError::Custom(e.to_string()))?
@@ -228,22 +282,17 @@ impl OperationStore<DoggoOperation> for SqlStorage {
     async fn get_operation_by_id(
         &self,
         id: OperationId,
-    ) -> Result<
-        (
-            Option<OperationRow>,
-            Vec<PreviousOperationRelationRow>,
-            Vec<OperationFieldRow>,
-        ),
-        OperationStorageError,
-    > {
+    ) -> Result<(Option<OperationRow>, Vec<OperationFieldRow>), OperationStorageError> {
         let operation_row = query_as::<_, OperationRow>(
             "
             SELECT
                 author,
+                document_id,
                 operation_id,
                 entry_hash,
                 action,
-                schema_id
+                schema_id,
+                previous_operations
             FROM
                 operations_v1
             WHERE
@@ -252,22 +301,6 @@ impl OperationStore<DoggoOperation> for SqlStorage {
         )
         .bind(id.as_str())
         .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| OperationStorageError::Custom(e.to_string()))?;
-
-        let previous_operation_rows = query_as::<_, PreviousOperationRelationRow>(
-            "
-            SELECT
-                parent_operation_id,
-                child_operation_id
-            FROM
-                previous_operations_v1
-            WHERE
-                child_operation_id = $1
-            ",
-        )
-        .bind(id.as_str())
-        .fetch_all(&self.pool)
         .await
         .map_err(|e| OperationStorageError::Custom(e.to_string()))?;
 
@@ -289,15 +322,15 @@ impl OperationStore<DoggoOperation> for SqlStorage {
         .await
         .map_err(|e| OperationStorageError::Custom(e.to_string()))?;
 
-        Ok((operation_row, previous_operation_rows, operation_field_rows))
+        Ok((operation_row, operation_field_rows))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::identity::Author;
     use p2panda_rs::operation::OperationId;
     use p2panda_rs::test_utils::constants::DEFAULT_HASH;
+    use p2panda_rs::{document::DocumentId, identity::Author};
 
     use crate::db::sql_store::SqlStorage;
     use crate::db::store::test_utils::test_operation;
@@ -315,8 +348,10 @@ mod tests {
         let author = Author::new(TEST_AUTHOR).unwrap();
 
         let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
+        let document_id = DocumentId::new(operation_id.clone());
 
-        let doggo_operation = DoggoOperation::new(&test_operation(), &operation_id, &author);
+        let doggo_operation =
+            DoggoOperation::new(&author, &test_operation(), &operation_id, &document_id);
 
         let result = storage_provider
             .insert_operation(&doggo_operation)
@@ -329,15 +364,11 @@ mod tests {
             .await
             .unwrap();
 
-        let (operation_row, previous_operation_relation_rows, field_rows) = result;
+        let (operation_row, field_rows) = result;
 
         assert!(operation_row.is_some());
-        assert_eq!(previous_operation_relation_rows.len(), 0);
         assert_eq!(field_rows.len(), 10);
 
-        println!(
-            "{:#?}",
-            (operation_row, previous_operation_relation_rows, field_rows)
-        );
+        println!("{:#?}", (operation_row, field_rows));
     }
 }

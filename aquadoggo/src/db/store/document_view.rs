@@ -269,7 +269,7 @@ impl DocumentStore<DoggoDocumentView> for SqlStorage {
 mod tests {
     use std::str::FromStr;
 
-    use p2panda_rs::document::DocumentViewId;
+    use p2panda_rs::document::{DocumentId, DocumentViewId};
     use p2panda_rs::identity::Author;
     use p2panda_rs::operation::{
         AsOperation, Operation, OperationFields, OperationId, OperationValue,
@@ -319,6 +319,9 @@ mod tests {
         // Fake id for our first operation.
         let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
 
+        // Coresponding document id.
+        let document_id = DocumentId::new(operation_id.clone());
+
         // The test CREATE operation which contains all fields.
         let operation = test_operation();
 
@@ -336,7 +339,7 @@ mod tests {
         });
 
         // Construct a doggo operation for publishing.
-        let doggo_operation = DoggoOperation::new(&operation, &operation_id, &author);
+        let doggo_operation = DoggoOperation::new(&author, &operation, &operation_id, &document_id);
 
         // Insert the CREATE op.
         storage_provider
@@ -378,8 +381,12 @@ mod tests {
 
         // Update the field_ids to include the newly update operation_id for the "username" field.
         field_ids.insert("username".to_string(), update_operation_id.clone());
-        let doggo_update_operation =
-            DoggoOperation::new(&update_operation, &update_operation_id, &author);
+        let doggo_update_operation = DoggoOperation::new(
+            &author,
+            &update_operation,
+            &update_operation_id,
+            &document_id,
+        );
 
         // Insert the operation.
         storage_provider

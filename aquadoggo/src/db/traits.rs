@@ -4,7 +4,7 @@ use std::collections::btree_map::Iter;
 use std::collections::BTreeMap;
 
 use async_trait::async_trait;
-use p2panda_rs::document::DocumentViewId;
+use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{OperationAction, OperationFields, OperationId, OperationValue};
 use p2panda_rs::schema::SchemaId;
@@ -65,6 +65,8 @@ pub trait AsStorageOperation: Sized + Clone + Send + Sync {
 
     fn author(&self) -> Author;
 
+    fn document_id(&self) -> DocumentId;
+
     fn fields(&self) -> Option<OperationFields>;
 
     fn id(&self) -> OperationId;
@@ -84,12 +86,5 @@ pub trait OperationStore<StorageOperation: AsStorageOperation> {
     async fn get_operation_by_id(
         &self,
         id: OperationId,
-    ) -> Result<
-        (
-            Option<OperationRow>,
-            Vec<PreviousOperationRelationRow>,
-            Vec<OperationFieldRow>,
-        ),
-        OperationStorageError,
-    >;
+    ) -> Result<(Option<OperationRow>, Vec<OperationFieldRow>), OperationStorageError>;
 }

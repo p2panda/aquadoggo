@@ -15,8 +15,8 @@ use p2panda_rs::storage_provider::errors::{EntryStorageError, ValidationError};
 use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, StorageProvider};
 use p2panda_rs::Validate;
 
-use crate::db::store::Log;
 use crate::db::sql_store::SqlStorage;
+use crate::db::store::Log;
 use crate::errors::StorageProviderResult;
 use crate::rpc::{EntryArgsRequest, EntryArgsResponse, PublishEntryRequest, PublishEntryResponse};
 

@@ -5,20 +5,26 @@ use sqlx::FromRow;
 /// A struct representing a single operation row as it is inserted in the database.
 #[derive(FromRow, Debug)]
 pub struct OperationRow {
-    /// The id of this operation.
-    operation_id: String,
-
     /// The author of this operation.
-    author: String,
+    pub author: String,
+
+    /// The id of the document this operation is part of.
+    pub document_id: String,
+
+    /// The id of this operation.
+    pub operation_id: String,
 
     /// The action type this operation is performing.
-    action: String,
+    pub action: String,
 
     /// The hash of the entry this operation is associated with.
-    entry_hash: String,
+    pub entry_hash: String,
 
     /// The id of the schema this operation follows.
-    schema_id: String,
+    pub schema_id: String,
+
+    /// The previous operations of this operation concatenated into string format with `_` seperator.
+    pub previous_operations: String,
 }
 
 /// A struct representing a single previous operation relation row as it is inserted in the database.
