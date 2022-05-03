@@ -44,16 +44,16 @@ pub struct PreviousOperationRelationRow {
 #[derive(FromRow, Debug)]
 pub struct OperationFieldRow {
     /// The id of the operation this field was published on.
-    operation_id: String,
+    pub operation_id: String,
 
     /// The name of this field.
-    name: String,
+    pub name: String,
 
     /// The type of this field.
-    field_type: String,
+    pub field_type: String,
 
     /// The actual value contained in this field.
-    value: String,
+    pub value: String,
 }
 
 /// A row in the DB which expresses a document view field. If the field type

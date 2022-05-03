@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use async_trait::async_trait;
 use futures::future::try_join_all;
-use p2panda_rs::document::DocumentId;
+use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::storage_provider::traits::StorageProvider;
 use sqlx::{query, query_as, query_scalar};
 
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{
     AsOperation, Operation, OperationAction, OperationFields, OperationId, OperationValue,
+    PinnedRelation, PinnedRelationList, Relation, RelationList,
 };
 use p2panda_rs::schema::SchemaId;
 
@@ -220,14 +221,31 @@ impl OperationStore<DoggoOperation> for SqlStorage {
                         db_values
                     }
                     OperationValue::PinnedRelation(pinned_relation) => {
-                        vec![Some(pinned_relation.view_id().hash().as_str().to_string())]
+                        // Deriving string id here for now until implemented in p2panda-rs
+                        let mut id_str = "".to_string();
+                        for (i, operation_id) in
+                            pinned_relation.view_id().sorted().iter().enumerate()
+                        {
+                            let separator = if i == 0 { "" } else { "_" };
+                            id_str += format!("{}{}", separator, operation_id.as_hash().as_str())
+                                .as_str();
+                        }
+
+                        vec![Some(id_str)]
                     }
                     OperationValue::PinnedRelationList(pinned_relation_list) => {
                         let mut db_values = Vec::new();
                         for document_view_id in pinned_relation_list.iter() {
-                            // I think we'd prefer to store the full id here, not the hash, don't think there's
-                            // a string method for that yet though.
-                            db_values.push(Some(document_view_id.hash().as_str().to_string()))
+                            // Deriving string id here for now until implemented in p2panda-rs
+                            let mut id_str = "".to_string();
+                            for (i, operation_id) in document_view_id.sorted().iter().enumerate() {
+                                let separator = if i == 0 { "" } else { "_" };
+                                id_str +=
+                                    format!("{}{}", separator, operation_id.as_hash().as_str())
+                                        .as_str();
+                            }
+
+                            db_values.push(Some(id_str))
                         }
                         db_values
                     }
@@ -326,6 +344,135 @@ impl OperationStore<DoggoOperation> for SqlStorage {
 
         Ok((operation_row, operation_field_rows))
     }
+
+    async fn get_operation_fields_by_id(
+        &self,
+        id: OperationId,
+    ) -> Result<OperationFields, OperationStorageError> {
+        let operation_field_rows = query_as::<_, OperationFieldRow>(
+            "
+            SELECT
+                operation_id,
+                name,
+                field_type,
+                value
+            FROM
+                operation_fields_v1
+            WHERE
+                operation_id = $1
+            ",
+        )
+        .bind(id.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| OperationStorageError::Custom(e.to_string()))?;
+
+        let mut relation_list: Vec<DocumentId> = Vec::new();
+        let mut pinned_relation_list: Vec<DocumentViewId> = Vec::new();
+
+        let mut operation_fields = OperationFields::new();
+
+        // Iterate over returned field values, for each value:
+        //  - if it is a simple value type, parse it into an OperationValue and add it to the operation_fields
+        //  - if it is a relation list value type parse each item into a DocumentId/DocumentViewId and push to
+        //    the suitable vec (instantiated above)
+        operation_field_rows.iter().for_each(|row| {
+            match row.field_type.as_str() {
+                "bool" => {
+                    operation_fields
+                        .add(
+                            row.name.as_str(),
+                            OperationValue::Boolean(row.value.parse::<bool>().unwrap()),
+                        )
+                        .unwrap();
+                }
+                "int" => {
+                    operation_fields
+                        .add(
+                            row.name.as_str(),
+                            OperationValue::Integer(row.value.parse::<i64>().unwrap()),
+                        )
+                        .unwrap();
+                }
+                "float" => {
+                    operation_fields
+                        .add(
+                            row.name.as_str(),
+                            OperationValue::Float(row.value.parse::<f64>().unwrap()),
+                        )
+                        .unwrap();
+                }
+                "str" => {
+                    operation_fields
+                        .add(row.name.as_str(), OperationValue::Text(row.value.clone()))
+                        .unwrap();
+                }
+                "relation" => {
+                    operation_fields
+                        .add(
+                            row.name.as_str(),
+                            OperationValue::Relation(Relation::new(
+                                row.value.parse::<DocumentId>().unwrap(),
+                            )),
+                        )
+                        .unwrap();
+                }
+                // A special case, this is a list item, so we push it to a vec but _don't_ add it
+                // to the operation_fields yet.
+                "relation_list" => relation_list.push(row.value.parse::<DocumentId>().unwrap()),
+                "pinned_relation" => {
+                    operation_fields
+                        .add(
+                            row.name.as_str(),
+                            OperationValue::PinnedRelation(PinnedRelation::new(
+                                row.value.parse::<DocumentViewId>().unwrap(),
+                            )),
+                        )
+                        .unwrap();
+                }
+                // A special case, this is a list item, so we push it to a vec but _don't_ add it
+                // to the operation_fields yet.
+                "pinned_relation_list" => {
+                    pinned_relation_list.push(row.value.parse::<DocumentViewId>().unwrap())
+                }
+                _ => (),
+            };
+        });
+
+        // Find if there is at least one field containing a "relation_list" type
+        let relation_list_field = &operation_field_rows
+            .iter()
+            .find(|row| row.field_type == "relation_list");
+
+        // If so, then parse the `relation_list` vec into an operation value and add it to the document view fields
+        if let Some(relation_list_field) = relation_list_field {
+            operation_fields
+                .add(
+                    relation_list_field.name.as_str(),
+                    OperationValue::RelationList(RelationList::new(relation_list)),
+                )
+                .unwrap();
+        }
+
+        // Find if there is at least one field containing a "pinned_relation_list" type
+        let pinned_relation_list_field = &operation_field_rows
+            .iter()
+            .find(|row| row.field_type == "pinned_relation_list");
+
+        // If so, then parse the `pinned_relation_list` vec into an operation value and add it to the document view fields
+        if let Some(pinned_relation_list_field) = pinned_relation_list_field {
+            operation_fields
+                .add(
+                    pinned_relation_list_field.name.as_str(),
+                    OperationValue::PinnedRelationList(PinnedRelationList::new(
+                        pinned_relation_list,
+                    )),
+                )
+                .unwrap();
+        }
+
+        Ok(operation_fields)
+    }
 }
 
 #[cfg(test)]
@@ -336,6 +483,7 @@ mod tests {
 
     use crate::db::sql_store::SqlStorage;
     use crate::db::store::test_utils::test_operation;
+    use crate::db::traits::AsStorageOperation;
     use crate::test_helpers::initialize_db;
 
     use super::{DoggoOperation, OperationStore};
@@ -372,5 +520,12 @@ mod tests {
         assert_eq!(field_rows.len(), 10);
 
         println!("{:#?}", (operation_row, field_rows));
+
+        let result = storage_provider
+            .get_operation_fields_by_id(operation_id.clone())
+            .await
+            .unwrap();
+
+        assert_eq!(result, doggo_operation.fields().unwrap());
     }
 }

@@ -93,10 +93,10 @@ pub trait OperationStore<StorageOperation: AsStorageOperation> {
         id: OperationId,
     ) -> Result<Option<DocumentId>, OperationStorageError>;
 
-    // async fn get_operation_fields_by_id(
-    //     &self,
-    //     id: OperationId,
-    // ) -> Result<OperationFields, OperationStorageError>;
+    async fn get_operation_fields_by_id(
+        &self,
+        id: OperationId,
+    ) -> Result<OperationFields, OperationStorageError>;
 
     // async fn get_operation_value_by_id(
     //     &self,
