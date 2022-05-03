@@ -8,9 +8,7 @@ use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{OperationAction, OperationFields, OperationId, OperationValue};
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::Validate;
 
-use crate::db::db_types::{OperationFieldRow, OperationRow, PreviousOperationRelationRow};
 use crate::db::errors::{DocumentViewStorageError, OperationStorageError};
 
 /// The string name of a documents field
@@ -21,7 +19,7 @@ pub type FieldName = String;
 pub type FieldIds = BTreeMap<FieldName, OperationId>;
 
 /// The fields of a document view.
-pub type DocumentViewFields = BTreeMap<FieldName, OperationValue>;
+pub type DocumentViewFields = OperationFields;
 
 /// WIP: Storage trait representing a document view.
 pub trait AsStorageDocumentView: Sized + Clone + Send + Sync {

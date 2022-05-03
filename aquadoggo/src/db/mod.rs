@@ -10,6 +10,7 @@ pub mod errors;
 pub mod sql_store;
 pub mod store;
 pub mod traits;
+pub mod utils;
 
 /// Re-export of generic connection pool type.
 pub type Pool = AnyPool;

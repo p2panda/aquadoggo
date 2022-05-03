@@ -55,14 +55,3 @@ pub struct OperationFieldRow {
     /// The actual value contained in this field.
     pub value: String,
 }
-
-/// A row in the DB which expresses a document view field. If the field type
-/// is a relation list, then a record for each item in the list will be recorded
-#[derive(FromRow, Debug)]
-pub struct DocumentViewFieldRow {
-    pub name: String,
-
-    pub field_type: String,
-
-    pub value: String,
-}

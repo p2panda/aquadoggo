@@ -3,22 +3,21 @@ use std::collections::btree_map::Iter;
 
 use async_trait::async_trait;
 use futures::future::try_join_all;
+use p2panda_rs::operation::OperationValue;
 use sqlx::{query, query_as};
 
-use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId};
-use p2panda_rs::operation::{
-    OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList,
-};
+use p2panda_rs::document::{DocumentView, DocumentViewId};
 use p2panda_rs::schema::SchemaId;
 
-use crate::db::db_types::DocumentViewFieldRow;
+use crate::db::db_types::OperationFieldRow;
 use crate::db::errors::DocumentViewStorageError;
 use crate::db::sql_store::SqlStorage;
 use crate::db::traits::{
     AsStorageDocumentView, DocumentStore, DocumentViewFields, FieldIds, FieldName,
 };
+use crate::db::utils::parse_operation_fields;
 
-/// WIP: Aquadoggo struct which will implements AsStorageDocumentView trait.
+/// Aquadoggo struct which will implements AsStorageDocumentView trait.
 #[derive(Debug, Clone)]
 pub struct DoggoDocumentView {
     document_view: DocumentView,
@@ -150,10 +149,11 @@ impl DocumentStore<DoggoDocumentView> for SqlStorage {
         &self,
         id: &DocumentViewId,
     ) -> Result<DocumentViewFields, DocumentViewStorageError> {
-        let document_view_field_rows = query_as::<_, DocumentViewFieldRow>(
+        let document_view_field_rows = query_as::<_, OperationFieldRow>(
             "
                     SELECT
                         document_view_fields.name,
+                        operation_fields_v1.operation_id,
                         operation_fields_v1.field_type,
                         operation_fields_v1.value
                     FROM
@@ -172,96 +172,7 @@ impl DocumentStore<DoggoDocumentView> for SqlStorage {
         .await
         .map_err(|e| DocumentViewStorageError::Custom(e.to_string()))?;
 
-        let mut relation_list: Vec<DocumentId> = Vec::new();
-        let mut pinned_relation_list: Vec<DocumentViewId> = Vec::new();
-
-        let mut document_view_fields = DocumentViewFields::new();
-
-        // Iterate over returned field values, for each value:
-        //  - if it is a simple value type, parse it into an OperationValue and add it to the operation_fields
-        //  - if it is a relation list value type parse each item into a DocumentId/DocumentViewId and push to
-        //    the suitable vec (instantiated above)
-        document_view_field_rows.iter().for_each(|row| {
-            match row.field_type.as_str() {
-                "bool" => {
-                    document_view_fields.insert(
-                        row.name.to_string(),
-                        OperationValue::Boolean(row.value.parse::<bool>().unwrap()),
-                    );
-                }
-                "int" => {
-                    document_view_fields.insert(
-                        row.name.to_string(),
-                        OperationValue::Integer(row.value.parse::<i64>().unwrap()),
-                    );
-                }
-                "float" => {
-                    document_view_fields.insert(
-                        row.name.to_string(),
-                        OperationValue::Float(row.value.parse::<f64>().unwrap()),
-                    );
-                }
-                "str" => {
-                    document_view_fields.insert(
-                        row.name.to_string(),
-                        OperationValue::Text(row.value.clone()),
-                    );
-                }
-                "relation" => {
-                    document_view_fields.insert(
-                        row.name.to_string(),
-                        OperationValue::Relation(Relation::new(
-                            row.value.parse::<DocumentId>().unwrap(),
-                        )),
-                    );
-                }
-                // A special case, this is a list item, so we push it to a vec but _don't_ add it
-                // to the document_view_fields yet.
-                "relation_list" => relation_list.push(row.value.parse::<DocumentId>().unwrap()),
-                "pinned_relation" => {
-                    document_view_fields.insert(
-                        row.name.to_string(),
-                        OperationValue::PinnedRelation(PinnedRelation::new(
-                            row.value.parse::<DocumentViewId>().unwrap(),
-                        )),
-                    );
-                }
-                // A special case, this is a list item, so we push it to a vec but _don't_ add it
-                // to the document_view_fields yet.
-                "pinned_relation_list" => {
-                    pinned_relation_list.push(row.value.parse::<DocumentViewId>().unwrap())
-                }
-                _ => (),
-            };
-        });
-
-        // Find if there is at least one field containing a "relation_list" type
-        let relation_list_field = &document_view_field_rows
-            .iter()
-            .find(|row| row.field_type == "relation_list");
-
-        // If so, then parse the `relation_list` vec into an operation value and add it to the document view fields
-        if let Some(relation_list_field) = relation_list_field {
-            document_view_fields.insert(
-                relation_list_field.name.to_string(),
-                OperationValue::RelationList(RelationList::new(relation_list)),
-            );
-        }
-
-        // Find if there is at least one field containing a "pinned_relation_list" type
-        let pinned_relation_list_field = &document_view_field_rows
-            .iter()
-            .find(|row| row.field_type == "pinned_relation_list");
-
-        // If so, then parse the `pinned_relation_list` vec into an operation value and add it to the document view fields
-        if let Some(pinned_relation_list_field) = pinned_relation_list_field {
-            document_view_fields.insert(
-                pinned_relation_list_field.name.to_string(),
-                OperationValue::PinnedRelationList(PinnedRelationList::new(pinned_relation_list)),
-            );
-        }
-
-        Ok(document_view_fields)
+        Ok(parse_operation_fields(document_view_field_rows))
     }
 }
 
