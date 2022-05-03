@@ -75,6 +75,10 @@ impl AsStorageOperation for DoggoOperation {
 
 #[async_trait]
 impl OperationStore<DoggoOperation> for SqlStorage {
+    /// Retrieve the id of the document an operation is contained within.
+    ///
+    /// If no document was found, then this method returns a result wrapping
+    /// a None variant.
     async fn get_document_by_operation_id(
         &self,
         id: OperationId,
@@ -97,6 +101,14 @@ impl OperationStore<DoggoOperation> for SqlStorage {
         Ok(document_id.map(|id_str| id_str.parse().unwrap()))
     }
 
+    /// Insert an operation into the db.
+    ///
+    /// This requires a DoggoEntry to be composed elsewhere, it contains an Author,
+    /// DocumentId, OperationId and the actual Operation we want to store.
+    ///
+    /// - TODO: similar to several other places in StorageProvider, here we return
+    ///   a bool wrapped in a result. We need to be more clear on when we expect to
+    ///   recieve eg. an Ok(false) result, and if this is even needed.
     async fn insert_operation(
         &self,
         operation: &DoggoOperation,
@@ -297,8 +309,9 @@ impl OperationStore<DoggoOperation> for SqlStorage {
         Ok(operation_inserted && previous_operations_inserted && fields_inserted)
     }
 
-    // Which getters do we actually want here? Right now, if we want to retrieve a complete operation, it's easier to do it
-    // via `EntryStore` by getting the encoded operation. We may want more atomic getters here for field_type, value, action etc..
+    /// Get an operation identified by it's OperationId.
+    ///
+    /// Returns a DoggoOperation which includes Author, DocumentId and OperationId metadata.
     async fn get_operation_by_id(
         &self,
         id: OperationId,
@@ -354,6 +367,7 @@ impl OperationStore<DoggoOperation> for SqlStorage {
         )))
     }
 
+    /// Get just the fields of an operation, identified by it's OperationId.
     async fn get_operation_fields_by_id(
         &self,
         id: OperationId,
@@ -504,20 +518,22 @@ mod tests {
         let pool = initialize_db().await;
         let storage_provider = SqlStorage { pool };
 
+        // Create Author, OperationId and DocumentId in order to compose a DoggoOperation.
         let author = Author::new(TEST_AUTHOR).unwrap();
-
         let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
         let document_id = DocumentId::new(operation_id.clone());
-
         let doggo_operation =
             DoggoOperation::new(&author, &test_operation(), &operation_id, &document_id);
 
+        // Insert the doggo operation into the db, returns Ok(true) when succesful.
         let result = storage_provider
             .insert_operation(&doggo_operation)
             .await
             .unwrap();
+
         assert!(result);
 
+        // Request the previously inserted operation by it's id.
         let returned_doggo_operation = storage_provider
             .get_operation_by_id(operation_id.clone())
             .await
@@ -531,6 +547,26 @@ mod tests {
             returned_doggo_operation.document_id(),
             doggo_operation.document_id()
         );
+    }
+
+    async fn get_operation_fields() {
+        let pool = initialize_db().await;
+        let storage_provider = SqlStorage { pool };
+
+        // Create Author, OperationId and DocumentId in order to compose a DoggoOperation.
+        let author = Author::new(TEST_AUTHOR).unwrap();
+        let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
+        let document_id = DocumentId::new(operation_id.clone());
+        let doggo_operation =
+            DoggoOperation::new(&author, &test_operation(), &operation_id, &document_id);
+
+        // Insert the doggo operation into the db, returns Ok(true) when succesful.
+        let result = storage_provider
+            .insert_operation(&doggo_operation)
+            .await
+            .unwrap();
+
+        assert!(result);
 
         println!("{:#?}", doggo_operation);
 
