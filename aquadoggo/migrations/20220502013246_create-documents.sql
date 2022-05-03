@@ -10,7 +10,7 @@ CREATE INDEX idx_document_view_fields ON document_view_fields (document_view_id_
 
 CREATE TABLE IF NOT EXISTS document_views (
     document_view_id_hash       VARCHAR(64)     NOT NULL UNIQUE,
-    schema_id                   VARCHAR(64)     NOT NULL,
+    schema_id                   TEXT            NOT NULL,
     PRIMARY KEY (document_view_id_hash)
 );
 
