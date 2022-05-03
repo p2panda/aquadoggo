@@ -46,15 +46,6 @@ impl AsStorageOperation for DoggoOperation {
         self.id.clone()
     }
 
-    fn schema_id_short(&self) -> String {
-        match &self.operation.schema() {
-            SchemaId::Application(name, document_view_id) => {
-                format!("{}__{}", name, document_view_id.hash().as_str())
-            }
-            _ => self.operation.schema().as_str(),
-        }
-    }
-
     fn schema_id(&self) -> SchemaId {
         self.operation.schema()
     }
@@ -91,7 +82,7 @@ impl OperationStore<DoggoOperation> for SqlStorage {
                     operation_id,
                     entry_hash,
                     action,
-                    schema_id_short
+                    schema_id
                 )
             VALUES
                 ($1, $2, $3, $4, $5)
@@ -101,7 +92,7 @@ impl OperationStore<DoggoOperation> for SqlStorage {
         .bind(operation.id().as_str())
         .bind(operation.id().as_hash().as_str())
         .bind(action)
-        .bind(operation.schema_id_short().as_str())
+        .bind(operation.schema_id().as_str())
         .execute(&self.pool)
         .await
         .map_err(|e| OperationStorageError::Custom(e.to_string()))?
@@ -252,7 +243,7 @@ impl OperationStore<DoggoOperation> for SqlStorage {
                 operation_id,
                 entry_hash,
                 action,
-                schema_id_short
+                schema_id
             FROM
                 operations_v1
             WHERE

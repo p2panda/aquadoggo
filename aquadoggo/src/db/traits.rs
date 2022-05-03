@@ -72,8 +72,6 @@ pub trait AsStorageOperation: Sized + Clone + Send + Sync {
     fn previous_operations(&self) -> PreviousOperations;
 
     fn schema_id(&self) -> SchemaId;
-
-    fn schema_id_short(&self) -> String;
 }
 
 #[async_trait]
