@@ -120,28 +120,20 @@ impl DocumentStore<DoggoDocumentView> for SqlStorage {
         })
         .is_ok();
 
-        // Construct short schema id
-        let schema_id_short = match &schema_id {
-            SchemaId::Application(name, document_view_id) => {
-                format!("{}__{}", name, document_view_id.hash().as_str())
-            }
-            _ => schema_id.as_str(),
-        };
-
         // Insert document view fields into the db
         let document_view_inserted = query(
             "
             INSERT INTO
                 document_views (
                     document_view_id_hash,
-                    schema_id_short
+                    schema_id
                 )
             VALUES
                 ($1, $2)
             ",
         )
         .bind(document_view_id.hash().as_str())
-        .bind(schema_id_short)
+        .bind(schema_id.as_str())
         .execute(&self.pool)
         .await
         .map_err(|e| DocumentViewStorageError::Custom(e.to_string()))?

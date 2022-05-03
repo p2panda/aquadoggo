@@ -18,7 +18,7 @@ pub struct OperationRow {
     entry_hash: String,
 
     /// The id of the schema this operation follows.
-    schema_id_short: String,
+    schema_id: String,
 }
 
 /// A struct representing a single previous operation relation row as it is inserted in the database.
