@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use futures::future::try_join_all;
 use p2panda_rs::document::DocumentId;
 use p2panda_rs::storage_provider::traits::StorageProvider;
-use sqlx::{query, query_as};
+use sqlx::{query, query_as, query_scalar};
 
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{
@@ -74,6 +74,28 @@ impl AsStorageOperation for DoggoOperation {
 
 #[async_trait]
 impl OperationStore<DoggoOperation> for SqlStorage {
+    async fn get_document_by_operation_id(
+        &self,
+        id: OperationId,
+    ) -> Result<Option<DocumentId>, OperationStorageError> {
+        let document_id: Option<String> = query_scalar(
+            "
+            SELECT
+                document_id
+            FROM
+                operations_v1
+            WHERE
+                operation_id = $1
+            ",
+        )
+        .bind(id.as_str())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| OperationStorageError::Custom(e.to_string()))?;
+
+        Ok(document_id.map(|id_str| id_str.parse().unwrap()))
+    }
+
     async fn insert_operation(
         &self,
         operation: &DoggoOperation,
@@ -97,29 +119,9 @@ impl OperationStore<DoggoOperation> for SqlStorage {
             // Unwrap as we know any "UPDATE" or "DELETE" operation should have previous operations
             let previous_operation_id = operation.previous_operations().get(0).unwrap().clone();
 
-            let operation_row = query_as::<_, OperationRow>(
-                "
-            SELECT
-                author,
-                document_id,
-                operation_id,
-                entry_hash,
-                action,
-                schema_id,
-                previous_operations
-            FROM
-                operations_v1
-            WHERE
-                operation_id = $1
-            ",
-            )
-            .bind(previous_operation_id.as_str())
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|e| OperationStorageError::Custom(e.to_string()))?
-            .ok_or_else(|| OperationStorageError::Custom("Document missing".to_string()))?;
-
-            operation_row.document_id.parse().unwrap()
+            self.get_document_by_operation_id(previous_operation_id)
+                .await?
+                .ok_or_else(|| OperationStorageError::Custom("Document missing".to_string()))?
         };
 
         // Consruct query for inserting operation row, execute it
