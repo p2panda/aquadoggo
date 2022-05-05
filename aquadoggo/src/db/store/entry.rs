@@ -358,6 +358,7 @@ mod tests {
     use p2panda_rs::storage_provider::traits::EntryStore;
 
     use crate::db::sql_store::SqlStorage;
+    use crate::db::store::test_utils::test_db;
     use crate::test_helpers::initialize_db;
 
     const TEST_AUTHOR: &str = "1a8a62c5f64eed987326513ea15a6ea2682c256ac57a418c1c92d96787c8b36e";
@@ -379,8 +380,7 @@ mod tests {
 
     #[tokio::test]
     async fn entries_by_schema() {
-        let pool = initialize_db().await;
-        let storage_provider = SqlStorage { pool };
+        let storage_provider = test_db().await;
 
         let schema = SchemaId::new_application(
             "venue",
