@@ -83,9 +83,11 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crossbeam_queue::SegQueue;
+use log::{error, info};
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::broadcast::{channel, Sender};
 use tokio::task;
+use triggered::{Listener, Trigger};
 
 /// A task holding a generic input value and the name of the worker which will process it
 /// eventually.
@@ -115,18 +117,6 @@ pub enum TaskError {
 
 /// Workers are identified by simple string values.
 pub type WorkerName = String;
-
-/// A context object can be shared with each processed task across threads to gain access to common
-/// services like a datbase.
-pub struct Context<D: Send + Sync + 'static>(Arc<D>);
-
-impl<D: Send + Sync + 'static> Clone for Context<D> {
-    /// This `clone` implementation efficiently increments the reference counter to the inner
-    /// object instead of actually cloning it.
-    fn clone(&self) -> Self {
-        Self(Arc::clone(&self.0))
-    }
-}
 
 /// Every registered worker pool is managed by a `WorkerManager` which holds the task queue for
 /// this registered work and an index of all current inputs in the task queue.
@@ -168,7 +158,7 @@ where
     IN: Send + Sync + Clone + 'static,
     D: Send + Sync + 'static,
 {
-    async fn call(&self, context: Context<D>, input: IN) -> TaskResult<IN>;
+    async fn call(&self, context: D, input: IN) -> TaskResult<IN>;
 }
 
 /// Implements our `Workable` trait for a generic async function.
@@ -176,7 +166,7 @@ where
 impl<FN, F, IN, D> Workable<IN, D> for FN
 where
     // Function accepting a context and generic input value, returning a future.
-    FN: Fn(Context<D>, IN) -> F + Sync,
+    FN: Fn(D, IN) -> F + Sync,
     // Future returning a `TaskResult`.
     F: Future<Output = TaskResult<IN>> + Send + 'static,
     // Generic input type.
@@ -189,7 +179,7 @@ where
     ///
     /// This gets automatically wrapped in a static, boxed and pinned function signature by the
     /// `async_trait` macro so we don't need to do it ourselves.
-    async fn call(&self, context: Context<D>, input: IN) -> TaskResult<IN> {
+    async fn call(&self, context: D, input: IN) -> TaskResult<IN> {
         (self)(context, input).await
     }
 }
@@ -231,22 +221,30 @@ where
 pub struct Factory<IN, D>
 where
     IN: Send + Sync + Clone + Hash + Eq + Debug + 'static,
-    D: Send + Sync + 'static,
+    D: Send + Sync + Clone + 'static,
 {
     /// Shared context between all tasks.
-    context: Context<D>,
+    context: D,
 
     /// Map of all registered worker pools.
     managers: HashMap<WorkerName, WorkerManager<IN>>,
 
     /// Broadcast channel to inform worker pools about new tasks.
     tx: Sender<Task<IN>>,
+
+    /// Sender of error signal.
+    error_signal: Trigger,
+
+    /// Receiver of error signal.
+    ///
+    /// This can be used to react to factory errors, for example by quitting the program.
+    error_handle: Listener,
 }
 
 impl<IN, D> Factory<IN, D>
 where
     IN: Send + Sync + Clone + Hash + Eq + Debug + 'static,
-    D: Send + Sync + 'static,
+    D: Send + Sync + Clone + 'static,
 {
     /// Initialises a new factory.
     ///
@@ -256,13 +254,16 @@ where
     ///
     /// Factories will panic if the capacity limit was reached as it will cause the workers to miss
     /// incoming tasks.
-    pub fn new(data: D, capacity: usize) -> Self {
+    pub fn new(context: D, capacity: usize) -> Self {
         let (tx, _) = channel(capacity);
+        let (error_signal, error_handle) = triggered::trigger();
 
         Self {
-            context: Context(Arc::new(data)),
+            context,
             managers: HashMap::new(),
             tx,
+            error_signal,
+            error_handle,
         }
     }
 
@@ -289,6 +290,8 @@ where
             self.managers.insert(name.into(), new_manager);
         }
 
+        info!("Register {} worker with pool size {}", name, pool_size);
+
         self.spawn_dispatcher(name);
         self.spawn_workers(name, pool_size, work);
     }
@@ -298,9 +301,13 @@ where
     /// Tasks with duplicate input values which already exist in the queue will be silently
     /// rejected.
     pub fn queue(&mut self, task: Task<IN>) {
-        self.tx
-            .send(task)
-            .expect("Critical system error: Cant broadcast task");
+        match self.tx.send(task) {
+            Err(err) => {
+                error!("Error while broadcasting task: {}", err);
+                self.error_signal.trigger();
+            }
+            _ => (),
+        }
     }
 
     /// Returns true if there are no more tasks given for this worker pool.
@@ -309,6 +316,11 @@ where
             Some(manager) => manager.queue.is_empty(),
             None => false,
         }
+    }
+
+    /// Future which resolves as soon as factory returned a critical error.
+    pub fn on_error(&self) -> Listener {
+        self.error_handle.clone()
     }
 
     /// Spawns a task which listens to broadcast channel for incoming new tasks which might be
@@ -328,6 +340,9 @@ where
         let name = String::from(name);
         let queue = manager.queue.clone();
 
+        // Create handle for error signal
+        let error_signal = self.error_signal.clone();
+
         task::spawn(async move {
             loop {
                 match rx.recv().await {
@@ -338,22 +353,28 @@ where
                         }
 
                         // Check if a task with the same input values already exists in queue
-                        // @TODO: Unwind panic
-                        let mut input_index = input_index.lock().unwrap();
-                        if input_index.contains(&task.1) {
-                            continue; // Task already exists
+                        match input_index.lock() {
+                            Ok(mut index) => {
+                                if index.contains(&task.1) {
+                                    continue; // Task already exists
+                                } else {
+                                    // Generate a unique id for this new task and add it to queue
+                                    let next_id = counter.fetch_add(1, Ordering::Relaxed);
+                                    queue.push(QueueItem::new(next_id, task.1.clone()));
+                                    index.insert(task.1);
+                                }
+                            }
+                            Err(err) => {
+                                error!("Error while locking input index: {}", err);
+                                error_signal.trigger();
+                            }
                         }
-
-                        // Generate a unique id for this new task and add it to queue
-                        let next_id = counter.fetch_add(1, Ordering::Relaxed);
-                        queue.push(QueueItem::new(next_id, task.1.clone()));
-                        input_index.insert(task.1);
                     }
                     // The capacity of the broadcast channel is full, we're lagging behind and miss
                     // out on incoming tasks
                     Err(RecvError::Lagged(skipped_messages)) => {
-                        // @TODO: Unwind panic
-                        panic!("Lagging! {}", skipped_messages);
+                        error!("Channel lagging behind {} messages", skipped_messages);
+                        error_signal.trigger();
                     }
                     // The channel got closed, nothing anymore to do here
                     Err(RecvError::Closed) => (),
@@ -382,6 +403,9 @@ where
             let input_index = manager.input_index.clone();
             let tx = self.tx.clone();
 
+            // Create handle for error signal
+            let error_signal = self.error_signal.clone();
+
             task::spawn(async move {
                 loop {
                     // Wait until there is a new task arriving in the queue
@@ -391,25 +415,34 @@ where
                             let result = work.call(context.clone(), item.input()).await;
 
                             // Remove input index from queue
-                            // @TODO: Unwind panic
-                            let mut input_index = input_index.lock().unwrap();
-                            input_index.remove(&item.input());
+                            match input_index.lock() {
+                                Ok(mut index) => {
+                                    index.remove(&item.input());
+                                }
+                                Err(err) => {
+                                    error!("Error while locking input index: {}", err);
+                                    error_signal.trigger();
+                                }
+                            }
 
                             // .. check the task result ..
                             match result {
                                 Ok(Some(list)) => {
                                     // Tasks succeeded and dispatches new, subsequent tasks
                                     for task in list {
-                                        tx.send(task)
-                                            // @TODO: Unwind panic
-                                            .expect("Critical system error: Cant broadcast task");
+                                        match tx.send(task) {
+                                            Err(err) => {
+                                                error!("Error while broadcasting task: {}", err);
+                                                error_signal.trigger();
+                                            }
+                                            _ => (),
+                                        }
                                     }
                                 }
                                 Err(TaskError::Critical) => {
                                     // Something really horrible happened, we need to crash!
-                                    //
-                                    // @TODO: Unwind panic
-                                    panic!("Critical system error: Task {:?} failed", item.id(),);
+                                    error!("Critical error in task {:?}", item);
+                                    error_signal.trigger();
                                 }
                                 Err(TaskError::Failure) => {
                                     // Silently fail .. maybe write something to the log or retry?
@@ -436,7 +469,7 @@ mod tests {
     use rand::seq::SliceRandom;
     use rand::Rng;
 
-    use super::{Context, Factory, Task, TaskError, TaskResult};
+    use super::{Factory, Task, TaskError, TaskResult};
 
     #[tokio::test]
     async fn factory() {
@@ -450,15 +483,15 @@ mod tests {
         let mut factory = Factory::<Input, Data>::new(database.clone(), 1024);
 
         // Define two workers
-        async fn first(database: Context<Data>, input: Input) -> TaskResult<Input> {
-            let mut db = database.0.lock().map_err(|_| TaskError::Critical)?;
+        async fn first(database: Data, input: Input) -> TaskResult<Input> {
+            let mut db = database.lock().map_err(|_| TaskError::Critical)?;
             db.push(format!("first-{}", input));
             Ok(None)
         }
 
         // .. the second worker dispatches a task for "first" at the end
-        async fn second(database: Context<Data>, input: Input) -> TaskResult<Input> {
-            let mut db = database.0.lock().map_err(|_| TaskError::Critical)?;
+        async fn second(database: Data, input: Input) -> TaskResult<Input> {
+            let mut db = database.lock().map_err(|_| TaskError::Critical)?;
             db.push(format!("second-{}", input));
             Ok(Some(vec![Task::new("first", input)]))
         }
@@ -525,8 +558,8 @@ mod tests {
         let mut factory = Factory::<JigsawPiece, Data>::new(database.clone(), 1024);
 
         // This tasks "picks" a single piece out of the box and sorts it into the database
-        async fn pick(database: Context<Data>, input: JigsawPiece) -> TaskResult<JigsawPiece> {
-            let mut db = database.0.lock().map_err(|_| TaskError::Critical)?;
+        async fn pick(database: Data, input: JigsawPiece) -> TaskResult<JigsawPiece> {
+            let mut db = database.lock().map_err(|_| TaskError::Critical)?;
 
             // 1. Take incoming puzzle piece from box and move it into the database first
             db.pieces.insert(input.id, input.clone());
@@ -545,8 +578,8 @@ mod tests {
         }
 
         // This task finds fitting pieces and tries to combine them to a puzzle
-        async fn find(database: Context<Data>, input: JigsawPiece) -> TaskResult<JigsawPiece> {
-            let mut db = database.0.lock().map_err(|_| TaskError::Critical)?;
+        async fn find(database: Data, input: JigsawPiece) -> TaskResult<JigsawPiece> {
+            let mut db = database.lock().map_err(|_| TaskError::Critical)?;
 
             // 1. Merge all known and related pieces into one large list
             let mut ids: Vec<usize> = Vec::new();
@@ -627,8 +660,8 @@ mod tests {
         }
 
         // This task checks if a puzzle was completed
-        async fn finish(database: Context<Data>, input: JigsawPiece) -> TaskResult<JigsawPiece> {
-            let mut db = database.0.lock().map_err(|_| TaskError::Critical)?;
+        async fn finish(database: Data, input: JigsawPiece) -> TaskResult<JigsawPiece> {
+            let mut db = database.lock().map_err(|_| TaskError::Critical)?;
 
             // 1. Identify unfinished puzzle related to this piece
             let puzzle: Option<JigsawPuzzle> = db

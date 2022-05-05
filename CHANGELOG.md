@@ -13,11 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Generic task queue with worker pool [#82](https://github.com/p2panda/aquadoggo/pull/82)
 - Service manager [#90](https://github.com/p2panda/aquadoggo/pull/90)
 - Service error handling, refactor runtime [#92](https://github.com/p2panda/aquadoggo/pull/92)
+- Refactor module structure, propagate errors in worker to service manager [#97](https://github.com/p2panda/aquadoggo/pull/97)
 
 ### Changed
 
 - Move to `tokio` async runtime [#75](https://github.com/p2panda/aquadoggo/pull/75)
 - Implement SQL storage using `p2panda_rs` storage provider traits [#80](https://github.com/p2panda/aquadoggo/pull/80)
+- Improve `Signal` efficiency in `ServiceManager` [#95](https://github.com/p2panda/aquadoggo/pull/95)
 
 ## [0.2.0]
 
