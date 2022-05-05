@@ -175,6 +175,31 @@ impl EntryStore<EntryRow> for SqlStorage {
         Ok(rows_affected == 1)
     }
 
+    async fn get_entry_by_hash(&self, hash: &Hash) -> Result<Option<EntryRow>, EntryStorageError> {
+        let entry_row = query_as::<_, EntryRow>(
+            "
+            SELECT
+                author,
+                entry_bytes,
+                entry_hash,
+                log_id,
+                payload_bytes,
+                payload_hash,
+                seq_num
+            FROM
+                entries
+            WHERE
+                entry_hash = $1
+            ",
+        )
+        .bind(hash.as_str())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| EntryStorageError::Custom(e.to_string()))?;
+
+        Ok(entry_row)
+    }
+
     /// Returns entry at sequence position within an author's log.
     async fn entry_at_seq_num(
         &self,
