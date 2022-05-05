@@ -3,28 +3,24 @@
 use async_trait::async_trait;
 use serde::Serialize;
 use sqlx::FromRow;
-use sqlx::{query, query_as, query_scalar};
+use sqlx::{query, query_as};
 
-use p2panda_rs::document::DocumentId;
 use p2panda_rs::entry::{decode_entry, Entry as P2PandaEntry, EntrySigned, LogId, SeqNum};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{Operation, OperationEncoded};
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::errors::{EntryStorageError, ValidationError};
-use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, StorageProvider};
+use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
 use p2panda_rs::Validate;
 
 use crate::db::sql_store::SqlStorage;
-use crate::db::store::Log;
-use crate::errors::StorageProviderResult;
-use crate::rpc::{EntryArgsRequest, EntryArgsResponse, PublishEntryRequest, PublishEntryResponse};
 
 /// Struct representing the actual SQL row of `Entry`.
 ///
 /// We store the u64 integer values of `log_id` and `seq_num` as strings since not all database
 /// backend support large numbers.
-#[derive(FromRow, Debug, Serialize, Clone)]
+#[derive(FromRow, Debug, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct DoggoEntry {
     /// Public key of the author.
@@ -304,90 +300,130 @@ impl EntryStore<DoggoEntry> for SqlStorage {
     }
 }
 
-/// All other methods needed to be implemented by a p2panda `StorageProvider`
-#[async_trait]
-impl StorageProvider<DoggoEntry, Log> for SqlStorage {
-    type EntryArgsResponse = EntryArgsResponse;
-    type EntryArgsRequest = EntryArgsRequest;
-    type PublishEntryResponse = PublishEntryResponse;
-    type PublishEntryRequest = PublishEntryRequest;
-
-    /// Returns the related document for any entry.
-    ///
-    /// Every entry is part of a document and, through that, associated with a specific log id used
-    /// by this document and author. This method returns that document id by looking up the log
-    /// that the entry was stored in.
-    async fn get_document_by_entry(
-        &self,
-        entry_hash: &Hash,
-    ) -> StorageProviderResult<Option<DocumentId>> {
-        let result: Option<String> = query_scalar(
-            "
-            SELECT
-                logs.document
-            FROM
-                logs
-            INNER JOIN entries
-                ON (logs.log_id = entries.log_id
-                    AND logs.author = entries.author)
-            WHERE
-                entries.entry_hash = $1
-            ",
-        )
-        .bind(entry_hash.as_str())
-        .fetch_optional(&self.pool)
-        .await?;
-
-        // Unwrap here since we already validated the hash
-        let hash = result.map(|str| {
-            Hash::new(&str)
-                .expect("Corrupt hash found in database")
-                .into()
-        });
-
-        Ok(hash)
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::entry::LogId;
+    use std::convert::TryFrom;
+
+    use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::hash::Hash;
-    use p2panda_rs::identity::Author;
+    use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::schema::SchemaId;
-    use p2panda_rs::storage_provider::traits::EntryStore;
+    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, StorageProvider};
+    use p2panda_rs::test_utils::constants::{DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
 
-    use crate::db::sql_store::SqlStorage;
     use crate::db::store::test_utils::test_db;
-    use crate::test_helpers::initialize_db;
-
-    const TEST_AUTHOR: &str = "1a8a62c5f64eed987326513ea15a6ea2682c256ac57a418c1c92d96787c8b36e";
 
     #[tokio::test]
     async fn latest_entry() {
-        let pool = initialize_db().await;
-        let storage_provider = SqlStorage { pool };
+        let storage_provider = test_db().await;
 
-        let author = Author::new(TEST_AUTHOR).unwrap();
+        let author_not_in_db = Author::try_from(*KeyPair::new().public_key()).unwrap();
         let log_id = LogId::new(1);
 
         let latest_entry = storage_provider
-            .latest_entry(&author, &log_id)
+            .latest_entry(&author_not_in_db, &log_id)
             .await
             .unwrap();
         assert!(latest_entry.is_none());
+
+        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
+        let author_in_db = Author::try_from(*key_pair.public_key()).unwrap();
+
+        let latest_entry = storage_provider
+            .latest_entry(&author_in_db, &log_id)
+            .await
+            .unwrap();
+        assert_eq!(latest_entry.unwrap().seq_num(), SeqNum::new(100).unwrap());
     }
 
     #[tokio::test]
     async fn entries_by_schema() {
         let storage_provider = test_db().await;
 
-        let schema = SchemaId::new_application(
+        let schema_not_in_the_db = SchemaId::new_application(
             "venue",
             &Hash::new_from_bytes(vec![1, 2, 3]).unwrap().into(),
         );
 
-        let entries = storage_provider.by_schema(&schema).await.unwrap();
-        assert!(entries.len() == 0);
+        let entries = storage_provider
+            .by_schema(&schema_not_in_the_db)
+            .await
+            .unwrap();
+        assert!(entries.is_empty());
+
+        let schema_in_the_db = SchemaId::new(TEST_SCHEMA_ID).unwrap();
+
+        let entries = storage_provider.by_schema(&schema_in_the_db).await.unwrap();
+        assert!(entries.len() == 100);
+    }
+
+    #[tokio::test]
+    async fn entry_by_seq_num() {
+        let storage_provider = test_db().await;
+
+        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
+        let author = Author::try_from(*key_pair.public_key()).unwrap();
+
+        for seq_num in [1, 10, 56, 77, 90] {
+            let seq_num = SeqNum::new(seq_num).unwrap();
+            let entry = storage_provider
+                .entry_at_seq_num(&author, &LogId::new(1), &seq_num)
+                .await
+                .unwrap();
+            assert_eq!(entry.unwrap().seq_num(), seq_num)
+        }
+
+        let wrong_log = LogId::new(2);
+        let entry = storage_provider
+            .entry_at_seq_num(&author, &wrong_log, &SeqNum::new(1).unwrap())
+            .await
+            .unwrap();
+        assert!(entry.is_none());
+
+        let author_not_in_db = Author::try_from(*KeyPair::new().public_key()).unwrap();
+        let entry = storage_provider
+            .entry_at_seq_num(&author_not_in_db, &LogId::new(1), &SeqNum::new(1).unwrap())
+            .await
+            .unwrap();
+        assert!(entry.is_none());
+
+        let seq_num_not_in_log = SeqNum::new(1000).unwrap();
+        let entry = storage_provider
+            .entry_at_seq_num(&author_not_in_db, &LogId::new(1), &seq_num_not_in_log)
+            .await
+            .unwrap();
+        assert!(entry.is_none())
+    }
+
+    #[tokio::test]
+    async fn get_entry_by_hash() {
+        let storage_provider = test_db().await;
+
+        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
+        let author = Author::try_from(*key_pair.public_key()).unwrap();
+
+        for seq_num in [1, 11, 32, 45, 76] {
+            let seq_num = SeqNum::new(seq_num).unwrap();
+            let entry = storage_provider
+                .entry_at_seq_num(&author, &LogId::new(1), &seq_num)
+                .await
+                .unwrap()
+                .unwrap();
+
+            let entry_hash = entry.hash();
+            let entry_by_hash = storage_provider
+                .get_entry_by_hash(&entry_hash)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(entry, entry_by_hash)
+        }
+
+        let entry_hash_not_in_db = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
+        let entry = storage_provider
+            .get_entry_by_hash(&entry_hash_not_in_db)
+            .await
+            .unwrap();
+        assert!(entry.is_none())
     }
 }

@@ -13,8 +13,7 @@ use p2panda_rs::operation::{
 };
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::{AsStorageEntry, AsStorageLog, StorageProvider};
-use p2panda_rs::test_utils::constants::{DEFAULT_HASH, TEST_SCHEMA_ID};
-use p2panda_rs::test_utils::utils::{create_operation, update_operation};
+use p2panda_rs::test_utils::constants::{DEFAULT_HASH, DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
 
 use crate::db::sql_store::SqlStorage;
 use crate::rpc::{EntryArgsRequest, PublishEntryRequest};
@@ -79,7 +78,7 @@ pub async fn test_db() -> SqlStorage {
     let pool = initialize_db().await;
     let storage_provider = SqlStorage { pool };
 
-    let key_pair = KeyPair::new();
+    let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
     let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
     let schema = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
     let create_operation = test_operation();
@@ -110,7 +109,7 @@ pub async fn test_db() -> SqlStorage {
         .add("username", OperationValue::Text("yahoooo".to_owned()))
         .unwrap();
 
-    for _ in 1..1000 {
+    for _ in 1..100 {
         let next_entry_args = storage_provider
             .get_entry_args(&EntryArgsRequest {
                 author: author.clone(),
