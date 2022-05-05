@@ -303,15 +303,100 @@ impl EntryStore<DoggoEntry> for SqlStorage {
 #[cfg(test)]
 mod tests {
     use std::convert::TryFrom;
+    use std::str::FromStr;
 
+    use p2panda_rs::document::DocumentId;
+    use p2panda_rs::entry::{sign_and_encode, Entry};
     use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
+    use p2panda_rs::operation::{Operation, OperationEncoded, OperationFields, OperationValue};
     use p2panda_rs::schema::SchemaId;
-    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
+    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, StorageProvider};
     use p2panda_rs::test_utils::constants::{DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
 
+    use crate::db::store::entry::DoggoEntry;
     use crate::db::store::test_utils::test_db;
+    use crate::rpc::EntryArgsRequest;
+
+    #[tokio::test]
+    async fn insert_entry() {
+        let storage_provider = test_db().await;
+
+        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
+        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+        let log_id = LogId::new(1);
+        let schema = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
+
+        // Derive the document_id by fetching the first entry
+        let document_id: DocumentId = storage_provider
+            .entry_at_seq_num(&author, &log_id, &SeqNum::new(1).unwrap())
+            .await
+            .unwrap()
+            .unwrap()
+            .hash()
+            .into();
+
+        let next_entry_args = storage_provider
+            .get_entry_args(&EntryArgsRequest {
+                author: author.clone(),
+                document: Some(document_id.clone()),
+            })
+            .await
+            .unwrap();
+
+        let mut fields = OperationFields::new();
+        fields
+            .add("username", OperationValue::Text("stitch".to_owned()))
+            .unwrap();
+
+        let update_operation = Operation::new_update(
+            schema.clone(),
+            vec![next_entry_args.entry_hash_backlink.clone().unwrap().into()],
+            fields.clone(),
+        )
+        .unwrap();
+
+        let update_entry = Entry::new(
+            &next_entry_args.log_id,
+            Some(&update_operation),
+            next_entry_args.entry_hash_skiplink.as_ref(),
+            next_entry_args.entry_hash_backlink.as_ref(),
+            &next_entry_args.seq_num,
+        )
+        .unwrap();
+
+        let entry_encoded = sign_and_encode(&update_entry, &key_pair).unwrap();
+        let operation_encoded = OperationEncoded::try_from(&update_operation).unwrap();
+        let doggo_entry = DoggoEntry::new(&entry_encoded, &operation_encoded).unwrap();
+        let result = storage_provider.insert_entry(doggo_entry).await;
+
+        assert!(result.is_ok())
+    }
+
+    #[tokio::test]
+    async fn try_insert_non_unique_entry() {
+        let storage_provider = test_db().await;
+
+        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
+        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+        let log_id = LogId::new(1);
+
+        let first_entry = storage_provider
+            .entry_at_seq_num(&author, &log_id, &SeqNum::new(1).unwrap())
+            .await
+            .unwrap()
+            .unwrap();
+
+        let duplicate_doggo_entry = DoggoEntry::new(
+            &first_entry.entry_signed(),
+            &first_entry.operation_encoded().unwrap(),
+        )
+        .unwrap();
+        let result = storage_provider.insert_entry(duplicate_doggo_entry).await;
+
+        assert_eq!(result.unwrap_err().to_string(), "Error occured during `EntryStorage` request in storage provider: error returned from database: UNIQUE constraint failed: entries.author, entries.log_id, entries.seq_num")
+    }
 
     #[tokio::test]
     async fn latest_entry() {
