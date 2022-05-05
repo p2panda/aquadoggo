@@ -76,21 +76,35 @@ pub trait AsStorageOperation: Sized + Clone + Send + Sync {
 
 #[async_trait]
 pub trait OperationStore<StorageOperation: AsStorageOperation> {
+    /// Insert an operation into the db.
+    ///
+    /// The passed operation must implement the `AsStorageOperation` trait. Errors when
+    /// a fatal DB error occurs, returns true or false depending if the expected number
+    /// of insertions occured.
     async fn insert_operation(
         &self,
         operation: &StorageOperation,
     ) -> Result<bool, OperationStorageError>;
 
+    /// Get an operation identified by it's OperationId.
+    ///
+    /// Returns a type implementing `AsStorageOperation` which includes `Author`, `DocumentId` and
+    /// `OperationId` metadata.
     async fn get_operation_by_id(
         &self,
         id: OperationId,
     ) -> Result<Option<StorageOperation>, OperationStorageError>;
 
+    /// Retrieve the id of the document an operation is contained within.
+    ///
+    /// If no document was found, then this method returns a result wrapping
+    /// a None variant.
     async fn get_document_by_operation_id(
         &self,
         id: OperationId,
     ) -> Result<Option<DocumentId>, OperationStorageError>;
 
+    /// Get just the fields of an operation, identified by their OperationId.
     async fn get_operation_fields_by_id(
         &self,
         id: OperationId,
