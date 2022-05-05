@@ -30,13 +30,3 @@ CREATE TABLE IF NOT EXISTS operation_fields_v1 (
 );
 
 CREATE INDEX idx_operation_fields_v1 ON operation_fields_v1 (operation_id, name);
-
-CREATE TRIGGER only_one_field_value 
-   BEFORE INSERT ON operation_fields_v1
-BEGIN
-    SELECT
-        CASE
-	        WHEN COUNT(NEW.value) = 0 THEN
-                RAISE (ABORT,'Field can only contain one value')
-       END;
-END;
