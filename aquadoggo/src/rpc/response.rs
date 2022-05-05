@@ -5,7 +5,7 @@ use serde::Serialize;
 use p2panda_rs::hash::Hash;
 use p2panda_rs::storage_provider::traits::{AsEntryArgsResponse, AsPublishEntryResponse};
 
-use crate::db::store::EntryRow;
+use crate::db::store::DoggoEntry;
 
 /// Response body of `panda_getEntryArguments`.
 ///
@@ -66,5 +66,5 @@ impl AsPublishEntryResponse for PublishEntryResponse {
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct QueryEntriesResponse {
-    pub entries: Vec<EntryRow>,
+    pub entries: Vec<DoggoEntry>,
 }

@@ -7,4 +7,4 @@ mod operation;
 mod test_utils;
 
 pub use self::log::Log;
-pub use entry::EntryRow;
+pub use entry::DoggoEntry;

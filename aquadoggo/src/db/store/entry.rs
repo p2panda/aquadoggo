@@ -26,7 +26,7 @@ use crate::rpc::{EntryArgsRequest, EntryArgsResponse, PublishEntryRequest, Publi
 /// backend support large numbers.
 #[derive(FromRow, Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct EntryRow {
+pub struct DoggoEntry {
     /// Public key of the author.
     pub author: String,
 
@@ -49,13 +49,13 @@ pub struct EntryRow {
     pub seq_num: String,
 }
 
-impl AsRef<Self> for EntryRow {
+impl AsRef<Self> for DoggoEntry {
     fn as_ref(&self) -> &Self {
         self
     }
 }
 
-impl EntryRow {
+impl DoggoEntry {
     fn entry_decoded(&self) -> P2PandaEntry {
         // Unwrapping as validation occurs in `EntryWithOperation`.
         decode_entry(&self.entry_signed(), self.operation_encoded().as_ref()).unwrap()
@@ -71,7 +71,7 @@ impl EntryRow {
 }
 
 /// Implement `AsStorageEntry` trait for `Entry`
-impl AsStorageEntry for EntryRow {
+impl AsStorageEntry for DoggoEntry {
     type AsStorageEntryError = EntryStorageError;
 
     fn new(
@@ -126,7 +126,7 @@ impl AsStorageEntry for EntryRow {
     }
 }
 
-impl Validate for EntryRow {
+impl Validate for DoggoEntry {
     type Error = ValidationError;
 
     fn validate(&self) -> Result<(), Self::Error> {
@@ -141,9 +141,9 @@ impl Validate for EntryRow {
 
 /// Trait which handles all storage actions relating to `Entries`.
 #[async_trait]
-impl EntryStore<EntryRow> for SqlStorage {
+impl EntryStore<DoggoEntry> for SqlStorage {
     /// Insert an entry into storage.
-    async fn insert_entry(&self, entry: EntryRow) -> Result<bool, EntryStorageError> {
+    async fn insert_entry(&self, entry: DoggoEntry) -> Result<bool, EntryStorageError> {
         let rows_affected = query(
             "
             INSERT INTO
@@ -175,8 +175,11 @@ impl EntryStore<EntryRow> for SqlStorage {
         Ok(rows_affected == 1)
     }
 
-    async fn get_entry_by_hash(&self, hash: &Hash) -> Result<Option<EntryRow>, EntryStorageError> {
-        let entry_row = query_as::<_, EntryRow>(
+    async fn get_entry_by_hash(
+        &self,
+        hash: &Hash,
+    ) -> Result<Option<DoggoEntry>, EntryStorageError> {
+        let entry_row = query_as::<_, DoggoEntry>(
             "
             SELECT
                 author,
@@ -206,8 +209,8 @@ impl EntryStore<EntryRow> for SqlStorage {
         author: &Author,
         log_id: &LogId,
         seq_num: &SeqNum,
-    ) -> Result<Option<EntryRow>, EntryStorageError> {
-        let entry_row = query_as::<_, EntryRow>(
+    ) -> Result<Option<DoggoEntry>, EntryStorageError> {
+        let entry_row = query_as::<_, DoggoEntry>(
             "
             SELECT
                 author,
@@ -240,8 +243,8 @@ impl EntryStore<EntryRow> for SqlStorage {
         &self,
         author: &Author,
         log_id: &LogId,
-    ) -> Result<Option<EntryRow>, EntryStorageError> {
-        let entry_row = query_as::<_, EntryRow>(
+    ) -> Result<Option<DoggoEntry>, EntryStorageError> {
+        let entry_row = query_as::<_, DoggoEntry>(
             "
             SELECT
                 author,
@@ -272,8 +275,8 @@ impl EntryStore<EntryRow> for SqlStorage {
     }
 
     /// Return vector of all entries of a given schema
-    async fn by_schema(&self, schema: &SchemaId) -> Result<Vec<EntryRow>, EntryStorageError> {
-        let entries = query_as::<_, EntryRow>(
+    async fn by_schema(&self, schema: &SchemaId) -> Result<Vec<DoggoEntry>, EntryStorageError> {
+        let entries = query_as::<_, DoggoEntry>(
             "
             SELECT
                 entries.author,
@@ -303,7 +306,7 @@ impl EntryStore<EntryRow> for SqlStorage {
 
 /// All other methods needed to be implemented by a p2panda `StorageProvider`
 #[async_trait]
-impl StorageProvider<EntryRow, Log> for SqlStorage {
+impl StorageProvider<DoggoEntry, Log> for SqlStorage {
     type EntryArgsResponse = EntryArgsResponse;
     type EntryArgsRequest = EntryArgsRequest;
     type PublishEntryResponse = PublishEntryResponse;
