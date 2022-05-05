@@ -6,6 +6,3 @@ mod log;
 mod operation;
 #[cfg(test)]
 mod test_utils;
-
-pub use self::log::Log;
-pub use entry::DoggoEntry;

@@ -9,34 +9,12 @@ use p2panda_rs::identity::Author;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::errors::LogStorageError;
 use p2panda_rs::storage_provider::traits::{AsStorageLog, LogStore};
-use sqlx::FromRow;
 use sqlx::{query, query_scalar};
 
+use crate::db::models::log::LogRow;
 use crate::db::provider::SqlStorage;
 
-/// Tracks the assigment of an author's logs to documents and records their schema.
-///
-/// This serves as an indexing layer on top of the lower-level bamboo entries. The node updates
-/// this data according to what it sees in the newly incoming entries.
-///
-/// We store the u64 integer values of `log_id` as a string here since not all database backends
-/// support large numbers.
-#[derive(FromRow, Debug, Clone)]
-pub struct Log {
-    /// Public key of the author.
-    pub author: String,
-
-    /// Log id used for this document.
-    pub log_id: String,
-
-    /// Hash that identifies the document this log is for.
-    pub document: String,
-
-    /// SchemaId which identifies the schema for operations in this log.
-    pub schema: String,
-}
-
-impl AsStorageLog for Log {
+impl AsStorageLog for LogRow {
     fn new(author: &Author, schema: &SchemaId, document: &DocumentId, log_id: &LogId) -> Self {
         Self {
             author: author.as_str().to_string(),
@@ -64,11 +42,11 @@ impl AsStorageLog for Log {
     }
 }
 
-/// Trait which handles all storage actions relating to `Log`s.
+/// Trait which handles all storage actions relating to `LogRow`s.
 #[async_trait]
-impl LogStore<Log> for SqlStorage {
+impl LogStore<LogRow> for SqlStorage {
     /// Insert a log into storage.
-    async fn insert_log(&self, log: Log) -> Result<bool, LogStorageError> {
+    async fn insert_log(&self, log: LogRow) -> Result<bool, LogStorageError> {
         let rows_affected = query(
             "
             INSERT INTO
@@ -186,8 +164,9 @@ mod tests {
         AsStorageEntry, AsStorageLog, EntryStore, LogStore, StorageProvider,
     };
 
+    use crate::db::models::entry::EntryRow;
+    use crate::db::models::log::LogRow;
     use crate::db::provider::SqlStorage;
-    use crate::db::store::{DoggoEntry, Log};
     use crate::test_helpers::{initialize_db, random_entry_hash};
 
     const TEST_AUTHOR: &str = "58223678ab378f1b07d1d8c789e6da01d16a06b1a4d17cc10119a0109181156c";
@@ -216,10 +195,10 @@ mod tests {
         let schema =
             SchemaId::new_application("venue", &Hash::new(&random_entry_hash()).unwrap().into());
 
-        let log = Log::new(&author, &schema, &document.clone().into(), &LogId::new(1));
+        let log = LogRow::new(&author, &schema, &document.clone().into(), &LogId::new(1));
         assert!(storage_provider.insert_log(log).await.is_ok());
 
-        let log = Log::new(&author, &schema, &document.into(), &LogId::new(1));
+        let log = LogRow::new(&author, &schema, &document.into(), &LogId::new(1));
         assert!(storage_provider.insert_log(log).await.is_err());
     }
 
@@ -238,7 +217,7 @@ mod tests {
             ]),
         );
 
-        let log = Log::new(&author, &schema, &document.into(), &LogId::new(1));
+        let log = LogRow::new(&author, &schema, &document.into(), &LogId::new(1));
 
         assert!(storage_provider.insert_log(log).await.is_ok());
     }
@@ -274,7 +253,7 @@ mod tests {
                 .await
                 .unwrap();
             assert_eq!(LogId::new(n.into()), log_id);
-            let log = Log::new(&author, &schema, &doc, &log_id);
+            let log = LogRow::new(&author, &schema, &doc, &log_id);
             storage_provider.insert_log(log).await.unwrap();
         }
     }
@@ -313,12 +292,12 @@ mod tests {
             None
         );
 
-        let entry = DoggoEntry::new(&entry_encoded.clone(), &operation_encoded).unwrap();
+        let entry = EntryRow::new(&entry_encoded.clone(), &operation_encoded).unwrap();
 
         // Store entry in database
         assert!(storage_provider.insert_entry(entry).await.is_ok());
 
-        let log = Log::new(
+        let log = LogRow::new(
             &author,
             &schema,
             &entry_encoded.hash().into(),
@@ -368,8 +347,8 @@ mod tests {
         let storage_provider = SqlStorage { pool };
 
         // Register two log ids at the beginning
-        let log_1 = Log::new(&author, &schema, &document_first.into(), &LogId::new(1));
-        let log_2 = Log::new(&author, &schema, &document_second.into(), &LogId::new(2));
+        let log_1 = LogRow::new(&author, &schema, &document_first.into(), &LogId::new(1));
+        let log_2 = LogRow::new(&author, &schema, &document_second.into(), &LogId::new(2));
 
         storage_provider.insert_log(log_1).await.unwrap();
         storage_provider.insert_log(log_2).await.unwrap();
@@ -378,7 +357,7 @@ mod tests {
         let log_id = storage_provider.next_log_id(&author).await.unwrap();
         assert_eq!(log_id, LogId::new(3));
 
-        let log_3 = Log::new(&author, &schema, &document_third.into(), &log_id);
+        let log_3 = LogRow::new(&author, &schema, &document_third.into(), &log_id);
 
         storage_provider.insert_log(log_3).await.unwrap();
 
@@ -386,7 +365,7 @@ mod tests {
         let log_id = storage_provider.next_log_id(&author).await.unwrap();
         assert_eq!(log_id, LogId::new(4));
 
-        let log_4 = Log::new(&author, &schema, &document_forth.into(), &log_id);
+        let log_4 = LogRow::new(&author, &schema, &document_forth.into(), &log_id);
 
         storage_provider.insert_log(log_4).await.unwrap();
 

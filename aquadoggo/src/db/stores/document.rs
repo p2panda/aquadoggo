@@ -9,8 +9,8 @@ use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
 use sqlx::{query, query_as};
 
-use crate::db::db_types::OperationFieldRow;
 use crate::db::errors::DocumentViewStorageError;
+use crate::db::models::operation::OperationFieldRow;
 use crate::db::provider::SqlStorage;
 use crate::db::traits::{
     AsStorageDocumentView, DocumentStore, DocumentViewFields, FieldIds, FieldName,
@@ -19,13 +19,13 @@ use crate::db::utils::parse_operation_fields;
 
 /// Aquadoggo struct which will implement AsStorageDocumentView trait.
 #[derive(Debug, Clone)]
-pub struct DoggoDocumentView {
+pub struct DocumentViewStorage {
     document_view: DocumentView,
     field_ids: FieldIds,
     schema_id: SchemaId,
 }
 
-impl DoggoDocumentView {
+impl DocumentViewStorage {
     pub fn new(document_view: &DocumentView, field_ids: &FieldIds, schema_id: &SchemaId) -> Self {
         Self {
             document_view: document_view.clone(),
@@ -35,7 +35,7 @@ impl DoggoDocumentView {
     }
 }
 
-impl AsStorageDocumentView for DoggoDocumentView {
+impl AsStorageDocumentView for DocumentViewStorage {
     type AsStorageDocumentViewError = DocumentViewStorageError;
 
     fn id(&self) -> DocumentViewId {
@@ -60,7 +60,7 @@ impl AsStorageDocumentView for DoggoDocumentView {
 }
 
 #[async_trait]
-impl DocumentStore<DoggoDocumentView> for SqlStorage {
+impl DocumentStore<DocumentViewStorage> for SqlStorage {
     /// Insert a document_view into the db. Requires that all relevent operations are already in
     /// the db as this method only creates relations between document view fields and their current
     /// values (last updated operation value).
@@ -141,6 +141,7 @@ impl DocumentStore<DoggoDocumentView> for SqlStorage {
         .map_err(|e| DocumentViewStorageError::Custom(e.to_string()))?
         .rows_affected()
             == 1;
+
         Ok(field_relations_inserted && document_view_inserted)
     }
 
@@ -195,8 +196,8 @@ mod tests {
     use p2panda_rs::test_utils::constants::{DEFAULT_HASH, TEST_SCHEMA_ID};
 
     use crate::db::provider::SqlStorage;
-    use crate::db::store::operation::DoggoOperation;
-    use crate::db::store::test_utils::test_operation;
+    use crate::db::stores::operation::OperationStorage;
+    use crate::db::stores::test_utils::test_operation;
     use crate::db::traits::OperationStore;
     use crate::test_helpers::initialize_db;
 
@@ -256,7 +257,8 @@ mod tests {
         });
 
         // Construct a doggo operation for publishing.
-        let doggo_operation = DoggoOperation::new(&author, &operation, &operation_id, &document_id);
+        let doggo_operation =
+            OperationStorage::new(&author, &operation, &operation_id, &document_id);
 
         // Insert the CREATE op.
         storage_provider
@@ -298,7 +300,7 @@ mod tests {
 
         // Update the field_ids to include the newly update operation_id for the "username" field.
         field_ids.insert("username".to_string(), update_operation_id.clone());
-        let doggo_update_operation = DoggoOperation::new(
+        let doggo_update_operation = OperationStorage::new(
             &author,
             &update_operation,
             &update_operation_id,

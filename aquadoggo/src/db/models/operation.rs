@@ -55,3 +55,4 @@ pub struct OperationFieldRow {
     /// The actual value contained in this field.
     pub value: String,
 }
+

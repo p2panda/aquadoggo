@@ -11,21 +11,21 @@ use p2panda_rs::operation::{
 use p2panda_rs::schema::SchemaId;
 use sqlx::{query, query_as, query_scalar};
 
-use crate::db::db_types::{OperationFieldRow, OperationRow};
 use crate::db::errors::OperationStorageError;
+use crate::db::models::operation::{OperationFieldRow, OperationRow};
 use crate::db::provider::SqlStorage;
 use crate::db::traits::{AsStorageOperation, OperationStore, PreviousOperations};
 use crate::db::utils::parse_operation_fields;
 
 #[derive(Debug, Clone)]
-pub struct DoggoOperation {
+pub struct OperationStorage {
     author: Author,
     operation: Operation,
     id: OperationId,
     document_id: DocumentId,
 }
 
-impl DoggoOperation {
+impl OperationStorage {
     pub fn new(
         author: &Author,
         operation: &Operation,
@@ -41,7 +41,7 @@ impl DoggoOperation {
     }
 }
 
-impl AsStorageOperation for DoggoOperation {
+impl AsStorageOperation for OperationStorage {
     type AsStorageOperationError = OperationStorageError;
 
     fn action(&self) -> OperationAction {
@@ -74,7 +74,7 @@ impl AsStorageOperation for DoggoOperation {
 }
 
 #[async_trait]
-impl OperationStore<DoggoOperation> for SqlStorage {
+impl OperationStore<OperationStorage> for SqlStorage {
     /// Retrieve the id of the document an operation is contained within.
     ///
     /// If no document was found, then this method returns a result wrapping
@@ -111,7 +111,7 @@ impl OperationStore<DoggoOperation> for SqlStorage {
     ///   recieve eg. an Ok(false) result, and if this is even needed.
     async fn insert_operation(
         &self,
-        operation: &DoggoOperation,
+        operation: &OperationStorage,
     ) -> Result<bool, OperationStorageError> {
         let mut prev_op_string = "".to_string();
         for (i, operation_id) in operation.previous_operations().iter().enumerate() {
@@ -299,16 +299,17 @@ impl OperationStore<DoggoOperation> for SqlStorage {
             })
             .is_ok();
         };
+
         Ok(operation_inserted && previous_operations_inserted && fields_inserted)
     }
 
     /// Get an operation identified by it's OperationId.
     ///
-    /// Returns a DoggoOperation which includes Author, DocumentId and OperationId metadata.
+    /// Returns a OperationStorage which includes Author, DocumentId and OperationId metadata.
     async fn get_operation_by_id(
         &self,
         id: OperationId,
-    ) -> Result<Option<DoggoOperation>, OperationStorageError> {
+    ) -> Result<Option<OperationStorage>, OperationStorageError> {
         let operation_row = query_as::<_, OperationRow>(
             "
             SELECT
@@ -352,7 +353,7 @@ impl OperationStore<DoggoOperation> for SqlStorage {
         }
         .unwrap();
 
-        Ok(Some(DoggoOperation::new(
+        Ok(Some(OperationStorage::new(
             &Author::new(&operation_row.author).unwrap(),
             &operation,
             &operation_row.operation_id.parse().unwrap(),
@@ -389,16 +390,17 @@ impl OperationStore<DoggoOperation> for SqlStorage {
 
 #[cfg(test)]
 mod tests {
+    use p2panda_rs::document::DocumentId;
+    use p2panda_rs::identity::Author;
     use p2panda_rs::operation::OperationId;
     use p2panda_rs::test_utils::constants::DEFAULT_HASH;
-    use p2panda_rs::{document::DocumentId, identity::Author};
 
     use crate::db::provider::SqlStorage;
-    use crate::db::store::test_utils::test_operation;
+    use crate::db::stores::test_utils::test_operation;
     use crate::db::traits::AsStorageOperation;
     use crate::test_helpers::initialize_db;
 
-    use super::{DoggoOperation, OperationStore};
+    use super::{OperationStorage, OperationStore};
 
     const TEST_AUTHOR: &str = "1a8a62c5f64eed987326513ea15a6ea2682c256ac57a418c1c92d96787c8b36e";
 
@@ -407,19 +409,18 @@ mod tests {
         let pool = initialize_db().await;
         let storage_provider = SqlStorage { pool };
 
-        // Create Author, OperationId and DocumentId in order to compose a DoggoOperation.
+        // Create Author, OperationId and DocumentId in order to compose a OperationStorage.
         let author = Author::new(TEST_AUTHOR).unwrap();
         let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
         let document_id = DocumentId::new(operation_id.clone());
         let doggo_operation =
-            DoggoOperation::new(&author, &test_operation(), &operation_id, &document_id);
+            OperationStorage::new(&author, &test_operation(), &operation_id, &document_id);
 
         // Insert the doggo operation into the db, returns Ok(true) when succesful.
         let result = storage_provider
             .insert_operation(&doggo_operation)
             .await
             .unwrap();
-
         assert!(result);
 
         // Request the previously inserted operation by it's id.
@@ -428,7 +429,6 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-
         assert_eq!(returned_doggo_operation.author(), doggo_operation.author());
         assert_eq!(returned_doggo_operation.fields(), doggo_operation.fields());
         assert_eq!(returned_doggo_operation.id(), doggo_operation.id());
@@ -443,19 +443,18 @@ mod tests {
         let pool = initialize_db().await;
         let storage_provider = SqlStorage { pool };
 
-        // Create Author, OperationId and DocumentId in order to compose a DoggoOperation.
+        // Create Author, OperationId and DocumentId in order to compose a OperationStorage.
         let author = Author::new(TEST_AUTHOR).unwrap();
         let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
         let document_id = DocumentId::new(operation_id.clone());
         let doggo_operation =
-            DoggoOperation::new(&author, &test_operation(), &operation_id, &document_id);
+            OperationStorage::new(&author, &test_operation(), &operation_id, &document_id);
 
         // Insert the doggo operation into the db, returns Ok(true) when succesful.
         let result = storage_provider
             .insert_operation(&doggo_operation)
             .await
             .unwrap();
-
         assert!(result);
 
         // Get the operation fields for an operation identified by it's OperationId.
@@ -463,7 +462,6 @@ mod tests {
             .get_operation_fields_by_id(operation_id.clone())
             .await
             .unwrap();
-
         assert_eq!(result, doggo_operation.fields().unwrap());
     }
 }

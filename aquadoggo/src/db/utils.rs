@@ -5,7 +5,7 @@ use p2panda_rs::operation::{
     OperationFields, OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList,
 };
 
-use super::db_types::OperationFieldRow;
+use crate::db::models::operation::OperationFieldRow;
 
 pub fn parse_operation_fields(operation_field_rows: Vec<OperationFieldRow>) -> OperationFields {
     let mut relation_list: Vec<DocumentId> = Vec::new();

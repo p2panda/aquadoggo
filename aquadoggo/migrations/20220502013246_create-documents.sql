@@ -1,4 +1,5 @@
 -- SPDX-License-Identifier: AGPL-3.0-or-later
+
 CREATE TABLE IF NOT EXISTS document_view_fields (
     document_view_id        VARCHAR(64)     NOT NULL,
     operation_id            VARCHAR(64)     NOT NULL,

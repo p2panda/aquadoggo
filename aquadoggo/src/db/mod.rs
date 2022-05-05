@@ -5,10 +5,10 @@ use sqlx::any::{Any, AnyPool, AnyPoolOptions};
 use sqlx::migrate;
 use sqlx::migrate::MigrateDatabase;
 
-pub mod db_types;
 pub mod errors;
+pub mod models;
 pub mod provider;
-pub mod store;
+pub mod stores;
 pub mod traits;
 pub mod utils;
 

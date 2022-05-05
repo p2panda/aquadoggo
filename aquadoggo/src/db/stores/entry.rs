@@ -1,72 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_trait::async_trait;
-use p2panda_rs::entry::{decode_entry, Entry as P2PandaEntry, EntrySigned, LogId, SeqNum};
+use p2panda_rs::entry::{decode_entry, EntrySigned, LogId, SeqNum};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{Operation, OperationEncoded};
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::storage_provider::errors::{EntryStorageError, ValidationError};
+use p2panda_rs::storage_provider::errors::EntryStorageError;
 use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
-use p2panda_rs::Validate;
-use serde::Serialize;
-use sqlx::FromRow;
 use sqlx::{query, query_as};
 
+use crate::db::models::entry::EntryRow;
 use crate::db::provider::SqlStorage;
 
-/// Struct representing the actual SQL row of `Entry`.
-///
-/// We store the u64 integer values of `log_id` and `seq_num` as strings since not all database
-/// backend support large numbers.
-#[derive(FromRow, Debug, Serialize, Clone, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct DoggoEntry {
-    /// Public key of the author.
-    pub author: String,
-
-    /// Actual Bamboo entry data.
-    pub entry_bytes: String,
-
-    /// Hash of Bamboo entry data.
-    pub entry_hash: String,
-
-    /// Used log for this entry.
-    pub log_id: String,
-
-    /// Payload of entry, can be deleted.
-    pub payload_bytes: Option<String>,
-
-    /// Hash of payload data.
-    pub payload_hash: String,
-
-    /// Sequence number of this entry.
-    pub seq_num: String,
-}
-
-impl AsRef<Self> for DoggoEntry {
-    fn as_ref(&self) -> &Self {
-        self
-    }
-}
-
-impl DoggoEntry {
-    fn entry_decoded(&self) -> P2PandaEntry {
-        // Unwrapping as validation occurs in `EntryWithOperation`.
-        decode_entry(&self.entry_signed(), self.operation_encoded().as_ref()).unwrap()
-    }
-
-    pub fn entry_signed(&self) -> EntrySigned {
-        EntrySigned::new(&self.entry_bytes).unwrap()
-    }
-
-    pub fn operation_encoded(&self) -> Option<OperationEncoded> {
-        Some(OperationEncoded::new(&self.payload_bytes.clone().unwrap()).unwrap())
-    }
-}
-
-/// Implement `AsStorageEntry` trait for `Entry`
-impl AsStorageEntry for DoggoEntry {
+/// Implement `AsStorageEntry` trait for `EntryRow`.
+impl AsStorageEntry for EntryRow {
     type AsStorageEntryError = EntryStorageError;
 
     fn new(
@@ -121,24 +69,11 @@ impl AsStorageEntry for DoggoEntry {
     }
 }
 
-impl Validate for DoggoEntry {
-    type Error = ValidationError;
-
-    fn validate(&self) -> Result<(), Self::Error> {
-        self.entry_signed().validate()?;
-        if let Some(operation) = self.operation_encoded() {
-            operation.validate()?;
-        }
-        decode_entry(&self.entry_signed(), self.operation_encoded().as_ref())?;
-        Ok(())
-    }
-}
-
 /// Trait which handles all storage actions relating to `Entries`.
 #[async_trait]
-impl EntryStore<DoggoEntry> for SqlStorage {
+impl EntryStore<EntryRow> for SqlStorage {
     /// Insert an entry into storage.
-    async fn insert_entry(&self, entry: DoggoEntry) -> Result<bool, EntryStorageError> {
+    async fn insert_entry(&self, entry: EntryRow) -> Result<bool, EntryStorageError> {
         let rows_affected = query(
             "
             INSERT INTO
@@ -170,11 +105,8 @@ impl EntryStore<DoggoEntry> for SqlStorage {
         Ok(rows_affected == 1)
     }
 
-    async fn get_entry_by_hash(
-        &self,
-        hash: &Hash,
-    ) -> Result<Option<DoggoEntry>, EntryStorageError> {
-        let entry_row = query_as::<_, DoggoEntry>(
+    async fn get_entry_by_hash(&self, hash: &Hash) -> Result<Option<EntryRow>, EntryStorageError> {
+        let entry_row = query_as::<_, EntryRow>(
             "
             SELECT
                 author,
@@ -204,8 +136,8 @@ impl EntryStore<DoggoEntry> for SqlStorage {
         author: &Author,
         log_id: &LogId,
         seq_num: &SeqNum,
-    ) -> Result<Option<DoggoEntry>, EntryStorageError> {
-        let entry_row = query_as::<_, DoggoEntry>(
+    ) -> Result<Option<EntryRow>, EntryStorageError> {
+        let entry_row = query_as::<_, EntryRow>(
             "
             SELECT
                 author,
@@ -238,8 +170,8 @@ impl EntryStore<DoggoEntry> for SqlStorage {
         &self,
         author: &Author,
         log_id: &LogId,
-    ) -> Result<Option<DoggoEntry>, EntryStorageError> {
-        let entry_row = query_as::<_, DoggoEntry>(
+    ) -> Result<Option<EntryRow>, EntryStorageError> {
+        let entry_row = query_as::<_, EntryRow>(
             "
             SELECT
                 author,
@@ -270,8 +202,8 @@ impl EntryStore<DoggoEntry> for SqlStorage {
     }
 
     /// Return vector of all entries of a given schema
-    async fn by_schema(&self, schema: &SchemaId) -> Result<Vec<DoggoEntry>, EntryStorageError> {
-        let entries = query_as::<_, DoggoEntry>(
+    async fn by_schema(&self, schema: &SchemaId) -> Result<Vec<EntryRow>, EntryStorageError> {
+        let entries = query_as::<_, EntryRow>(
             "
             SELECT
                 entries.author,
@@ -314,8 +246,8 @@ mod tests {
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, StorageProvider};
     use p2panda_rs::test_utils::constants::{DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
 
-    use crate::db::store::entry::DoggoEntry;
-    use crate::db::store::test_utils::test_db;
+    use crate::db::stores::entry::EntryRow;
+    use crate::db::stores::test_utils::test_db;
     use crate::rpc::EntryArgsRequest;
 
     #[tokio::test]
@@ -367,7 +299,7 @@ mod tests {
 
         let entry_encoded = sign_and_encode(&update_entry, &key_pair).unwrap();
         let operation_encoded = OperationEncoded::try_from(&update_operation).unwrap();
-        let doggo_entry = DoggoEntry::new(&entry_encoded, &operation_encoded).unwrap();
+        let doggo_entry = EntryRow::new(&entry_encoded, &operation_encoded).unwrap();
         let result = storage_provider.insert_entry(doggo_entry).await;
 
         assert!(result.is_ok())
@@ -387,7 +319,7 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        let duplicate_doggo_entry = DoggoEntry::new(
+        let duplicate_doggo_entry = EntryRow::new(
             &first_entry.entry_signed(),
             &first_entry.operation_encoded().unwrap(),
         )
