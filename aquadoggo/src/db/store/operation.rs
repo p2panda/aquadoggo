@@ -114,20 +114,13 @@ impl OperationStore<DoggoOperation> for SqlStorage {
         &self,
         operation: &DoggoOperation,
     ) -> Result<bool, OperationStorageError> {
-        // Convert the action to a string.
-        let action = match operation.action() {
-            OperationAction::Create => "create",
-            OperationAction::Update => "update",
-            OperationAction::Delete => "delete",
-        };
-
         let mut prev_op_string = "".to_string();
         for (i, operation_id) in operation.previous_operations().iter().enumerate() {
             let separator = if i == 0 { "" } else { "_" };
             prev_op_string += format!("{}{}", separator, operation_id.as_hash().as_str()).as_str();
         }
 
-        let document_id = if action == "create" {
+        let document_id = if operation.action().as_str() == "create" {
             DocumentId::new(operation.id())
         } else {
             // Unwrap as we know any "UPDATE" or "DELETE" operation should have previous operations
@@ -160,7 +153,7 @@ impl OperationStore<DoggoOperation> for SqlStorage {
         .bind(document_id.as_str())
         .bind(operation.id().as_str())
         .bind(operation.id().as_hash().as_str())
-        .bind(action)
+        .bind(operation.action().as_str())
         .bind(operation.schema_id().as_str())
         .bind(prev_op_string.as_str())
         .execute(&self.pool)

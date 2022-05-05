@@ -87,9 +87,6 @@ pub fn parse_operation_fields(operation_field_rows: Vec<OperationFieldRow>) -> O
 
     // If so, then parse the `relation_list` vec into an operation value and add it to the document view fields
     if let Some(relation_list_field) = relation_list_field {
-        // TODO: We need a deterministic order of document ids in a relation_list.
-        // This is a temp workaround for now.
-        relation_list.sort_by_key(|a| a.as_str().to_string());
         operation_fields
             .add(
                 relation_list_field.name.as_str(),
@@ -105,9 +102,6 @@ pub fn parse_operation_fields(operation_field_rows: Vec<OperationFieldRow>) -> O
 
     // If so, then parse the `pinned_relation_list` vec into an operation value and add it to the document view fields
     if let Some(pinned_relation_list_field) = pinned_relation_list_field {
-        // TODO: We need a deterministic order of view ids in a pinned_relation_list.
-        // This is a temp workaround for now.
-        pinned_relation_list.sort_by_key(|a| a.hash());
         operation_fields
             .add(
                 pinned_relation_list_field.name.as_str(),

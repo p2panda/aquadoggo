@@ -25,8 +25,18 @@ CREATE TABLE IF NOT EXISTS operation_fields_v1 (
     operation_id           VARCHAR(64)       NOT NULL,
     name                   VARCHAR(128)      NOT NULL,
     field_type             TEXT              NOT NULL,
-    value                  BLOB              NOT NULL,
+    value                  BLOB              NULL,
     FOREIGN KEY(operation_id) REFERENCES operations_v1(operation_id)
 );
 
 CREATE INDEX idx_operation_fields_v1 ON operation_fields_v1 (operation_id, name);
+
+CREATE TRIGGER only_one_field_value 
+   BEFORE INSERT ON operation_fields_v1
+BEGIN
+    SELECT
+        CASE
+	        WHEN COUNT(NEW.value) = 0 THEN
+                RAISE (ABORT,'Field can only contain one value')
+       END;
+END;

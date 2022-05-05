@@ -91,7 +91,7 @@ impl DocumentStore<DoggoDocumentView> for SqlStorage {
                 "
                     INSERT INTO
                         document_view_fields (
-                            document_view_id_hash,
+                            document_view_id,
                             operation_id,
                             name
                         )
@@ -99,7 +99,7 @@ impl DocumentStore<DoggoDocumentView> for SqlStorage {
                         ($1, $2, $3)
                     ",
             )
-            .bind(document_view_id.hash().as_str().to_string())
+            .bind(document_view_id.as_str())
             .bind(field.1.as_str().to_owned())
             .bind(field.0.as_str())
             .execute(&self.pool)
@@ -124,14 +124,14 @@ impl DocumentStore<DoggoDocumentView> for SqlStorage {
             "
             INSERT INTO
                 document_views (
-                    document_view_id_hash,
+                    document_view_id,
                     schema_id
                 )
             VALUES
                 ($1, $2)
             ",
         )
-        .bind(document_view_id.hash().as_str())
+        .bind(document_view_id.as_str())
         .bind(schema_id.as_str())
         .execute(&self.pool)
         .await
@@ -164,7 +164,7 @@ impl DocumentStore<DoggoDocumentView> for SqlStorage {
                         AND 
                             operation_fields_v1.name = document_view_fields.name
                     WHERE
-                        document_view_id_hash = $1
+                        document_view_id = $1
                 ",
         )
         .bind(id.hash().as_str())
