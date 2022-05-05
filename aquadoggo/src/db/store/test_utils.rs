@@ -74,13 +74,20 @@ pub fn test_operation() -> Operation {
     Operation::new_create(SchemaId::from_str(TEST_SCHEMA_ID).unwrap(), fields).unwrap()
 }
 
-pub async fn test_db() -> SqlStorage {
+pub async fn test_db(no_of_entries: usize) -> SqlStorage {
     let pool = initialize_db().await;
     let storage_provider = SqlStorage { pool };
+
+    // If we don't want any entries in the db return now
+    if no_of_entries == 0 {
+        return storage_provider;
+    }
 
     let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
     let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
     let schema = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
+
+    // Build first CREATE entry for the db
     let create_operation = test_operation();
     let create_entry = Entry::new(
         &LogId::default(),
@@ -94,8 +101,10 @@ pub async fn test_db() -> SqlStorage {
     let entry_encoded = sign_and_encode(&create_entry, &key_pair).unwrap();
     let operation_encoded = OperationEncoded::try_from(&create_operation).unwrap();
 
+    // Derive the document id from the CREATE entries hash
     let document: DocumentId = entry_encoded.hash().into();
 
+    // Publish the CREATE entry
     storage_provider
         .publish_entry(&PublishEntryRequest {
             entry_encoded,
@@ -109,7 +118,9 @@ pub async fn test_db() -> SqlStorage {
         .add("username", OperationValue::Text("yahoooo".to_owned()))
         .unwrap();
 
-    for _ in 1..100 {
+    // Publish more update entries
+    for _ in 1..no_of_entries {
+        // Get next entry args
         let next_entry_args = storage_provider
             .get_entry_args(&EntryArgsRequest {
                 author: author.clone(),
@@ -120,6 +131,7 @@ pub async fn test_db() -> SqlStorage {
 
         let backlink = next_entry_args.entry_hash_backlink.clone().unwrap();
 
+        // Construct the next UPDATE operation, we use the backlink hash in the prev_op vector
         let update_operation =
             Operation::new_update(schema.clone(), vec![backlink.into()], fields.clone()).unwrap();
 
@@ -135,6 +147,7 @@ pub async fn test_db() -> SqlStorage {
         let entry_encoded = sign_and_encode(&update_entry, &key_pair).unwrap();
         let operation_encoded = OperationEncoded::try_from(&update_operation).unwrap();
 
+        // Publish the new entry
         storage_provider
             .publish_entry(&PublishEntryRequest {
                 entry_encoded,

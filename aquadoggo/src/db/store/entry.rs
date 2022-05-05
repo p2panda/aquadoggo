@@ -321,7 +321,7 @@ mod tests {
 
     #[tokio::test]
     async fn insert_entry() {
-        let storage_provider = test_db().await;
+        let storage_provider = test_db(100).await;
 
         let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
         let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
@@ -376,7 +376,7 @@ mod tests {
 
     #[tokio::test]
     async fn try_insert_non_unique_entry() {
-        let storage_provider = test_db().await;
+        let storage_provider = test_db(100).await;
 
         let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
         let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
@@ -400,7 +400,7 @@ mod tests {
 
     #[tokio::test]
     async fn latest_entry() {
-        let storage_provider = test_db().await;
+        let storage_provider = test_db(100).await;
 
         let author_not_in_db = Author::try_from(*KeyPair::new().public_key()).unwrap();
         let log_id = LogId::new(1);
@@ -423,7 +423,7 @@ mod tests {
 
     #[tokio::test]
     async fn entries_by_schema() {
-        let storage_provider = test_db().await;
+        let storage_provider = test_db(100).await;
 
         let schema_not_in_the_db = SchemaId::new_application(
             "venue",
@@ -444,7 +444,7 @@ mod tests {
 
     #[tokio::test]
     async fn entry_by_seq_num() {
-        let storage_provider = test_db().await;
+        let storage_provider = test_db(100).await;
 
         let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
         let author = Author::try_from(*key_pair.public_key()).unwrap();
@@ -482,7 +482,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_entry_by_hash() {
-        let storage_provider = test_db().await;
+        let storage_provider = test_db(100).await;
 
         let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
         let author = Author::try_from(*key_pair.public_key()).unwrap();
