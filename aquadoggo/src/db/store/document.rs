@@ -35,7 +35,6 @@ impl DoggoDocumentView {
     }
 }
 
-/// WIP: Aquadoggo implementation of the above trait
 impl AsStorageDocumentView for DoggoDocumentView {
     type AsStorageDocumentViewError = DocumentViewStorageError;
 
