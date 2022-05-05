@@ -439,6 +439,7 @@ mod tests {
         );
     }
 
+    #[tokio::test]
     async fn get_operation_fields() {
         let pool = initialize_db().await;
         let storage_provider = SqlStorage { pool };
