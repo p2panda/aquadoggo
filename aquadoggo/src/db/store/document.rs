@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
 use std::collections::btree_map::Iter;
 
 use async_trait::async_trait;
 use futures::future::try_join_all;
-use p2panda_rs::operation::OperationValue;
-use sqlx::{query, query_as};
-
 use p2panda_rs::document::{DocumentView, DocumentViewHash, DocumentViewId};
+use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
+use sqlx::{query, query_as};
 
 use crate::db::db_types::OperationFieldRow;
 use crate::db::errors::DocumentViewStorageError;
@@ -17,7 +17,7 @@ use crate::db::traits::{
 };
 use crate::db::utils::parse_operation_fields;
 
-/// Aquadoggo struct which will implements AsStorageDocumentView trait.
+/// Aquadoggo struct which will implement AsStorageDocumentView trait.
 #[derive(Debug, Clone)]
 pub struct DoggoDocumentView {
     document_view: DocumentView,
@@ -41,15 +41,19 @@ impl AsStorageDocumentView for DoggoDocumentView {
     fn id(&self) -> DocumentViewId {
         self.document_view.id().clone()
     }
+
     fn iter(&self) -> Iter<FieldName, OperationValue> {
         self.document_view.iter()
     }
+
     fn get(&self, key: &str) -> Option<&OperationValue> {
         self.document_view.get(key)
     }
+
     fn schema_id(&self) -> SchemaId {
         self.schema_id.clone()
     }
+
     fn field_ids(&self) -> FieldIds {
         self.field_ids.clone()
     }
@@ -57,9 +61,9 @@ impl AsStorageDocumentView for DoggoDocumentView {
 
 #[async_trait]
 impl DocumentStore<DoggoDocumentView> for SqlStorage {
-    /// Insert a document_view into the db. Requires that all relevent operations
-    /// are already in the db as this method only creates relations between
-    /// document view fields and their current values (last updated operation value).
+    /// Insert a document_view into the db. Requires that all relevent operations are already in
+    /// the db as this method only creates relations between document view fields and their current
+    /// values (last updated operation value).
     ///
     /// QUESTION: Is this too implementation specific? It assumes quite a lot about the db
     /// structure and others may wish to structure things differently.
@@ -88,15 +92,15 @@ impl DocumentStore<DoggoDocumentView> for SqlStorage {
         let field_relations_inserted = try_join_all(field_ids.iter().map(|field| {
             query(
                 "
-                    INSERT INTO
-                        document_view_fields (
-                            document_view_id,
-                            operation_id,
-                            name
-                        )
-                    VALUES
-                        ($1, $2, $3)
-                    ",
+                INSERT INTO
+                    document_view_fields (
+                        document_view_id,
+                        operation_id,
+                        name
+                    )
+                VALUES
+                    ($1, $2, $3)
+                ",
             )
             .bind(document_view_id.as_str())
             .bind(field.1.as_str().to_owned())

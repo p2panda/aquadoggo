@@ -1,10 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_trait::async_trait;
-use serde::Serialize;
-use sqlx::FromRow;
-use sqlx::{query, query_as};
-
 use p2panda_rs::entry::{decode_entry, Entry as P2PandaEntry, EntrySigned, LogId, SeqNum};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
@@ -13,6 +9,9 @@ use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::errors::{EntryStorageError, ValidationError};
 use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
 use p2panda_rs::Validate;
+use serde::Serialize;
+use sqlx::FromRow;
+use sqlx::{query, query_as};
 
 use crate::db::sql_store::SqlStorage;
 

@@ -50,13 +50,16 @@ impl AsStorageLog for Log {
     fn author(&self) -> Author {
         Author::new(&self.author).unwrap()
     }
+
     fn id(&self) -> LogId {
         LogId::from_str(&self.log_id).unwrap()
     }
+
     fn document_id(&self) -> DocumentId {
         let document_id: DocumentId = self.document.parse().unwrap();
         document_id
     }
+
     fn schema_id(&self) -> SchemaId {
         SchemaId::new(&self.schema).unwrap()
     }
@@ -70,7 +73,12 @@ impl LogStore<Log> for SqlStorage {
         let rows_affected = query(
             "
             INSERT INTO
-                logs (author, log_id, document, schema)
+                logs (
+                    author,
+                    log_id,
+                    document,
+                    schema
+                )
             VALUES
                 ($1, $2, $3, $4)
             ",
@@ -122,13 +130,13 @@ impl LogStore<Log> for SqlStorage {
         // Get all log ids from this author
         let mut result: Vec<String> = query_scalar(
             "
-                    SELECT
-                        log_id
-                    FROM
-                        logs
-                    WHERE
-                        author = $1
-                    ",
+            SELECT
+                log_id
+            FROM
+                logs
+            WHERE
+                author = $1
+            ",
         )
         .bind(author.as_str())
         .fetch_all(&self.pool)
@@ -188,9 +196,7 @@ mod tests {
     #[tokio::test]
     async fn initial_log_id() {
         let pool = initialize_db().await;
-
         let author = Author::new(TEST_AUTHOR).unwrap();
-
         let storage_provider = SqlStorage { pool };
 
         let log_id = storage_provider
