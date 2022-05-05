@@ -2,7 +2,7 @@
 
 use structopt::StructOpt;
 
-use aquadoggo::{Configuration, Runtime};
+use aquadoggo::{Configuration, Node};
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "aquadoggo Node", about = "Node server for the p2panda network")]
@@ -21,7 +21,7 @@ async fn main() {
     let config = Configuration::new(opt.data_dir).expect("Could not load configuration");
 
     // Start p2panda node in async runtime
-    let node = Runtime::start(config).await;
+    let node = Node::start(config).await;
 
     // Run this until [CTRL] + [C] got pressed or something went wrong
     tokio::select! {

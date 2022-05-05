@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Generic task queue with worker pool [#82](https://github.com/p2panda/aquadoggo/pull/82)
 - Service manager [#90](https://github.com/p2panda/aquadoggo/pull/90)
 - Service error handling, refactor runtime [#92](https://github.com/p2panda/aquadoggo/pull/92)
+- Refactor module structure, propagate errors in worker to service manager [#97](https://github.com/p2panda/aquadoggo/pull/97)
 
 ### Changed
 

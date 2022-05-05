@@ -9,11 +9,11 @@ use axum::routing::get;
 use axum::Router;
 use tower_http::cors::{Any, CorsLayer};
 
+use crate::bus::ServiceSender;
 use crate::context::Context;
 use crate::graphql::{handle_graphql_playground, handle_graphql_query};
 use crate::rpc::{handle_get_http_request, handle_http_request};
-use crate::service_manager::Shutdown;
-use crate::service_message::ServiceSender;
+use crate::manager::Shutdown;
 
 /// Build HTTP server with GraphQL API.
 pub fn build_server(context: Context) -> Router {
