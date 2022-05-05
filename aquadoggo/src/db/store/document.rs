@@ -6,7 +6,7 @@ use futures::future::try_join_all;
 use p2panda_rs::operation::OperationValue;
 use sqlx::{query, query_as};
 
-use p2panda_rs::document::{DocumentView, DocumentViewId};
+use p2panda_rs::document::{DocumentView, DocumentViewHash, DocumentViewId};
 use p2panda_rs::schema::SchemaId;
 
 use crate::db::db_types::OperationFieldRow;
@@ -140,7 +140,7 @@ impl DocumentStore<DoggoDocumentView> for SqlStorage {
         Ok(field_relations_inserted && document_view_inserted)
     }
 
-    /// Get a document view from the db by it'd id.
+    /// Get a document view from the database by it's id.
     ///
     /// Currently returns a map of document view fields as FieldName -> OperationValue.
     /// This can be specified more shortly.
@@ -148,25 +148,28 @@ impl DocumentStore<DoggoDocumentView> for SqlStorage {
         &self,
         id: &DocumentViewId,
     ) -> Result<DocumentViewFields, DocumentViewStorageError> {
+        // Store the document view id in its hashed form
+        let document_view_hash = DocumentViewHash::from(id);
+
         let document_view_field_rows = query_as::<_, OperationFieldRow>(
             "
-                    SELECT
-                        document_view_fields.name,
-                        operation_fields_v1.operation_id,
-                        operation_fields_v1.field_type,
-                        operation_fields_v1.value
-                    FROM
-                        document_view_fields
-                    LEFT JOIN operation_fields_v1
-                        ON
-                            operation_fields_v1.operation_id = document_view_fields.operation_id
-                        AND 
-                            operation_fields_v1.name = document_view_fields.name
-                    WHERE
-                        document_view_id = $1
-                ",
+            SELECT
+                document_view_fields.name,
+                operation_fields_v1.operation_id,
+                operation_fields_v1.field_type,
+                operation_fields_v1.value
+            FROM
+                document_view_fields
+            LEFT JOIN operation_fields_v1
+                ON
+                    operation_fields_v1.operation_id = document_view_fields.operation_id
+                AND
+                    operation_fields_v1.name = document_view_fields.name
+            WHERE
+                document_view_id = $1
+            ",
         )
-        .bind(id.hash().as_str())
+        .bind(document_view_hash.as_str())
         .fetch_all(&self.pool)
         .await
         .map_err(|e| DocumentViewStorageError::Custom(e.to_string()))?;
