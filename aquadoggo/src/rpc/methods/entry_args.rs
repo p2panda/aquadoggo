@@ -76,8 +76,8 @@ mod tests {
             r#"{
                 "entryHashBacklink": null,
                 "entryHashSkiplink": null,
-                "seqNum": "1",
-                "logId": "1"
+                "seqNum": 1,
+                "logId": 1
             }"#,
         );
 
