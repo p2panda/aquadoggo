@@ -1,7 +1,6 @@
 -- SPDX-License-Identifier: AGPL-3.0-or-later
 CREATE TABLE IF NOT EXISTS document_view_fields (
     document_view_id        VARCHAR(64)     NOT NULL,
-    -- we wanna use this as a foreign key, how do we make it non-unique
     operation_id            VARCHAR(64)     NOT NULL,
     name                    VARCHAR(128)    NOT NULL
 );
