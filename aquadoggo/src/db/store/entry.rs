@@ -308,7 +308,7 @@ mod tests {
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::schema::SchemaId;
-    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, StorageProvider};
+    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
     use p2panda_rs::test_utils::constants::{DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
 
     use crate::db::store::test_utils::test_db;

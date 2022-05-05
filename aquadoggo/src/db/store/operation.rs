@@ -3,16 +3,15 @@ use async_trait::async_trait;
 use futures::future::try_join_all;
 use sqlx::{query, query_as, query_scalar};
 
-use p2panda_rs::document::{DocumentId, DocumentViewId};
+use p2panda_rs::document::DocumentId;
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{
     AsOperation, Operation, OperationAction, OperationFields, OperationId, OperationValue,
-    PinnedRelation, PinnedRelationList, Relation, RelationList,
 };
 use p2panda_rs::schema::SchemaId;
 
-use crate::db::db_types::{OperationFieldRow, OperationRow, PreviousOperationRelationRow};
+use crate::db::db_types::{OperationFieldRow, OperationRow};
 use crate::db::errors::OperationStorageError;
 use crate::db::sql_store::SqlStorage;
 use crate::db::traits::{AsStorageOperation, OperationStore, PreviousOperations};

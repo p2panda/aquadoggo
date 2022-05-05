@@ -4,7 +4,7 @@ use std::convert::TryFrom;
 use std::str::FromStr;
 
 use p2panda_rs::document::DocumentId;
-use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned, LogId, SeqNum};
+use p2panda_rs::entry::{sign_and_encode, Entry, LogId, SeqNum};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::{Author, KeyPair};
 use p2panda_rs::operation::{
@@ -12,7 +12,7 @@ use p2panda_rs::operation::{
     PinnedRelationList, Relation, RelationList,
 };
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::storage_provider::traits::{AsStorageEntry, AsStorageLog, StorageProvider};
+use p2panda_rs::storage_provider::traits::StorageProvider;
 use p2panda_rs::test_utils::constants::{DEFAULT_HASH, DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
 
 use crate::db::sql_store::SqlStorage;
