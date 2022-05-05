@@ -3,17 +3,16 @@
 use std::str::FromStr;
 
 use async_trait::async_trait;
-use sqlx::FromRow;
-use sqlx::{query, query_scalar};
-
 use p2panda_rs::document::DocumentId;
 use p2panda_rs::entry::LogId;
 use p2panda_rs::identity::Author;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::errors::LogStorageError;
 use p2panda_rs::storage_provider::traits::{AsStorageLog, LogStore};
+use sqlx::FromRow;
+use sqlx::{query, query_scalar};
 
-use crate::db::sql_store::SqlStorage;
+use crate::db::provider::SqlStorage;
 
 /// Tracks the assigment of an author's logs to documents and records their schema.
 ///
@@ -187,7 +186,7 @@ mod tests {
         AsStorageEntry, AsStorageLog, EntryStore, LogStore, StorageProvider,
     };
 
-    use crate::db::sql_store::SqlStorage;
+    use crate::db::provider::SqlStorage;
     use crate::db::store::{DoggoEntry, Log};
     use crate::test_helpers::{initialize_db, random_entry_hash};
 

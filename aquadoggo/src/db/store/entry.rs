@@ -13,7 +13,7 @@ use serde::Serialize;
 use sqlx::FromRow;
 use sqlx::{query, query_as};
 
-use crate::db::sql_store::SqlStorage;
+use crate::db::provider::SqlStorage;
 
 /// Struct representing the actual SQL row of `Entry`.
 ///

@@ -7,7 +7,7 @@ use sqlx::migrate::MigrateDatabase;
 
 pub mod db_types;
 pub mod errors;
-pub mod sql_store;
+pub mod provider;
 pub mod store;
 pub mod traits;
 pub mod utils;

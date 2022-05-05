@@ -2,7 +2,6 @@
 
 use async_trait::async_trait;
 use sqlx::query_scalar;
-
 use p2panda_rs::document::DocumentId;
 use p2panda_rs::hash::Hash;
 use p2panda_rs::storage_provider::traits::StorageProvider;

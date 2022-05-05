@@ -13,7 +13,7 @@ use sqlx::{query, query_as, query_scalar};
 
 use crate::db::db_types::{OperationFieldRow, OperationRow};
 use crate::db::errors::OperationStorageError;
-use crate::db::sql_store::SqlStorage;
+use crate::db::provider::SqlStorage;
 use crate::db::traits::{AsStorageOperation, OperationStore, PreviousOperations};
 use crate::db::utils::parse_operation_fields;
 
@@ -393,7 +393,7 @@ mod tests {
     use p2panda_rs::test_utils::constants::DEFAULT_HASH;
     use p2panda_rs::{document::DocumentId, identity::Author};
 
-    use crate::db::sql_store::SqlStorage;
+    use crate::db::provider::SqlStorage;
     use crate::db::store::test_utils::test_operation;
     use crate::db::traits::AsStorageOperation;
     use crate::test_helpers::initialize_db;

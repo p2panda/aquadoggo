@@ -11,7 +11,7 @@ use sqlx::{query, query_as};
 
 use crate::db::db_types::OperationFieldRow;
 use crate::db::errors::DocumentViewStorageError;
-use crate::db::sql_store::SqlStorage;
+use crate::db::provider::SqlStorage;
 use crate::db::traits::{
     AsStorageDocumentView, DocumentStore, DocumentViewFields, FieldIds, FieldName,
 };
@@ -194,7 +194,7 @@ mod tests {
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::test_utils::constants::{DEFAULT_HASH, TEST_SCHEMA_ID};
 
-    use crate::db::sql_store::SqlStorage;
+    use crate::db::provider::SqlStorage;
     use crate::db::store::operation::DoggoOperation;
     use crate::db::store::test_utils::test_operation;
     use crate::db::traits::OperationStore;

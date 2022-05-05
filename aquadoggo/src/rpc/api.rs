@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use jsonrpc_v2::{Data, MapRouter, Server as Service};
 
-use crate::db::sql_store::SqlStorage;
+use crate::db::provider::SqlStorage;
 use crate::db::Pool;
 use crate::rpc::methods::{get_entry_args, publish_entry, query_entries};
 
