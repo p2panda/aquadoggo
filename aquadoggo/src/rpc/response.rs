@@ -2,6 +2,7 @@
 
 use serde::Serialize;
 
+use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::storage_provider::traits::{AsEntryArgsResponse, AsPublishEntryResponse};
 
@@ -15,22 +16,22 @@ use crate::db::store::DoggoEntry;
 pub struct EntryArgsResponse {
     pub entry_hash_backlink: Option<Hash>,
     pub entry_hash_skiplink: Option<Hash>,
-    pub seq_num: String,
-    pub log_id: String,
+    pub seq_num: SeqNum,
+    pub log_id: LogId,
 }
 
 impl AsEntryArgsResponse for EntryArgsResponse {
     fn new(
         entry_hash_backlink: Option<Hash>,
         entry_hash_skiplink: Option<Hash>,
-        seq_num: p2panda_rs::entry::SeqNum,
-        log_id: p2panda_rs::entry::LogId,
+        seq_num: SeqNum,
+        log_id: LogId,
     ) -> Self {
         EntryArgsResponse {
             entry_hash_backlink,
             entry_hash_skiplink,
-            seq_num: seq_num.as_u64().to_string(),
-            log_id: log_id.as_u64().to_string(),
+            seq_num,
+            log_id,
         }
     }
 }
@@ -43,22 +44,22 @@ impl AsEntryArgsResponse for EntryArgsResponse {
 pub struct PublishEntryResponse {
     pub entry_hash_backlink: Option<Hash>,
     pub entry_hash_skiplink: Option<Hash>,
-    pub seq_num: String,
-    pub log_id: String,
+    pub seq_num: SeqNum,
+    pub log_id: LogId,
 }
 
 impl AsPublishEntryResponse for PublishEntryResponse {
     fn new(
         entry_hash_backlink: Option<Hash>,
         entry_hash_skiplink: Option<Hash>,
-        seq_num: p2panda_rs::entry::SeqNum,
-        log_id: p2panda_rs::entry::LogId,
+        seq_num: SeqNum,
+        log_id: LogId,
     ) -> Self {
         PublishEntryResponse {
             entry_hash_backlink,
             entry_hash_skiplink,
-            seq_num: seq_num.as_u64().to_string(),
-            log_id: log_id.as_u64().to_string(),
+            seq_num,
+            log_id,
         }
     }
 }
