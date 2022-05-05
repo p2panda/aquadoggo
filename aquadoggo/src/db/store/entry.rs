@@ -260,7 +260,7 @@ impl EntryStore<DoggoEntry> for SqlStorage {
                 author = $1
                 AND log_id = $2
             ORDER BY
-                seq_num DESC
+                CAST(seq_num AS INTEGER)
             LIMIT
                 1
             ",
