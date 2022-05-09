@@ -379,7 +379,6 @@ mod tests {
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::OperationId;
-    use p2panda_rs::storage_provider;
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, StorageProvider};
     use p2panda_rs::test_utils::constants::{DEFAULT_HASH, DEFAULT_PRIVATE_KEY};
 
@@ -436,23 +435,13 @@ mod tests {
         let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
         let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
-        let latest_entry = storage_provider
-            .latest_entry(&author, &LogId::default())
-            .await
-            .unwrap()
-            .unwrap();
-
-        let document_id = storage_provider
-            .get_document_by_entry(&latest_entry.hash())
-            .await
-            .unwrap()
-            .unwrap();
-
-        let operation_id = OperationId::new(Hash::new_from_bytes(vec![3, 4, 5]).unwrap());
+        let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
+        let document_id = DocumentId::new(operation_id.clone());
+        let prev_op_id = DEFAULT_HASH.parse().unwrap();
 
         let update_operation = OperationStorage::new(
             &author,
-            &test_update_operation(vec![latest_entry.hash().into()], "huhuhu"),
+            &test_update_operation(vec![prev_op_id], "huhuhu"),
             &operation_id,
             &document_id,
         );
@@ -467,23 +456,13 @@ mod tests {
         let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
         let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
-        let latest_entry = storage_provider
-            .latest_entry(&author, &LogId::default())
-            .await
-            .unwrap()
-            .unwrap();
-
-        let document_id = storage_provider
-            .get_document_by_entry(&latest_entry.hash())
-            .await
-            .unwrap()
-            .unwrap();
-
-        let operation_id = OperationId::new(Hash::new_from_bytes(vec![3, 4, 5]).unwrap());
+        let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
+        let document_id = DocumentId::new(operation_id.clone());
+        let prev_op_id = DEFAULT_HASH.parse().unwrap();
 
         let delete_operation = OperationStorage::new(
             &author,
-            &test_delete_operation(vec![latest_entry.hash().into()]),
+            &test_delete_operation(vec![prev_op_id]),
             &operation_id,
             &document_id,
         );
