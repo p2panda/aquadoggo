@@ -12,10 +12,10 @@ use p2panda_rs::schema::SchemaId;
 use sqlx::{query, query_as, query_scalar};
 
 use crate::db::errors::OperationStorageError;
-use crate::db::models::operation::{OperationFieldRow, OperationRow};
+use crate::db::models::operation::{OperationFieldRow, OperationFieldsJoinedRow, OperationRow};
 use crate::db::provider::SqlStorage;
 use crate::db::traits::{AsStorageOperation, OperationStore, PreviousOperations};
-use crate::db::utils::parse_operation_fields;
+use crate::db::utils::parse_operation_rows;
 
 #[derive(Debug, Clone)]
 pub struct OperationStorage {
@@ -319,90 +319,26 @@ impl OperationStore<OperationStorage> for SqlStorage {
         id: OperationId,
     ) -> Result<Option<OperationStorage>, OperationStorageError> {
         // TODO: Can we do this in one query (2nd query occurs on line 343)?
-        let operation_row = query_as::<_, OperationRow>(
+        let operation_rows = query_as::<_, OperationFieldsJoinedRow>(
             "
             SELECT
-                author,
-                document_id,
-                operation_id,
-                entry_hash,
-                action,
-                schema_id,
-                previous_operations
+                operations_v1.author,
+                operations_v1.document_id,
+                operations_v1.operation_id,
+                operations_v1.entry_hash,
+                operations_v1.action,
+                operations_v1.schema_id,
+                operations_v1.previous_operations,
+                operation_fields_v1.name,
+                operation_fields_v1.field_type,
+                operation_fields_v1.value
             FROM
                 operations_v1
+            LEFT JOIN operation_fields_v1
+                ON
+                    operation_fields_v1.operation_id = operations_v1.operation_id
             WHERE
-                operation_id = $1
-            ",
-        )
-        .bind(id.as_str())
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| OperationStorageError::Custom(e.to_string()))?;
-
-        let operation_row = match operation_row {
-            Some(operation) => operation,
-            None => return Ok(None),
-        };
-
-        let operation_fields = self.get_operation_fields_by_id(id).await?;
-        let operation_fields = match operation_fields {
-            Some(fields) => Ok(fields),
-            None => Err(OperationStorageError::Custom(
-                "Missing operation fields for CREATE or UPDATE operation".to_string(),
-            )),
-        }?;
-
-        // Unwrapping as we assume values coming from the db are valid
-        let schema: SchemaId = operation_row.schema_id.parse().unwrap();
-
-        // TODO: Once we have resolved https://github.com/p2panda/p2panda/issues/315 then
-        // we can coerce types here.
-        let mut previous_operations: Vec<OperationId> = Vec::new();
-        if operation_row.action != "create" {
-            previous_operations = operation_row
-                .previous_operations
-                .rsplit('_')
-                .map(|id_str| Hash::new(id_str).unwrap().into())
-                .collect();
-        }
-
-        let operation = match operation_row.action.as_str() {
-            "create" => Operation::new_create(schema, operation_fields),
-            "update" => Operation::new_update(schema, previous_operations, operation_fields),
-            "delete" => Operation::new_delete(schema, previous_operations),
-            _ => panic!("Operation which was not CREATE, UPDATE or DELETE found."),
-        }
-        // Unwrap as we know all possible strings should have been accounted for.
-        .unwrap();
-
-        Ok(Some(OperationStorage::new(
-            &Author::new(&operation_row.author).unwrap(),
-            &operation,
-            &operation_row.operation_id.parse().unwrap(),
-            &operation_row.document_id.parse().unwrap(),
-        )))
-    }
-
-    /// Get just the fields of an operation, identified by their OperationId.
-    ///
-    /// Returns a result containing OpertionFields wrapped in an option. If no
-    /// fields were found, returns None. Errors if a fatal storage error occurs.
-    async fn get_operation_fields_by_id(
-        &self,
-        id: OperationId,
-    ) -> Result<Option<OperationFields>, OperationStorageError> {
-        let operation_field_rows = query_as::<_, OperationFieldRow>(
-            "
-            SELECT
-                operation_id,
-                name,
-                field_type,
-                value
-            FROM
-                operation_fields_v1
-            WHERE
-                operation_id = $1
+                operations_v1.operation_id = $1
             ",
         )
         .bind(id.as_str())
@@ -410,11 +346,8 @@ impl OperationStore<OperationStorage> for SqlStorage {
         .await
         .map_err(|e| OperationStorageError::Custom(e.to_string()))?;
 
-        if operation_field_rows.is_empty() {
-            return Ok(None);
-        }
-
-        Ok(Some(parse_operation_fields(operation_field_rows)))
+        let operation = parse_operation_rows(operation_rows);
+        Ok(operation)
     }
 }
 
@@ -468,30 +401,30 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn get_operation_fields() {
-        let pool = initialize_db().await;
-        let storage_provider = SqlStorage { pool };
+    // #[tokio::test]
+    // async fn get_operation_fields() {
+    //     let pool = initialize_db().await;
+    //     let storage_provider = SqlStorage { pool };
 
-        // Create Author, OperationId and DocumentId in order to compose a OperationStorage.
-        let author = Author::new(TEST_AUTHOR).unwrap();
-        let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
-        let document_id = DocumentId::new(operation_id.clone());
-        let doggo_operation =
-            OperationStorage::new(&author, &test_operation(), &operation_id, &document_id);
+    //     // Create Author, OperationId and DocumentId in order to compose a OperationStorage.
+    //     let author = Author::new(TEST_AUTHOR).unwrap();
+    //     let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
+    //     let document_id = DocumentId::new(operation_id.clone());
+    //     let doggo_operation =
+    //         OperationStorage::new(&author, &test_operation(), &operation_id, &document_id);
 
-        // Insert the doggo operation into the db, returns Ok(true) when succesful.
-        let result = storage_provider
-            .insert_operation(&doggo_operation)
-            .await
-            .unwrap();
-        assert!(result);
+    //     // Insert the doggo operation into the db, returns Ok(true) when succesful.
+    //     let result = storage_provider
+    //         .insert_operation(&doggo_operation)
+    //         .await
+    //         .unwrap();
+    //     assert!(result);
 
-        // Get the operation fields for an operation identified by it's OperationId.
-        let result = storage_provider
-            .get_operation_fields_by_id(operation_id.clone())
-            .await
-            .unwrap();
-        assert_eq!(result.unwrap(), doggo_operation.fields().unwrap());
-    }
+    //     // Get the operation fields for an operation identified by it's OperationId.
+    //     let result = storage_provider
+    //         .get_operation_fields_by_id(operation_id.clone())
+    //         .await
+    //         .unwrap();
+    //     assert_eq!(result.unwrap(), doggo_operation.fields().unwrap());
+    // }
 }
