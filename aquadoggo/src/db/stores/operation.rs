@@ -368,7 +368,7 @@ mod tests {
     const TEST_AUTHOR: &str = "1a8a62c5f64eed987326513ea15a6ea2682c256ac57a418c1c92d96787c8b36e";
 
     #[tokio::test]
-    async fn insert_operation() {
+    async fn inserts_and_gets_operations() {
         let pool = initialize_db().await;
         let storage_provider = SqlStorage { pool };
 
@@ -428,43 +428,19 @@ mod tests {
 
         assert_eq!(
             returned_delete_doggo_operation.author(),
-            doggo_operation.author()
+            delete_doggo_operation.author()
         );
         assert_eq!(
             returned_delete_doggo_operation.fields(),
-            doggo_operation.fields()
+            delete_doggo_operation.fields()
         );
-        assert_eq!(returned_delete_doggo_operation.id(), doggo_operation.id());
+        assert_eq!(
+            returned_delete_doggo_operation.id(),
+            delete_doggo_operation.id()
+        );
         assert_eq!(
             returned_delete_doggo_operation.document_id(),
-            doggo_operation.document_id()
+            delete_doggo_operation.document_id()
         );
     }
-
-    // #[tokio::test]
-    // async fn get_operation_fields() {
-    //     let pool = initialize_db().await;
-    //     let storage_provider = SqlStorage { pool };
-
-    //     // Create Author, OperationId and DocumentId in order to compose a OperationStorage.
-    //     let author = Author::new(TEST_AUTHOR).unwrap();
-    //     let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
-    //     let document_id = DocumentId::new(operation_id.clone());
-    //     let doggo_operation =
-    //         OperationStorage::new(&author, &test_operation(), &operation_id, &document_id);
-
-    //     // Insert the doggo operation into the db, returns Ok(true) when succesful.
-    //     let result = storage_provider
-    //         .insert_operation(&doggo_operation)
-    //         .await
-    //         .unwrap();
-    //     assert!(result);
-
-    //     // Get the operation fields for an operation identified by it's OperationId.
-    //     let result = storage_provider
-    //         .get_operation_fields_by_id(operation_id.clone())
-    //         .await
-    //         .unwrap();
-    //     assert_eq!(result.unwrap(), doggo_operation.fields().unwrap());
-    // }
 }
