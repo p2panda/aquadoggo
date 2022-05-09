@@ -359,9 +359,9 @@ impl OperationStore<OperationStorage> for SqlStorage {
             "create" => Operation::new_create(schema, operation_fields),
             "update" => Operation::new_update(schema, previous_operations, operation_fields),
             "delete" => Operation::new_delete(schema, previous_operations),
-            _ => None,
+            _ => panic!("Operation which was not CREATE, UPDATE or DELETE found."),
         }
-        // Unwrap as we know all possible strings should have been accounted for
+        // Unwrap as we know all possible strings should have been accounted for.
         .unwrap();
 
         Ok(Some(OperationStorage::new(
