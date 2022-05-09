@@ -5,3 +5,4 @@ mod log;
 
 pub use self::log::LogRow;
 pub use entry::EntryRow;
+pub mod operation;

@@ -75,10 +75,11 @@ impl AsStorageOperation for OperationStorage {
 
 #[async_trait]
 impl OperationStore<OperationStorage> for SqlStorage {
-    /// Retrieve the id of the document an operation is contained within.
+    /// Get the id of the document an operation is part of.
     ///
-    /// If no document was found, then this method returns a result wrapping
-    /// a None variant.
+    /// Returns a result containing a `DocumentId` wrapped in an option. If no
+    /// document was found, then this method returns None. Errors if a fatal
+    /// storage error occurs.
     async fn get_document_by_operation_id(
         &self,
         id: OperationId,
@@ -101,36 +102,44 @@ impl OperationStore<OperationStorage> for SqlStorage {
         Ok(document_id.map(|id_str| id_str.parse().unwrap()))
     }
 
-    /// Insert an operation into the db.
+    /// Insert an operation into storage.
     ///
-    /// This requires a DoggoEntry to be composed elsewhere, it contains an Author,
+    /// This requires a DoggoOperation to be composed elsewhere, it contains an Author,
     /// DocumentId, OperationId and the actual Operation we want to store.
     ///
-    /// - TODO: similar to several other places in StorageProvider, here we return
-    ///   a bool wrapped in a result. We need to be more clear on when we expect to
-    ///   recieve eg. an Ok(false) result, and if this is even needed.
+    /// Returns a result containing `true` when one insertion occured, and false
+    /// when no insertions occured. Errors when a fatal storage error occurs.
+    ///
+    /// In aquadoggo we store an operatin in the database in three different tables:
+    /// `operations`, `previous_operations` and `operation_fields`. This means that
+    /// this method actually makes 3 different sets of insertions.
     async fn insert_operation(
         &self,
         operation: &OperationStorage,
     ) -> Result<bool, OperationStorageError> {
+        // TODO: Once we have resolved https://github.com/p2panda/p2panda/issues/315 then
+        // we can derive this string from the previous_operations' `DocumentViewId`
         let mut prev_op_string = "".to_string();
         for (i, operation_id) in operation.previous_operations().iter().enumerate() {
             let separator = if i == 0 { "" } else { "_" };
             prev_op_string += format!("{}{}", separator, operation_id.as_hash().as_str()).as_str();
         }
 
+        // If this is a CREATE operation we derive the document id from it's `OperationId`
         let document_id = if operation.action().as_str() == "create" {
             DocumentId::new(operation.id())
         } else {
             // Unwrap as we know any "UPDATE" or "DELETE" operation should have previous operations
             let previous_operation_id = operation.previous_operations().get(0).unwrap().clone();
 
+            // For DELETE of UPDATE operations we need to fetch the document id from storage.
+            // We do this by finding the document for one of the contained previous_operations.
             self.get_document_by_operation_id(previous_operation_id)
                 .await?
                 .ok_or_else(|| OperationStorageError::Custom("Document missing".to_string()))?
         };
 
-        // Consruct query for inserting operation row, execute it
+        // Consruct query for inserting operation an row, execute it
         // and check exactly one row was affected.
         let operation_inserted = query(
             "
@@ -182,10 +191,10 @@ impl OperationStore<OperationStorage> for SqlStorage {
                 .execute(&self.pool)
             }))
             .await
-            // If any of the queries error we will catch that here.
+            // If any of database errors occur we will catch that here
             .map_err(|e| OperationStorageError::Custom(e.to_string()))?
             .iter()
-            // Here we check that each query inserted exactly one row.
+            // Here we check that each query inserted exactly one row
             .try_for_each(|result| {
                 if result.rows_affected() == 1 {
                     Ok(())
@@ -198,18 +207,14 @@ impl OperationStore<OperationStorage> for SqlStorage {
             })
             .is_ok();
 
-        // Same pattern as above, construct and execute the queries, return their futures
-        // and execute all of them with `try_join_all()`.
+        // Same pattern as above but now for operation_fields. Construct and execute the
+        // queries, return their futures and execute all of them with `try_join_all()`.
         let mut fields_inserted = true;
         if let Some(fields) = operation.fields() {
             fields_inserted = try_join_all(fields.iter().flat_map(|(name, value)| {
-                // Extract the field type.
-                let field_type = value.field_type();
-
                 // If the value is a relation_list or pinned_relation_list we need to insert a new field row for
                 // every item in the list. Here we collect these items and return them in a vector. If this operation
                 // value is anything except for the above list types, we will return a vec containing a single item.
-
                 let db_values = match value {
                     OperationValue::Boolean(bool) => vec![Some(bool.to_string())],
                     OperationValue::Integer(int) => vec![Some(int.to_string())],
@@ -276,7 +281,7 @@ impl OperationStore<OperationStorage> for SqlStorage {
                         )
                         .bind(operation.id().as_str().to_owned())
                         .bind(name.to_owned())
-                        .bind(field_type.to_string())
+                        .bind(value.field_type().to_string())
                         .bind(db_value)
                         .execute(&self.pool)
                     })
@@ -305,11 +310,14 @@ impl OperationStore<OperationStorage> for SqlStorage {
 
     /// Get an operation identified by it's OperationId.
     ///
-    /// Returns a OperationStorage which includes Author, DocumentId and OperationId metadata.
+    /// Returns a result containing an OperationStorage wrapped in an option, if no
+    /// operation with this id was found, returns none. Errors if a fatal storage
+    /// error occured.
     async fn get_operation_by_id(
         &self,
         id: OperationId,
     ) -> Result<Option<OperationStorage>, OperationStorageError> {
+        // TODO: Can we do this in one query (2nd query occurs on line 343)?
         let operation_row = query_as::<_, OperationRow>(
             "
             SELECT
@@ -330,12 +338,14 @@ impl OperationStore<OperationStorage> for SqlStorage {
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| OperationStorageError::Custom(e.to_string()))?
-        .unwrap();
+        .unwrap(); // TODO: Don't unwrap!
 
         let operation_fields = self.get_operation_fields_by_id(id).await?;
+        // Unwrapping as we assume values coming from the db are valid
         let schema: SchemaId = operation_row.schema_id.parse().unwrap();
 
-        // Need some more tooling around prev_ops in p2panda-rs
+        // TODO: Once we have resolved https://github.com/p2panda/p2panda/issues/315 then
+        // we can coerce types here.
         let mut previous_operations: Vec<OperationId> = Vec::new();
         if operation_row.action != "create" {
             previous_operations = operation_row
@@ -349,8 +359,9 @@ impl OperationStore<OperationStorage> for SqlStorage {
             "create" => Operation::new_create(schema, operation_fields),
             "update" => Operation::new_update(schema, previous_operations, operation_fields),
             "delete" => Operation::new_delete(schema, previous_operations),
-            _ => panic!(),
+            _ => None,
         }
+        // Unwrap as we know all possible strings should have been accounted for
         .unwrap();
 
         Ok(Some(OperationStorage::new(
@@ -361,7 +372,9 @@ impl OperationStore<OperationStorage> for SqlStorage {
         )))
     }
 
-    /// Get just the fields of an operation, identified by it's OperationId.
+    /// Get just the fields of an operation, identified by their OperationId.
+    ///
+    /// TODO...
     async fn get_operation_fields_by_id(
         &self,
         id: OperationId,
