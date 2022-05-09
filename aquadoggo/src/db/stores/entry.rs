@@ -244,6 +244,45 @@ impl EntryStore<EntryRow> for SqlStorage {
         Ok(entries)
     }
 
+    async fn get_next_n_entries_after_seq(
+        &self,
+        author: &Author,
+        log_id: &LogId,
+        seq_num: &SeqNum,
+        max_number_of_entries: usize,
+    ) -> Result<Option<Vec<EntryRow>>, EntryStorageError> {
+        let max_seq_num = seq_num.as_u64() as usize + max_number_of_entries - 1;
+        let entries = query_as::<_, EntryRow>(
+            "
+            SELECT
+                author,
+                entry_bytes,
+                entry_hash,
+                log_id,
+                payload_bytes,
+                payload_hash,
+                seq_num
+            FROM
+                entries
+            WHERE
+                author = $1
+                AND log_id = $2
+                AND CAST(seq_num AS INTEGER) BETWEEN $3 and $4
+            ORDER BY
+                CAST(seq_num AS INTEGER)
+            ",
+        )
+        .bind(author.as_str())
+        .bind(log_id.as_u64().to_string())
+        .bind(seq_num.as_u64().to_string())
+        .bind((max_seq_num as u64).to_string())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| EntryStorageError::Custom(e.to_string()))?;
+
+        Ok(Some(entries))
+    }
+
     async fn get_all_lipmaa_entries_for_entry(
         &self,
         author: Author,
@@ -503,4 +542,23 @@ mod tests {
             .unwrap();
         assert!(entry.is_none())
     }
+
+    #[tokio::test]
+    async fn gets_next_n_entries_after_seq() {
+        let storage_provider = test_db(50).await;
+
+        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
+        let author = Author::try_from(*key_pair.public_key()).unwrap();
+
+        let entries = storage_provider
+            .get_next_n_entries_after_seq(&author, &LogId::default(), &SeqNum::default(), 20)
+            .await
+            .unwrap()
+            .unwrap();
+        for entry in entries.clone() {
+            assert!(entry.seq_num().as_u64() >= 1 && entry.seq_num().as_u64() <= 20)
+        }
+        assert_eq!(entries.len(), 20);
+    }
+
 }
