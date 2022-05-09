@@ -311,7 +311,8 @@ impl OperationStore<OperationStorage> for SqlStorage {
     /// Get an operation identified by it's OperationId.
     ///
     /// Returns a result containing an OperationStorage wrapped in an option, if no
-    /// operation with this id was found, returns none. Errors if a fatal storage
+    /// operation with this id was found, returns none. Errors if no operation fields
+    /// were found for an existing CREATE or UPDATE operation, or if a fatal storage
     /// error occured.
     async fn get_operation_by_id(
         &self,
@@ -345,6 +346,13 @@ impl OperationStore<OperationStorage> for SqlStorage {
         };
 
         let operation_fields = self.get_operation_fields_by_id(id).await?;
+        let operation_fields = match operation_fields {
+            Some(fields) => Ok(fields),
+            None => Err(OperationStorageError::Custom(
+                "Missing operation fields for CREATE or UPDATE operation".to_string(),
+            )),
+        }?;
+
         // Unwrapping as we assume values coming from the db are valid
         let schema: SchemaId = operation_row.schema_id.parse().unwrap();
 
@@ -378,11 +386,12 @@ impl OperationStore<OperationStorage> for SqlStorage {
 
     /// Get just the fields of an operation, identified by their OperationId.
     ///
-    /// TODO...
+    /// Returns a result containing OpertionFields wrapped in an option. If no
+    /// fields were found, returns None. Errors if a fatal storage error occurs.
     async fn get_operation_fields_by_id(
         &self,
         id: OperationId,
-    ) -> Result<OperationFields, OperationStorageError> {
+    ) -> Result<Option<OperationFields>, OperationStorageError> {
         let operation_field_rows = query_as::<_, OperationFieldRow>(
             "
             SELECT
@@ -401,7 +410,11 @@ impl OperationStore<OperationStorage> for SqlStorage {
         .await
         .map_err(|e| OperationStorageError::Custom(e.to_string()))?;
 
-        Ok(parse_operation_fields(operation_field_rows))
+        if operation_field_rows.is_empty() {
+            return Ok(None);
+        }
+
+        Ok(Some(parse_operation_fields(operation_field_rows)))
     }
 }
 
@@ -479,6 +492,6 @@ mod tests {
             .get_operation_fields_by_id(operation_id.clone())
             .await
             .unwrap();
-        assert_eq!(result, doggo_operation.fields().unwrap());
+        assert_eq!(result.unwrap(), doggo_operation.fields().unwrap());
     }
 }
