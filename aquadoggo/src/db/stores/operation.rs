@@ -486,4 +486,67 @@ mod tests {
             "Error occured in OperationStore: error returned from database: UNIQUE constraint failed: operations_v1.entry_hash"
         )
     }
+
+    #[tokio::test]
+    async fn gets_document_by_operation_id() {
+        let storage_provider = test_db(0, false).await;
+
+        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
+        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+        let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
+        let document_id = DocumentId::new(operation_id.clone());
+
+        let create_operation = OperationStorage::new(
+            &author,
+            &test_create_operation(),
+            &operation_id,
+            &document_id,
+        );
+
+        let document_id_should_be_none = storage_provider
+            .get_document_by_operation_id(operation_id.clone())
+            .await
+            .unwrap();
+
+        assert!(document_id_should_be_none.is_none());
+
+        storage_provider
+            .insert_operation(&create_operation)
+            .await
+            .unwrap();
+
+        let expected_document_id: DocumentId = create_operation.id().as_hash().clone().into();
+        let document_id_should_exist = storage_provider
+            .get_document_by_operation_id(operation_id.clone())
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(document_id_should_exist, expected_document_id);
+
+        let operation_id = OperationId::new(Hash::new_from_bytes(vec![3, 4, 5]).unwrap());
+
+        let update_operation = OperationStorage::new(
+            &author,
+            &test_update_operation(
+                vec![create_operation.id().as_hash().clone().into()],
+                "huhuhu",
+            ),
+            &operation_id,
+            &document_id,
+        );
+
+        storage_provider
+            .insert_operation(&update_operation)
+            .await
+            .unwrap();
+
+        let document_id_should_be_the_same = storage_provider
+            .get_document_by_operation_id(update_operation.id())
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(document_id_should_be_the_same, expected_document_id);
+    }
 }
