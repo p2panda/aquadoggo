@@ -125,20 +125,6 @@ impl OperationStore<OperationStorage> for SqlStorage {
             prev_op_string += format!("{}{}", separator, operation_id.as_hash().as_str()).as_str();
         }
 
-        // If this is a CREATE operation we derive the document id from it's `OperationId`
-        let document_id = if operation.action().as_str() == "create" {
-            DocumentId::new(operation.id())
-        } else {
-            // Unwrap as we know any "UPDATE" or "DELETE" operation should have previous operations
-            let previous_operation_id = operation.previous_operations().get(0).unwrap().clone();
-
-            // For DELETE of UPDATE operations we need to fetch the document id from storage.
-            // We do this by finding the document for one of the contained previous_operations.
-            self.get_document_by_operation_id(previous_operation_id)
-                .await?
-                .ok_or_else(|| OperationStorageError::Custom("Document missing".to_string()))?
-        };
-
         // Consruct query for inserting operation an row, execute it
         // and check exactly one row was affected.
         let operation_inserted = query(
@@ -158,7 +144,7 @@ impl OperationStore<OperationStorage> for SqlStorage {
             ",
         )
         .bind(operation.author().as_str())
-        .bind(document_id.as_str())
+        .bind(operation.document_id().as_str())
         .bind(operation.id().as_str())
         .bind(operation.id().as_hash().as_str())
         .bind(operation.action().as_str())
