@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_trait::async_trait;
+use bamboo_rs_core_ed25519_yasmf::lipmaa;
+use sqlx::{query, query_as};
+
 use p2panda_rs::entry::{decode_entry, EntrySigned, LogId, SeqNum};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
@@ -8,10 +11,21 @@ use p2panda_rs::operation::{Operation, OperationEncoded};
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::errors::EntryStorageError;
 use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
-use sqlx::{query, query_as};
 
 use crate::db::models::entry::EntryRow;
 use crate::db::provider::SqlStorage;
+
+// Remove once https://github.com/pietgeursen/lipmaa-link/pull/3 merged in lipma-link
+pub fn get_lipmaa_links_back_to_root(mut n: u64) -> Vec<u64> {
+    let mut path = Vec::new();
+
+    while n > 0 {
+        n = lipmaa(n);
+        path.push(n);
+    }
+
+    path
+}
 
 /// Implement `AsStorageEntry` trait for `EntryRow`.
 impl AsStorageEntry for EntryRow {
@@ -223,6 +237,53 @@ impl EntryStore<EntryRow> for SqlStorage {
             ",
         )
         .bind(schema.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| EntryStorageError::Custom(e.to_string()))?;
+
+        Ok(entries)
+    }
+
+    async fn get_all_lipmaa_entries_for_entry(
+        &self,
+        author: Author,
+        log_id: LogId,
+        initial_seq_num: SeqNum,
+    ) -> Result<Vec<EntryRow>, EntryStorageError> {
+        let seq_num = initial_seq_num.as_u64();
+        let cert_pool_seq_nums = get_lipmaa_links_back_to_root(seq_num);
+
+        let mut cert_pool_query_str = "(";
+
+        for (seq_num, count) in cert_pool_seq_nums.iter().enumerate() {
+            let mut seperator = ",";
+            if *count == cert_pool_seq_nums.len() as u64 {
+                seperator = ")";
+            }
+            cert_pool_query_str = &format!("{cert_pool_query_str} {seq_num}{seperator}")
+        }
+
+        let entries = query_as::<_, EntryRow>(
+            "
+            SELECT
+                author,
+                entry_bytes,
+                entry_hash,
+                log_id,
+                payload_bytes,
+                payload_hash,
+                seq_num
+            FROM
+                entries
+            WHERE
+                author = $1
+                AND log_id = $2
+                AND seq_num IN $3
+            ",
+        )
+        .bind(author.as_str())
+        .bind(log_id.as_u64().to_string())
+        .bind(cert_pool_query_str)
         .fetch_all(&self.pool)
         .await
         .map_err(|e| EntryStorageError::Custom(e.to_string()))?;
