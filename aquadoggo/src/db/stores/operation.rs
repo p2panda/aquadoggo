@@ -311,8 +311,7 @@ impl OperationStore<OperationStorage> for SqlStorage {
     /// Get an operation identified by it's OperationId.
     ///
     /// Returns a result containing an OperationStorage wrapped in an option, if no
-    /// operation with this id was found, returns none. Errors if no operation fields
-    /// were found for an existing CREATE or UPDATE operation, or if a fatal storage
+    /// operation with this id was found, returns none. Errors if a fatal storage
     /// error occured.
     async fn get_operation_by_id(
         &self,
@@ -353,10 +352,11 @@ impl OperationStore<OperationStorage> for SqlStorage {
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::document::DocumentId;
+    use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::Author;
     use p2panda_rs::operation::OperationId;
     use p2panda_rs::test_utils::constants::DEFAULT_HASH;
+    use p2panda_rs::{document::DocumentId, operation::Operation};
 
     use crate::db::provider::SqlStorage;
     use crate::db::stores::test_utils::test_operation;
@@ -397,6 +397,46 @@ mod tests {
         assert_eq!(returned_doggo_operation.id(), doggo_operation.id());
         assert_eq!(
             returned_doggo_operation.document_id(),
+            doggo_operation.document_id()
+        );
+
+        let delete_doggo_operation_id =
+            OperationId::new(Hash::new_from_bytes(vec![2, 3, 4]).unwrap());
+
+        let delete_doggo_operation = OperationStorage::new(
+            &author,
+            &Operation::new_delete(doggo_operation.schema_id(), vec![doggo_operation.id()])
+                .unwrap(),
+            &delete_doggo_operation_id,
+            &document_id,
+        );
+
+        // Insert a delete operation into the db.
+        let result = storage_provider
+            .insert_operation(&delete_doggo_operation)
+            .await
+            .unwrap();
+
+        assert!(result);
+
+        // Request the previously inserted delete operation by it's id.
+        let returned_delete_doggo_operation = storage_provider
+            .get_operation_by_id(delete_doggo_operation.id())
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(
+            returned_delete_doggo_operation.author(),
+            doggo_operation.author()
+        );
+        assert_eq!(
+            returned_delete_doggo_operation.fields(),
+            doggo_operation.fields()
+        );
+        assert_eq!(returned_delete_doggo_operation.id(), doggo_operation.id());
+        assert_eq!(
+            returned_delete_doggo_operation.document_id(),
             doggo_operation.document_id()
         );
     }
