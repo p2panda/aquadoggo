@@ -15,20 +15,6 @@ use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
 use crate::db::models::entry::EntryRow;
 use crate::db::provider::SqlStorage;
 
-// Re-write once https://github.com/pietgeursen/lipmaa-link/pull/3 merged in lipma-link
-pub fn get_lipmaa_links_back_to_root(mut n: u64) -> Vec<u64> {
-    let mut path = Vec::new();
-
-    // We don't want to include lipmaa link at position `0` so we
-    // do the final lipmaa calculation landing on `1`
-    while n > 1 {
-        n = lipmaa(n);
-        path.push(n);
-    }
-
-    path
-}
-
 /// Implement `AsStorageEntry` trait for `EntryRow`.
 impl AsStorageEntry for EntryRow {
     type AsStorageEntryError = EntryStorageError;
@@ -121,31 +107,6 @@ impl EntryStore<EntryRow> for SqlStorage {
         Ok(rows_affected == 1)
     }
 
-    async fn get_entry_by_hash(&self, hash: &Hash) -> Result<Option<EntryRow>, EntryStorageError> {
-        let entry_row = query_as::<_, EntryRow>(
-            "
-            SELECT
-                author,
-                entry_bytes,
-                entry_hash,
-                log_id,
-                payload_bytes,
-                payload_hash,
-                seq_num
-            FROM
-                entries
-            WHERE
-                entry_hash = $1
-            ",
-        )
-        .bind(hash.as_str())
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| EntryStorageError::Custom(e.to_string()))?;
-
-        Ok(entry_row)
-    }
-
     /// Returns entry at sequence position within an author's log.
     async fn entry_at_seq_num(
         &self,
@@ -203,7 +164,7 @@ impl EntryStore<EntryRow> for SqlStorage {
                 author = $1
                 AND log_id = $2
             ORDER BY
-                CAST(seq_num AS INTEGER) DESC
+                seq_num DESC
             LIMIT
                 1
             ",
@@ -245,340 +206,47 @@ impl EntryStore<EntryRow> for SqlStorage {
 
         Ok(entries)
     }
-
-    async fn get_next_n_entries_after_seq(
-        &self,
-        author: &Author,
-        log_id: &LogId,
-        seq_num: &SeqNum,
-        max_number_of_entries: usize,
-    ) -> Result<Option<Vec<EntryRow>>, EntryStorageError> {
-        let max_seq_num = seq_num.as_u64() as usize + max_number_of_entries - 1;
-        let entries = query_as::<_, EntryRow>(
-            "
-            SELECT
-                author,
-                entry_bytes,
-                entry_hash,
-                log_id,
-                payload_bytes,
-                payload_hash,
-                seq_num
-            FROM
-                entries
-            WHERE
-                author = $1
-                AND log_id = $2
-                AND CAST(seq_num AS INTEGER) BETWEEN $3 and $4
-            ORDER BY
-                CAST(seq_num AS INTEGER)
-            ",
-        )
-        .bind(author.as_str())
-        .bind(log_id.as_u64().to_string())
-        .bind(seq_num.as_u64().to_string())
-        .bind((max_seq_num as u64).to_string())
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| EntryStorageError::Custom(e.to_string()))?;
-
-        Ok(Some(entries))
-    }
-
-    async fn get_all_lipmaa_entries_for_entry(
-        &self,
-        author: &Author,
-        log_id: &LogId,
-        initial_seq_num: &SeqNum,
-    ) -> Result<Vec<EntryRow>, EntryStorageError> {
-        let cert_pool = get_lipmaa_links_back_to_root(initial_seq_num.as_u64())
-            .iter()
-            .map(|seq_num| seq_num.to_string())
-            .collect::<Vec<String>>()
-            .join(",");
-
-        // Formatting query string in this way as `sqlx` currently
-        // doesn't support binding list arguments for IN queries.
-        let sql_str = format!(
-            "SELECT
-                author,
-                entry_bytes,
-                entry_hash,
-                log_id,
-                payload_bytes,
-                payload_hash,
-                seq_num
-            FROM
-                entries
-            WHERE
-                author = $1
-                AND log_id = $2
-                AND CAST(seq_num AS INTEGER) IN ({})
-            ORDER BY
-                CAST(seq_num AS INTEGER) DESC
-            ",
-            cert_pool
-        );
-
-        let entries = query_as::<_, EntryRow>(sql_str.as_str())
-            .bind(author.as_str())
-            .bind(log_id.as_u64().to_string())
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| EntryStorageError::Custom(e.to_string()))?;
-
-        Ok(entries)
-    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryFrom;
-    use std::str::FromStr;
-
-    use p2panda_rs::document::DocumentId;
-    use p2panda_rs::entry::{sign_and_encode, Entry};
-    use p2panda_rs::entry::{LogId, SeqNum};
+    use p2panda_rs::entry::LogId;
     use p2panda_rs::hash::Hash;
-    use p2panda_rs::identity::{Author, KeyPair};
-    use p2panda_rs::operation::{Operation, OperationEncoded, OperationFields, OperationValue};
+    use p2panda_rs::identity::Author;
     use p2panda_rs::schema::SchemaId;
-    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, StorageProvider};
-    use p2panda_rs::test_utils::constants::{DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
+    use p2panda_rs::storage_provider::traits::EntryStore;
 
-    use crate::db::stores::entry::EntryRow;
-    use crate::db::stores::test_utils::test_db;
-    use crate::rpc::EntryArgsRequest;
+    use crate::db::provider::SqlStorage;
+    use crate::test_helpers::initialize_db;
 
-    #[tokio::test]
-    async fn insert_entry() {
-        let storage_provider = test_db(100).await;
-
-        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
-        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
-        let log_id = LogId::new(1);
-        let schema = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
-
-        // Derive the document_id by fetching the first entry
-        let document_id: DocumentId = storage_provider
-            .entry_at_seq_num(&author, &log_id, &SeqNum::new(1).unwrap())
-            .await
-            .unwrap()
-            .unwrap()
-            .hash()
-            .into();
-
-        let next_entry_args = storage_provider
-            .get_entry_args(&EntryArgsRequest {
-                author: author.clone(),
-                document: Some(document_id.clone()),
-            })
-            .await
-            .unwrap();
-
-        let mut fields = OperationFields::new();
-        fields
-            .add("username", OperationValue::Text("stitch".to_owned()))
-            .unwrap();
-
-        let update_operation = Operation::new_update(
-            schema.clone(),
-            vec![next_entry_args.entry_hash_backlink.clone().unwrap().into()],
-            fields.clone(),
-        )
-        .unwrap();
-
-        let update_entry = Entry::new(
-            &next_entry_args.log_id,
-            Some(&update_operation),
-            next_entry_args.entry_hash_skiplink.as_ref(),
-            next_entry_args.entry_hash_backlink.as_ref(),
-            &next_entry_args.seq_num,
-        )
-        .unwrap();
-
-        let entry_encoded = sign_and_encode(&update_entry, &key_pair).unwrap();
-        let operation_encoded = OperationEncoded::try_from(&update_operation).unwrap();
-        let doggo_entry = EntryRow::new(&entry_encoded, &operation_encoded).unwrap();
-        let result = storage_provider.insert_entry(doggo_entry).await;
-
-        assert!(result.is_ok())
-    }
-
-    #[tokio::test]
-    async fn try_insert_non_unique_entry() {
-        let storage_provider = test_db(100).await;
-
-        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
-        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
-        let log_id = LogId::new(1);
-
-        let first_entry = storage_provider
-            .entry_at_seq_num(&author, &log_id, &SeqNum::new(1).unwrap())
-            .await
-            .unwrap()
-            .unwrap();
-
-        let duplicate_doggo_entry = EntryRow::new(
-            &first_entry.entry_signed(),
-            &first_entry.operation_encoded().unwrap(),
-        )
-        .unwrap();
-        let result = storage_provider.insert_entry(duplicate_doggo_entry).await;
-
-        assert_eq!(result.unwrap_err().to_string(), "Error occured during `EntryStorage` request in storage provider: error returned from database: UNIQUE constraint failed: entries.author, entries.log_id, entries.seq_num")
-    }
+    const TEST_AUTHOR: &str = "1a8a62c5f64eed987326513ea15a6ea2682c256ac57a418c1c92d96787c8b36e";
 
     #[tokio::test]
     async fn latest_entry() {
-        let storage_provider = test_db(100).await;
+        let pool = initialize_db().await;
+        let storage_provider = SqlStorage { pool };
 
-        let author_not_in_db = Author::try_from(*KeyPair::new().public_key()).unwrap();
+        let author = Author::new(TEST_AUTHOR).unwrap();
         let log_id = LogId::new(1);
 
         let latest_entry = storage_provider
-            .latest_entry(&author_not_in_db, &log_id)
+            .latest_entry(&author, &log_id)
             .await
             .unwrap();
         assert!(latest_entry.is_none());
-
-        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
-        let author_in_db = Author::try_from(*key_pair.public_key()).unwrap();
-
-        let latest_entry = storage_provider
-            .latest_entry(&author_in_db, &log_id)
-            .await
-            .unwrap();
-        assert_eq!(latest_entry.unwrap().seq_num(), SeqNum::new(100).unwrap());
     }
 
     #[tokio::test]
     async fn entries_by_schema() {
-        let storage_provider = test_db(100).await;
+        let pool = initialize_db().await;
+        let storage_provider = SqlStorage { pool };
 
-        let schema_not_in_the_db = SchemaId::new_application(
+        let schema = SchemaId::new_application(
             "venue",
             &Hash::new_from_bytes(vec![1, 2, 3]).unwrap().into(),
         );
 
-        let entries = storage_provider
-            .by_schema(&schema_not_in_the_db)
-            .await
-            .unwrap();
-        assert!(entries.is_empty());
-
-        let schema_in_the_db = SchemaId::new(TEST_SCHEMA_ID).unwrap();
-
-        let entries = storage_provider.by_schema(&schema_in_the_db).await.unwrap();
-        assert!(entries.len() == 100);
-    }
-
-    #[tokio::test]
-    async fn entry_by_seq_num() {
-        let storage_provider = test_db(100).await;
-
-        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
-        let author = Author::try_from(*key_pair.public_key()).unwrap();
-
-        for seq_num in [1, 10, 56, 77, 90] {
-            let seq_num = SeqNum::new(seq_num).unwrap();
-            let entry = storage_provider
-                .entry_at_seq_num(&author, &LogId::new(1), &seq_num)
-                .await
-                .unwrap();
-            assert_eq!(entry.unwrap().seq_num(), seq_num)
-        }
-
-        let wrong_log = LogId::new(2);
-        let entry = storage_provider
-            .entry_at_seq_num(&author, &wrong_log, &SeqNum::new(1).unwrap())
-            .await
-            .unwrap();
-        assert!(entry.is_none());
-
-        let author_not_in_db = Author::try_from(*KeyPair::new().public_key()).unwrap();
-        let entry = storage_provider
-            .entry_at_seq_num(&author_not_in_db, &LogId::new(1), &SeqNum::new(1).unwrap())
-            .await
-            .unwrap();
-        assert!(entry.is_none());
-
-        let seq_num_not_in_log = SeqNum::new(1000).unwrap();
-        let entry = storage_provider
-            .entry_at_seq_num(&author_not_in_db, &LogId::new(1), &seq_num_not_in_log)
-            .await
-            .unwrap();
-        assert!(entry.is_none())
-    }
-
-    #[tokio::test]
-    async fn get_entry_by_hash() {
-        let storage_provider = test_db(100).await;
-
-        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
-        let author = Author::try_from(*key_pair.public_key()).unwrap();
-
-        for seq_num in [1, 11, 32, 45, 76] {
-            let seq_num = SeqNum::new(seq_num).unwrap();
-            let entry = storage_provider
-                .entry_at_seq_num(&author, &LogId::new(1), &seq_num)
-                .await
-                .unwrap()
-                .unwrap();
-
-            let entry_hash = entry.hash();
-            let entry_by_hash = storage_provider
-                .get_entry_by_hash(&entry_hash)
-                .await
-                .unwrap()
-                .unwrap();
-            assert_eq!(entry, entry_by_hash)
-        }
-
-        let entry_hash_not_in_db = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
-        let entry = storage_provider
-            .get_entry_by_hash(&entry_hash_not_in_db)
-            .await
-            .unwrap();
-        assert!(entry.is_none())
-    }
-
-    #[tokio::test]
-    async fn gets_next_n_entries_after_seq() {
-        let storage_provider = test_db(50).await;
-
-        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
-        let author = Author::try_from(*key_pair.public_key()).unwrap();
-
-        let entries = storage_provider
-            .get_next_n_entries_after_seq(&author, &LogId::default(), &SeqNum::default(), 20)
-            .await
-            .unwrap()
-            .unwrap();
-        for entry in entries.clone() {
-            assert!(entry.seq_num().as_u64() >= 1 && entry.seq_num().as_u64() <= 20)
-        }
-        assert_eq!(entries.len(), 20);
-    }
-
-    #[tokio::test]
-    async fn gets_all_lipmaa_entries_for_entry() {
-        let storage_provider = test_db(50).await;
-
-        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
-        let author = Author::try_from(*key_pair.public_key()).unwrap();
-
-        let entries = storage_provider
-            .get_all_lipmaa_entries_for_entry(&author, &LogId::default(), &SeqNum::new(20).unwrap())
-            .await
-            .unwrap();
-
-        let cert_pool_seq_nums = entries
-            .iter()
-            .map(|entry| entry.seq_num().as_u64())
-            .collect::<Vec<u64>>();
-
-        assert!(!entries.is_empty());
-        assert_eq!(cert_pool_seq_nums, vec![19, 18, 17, 13, 4, 1]);
+        let entries = storage_provider.by_schema(&schema).await.unwrap();
+        assert!(entries.len() == 0);
     }
 }
