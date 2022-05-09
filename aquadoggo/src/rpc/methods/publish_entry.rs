@@ -3,7 +3,7 @@
 use jsonrpc_v2::{Data, Params};
 use p2panda_rs::storage_provider::traits::StorageProvider;
 
-use crate::db::store::SqlStorage;
+use crate::db::provider::SqlStorage;
 use crate::errors::StorageProviderResult;
 use crate::rpc::{PublishEntryRequest, PublishEntryResponse};
 
@@ -111,8 +111,8 @@ mod tests {
             r#"{{
                 "entryHashBacklink": "{}",
                 "entryHashSkiplink": {},
-                "seqNum": "{}",
-                "logId": "{}"
+                "seqNum": {},
+                "logId": {}
             }}"#,
             entry_encoded.hash().as_str(),
             skiplink_str,
@@ -374,9 +374,10 @@ mod tests {
             ),
         );
 
-        let response = rpc_error(
-            "The backlink hash encoded in the entry does not match the lipmaa entry provided",
-        );
+        let response = rpc_error(&format!(
+            "The backlink hash encoded in the entry: {} did not match the expected backlink hash",
+            entry_wrong_hash.hash()
+        ));
         assert_eq!(handle_http(&client, request).await, response);
 
         // Send invalid sequence number
@@ -403,7 +404,7 @@ mod tests {
         );
 
         let response = rpc_error(&format!(
-            "Could not find backlink entry in database with id: {}",
+            "Could not find expected backlink in database for entry with id: {}",
             entry_wrong_seq_num.hash()
         ));
         assert_eq!(handle_http(&client, request).await, response);
