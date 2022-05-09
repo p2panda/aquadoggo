@@ -15,9 +15,7 @@ CREATE TABLE IF NOT EXISTS operations_v1 (
 -- relation table. Can we remove it or are there reasons it's useful?
 CREATE TABLE IF NOT EXISTS previous_operations_v1 (
     parent_operation_id    VARCHAR(64)       NOT NULL,
-    child_operation_id     VARCHAR(64)       NOT NULL,
-    FOREIGN KEY(parent_operation_id) REFERENCES operations_v1(operation_id)
-    FOREIGN KEY(child_operation_id)  REFERENCES operations_v1(operation_id)
+    child_operation_id     VARCHAR(64)       NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS operation_fields_v1 (
