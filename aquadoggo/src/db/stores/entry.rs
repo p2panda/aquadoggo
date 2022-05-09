@@ -15,11 +15,13 @@ use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
 use crate::db::models::entry::EntryRow;
 use crate::db::provider::SqlStorage;
 
-// Remove once https://github.com/pietgeursen/lipmaa-link/pull/3 merged in lipma-link
+// Re-write once https://github.com/pietgeursen/lipmaa-link/pull/3 merged in lipma-link
 pub fn get_lipmaa_links_back_to_root(mut n: u64) -> Vec<u64> {
     let mut path = Vec::new();
 
-    while n > 0 {
+    // We don't want to include lipmaa link at position `0` so we
+    // do the final lipmaa calculation landing on `1`
+    while n > 1 {
         n = lipmaa(n);
         path.push(n);
     }
@@ -285,26 +287,20 @@ impl EntryStore<EntryRow> for SqlStorage {
 
     async fn get_all_lipmaa_entries_for_entry(
         &self,
-        author: Author,
-        log_id: LogId,
-        initial_seq_num: SeqNum,
+        author: &Author,
+        log_id: &LogId,
+        initial_seq_num: &SeqNum,
     ) -> Result<Vec<EntryRow>, EntryStorageError> {
-        let seq_num = initial_seq_num.as_u64();
-        let cert_pool_seq_nums = get_lipmaa_links_back_to_root(seq_num);
+        let cert_pool = get_lipmaa_links_back_to_root(initial_seq_num.as_u64())
+            .iter()
+            .map(|seq_num| seq_num.to_string())
+            .collect::<Vec<String>>()
+            .join(",");
 
-        let mut cert_pool_query_str = "(";
-
-        for (seq_num, count) in cert_pool_seq_nums.iter().enumerate() {
-            let mut seperator = ",";
-            if *count == cert_pool_seq_nums.len() as u64 {
-                seperator = ")";
-            }
-            cert_pool_query_str = &format!("{cert_pool_query_str} {seq_num}{seperator}")
-        }
-
-        let entries = query_as::<_, EntryRow>(
-            "
-            SELECT
+        // Formatting query string in this way as `sqlx` currently
+        // doesn't support binding list arguments for IN queries.
+        let sql_str = format!(
+            "SELECT
                 author,
                 entry_bytes,
                 entry_hash,
@@ -317,15 +313,19 @@ impl EntryStore<EntryRow> for SqlStorage {
             WHERE
                 author = $1
                 AND log_id = $2
-                AND seq_num IN $3
+                AND CAST(seq_num AS INTEGER) IN ({})
+            ORDER BY
+                CAST(seq_num AS INTEGER) DESC
             ",
-        )
-        .bind(author.as_str())
-        .bind(log_id.as_u64().to_string())
-        .bind(cert_pool_query_str)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| EntryStorageError::Custom(e.to_string()))?;
+            cert_pool
+        );
+
+        let entries = query_as::<_, EntryRow>(sql_str.as_str())
+            .bind(author.as_str())
+            .bind(log_id.as_u64().to_string())
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| EntryStorageError::Custom(e.to_string()))?;
 
         Ok(entries)
     }
@@ -561,4 +561,24 @@ mod tests {
         assert_eq!(entries.len(), 20);
     }
 
+    #[tokio::test]
+    async fn gets_all_lipmaa_entries_for_entry() {
+        let storage_provider = test_db(50).await;
+
+        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
+        let author = Author::try_from(*key_pair.public_key()).unwrap();
+
+        let entries = storage_provider
+            .get_all_lipmaa_entries_for_entry(&author, &LogId::default(), &SeqNum::new(20).unwrap())
+            .await
+            .unwrap();
+
+        let cert_pool_seq_nums = entries
+            .iter()
+            .map(|entry| entry.seq_num().as_u64())
+            .collect::<Vec<u64>>();
+
+        assert!(!entries.is_empty());
+        assert_eq!(cert_pool_seq_nums, vec![19, 18, 17, 13, 4, 1]);
+    }
 }
