@@ -160,7 +160,7 @@ impl OperationStore<OperationStorage> for SqlStorage {
         // each, construct and execute the queries, return their futures
         // and execute all of them with `try_join_all()`.
         let previous_operations_inserted =
-            try_join_all(operation.previous_operations().iter().map(|prev_op_id| {
+            !try_join_all(operation.previous_operations().iter().map(|prev_op_id| {
                 query(
                     "
                     INSERT INTO
@@ -181,23 +181,13 @@ impl OperationStore<OperationStorage> for SqlStorage {
             .map_err(|e| OperationStorageError::Custom(e.to_string()))?
             .iter()
             // Here we check that each query inserted exactly one row
-            .try_for_each(|result| {
-                if result.rows_affected() == 1 {
-                    Ok(())
-                } else {
-                    Err(OperationStorageError::Custom(format!(
-                        "Incorrect rows affected: {}",
-                        result.rows_affected()
-                    )))
-                }
-            })
-            .is_ok();
+            .any(|query_result| query_result.rows_affected() != 1);
 
         // Same pattern as above but now for operation_fields. Construct and execute the
         // queries, return their futures and execute all of them with `try_join_all()`.
         let mut fields_inserted = true;
         if let Some(fields) = operation.fields() {
-            fields_inserted = try_join_all(fields.iter().flat_map(|(name, value)| {
+            fields_inserted = !try_join_all(fields.iter().flat_map(|(name, value)| {
                 // If the value is a relation_list or pinned_relation_list we need to insert a new field row for
                 // every item in the list. Here we collect these items and return them in a vector. If this operation
                 // value is anything except for the above list types, we will return a vec containing a single item.
@@ -277,18 +267,8 @@ impl OperationStore<OperationStorage> for SqlStorage {
             // If any queries error, we catch that here.
             .map_err(|e| OperationStorageError::Custom(e.to_string()))? // Coerce error here
             .iter()
-            // All queries should perform exactly one insertion, we check that here.
-            .try_for_each(|result| {
-                if result.rows_affected() == 1 {
-                    Ok(())
-                } else {
-                    Err(OperationStorageError::Custom(format!(
-                        "Incorrect rows affected: {}",
-                        result.rows_affected()
-                    )))
-                }
-            })
-            .is_ok();
+            // Here we check that each query inserted exactly one row
+            .any(|query_result| query_result.rows_affected() != 1);
         };
 
         Ok(operation_inserted && previous_operations_inserted && fields_inserted)
