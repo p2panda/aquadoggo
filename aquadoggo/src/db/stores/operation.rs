@@ -338,95 +338,121 @@ impl OperationStore<OperationStorage> for SqlStorage {
 
 #[cfg(test)]
 mod tests {
+    use std::convert::TryFrom;
+
+    use p2panda_rs::document::DocumentId;
+    use p2panda_rs::entry::LogId;
     use p2panda_rs::hash::Hash;
-    use p2panda_rs::identity::Author;
+    use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::OperationId;
-    use p2panda_rs::test_utils::constants::DEFAULT_HASH;
-    use p2panda_rs::{document::DocumentId, operation::Operation};
+    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, StorageProvider};
+    use p2panda_rs::test_utils::constants::{DEFAULT_HASH, DEFAULT_PRIVATE_KEY};
 
     use crate::db::provider::SqlStorage;
-    use crate::db::stores::test_utils::test_operation;
+    use crate::db::stores::test_utils::{
+        test_create_operation, test_db, test_delete_operation, test_update_operation,
+    };
     use crate::db::traits::AsStorageOperation;
-    use crate::test_helpers::initialize_db;
 
     use super::{OperationStorage, OperationStore};
 
-    const TEST_AUTHOR: &str = "1a8a62c5f64eed987326513ea15a6ea2682c256ac57a418c1c92d96787c8b36e";
-
-    #[tokio::test]
-    async fn inserts_and_gets_operations() {
-        let pool = initialize_db().await;
-        let storage_provider = SqlStorage { pool };
-
-        // Create Author, OperationId and DocumentId in order to compose a OperationStorage.
-        let author = Author::new(TEST_AUTHOR).unwrap();
-        let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
-        let document_id = DocumentId::new(operation_id.clone());
-        let doggo_operation =
-            OperationStorage::new(&author, &test_operation(), &operation_id, &document_id);
-
+    async fn insert_get_assert(storage_provider: SqlStorage, operation: OperationStorage) {
         // Insert the doggo operation into the db, returns Ok(true) when succesful.
-        let result = storage_provider
-            .insert_operation(&doggo_operation)
-            .await
-            .unwrap();
+        let result = storage_provider.insert_operation(&operation).await.unwrap();
         assert!(result);
 
         // Request the previously inserted operation by it's id.
-        let returned_doggo_operation = storage_provider
-            .get_operation_by_id(operation_id.clone())
+        let returned_operation = storage_provider
+            .get_operation_by_id(operation.id())
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(returned_doggo_operation.author(), doggo_operation.author());
-        assert_eq!(returned_doggo_operation.fields(), doggo_operation.fields());
-        assert_eq!(returned_doggo_operation.id(), doggo_operation.id());
-        assert_eq!(
-            returned_doggo_operation.document_id(),
-            doggo_operation.document_id()
-        );
 
-        let delete_doggo_operation_id =
-            OperationId::new(Hash::new_from_bytes(vec![2, 3, 4]).unwrap());
+        assert_eq!(returned_operation.author(), operation.author());
+        assert_eq!(returned_operation.fields(), operation.fields());
+        assert_eq!(returned_operation.id(), operation.id());
+        assert_eq!(returned_operation.document_id(), operation.document_id());
+    }
 
-        let delete_doggo_operation = OperationStorage::new(
+    #[tokio::test]
+    async fn insert_get_create_operation() {
+        let storage_provider = test_db(0, false).await;
+
+        // Create Author, OperationId and DocumentId in order to compose a OperationStorage.
+        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
+        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+        let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
+        let document_id = DocumentId::new(operation_id.clone());
+        let create_operation = OperationStorage::new(
             &author,
-            &Operation::new_delete(doggo_operation.schema_id(), vec![doggo_operation.id()])
-                .unwrap(),
-            &delete_doggo_operation_id,
+            &test_create_operation(),
+            &operation_id,
             &document_id,
         );
 
-        // Insert a delete operation into the db.
-        let result = storage_provider
-            .insert_operation(&delete_doggo_operation)
-            .await
-            .unwrap();
+        insert_get_assert(storage_provider, create_operation).await;
+    }
 
-        assert!(result);
+    #[tokio::test]
+    async fn insert_get_update_operation() {
+        let storage_provider = test_db(1, false).await;
 
-        // Request the previously inserted delete operation by it's id.
-        let returned_delete_doggo_operation = storage_provider
-            .get_operation_by_id(delete_doggo_operation.id())
+        // Create Author, OperationId and DocumentId in order to compose a OperationStorage.
+        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
+        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+
+        let latest_entry = storage_provider
+            .latest_entry(&author, &LogId::default())
             .await
             .unwrap()
             .unwrap();
 
-        assert_eq!(
-            returned_delete_doggo_operation.author(),
-            delete_doggo_operation.author()
+        let document_id = storage_provider
+            .get_document_by_entry(&latest_entry.hash())
+            .await
+            .unwrap()
+            .unwrap();
+
+        let operation_id = OperationId::new(Hash::new_from_bytes(vec![3, 4, 5]).unwrap());
+
+        let update_operation = OperationStorage::new(
+            &author,
+            &test_update_operation(vec![latest_entry.hash().into()], "huhuhu"),
+            &operation_id,
+            &document_id,
         );
-        assert_eq!(
-            returned_delete_doggo_operation.fields(),
-            delete_doggo_operation.fields()
+        insert_get_assert(storage_provider, update_operation).await;
+    }
+
+    #[tokio::test]
+    async fn insert_get_delete_operation() {
+        let storage_provider = test_db(1, false).await;
+
+        // Create Author, OperationId and DocumentId in order to compose a OperationStorage.
+        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
+        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+
+        let latest_entry = storage_provider
+            .latest_entry(&author, &LogId::default())
+            .await
+            .unwrap()
+            .unwrap();
+
+        let document_id = storage_provider
+            .get_document_by_entry(&latest_entry.hash())
+            .await
+            .unwrap()
+            .unwrap();
+
+        let operation_id = OperationId::new(Hash::new_from_bytes(vec![3, 4, 5]).unwrap());
+
+        let delete_operation = OperationStorage::new(
+            &author,
+            &test_delete_operation(vec![latest_entry.hash().into()]),
+            &operation_id,
+            &document_id,
         );
-        assert_eq!(
-            returned_delete_doggo_operation.id(),
-            delete_doggo_operation.id()
-        );
-        assert_eq!(
-            returned_delete_doggo_operation.document_id(),
-            delete_doggo_operation.document_id()
-        );
+
+        insert_get_assert(storage_provider, delete_operation).await;
     }
 }

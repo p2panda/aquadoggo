@@ -8,7 +8,7 @@ use p2panda_rs::entry::{sign_and_encode, Entry, LogId, SeqNum};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::{Author, KeyPair};
 use p2panda_rs::operation::{
-    Operation, OperationEncoded, OperationFields, OperationValue, PinnedRelation,
+    Operation, OperationEncoded, OperationFields, OperationId, OperationValue, PinnedRelation,
     PinnedRelationList, Relation, RelationList,
 };
 use p2panda_rs::schema::SchemaId;
@@ -19,7 +19,7 @@ use crate::db::provider::SqlStorage;
 use crate::graphql::client::{EntryArgsRequest, PublishEntryRequest};
 use crate::test_helpers::initialize_db;
 
-pub fn test_operation() -> Operation {
+pub fn test_create_operation() -> Operation {
     let mut fields = OperationFields::new();
     fields
         .add("username", OperationValue::Text("bubu".to_owned()))
@@ -74,7 +74,29 @@ pub fn test_operation() -> Operation {
     Operation::new_create(SchemaId::from_str(TEST_SCHEMA_ID).unwrap(), fields).unwrap()
 }
 
-pub async fn test_db(no_of_entries: usize) -> SqlStorage {
+pub fn test_update_operation(previous_operations: Vec<OperationId>, username: &str) -> Operation {
+    let mut fields = OperationFields::new();
+    fields
+        .add("username", OperationValue::Text(username.to_owned()))
+        .unwrap();
+
+    Operation::new_update(
+        SchemaId::from_str(TEST_SCHEMA_ID).unwrap(),
+        previous_operations,
+        fields,
+    )
+    .unwrap()
+}
+
+pub fn test_delete_operation(previous_operations: Vec<OperationId>) -> Operation {
+    Operation::new_delete(
+        SchemaId::from_str(TEST_SCHEMA_ID).unwrap(),
+        previous_operations,
+    )
+    .unwrap()
+}
+
+pub async fn test_db(no_of_entries: usize, with_delete: bool) -> SqlStorage {
     let pool = initialize_db().await;
     let storage_provider = SqlStorage { pool };
 
@@ -88,7 +110,7 @@ pub async fn test_db(no_of_entries: usize) -> SqlStorage {
     let schema = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
 
     // Build first CREATE entry for the db
-    let create_operation = test_operation();
+    let create_operation = test_create_operation();
     let create_entry = Entry::new(
         &LogId::default(),
         Some(&create_operation),
@@ -113,13 +135,8 @@ pub async fn test_db(no_of_entries: usize) -> SqlStorage {
         .await
         .unwrap();
 
-    let mut fields = OperationFields::new();
-    fields
-        .add("username", OperationValue::Text("yahoooo".to_owned()))
-        .unwrap();
-
     // Publish more update entries
-    for _ in 1..no_of_entries {
+    for index in 1..no_of_entries {
         // Get next entry args
         let next_entry_args = storage_provider
             .get_entry_args(&EntryArgsRequest {
@@ -132,20 +149,24 @@ pub async fn test_db(no_of_entries: usize) -> SqlStorage {
         let backlink = next_entry_args.backlink.clone().unwrap();
 
         // Construct the next UPDATE operation, we use the backlink hash in the prev_op vector
-        let update_operation =
-            Operation::new_update(schema.clone(), vec![backlink.into()], fields.clone()).unwrap();
 
-        let update_entry = Entry::new(
+        let next_operation = if index == no_of_entries && with_delete {
+            test_delete_operation(vec![backlink.into()])
+        } else {
+            test_update_operation(vec![backlink.into()], "yoyo")
+        };
+
+        let next_entry = Entry::new(
             &next_entry_args.log_id,
-            Some(&update_operation),
+            Some(&next_operation),
             next_entry_args.skiplink.as_ref(),
             next_entry_args.backlink.as_ref(),
             &next_entry_args.seq_num,
         )
         .unwrap();
 
-        let entry_encoded = sign_and_encode(&update_entry, &key_pair).unwrap();
-        let operation_encoded = OperationEncoded::try_from(&update_operation).unwrap();
+        let entry_encoded = sign_and_encode(&next_entry, &key_pair).unwrap();
+        let operation_encoded = OperationEncoded::try_from(&next_operation).unwrap();
 
         // Publish the new entry
         storage_provider
