@@ -337,8 +337,12 @@ impl OperationStore<OperationStorage> for SqlStorage {
         .bind(id.as_str())
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| OperationStorageError::Custom(e.to_string()))?
-        .unwrap(); // TODO: Don't unwrap!
+        .map_err(|e| OperationStorageError::Custom(e.to_string()))?;
+
+        let operation_row = match operation_row {
+            Some(operation) => operation,
+            None => return Ok(None),
+        };
 
         let operation_fields = self.get_operation_fields_by_id(id).await?;
         // Unwrapping as we assume values coming from the db are valid
