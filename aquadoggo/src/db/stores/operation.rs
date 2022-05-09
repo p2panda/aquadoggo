@@ -455,4 +455,35 @@ mod tests {
 
         insert_get_assert(storage_provider, delete_operation).await;
     }
+
+    #[tokio::test]
+    async fn insert_operation_twice() {
+        let storage_provider = test_db(0, false).await;
+
+        // Create Author, OperationId and DocumentId in order to compose a OperationStorage.
+        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
+        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+        let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
+        let document_id = DocumentId::new(operation_id.clone());
+        let create_operation = OperationStorage::new(
+            &author,
+            &test_create_operation(),
+            &operation_id,
+            &document_id,
+        );
+
+        let result = storage_provider
+            .insert_operation(&create_operation)
+            .await
+            .unwrap();
+
+        assert!(result);
+
+        let result = storage_provider.insert_operation(&create_operation).await;
+
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Error occured in OperationStore: error returned from database: UNIQUE constraint failed: operations_v1.entry_hash"
+        )
+    }
 }
