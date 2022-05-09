@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::collections::BTreeMap;
+
 use async_trait::async_trait;
 use futures::future::try_join_all;
 use p2panda_rs::document::DocumentId;
@@ -283,7 +285,6 @@ impl OperationStore<OperationStorage> for SqlStorage {
         &self,
         id: OperationId,
     ) -> Result<Option<OperationStorage>, OperationStorageError> {
-        // TODO: Can we do this in one query (2nd query occurs on line 343)?
         let operation_rows = query_as::<_, OperationFieldsJoinedRow>(
             "
             SELECT
@@ -314,6 +315,59 @@ impl OperationStore<OperationStorage> for SqlStorage {
         let operation = parse_operation_rows(operation_rows);
         Ok(operation)
     }
+
+    async fn get_operations_by_document_id(
+        &self,
+        id: &DocumentId,
+    ) -> Result<Vec<OperationStorage>, OperationStorageError> {
+        let operation_rows = query_as::<_, OperationFieldsJoinedRow>(
+            "
+            SELECT
+                operations_v1.author,
+                operations_v1.document_id,
+                operations_v1.operation_id,
+                operations_v1.entry_hash,
+                operations_v1.action,
+                operations_v1.schema_id,
+                operations_v1.previous_operations,
+                operation_fields_v1.name,
+                operation_fields_v1.field_type,
+                operation_fields_v1.value
+            FROM
+                operations_v1
+            LEFT JOIN operation_fields_v1
+                ON
+                    operation_fields_v1.operation_id = operations_v1.operation_id
+            WHERE
+                operations_v1.document_id = $1
+            ",
+        )
+        .bind(id.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| OperationStorageError::Custom(e.to_string()))?;
+
+        let mut grouped_operation_rows: BTreeMap<String, Vec<OperationFieldsJoinedRow>> =
+            BTreeMap::new();
+
+        for operation_row in operation_rows {
+            if let Some(current_operations) =
+                grouped_operation_rows.get_mut(&operation_row.operation_id)
+            {
+                current_operations.push(operation_row)
+            } else {
+                grouped_operation_rows
+                    .insert(operation_row.clone().operation_id, vec![operation_row]);
+            };
+        }
+
+        let operations: Vec<OperationStorage> = grouped_operation_rows
+            .iter()
+            .filter_map(|(_id, operation_rows)| parse_operation_rows(operation_rows.to_owned()))
+            .collect();
+
+        Ok(operations)
+    }
 }
 
 #[cfg(test)]
@@ -325,6 +379,7 @@ mod tests {
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::OperationId;
+    use p2panda_rs::storage_provider;
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, StorageProvider};
     use p2panda_rs::test_utils::constants::{DEFAULT_HASH, DEFAULT_PRIVATE_KEY};
 
@@ -375,7 +430,7 @@ mod tests {
 
     #[tokio::test]
     async fn insert_get_update_operation() {
-        let storage_provider = test_db(1, false).await;
+        let storage_provider = test_db(0, false).await;
 
         // Create Author, OperationId and DocumentId in order to compose a OperationStorage.
         let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
@@ -406,7 +461,7 @@ mod tests {
 
     #[tokio::test]
     async fn insert_get_delete_operation() {
-        let storage_provider = test_db(1, false).await;
+        let storage_provider = test_db(0, false).await;
 
         // Create Author, OperationId and DocumentId in order to compose a OperationStorage.
         let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
@@ -528,5 +583,30 @@ mod tests {
             .unwrap();
 
         assert_eq!(document_id_should_be_the_same, expected_document_id);
+    }
+
+    #[tokio::test]
+    async fn get_operations_by_document_id() {
+        let storage_provider = test_db(5, false).await;
+        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
+        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+
+        let latest_entry = storage_provider
+            .latest_entry(&author, &LogId::default())
+            .await
+            .unwrap()
+            .unwrap();
+        let document_id = storage_provider
+            .get_document_by_entry(&Hash::new(&latest_entry.entry_hash).unwrap())
+            .await
+            .unwrap()
+            .unwrap();
+
+        let operations_by_document_id = storage_provider
+            .get_operations_by_document_id(&document_id)
+            .await
+            .unwrap();
+
+        assert_eq!(operations_by_document_id.len(), 5)
     }
 }

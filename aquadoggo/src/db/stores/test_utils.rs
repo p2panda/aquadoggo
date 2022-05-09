@@ -16,8 +16,11 @@ use p2panda_rs::storage_provider::traits::StorageProvider;
 use p2panda_rs::test_utils::constants::{DEFAULT_HASH, DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
 
 use crate::db::provider::SqlStorage;
+use crate::db::traits::OperationStore;
 use crate::graphql::client::{EntryArgsRequest, PublishEntryRequest};
 use crate::test_helpers::initialize_db;
+
+use super::operation::OperationStorage;
 
 pub fn test_create_operation() -> Operation {
     let mut fields = OperationFields::new();
@@ -107,53 +110,28 @@ pub async fn test_db(no_of_entries: usize, with_delete: bool) -> SqlStorage {
 
     let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
     let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
-    let schema = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
 
-    // Build first CREATE entry for the db
-    let create_operation = test_create_operation();
-    let create_entry = Entry::new(
-        &LogId::default(),
-        Some(&create_operation),
-        None,
-        None,
-        &SeqNum::new(1).unwrap(),
-    )
-    .unwrap();
-
-    let entry_encoded = sign_and_encode(&create_entry, &key_pair).unwrap();
-    let operation_encoded = OperationEncoded::try_from(&create_operation).unwrap();
-
-    // Derive the document id from the CREATE entries hash
-    let document: DocumentId = entry_encoded.hash().into();
-
-    // Publish the CREATE entry
-    storage_provider
-        .publish_entry(&PublishEntryRequest {
-            entry_encoded,
-            operation_encoded,
-        })
-        .await
-        .unwrap();
+    let mut document: Option<DocumentId> = None;
 
     // Publish more update entries
-    for index in 1..no_of_entries {
-        // Get next entry args
+    for index in 0..no_of_entries {
         let next_entry_args = storage_provider
             .get_entry_args(&EntryArgsRequest {
                 author: author.clone(),
-                document: Some(document.clone()),
+                document: document.as_ref().cloned(),
             })
             .await
             .unwrap();
 
-        let backlink = next_entry_args.backlink.clone().unwrap();
-
-        // Construct the next UPDATE operation, we use the backlink hash in the prev_op vector
-
-        let next_operation = if index == no_of_entries && with_delete {
-            test_delete_operation(vec![backlink.into()])
+        let next_operation = if index == 0 {
+            test_create_operation()
+        } else if index == no_of_entries && with_delete {
+            test_delete_operation(vec![next_entry_args.backlink.clone().unwrap().into()])
         } else {
-            test_update_operation(vec![backlink.into()], "yoyo")
+            test_update_operation(
+                vec![next_entry_args.backlink.clone().unwrap().into()],
+                "yoyo",
+            )
         };
 
         let next_entry = Entry::new(
@@ -168,12 +146,31 @@ pub async fn test_db(no_of_entries: usize, with_delete: bool) -> SqlStorage {
         let entry_encoded = sign_and_encode(&next_entry, &key_pair).unwrap();
         let operation_encoded = OperationEncoded::try_from(&next_operation).unwrap();
 
+        if index == 0 {
+            document = Some(entry_encoded.hash().into());
+        }
+
+        let operation_id = entry_encoded.hash().into();
+
         // Publish the new entry
         storage_provider
             .publish_entry(&PublishEntryRequest {
-                entry_encoded,
+                entry_encoded: entry_encoded.clone(),
                 operation_encoded,
             })
+            .await
+            .unwrap();
+
+        let storage_operation = OperationStorage::new(
+            &author,
+            &next_operation,
+            &operation_id,
+            &document.as_ref().cloned().unwrap(),
+        );
+
+        // Publish the new entry
+        storage_provider
+            .insert_operation(&storage_operation)
             .await
             .unwrap();
     }

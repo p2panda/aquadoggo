@@ -71,9 +71,8 @@ pub trait OperationStore<StorageOperation: AsStorageOperation> {
     //     name: String,
     // ) -> Result<OperationValue, OperationStorageError>;
 
-    // async fn get_operations_by_document_id(
-    //     &self,
-    //     id: DocumentId,
-    //     name: String,
-    // ) -> Result<Vec<StorageOperation>, OperationStorageError>;
+    async fn get_operations_by_document_id(
+        &self,
+        id: &DocumentId,
+    ) -> Result<Vec<StorageOperation>, OperationStorageError>;
 }

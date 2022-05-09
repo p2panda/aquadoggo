@@ -57,7 +57,7 @@ pub struct OperationFieldRow {
 }
 
 /// A struct representing a joined OperationRow and OperationFieldRow.
-#[derive(FromRow, Debug)]
+#[derive(FromRow, Debug, Clone)]
 pub struct OperationFieldsJoinedRow {
     /// The author of this operation.
     pub author: String,
