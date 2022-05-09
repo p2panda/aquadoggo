@@ -89,6 +89,10 @@ impl AsStorageEntry for EntryRow {
 #[async_trait]
 impl EntryStore<EntryRow> for SqlStorage {
     /// Insert an entry into storage.
+    ///
+    /// Returns a result containing `true` when the insertion occured (one row affected)
+    /// returns `false` when an unexpected number of rows was affected. Errors when
+    /// a fatal storage error occured.
     async fn insert_entry(&self, entry: EntryRow) -> Result<bool, EntryStorageError> {
         let rows_affected = query(
             "
@@ -121,6 +125,11 @@ impl EntryStore<EntryRow> for SqlStorage {
         Ok(rows_affected == 1)
     }
 
+    /// Get an entry from storage by it's hash id.
+    ///
+    /// Returns a result containing the entry wrapped in an option if it was
+    /// found successfully. Returns `None` if the entry was not found in storage.
+    /// Errors when a fatal storage error occured.
     async fn get_entry_by_hash(&self, hash: &Hash) -> Result<Option<EntryRow>, EntryStorageError> {
         let entry_row = query_as::<_, EntryRow>(
             "
@@ -146,7 +155,11 @@ impl EntryStore<EntryRow> for SqlStorage {
         Ok(entry_row)
     }
 
-    /// Returns entry at sequence position within an author's log.
+    /// Get an entry at a sequence position within an author's log.
+    ///
+    /// Returns a result containing the entry wrapped in an option if it was found
+    /// successfully. Returns None if the entry was not found in storage. Errors when
+    /// a fatal storage error occured.
     async fn entry_at_seq_num(
         &self,
         author: &Author,
@@ -181,7 +194,11 @@ impl EntryStore<EntryRow> for SqlStorage {
         Ok(entry_row)
     }
 
-    /// Returns the latest Bamboo entry of an author's log.
+    /// Get the latest entry of an author's log.
+    ///
+    /// Returns a result containing the latest log entry wrapped in an option if an
+    /// entry was found. Returns None if the specified author and log could not be
+    /// found in storage. Errors when a fatal storage error occured.
     async fn latest_entry(
         &self,
         author: &Author,
@@ -217,7 +234,11 @@ impl EntryStore<EntryRow> for SqlStorage {
         Ok(entry_row)
     }
 
-    /// Return vector of all entries of a given schema
+    /// Get all entries of a given schema
+    ///
+    /// Returns a result containing a vector of all entries which follow the passed
+    /// schema (identified by it's `SchemaId`). If no entries exist, or the schema
+    /// is not known by this node, then an empty vecot is returned.
     async fn by_schema(&self, schema: &SchemaId) -> Result<Vec<EntryRow>, EntryStorageError> {
         let entries = query_as::<_, EntryRow>(
             "
@@ -246,13 +267,18 @@ impl EntryStore<EntryRow> for SqlStorage {
         Ok(entries)
     }
 
+    /// Get all entries of a given schema
+    ///
+    /// Returns a result containing a vector of all entries which follow the passed
+    /// schema (identified by it's `SchemaId`). If no entries exist, or the schema
+    /// is not known by this node, then an empty vector is returned.
     async fn get_next_n_entries_after_seq(
         &self,
         author: &Author,
         log_id: &LogId,
         seq_num: &SeqNum,
         max_number_of_entries: usize,
-    ) -> Result<Option<Vec<EntryRow>>, EntryStorageError> {
+    ) -> Result<Vec<EntryRow>, EntryStorageError> {
         let max_seq_num = seq_num.as_u64() as usize + max_number_of_entries - 1;
         let entries = query_as::<_, EntryRow>(
             "
@@ -282,9 +308,18 @@ impl EntryStore<EntryRow> for SqlStorage {
         .await
         .map_err(|e| EntryStorageError::Custom(e.to_string()))?;
 
-        Ok(Some(entries))
+        Ok(entries)
     }
 
+    /// Get all entries which make up the certificate pool for a specified entry.
+    ///
+    /// Returns a result containing a vector of all stored entries which are part
+    /// the passed entries' certificate pool. Errors if a fatal storage error
+    /// occurs.
+    ///
+    /// It is worth noting that this method doesn't check if the certificate pool
+    /// is complete, it only returns entries which are part of the pool and found
+    /// in storage. If an entry was not stored, then the pool may be incomplete.
     async fn get_all_lipmaa_entries_for_entry(
         &self,
         author: &Author,
@@ -553,7 +588,6 @@ mod tests {
         let entries = storage_provider
             .get_next_n_entries_after_seq(&author, &LogId::default(), &SeqNum::default(), 20)
             .await
-            .unwrap()
             .unwrap();
         for entry in entries.clone() {
             assert!(entry.seq_num().as_u64() >= 1 && entry.seq_num().as_u64() <= 20)
