@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use p2panda_rs::document::{DocumentId, DocumentViewId};
+use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{

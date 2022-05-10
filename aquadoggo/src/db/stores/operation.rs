@@ -273,9 +273,9 @@ impl OperationStore<OperationStorage> for SqlStorage {
                 operations_v1
             LEFT JOIN operation_fields_v1
                 ON
-                    operation_fields_v1.operation_id = operations_v1.operation_id
+                    document_view_fields.operation_id = operations_v1.operation_id
             WHERE
-                operations_v1.operation_id = $1
+            document_view_fields.document_id = $1
             ",
         )
         .bind(id.as_str())

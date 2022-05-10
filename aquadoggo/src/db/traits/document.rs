@@ -8,7 +8,8 @@ use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::operation::{OperationFields, OperationId, OperationValue};
 use p2panda_rs::schema::SchemaId;
 
-use crate::db::errors::DocumentViewStorageError;
+use crate::db::errors::DocumentStorageError;
+use crate::db::stores::operation::OperationStorage;
 
 /// The string name of a documents field
 pub type FieldName = String;
@@ -44,10 +45,10 @@ pub trait DocumentStore<StorageDocumentView: AsStorageDocumentView> {
         document_view: &DocumentViewId,
         field_ids: &FieldIds,
         schema_id: &SchemaId,
-    ) -> Result<bool, DocumentViewStorageError>;
+    ) -> Result<bool, DocumentStorageError>;
 
     async fn get_document_view_by_id(
         &self,
         id: &DocumentViewId,
-    ) -> Result<DocumentViewFields, DocumentViewStorageError>;
+    ) -> Result<OperationStorage, DocumentStorageError>;
 }
