@@ -50,7 +50,7 @@ pub trait OperationStore<StorageOperation: AsStorageOperation> {
         id: OperationId,
     ) -> Result<Option<StorageOperation>, OperationStorageError>;
 
-    /// Retrieve the id of the document an operation is contained within.
+    /// Get the id of the document an operation is contained within.
     ///
     /// If no document was found, then this method returns a result wrapping
     /// a None variant.
@@ -59,18 +59,11 @@ pub trait OperationStore<StorageOperation: AsStorageOperation> {
         id: OperationId,
     ) -> Result<Option<DocumentId>, OperationStorageError>;
 
-    // /// Get just the fields of an operation, identified by their OperationId.
-    // async fn get_operation_fields_by_id(
-    //     &self,
-    //     id: OperationId,
-    // ) -> Result<Option<OperationFields>, OperationStorageError>;
-
-    // async fn get_operation_value_by_id(
-    //     &self,
-    //     id: OperationId,
-    //     name: String,
-    // ) -> Result<OperationValue, OperationStorageError>;
-
+    /// Get all operations which are part of a specific document.
+    ///
+    /// Returns a result containing a vector of operations. If no document
+    /// was found then an empty vecotr is returned. Errors if a fatal storage
+    /// error occured.
     async fn get_operations_by_document_id(
         &self,
         id: &DocumentId,
