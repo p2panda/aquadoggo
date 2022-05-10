@@ -471,7 +471,7 @@ mod tests {
 
         assert_eq!(
             result.unwrap_err().to_string(),
-            "Error occured in OperationStore: error returned from database: UNIQUE constraint failed: operations_v1.entry_hash"
+            "A fatal error occured in OperationStore: error returned from database: UNIQUE constraint failed: operations_v1.entry_hash"
         )
     }
 
