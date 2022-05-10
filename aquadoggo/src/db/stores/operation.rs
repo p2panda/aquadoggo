@@ -118,6 +118,14 @@ impl OperationStore<OperationStorage> for SqlStorage {
         &self,
         operation: &OperationStorage,
     ) -> Result<(), OperationStorageError> {
+        // Start a transaction, any db insertions after this point, and before the `commit()`
+        // will be rolled back in the event of an error.
+        let transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| OperationStorageError::Custom(e.to_string()))?;
+
         // TODO: Once we have resolved https://github.com/p2panda/p2panda/issues/315 then
         // we can derive this string from the previous_operations' `DocumentViewId`
         let mut prev_op_string = "".to_string();
@@ -235,6 +243,12 @@ impl OperationStore<OperationStorage> for SqlStorage {
         {
             return Err(OperationStorageError::InsertionError(operation.id()));
         }
+
+        // Commit the transaction.
+        transaction
+            .commit()
+            .await
+            .map_err(|e| OperationStorageError::Custom(e.to_string()))?;
 
         Ok(())
     }
