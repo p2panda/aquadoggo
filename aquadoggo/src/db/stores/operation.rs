@@ -98,7 +98,7 @@ impl OperationStore<OperationStorage> for SqlStorage {
         .bind(id.as_str())
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| OperationStorageError::Custom(e.to_string()))?;
+        .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
 
         Ok(document_id.map(|id_str| id_str.parse().unwrap()))
     }
@@ -124,7 +124,7 @@ impl OperationStore<OperationStorage> for SqlStorage {
             .pool
             .begin()
             .await
-            .map_err(|e| OperationStorageError::Custom(e.to_string()))?;
+            .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
 
         // TODO: Once we have resolved https://github.com/p2panda/p2panda/issues/315 then
         // we can derive this string from the previous_operations' `DocumentViewId`
@@ -161,7 +161,7 @@ impl OperationStore<OperationStorage> for SqlStorage {
         .bind(prev_op_string.as_str())
         .execute(&self.pool)
         .await
-        .map_err(|e| OperationStorageError::Custom(e.to_string()))?;
+        .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
 
         // Loop over all previous operations and insert one row for
         // each, construct and execute the queries, return their futures
@@ -185,7 +185,7 @@ impl OperationStore<OperationStorage> for SqlStorage {
             }))
             .await
             // If any of database errors occur we will catch that here
-            .map_err(|e| OperationStorageError::Custom(e.to_string()))?;
+            .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
 
         // Same pattern as above but now for operation_fields. Construct and execute the
         // queries, return their futures and execute all of them with `try_join_all()`.
@@ -225,7 +225,7 @@ impl OperationStore<OperationStorage> for SqlStorage {
                 }))
                 .await
                 // If any queries error, we catch that here.
-                .map_err(|e| OperationStorageError::Custom(e.to_string()))?;
+                .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
                 Some(result)
             }
             None => None,
@@ -248,7 +248,7 @@ impl OperationStore<OperationStorage> for SqlStorage {
         transaction
             .commit()
             .await
-            .map_err(|e| OperationStorageError::Custom(e.to_string()))?;
+            .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
 
         Ok(())
     }
@@ -287,7 +287,7 @@ impl OperationStore<OperationStorage> for SqlStorage {
         .bind(id.as_str())
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| OperationStorageError::Custom(e.to_string()))?;
+        .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
 
         let operation = parse_operation_rows(operation_rows);
         Ok(operation)
@@ -322,7 +322,7 @@ impl OperationStore<OperationStorage> for SqlStorage {
         .bind(id.as_str())
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| OperationStorageError::Custom(e.to_string()))?;
+        .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
 
         let mut grouped_operation_rows: BTreeMap<String, Vec<OperationFieldsJoinedRow>> =
             BTreeMap::new();
