@@ -39,7 +39,7 @@ pub trait OperationStore<StorageOperation: AsStorageOperation> {
     async fn insert_operation(
         &self,
         operation: &StorageOperation,
-    ) -> Result<bool, OperationStorageError>;
+    ) -> Result<(), OperationStorageError>;
 
     /// Get an operation identified by it's OperationId.
     ///

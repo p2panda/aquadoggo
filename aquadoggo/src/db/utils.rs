@@ -155,3 +155,46 @@ pub fn parse_operation_rows(
         &document_id,
     ))
 }
+
+pub fn parse_value_to_string_vec(value: &OperationValue) -> Vec<Option<String>> {
+    match value {
+        OperationValue::Boolean(bool) => vec![Some(bool.to_string())],
+        OperationValue::Integer(int) => vec![Some(int.to_string())],
+        OperationValue::Float(float) => vec![Some(float.to_string())],
+        OperationValue::Text(str) => vec![Some(str.to_string())],
+        OperationValue::Relation(relation) => {
+            vec![Some(relation.document_id().as_str().to_string())]
+        }
+        OperationValue::RelationList(relation_list) => {
+            let mut db_values = Vec::new();
+            for document_id in relation_list.iter() {
+                db_values.push(Some(document_id.as_str().to_string()))
+            }
+            db_values
+        }
+        OperationValue::PinnedRelation(pinned_relation) => {
+            // Deriving string id here for now until implemented in p2panda-rs
+            let mut id_str = "".to_string();
+            for (i, operation_id) in pinned_relation.view_id().sorted().iter().enumerate() {
+                let separator = if i == 0 { "" } else { "_" };
+                id_str += format!("{}{}", separator, operation_id.as_hash().as_str()).as_str();
+            }
+
+            vec![Some(id_str)]
+        }
+        OperationValue::PinnedRelationList(pinned_relation_list) => {
+            let mut db_values = Vec::new();
+            for document_view_id in pinned_relation_list.iter() {
+                // Deriving string id here for now until implemented in p2panda-rs
+                let mut id_str = "".to_string();
+                for (i, operation_id) in document_view_id.sorted().iter().enumerate() {
+                    let separator = if i == 0 { "" } else { "_" };
+                    id_str += format!("{}{}", separator, operation_id.as_hash().as_str()).as_str();
+                }
+
+                db_values.push(Some(id_str))
+            }
+            db_values
+        }
+    }
+}
