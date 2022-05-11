@@ -10,13 +10,14 @@ use p2panda_rs::schema::SchemaId;
 use sqlx::{query, query_as};
 
 use crate::db::errors::DocumentStorageError;
+use crate::db::models::document::DocumentViewFieldRow;
 use crate::db::models::operation::{OperationFieldRow, OperationFieldsJoinedRow};
 use crate::db::provider::SqlStorage;
 use crate::db::traits::{
     AsStorageDocumentView, AsStorageOperation, DocumentStore, DocumentViewFields, FieldIds,
     FieldName,
 };
-use crate::db::utils::parse_operation_rows;
+use crate::db::utils::{parse_document_view_field_rows, parse_operation_rows};
 
 use super::operation::OperationStorage;
 
@@ -155,29 +156,18 @@ impl DocumentStore<DocumentViewStorage> for SqlStorage {
     async fn get_document_view_by_id(
         &self,
         id: &DocumentViewId,
-    ) -> Result<OperationStorage, DocumentStorageError> {
-        // Store the document view id in its hashed form
-        let document_view_hash = DocumentViewHash::from(id);
-
-        let document_view_field_rows = query_as::<_, OperationFieldsJoinedRow>(
+    ) -> Result<DocumentView, DocumentStorageError> {
+        let document_view_field_rows = query_as::<_, DocumentViewFieldRow>(
             "
             SELECT
-                operations_v1.author,
-                operations_v1.document_id,
-                operations_v1.operation_id,
-                operations_v1.entry_hash,
-                operations_v1.action,
-                operations_v1.schema_id,
-                operations_v1.previous_operations,
+                document_view_fields.document_view_id,
+                document_view_fields.operation_id,
                 document_view_fields.name,
-                operation_fields_v1.value,
-                operation_fields_v1.field_type
+                operation_fields_v1.field_type,
+                operation_fields_v1.value
             FROM
-                operations_v1
+                document_view_fields
             LEFT JOIN operation_fields_v1
-                ON
-                    operation_fields_v1.operation_id = operations_v1.operation_id
-            LEFT JOIN document_view_fields
                 ON
                     operation_fields_v1.operation_id = document_view_fields.operation_id
                 AND
@@ -186,12 +176,15 @@ impl DocumentStore<DocumentViewStorage> for SqlStorage {
                 document_view_fields.document_view_id = $1
             ",
         )
-        .bind(document_view_hash.as_str())
+        .bind(id.as_str())
         .fetch_all(&self.pool)
         .await
         .map_err(|e| DocumentStorageError::Custom(e.to_string()))?;
 
-        Ok(parse_operation_rows(document_view_field_rows).unwrap())
+        Ok(DocumentView::new(
+            id.to_owned(),
+            parse_document_view_field_rows(document_view_field_rows),
+        ))
     }
 }
 
@@ -292,53 +285,54 @@ mod tests {
         println!("{:#?}", result);
         assert!(result.is_ok());
 
-        // // Construct an UPDATE operation which only updates one field.
-        // let mut fields = OperationFields::new();
-        // fields
-        //     .add("username", OperationValue::Text("yahoooo".to_owned()))
-        //     .unwrap();
-        // let update_operation = Operation::new_update(
-        //     SchemaId::from_str(TEST_SCHEMA_ID).unwrap(),
-        //     vec![operation_id],
-        //     fields,
-        // )
-        // .unwrap();
+        // Construct an UPDATE operation which only updates one field.
+        let mut fields = OperationFields::new();
+        fields
+            .add("username", OperationValue::Text("yahoooo".to_owned()))
+            .unwrap();
+        let update_operation = Operation::new_update(
+            SchemaId::from_str(TEST_SCHEMA_ID).unwrap(),
+            vec![operation_id],
+            fields,
+        )
+        .unwrap();
 
-        // // Give it a dummy id.
-        // let update_operation_id = OperationId::new(
-        //     "0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
-        //         .parse()
-        //         .unwrap(),
-        // );
+        // Give it a dummy id.
+        let update_operation_id = OperationId::new(
+            "0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                .parse()
+                .unwrap(),
+        );
 
-        // // Update the field_ids to include the newly update operation_id for the "username" field.
-        // field_ids.insert("username".to_string(), update_operation_id.clone());
-        // let doggo_update_operation = OperationStorage::new(
-        //     &author,
-        //     &update_operation,
-        //     &update_operation_id,
-        //     &document_id,
-        // );
+        // Update the field_ids to include the newly update operation_id for the "username" field.
+        field_ids.insert("username".to_string(), update_operation_id.clone());
+        let doggo_update_operation = OperationStorage::new(
+            &author,
+            &update_operation,
+            &update_operation_id,
+            &document_id,
+        );
 
-        // // Insert the operation.
-        // storage_provider
-        //     .insert_operation(&doggo_update_operation)
-        //     .await
-        //     .unwrap();
+        // Insert the operation.
+        storage_provider
+            .insert_operation(&doggo_update_operation)
+            .await
+            .unwrap();
 
-        // // Update the document view.
-        // storage_provider
-        //     .insert_document_view(&update_operation_id.clone().into(), &field_ids, &schema_id)
-        //     .await
-        //     .unwrap();
+        // Update the document view.
+        storage_provider
+            .insert_document_view(&update_operation_id.clone().into(), &field_ids, &schema_id)
+            .await
+            .unwrap();
 
-        // // Query the new document view.
-        // //
-        // // It will combine the origin fields with the newly updated "username" field and return the completed fields.
-        // let result = storage_provider
-        //     .get_document_view_by_id(&update_operation_id.into())
-        //     .await;
+        // Query the new document view.
+        //
+        // It will combine the origin fields with the newly updated "username" field and return the completed fields.
+        let result = storage_provider
+            .get_document_view_by_id(&update_operation_id.into())
+            .await;
 
-        // assert!(result.is_ok())
+        println!("{:#?}", result);
+        assert!(result.is_ok())
     }
 }

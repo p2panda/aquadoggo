@@ -4,12 +4,12 @@ use std::collections::btree_map::Iter;
 use std::collections::BTreeMap;
 
 use async_trait::async_trait;
-use p2panda_rs::document::DocumentViewId;
+use p2panda_rs::document::{DocumentView, DocumentViewId};
 use p2panda_rs::operation::{OperationFields, OperationId, OperationValue};
 use p2panda_rs::schema::SchemaId;
 
 use crate::db::errors::DocumentStorageError;
-use crate::db::stores::operation::OperationStorage;
+use crate::db::models::document::DocumentViewFieldRow;
 
 /// The string name of a documents field
 pub type FieldName = String;
@@ -50,5 +50,5 @@ pub trait DocumentStore<StorageDocumentView: AsStorageDocumentView> {
     async fn get_document_view_by_id(
         &self,
         id: &DocumentViewId,
-    ) -> Result<OperationStorage, DocumentStorageError>;
+    ) -> Result<DocumentView, DocumentStorageError>;
 }
