@@ -4,58 +4,58 @@ use std::collections::btree_map::Iter;
 
 use async_trait::async_trait;
 use futures::future::try_join_all;
-use p2panda_rs::document::{DocumentView, DocumentViewFields, DocumentViewId, DocumentViewValue};
+use p2panda_rs::document::{DocumentView, DocumentViewId};
 use p2panda_rs::schema::SchemaId;
 use sqlx::{query, query_as};
 
 use crate::db::errors::DocumentStorageError;
 use crate::db::models::document::DocumentViewFieldRow;
 use crate::db::provider::SqlStorage;
-use crate::db::traits::{AsStorageDocumentView, DocumentStore};
+use crate::db::traits::DocumentStore;
 use crate::db::utils::parse_document_view_field_rows;
 
-/// Aquadoggo struct which will implement AsStorageDocumentView trait.
-#[derive(Debug, Clone)]
-pub struct DocumentViewStorage {
-    document_view: DocumentView,
-    schema_id: SchemaId,
-}
+// /// Aquadoggo struct which will implement AsStorageDocumentView trait.
+// #[derive(Debug, Clone)]
+// pub struct DocumentViewStorage {
+//     document_view: DocumentView,
+//     schema_id: SchemaId,
+// }
 
-impl DocumentViewStorage {
-    pub fn new(document_view: &DocumentView, schema_id: &SchemaId) -> Self {
-        Self {
-            document_view: document_view.clone(),
-            schema_id: schema_id.clone(),
-        }
-    }
-}
+// impl DocumentViewStorage {
+//     pub fn new(document_view: &DocumentView, schema_id: &SchemaId) -> Self {
+//         Self {
+//             document_view: document_view.clone(),
+//             schema_id: schema_id.clone(),
+//         }
+//     }
+// }
 
-impl AsStorageDocumentView for DocumentViewStorage {
-    type AsStorageDocumentViewError = DocumentStorageError;
+// impl AsStorageDocumentView for DocumentViewStorage {
+//     type AsStorageDocumentViewError = DocumentStorageError;
 
-    fn id(&self) -> &DocumentViewId {
-        self.document_view.id()
-    }
+//     fn id(&self) -> &DocumentViewId {
+//         self.document_view.id()
+//     }
 
-    fn iter(&self) -> Iter<String, DocumentViewValue> {
-        self.document_view.iter()
-    }
+//     fn iter(&self) -> Iter<String, DocumentViewValue> {
+//         self.document_view.iter()
+//     }
 
-    fn get(&self, key: &str) -> Option<&DocumentViewValue> {
-        self.document_view.get(key)
-    }
+//     fn get(&self, key: &str) -> Option<&DocumentViewValue> {
+//         self.document_view.get(key)
+//     }
 
-    fn schema_id(&self) -> &SchemaId {
-        &self.schema_id
-    }
+//     fn schema_id(&self) -> &SchemaId {
+//         &self.schema_id
+//     }
 
-    fn fields(&self) -> &DocumentViewFields {
-        self.fields()
-    }
-}
+//     fn fields(&self) -> &DocumentViewFields {
+//         self.fields()
+//     }
+// }
 
 #[async_trait]
-impl DocumentStore<DocumentViewStorage> for SqlStorage {
+impl DocumentStore for SqlStorage {
     /// Insert a document_view into the db. Requires that all relevent operations are already in
     /// the db as this method only creates relations between document view fields and their current
     /// values (last updated operation value).
