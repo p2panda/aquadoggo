@@ -4,7 +4,7 @@ use std::collections::btree_map::Iter;
 
 use async_trait::async_trait;
 
-use p2panda_rs::document::{DocumentView, DocumentViewFields, DocumentViewId, DocumentViewValue};
+use p2panda_rs::document::{DocumentViewFields, DocumentViewId, DocumentViewValue};
 use p2panda_rs::schema::SchemaId;
 
 use crate::db::errors::DocumentStorageError;

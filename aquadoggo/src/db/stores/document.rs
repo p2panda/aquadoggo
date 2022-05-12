@@ -154,18 +154,19 @@ impl DocumentStore<StorageDocumentView> for SqlStorage {
 mod tests {
     use std::str::FromStr;
 
-    use p2panda_rs::document::{DocumentId, DocumentViewFields, DocumentViewId, DocumentViewValue};
+    use p2panda_rs::document::{DocumentId, DocumentViewFields, DocumentViewValue};
     use p2panda_rs::identity::Author;
     use p2panda_rs::operation::{
         AsOperation, Operation, OperationFields, OperationId, OperationValue,
     };
     use p2panda_rs::schema::SchemaId;
+    use p2panda_rs::storage_provider;
     use p2panda_rs::test_utils::constants::{DEFAULT_HASH, TEST_SCHEMA_ID};
 
     use crate::db::provider::SqlStorage;
     use crate::db::stores::document::StorageDocumentView;
     use crate::db::stores::operation::OperationStorage;
-    use crate::db::stores::test_utils::test_create_operation;
+    use crate::db::stores::test_utils::{test_create_operation, test_db};
     use crate::db::traits::OperationStore;
     use crate::test_helpers::initialize_db;
 
@@ -179,17 +180,16 @@ mod tests {
         let storage_provider = SqlStorage { pool };
 
         let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
-        let document_view_id = DocumentViewId::from(operation_id.clone());
-        let operation = test_create_operation();
-        let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
-        let document_view_fields = DocumentViewFields::new_from_operation_fields(
-            &operation_id,
-            &operation.fields().unwrap(),
+        let document_view = StorageDocumentView::new(
+            &operation_id.clone().into(),
+            &DocumentViewFields::new_from_operation_fields(
+                &operation_id,
+                &test_create_operation().fields().unwrap(),
+            ),
         );
-        let document_view = StorageDocumentView::new(&document_view_id, &document_view_fields);
 
         let result = storage_provider
-            .insert_document_view(&document_view, &schema_id)
+            .insert_document_view(&document_view, &SchemaId::from_str(TEST_SCHEMA_ID).unwrap())
             .await;
 
         assert!(result.is_ok());
@@ -197,24 +197,27 @@ mod tests {
 
     #[tokio::test]
     async fn get_document_view() {
-        let pool = initialize_db().await;
-        let storage_provider = SqlStorage { pool };
+        let storage_provider = test_db(0, false).await;
         let author = Author::new(TEST_AUTHOR).unwrap();
 
         let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
-        let document_id = DocumentId::new(operation_id.clone());
-        let document_view_id = DocumentViewId::from(operation_id.clone());
-        let operation = test_create_operation();
-        let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
         let mut document_view_fields = DocumentViewFields::new_from_operation_fields(
             &operation_id,
-            &operation.fields().unwrap(),
+            &test_create_operation().fields().unwrap(),
         );
-        let document_view = StorageDocumentView::new(&document_view_id, &document_view_fields);
+        let document_view =
+            StorageDocumentView::new(&operation_id.clone().into(), &document_view_fields);
+
+        let document_id = DocumentId::new(operation_id.clone());
+        let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
 
         // Construct a doggo operation for publishing.
-        let doggo_operation =
-            OperationStorage::new(&author, &operation, &operation_id, &document_id);
+        let doggo_operation = OperationStorage::new(
+            &author,
+            &test_create_operation(),
+            &operation_id,
+            &document_id,
+        );
 
         // Insert the CREATE op.
         storage_provider
@@ -230,7 +233,7 @@ mod tests {
 
         // Retrieve the document view.
         let result = storage_provider
-            .get_document_view_by_id(&document_view_id)
+            .get_document_view_by_id(&operation_id.clone().into())
             .await;
 
         println!("{:#?}", result);
