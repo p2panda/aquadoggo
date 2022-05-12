@@ -152,31 +152,27 @@ impl DocumentStore<StorageDocumentView> for SqlStorage {
 
 #[cfg(test)]
 mod tests {
+    use std::convert::TryFrom;
     use std::str::FromStr;
 
     use p2panda_rs::document::{DocumentId, DocumentViewFields, DocumentViewValue};
-    use p2panda_rs::identity::Author;
+    use p2panda_rs::entry::{LogId, SeqNum};
+    use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::{
         AsOperation, Operation, OperationFields, OperationId, OperationValue,
     };
     use p2panda_rs::schema::SchemaId;
-    use p2panda_rs::test_utils::constants::{DEFAULT_HASH, TEST_SCHEMA_ID};
+    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
+    use p2panda_rs::test_utils::constants::{DEFAULT_HASH, DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
 
     use crate::db::provider::SqlStorage;
-    use crate::db::stores::document::StorageDocumentView;
-    use crate::db::stores::operation::OperationStorage;
+    use crate::db::stores::document::{DocumentStore, StorageDocumentView};
     use crate::db::stores::test_utils::{test_create_operation, test_db};
-    use crate::db::traits::OperationStore;
     use crate::test_helpers::initialize_db;
-
-    use super::DocumentStore;
-
-    const TEST_AUTHOR: &str = "1a8a62c5f64eed987326513ea15a6ea2682c256ac57a418c1c92d96787c8b36e";
 
     #[tokio::test]
     async fn insert_document_view() {
-        let pool = initialize_db().await;
-        let storage_provider = SqlStorage { pool };
+        let storage_provider = test_db(0, false).await;
 
         let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
         let document_view = StorageDocumentView::new(
@@ -196,33 +192,29 @@ mod tests {
 
     #[tokio::test]
     async fn get_document_view() {
-        let storage_provider = test_db(0, false).await;
-        let author = Author::new(TEST_AUTHOR).unwrap();
+        let storage_provider = test_db(2, false).await;
+        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
+        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
-        let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
+        let log_id = LogId::default();
+        let seq_num = SeqNum::default();
+
+        let entry = storage_provider
+            .entry_at_seq_num(&author, &log_id, &seq_num)
+            .await
+            .unwrap()
+            .unwrap();
+
+        let operation_id = entry.hash().into();
         let mut document_view_fields = DocumentViewFields::new_from_operation_fields(
             &operation_id,
-            &test_create_operation().fields().unwrap(),
+            &entry.operation().fields().unwrap(),
         );
+
         let document_view =
             StorageDocumentView::new(&operation_id.clone().into(), &document_view_fields);
 
-        let document_id = DocumentId::new(operation_id.clone());
         let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
-
-        // Construct a doggo operation for publishing.
-        let doggo_operation = OperationStorage::new(
-            &author,
-            &test_create_operation(),
-            &operation_id,
-            &document_id,
-        );
-
-        // Insert the CREATE op.
-        storage_provider
-            .insert_operation(&doggo_operation)
-            .await
-            .unwrap();
 
         // Insert the document view.
         storage_provider
@@ -238,44 +230,32 @@ mod tests {
         println!("{:#?}", result);
         assert!(result.is_ok());
 
-        // Construct an UPDATE operation which only updates one field.
-        let mut fields = OperationFields::new();
-        let value = OperationValue::Text("yahoooo".to_owned());
-        fields.add("username", value.clone()).unwrap();
-        let update_operation = Operation::new_update(
-            SchemaId::from_str(TEST_SCHEMA_ID).unwrap(),
-            vec![operation_id],
-            fields,
-        )
-        .unwrap();
+        let seq_num = SeqNum::new(2).unwrap();
 
-        // Give it a dummy id.
-        let update_operation_id = OperationId::new(
-            "0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
-                .parse()
-                .unwrap(),
-        );
+        let entry = storage_provider
+            .entry_at_seq_num(&author, &log_id, &seq_num)
+            .await
+            .unwrap()
+            .unwrap();
 
-        let doggo_update_operation = OperationStorage::new(
-            &author,
-            &update_operation,
-            &update_operation_id,
-            &document_id,
-        );
+        let operation_id: OperationId = entry.hash().into();
 
         document_view_fields.insert(
             "username",
-            DocumentViewValue::Value(update_operation_id.clone(), value),
+            DocumentViewValue::Value(
+                operation_id.clone(),
+                entry
+                    .operation()
+                    .fields()
+                    .unwrap()
+                    .get("username")
+                    .unwrap()
+                    .clone(),
+            ),
         );
 
         let document_view =
-            StorageDocumentView::new(&update_operation_id.clone().into(), &document_view_fields);
-
-        // Insert the operation.
-        storage_provider
-            .insert_operation(&doggo_update_operation)
-            .await
-            .unwrap();
+            StorageDocumentView::new(&operation_id.clone().into(), &document_view_fields);
 
         // Update the document view.
         storage_provider
@@ -287,7 +267,7 @@ mod tests {
         //
         // It will combine the origin fields with the newly updated "username" field and return the completed fields.
         let result = storage_provider
-            .get_document_view_by_id(&update_operation_id.into())
+            .get_document_view_by_id(&operation_id.into())
             .await;
 
         println!("{:#?}", result);
