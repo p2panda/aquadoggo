@@ -1,9 +1,10 @@
 -- SPDX-License-Identifier: AGPL-3.0-or-later
 
 CREATE TABLE IF NOT EXISTS document_view_fields (
-    document_view_id        TEXT            NOT NULL,
-    operation_id            VARCHAR(64)     NOT NULL,
-    name                    VARCHAR(128)    NOT NULL
+    document_view_id            TEXT            NOT NULL,
+    operation_id                VARCHAR(64)     NOT NULL,
+    name                        VARCHAR(128)    NOT NULL,
+    FOREIGN KEY(operation_id)   REFERENCES      operations_v1(operation_id)
 );
 
 CREATE INDEX idx_document_view_fields ON document_view_fields (document_view_id, operation_id, name);

@@ -208,7 +208,7 @@ mod tests {
 
     #[tokio::test]
     async fn insert_document_view() {
-        let storage_provider = test_db(0, false).await;
+        let storage_provider = test_db(1, false).await;
 
         let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
         let document_view = StorageDocumentView::new(
@@ -223,7 +223,7 @@ mod tests {
             .insert_document_view(&document_view, &SchemaId::from_str(TEST_SCHEMA_ID).unwrap())
             .await;
 
-        assert!(result.is_ok());
+        assert!(result.is_err());
     }
 
     #[tokio::test]
