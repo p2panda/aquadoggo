@@ -15,7 +15,7 @@ use crate::db::traits::{AsStorageDocumentView, DocumentStore};
 use crate::db::utils::parse_document_view_field_rows;
 
 /// Aquadoggo struct which will implement AsStorageDocumentView trait.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct StorageDocumentView(DocumentView);
 
 impl StorageDocumentView {
@@ -52,6 +52,14 @@ impl DocumentStore<StorageDocumentView> for SqlStorage {
         document_view: &StorageDocumentView,
         schema_id: &SchemaId,
     ) -> Result<(), DocumentStorageError> {
+        // Start a transaction, any db insertions after this point, and before the `commit()`
+        // will be rolled back in the event of an error.
+        let transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+
         // Insert document view field relations into the db
         let field_relations_insertion_result =
             try_join_all(document_view.iter().map(|(name, value)| {
@@ -104,6 +112,12 @@ impl DocumentStore<StorageDocumentView> for SqlStorage {
             ));
         }
 
+        // Commit the transaction.
+        transaction
+            .commit()
+            .await
+            .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+
         Ok(())
     }
 
@@ -148,7 +162,7 @@ mod tests {
     use std::convert::TryFrom;
     use std::str::FromStr;
 
-    use p2panda_rs::document::{DocumentViewFields, DocumentViewValue};
+    use p2panda_rs::document::{DocumentView, DocumentViewFields, DocumentViewValue};
     use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::{AsOperation, OperationId};
@@ -156,8 +170,41 @@ mod tests {
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
     use p2panda_rs::test_utils::constants::{DEFAULT_HASH, DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
 
+    use crate::db::models::entry::EntryRow;
     use crate::db::stores::document::{DocumentStore, StorageDocumentView};
     use crate::db::stores::test_utils::{test_create_operation, test_db};
+
+    fn entries_to_document_views(entries: &Vec<EntryRow>) -> Vec<StorageDocumentView> {
+        let mut document_views = Vec::new();
+        let mut current_document_view_fields = DocumentViewFields::new();
+        for entry in entries {
+            let operation_id: OperationId = entry.hash().into();
+            for (name, value) in entry.operation().fields().unwrap().iter() {
+                if entry.operation().is_delete() {
+                    current_document_view_fields
+                        .clone()
+                        .iter()
+                        .for_each(|(name, value)| {
+                            current_document_view_fields
+                                .insert(name, DocumentViewValue::Deleted(operation_id.clone()));
+                        });
+                } else {
+                    current_document_view_fields.insert(
+                        name,
+                        DocumentViewValue::Value(operation_id.clone(), value.clone()),
+                    );
+                }
+            }
+            let mut document_view_fields = DocumentViewFields::new_from_operation_fields(
+                &operation_id,
+                &entry.operation().fields().unwrap(),
+            );
+            let document_view =
+                StorageDocumentView::new(&operation_id.clone().into(), &document_view_fields);
+            document_views.push(document_view)
+        }
+        document_views
+    }
 
     #[tokio::test]
     async fn insert_document_view() {
@@ -181,85 +228,36 @@ mod tests {
 
     #[tokio::test]
     async fn get_document_view() {
-        let storage_provider = test_db(2, false).await;
+        // Test setup //
+        let storage_provider = test_db(10, true).await;
         let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
         let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+        let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
 
         let log_id = LogId::default();
         let seq_num = SeqNum::default();
 
-        let entry = storage_provider
-            .entry_at_seq_num(&author, &log_id, &seq_num)
-            .await
-            .unwrap()
-            .unwrap();
-
-        let operation_id = entry.hash().into();
-        let mut document_view_fields = DocumentViewFields::new_from_operation_fields(
-            &operation_id,
-            &entry.operation().fields().unwrap(),
-        );
-
-        let document_view =
-            StorageDocumentView::new(&operation_id.clone().into(), &document_view_fields);
-
-        let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
-
-        // Insert the document view.
-        storage_provider
-            .insert_document_view(&document_view, &schema_id)
+        let entries = storage_provider
+            .get_next_n_entries_after_seq(&author, &log_id, &seq_num, 10)
             .await
             .unwrap();
 
-        // Retrieve the document view.
-        let result = storage_provider
-            .get_document_view_by_id(&operation_id.clone().into())
-            .await;
+        let document_views = entries_to_document_views(&entries);
 
-        println!("{:#?}", result);
-        assert!(result.is_ok());
+        for document_view in document_views.clone() {
+            storage_provider
+                .insert_document_view(&document_view, &schema_id)
+                .await
+                .unwrap();
+        }
 
-        let seq_num = SeqNum::new(2).unwrap();
+        for (count, entry) in entries.iter().enumerate() {
+            let result = storage_provider
+                .get_document_view_by_id(&entry.hash().into())
+                .await;
 
-        let entry = storage_provider
-            .entry_at_seq_num(&author, &log_id, &seq_num)
-            .await
-            .unwrap()
-            .unwrap();
-
-        let operation_id: OperationId = entry.hash().into();
-
-        document_view_fields.insert(
-            "username",
-            DocumentViewValue::Value(
-                operation_id.clone(),
-                entry
-                    .operation()
-                    .fields()
-                    .unwrap()
-                    .get("username")
-                    .unwrap()
-                    .clone(),
-            ),
-        );
-
-        let document_view =
-            StorageDocumentView::new(&operation_id.clone().into(), &document_view_fields);
-
-        // Update the document view.
-        storage_provider
-            .insert_document_view(&document_view, &schema_id)
-            .await
-            .unwrap();
-
-        // Query the new document view.
-        //
-        // It will combine the origin fields with the newly updated "username" field and return the completed fields.
-        let result = storage_provider
-            .get_document_view_by_id(&operation_id.into())
-            .await;
-
-        println!("{:#?}", result);
-        assert!(result.is_ok())
+            assert!(result.is_ok());
+            assert_eq!(&result.unwrap(), document_views.get(count).unwrap());
+        }
     }
 }
