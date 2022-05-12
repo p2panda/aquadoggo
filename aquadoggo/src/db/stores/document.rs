@@ -160,7 +160,6 @@ mod tests {
         AsOperation, Operation, OperationFields, OperationId, OperationValue,
     };
     use p2panda_rs::schema::SchemaId;
-    use p2panda_rs::storage_provider;
     use p2panda_rs::test_utils::constants::{DEFAULT_HASH, TEST_SCHEMA_ID};
 
     use crate::db::provider::SqlStorage;
