@@ -73,8 +73,7 @@ impl DocumentStore<DocumentViewStorage> for SqlStorage {
     /// structure and others may wish to structure things differently.
     async fn insert_document_view(
         &self,
-        document_view_id: &DocumentViewId,
-        field_ids: &FieldIds,
+        document_view: &DocumentView,
         schema_id: &SchemaId,
     ) -> Result<bool, DocumentStorageError> {
         // OBSERVATIONS:
