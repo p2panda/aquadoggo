@@ -59,29 +59,11 @@ impl DocumentStore<DocumentViewStorage> for SqlStorage {
     /// Insert a document_view into the db. Requires that all relevent operations are already in
     /// the db as this method only creates relations between document view fields and their current
     /// values (last updated operation value).
-    ///
-    /// QUESTION: Is this too implementation specific? It assumes quite a lot about the db
-    /// structure and others may wish to structure things differently.
     async fn insert_document_view(
         &self,
         document_view: &DocumentView,
         schema_id: &SchemaId,
     ) -> Result<bool, DocumentStorageError> {
-        // OBSERVATIONS:
-        // - we need to know which operation was LWW for each field.
-        // - this is different from knowing the document view id, which is
-        // just the tip(s) of the graph, and will likely not contain a value
-        // for every field.
-        // - we could record the operation id for each value when we build the
-        //   document
-        // - alternatively we could do some dynamic "reverse" graph traversal
-        // starting from the document view id. This would require
-        // implementing some new traversal logic (maybe it is already underway
-        // somewhere? I remember @cafca working on this a while ago).
-        // - we could also pass in a full list of already sorted operations,
-        // these are already stored on `Document` so could be re-used from
-        // there.
-
         // Insert document view field relations into the db
         let field_relations_inserted = try_join_all(document_view.iter().map(|(name, value)| {
             query(
