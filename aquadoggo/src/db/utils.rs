@@ -2,7 +2,9 @@
 
 use std::collections::BTreeMap;
 
-use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId};
+use p2panda_rs::document::{
+    DocumentId, DocumentView, DocumentViewFields, DocumentViewId, DocumentViewValue,
+};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{
@@ -206,12 +208,12 @@ pub fn parse_value_to_string_vec(value: &OperationValue) -> Vec<String> {
 
 pub fn parse_document_view_field_rows(
     operation_rows: Vec<DocumentViewFieldRow>,
-) -> BTreeMap<String, OperationValue> {
+) -> DocumentViewFields {
     // Unwrap as we know all possible strings should have been accounted for.
     let mut relation_list: Vec<DocumentId> = Vec::new();
     let mut pinned_relation_list: Vec<DocumentViewId> = Vec::new();
 
-    let mut document_view_fields = BTreeMap::new();
+    let mut document_view_fields = DocumentViewFields::new();
 
     // Iterate over returned field values, for each value:
     //  - if it is a simple value type, parse it into an OperationValue and add it to the operation_fields
@@ -221,34 +223,49 @@ pub fn parse_document_view_field_rows(
         match row.field_type.as_str() {
             "bool" => {
                 document_view_fields.insert(
-                    row.name.to_string(),
-                    OperationValue::Boolean(row.value.parse::<bool>().unwrap()),
+                    &row.name,
+                    DocumentViewValue::Value(
+                        row.operation_id.parse::<OperationId>().unwrap(),
+                        OperationValue::Boolean(row.value.parse::<bool>().unwrap()),
+                    ),
                 );
             }
             "int" => {
                 document_view_fields.insert(
-                    row.name.to_string(),
-                    OperationValue::Integer(row.value.parse::<i64>().unwrap()),
+                    &row.name,
+                    DocumentViewValue::Value(
+                        row.operation_id.parse::<OperationId>().unwrap(),
+                        OperationValue::Integer(row.value.parse::<i64>().unwrap()),
+                    ),
                 );
             }
             "float" => {
                 document_view_fields.insert(
-                    row.name.to_string(),
-                    OperationValue::Float(row.value.parse::<f64>().unwrap()),
+                    &row.name,
+                    DocumentViewValue::Value(
+                        row.operation_id.parse::<OperationId>().unwrap(),
+                        OperationValue::Float(row.value.parse::<f64>().unwrap()),
+                    ),
                 );
             }
             "str" => {
                 document_view_fields.insert(
-                    row.name.to_string(),
-                    OperationValue::Text(row.value.clone()),
+                    &row.name,
+                    DocumentViewValue::Value(
+                        row.operation_id.parse::<OperationId>().unwrap(),
+                        OperationValue::Text(row.value.clone()),
+                    ),
                 );
             }
             "relation" => {
                 document_view_fields.insert(
-                    row.name.to_string(),
-                    OperationValue::Relation(Relation::new(
-                        row.value.parse::<DocumentId>().unwrap(),
-                    )),
+                    &row.name,
+                    DocumentViewValue::Value(
+                        row.operation_id.parse::<OperationId>().unwrap(),
+                        OperationValue::Relation(Relation::new(
+                            row.value.parse::<DocumentId>().unwrap(),
+                        )),
+                    ),
                 );
             }
             // A special case, this is a list item, so we push it to a vec but _don't_ add it
@@ -256,10 +273,13 @@ pub fn parse_document_view_field_rows(
             "relation_list" => relation_list.push(row.value.parse::<DocumentId>().unwrap()),
             "pinned_relation" => {
                 document_view_fields.insert(
-                    row.name.to_string(),
-                    OperationValue::PinnedRelation(PinnedRelation::new(
-                        row.value.parse::<DocumentViewId>().unwrap(),
-                    )),
+                    &row.name,
+                    DocumentViewValue::Value(
+                        row.operation_id.parse::<OperationId>().unwrap(),
+                        OperationValue::PinnedRelation(PinnedRelation::new(
+                            row.value.parse::<DocumentViewId>().unwrap(),
+                        )),
+                    ),
                 );
             }
             // A special case, this is a list item, so we push it to a vec but _don't_ add it
@@ -279,8 +299,14 @@ pub fn parse_document_view_field_rows(
     // If so, then parse the `relation_list` vec into an operation value and add it to the document view fields
     if let Some(relation_list_field) = relation_list_field {
         document_view_fields.insert(
-            relation_list_field.name.to_string(),
-            OperationValue::RelationList(RelationList::new(relation_list)),
+            &relation_list_field.name,
+            DocumentViewValue::Value(
+                relation_list_field
+                    .operation_id
+                    .parse::<OperationId>()
+                    .unwrap(),
+                OperationValue::RelationList(RelationList::new(relation_list)),
+            ),
         );
     }
 
@@ -292,8 +318,14 @@ pub fn parse_document_view_field_rows(
     // If so, then parse the `pinned_relation_list` vec into an operation value and add it to the document view fields
     if let Some(pinned_relation_list_field) = pinned_relation_list_field {
         document_view_fields.insert(
-            pinned_relation_list_field.name.to_string(),
-            OperationValue::PinnedRelationList(PinnedRelationList::new(pinned_relation_list)),
+            &pinned_relation_list_field.name,
+            DocumentViewValue::Value(
+                pinned_relation_list_field
+                    .operation_id
+                    .parse::<OperationId>()
+                    .unwrap(),
+                OperationValue::PinnedRelationList(PinnedRelationList::new(pinned_relation_list)),
+            ),
         );
     }
 

@@ -4,36 +4,27 @@ use std::collections::btree_map::Iter;
 
 use async_trait::async_trait;
 use futures::future::try_join_all;
-use p2panda_rs::document::{DocumentView, DocumentViewHash, DocumentViewId};
-use p2panda_rs::operation::OperationValue;
+use p2panda_rs::document::{DocumentView, DocumentViewFields, DocumentViewId, DocumentViewValue};
 use p2panda_rs::schema::SchemaId;
 use sqlx::{query, query_as};
 
 use crate::db::errors::DocumentStorageError;
 use crate::db::models::document::DocumentViewFieldRow;
-use crate::db::models::operation::{OperationFieldRow, OperationFieldsJoinedRow};
 use crate::db::provider::SqlStorage;
-use crate::db::traits::{
-    AsStorageDocumentView, AsStorageOperation, DocumentStore, DocumentViewFields, FieldIds,
-    FieldName,
-};
-use crate::db::utils::{parse_document_view_field_rows, parse_operation_rows};
-
-use super::operation::OperationStorage;
+use crate::db::traits::{AsStorageDocumentView, DocumentStore};
+use crate::db::utils::parse_document_view_field_rows;
 
 /// Aquadoggo struct which will implement AsStorageDocumentView trait.
 #[derive(Debug, Clone)]
 pub struct DocumentViewStorage {
     document_view: DocumentView,
-    field_ids: FieldIds,
     schema_id: SchemaId,
 }
 
 impl DocumentViewStorage {
-    pub fn new(document_view: &DocumentView, field_ids: &FieldIds, schema_id: &SchemaId) -> Self {
+    pub fn new(document_view: &DocumentView, schema_id: &SchemaId) -> Self {
         Self {
             document_view: document_view.clone(),
-            field_ids: field_ids.clone(),
             schema_id: schema_id.clone(),
         }
     }
@@ -42,24 +33,24 @@ impl DocumentViewStorage {
 impl AsStorageDocumentView for DocumentViewStorage {
     type AsStorageDocumentViewError = DocumentStorageError;
 
-    fn id(&self) -> DocumentViewId {
-        self.document_view.id().clone()
+    fn id(&self) -> &DocumentViewId {
+        self.document_view.id()
     }
 
-    fn iter(&self) -> Iter<FieldName, OperationValue> {
+    fn iter(&self) -> Iter<String, DocumentViewValue> {
         self.document_view.iter()
     }
 
-    fn get(&self, key: &str) -> Option<&OperationValue> {
+    fn get(&self, key: &str) -> Option<&DocumentViewValue> {
         self.document_view.get(key)
     }
 
-    fn schema_id(&self) -> SchemaId {
-        self.schema_id.clone()
+    fn schema_id(&self) -> &SchemaId {
+        &self.schema_id
     }
 
-    fn field_ids(&self) -> FieldIds {
-        self.field_ids.clone()
+    fn fields(&self) -> &DocumentViewFields {
+        self.fields()
     }
 }
 
@@ -92,7 +83,7 @@ impl DocumentStore<DocumentViewStorage> for SqlStorage {
         // there.
 
         // Insert document view field relations into the db
-        let field_relations_inserted = try_join_all(field_ids.iter().map(|field| {
+        let field_relations_inserted = try_join_all(document_view.iter().map(|(name, value)| {
             query(
                 "
                 INSERT INTO
@@ -105,9 +96,9 @@ impl DocumentStore<DocumentViewStorage> for SqlStorage {
                     ($1, $2, $3)
                 ",
             )
-            .bind(document_view_id.as_str())
-            .bind(field.1.as_str().to_owned())
-            .bind(field.0.as_str())
+            .bind(document_view.id().as_str())
+            .bind(value.id().as_str().to_owned())
+            .bind(name)
             .execute(&self.pool)
         }))
         .await
@@ -137,7 +128,7 @@ impl DocumentStore<DocumentViewStorage> for SqlStorage {
                 ($1, $2)
             ",
         )
-        .bind(document_view_id.as_str())
+        .bind(document_view.id().as_str())
         .bind(schema_id.as_str())
         .execute(&self.pool)
         .await
@@ -191,7 +182,9 @@ impl DocumentStore<DocumentViewStorage> for SqlStorage {
 mod tests {
     use std::str::FromStr;
 
-    use p2panda_rs::document::{DocumentId, DocumentViewId};
+    use p2panda_rs::document::{
+        DocumentId, DocumentView, DocumentViewFields, DocumentViewId, DocumentViewValue,
+    };
     use p2panda_rs::identity::Author;
     use p2panda_rs::operation::{
         AsOperation, Operation, OperationFields, OperationId, OperationValue,
@@ -205,7 +198,7 @@ mod tests {
     use crate::db::traits::OperationStore;
     use crate::test_helpers::initialize_db;
 
-    use super::{DocumentStore, FieldIds};
+    use super::DocumentStore;
 
     const TEST_AUTHOR: &str = "1a8a62c5f64eed987326513ea15a6ea2682c256ac57a418c1c92d96787c8b36e";
 
@@ -215,18 +208,17 @@ mod tests {
         let storage_provider = SqlStorage { pool };
 
         let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
+        let document_view_id = DocumentViewId::from(operation_id.clone());
         let operation = test_create_operation();
-        let document_view_id: DocumentViewId = operation_id.clone().into();
         let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
-
-        let mut field_ids = FieldIds::new();
-
-        operation.fields().unwrap().keys().iter().for_each(|key| {
-            field_ids.insert(key.clone(), operation_id.clone());
-        });
+        let document_view_fields = DocumentViewFields::new_from_operation_fields(
+            &operation_id,
+            &operation.fields().unwrap(),
+        );
+        let document_view = DocumentView::new(document_view_id, document_view_fields);
 
         let result = storage_provider
-            .insert_document_view(&document_view_id, &field_ids, &schema_id)
+            .insert_document_view(&document_view, &schema_id)
             .await;
 
         assert!(result.is_ok());
@@ -238,27 +230,17 @@ mod tests {
         let storage_provider = SqlStorage { pool };
         let author = Author::new(TEST_AUTHOR).unwrap();
 
-        // Fake id for our first operation.
         let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
-
-        // Coresponding document id.
         let document_id = DocumentId::new(operation_id.clone());
-
-        // The test CREATE operation which contains all fields.
+        let document_view_id = DocumentViewId::from(operation_id.clone());
         let operation = test_create_operation();
-
-        // The document view now is just this one operation.
-        let document_view_id: DocumentViewId = operation_id.clone().into();
-
         let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
-
-        // Init the field ids.
-        let mut field_ids = FieldIds::new();
-
-        // Right now every field is derived from the CREATE operation, so they will all contain that id
-        operation.fields().unwrap().keys().iter().for_each(|key| {
-            field_ids.insert(key.clone(), operation_id.clone());
-        });
+        let mut document_view_fields = DocumentViewFields::new_from_operation_fields(
+            &operation_id,
+            &operation.fields().unwrap(),
+        );
+        let document_view =
+            DocumentView::new(document_view_id.clone(), document_view_fields.clone());
 
         // Construct a doggo operation for publishing.
         let doggo_operation =
@@ -270,9 +252,9 @@ mod tests {
             .await
             .unwrap();
 
-        // Insert the document view, passing in the field_ids created above.
+        // Insert the document view.
         storage_provider
-            .insert_document_view(&document_view_id, &field_ids, &schema_id)
+            .insert_document_view(&document_view, &schema_id)
             .await
             .unwrap();
 
@@ -286,9 +268,8 @@ mod tests {
 
         // Construct an UPDATE operation which only updates one field.
         let mut fields = OperationFields::new();
-        fields
-            .add("username", OperationValue::Text("yahoooo".to_owned()))
-            .unwrap();
+        let value = OperationValue::Text("yahoooo".to_owned());
+        fields.add("username", value.clone()).unwrap();
         let update_operation = Operation::new_update(
             SchemaId::from_str(TEST_SCHEMA_ID).unwrap(),
             vec![operation_id],
@@ -303,14 +284,20 @@ mod tests {
                 .unwrap(),
         );
 
-        // Update the field_ids to include the newly update operation_id for the "username" field.
-        field_ids.insert("username".to_string(), update_operation_id.clone());
         let doggo_update_operation = OperationStorage::new(
             &author,
             &update_operation,
             &update_operation_id,
             &document_id,
         );
+
+        document_view_fields.insert(
+            "username",
+            DocumentViewValue::Value(update_operation_id.clone(), value),
+        );
+
+        let document_view =
+            DocumentView::new(update_operation_id.clone().into(), document_view_fields);
 
         // Insert the operation.
         storage_provider
@@ -320,7 +307,7 @@ mod tests {
 
         // Update the document view.
         storage_provider
-            .insert_document_view(&update_operation_id.clone().into(), &field_ids, &schema_id)
+            .insert_document_view(&document_view, &schema_id)
             .await
             .unwrap();
 
