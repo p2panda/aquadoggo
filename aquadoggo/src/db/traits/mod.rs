@@ -1,5 +1,5 @@
 mod document;
 mod operation;
 
-pub use document::DocumentStore;
+pub use document::{AsStorageDocumentView, DocumentStore};
 pub use operation::{AsStorageOperation, OperationStore, PreviousOperations};

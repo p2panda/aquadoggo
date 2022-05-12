@@ -4,64 +4,54 @@ use std::collections::btree_map::Iter;
 
 use async_trait::async_trait;
 use futures::future::try_join_all;
-use p2panda_rs::document::{DocumentView, DocumentViewId};
+use p2panda_rs::document::{DocumentView, DocumentViewFields, DocumentViewId, DocumentViewValue};
 use p2panda_rs::schema::SchemaId;
 use sqlx::{query, query_as};
 
 use crate::db::errors::DocumentStorageError;
 use crate::db::models::document::DocumentViewFieldRow;
 use crate::db::provider::SqlStorage;
-use crate::db::traits::DocumentStore;
+use crate::db::traits::{AsStorageDocumentView, DocumentStore};
 use crate::db::utils::parse_document_view_field_rows;
 
-// /// Aquadoggo struct which will implement AsStorageDocumentView trait.
-// #[derive(Debug, Clone)]
-// pub struct DocumentViewStorage {
-//     document_view: DocumentView,
-//     schema_id: SchemaId,
-// }
+/// Aquadoggo struct which will implement AsStorageDocumentView trait.
+#[derive(Debug, Clone)]
+pub struct StorageDocumentView(DocumentView);
 
-// impl DocumentViewStorage {
-//     pub fn new(document_view: &DocumentView, schema_id: &SchemaId) -> Self {
-//         Self {
-//             document_view: document_view.clone(),
-//             schema_id: schema_id.clone(),
-//         }
-//     }
-// }
+impl StorageDocumentView {
+    pub fn new(id: &DocumentViewId, fields: &DocumentViewFields) -> Self {
+        Self(DocumentView::new(id.clone(), fields.clone()))
+    }
+}
 
-// impl AsStorageDocumentView for DocumentViewStorage {
-//     type AsStorageDocumentViewError = DocumentStorageError;
+impl AsStorageDocumentView for StorageDocumentView {
+    type AsStorageDocumentViewError = DocumentStorageError;
 
-//     fn id(&self) -> &DocumentViewId {
-//         self.document_view.id()
-//     }
+    fn id(&self) -> &DocumentViewId {
+        self.0.id()
+    }
 
-//     fn iter(&self) -> Iter<String, DocumentViewValue> {
-//         self.document_view.iter()
-//     }
+    fn iter(&self) -> Iter<String, DocumentViewValue> {
+        self.0.iter()
+    }
 
-//     fn get(&self, key: &str) -> Option<&DocumentViewValue> {
-//         self.document_view.get(key)
-//     }
+    fn get(&self, key: &str) -> Option<&DocumentViewValue> {
+        self.0.get(key)
+    }
 
-//     fn schema_id(&self) -> &SchemaId {
-//         &self.schema_id
-//     }
-
-//     fn fields(&self) -> &DocumentViewFields {
-//         self.fields()
-//     }
-// }
+    fn fields(&self) -> &DocumentViewFields {
+        self.0.fields()
+    }
+}
 
 #[async_trait]
-impl DocumentStore for SqlStorage {
+impl DocumentStore<StorageDocumentView> for SqlStorage {
     /// Insert a document_view into the db. Requires that all relevent operations are already in
     /// the db as this method only creates relations between document view fields and their current
     /// values (last updated operation value).
     async fn insert_document_view(
         &self,
-        document_view: &DocumentView,
+        document_view: &StorageDocumentView,
         schema_id: &SchemaId,
     ) -> Result<bool, DocumentStorageError> {
         // Insert document view field relations into the db
@@ -128,7 +118,7 @@ impl DocumentStore for SqlStorage {
     async fn get_document_view_by_id(
         &self,
         id: &DocumentViewId,
-    ) -> Result<DocumentView, DocumentStorageError> {
+    ) -> Result<StorageDocumentView, DocumentStorageError> {
         let document_view_field_rows = query_as::<_, DocumentViewFieldRow>(
             "
             SELECT
@@ -153,9 +143,9 @@ impl DocumentStore for SqlStorage {
         .await
         .map_err(|e| DocumentStorageError::Custom(e.to_string()))?;
 
-        Ok(DocumentView::new(
-            id.to_owned(),
-            parse_document_view_field_rows(document_view_field_rows),
+        Ok(StorageDocumentView::new(
+            &id.to_owned(),
+            &parse_document_view_field_rows(document_view_field_rows),
         ))
     }
 }
@@ -164,9 +154,7 @@ impl DocumentStore for SqlStorage {
 mod tests {
     use std::str::FromStr;
 
-    use p2panda_rs::document::{
-        DocumentId, DocumentView, DocumentViewFields, DocumentViewId, DocumentViewValue,
-    };
+    use p2panda_rs::document::{DocumentId, DocumentViewFields, DocumentViewId, DocumentViewValue};
     use p2panda_rs::identity::Author;
     use p2panda_rs::operation::{
         AsOperation, Operation, OperationFields, OperationId, OperationValue,
@@ -175,6 +163,7 @@ mod tests {
     use p2panda_rs::test_utils::constants::{DEFAULT_HASH, TEST_SCHEMA_ID};
 
     use crate::db::provider::SqlStorage;
+    use crate::db::stores::document::StorageDocumentView;
     use crate::db::stores::operation::OperationStorage;
     use crate::db::stores::test_utils::test_create_operation;
     use crate::db::traits::OperationStore;
@@ -197,7 +186,7 @@ mod tests {
             &operation_id,
             &operation.fields().unwrap(),
         );
-        let document_view = DocumentView::new(document_view_id, document_view_fields);
+        let document_view = StorageDocumentView::new(&document_view_id, &document_view_fields);
 
         let result = storage_provider
             .insert_document_view(&document_view, &schema_id)
@@ -221,8 +210,7 @@ mod tests {
             &operation_id,
             &operation.fields().unwrap(),
         );
-        let document_view =
-            DocumentView::new(document_view_id.clone(), document_view_fields.clone());
+        let document_view = StorageDocumentView::new(&document_view_id, &document_view_fields);
 
         // Construct a doggo operation for publishing.
         let doggo_operation =
@@ -279,7 +267,7 @@ mod tests {
         );
 
         let document_view =
-            DocumentView::new(update_operation_id.clone().into(), document_view_fields);
+            StorageDocumentView::new(&update_operation_id.clone().into(), &document_view_fields);
 
         // Insert the operation.
         storage_provider
