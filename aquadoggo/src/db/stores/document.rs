@@ -51,11 +51,12 @@ impl DocumentStore<StorageDocumentView> for SqlStorage {
         &self,
         document_view: &StorageDocumentView,
         schema_id: &SchemaId,
-    ) -> Result<bool, DocumentStorageError> {
+    ) -> Result<(), DocumentStorageError> {
         // Insert document view field relations into the db
-        let field_relations_inserted = try_join_all(document_view.iter().map(|(name, value)| {
-            query(
-                "
+        let field_relations_insertion_result =
+            try_join_all(document_view.iter().map(|(name, value)| {
+                query(
+                    "
                 INSERT INTO
                     document_view_fields (
                         document_view_id,
@@ -65,29 +66,17 @@ impl DocumentStore<StorageDocumentView> for SqlStorage {
                 VALUES
                     ($1, $2, $3)
                 ",
-            )
-            .bind(document_view.id().as_str())
-            .bind(value.id().as_str().to_owned())
-            .bind(name)
-            .execute(&self.pool)
-        }))
-        .await
-        .map_err(|e| DocumentStorageError::Custom(e.to_string()))?
-        .iter()
-        .try_for_each(|result| {
-            if result.rows_affected() == 1 {
-                Ok(())
-            } else {
-                Err(DocumentStorageError::Custom(format!(
-                    "Incorrect rows affected: {}",
-                    result.rows_affected()
-                )))
-            }
-        })
-        .is_ok();
+                )
+                .bind(document_view.id().as_str())
+                .bind(value.id().as_str().to_owned())
+                .bind(name)
+                .execute(&self.pool)
+            }))
+            .await
+            .map_err(|e| DocumentStorageError::Custom(e.to_string()))?;
 
-        // Insert document view fields into the db
-        let document_view_inserted = query(
+        // Insert document view into the db
+        let document_view_insertion_result = query(
             "
             INSERT INTO
                 document_views (
@@ -102,11 +91,20 @@ impl DocumentStore<StorageDocumentView> for SqlStorage {
         .bind(schema_id.as_str())
         .execute(&self.pool)
         .await
-        .map_err(|e| DocumentStorageError::Custom(e.to_string()))?
-        .rows_affected()
-            == 1;
+        .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
 
-        Ok(field_relations_inserted && document_view_inserted)
+        // Check every insertion performed affected exactly 1 row.
+        if document_view_insertion_result.rows_affected() != 1
+            || field_relations_insertion_result
+                .iter()
+                .any(|query_result| query_result.rows_affected() != 1)
+        {
+            return Err(DocumentStorageError::InsertionError(
+                document_view.id().clone(),
+            ));
+        }
+
+        Ok(())
     }
 
     /// Get a document view from the database by it's id.
@@ -136,7 +134,7 @@ impl DocumentStore<StorageDocumentView> for SqlStorage {
         .bind(id.as_str())
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| DocumentStorageError::Custom(e.to_string()))?;
+        .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
 
         Ok(StorageDocumentView::new(
             &id.to_owned(),

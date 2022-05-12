@@ -30,7 +30,7 @@ pub trait DocumentStore<StorageDocumentView: AsStorageDocumentView> {
         &self,
         document_view: &StorageDocumentView,
         schema_id: &SchemaId,
-    ) -> Result<bool, DocumentStorageError>;
+    ) -> Result<(), DocumentStorageError>;
 
     async fn get_document_view_by_id(
         &self,
