@@ -155,20 +155,16 @@ mod tests {
     use std::convert::TryFrom;
     use std::str::FromStr;
 
-    use p2panda_rs::document::{DocumentId, DocumentViewFields, DocumentViewValue};
+    use p2panda_rs::document::{DocumentViewFields, DocumentViewValue};
     use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::identity::{Author, KeyPair};
-    use p2panda_rs::operation::{
-        AsOperation, Operation, OperationFields, OperationId, OperationValue,
-    };
+    use p2panda_rs::operation::{AsOperation, OperationId};
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
     use p2panda_rs::test_utils::constants::{DEFAULT_HASH, DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
 
-    use crate::db::provider::SqlStorage;
     use crate::db::stores::document::{DocumentStore, StorageDocumentView};
     use crate::db::stores::test_utils::{test_create_operation, test_db};
-    use crate::test_helpers::initialize_db;
 
     #[tokio::test]
     async fn insert_document_view() {
