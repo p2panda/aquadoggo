@@ -46,9 +46,7 @@ impl AsStorageDocumentView for StorageDocumentView {
 
 #[async_trait]
 impl DocumentStore<StorageDocumentView> for SqlStorage {
-    /// Insert a document_view into the db. Requires that all relevent operations are already in
-    /// the db as this method only creates relations between document view fields and their current
-    /// values (last updated operation value).
+    /// Insert a document_view into the db.
     async fn insert_document_view(
         &self,
         document_view: &StorageDocumentView,
@@ -112,9 +110,6 @@ impl DocumentStore<StorageDocumentView> for SqlStorage {
     }
 
     /// Get a document view from the database by it's id.
-    ///
-    /// Currently returns a map of document view fields as FieldName -> OperationValue.
-    /// This can be specified more shortly.
     async fn get_document_view_by_id(
         &self,
         id: &DocumentViewId,
