@@ -29,6 +29,7 @@ jsonrpc-v2 = { version = "0.10.1", features = [
     "easy-errors",
     "bytes-v05",
 ], default-features = false }
+lipmaa-link = "0.2.2"
 log = "0.4.14"
 openssl-probe = "0.1.4"
 # We can not publish the `aquadoggo` crate yet, since `p2panda-rs` is an

@@ -2,6 +2,7 @@
 
 use async_trait::async_trait;
 use bamboo_rs_core_ed25519_yasmf::lipmaa;
+use lipmaa_link::get_lipmaa_links_back_to;
 use sqlx::{query, query_as};
 
 use p2panda_rs::entry::{decode_entry, EntrySigned, LogId, SeqNum};
@@ -14,20 +15,6 @@ use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
 
 use crate::db::models::entry::EntryRow;
 use crate::db::provider::SqlStorage;
-
-// Re-write once https://github.com/pietgeursen/lipmaa-link/pull/3 merged in lipma-link
-pub fn get_lipmaa_links_back_to_root(mut n: u64) -> Vec<u64> {
-    let mut path = Vec::new();
-
-    // We don't want to include lipmaa link at position `0` so we
-    // do the final lipmaa calculation landing on `1`
-    while n > 1 {
-        n = lipmaa(n);
-        path.push(n);
-    }
-
-    path
-}
 
 /// Implement `AsStorageEntry` trait for `EntryRow`.
 impl AsStorageEntry for EntryRow {
@@ -326,7 +313,7 @@ impl EntryStore<EntryRow> for SqlStorage {
         log_id: &LogId,
         initial_seq_num: &SeqNum,
     ) -> Result<Vec<EntryRow>, EntryStorageError> {
-        let cert_pool = get_lipmaa_links_back_to_root(initial_seq_num.as_u64())
+        let cert_pool_seq_nums = get_lipmaa_links_back_to(initial_seq_num.as_u64(), 1)
             .iter()
             .map(|seq_num| seq_num.to_string())
             .collect::<Vec<String>>()
@@ -352,7 +339,7 @@ impl EntryStore<EntryRow> for SqlStorage {
             ORDER BY
                 CAST(seq_num AS INTEGER) DESC
             ",
-            cert_pool
+            cert_pool_seq_nums
         );
 
         let entries = query_as::<_, EntryRow>(sql_str.as_str())
