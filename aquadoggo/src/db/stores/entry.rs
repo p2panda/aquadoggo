@@ -259,7 +259,7 @@ impl EntryStore<EntryRow> for SqlStorage {
     /// Returns a result containing a vector of all entries which follow the passed
     /// schema (identified by it's `SchemaId`). If no entries exist, or the schema
     /// is not known by this node, then an empty vector is returned.
-    async fn get_next_n_entries_after_seq(
+    async fn get_paginated_log_entries(
         &self,
         author: &Author,
         log_id: &LogId,
@@ -307,7 +307,7 @@ impl EntryStore<EntryRow> for SqlStorage {
     /// It is worth noting that this method doesn't check if the certificate pool
     /// is complete, it only returns entries which are part of the pool and found
     /// in storage. If an entry was not stored, then the pool may be incomplete.
-    async fn get_all_lipmaa_entries_for_entry(
+    async fn get_all_skiplink_entries_for_entry(
         &self,
         author: &Author,
         log_id: &LogId,
@@ -573,7 +573,7 @@ mod tests {
         let author = Author::try_from(*key_pair.public_key()).unwrap();
 
         let entries = storage_provider
-            .get_next_n_entries_after_seq(&author, &LogId::default(), &SeqNum::default(), 20)
+            .get_paginated_log_entries(&author, &LogId::default(), &SeqNum::default(), 20)
             .await
             .unwrap();
         for entry in entries.clone() {
@@ -590,7 +590,11 @@ mod tests {
         let author = Author::try_from(*key_pair.public_key()).unwrap();
 
         let entries = storage_provider
-            .get_all_lipmaa_entries_for_entry(&author, &LogId::default(), &SeqNum::new(20).unwrap())
+            .get_all_liskiplinkntries_for_entry(
+                &author,
+                &LogId::default(),
+                &SeqNum::new(20).unwrap(),
+            )
             .await
             .unwrap();
 
