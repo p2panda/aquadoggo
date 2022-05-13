@@ -514,7 +514,7 @@ dependencies = [
  "blake2b_simd",
  "ed25519-dalek",
  "hex",
- "lipmaa-link",
+ "lipmaa-link 0.1.1",
  "rayon",
  "serde",
  "serde_derive",
@@ -1946,6 +1946,12 @@ name = "lipmaa-link"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8fbee9dd9064a4e7405d9550402d8d0b9ddebec0f31d84c0f9337a1389c6ef9"
+
+[[package]]
+name = "lipmaa-link"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "36f5f0defb4c1af68c2b96ef3c9dee86cc4d113a21e1845fd2c557b36c16fbcb"
 
 [[package]]
 name = "lock_api"
