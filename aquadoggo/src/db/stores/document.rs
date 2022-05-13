@@ -81,7 +81,7 @@ impl DocumentStore<StorageDocumentView> for SqlStorage {
                 .execute(&self.pool)
             }))
             .await
-            .map_err(|e| DocumentStorageError::Custom(e.to_string()))?;
+            .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
 
         // Insert document view into the db
         let document_view_insertion_result = query(
@@ -162,7 +162,7 @@ mod tests {
     use std::convert::TryFrom;
     use std::str::FromStr;
 
-    use p2panda_rs::document::{DocumentView, DocumentViewFields, DocumentViewValue};
+    use p2panda_rs::document::{DocumentViewFields, DocumentViewId, DocumentViewValue};
     use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::{AsOperation, OperationId};
@@ -207,15 +207,25 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn insert_document_view() {
+    async fn insert_one_document_view() {
+        // The database contains one entry and it's corresponding operation.
         let storage_provider = test_db(1, false).await;
+        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
+        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
-        let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
+        let entry = storage_provider
+            .entry_at_seq_num(&author, &LogId::new(1), &SeqNum::new(1).unwrap())
+            .await
+            .unwrap()
+            .unwrap();
+
+        let operation_id: OperationId = entry.hash().into();
+        let document_view_id: DocumentViewId = operation_id.clone().into();
         let document_view = StorageDocumentView::new(
-            &operation_id.clone().into(),
+            &document_view_id,
             &DocumentViewFields::new_from_operation_fields(
                 &operation_id,
-                &test_create_operation().fields().unwrap(),
+                &entry.operation().fields().unwrap(),
             ),
         );
 
@@ -223,12 +233,11 @@ mod tests {
             .insert_document_view(&document_view, &SchemaId::from_str(TEST_SCHEMA_ID).unwrap())
             .await;
 
-        assert!(result.is_err());
+        assert!(result.is_ok());
     }
 
     #[tokio::test]
     async fn get_document_view() {
-        // Test setup //
         let storage_provider = test_db(10, true).await;
         let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
         let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
@@ -259,5 +268,29 @@ mod tests {
             assert!(result.is_ok());
             assert_eq!(&result.unwrap(), document_views.get(count).unwrap());
         }
+    }
+
+    #[tokio::test]
+    async fn insert_duplicate_document_view() {
+        let storage_provider = test_db(1, false).await;
+
+        let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
+        let document_view_id: DocumentViewId = operation_id.clone().into();
+        let document_view = StorageDocumentView::new(
+            &document_view_id,
+            &DocumentViewFields::new_from_operation_fields(
+                &operation_id,
+                &test_create_operation().fields().unwrap(),
+            ),
+        );
+
+        let result = storage_provider
+            .insert_document_view(&document_view, &SchemaId::from_str(TEST_SCHEMA_ID).unwrap())
+            .await;
+
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "A fatal error occured in DocumentStore: error returned from database: FOREIGN KEY constraint failed".to_string()
+        );
     }
 }
