@@ -238,7 +238,7 @@ mod tests {
         let seq_num = SeqNum::default();
 
         let entries = storage_provider
-            .get_next_n_entries_after_seq(&author, &log_id, &seq_num, 10)
+            .get_paginated_log_entries(&author, &log_id, &seq_num, 10)
             .await
             .unwrap();
 
