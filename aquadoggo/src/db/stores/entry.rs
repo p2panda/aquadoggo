@@ -590,7 +590,7 @@ mod tests {
         let author = Author::try_from(*key_pair.public_key()).unwrap();
 
         let entries = storage_provider
-            .get_all_liskiplinkntries_for_entry(
+            .get_all_skiplink_entries_for_entry(
                 &author,
                 &LogId::default(),
                 &SeqNum::new(20).unwrap(),
