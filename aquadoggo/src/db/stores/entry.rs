@@ -583,7 +583,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn gets_all_lipmaa_entries_for_entry() {
+    async fn gets_all_skiplink_entries_for_entry() {
         let storage_provider = test_db(50).await;
 
         let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
