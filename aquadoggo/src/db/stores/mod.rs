@@ -3,7 +3,7 @@
 mod entry;
 mod log;
 #[cfg(test)]
-mod test_utils;
+pub mod test_utils;
 
 pub use self::log::StorageLog;
 pub use entry::StorageEntry;

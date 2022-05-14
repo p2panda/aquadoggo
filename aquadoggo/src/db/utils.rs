@@ -198,16 +198,17 @@ pub fn parse_value_to_string_vec(value: &OperationValue) -> Vec<String> {
 mod tests {
 
     use p2panda_rs::operation::{
-        OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList,
+        AsOperation, OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList,
     };
 
     use crate::db::models::operation::OperationFieldsJoinedRow;
+    use crate::db::stores::test_utils::test_create_operation;
     use crate::db::traits::AsStorageOperation;
 
-    use super::parse_operation_rows;
+    use super::{parse_operation_rows, parse_value_to_string_vec};
 
-    #[tokio::test]
-    async fn parses_operation_rows() {
+    #[test]
+    fn parses_operation_rows() {
         let operation_rows = vec![
             OperationFieldsJoinedRow {
                 author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -475,5 +476,28 @@ mod tests {
                     .unwrap()
             ))
         )
+    }
+
+    #[test]
+    fn operation_values_to_string_vec() {
+        let expected_list = vec![
+            "28",
+            "3.5",
+            "false",
+            "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543",
+            "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543",
+            "bubu",
+        ];
+        let mut string_value_list = vec![];
+        let operation = test_create_operation();
+        for (_, value) in operation.fields().unwrap().iter() {
+            string_value_list.push(parse_value_to_string_vec(value));
+        }
+        let string_value_list: Vec<&String> = string_value_list.iter().flatten().collect();
+        assert_eq!(expected_list, string_value_list)
     }
 }
