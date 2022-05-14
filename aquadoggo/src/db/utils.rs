@@ -12,6 +12,12 @@ use p2panda_rs::schema::SchemaId;
 use crate::db::models::operation::OperationFieldsJoinedRow;
 use crate::db::stores::operation::OperationStorage;
 
+/// Takes a vector of `OperationFieldsJoinedRow` and parses them into an `OperationStorage`
+/// struct.
+///
+/// Operation fields which contain lists of values (RelationList & PinnedRelationList) are
+/// flattened and inserted as indiviual rows. This means we need to reconstruct these fields
+/// when retrieving an operation from the db.
 pub fn parse_operation_rows(
     operation_rows: Vec<OperationFieldsJoinedRow>,
 ) -> Option<OperationStorage> {
@@ -36,7 +42,7 @@ pub fn parse_operation_rows(
             .map(|id_str| Hash::new(id_str).unwrap().into())
             .collect();
     }
-    // Unwrap as we know all possible strings should have been accounted for.
+
     let mut relation_list: Vec<DocumentId> = Vec::new();
     let mut pinned_relation_list: Vec<DocumentViewId> = Vec::new();
 
@@ -87,7 +93,7 @@ pub fn parse_operation_rows(
                     )
                     .unwrap();
             }
-            // A special case, this is a list item, so we push it to a vec but _don't_ add it
+            // This is a list item, so we push it to a vec but _don't_ add it
             // to the operation_fields yet.
             "relation_list" => relation_list.push(row.value.parse::<DocumentId>().unwrap()),
             "pinned_relation" => {
@@ -100,7 +106,7 @@ pub fn parse_operation_rows(
                     )
                     .unwrap();
             }
-            // A special case, this is a list item, so we push it to a vec but _don't_ add it
+            // This is a list item, so we push it to a vec but _don't_ add it
             // to the operation_fields yet.
             "pinned_relation_list" => {
                 pinned_relation_list.push(row.value.parse::<DocumentViewId>().unwrap())
@@ -156,6 +162,12 @@ pub fn parse_operation_rows(
     ))
 }
 
+/// Takes a single `OperationValue` and parses it into a vector of string values.
+///
+/// OperationValues are inserted into the database as strings. If a value is a list
+/// type (`RelationList` & `PinnedRelationList`) we insert one row for each value.
+/// This method transforms a single operation into a list of string values, if the
+/// is not a list, it will only contain a single item.
 pub fn parse_value_to_string_vec(value: &OperationValue) -> Vec<String> {
     match value {
         OperationValue::Boolean(bool) => vec![bool.to_string()],
@@ -179,5 +191,289 @@ pub fn parse_value_to_string_vec(value: &OperationValue) -> Vec<String> {
             .iter()
             .map(|document_view_id| document_view_id.as_str())
             .collect(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use p2panda_rs::operation::{
+        OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList,
+    };
+
+    use crate::db::models::operation::OperationFieldsJoinedRow;
+    use crate::db::traits::AsStorageOperation;
+
+    use super::parse_operation_rows;
+
+    #[tokio::test]
+    async fn parses_operation_rows() {
+        let operation_rows = vec![
+            OperationFieldsJoinedRow {
+                author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
+                    .to_string(),
+                document_id: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                    .to_string(),
+                operation_id:
+                    "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                        .to_string(),
+                action: "create".to_string(),
+                entry_hash: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                    .to_string(),
+                schema_id:
+                    "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
+                        .to_string(),
+                previous_operations: "".to_string(),
+                name: "age".to_string(),
+                field_type: "int".to_string(),
+                value: "28".to_string(),
+            },
+            OperationFieldsJoinedRow {
+                author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
+                    .to_string(),
+                document_id: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                    .to_string(),
+                operation_id:
+                    "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                        .to_string(),
+                action: "create".to_string(),
+                entry_hash: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                    .to_string(),
+                schema_id:
+                    "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
+                        .to_string(),
+                previous_operations: "".to_string(),
+                name: "height".to_string(),
+                field_type: "float".to_string(),
+                value: "3.5".to_string(),
+            },
+            OperationFieldsJoinedRow {
+                author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
+                    .to_string(),
+                document_id: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                    .to_string(),
+                operation_id:
+                    "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                        .to_string(),
+                action: "create".to_string(),
+                entry_hash: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                    .to_string(),
+                schema_id:
+                    "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
+                        .to_string(),
+                previous_operations: "".to_string(),
+                name: "is_admin".to_string(),
+                field_type: "bool".to_string(),
+                value: "false".to_string(),
+            },
+            OperationFieldsJoinedRow {
+                author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
+                    .to_string(),
+                document_id: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                    .to_string(),
+                operation_id:
+                    "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                        .to_string(),
+                action: "create".to_string(),
+                entry_hash: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                    .to_string(),
+                schema_id:
+                    "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
+                        .to_string(),
+                previous_operations: "".to_string(),
+                name: "many_profile_pictures".to_string(),
+                field_type: "relation_list".to_string(),
+                value: "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                    .to_string(),
+            },
+            OperationFieldsJoinedRow {
+                author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
+                    .to_string(),
+                document_id: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                    .to_string(),
+                operation_id:
+                    "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                        .to_string(),
+                action: "create".to_string(),
+                entry_hash: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                    .to_string(),
+                schema_id:
+                    "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
+                        .to_string(),
+                previous_operations: "".to_string(),
+                name: "many_profile_pictures".to_string(),
+                field_type: "relation_list".to_string(),
+                value: "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                    .to_string(),
+            },
+            OperationFieldsJoinedRow {
+                author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
+                    .to_string(),
+                document_id: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                    .to_string(),
+                operation_id:
+                    "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                        .to_string(),
+                action: "create".to_string(),
+                entry_hash: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                    .to_string(),
+                schema_id:
+                    "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
+                        .to_string(),
+                previous_operations: "".to_string(),
+                name: "many_special_profile_pictures".to_string(),
+                field_type: "pinned_relation_list".to_string(),
+                value: "0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                    .to_string(),
+            },
+            OperationFieldsJoinedRow {
+                author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
+                    .to_string(),
+                document_id: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                    .to_string(),
+                operation_id:
+                    "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                        .to_string(),
+                action: "create".to_string(),
+                entry_hash: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                    .to_string(),
+                schema_id:
+                    "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
+                        .to_string(),
+                previous_operations: "".to_string(),
+                name: "many_special_profile_pictures".to_string(),
+                field_type: "pinned_relation_list".to_string(),
+                value: "0020dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                    .to_string(),
+            },
+            OperationFieldsJoinedRow {
+                author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
+                    .to_string(),
+                document_id: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                    .to_string(),
+                operation_id:
+                    "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                        .to_string(),
+                action: "create".to_string(),
+                entry_hash: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                    .to_string(),
+                schema_id:
+                    "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
+                        .to_string(),
+                previous_operations: "".to_string(),
+                name: "profile_picture".to_string(),
+                field_type: "relation".to_string(),
+                value: "0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                    .to_string(),
+            },
+            OperationFieldsJoinedRow {
+                author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
+                    .to_string(),
+                document_id: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                    .to_string(),
+                operation_id:
+                    "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                        .to_string(),
+                action: "create".to_string(),
+                entry_hash: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                    .to_string(),
+                schema_id:
+                    "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
+                        .to_string(),
+                previous_operations: "".to_string(),
+                name: "special_profile_picture".to_string(),
+                field_type: "pinned_relation".to_string(),
+                value: "0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                    .to_string(),
+            },
+            OperationFieldsJoinedRow {
+                author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
+                    .to_string(),
+                document_id: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                    .to_string(),
+                operation_id:
+                    "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                        .to_string(),
+                action: "create".to_string(),
+                entry_hash: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                    .to_string(),
+                schema_id:
+                    "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
+                        .to_string(),
+                previous_operations: "".to_string(),
+                name: "username".to_string(),
+                field_type: "str".to_string(),
+                value: "bubu".to_string(),
+            },
+        ];
+
+        let operation = parse_operation_rows(operation_rows).unwrap();
+
+        assert_eq!(
+            operation.fields().unwrap().get("username").unwrap(),
+            &OperationValue::Text("bubu".to_string())
+        );
+        assert_eq!(
+            operation.fields().unwrap().get("age").unwrap(),
+            &OperationValue::Integer(28)
+        );
+        assert_eq!(
+            operation.fields().unwrap().get("height").unwrap(),
+            &OperationValue::Float(3.5)
+        );
+        assert_eq!(
+            operation.fields().unwrap().get("is_admin").unwrap(),
+            &OperationValue::Boolean(false)
+        );
+        assert_eq!(
+            operation
+                .fields()
+                .unwrap()
+                .get("many_profile_pictures")
+                .unwrap(),
+            &OperationValue::RelationList(RelationList::new(vec![
+                "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                    .parse()
+                    .unwrap(),
+                "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                    .parse()
+                    .unwrap(),
+            ]))
+        );
+        assert_eq!(
+            operation
+                .fields()
+                .unwrap()
+                .get("many_special_profile_pictures")
+                .unwrap(),
+            &OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
+                "0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                    .parse()
+                    .unwrap(),
+                "0020dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                    .parse()
+                    .unwrap(),
+            ]))
+        );
+        assert_eq!(
+            operation.fields().unwrap().get("profile_picture").unwrap(),
+            &OperationValue::Relation(Relation::new(
+                "0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                    .parse()
+                    .unwrap()
+            ))
+        );
+        assert_eq!(
+            operation
+                .fields()
+                .unwrap()
+                .get("special_profile_picture")
+                .unwrap(),
+            &OperationValue::PinnedRelation(PinnedRelation::new(
+                "0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                    .parse()
+                    .unwrap()
+            ))
+        )
     }
 }
