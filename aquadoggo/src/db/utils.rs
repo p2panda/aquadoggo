@@ -202,20 +202,25 @@ pub fn parse_value_to_string_vec(value: &OperationValue) -> Vec<String> {
     }
 }
 
+/// Takes a vector of `DocumentViewFieldRow` and parses them into an `DocumentViewFields`
+/// struct.
+///
+/// Document fields which contain lists of values (RelationList & PinnedRelationList) are
+/// flattened and inserted as indiviual rows. This means we need to reconstruct these fields
+/// when retrieving an document view from the db.
 pub fn parse_document_view_field_rows(
-    operation_rows: Vec<DocumentViewFieldRow>,
+    document_field_rows: Vec<DocumentViewFieldRow>,
 ) -> DocumentViewFields {
-    // Unwrap as we know all possible strings should have been accounted for.
     let mut relation_list: Vec<DocumentId> = Vec::new();
     let mut pinned_relation_list: Vec<DocumentViewId> = Vec::new();
 
     let mut document_view_fields = DocumentViewFields::new();
 
     // Iterate over returned field values, for each value:
-    //  - if it is a simple value type, parse it into an OperationValue and add it to the operation_fields
+    //  - if it is a simple value type, parse it into an DocumentViewValue and add it to the document_view_fields
     //  - if it is a relation list value type parse each item into a DocumentId/DocumentViewId and push to
     //    the suitable vec (instantiated above)
-    operation_rows.iter().for_each(|row| {
+    document_field_rows.iter().for_each(|row| {
         match row.field_type.as_str() {
             "bool" => {
                 document_view_fields.insert(
@@ -264,7 +269,7 @@ pub fn parse_document_view_field_rows(
                     ),
                 );
             }
-            // A special case, this is a list item, so we push it to a vec but _don't_ add it
+            // This is a list item, so we push it to a vec but _don't_ add it
             // to the document_view_fields yet.
             "relation_list" => relation_list.push(row.value.parse::<DocumentId>().unwrap()),
             "pinned_relation" => {
@@ -278,7 +283,7 @@ pub fn parse_document_view_field_rows(
                     ),
                 );
             }
-            // A special case, this is a list item, so we push it to a vec but _don't_ add it
+            // This is a list item, so we push it to a vec but _don't_ add it
             // to the document_view_fields yet.
             "pinned_relation_list" => {
                 pinned_relation_list.push(row.value.parse::<DocumentViewId>().unwrap())
@@ -288,7 +293,7 @@ pub fn parse_document_view_field_rows(
     });
 
     // Find if there is at least one field containing a "relation_list" type
-    let relation_list_field = &operation_rows
+    let relation_list_field = &document_field_rows
         .iter()
         .find(|row| row.field_type == "relation_list");
 
@@ -307,7 +312,7 @@ pub fn parse_document_view_field_rows(
     }
 
     // Find if there is at least one field containing a "pinned_relation_list" type
-    let pinned_relation_list_field = &operation_rows
+    let pinned_relation_list_field = &document_field_rows
         .iter()
         .find(|row| row.field_type == "pinned_relation_list");
 

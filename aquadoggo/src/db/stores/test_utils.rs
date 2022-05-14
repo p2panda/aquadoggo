@@ -121,7 +121,6 @@ pub async fn test_db(no_of_entries: usize, with_delete: bool) -> SqlStorage {
 
     let mut document: Option<DocumentId> = None;
 
-    // Publish more update entries
     for index in 0..no_of_entries {
         let next_entry_args = storage_provider
             .get_entry_args(&EntryArgsRequest {
@@ -176,7 +175,7 @@ pub async fn test_db(no_of_entries: usize, with_delete: bool) -> SqlStorage {
             &document.as_ref().cloned().unwrap(),
         );
 
-        // Publish the new entry
+        // Publish the new operation
         storage_provider
             .insert_operation(&storage_operation)
             .await
