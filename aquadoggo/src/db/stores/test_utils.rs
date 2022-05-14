@@ -13,7 +13,7 @@ use p2panda_rs::operation::{
 };
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::StorageProvider;
-use p2panda_rs::test_utils::constants::{DEFAULT_HASH, DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
+use p2panda_rs::test_utils::constants::{DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
 
 use crate::db::provider::SqlStorage;
 use crate::db::traits::OperationStore;
@@ -39,13 +39,21 @@ pub fn test_create_operation() -> Operation {
     fields
         .add(
             "profile_picture",
-            OperationValue::Relation(Relation::new(DEFAULT_HASH.parse().unwrap())),
+            OperationValue::Relation(Relation::new(
+                Hash::new("0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
+                    .unwrap()
+                    .into(),
+            )),
         )
         .unwrap();
     fields
         .add(
             "special_profile_picture",
-            OperationValue::PinnedRelation(PinnedRelation::new(DEFAULT_HASH.parse().unwrap())),
+            OperationValue::PinnedRelation(PinnedRelation::new(
+                Hash::new("0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+                    .unwrap()
+                    .into(),
+            )),
         )
         .unwrap();
     fields
@@ -65,10 +73,10 @@ pub fn test_create_operation() -> Operation {
         .add(
             "many_special_profile_pictures",
             OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
-                Hash::new("0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+                Hash::new("0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")
                     .unwrap()
                     .into(),
-                Hash::new("0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+                Hash::new("0020dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd")
                     .unwrap()
                     .into(),
             ])),

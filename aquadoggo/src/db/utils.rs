@@ -364,7 +364,7 @@ mod tests {
                 previous_operations: "".to_string(),
                 name: "profile_picture".to_string(),
                 field_type: "relation".to_string(),
-                value: "0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                value: "0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
                     .to_string(),
             },
             OperationFieldsJoinedRow {
@@ -384,7 +384,7 @@ mod tests {
                 previous_operations: "".to_string(),
                 name: "special_profile_picture".to_string(),
                 field_type: "pinned_relation".to_string(),
-                value: "0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                value: "0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
                     .to_string(),
             },
             OperationFieldsJoinedRow {
@@ -459,7 +459,7 @@ mod tests {
         assert_eq!(
             operation.fields().unwrap().get("profile_picture").unwrap(),
             &OperationValue::Relation(Relation::new(
-                "0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                "0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
                     .parse()
                     .unwrap()
             ))
@@ -471,7 +471,7 @@ mod tests {
                 .get("special_profile_picture")
                 .unwrap(),
             &OperationValue::PinnedRelation(PinnedRelation::new(
-                "0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                "0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
                     .parse()
                     .unwrap()
             ))
@@ -486,10 +486,10 @@ mod tests {
             "false",
             "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543",
-            "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543",
+            "0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "0020dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             "bubu",
         ];
         let mut string_value_list = vec![];
