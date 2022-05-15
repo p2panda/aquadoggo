@@ -1,9 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use p2panda_rs::entry::{decode_entry, Entry, EntrySigned};
-use p2panda_rs::operation::OperationEncoded;
-use p2panda_rs::storage_provider::errors::ValidationError;
-use p2panda_rs::Validate;
 use serde::Serialize;
 use sqlx::FromRow;
 
@@ -34,38 +30,4 @@ pub struct EntryRow {
 
     /// Sequence number of this entry.
     pub seq_num: String,
-}
-
-impl EntryRow {
-    pub fn entry_decoded(&self) -> Entry {
-        // Unwrapping as validation occurs in `EntryWithOperation`.
-        decode_entry(&self.entry_signed(), self.operation_encoded().as_ref()).unwrap()
-    }
-
-    pub fn entry_signed(&self) -> EntrySigned {
-        EntrySigned::new(&self.entry_bytes).unwrap()
-    }
-
-    pub fn operation_encoded(&self) -> Option<OperationEncoded> {
-        Some(OperationEncoded::new(&self.payload_bytes.clone().unwrap()).unwrap())
-    }
-}
-
-impl Validate for EntryRow {
-    type Error = ValidationError;
-
-    fn validate(&self) -> Result<(), Self::Error> {
-        self.entry_signed().validate()?;
-        if let Some(operation) = self.operation_encoded() {
-            operation.validate()?;
-        }
-        decode_entry(&self.entry_signed(), self.operation_encoded().as_ref())?;
-        Ok(())
-    }
-}
-
-impl AsRef<Self> for EntryRow {
-    fn as_ref(&self) -> &Self {
-        self
-    }
 }
