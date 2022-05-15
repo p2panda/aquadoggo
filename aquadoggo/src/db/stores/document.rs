@@ -208,17 +208,18 @@ mod tests {
 
     #[tokio::test]
     async fn insert_one_document_view() {
-        // The database contains one entry and it's corresponding operation.
         let storage_provider = test_db(1, false).await;
         let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
         let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
+        // Get one entry from the pre-polulated db
         let entry = storage_provider
             .entry_at_seq_num(&author, &LogId::new(1), &SeqNum::new(1).unwrap())
             .await
             .unwrap()
             .unwrap();
 
+        // Construct a `StorageDocumentView`
         let operation_id: OperationId = entry.hash().into();
         let document_view_id: DocumentViewId = operation_id.clone().into();
         let document_view = StorageDocumentView::new(
@@ -229,6 +230,7 @@ mod tests {
             ),
         );
 
+        // Insert into db
         let result = storage_provider
             .insert_document_view(&document_view, &SchemaId::from_str(TEST_SCHEMA_ID).unwrap())
             .await;
@@ -246,13 +248,16 @@ mod tests {
         let log_id = LogId::default();
         let seq_num = SeqNum::default();
 
+        // Get 10 entries from the pre-populated test db
         let entries = storage_provider
             .get_paginated_log_entries(&author, &log_id, &seq_num, 10)
             .await
             .unwrap();
 
+        // Parse them into document views
         let document_views = entries_to_document_views(&entries);
 
+        // Insert each of these views into the db
         for document_view in document_views.clone() {
             storage_provider
                 .insert_document_view(&document_view, &schema_id)
@@ -260,6 +265,7 @@ mod tests {
                 .unwrap();
         }
 
+        // Retrieve them again and assert they are the same as the inserted ones
         for (count, entry) in entries.iter().enumerate() {
             let result = storage_provider
                 .get_document_view_by_id(&entry.hash().into())
