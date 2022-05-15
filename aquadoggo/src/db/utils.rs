@@ -336,15 +336,17 @@ pub fn parse_document_view_field_rows(
 #[cfg(test)]
 mod tests {
 
+    use p2panda_rs::document::DocumentViewValue;
     use p2panda_rs::operation::{
-        AsOperation, OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList,
+        AsOperation, OperationId, OperationValue, PinnedRelation, PinnedRelationList, Relation,
+        RelationList,
     };
     use p2panda_rs::storage_provider::traits::AsStorageOperation;
 
-    use crate::db::models::OperationFieldsJoinedRow;
+    use crate::db::models::{document::DocumentViewFieldRow, OperationFieldsJoinedRow};
     use crate::db::stores::test_utils::test_create_operation;
 
-    use super::{parse_operation_rows, parse_value_to_string_vec};
+    use super::{parse_document_view_field_rows, parse_operation_rows, parse_value_to_string_vec};
 
     #[test]
     fn parses_operation_rows() {
@@ -694,5 +696,205 @@ mod tests {
         }
         let string_value_list: Vec<&String> = string_value_list.iter().flatten().collect();
         assert_eq!(expected_list, string_value_list)
+    }
+
+    #[test]
+    fn parses_document_field_rows() {
+        let document_field_rows = vec![
+            DocumentViewFieldRow {
+                document_view_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                operation_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                name: "age".to_string(),
+                field_type: "int".to_string(),
+                value: "28".to_string(),
+            },
+            DocumentViewFieldRow {
+                document_view_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                operation_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                name: "height".to_string(),
+                field_type: "float".to_string(),
+                value: "3.5".to_string(),
+            },
+            DocumentViewFieldRow {
+                document_view_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                operation_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                name: "is_admin".to_string(),
+                field_type: "bool".to_string(),
+                value: "false".to_string(),
+            },
+            DocumentViewFieldRow {
+                document_view_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                operation_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                name: "many_profile_pictures".to_string(),
+                field_type: "relation_list".to_string(),
+                value: "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                    .to_string(),
+            },
+            DocumentViewFieldRow {
+                document_view_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                operation_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                name: "many_profile_pictures".to_string(),
+                field_type: "relation_list".to_string(),
+                value: "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                    .to_string(),
+            },
+            DocumentViewFieldRow {
+                document_view_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                operation_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                name: "many_special_profile_pictures".to_string(),
+                field_type: "pinned_relation_list".to_string(),
+                value: "0020dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                    .to_string(),
+            },
+            DocumentViewFieldRow {
+                document_view_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                operation_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                name: "many_special_profile_pictures".to_string(),
+                field_type: "pinned_relation_list".to_string(),
+                value: "0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                    .to_string(),
+            },
+            DocumentViewFieldRow {
+                document_view_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                operation_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                name: "profile_picture".to_string(),
+                field_type: "relation".to_string(),
+                value: "0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                    .to_string(),
+            },
+            DocumentViewFieldRow {
+                document_view_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                operation_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                name: "special_profile_picture".to_string(),
+                field_type: "pinned_relation".to_string(),
+                value: "0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                    .to_string(),
+            },
+            DocumentViewFieldRow {
+                document_view_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                operation_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                name: "username".to_string(),
+                field_type: "str".to_string(),
+                value: "bubu".to_string(),
+            },
+        ];
+
+        let document_fields = parse_document_view_field_rows(document_field_rows);
+        let operation_id: OperationId =
+            "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                .parse()
+                .unwrap();
+
+        assert_eq!(
+            document_fields.get("username").unwrap(),
+            &DocumentViewValue::Value(
+                operation_id.clone(),
+                OperationValue::Text("bubu".to_string())
+            )
+        );
+        assert_eq!(
+            document_fields.get("age").unwrap(),
+            &DocumentViewValue::Value(operation_id.clone(), OperationValue::Integer(28))
+        );
+        assert_eq!(
+            document_fields.get("height").unwrap(),
+            &DocumentViewValue::Value(operation_id.clone(), OperationValue::Float(3.5))
+        );
+        assert_eq!(
+            document_fields.get("is_admin").unwrap(),
+            &DocumentViewValue::Value(operation_id.clone(), OperationValue::Boolean(false))
+        );
+        assert_eq!(
+            document_fields.get("many_profile_pictures").unwrap(),
+            &DocumentViewValue::Value(
+                operation_id.clone(),
+                OperationValue::RelationList(RelationList::new(vec![
+                    "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                        .parse()
+                        .unwrap(),
+                    "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                        .parse()
+                        .unwrap(),
+                ]))
+            )
+        );
+        assert_eq!(
+            document_fields
+                .get("many_special_profile_pictures")
+                .unwrap(),
+            &DocumentViewValue::Value(
+                operation_id.clone(),
+                OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
+                    "0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                        .parse()
+                        .unwrap(),
+                    "0020dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                        .parse()
+                        .unwrap(),
+                ]))
+            )
+        );
+        assert_eq!(
+            document_fields.get("profile_picture").unwrap(),
+            &DocumentViewValue::Value(
+                operation_id.clone(),
+                OperationValue::Relation(Relation::new(
+                    "0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                        .parse()
+                        .unwrap()
+                ))
+            )
+        );
+        assert_eq!(
+            document_fields.get("special_profile_picture").unwrap(),
+            &DocumentViewValue::Value(
+                operation_id,
+                OperationValue::PinnedRelation(PinnedRelation::new(
+                    "0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                        .parse()
+                        .unwrap()
+                ))
+            )
+        )
     }
 }
