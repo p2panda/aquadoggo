@@ -356,7 +356,7 @@ mod tests {
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::OperationId;
-    use p2panda_rs::storage_provider::traits::{EntryStore, StorageProvider};
+    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, StorageProvider};
     use p2panda_rs::test_utils::constants::{DEFAULT_HASH, DEFAULT_PRIVATE_KEY};
 
     use crate::db::provider::SqlStorage;
@@ -550,7 +550,7 @@ mod tests {
             .unwrap()
             .unwrap();
         let document_id = storage_provider
-            .get_document_by_entry(&Hash::new(&latest_entry.entry_hash).unwrap())
+            .get_document_by_entry(&latest_entry.hash())
             .await
             .unwrap()
             .unwrap();
