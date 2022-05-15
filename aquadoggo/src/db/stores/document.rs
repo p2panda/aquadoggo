@@ -170,11 +170,11 @@ mod tests {
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
     use p2panda_rs::test_utils::constants::{DEFAULT_HASH, DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
 
-    use crate::db::models::entry::EntryRow;
     use crate::db::stores::document::{DocumentStore, StorageDocumentView};
+    use crate::db::stores::entry::StorageEntry;
     use crate::db::stores::test_utils::{test_create_operation, test_db};
 
-    fn entries_to_document_views(entries: &Vec<EntryRow>) -> Vec<StorageDocumentView> {
+    fn entries_to_document_views(entries: &Vec<StorageEntry>) -> Vec<StorageDocumentView> {
         let mut document_views = Vec::new();
         let mut current_document_view_fields = DocumentViewFields::new();
         for entry in entries {
