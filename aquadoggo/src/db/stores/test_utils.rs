@@ -157,7 +157,7 @@ pub async fn test_db(no_of_entries: usize, with_delete: bool) -> SqlStorage {
             document = Some(entry_encoded.hash().into());
         }
 
-        let operation_id = entry_encoded.hash().into();
+        let operation_id: OperationId = entry_encoded.hash().into();
 
         // Publish the new entry
         storage_provider

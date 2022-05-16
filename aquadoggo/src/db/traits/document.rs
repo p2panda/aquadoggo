@@ -4,7 +4,9 @@ use std::collections::btree_map::Iter;
 
 use async_trait::async_trait;
 
-use p2panda_rs::document::{DocumentViewFields, DocumentViewId, DocumentViewValue};
+use p2panda_rs::document::{
+    Document, DocumentId, DocumentView, DocumentViewFields, DocumentViewId, DocumentViewValue,
+};
 use p2panda_rs::schema::SchemaId;
 
 use crate::db::errors::DocumentStorageError;
@@ -23,9 +25,29 @@ pub trait AsStorageDocumentView: Sized + Clone + Send + Sync {
     fn fields(&self) -> &DocumentViewFields;
 }
 
+/// WIP: Storage trait representing a document view.
+pub trait AsStorageDocument: Sized + Clone + Send + Sync {
+    /// The error type returned by this traits' methods.
+    type AsStorageDocumentError: 'static + std::error::Error;
+
+    fn id(&self) -> &DocumentId;
+
+    fn schema_id(&self) -> &SchemaId;
+
+    fn view(&self) -> Option<&DocumentView>;
+
+    fn view_id(&self) -> &DocumentViewId;
+
+    fn is_deleted(&self) -> bool;
+}
+
 /// Storage traits for documents and document views.
 #[async_trait]
-pub trait DocumentStore<StorageDocumentView: AsStorageDocumentView> {
+pub trait DocumentStore<
+    StorageDocumentView: AsStorageDocumentView,
+    StorageDocument: AsStorageDocument,
+>
+{
     async fn insert_document_view(
         &self,
         document_view: &StorageDocumentView,
@@ -41,4 +63,7 @@ pub trait DocumentStore<StorageDocumentView: AsStorageDocumentView> {
         &self,
         schema_id: &SchemaId,
     ) -> Result<Vec<StorageDocumentView>, DocumentStorageError>;
+
+    async fn insert_document(&self, document: &StorageDocument)
+        -> Result<(), DocumentStorageError>;
 }

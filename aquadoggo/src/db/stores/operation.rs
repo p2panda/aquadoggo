@@ -7,7 +7,7 @@ use futures::future::try_join_all;
 use p2panda_rs::document::DocumentId;
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{
-    AsOperation, Operation, OperationAction, OperationFields, OperationId,
+    AsOperation, Operation, OperationAction, OperationFields, OperationId, OperationWithMeta,
 };
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::errors::OperationStorageError;
@@ -82,6 +82,16 @@ impl AsStorageOperation for OperationStorage {
 
     fn previous_operations(&self) -> Vec<OperationId> {
         self.operation.previous_operations().unwrap_or_default()
+    }
+
+    fn raw_operation(&self) -> Operation {
+        self.operation.clone()
+    }
+}
+
+impl Into<OperationWithMeta> for OperationStorage {
+    fn into(self) -> OperationWithMeta {
+        OperationWithMeta::new(&self.author(), &self.id(), &self.raw_operation()).unwrap()
     }
 }
 

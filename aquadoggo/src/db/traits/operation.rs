@@ -3,7 +3,9 @@
 use async_trait::async_trait;
 use p2panda_rs::document::DocumentId;
 use p2panda_rs::identity::Author;
-use p2panda_rs::operation::{OperationAction, OperationFields, OperationId};
+use p2panda_rs::operation::{
+    Operation, OperationAction, OperationFields, OperationId, OperationWithMeta,
+};
 use p2panda_rs::schema::SchemaId;
 
 use crate::db::errors::OperationStorageError;
@@ -27,6 +29,8 @@ pub trait AsStorageOperation: Sized + Clone + Send + Sync {
     fn previous_operations(&self) -> PreviousOperations;
 
     fn schema_id(&self) -> SchemaId;
+
+    fn raw_operation(&self) -> Operation;
 }
 
 #[async_trait]
