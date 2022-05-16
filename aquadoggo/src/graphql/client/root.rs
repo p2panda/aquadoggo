@@ -18,7 +18,7 @@ pub struct EntryArgs {
 }
 
 #[derive(Default, Debug, Copy, Clone)]
-/// The root graphql object for ping
+/// The GraphQL root for the client api that p2panda clients can use to connect to a node.
 pub struct ClientRoot;
 
 #[Object]
@@ -34,7 +34,7 @@ impl ClientRoot {
         public_key_param: String,
         #[graphql(
             name = "documentId",
-            desc = "Document ID to which the entry's operation will apply"
+            desc = "Document id to which the entry's operation will apply"
         )]
         document_id_param: Option<String>,
     ) -> Result<EntryArgs> {
@@ -79,8 +79,8 @@ impl ClientRoot {
     }
 }
 
-/// Determine skiplink entry hash ("lipmaa"-link) for entry in this log, return `None` when no
-/// skiplink is required for the next entry.
+/// Determine skiplink entry hash for entry in this log, return `None` when no skiplink is
+/// required for the next entry.
 pub async fn determine_skiplink(pool: Pool, entry: &Entry) -> Result<Option<Hash>> {
     let next_seq_num = entry.seq_num.clone().next().unwrap();
 
@@ -118,7 +118,6 @@ mod tests {
 
         // Selected fields need to be alphabetically sorted because that's what the `json` macro
         // that is used in the assert below produces.
-
         let response = client
             .post("/graphql")
             .json(&json!({
