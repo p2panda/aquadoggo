@@ -68,7 +68,7 @@ mod tests {
         let response = client
             .post("/graphql")
             .json(&json!({
-                "query": "{ ping }",
+                "query": "{ __schema { __typename } }",
             }))
             .send()
             .await;
@@ -77,7 +77,9 @@ mod tests {
             response.text().await,
             json!({
                 "data": {
-                    "ping": "pong"
+                    "__schema": {
+                        "__typename": "__Schema"
+                    }
                 }
             })
             .to_string()
