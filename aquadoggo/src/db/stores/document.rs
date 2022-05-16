@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::collections::btree_map::Iter;
+use std::collections::BTreeMap;
 
 use async_trait::async_trait;
 use futures::future::try_join_all;
@@ -20,7 +21,7 @@ pub struct StorageDocumentView(DocumentView);
 
 impl StorageDocumentView {
     pub fn new(id: &DocumentViewId, fields: &DocumentViewFields) -> Self {
-        Self(DocumentView::new(id.clone(), fields.clone()))
+        Self(DocumentView::new(id, fields))
     }
 }
 
@@ -155,6 +156,64 @@ impl DocumentStore<StorageDocumentView> for SqlStorage {
             &parse_document_view_field_rows(document_view_field_rows),
         ))
     }
+
+    async fn get_document_views_by_schema(
+        &self,
+        schema_id: &SchemaId,
+    ) -> Result<Vec<StorageDocumentView>, DocumentStorageError> {
+        let document_view_field_rows = query_as::<_, DocumentViewFieldRow>(
+            "
+            SELECT
+                document_views.document_view_id,
+                document_view_fields.operation_id,
+                document_view_fields.name,
+                operation_fields_v1.field_type,
+                operation_fields_v1.value
+            FROM
+                document_views
+            LEFT JOIN document_view_fields
+                ON
+                    document_view_fields.document_view_id = document_views.document_view_id
+            LEFT JOIN operation_fields_v1
+                ON
+                    operation_fields_v1.operation_id = document_view_fields.operation_id
+                AND
+                    operation_fields_v1.name = document_view_fields.name
+            WHERE
+                document_views.schema_id = $1
+            ",
+        )
+        .bind(schema_id.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+
+        let mut grouped_document_field_rows: BTreeMap<String, Vec<DocumentViewFieldRow>> =
+            BTreeMap::new();
+
+        for document_field_row in document_view_field_rows {
+            if let Some(current_operations) =
+                grouped_document_field_rows.get_mut(&document_field_row.document_view_id)
+            {
+                current_operations.push(document_field_row)
+            } else {
+                grouped_document_field_rows.insert(
+                    document_field_row.clone().document_view_id,
+                    vec![document_field_row],
+                );
+            };
+        }
+
+        let document_views: Vec<StorageDocumentView> = grouped_document_field_rows
+            .iter()
+            .map(|(id, document_field_row)| {
+                let fields = parse_document_view_field_rows(document_field_row.to_owned());
+                StorageDocumentView::new(&id.parse().unwrap(), &fields)
+            })
+            .collect();
+
+        Ok(document_views)
+    }
 }
 
 #[cfg(test)]
@@ -165,7 +224,7 @@ mod tests {
     use p2panda_rs::document::{DocumentViewFields, DocumentViewId, DocumentViewValue};
     use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::identity::{Author, KeyPair};
-    use p2panda_rs::operation::{AsOperation, OperationId};
+    use p2panda_rs::operation::{AsOperation, OperationId, OperationValue};
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
     use p2panda_rs::test_utils::constants::{DEFAULT_HASH, DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
@@ -173,29 +232,22 @@ mod tests {
     use crate::db::stores::document::{DocumentStore, StorageDocumentView};
     use crate::db::stores::entry::StorageEntry;
     use crate::db::stores::test_utils::{test_create_operation, test_db};
+    use crate::db::traits::AsStorageDocumentView;
 
-    fn entries_to_document_views(entries: &Vec<StorageEntry>) -> Vec<StorageDocumentView> {
+    fn entries_to_document_views(entries: &[StorageEntry]) -> Vec<StorageDocumentView> {
         let mut document_views = Vec::new();
         let mut current_document_view_fields = DocumentViewFields::new();
         for entry in entries {
             let operation_id: OperationId = entry.hash().into();
             for (name, value) in entry.operation().fields().unwrap().iter() {
                 if entry.operation().is_delete() {
-                    current_document_view_fields
-                        .clone()
-                        .iter()
-                        .for_each(|(name, value)| {
-                            current_document_view_fields
-                                .insert(name, DocumentViewValue::Deleted(operation_id.clone()));
-                        });
+                    continue;
                 } else {
-                    current_document_view_fields.insert(
-                        name,
-                        DocumentViewValue::Value(operation_id.clone(), value.clone()),
-                    );
+                    current_document_view_fields
+                        .insert(name, DocumentViewValue::new(&operation_id, value));
                 }
             }
-            let mut document_view_fields = DocumentViewFields::new_from_operation_fields(
+            let document_view_fields = DocumentViewFields::new_from_operation_fields(
                 &operation_id,
                 &entry.operation().fields().unwrap(),
             );
@@ -272,7 +324,21 @@ mod tests {
                 .await;
 
             assert!(result.is_ok());
-            assert_eq!(&result.unwrap(), document_views.get(count).unwrap());
+
+            let document_view = result.unwrap();
+
+            let expected_username = if count == 0 {
+                DocumentViewValue::new(
+                    &entry.hash().into(),
+                    &OperationValue::Text("bubu".to_string()),
+                )
+            } else {
+                DocumentViewValue::new(
+                    &entry.hash().into(),
+                    &OperationValue::Text("yoyo".to_string()),
+                )
+            };
+            assert_eq!(document_view.get("username").unwrap(), &expected_username);
         }
     }
 
@@ -298,5 +364,40 @@ mod tests {
             result.unwrap_err().to_string(),
             "A fatal error occured in DocumentStore: error returned from database: FOREIGN KEY constraint failed".to_string()
         );
+    }
+
+    #[tokio::test]
+    async fn gets_document_views_by_schema() {
+        let storage_provider = test_db(10, false).await;
+        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
+        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+        let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
+
+        let log_id = LogId::default();
+        let seq_num = SeqNum::default();
+
+        // Get 10 entries from the pre-populated test db
+        let entries = storage_provider
+            .get_paginated_log_entries(&author, &log_id, &seq_num, 10)
+            .await
+            .unwrap();
+
+        // Parse them into document views
+        let document_views = entries_to_document_views(&entries);
+
+        // Insert each of these views into the db
+        for (count, document_view) in document_views.clone().iter().enumerate() {
+            storage_provider
+                .insert_document_view(document_view, &schema_id)
+                .await
+                .unwrap();
+
+            let result = storage_provider
+                .get_document_views_by_schema(&schema_id)
+                .await;
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().len(), count + 1);
+        }
     }
 }

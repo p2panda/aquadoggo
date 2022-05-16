@@ -36,4 +36,9 @@ pub trait DocumentStore<StorageDocumentView: AsStorageDocumentView> {
         &self,
         id: &DocumentViewId,
     ) -> Result<StorageDocumentView, DocumentStorageError>;
+
+    async fn get_document_views_by_schema(
+        &self,
+        schema_id: &SchemaId,
+    ) -> Result<Vec<StorageDocumentView>, DocumentStorageError>;
 }

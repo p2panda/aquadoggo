@@ -9,10 +9,9 @@ use p2panda_rs::operation::{
 };
 use p2panda_rs::schema::SchemaId;
 
+use crate::db::models::document::DocumentViewFieldRow;
 use crate::db::models::OperationFieldsJoinedRow;
 use crate::db::stores::OperationStorage;
-
-use super::models::document::DocumentViewFieldRow;
 
 /// Takes a vector of `OperationFieldsJoinedRow` and parses them into an `OperationStorage`
 /// struct.
@@ -225,45 +224,45 @@ pub fn parse_document_view_field_rows(
             "bool" => {
                 document_view_fields.insert(
                     &row.name,
-                    DocumentViewValue::Value(
-                        row.operation_id.parse::<OperationId>().unwrap(),
-                        OperationValue::Boolean(row.value.parse::<bool>().unwrap()),
+                    DocumentViewValue::new(
+                        &row.operation_id.parse::<OperationId>().unwrap(),
+                        &OperationValue::Boolean(row.value.parse::<bool>().unwrap()),
                     ),
                 );
             }
             "int" => {
                 document_view_fields.insert(
                     &row.name,
-                    DocumentViewValue::Value(
-                        row.operation_id.parse::<OperationId>().unwrap(),
-                        OperationValue::Integer(row.value.parse::<i64>().unwrap()),
+                    DocumentViewValue::new(
+                        &row.operation_id.parse::<OperationId>().unwrap(),
+                        &OperationValue::Integer(row.value.parse::<i64>().unwrap()),
                     ),
                 );
             }
             "float" => {
                 document_view_fields.insert(
                     &row.name,
-                    DocumentViewValue::Value(
-                        row.operation_id.parse::<OperationId>().unwrap(),
-                        OperationValue::Float(row.value.parse::<f64>().unwrap()),
+                    DocumentViewValue::new(
+                        &row.operation_id.parse::<OperationId>().unwrap(),
+                        &OperationValue::Float(row.value.parse::<f64>().unwrap()),
                     ),
                 );
             }
             "str" => {
                 document_view_fields.insert(
                     &row.name,
-                    DocumentViewValue::Value(
-                        row.operation_id.parse::<OperationId>().unwrap(),
-                        OperationValue::Text(row.value.clone()),
+                    DocumentViewValue::new(
+                        &row.operation_id.parse::<OperationId>().unwrap(),
+                        &OperationValue::Text(row.value.clone()),
                     ),
                 );
             }
             "relation" => {
                 document_view_fields.insert(
                     &row.name,
-                    DocumentViewValue::Value(
-                        row.operation_id.parse::<OperationId>().unwrap(),
-                        OperationValue::Relation(Relation::new(
+                    DocumentViewValue::new(
+                        &row.operation_id.parse::<OperationId>().unwrap(),
+                        &OperationValue::Relation(Relation::new(
                             row.value.parse::<DocumentId>().unwrap(),
                         )),
                     ),
@@ -275,9 +274,9 @@ pub fn parse_document_view_field_rows(
             "pinned_relation" => {
                 document_view_fields.insert(
                     &row.name,
-                    DocumentViewValue::Value(
-                        row.operation_id.parse::<OperationId>().unwrap(),
-                        OperationValue::PinnedRelation(PinnedRelation::new(
+                    DocumentViewValue::new(
+                        &row.operation_id.parse::<OperationId>().unwrap(),
+                        &OperationValue::PinnedRelation(PinnedRelation::new(
                             row.value.parse::<DocumentViewId>().unwrap(),
                         )),
                     ),
@@ -301,12 +300,12 @@ pub fn parse_document_view_field_rows(
     if let Some(relation_list_field) = relation_list_field {
         document_view_fields.insert(
             &relation_list_field.name,
-            DocumentViewValue::Value(
-                relation_list_field
+            DocumentViewValue::new(
+                &relation_list_field
                     .operation_id
                     .parse::<OperationId>()
                     .unwrap(),
-                OperationValue::RelationList(RelationList::new(relation_list)),
+                &OperationValue::RelationList(RelationList::new(relation_list)),
             ),
         );
     }
@@ -320,12 +319,12 @@ pub fn parse_document_view_field_rows(
     if let Some(pinned_relation_list_field) = pinned_relation_list_field {
         document_view_fields.insert(
             &pinned_relation_list_field.name,
-            DocumentViewValue::Value(
-                pinned_relation_list_field
+            DocumentViewValue::new(
+                &pinned_relation_list_field
                     .operation_id
                     .parse::<OperationId>()
                     .unwrap(),
-                OperationValue::PinnedRelationList(PinnedRelationList::new(pinned_relation_list)),
+                &OperationValue::PinnedRelationList(PinnedRelationList::new(pinned_relation_list)),
             ),
         );
     }
@@ -827,28 +826,25 @@ mod tests {
 
         assert_eq!(
             document_fields.get("username").unwrap(),
-            &DocumentViewValue::Value(
-                operation_id.clone(),
-                OperationValue::Text("bubu".to_string())
-            )
+            &DocumentViewValue::new(&operation_id, &OperationValue::Text("bubu".to_string()))
         );
         assert_eq!(
             document_fields.get("age").unwrap(),
-            &DocumentViewValue::Value(operation_id.clone(), OperationValue::Integer(28))
+            &DocumentViewValue::new(&operation_id, &OperationValue::Integer(28))
         );
         assert_eq!(
             document_fields.get("height").unwrap(),
-            &DocumentViewValue::Value(operation_id.clone(), OperationValue::Float(3.5))
+            &DocumentViewValue::new(&operation_id, &OperationValue::Float(3.5))
         );
         assert_eq!(
             document_fields.get("is_admin").unwrap(),
-            &DocumentViewValue::Value(operation_id.clone(), OperationValue::Boolean(false))
+            &DocumentViewValue::new(&operation_id, &OperationValue::Boolean(false))
         );
         assert_eq!(
             document_fields.get("many_profile_pictures").unwrap(),
-            &DocumentViewValue::Value(
-                operation_id.clone(),
-                OperationValue::RelationList(RelationList::new(vec![
+            &DocumentViewValue::new(
+                &operation_id,
+                &OperationValue::RelationList(RelationList::new(vec![
                     "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
                         .parse()
                         .unwrap(),
@@ -862,9 +858,9 @@ mod tests {
             document_fields
                 .get("many_special_profile_pictures")
                 .unwrap(),
-            &DocumentViewValue::Value(
-                operation_id.clone(),
-                OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
+            &DocumentViewValue::new(
+                &operation_id,
+                &OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
                     "0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
                         .parse()
                         .unwrap(),
@@ -876,9 +872,9 @@ mod tests {
         );
         assert_eq!(
             document_fields.get("profile_picture").unwrap(),
-            &DocumentViewValue::Value(
-                operation_id.clone(),
-                OperationValue::Relation(Relation::new(
+            &DocumentViewValue::new(
+                &operation_id,
+                &OperationValue::Relation(Relation::new(
                     "0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
                         .parse()
                         .unwrap()
@@ -887,9 +883,9 @@ mod tests {
         );
         assert_eq!(
             document_fields.get("special_profile_picture").unwrap(),
-            &DocumentViewValue::Value(
-                operation_id,
-                OperationValue::PinnedRelation(PinnedRelation::new(
+            &DocumentViewValue::new(
+                &operation_id,
+                &OperationValue::PinnedRelation(PinnedRelation::new(
                     "0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
                         .parse()
                         .unwrap()
