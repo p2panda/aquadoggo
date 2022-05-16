@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use async_graphql::{Context, Object, SimpleObject};
+use async_graphql::{Context, Error, Object, Result, SimpleObject};
 use bamboo_rs_core_ed25519_yasmf::entry::is_lipmaa_required as is_skiplink_required;
 use p2panda_rs::entry::SeqNum;
 use p2panda_rs::hash::Hash;
@@ -8,7 +8,6 @@ use p2panda_rs::identity::Author;
 
 use crate::db::models::{Entry, Log};
 use crate::db::Pool;
-use crate::errors::Result;
 
 #[derive(SimpleObject)]
 pub struct EntryArgs {
@@ -46,17 +45,15 @@ impl ClientRoot {
         };
 
         // Get database connection pool
-        let pool = ctx.data::<Pool>().unwrap();
+        let pool = ctx.data::<Pool>().map_err(|err| Error::from(err))?;
 
         // Determine log_id for this document. If this is the very first operation in the document
         // graph, the `document` value is None and we will return the next free log id
-        let log_id = Log::find_document_log_id(&pool, &public_key, document_id.as_ref())
-            .await
-            .unwrap();
+        let log_id = Log::find_document_log_id(&pool, &public_key, document_id.as_ref()).await?;
 
         // Determine backlink and skiplink hashes for the next entry. To do this we need the latest
         // entry in this log
-        let entry_latest = Entry::latest(&pool, &public_key, &log_id).await.unwrap();
+        let entry_latest = Entry::latest(&pool, &public_key, &log_id).await?;
 
         match entry_latest {
             // An entry was found which serves as the backlink for the upcoming entry
@@ -108,14 +105,16 @@ pub async fn determine_skiplink(pool: Pool, entry: &Entry) -> Result<Option<Hash
 mod tests {
     use serde_json::json;
 
-    use crate::server::{build_server, ApiState};
+    use crate::config::Configuration;
+    use crate::context::Context;
+    use crate::server::build_server;
     use crate::test_helpers::{initialize_db, TestClient};
 
     #[tokio::test]
     async fn next_entry_args_valid_query() {
         let pool = initialize_db().await;
-        let state = ApiState::new(pool.clone());
-        let client = TestClient::new(build_server(state));
+        let context = Context::new(pool.clone(), Configuration::default());
+        let client = TestClient::new(build_server(context));
 
         // Selected fields need to be alphabetically sorted because that's what the `json` macro
         // that is used in the assert below produces.
@@ -156,8 +155,8 @@ mod tests {
     #[tokio::test]
     async fn next_entry_args_invalid_author() {
         let pool = initialize_db().await;
-        let state = ApiState::new(pool.clone());
-        let client = TestClient::new(build_server(state));
+        let context = Context::new(pool.clone(), Configuration::default());
+        let client = TestClient::new(build_server(context));
 
         // Selected fields need to be alphabetically sorted because that's what the `json` macro
         // that is used in the assert below produces.
