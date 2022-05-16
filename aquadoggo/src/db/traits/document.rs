@@ -66,4 +66,9 @@ pub trait DocumentStore<
 
     async fn insert_document(&self, document: &StorageDocument)
         -> Result<(), DocumentStorageError>;
+
+    async fn get_document_by_id(
+        &self,
+        id: &DocumentId,
+    ) -> Result<StorageDocumentView, DocumentStorageError>;
 }

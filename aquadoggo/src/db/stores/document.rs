@@ -282,6 +282,46 @@ impl DocumentStore<StorageDocumentView, StorageDocument> for SqlStorage {
 
         Ok(())
     }
+
+    async fn get_document_by_id(
+        &self,
+        id: &DocumentId,
+    ) -> Result<StorageDocumentView, DocumentStorageError> {
+        let document_view_field_rows = query_as::<_, DocumentViewFieldRow>(
+            "
+            SELECT
+                document_view_fields.document_view_id,
+                document_view_fields.operation_id,
+                document_view_fields.name,
+                operation_fields_v1.field_type,
+                operation_fields_v1.value
+            FROM
+                documents
+            LEFT JOIN document_view_fields
+                ON
+                    documents.document_view_id = document_view_fields.document_view_id    
+            LEFT JOIN operation_fields_v1
+                ON
+                    document_view_fields.operation_id = operation_fields_v1.operation_id
+                AND
+                    document_view_fields.name = operation_fields_v1.name
+            WHERE
+                documents.document_id = $1
+            ",
+        )
+        .bind(id.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+
+        Ok(StorageDocumentView::new(
+            &document_view_field_rows[0]
+                .document_view_id
+                .parse()
+                .unwrap(),
+            &parse_document_view_field_rows(document_view_field_rows),
+        ))
+    }
 }
 
 #[cfg(test)]
@@ -527,6 +567,60 @@ mod tests {
 
         let document_view = storage_provider
             .get_document_view_by_id(document.view_id())
+            .await
+            .unwrap();
+
+        let expected_document_view = document.view().unwrap();
+
+        for key in [
+            "username",
+            "age",
+            "height",
+            "is_admin",
+            "profile_picture",
+            "many_profile_pictures",
+            "special_profile_picture",
+            "many_special_profile_pictures",
+        ] {
+            assert!(document_view.get(key).is_some());
+            assert_eq!(document_view.get(key), expected_document_view.get(key));
+        }
+    }
+
+    #[tokio::test]
+    async fn gets_document_by_id() {
+        let storage_provider = test_db(10, false).await;
+
+        // This is the id for the document CREATE operation which exists in the test db.
+        let document_id = DocumentId::new(
+            "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                .parse()
+                .unwrap(),
+        );
+
+        let document_operations = storage_provider
+            .get_operations_by_document_id(&document_id)
+            .await
+            .unwrap();
+
+        // We're accessing the wrapped `Operation` here, I think there could be a nicer pattern for this, see: https://github.com/p2panda/p2panda/issues/320
+        let document = DocumentBuilder::new(
+            document_operations
+                .into_iter()
+                .map(|operation| operation.into())
+                .collect(),
+        )
+        .build()
+        .unwrap();
+
+        let result = storage_provider
+            .insert_document(&StorageDocument(document.clone()))
+            .await;
+
+        assert!(result.is_ok());
+
+        let document_view = storage_provider
+            .get_document_by_id(document.id())
             .await
             .unwrap();
 
