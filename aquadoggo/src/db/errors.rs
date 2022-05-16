@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use p2panda_rs::{document::DocumentViewId, operation::OperationId};
+use p2panda_rs::{
+    document::{DocumentId, DocumentViewId},
+    operation::OperationId,
+};
 
 /// `OperationStore` errors.
 #[derive(thiserror::Error, Debug)]
@@ -29,7 +32,11 @@ pub enum DocumentStorageError {
     #[error("A fatal error occured in DocumentStore: {0}")]
     FatalStorageError(String),
 
-    /// Error which originates in `insert_document()` when the insertion fails.
+    /// Error which originates in `insert_document_view()` when the insertion fails.
     #[error("Error occured when inserting a document view with id {0:?} into storage")]
-    InsertionError(DocumentViewId),
+    DocumentViewInsertionError(DocumentViewId),
+
+    /// Error which originates in `insert_document()` when the insertion fails.
+    #[error("Error occured when inserting a document with id {0:?} into storage")]
+    DocumentInsertionError(DocumentId),
 }

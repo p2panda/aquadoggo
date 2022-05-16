@@ -137,7 +137,7 @@ impl DocumentStore<StorageDocumentView, StorageDocument> for SqlStorage {
                 .iter()
                 .any(|query_result| query_result.rows_affected() != 1)
         {
-            return Err(DocumentStorageError::InsertionError(
+            return Err(DocumentStorageError::DocumentViewInsertionError(
                 document_view.id().clone(),
             ));
         }
@@ -248,8 +248,6 @@ impl DocumentStore<StorageDocumentView, StorageDocument> for SqlStorage {
         &self,
         document: &StorageDocument,
     ) -> Result<(), DocumentStorageError> {
-        let document_view = document.view();
-
         // Insert document view into the db
         let document_insertion_result = query(
             "
@@ -271,6 +269,12 @@ impl DocumentStore<StorageDocumentView, StorageDocument> for SqlStorage {
         .execute(&self.pool)
         .await
         .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+
+        if document_insertion_result.rows_affected() != 1 {
+            return Err(DocumentStorageError::DocumentInsertionError(
+                document.id().clone(),
+            ));
+        }
 
         if !document.is_deleted() && document.view().is_some() {
             let document_view =
