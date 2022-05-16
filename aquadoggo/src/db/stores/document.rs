@@ -186,30 +186,30 @@ impl DocumentStore<StorageDocumentView, StorageDocument> for SqlStorage {
         ))
     }
 
-    async fn get_document_views_by_schema(
+    async fn get_documents_by_schema(
         &self,
         schema_id: &SchemaId,
     ) -> Result<Vec<StorageDocumentView>, DocumentStorageError> {
         let document_view_field_rows = query_as::<_, DocumentViewFieldRow>(
             "
             SELECT
-                document_views.document_view_id,
+                document_view_fields.document_view_id,
                 document_view_fields.operation_id,
                 document_view_fields.name,
                 operation_fields_v1.field_type,
                 operation_fields_v1.value
             FROM
-                document_views
+                documents
             LEFT JOIN document_view_fields
                 ON
-                    document_view_fields.document_view_id = document_views.document_view_id
+                    documents.document_view_id = document_view_fields.document_view_id    
             LEFT JOIN operation_fields_v1
                 ON
-                    operation_fields_v1.operation_id = document_view_fields.operation_id
+                    document_view_fields.operation_id = operation_fields_v1.operation_id
                 AND
-                    operation_fields_v1.name = document_view_fields.name
+                    document_view_fields.name = operation_fields_v1.name
             WHERE
-                document_views.schema_id = $1
+                documents.schema_id = $1
             ",
         )
         .bind(schema_id.as_str())
@@ -290,7 +290,7 @@ impl DocumentStore<StorageDocumentView, StorageDocument> for SqlStorage {
     async fn get_document_by_id(
         &self,
         id: &DocumentId,
-    ) -> Result<StorageDocumentView, DocumentStorageError> {
+    ) -> Result<Option<StorageDocumentView>, DocumentStorageError> {
         let document_view_field_rows = query_as::<_, DocumentViewFieldRow>(
             "
             SELECT
@@ -310,7 +310,7 @@ impl DocumentStore<StorageDocumentView, StorageDocument> for SqlStorage {
                 AND
                     document_view_fields.name = operation_fields_v1.name
             WHERE
-                documents.document_id = $1
+                documents.document_id = $1 AND documents.is_deleted = false
             ",
         )
         .bind(id.as_str())
@@ -318,13 +318,17 @@ impl DocumentStore<StorageDocumentView, StorageDocument> for SqlStorage {
         .await
         .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
 
-        Ok(StorageDocumentView::new(
+        if document_view_field_rows.is_empty() {
+            return Ok(None);
+        }
+
+        Ok(Some(StorageDocumentView::new(
             &document_view_field_rows[0]
                 .document_view_id
                 .parse()
                 .unwrap(),
             &parse_document_view_field_rows(document_view_field_rows),
-        ))
+        )))
     }
 }
 
@@ -427,7 +431,7 @@ mod tests {
 
     #[tokio::test]
     async fn inserts_gets_many_document_views() {
-        let storage_provider = test_db(10, true).await;
+        let storage_provider = test_db(10, false).await;
         let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
         let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
         let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
@@ -503,43 +507,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn gets_document_views_by_schema() {
-        let storage_provider = test_db(10, false).await;
-        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
-        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
-        let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
-
-        let log_id = LogId::default();
-        let seq_num = SeqNum::default();
-
-        // Get 10 entries from the pre-populated test db
-        let entries = storage_provider
-            .get_paginated_log_entries(&author, &log_id, &seq_num, 10)
-            .await
-            .unwrap();
-
-        // Parse them into document views
-        let document_views = entries_to_document_views(&entries);
-
-        // Insert each of these views into the db
-        for (count, document_view) in document_views.clone().iter().enumerate() {
-            storage_provider
-                .insert_document_view(document_view, &schema_id)
-                .await
-                .unwrap();
-
-            let result = storage_provider
-                .get_document_views_by_schema(&schema_id)
-                .await;
-
-            assert!(result.is_ok());
-            assert_eq!(result.unwrap().len(), count + 1);
-        }
-    }
-
-    #[tokio::test]
     async fn inserts_gets_document() {
-        let storage_provider = test_db(10, false).await;
+        let storage_provider = test_db(3, false).await;
 
         // This is the id for the document CREATE operation which exists in the test db.
         let document_id = DocumentId::new(
@@ -593,7 +562,62 @@ mod tests {
 
     #[tokio::test]
     async fn gets_document_by_id() {
-        let storage_provider = test_db(10, false).await;
+        let storage_provider = test_db(3, false).await;
+
+        // This is the id for the document CREATE operation which exists in the test db.
+        let document_id = DocumentId::new(
+            "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                .parse()
+                .unwrap(),
+        );
+
+        let document_operations = storage_provider
+            .get_operations_by_document_id(&document_id)
+            .await
+            .unwrap();
+
+        // We're accessing the wrapped `Operation` here, I think there could be a nicer pattern for this, see: https://github.com/p2panda/p2panda/issues/320
+        let document = DocumentBuilder::new(
+            document_operations
+                .into_iter()
+                .map(|operation| operation.into())
+                .collect(),
+        )
+        .build()
+        .unwrap();
+
+        let result = storage_provider
+            .insert_document(&StorageDocument(document.clone()))
+            .await;
+
+        assert!(result.is_ok());
+
+        let document_view = storage_provider
+            .get_document_by_id(document.id())
+            .await
+            .unwrap()
+            .unwrap();
+
+        let expected_document_view = document.view().unwrap();
+
+        for key in [
+            "username",
+            "age",
+            "height",
+            "is_admin",
+            "profile_picture",
+            "many_profile_pictures",
+            "special_profile_picture",
+            "many_special_profile_pictures",
+        ] {
+            assert!(document_view.get(key).is_some());
+            assert_eq!(document_view.get(key), expected_document_view.get(key));
+        }
+    }
+
+    #[tokio::test]
+    async fn no_view_when_document_deleted() {
+        let storage_provider = test_db(3, true).await;
 
         // This is the id for the document CREATE operation which exists in the test db.
         let document_id = DocumentId::new(
@@ -628,20 +652,6 @@ mod tests {
             .await
             .unwrap();
 
-        let expected_document_view = document.view().unwrap();
-
-        for key in [
-            "username",
-            "age",
-            "height",
-            "is_admin",
-            "profile_picture",
-            "many_profile_pictures",
-            "special_profile_picture",
-            "many_special_profile_pictures",
-        ] {
-            assert!(document_view.get(key).is_some());
-            assert_eq!(document_view.get(key), expected_document_view.get(key));
-        }
+        assert!(document_view.is_none());
     }
 }
