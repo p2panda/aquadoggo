@@ -2294,7 +2294,7 @@ dependencies = [
 [[package]]
 name = "p2panda-rs"
 version = "0.3.0"
-source = "git+https://github.com/p2panda/p2panda?branch=aquadoggo-wip#41143b403d5bcbfffca5b0e8ad13e8af35ff92f5"
+source = "git+https://github.com/p2panda/p2panda?branch=aquadoggo-wip#d8c93bed89a9a0e19b081275c4b826245a1b59f2"
 dependencies = [
  "arrayvec 0.5.2",
  "async-trait",
