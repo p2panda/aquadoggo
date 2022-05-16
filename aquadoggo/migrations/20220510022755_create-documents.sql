@@ -17,7 +17,8 @@ CREATE TABLE IF NOT EXISTS document_views (
 
 CREATE TABLE IF NOT EXISTS documents (
     document_id                 VARCHAR(64)     NOT NULL UNIQUE,
-    document_view_id            TEXT            NOT NULL,
+    document_view_id            TEXT            NULL,
     schema_id                   TEXT            NOT NULL,
+    is_deleted                  BOOLEAN         NOT NULL,
     PRIMARY KEY (document_id)
 );
