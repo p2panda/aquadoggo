@@ -25,7 +25,7 @@ pub struct ClientRoot;
 #[Object]
 impl ClientRoot {
     /// Return required arguments for publishing the next entry.
-    async fn get_entry_args(
+    async fn next_entry_args(
         &self,
         ctx: &Context<'_>,
         #[graphql(
@@ -102,4 +102,79 @@ pub async fn determine_skiplink(pool: Pool, entry: &Entry) -> Result<Option<Hash
     };
 
     Ok(entry_skiplink_hash)
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use crate::server::{build_server, ApiState};
+    use crate::test_helpers::{initialize_db, TestClient};
+
+    #[tokio::test]
+    async fn next_entry_args_valid_query() {
+        let pool = initialize_db().await;
+        let state = ApiState::new(pool.clone());
+        let client = TestClient::new(build_server(state));
+
+        // Selected fields need to be alphabetically sorted because that's what the `json` macro
+        // that is used in the assert below produces.
+
+        let response = client
+            .post("/graphql")
+            .json(&json!({
+                "query": r#"{
+                    nextEntryArgs(
+                        publicKey: "8b52ae153142288402382fd6d9619e018978e015e6bc372b1b0c7bd40c6a240a"
+                    ) {
+                        backlink,
+                        logId,
+                        seqNum,
+                        skiplink
+                    }
+                }"#,
+            }))
+            .send()
+            .await;
+
+        assert_eq!(
+            response.text().await,
+            json!({
+                "data": {
+                    "nextEntryArgs": {
+                        "logId": "1",
+                        "seqNum": "1",
+                        "backlink": null,
+                        "skiplink": null
+                    }
+                }
+            })
+            .to_string()
+        );
+    }
+
+    #[tokio::test]
+    async fn next_entry_args_invalid_author() {
+        let pool = initialize_db().await;
+        let state = ApiState::new(pool.clone());
+        let client = TestClient::new(build_server(state));
+
+        // Selected fields need to be alphabetically sorted because that's what the `json` macro
+        // that is used in the assert below produces.
+
+        let response = client
+            .post("/graphql")
+            .json(&json!({
+                "query": r#"{
+                    nextEntryArgs(publicKey: "nope") {
+                        logId
+                    }
+                }"#,
+            }))
+            .send()
+            .await;
+
+        let response_text = response.text().await;
+        assert!(response_text.contains("invalid hex encoding in author string"));
+    }
 }
