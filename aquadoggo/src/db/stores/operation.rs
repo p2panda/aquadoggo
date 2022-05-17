@@ -392,7 +392,7 @@ mod tests {
 
     #[tokio::test]
     async fn insert_get_create_operation() {
-        let storage_provider = test_db(0, false).await;
+        let storage_provider = test_db(0, 1, false).await;
 
         // Create Author, OperationId and DocumentId in order to compose a OperationStorage.
         let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
@@ -411,7 +411,7 @@ mod tests {
 
     #[tokio::test]
     async fn insert_get_update_operation() {
-        let storage_provider = test_db(0, false).await;
+        let storage_provider = test_db(0, 1, false).await;
 
         // Create Author, OperationId and DocumentId in order to compose a OperationStorage.
         let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
@@ -432,7 +432,7 @@ mod tests {
 
     #[tokio::test]
     async fn insert_get_delete_operation() {
-        let storage_provider = test_db(0, false).await;
+        let storage_provider = test_db(0, 1, false).await;
 
         // Create Author, OperationId and DocumentId in order to compose a OperationStorage.
         let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
@@ -454,7 +454,7 @@ mod tests {
 
     #[tokio::test]
     async fn insert_operation_twice() {
-        let storage_provider = test_db(0, false).await;
+        let storage_provider = test_db(0, 1, false).await;
 
         // Create Author, OperationId and DocumentId in order to compose a OperationStorage.
         let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
@@ -482,7 +482,7 @@ mod tests {
 
     #[tokio::test]
     async fn gets_document_by_operation_id() {
-        let storage_provider = test_db(0, false).await;
+        let storage_provider = test_db(0, 1, false).await;
 
         let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
         let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
@@ -545,7 +545,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_operations_by_document_id() {
-        let storage_provider = test_db(5, false).await;
+        let storage_provider = test_db(5, 1, false).await;
         let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
         let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 

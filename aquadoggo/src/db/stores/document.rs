@@ -380,7 +380,7 @@ mod tests {
 
     #[tokio::test]
     async fn inserts_gets_one_document_view() {
-        let storage_provider = test_db(1, false).await;
+        let storage_provider = test_db(1, 1, false).await;
         let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
         let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
@@ -431,7 +431,7 @@ mod tests {
 
     #[tokio::test]
     async fn inserts_gets_many_document_views() {
-        let storage_provider = test_db(10, false).await;
+        let storage_provider = test_db(10, 1, false).await;
         let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
         let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
         let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
@@ -484,7 +484,7 @@ mod tests {
 
     #[tokio::test]
     async fn insert_duplicate_document_view() {
-        let storage_provider = test_db(1, false).await;
+        let storage_provider = test_db(1, 1, false).await;
 
         let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
         let document_view_id: DocumentViewId = operation_id.clone().into();
@@ -508,7 +508,7 @@ mod tests {
 
     #[tokio::test]
     async fn inserts_gets_document() {
-        let storage_provider = test_db(3, false).await;
+        let storage_provider = test_db(3, 1, false).await;
 
         // This is the id for the document CREATE operation which exists in the test db.
         let document_id = DocumentId::new(
@@ -562,7 +562,7 @@ mod tests {
 
     #[tokio::test]
     async fn gets_document_by_id() {
-        let storage_provider = test_db(3, false).await;
+        let storage_provider = test_db(3, 1, false).await;
 
         // This is the id for the document CREATE operation which exists in the test db.
         let document_id = DocumentId::new(
@@ -617,7 +617,7 @@ mod tests {
 
     #[tokio::test]
     async fn no_view_when_document_deleted() {
-        let storage_provider = test_db(3, true).await;
+        let storage_provider = test_db(3, 1, true).await;
 
         // This is the id for the document CREATE operation which exists in the test db.
         let document_id = DocumentId::new(
@@ -653,5 +653,16 @@ mod tests {
             .unwrap();
 
         assert!(document_view.is_none());
+    }
+
+    #[tokio::test]
+    async fn gets_documents_by_schema() {
+        let storage_provider = test_db(1, 2, false).await;
+
+        let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
+
+        let schema_entries = storage_provider.by_schema(&schema_id).await.unwrap();
+
+        assert_eq!(schema_entries.len(), 2)
     }
 }

@@ -107,7 +107,7 @@ pub fn test_delete_operation(previous_operations: Vec<OperationId>) -> Operation
     .unwrap()
 }
 
-pub async fn test_db(no_of_entries: usize, with_delete: bool) -> SqlStorage {
+pub async fn test_db(no_of_entries: usize, no_of_authors: usize, with_delete: bool) -> SqlStorage {
     let pool = initialize_db().await;
     let storage_provider = SqlStorage { pool };
 
@@ -116,70 +116,79 @@ pub async fn test_db(no_of_entries: usize, with_delete: bool) -> SqlStorage {
         return storage_provider;
     }
 
-    let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
-    let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+    let mut key_pairs = vec![KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap()];
 
-    let mut document: Option<DocumentId> = None;
+    for index in 1..no_of_authors {
+        key_pairs.push(KeyPair::new())
+    }
 
-    for index in 0..no_of_entries {
-        let next_entry_args = storage_provider
-            .get_entry_args(&EntryArgsRequest {
-                author: author.clone(),
-                document: document.as_ref().cloned(),
-            })
-            .await
-            .unwrap();
+    for key_pair in key_pairs {
+        let mut document: Option<DocumentId> = None;
+        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+        for index in 0..no_of_entries {
+            let next_entry_args = storage_provider
+                .get_entry_args(&EntryArgsRequest {
+                    author: author.clone(),
+                    document: document.as_ref().cloned(),
+                })
+                .await
+                .unwrap();
 
-        let next_operation = if index == 0 {
-            test_create_operation()
-        } else if index == no_of_entries && with_delete {
-            test_delete_operation(vec![next_entry_args.backlink.clone().unwrap().into()])
-        } else {
-            test_update_operation(
-                vec![next_entry_args.backlink.clone().unwrap().into()],
-                "yoyo",
+            let next_operation = if index == 0 {
+                test_create_operation()
+            } else if index == (no_of_entries - 1) && with_delete {
+                test_delete_operation(vec![next_entry_args
+                    .entry_hash_backlink
+                    .clone()
+                    .unwrap()
+                    .into()])
+            } else {
+                test_update_operation(
+                    vec![next_entry_args.entry_hash_backlink.clone().unwrap().into()],
+                    "yoyo",
+                )
+            };
+
+            let next_entry = Entry::new(
+                &next_entry_args.log_id,
+                Some(&next_operation),
+                next_entry_args.entry_hash_skiplink.as_ref(),
+                next_entry_args.entry_hash_backlink.as_ref(),
+                &next_entry_args.seq_num,
             )
-        };
+            .unwrap();
 
-        let next_entry = Entry::new(
-            &next_entry_args.log_id,
-            Some(&next_operation),
-            next_entry_args.skiplink.as_ref(),
-            next_entry_args.backlink.as_ref(),
-            &next_entry_args.seq_num,
-        )
-        .unwrap();
+            let entry_encoded = sign_and_encode(&next_entry, &key_pair).unwrap();
+            let operation_encoded = OperationEncoded::try_from(&next_operation).unwrap();
 
-        let entry_encoded = sign_and_encode(&next_entry, &key_pair).unwrap();
-        let operation_encoded = OperationEncoded::try_from(&next_operation).unwrap();
+            if index == 0 {
+                document = Some(entry_encoded.hash().into());
+            }
 
-        if index == 0 {
-            document = Some(entry_encoded.hash().into());
+            let operation_id: OperationId = entry_encoded.hash().into();
+
+            // Publish the new entry
+            storage_provider
+                .publish_entry(&PublishEntryRequest {
+                    entry_encoded: entry_encoded.clone(),
+                    operation_encoded,
+                })
+                .await
+                .unwrap();
+
+            let storage_operation = OperationStorage::new(
+                &author,
+                &next_operation,
+                &operation_id,
+                &document.as_ref().cloned().unwrap(),
+            );
+
+            // Publish the new operation
+            storage_provider
+                .insert_operation(&storage_operation)
+                .await
+                .unwrap();
         }
-
-        let operation_id: OperationId = entry_encoded.hash().into();
-
-        // Publish the new entry
-        storage_provider
-            .publish_entry(&PublishEntryRequest {
-                entry_encoded: entry_encoded.clone(),
-                operation_encoded,
-            })
-            .await
-            .unwrap();
-
-        let storage_operation = OperationStorage::new(
-            &author,
-            &next_operation,
-            &operation_id,
-            &document.as_ref().cloned().unwrap(),
-        );
-
-        // Publish the new operation
-        storage_provider
-            .insert_operation(&storage_operation)
-            .await
-            .unwrap();
     }
     storage_provider
 }
