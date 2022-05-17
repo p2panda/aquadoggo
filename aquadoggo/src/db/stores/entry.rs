@@ -17,10 +17,6 @@ use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
 use crate::db::models::EntryRow;
 use crate::db::provider::SqlStorage;
 
-/// Represents a stored entry in a way that is conducive to implementing storage traits.
-///
-/// In the case of `EntryRow`, the traits could have been implemented directly on it but this
-/// structure was chosen to align with the way the other stores are structured.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StorageEntry {
     entry_signed: EntrySigned,
