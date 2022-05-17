@@ -8,7 +8,7 @@ use p2panda_rs::entry::{sign_and_encode, Entry, LogId, SeqNum};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::{Author, KeyPair};
 use p2panda_rs::operation::{
-    Operation, OperationEncoded, OperationFields, OperationValue, PinnedRelation,
+    Operation, OperationEncoded, OperationFields, OperationId, OperationValue, PinnedRelation,
     PinnedRelationList, Relation, RelationList,
 };
 use p2panda_rs::schema::SchemaId;
@@ -129,18 +129,28 @@ pub async fn test_db(no_of_entries: usize) -> SqlStorage {
             .await
             .unwrap();
 
-        let backlink = next_entry_args.entry_hash_backlink.clone().unwrap();
+        let backlink = next_entry_args
+            .backlink
+            .clone()
+            .map(|val| val.parse::<OperationId>().expect(&format!("{}", val)))
+            .unwrap();
 
         // Construct the next UPDATE operation, we use the backlink hash in the prev_op vector
         let update_operation =
             Operation::new_update(schema.clone(), vec![backlink.into()], fields.clone()).unwrap();
 
         let update_entry = Entry::new(
-            &next_entry_args.log_id,
+            &next_entry_args.log_id.parse().unwrap(),
             Some(&update_operation),
-            next_entry_args.entry_hash_skiplink.as_ref(),
-            next_entry_args.entry_hash_backlink.as_ref(),
-            &next_entry_args.seq_num,
+            next_entry_args
+                .skiplink
+                .map(|val| val.parse().unwrap())
+                .as_ref(),
+            next_entry_args
+                .backlink
+                .map(|val| val.parse().unwrap())
+                .as_ref(),
+            &next_entry_args.seq_num.parse().unwrap(),
         )
         .unwrap();
 

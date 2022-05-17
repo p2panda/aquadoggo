@@ -2314,7 +2314,7 @@ dependencies = [
 [[package]]
 name = "p2panda-rs"
 version = "0.3.0"
-source = "git+https://github.com/p2panda/p2panda?branch=aquadoggo-wip#8bc8eb5466a881c06265e3d2b4a2ab36d404f1d0"
+source = "git+https://github.com/p2panda/p2panda?branch=storage-provider-error-send-sync#b3f062df9f3e39668fdd4c3899c243d50e661709"
 dependencies = [
  "arrayvec 0.5.2",
  "async-trait",

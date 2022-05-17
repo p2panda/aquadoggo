@@ -10,26 +10,6 @@ use crate::db::Pool;
 
 use super::{EntryArgsRequest, EntryArgsResponse};
 
-//
-#[derive(SimpleObject)]
-pub struct EntryArgs {
-    pub log_id: String,
-    pub seq_num: String,
-    pub backlink: Option<String>,
-    pub skiplink: Option<String>,
-}
-
-impl From<EntryArgsResponse> for EntryArgs {
-    fn from(value: EntryArgsResponse) -> Self {
-        EntryArgs {
-            log_id: value.log_id.as_u64().to_string(),
-            seq_num: value.seq_num.as_u64().to_string(),
-            backlink: value.entry_hash_backlink.map(|hash| hash.to_string()),
-            skiplink: value.entry_hash_skiplink.map(|hash| hash.to_string()),
-        }
-    }
-}
-
 #[derive(Default, Debug, Copy, Clone)]
 /// The GraphQL root for the client api that p2panda clients can use to connect to a node.
 pub struct ClientRoot;
@@ -50,7 +30,7 @@ impl ClientRoot {
             desc = "Document id to which the entry's operation will apply"
         )]
         document_id_param: Option<String>,
-    ) -> Result<EntryArgs> {
+    ) -> Result<EntryArgsResponse> {
         // Parse and validate parameters
         let document_id = match document_id_param {
             Some(val) => Some(val.parse::<DocumentId>()?),
@@ -67,11 +47,10 @@ impl ClientRoot {
             pool: pool.to_owned(),
         };
 
-        match provider.get_entry_args(&args).await {
-            Ok(entry_args) => Ok(entry_args.into()),
-            Err(_) => Err(Error::new("Graphql gone wrong")),
-            // Err(err) => Err(Error::from(err)),
-        }
+        provider
+            .get_entry_args(&args)
+            .await
+            .map_err(|err| Error::from(err))
     }
 }
 

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use async_graphql::SimpleObject;
 use p2panda_rs::document::DocumentId;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::{AsEntryArgsRequest, AsPublishEntryRequest};
@@ -53,27 +54,22 @@ impl Validate for EntryArgsRequest {
 /// Response body of `panda_getEntryArguments`.
 ///
 /// `seq_num` and `log_id` are returned as strings to be able to represent large integers in JSON.
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, SimpleObject)]
 #[serde(rename_all = "camelCase")]
 pub struct EntryArgsResponse {
-    pub entry_hash_backlink: Option<Hash>,
-    pub entry_hash_skiplink: Option<Hash>,
-    pub seq_num: SeqNum,
-    pub log_id: LogId,
+    pub backlink: Option<String>,
+    pub skiplink: Option<String>,
+    pub seq_num: String,
+    pub log_id: String,
 }
 
 impl AsEntryArgsResponse for EntryArgsResponse {
-    fn new(
-        entry_hash_backlink: Option<Hash>,
-        entry_hash_skiplink: Option<Hash>,
-        seq_num: SeqNum,
-        log_id: LogId,
-    ) -> Self {
+    fn new(backlink: Option<Hash>, skiplink: Option<Hash>, seq_num: SeqNum, log_id: LogId) -> Self {
         EntryArgsResponse {
-            entry_hash_backlink,
-            entry_hash_skiplink,
-            seq_num,
-            log_id,
+            backlink: backlink.map(|hash| hash.as_str().to_string()),
+            skiplink: skiplink.map(|hash| hash.as_str().to_string()),
+            seq_num: seq_num.as_u64().to_string(),
+            log_id: log_id.as_u64().to_string(),
         }
     }
 }

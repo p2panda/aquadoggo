@@ -416,14 +416,16 @@ mod tests {
     use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
-    use p2panda_rs::operation::{Operation, OperationEncoded, OperationFields, OperationValue};
+    use p2panda_rs::operation::{
+        Operation, OperationEncoded, OperationFields, OperationId, OperationValue,
+    };
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, StorageProvider};
     use p2panda_rs::test_utils::constants::{DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
 
     use crate::db::stores::entry::StorageEntry;
     use crate::db::stores::test_utils::test_db;
-    use crate::rpc::EntryArgsRequest;
+    use crate::graphql::client::EntryArgsRequest;
 
     #[tokio::test]
     async fn insert_entry() {
@@ -443,7 +445,7 @@ mod tests {
             .hash()
             .into();
 
-        let next_entry_args = storage_provider
+        let entry_args = storage_provider
             .get_entry_args(&EntryArgsRequest {
                 author: author.clone(),
                 document: Some(document_id.clone()),
@@ -458,17 +460,22 @@ mod tests {
 
         let update_operation = Operation::new_update(
             schema.clone(),
-            vec![next_entry_args.entry_hash_backlink.clone().unwrap().into()],
+            vec![entry_args
+                .backlink
+                .clone()
+                .map(|val| val.parse::<OperationId>().unwrap())
+                .unwrap()
+                .into()],
             fields.clone(),
         )
         .unwrap();
 
         let update_entry = Entry::new(
-            &next_entry_args.log_id,
+            &entry_args.log_id.parse().unwrap(),
             Some(&update_operation),
-            next_entry_args.entry_hash_skiplink.as_ref(),
-            next_entry_args.entry_hash_backlink.as_ref(),
-            &next_entry_args.seq_num,
+            entry_args.skiplink.map(|val| val.parse().unwrap()).as_ref(),
+            entry_args.backlink.map(|val| val.parse().unwrap()).as_ref(),
+            &entry_args.seq_num.parse().unwrap(),
         )
         .unwrap();
 
@@ -501,7 +508,11 @@ mod tests {
         .unwrap();
         let result = storage_provider.insert_entry(duplicate_doggo_entry).await;
 
-        assert_eq!(result.unwrap_err().to_string(), "Error occured during `EntryStorage` request in storage provider: error returned from database: UNIQUE constraint failed: entries.author, entries.log_id, entries.seq_num")
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Error occured during `EntryStorage` request in storage provider: error returned from \
+            database: UNIQUE constraint failed: entries.author, entries.log_id, entries.seq_num"
+        )
     }
 
     #[tokio::test]
