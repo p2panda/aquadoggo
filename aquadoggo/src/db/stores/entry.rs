@@ -14,7 +14,7 @@ use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::errors::EntryStorageError;
 use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
 
-use crate::db::models::entry::EntryRow;
+use crate::db::models::EntryRow;
 use crate::db::provider::SqlStorage;
 
 #[derive(Debug, Clone, PartialEq)]

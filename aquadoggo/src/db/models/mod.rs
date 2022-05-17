@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-pub mod entry;
-pub mod log;
+mod entry;
+mod log;
+
+pub use self::log::LogRow;
+pub use entry::EntryRow;

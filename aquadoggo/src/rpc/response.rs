@@ -6,7 +6,7 @@ use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::storage_provider::traits::{AsEntryArgsResponse, AsPublishEntryResponse};
 
-use crate::db::models::entry::EntryRow;
+use crate::db::models::EntryRow;
 
 /// Response body of `panda_getEntryArguments`.
 ///
