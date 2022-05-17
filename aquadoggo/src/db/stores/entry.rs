@@ -621,7 +621,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn gets_next_n_entries_after_seq() {
+    async fn get_paginated_log_entries() {
         let storage_provider = test_db(50).await;
 
         let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
