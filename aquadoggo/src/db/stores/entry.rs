@@ -257,7 +257,7 @@ impl EntryStore<StorageEntry> for SqlStorage {
                 author = $1
                 AND log_id = $2
             ORDER BY
-                CAST(seq_num AS INTEGER) DESC
+                CAST(seq_num AS NUMERIC) DESC
             LIMIT
                 1
             ",
@@ -335,9 +335,9 @@ impl EntryStore<StorageEntry> for SqlStorage {
             WHERE
                 author = $1
                 AND log_id = $2
-                AND CAST(seq_num AS INTEGER) BETWEEN $3 and $4
+                AND CAST(seq_num AS NUMERIC) BETWEEN $3 and $4
             ORDER BY
-                CAST(seq_num AS INTEGER)
+                CAST(seq_num AS NUMERIC)
             ",
         )
         .bind(author.as_str())
@@ -388,9 +388,9 @@ impl EntryStore<StorageEntry> for SqlStorage {
             WHERE
                 author = $1
                 AND log_id = $2
-                AND CAST(seq_num AS INTEGER) IN ({})
+                AND CAST(seq_num AS NUMERIC) IN ({})
             ORDER BY
-                CAST(seq_num AS INTEGER) DESC
+                CAST(seq_num AS NUMERIC) DESC
             ",
             cert_pool_seq_nums
         );
