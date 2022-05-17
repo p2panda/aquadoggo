@@ -545,7 +545,7 @@ mod tests {
         let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
         let latest_entry = storage_provider
-            .latest_entry(&author, &LogId::default())
+            .get_latest_entry(&author, &LogId::default())
             .await
             .unwrap()
             .unwrap();
