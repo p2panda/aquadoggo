@@ -105,8 +105,12 @@ impl LogStore<StorageLog> for SqlStorage {
         .map_err(|e| LogStorageError::Custom(e.to_string()))?;
 
         // Wrap u64 inside of `P2PandaLog` instance
-        let log_id: Option<LogId> =
-            result.map(|str| str.parse().expect("Corrupt u64 integer found in database"));
+        let log_id: Option<LogId> = result.map(|str| {
+            str.parse().expect(&format!(
+                "Corrupt u64 integer found in database: '{0}'",
+                &str
+            ))
+        });
 
         Ok(log_id)
     }
@@ -132,7 +136,12 @@ impl LogStore<StorageLog> for SqlStorage {
         // Convert all strings representing u64 integers to `LogId` instances
         let mut log_ids: Vec<LogId> = result
             .iter_mut()
-            .map(|str| str.parse().expect("Corrupt u64 integer found in database"))
+            .map(|str| {
+                str.parse().expect(&format!(
+                    "Corrupt u64 integer found in database: '{0}'",
+                    &str
+                ))
+            })
             .collect();
 
         // The log id selection below expects log ids in sorted order. We can't easily use SQL

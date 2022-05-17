@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Move to `tokio` async runtime [#75](https://github.com/p2panda/aquadoggo/pull/75)
 - Implement SQL storage using `p2panda_rs` storage provider traits [#80](https://github.com/p2panda/aquadoggo/pull/80)
 - Improve `Signal` efficiency in `ServiceManager` [#95](https://github.com/p2panda/aquadoggo/pull/95)
+- `EntryStore` improvements [#123](https://github.com/p2panda/aquadoggo/pull/123)
 - Improvements for log and entry table layout [#124](https://github.com/p2panda/aquadoggo/issues/122)
 
 ## [0.2.0]
