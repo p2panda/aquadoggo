@@ -16,7 +16,7 @@ pub struct SqlStorage {
     pub(crate) pool: Pool,
 }
 
-/// All other methods needed to be implemented by a p2panda `StorageProvider`
+/// A `StorageProvider` implementation based on `sqlx` that supports SQLite and PostgreSQL databases.
 #[async_trait]
 impl StorageProvider<EntryRow, LogRow> for SqlStorage {
     type EntryArgsResponse = EntryArgsResponse;
@@ -50,7 +50,7 @@ impl StorageProvider<EntryRow, LogRow> for SqlStorage {
         .fetch_optional(&self.pool)
         .await?;
 
-        // Unwrap here since we already validated the hash
+        // Unwrap here since we validate hashes before storing them in the db.
         let hash = result.map(|str| {
             Hash::new(&str)
                 .expect("Corrupt hash found in database")
