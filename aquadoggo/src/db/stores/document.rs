@@ -338,20 +338,20 @@ mod tests {
     use std::str::FromStr;
 
     use p2panda_rs::document::{
-        DocumentBuilder, DocumentId, DocumentViewFields, DocumentViewId, DocumentViewValue,
+        DocumentBuilder, DocumentViewFields, DocumentViewId, DocumentViewValue,
     };
     use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::hash::Hash;
-    use p2panda_rs::identity::{Author, KeyPair};
+    use p2panda_rs::identity::Author;
     use p2panda_rs::operation::{AsOperation, OperationId, OperationValue};
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
-    use p2panda_rs::test_utils::constants::{DEFAULT_HASH, DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
+    use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
 
     use crate::db::stores::document::{DocumentStore, StorageDocumentView};
     use crate::db::stores::entry::StorageEntry;
     use crate::db::stores::test_utils::{test_create_operation, test_db};
-    use crate::db::traits::{AsStorageDocumentView, AsStorageOperation, OperationStore};
+    use crate::db::traits::{AsStorageDocumentView, OperationStore};
 
     use super::StorageDocument;
 
@@ -381,8 +381,8 @@ mod tests {
 
     #[tokio::test]
     async fn inserts_gets_one_document_view() {
-        let (storage_provider, key_pairs, documents) = test_db(1, 1, false).await;
-        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
+        let (storage_provider, key_pairs, _documents) = test_db(1, 1, false).await;
+        let key_pair = key_pairs.get(0).unwrap();
         let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
         // Get one entry from the pre-polulated db
@@ -432,7 +432,7 @@ mod tests {
 
     #[tokio::test]
     async fn inserts_gets_many_document_views() {
-        let (storage_provider, key_pairs, documents) = test_db(10, 1, false).await;
+        let (storage_provider, key_pairs, _documents) = test_db(10, 1, false).await;
         let key_pair = key_pairs.get(0).unwrap();
         let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
         let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
@@ -485,7 +485,7 @@ mod tests {
 
     #[tokio::test]
     async fn insert_document_view_with_missing_operation() {
-        let (storage_provider, key_pairs, documents) = test_db(1, 1, false).await;
+        let (storage_provider, _key_pairs, documents) = test_db(1, 1, false).await;
 
         let document_id = documents.get(0).unwrap();
         let operation_id: OperationId = Hash::new_from_bytes(vec![0, 1, 2]).unwrap().into();
@@ -510,12 +510,12 @@ mod tests {
 
     #[tokio::test]
     async fn inserts_gets_document() {
-        let (storage_provider, key_pairs, documents) = test_db(1, 1, false).await;
+        let (storage_provider, _key_pairs, documents) = test_db(1, 1, false).await;
 
         let document_id = documents.get(0).unwrap();
 
         let document_operations = storage_provider
-            .get_operations_by_document_id(&document_id)
+            .get_operations_by_document_id(document_id)
             .await
             .unwrap();
 
@@ -559,12 +559,12 @@ mod tests {
 
     #[tokio::test]
     async fn gets_document_by_id() {
-        let (storage_provider, key_pairs, documents) = test_db(1, 1, false).await;
+        let (storage_provider, _key_pairs, documents) = test_db(1, 1, false).await;
 
         let document_id = documents.get(0).unwrap();
 
         let document_operations = storage_provider
-            .get_operations_by_document_id(&document_id)
+            .get_operations_by_document_id(document_id)
             .await
             .unwrap();
 
@@ -609,12 +609,12 @@ mod tests {
 
     #[tokio::test]
     async fn no_view_when_document_deleted() {
-        let (storage_provider, key_pairs, documents) = test_db(3, 1, true).await;
+        let (storage_provider, _key_pairs, documents) = test_db(3, 1, true).await;
 
         let document_id = documents.get(0).unwrap();
 
         let document_operations = storage_provider
-            .get_operations_by_document_id(&document_id)
+            .get_operations_by_document_id(document_id)
             .await
             .unwrap();
 
@@ -644,7 +644,7 @@ mod tests {
 
     #[tokio::test]
     async fn gets_documents_by_schema() {
-        let (storage_provider, key_pairs, documents) = test_db(1, 2, false).await;
+        let (storage_provider, _key_pairs, _documents) = test_db(1, 2, false).await;
 
         let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
 

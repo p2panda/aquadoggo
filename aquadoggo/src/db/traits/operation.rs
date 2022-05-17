@@ -3,9 +3,7 @@
 use async_trait::async_trait;
 use p2panda_rs::document::DocumentId;
 use p2panda_rs::identity::Author;
-use p2panda_rs::operation::{
-    Operation, OperationAction, OperationFields, OperationId, OperationWithMeta,
-};
+use p2panda_rs::operation::{Operation, OperationAction, OperationFields, OperationId};
 use p2panda_rs::schema::SchemaId;
 
 use crate::db::errors::OperationStorageError;
