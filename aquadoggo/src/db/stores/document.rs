@@ -184,14 +184,19 @@ impl DocumentStore<StorageDocumentView, StorageDocument> for SqlStorage {
             None
         } else {
             Some(StorageDocumentView::new(
-            &id.to_owned(),
-            &parse_document_view_field_rows(document_view_field_rows),
-        ))
-            };
+                &id.to_owned(),
+                &parse_document_view_field_rows(document_view_field_rows),
+            ))
+        };
 
         Ok(view)
     }
 
+    /// Insert a document and it's latest document view into the database.
+    ///
+    /// Note: "out-of-date" document views will remain in storage when a document already
+    /// existed and is updated. If they are not needed for anything else they can be garbage
+    /// collected.
     async fn insert_document(
         &self,
         document: &StorageDocument,
@@ -235,6 +240,7 @@ impl DocumentStore<StorageDocumentView, StorageDocument> for SqlStorage {
         Ok(())
     }
 
+    /// Get a documents' latest document view from the database by it's `DocumentId`.
     async fn get_document_by_id(
         &self,
         id: &DocumentId,
@@ -277,6 +283,65 @@ impl DocumentStore<StorageDocumentView, StorageDocument> for SqlStorage {
                 .unwrap(),
             &parse_document_view_field_rows(document_view_field_rows),
         )))
+    }
+
+    /// Get all documents which follow the passed schema id from the database
+    async fn get_documents_by_schema(
+        &self,
+        schema_id: &SchemaId,
+    ) -> Result<Vec<StorageDocumentView>, DocumentStorageError> {
+        let document_view_field_rows = query_as::<_, DocumentViewFieldRow>(
+            "
+                SELECT
+                    document_view_fields.document_view_id,
+                    document_view_fields.operation_id,
+                    document_view_fields.name,
+                    operation_fields_v1.field_type,
+                    operation_fields_v1.value
+                FROM
+                    documents
+                LEFT JOIN document_view_fields
+                    ON
+                        documents.document_view_id = document_view_fields.document_view_id    
+                LEFT JOIN operation_fields_v1
+                    ON
+                        document_view_fields.operation_id = operation_fields_v1.operation_id
+                    AND
+                        document_view_fields.name = operation_fields_v1.name
+                WHERE
+                    documents.schema_id = $1
+                ",
+        )
+        .bind(schema_id.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+
+        let mut grouped_document_field_rows: BTreeMap<String, Vec<DocumentViewFieldRow>> =
+            BTreeMap::new();
+
+        for document_field_row in document_view_field_rows {
+            if let Some(current_operations) =
+                grouped_document_field_rows.get_mut(&document_field_row.document_view_id)
+            {
+                current_operations.push(document_field_row)
+            } else {
+                grouped_document_field_rows.insert(
+                    document_field_row.clone().document_view_id,
+                    vec![document_field_row],
+                );
+            };
+        }
+
+        let document_views: Vec<StorageDocumentView> = grouped_document_field_rows
+            .iter()
+            .map(|(id, document_field_row)| {
+                let fields = parse_document_view_field_rows(document_field_row.to_owned());
+                StorageDocumentView::new(&id.parse().unwrap(), &fields)
+            })
+            .collect();
+
+        Ok(document_views)
     }
 }
 
@@ -361,6 +426,7 @@ mod tests {
         let retrieved_document_view = storage_provider
             .get_document_view_by_id(&document_view_id)
             .await
+            .unwrap()
             .unwrap();
 
         for key in [
@@ -376,6 +442,18 @@ mod tests {
             assert!(retrieved_document_view.get(key).is_some());
             assert_eq!(retrieved_document_view.get(key), document_view.get(key));
         }
+    }
+
+    #[tokio::test]
+    async fn document_view_does_not_exist() {
+        let (storage_provider, _key_pairs, _documents) = test_db(1, 1, false).await;
+
+        let view_does_not_exist = storage_provider
+            .get_document_view_by_id(&Hash::new_from_bytes(vec![1, 2, 3]).unwrap().into())
+            .await
+            .unwrap();
+
+        assert!(view_does_not_exist.is_none())
     }
 
     #[tokio::test]
@@ -413,7 +491,7 @@ mod tests {
 
             assert!(result.is_ok());
 
-            let document_view = result.unwrap();
+            let document_view = result.unwrap().unwrap();
 
             // The update operation should be included in the view correctly, we check that here.
             let expected_username = if count == 0 {
@@ -486,6 +564,7 @@ mod tests {
         let document_view = storage_provider
             .get_document_view_by_id(document.view_id())
             .await
+            .unwrap()
             .unwrap();
 
         let expected_document_view = document.view().unwrap();
