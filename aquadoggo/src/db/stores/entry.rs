@@ -121,8 +121,8 @@ impl EntryStore<StorageEntry> for SqlStorage {
     /// Returns a result containing `true` when the insertion occured (one row affected)
     /// returns `false` when an unexpected number of rows was affected. Errors when
     /// a fatal storage error occured.
-    async fn insert_entry(&self, entry: StorageEntry) -> Result<bool, EntryStorageError> {
-        let rows_affected = query(
+    async fn insert_entry(&self, entry: StorageEntry) -> Result<(), EntryStorageError> {
+        let insert_entry_result = query(
             "
             INSERT INTO
                 entries (
@@ -147,10 +147,16 @@ impl EntryStore<StorageEntry> for SqlStorage {
         .bind(entry.seq_num().as_u64().to_string())
         .execute(&self.pool)
         .await
-        .map_err(|e| EntryStorageError::Custom(e.to_string()))?
-        .rows_affected();
+        .map_err(|e| EntryStorageError::Custom(e.to_string()))?;
 
-        Ok(rows_affected == 1)
+        if insert_entry_result.rows_affected() != 1 {
+            return Err(EntryStorageError::Custom(format!(
+                "Unexpected number of inserts occured for entry with id: {}",
+                entry.hash()
+            )));
+        }
+
+        Ok(())
     }
 
     /// Get an entry from storage by it's hash id.
