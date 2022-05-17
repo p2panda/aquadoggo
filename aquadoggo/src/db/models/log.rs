@@ -8,7 +8,7 @@ use sqlx::FromRow;
 /// this data according to what it sees in the newly incoming entries.
 ///
 /// We store the u64 integer values of `log_id` as a string here since SQLite doesn't support
-/// unsigned 64 bit integers.
+/// storing unsigned 64 bit integers.
 #[derive(FromRow, Debug, Clone)]
 pub struct LogRow {
     /// Public key of the author.

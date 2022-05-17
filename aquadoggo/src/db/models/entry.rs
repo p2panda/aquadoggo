@@ -6,7 +6,7 @@ use sqlx::FromRow;
 /// Struct representing the actual SQL row of `Entry`.
 ///
 /// We store the u64 integer values of `log_id` and `seq_num` as strings since SQLite doesn't
-/// support unsigned 64 bit integers.
+/// support storing unsigned 64 bit integers.
 #[derive(FromRow, Debug, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct EntryRow {
