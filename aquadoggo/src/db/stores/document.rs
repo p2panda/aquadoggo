@@ -341,6 +341,7 @@ mod tests {
         DocumentBuilder, DocumentId, DocumentViewFields, DocumentViewId, DocumentViewValue,
     };
     use p2panda_rs::entry::{LogId, SeqNum};
+    use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::{AsOperation, OperationId, OperationValue};
     use p2panda_rs::schema::SchemaId;
@@ -350,7 +351,7 @@ mod tests {
     use crate::db::stores::document::{DocumentStore, StorageDocumentView};
     use crate::db::stores::entry::StorageEntry;
     use crate::db::stores::test_utils::{test_create_operation, test_db};
-    use crate::db::traits::{AsStorageDocumentView, OperationStore};
+    use crate::db::traits::{AsStorageDocumentView, AsStorageOperation, OperationStore};
 
     use super::StorageDocument;
 
@@ -380,13 +381,13 @@ mod tests {
 
     #[tokio::test]
     async fn inserts_gets_one_document_view() {
-        let storage_provider = test_db(1, 1, false).await;
+        let (storage_provider, key_pairs, documents) = test_db(1, 1, false).await;
         let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
         let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
         // Get one entry from the pre-polulated db
         let entry = storage_provider
-            .entry_at_seq_num(&author, &LogId::new(1), &SeqNum::new(1).unwrap())
+            .get_entry_at_seq_num(&author, &LogId::new(1), &SeqNum::new(1).unwrap())
             .await
             .unwrap()
             .unwrap();
@@ -431,8 +432,8 @@ mod tests {
 
     #[tokio::test]
     async fn inserts_gets_many_document_views() {
-        let storage_provider = test_db(10, 1, false).await;
-        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
+        let (storage_provider, key_pairs, documents) = test_db(10, 1, false).await;
+        let key_pair = key_pairs.get(0).unwrap();
         let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
         let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
 
@@ -483,13 +484,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn insert_duplicate_document_view() {
-        let storage_provider = test_db(1, 1, false).await;
+    async fn insert_document_view_with_missing_operation() {
+        let (storage_provider, key_pairs, documents) = test_db(1, 1, false).await;
 
-        let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
-        let document_view_id: DocumentViewId = operation_id.clone().into();
+        let document_id = documents.get(0).unwrap();
+        let operation_id: OperationId = Hash::new_from_bytes(vec![0, 1, 2]).unwrap().into();
+
         let document_view = StorageDocumentView::new(
-            &document_view_id,
+            &document_id.as_str().parse().unwrap(),
             &DocumentViewFields::new_from_operation_fields(
                 &operation_id,
                 &test_create_operation().fields().unwrap(),
@@ -508,14 +510,9 @@ mod tests {
 
     #[tokio::test]
     async fn inserts_gets_document() {
-        let storage_provider = test_db(3, 1, false).await;
+        let (storage_provider, key_pairs, documents) = test_db(1, 1, false).await;
 
-        // This is the id for the document CREATE operation which exists in the test db.
-        let document_id = DocumentId::new(
-            "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
-                .parse()
-                .unwrap(),
-        );
+        let document_id = documents.get(0).unwrap();
 
         let document_operations = storage_provider
             .get_operations_by_document_id(&document_id)
@@ -562,14 +559,9 @@ mod tests {
 
     #[tokio::test]
     async fn gets_document_by_id() {
-        let storage_provider = test_db(3, 1, false).await;
+        let (storage_provider, key_pairs, documents) = test_db(1, 1, false).await;
 
-        // This is the id for the document CREATE operation which exists in the test db.
-        let document_id = DocumentId::new(
-            "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
-                .parse()
-                .unwrap(),
-        );
+        let document_id = documents.get(0).unwrap();
 
         let document_operations = storage_provider
             .get_operations_by_document_id(&document_id)
@@ -617,14 +609,9 @@ mod tests {
 
     #[tokio::test]
     async fn no_view_when_document_deleted() {
-        let storage_provider = test_db(3, 1, true).await;
+        let (storage_provider, key_pairs, documents) = test_db(3, 1, true).await;
 
-        // This is the id for the document CREATE operation which exists in the test db.
-        let document_id = DocumentId::new(
-            "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
-                .parse()
-                .unwrap(),
-        );
+        let document_id = documents.get(0).unwrap();
 
         let document_operations = storage_provider
             .get_operations_by_document_id(&document_id)
@@ -657,7 +644,7 @@ mod tests {
 
     #[tokio::test]
     async fn gets_documents_by_schema() {
-        let storage_provider = test_db(1, 2, false).await;
+        let (storage_provider, key_pairs, documents) = test_db(1, 2, false).await;
 
         let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
 
