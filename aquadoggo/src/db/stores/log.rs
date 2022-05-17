@@ -11,7 +11,10 @@ use p2panda_rs::storage_provider::errors::LogStorageError;
 use p2panda_rs::storage_provider::traits::{AsStorageLog, LogStore};
 
 use crate::db::provider::SqlStorage;
-
+/// Represents a stored log in a way that is conducive to implementing storage traits.
+///
+/// In the case of `LogRow`, the traits could have been implemented directly on it but this
+/// structure was chosen to align with the way the other stores are structured.
 pub struct StorageLog {
     author: Author,
     log_id: LogId,
