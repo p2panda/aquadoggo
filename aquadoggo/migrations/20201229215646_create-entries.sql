@@ -12,3 +12,6 @@ CREATE TABLE IF NOT EXISTS entries (
     seq_num           TEXT      NOT NULL,
     PRIMARY KEY (author, log_id, seq_num)
 );
+
+-- Create an index for sorting by sequence number
+CREATE INDEX idx_entries_by_seq_num ON entries (CAST(seq_num AS NUMERIC));
