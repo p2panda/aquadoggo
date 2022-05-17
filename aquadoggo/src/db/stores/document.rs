@@ -661,7 +661,10 @@ mod tests {
 
         let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
 
-        let schema_entries = storage_provider.by_schema(&schema_id).await.unwrap();
+        let schema_entries = storage_provider
+            .get_entries_by_schema(&schema_id)
+            .await
+            .unwrap();
 
         assert_eq!(schema_entries.len(), 2)
     }
