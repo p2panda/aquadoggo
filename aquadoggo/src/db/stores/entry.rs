@@ -14,11 +14,10 @@ use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::errors::EntryStorageError;
 use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
 
-use crate::db::models::entry::EntryRow;
+use crate::db::models::EntryRow;
 use crate::db::provider::SqlStorage;
 
 #[derive(Debug, Clone, PartialEq)]
-
 pub struct StorageEntry {
     entry_signed: EntrySigned,
     operation_encoded: OperationEncoded,
@@ -118,9 +117,8 @@ impl AsStorageEntry for StorageEntry {
 impl EntryStore<StorageEntry> for SqlStorage {
     /// Insert an entry into storage.
     ///
-    /// Returns a result containing `true` when the insertion occured (one row affected)
-    /// returns `false` when an unexpected number of rows was affected. Errors when
-    /// a fatal storage error occured.
+    /// Returns an error if the insertion doesn't result in exactly one
+    /// affected row.
     async fn insert_entry(&self, entry: StorageEntry) -> Result<(), EntryStorageError> {
         let insert_entry_result = query(
             "
@@ -275,7 +273,7 @@ impl EntryStore<StorageEntry> for SqlStorage {
     ///
     /// Returns a result containing a vector of all entries which follow the passed
     /// schema (identified by it's `SchemaId`). If no entries exist, or the schema
-    /// is not known by this node, then an empty vecot is returned.
+    /// is not known by this node, then an empty vector is returned.
     async fn get_entries_by_schema(
         &self,
         schema: &SchemaId,
@@ -307,7 +305,7 @@ impl EntryStore<StorageEntry> for SqlStorage {
         Ok(entries.into_iter().map(|row| row.into()).collect())
     }
 
-    /// Get all entries of a given schema
+    /// Get all entries of a given schema.
     ///
     /// Returns a result containing a vector of all entries which follow the passed
     /// schema (identified by it's `SchemaId`). If no entries exist, or the schema
@@ -633,7 +631,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn gets_next_n_entries_after_seq() {
+    async fn get_paginated_log_entries() {
         let storage_provider = test_db(50).await;
 
         let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
