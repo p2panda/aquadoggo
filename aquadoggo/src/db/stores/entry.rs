@@ -191,7 +191,7 @@ impl EntryStore<StorageEntry> for SqlStorage {
     /// Returns a result containing the entry wrapped in an option if it was found
     /// successfully. Returns None if the entry was not found in storage. Errors when
     /// a fatal storage error occured.
-    async fn entry_at_seq_num(
+    async fn get_entry_at_seq_num(
         &self,
         author: &Author,
         log_id: &LogId,
@@ -230,7 +230,7 @@ impl EntryStore<StorageEntry> for SqlStorage {
     /// Returns a result containing the latest log entry wrapped in an option if an
     /// entry was found. Returns None if the specified author and log could not be
     /// found in storage. Errors when a fatal storage error occured.
-    async fn latest_entry(
+    async fn get_latest_entry(
         &self,
         author: &Author,
         log_id: &LogId,
@@ -270,7 +270,10 @@ impl EntryStore<StorageEntry> for SqlStorage {
     /// Returns a result containing a vector of all entries which follow the passed
     /// schema (identified by it's `SchemaId`). If no entries exist, or the schema
     /// is not known by this node, then an empty vecot is returned.
-    async fn by_schema(&self, schema: &SchemaId) -> Result<Vec<StorageEntry>, EntryStorageError> {
+    async fn get_entries_by_schema(
+        &self,
+        schema: &SchemaId,
+    ) -> Result<Vec<StorageEntry>, EntryStorageError> {
         let entries = query_as::<_, EntryRow>(
             "
             SELECT
@@ -427,7 +430,7 @@ mod tests {
 
         // Derive the document_id by fetching the first entry
         let document_id: DocumentId = storage_provider
-            .entry_at_seq_num(&author, &log_id, &SeqNum::new(1).unwrap())
+            .get_entry_at_seq_num(&author, &log_id, &SeqNum::new(1).unwrap())
             .await
             .unwrap()
             .unwrap()
@@ -480,7 +483,7 @@ mod tests {
         let log_id = LogId::new(1);
 
         let first_entry = storage_provider
-            .entry_at_seq_num(&author, &log_id, &SeqNum::new(1).unwrap())
+            .get_entry_at_seq_num(&author, &log_id, &SeqNum::new(1).unwrap())
             .await
             .unwrap()
             .unwrap();
@@ -503,7 +506,7 @@ mod tests {
         let log_id = LogId::new(1);
 
         let latest_entry = storage_provider
-            .latest_entry(&author_not_in_db, &log_id)
+            .get_latest_entry(&author_not_in_db, &log_id)
             .await
             .unwrap();
         assert!(latest_entry.is_none());
@@ -512,7 +515,7 @@ mod tests {
         let author_in_db = Author::try_from(*key_pair.public_key()).unwrap();
 
         let latest_entry = storage_provider
-            .latest_entry(&author_in_db, &log_id)
+            .get_latest_entry(&author_in_db, &log_id)
             .await
             .unwrap();
         assert_eq!(latest_entry.unwrap().seq_num(), SeqNum::new(100).unwrap());
@@ -528,14 +531,17 @@ mod tests {
         );
 
         let entries = storage_provider
-            .by_schema(&schema_not_in_the_db)
+            .get_entries_by_schema(&schema_not_in_the_db)
             .await
             .unwrap();
         assert!(entries.is_empty());
 
         let schema_in_the_db = SchemaId::new(TEST_SCHEMA_ID).unwrap();
 
-        let entries = storage_provider.by_schema(&schema_in_the_db).await.unwrap();
+        let entries = storage_provider
+            .get_entries_by_schema(&schema_in_the_db)
+            .await
+            .unwrap();
         assert!(entries.len() == 100);
     }
 
@@ -549,7 +555,7 @@ mod tests {
         for seq_num in [1, 10, 56, 77, 90] {
             let seq_num = SeqNum::new(seq_num).unwrap();
             let entry = storage_provider
-                .entry_at_seq_num(&author, &LogId::new(1), &seq_num)
+                .get_entry_at_seq_num(&author, &LogId::new(1), &seq_num)
                 .await
                 .unwrap();
             assert_eq!(entry.unwrap().seq_num(), seq_num)
@@ -557,21 +563,21 @@ mod tests {
 
         let wrong_log = LogId::new(2);
         let entry = storage_provider
-            .entry_at_seq_num(&author, &wrong_log, &SeqNum::new(1).unwrap())
+            .get_entry_at_seq_num(&author, &wrong_log, &SeqNum::new(1).unwrap())
             .await
             .unwrap();
         assert!(entry.is_none());
 
         let author_not_in_db = Author::try_from(*KeyPair::new().public_key()).unwrap();
         let entry = storage_provider
-            .entry_at_seq_num(&author_not_in_db, &LogId::new(1), &SeqNum::new(1).unwrap())
+            .get_entry_at_seq_num(&author_not_in_db, &LogId::new(1), &SeqNum::new(1).unwrap())
             .await
             .unwrap();
         assert!(entry.is_none());
 
         let seq_num_not_in_log = SeqNum::new(1000).unwrap();
         let entry = storage_provider
-            .entry_at_seq_num(&author_not_in_db, &LogId::new(1), &seq_num_not_in_log)
+            .get_entry_at_seq_num(&author_not_in_db, &LogId::new(1), &seq_num_not_in_log)
             .await
             .unwrap();
         assert!(entry.is_none())
@@ -587,7 +593,7 @@ mod tests {
         for seq_num in [1, 11, 32, 45, 76] {
             let seq_num = SeqNum::new(seq_num).unwrap();
             let entry = storage_provider
-                .entry_at_seq_num(&author, &LogId::new(1), &seq_num)
+                .get_entry_at_seq_num(&author, &LogId::new(1), &seq_num)
                 .await
                 .unwrap()
                 .unwrap();
