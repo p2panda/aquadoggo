@@ -1,52 +1,61 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::str::FromStr;
-
 use async_trait::async_trait;
+use sqlx::{query, query_scalar};
+
 use p2panda_rs::document::DocumentId;
 use p2panda_rs::entry::LogId;
 use p2panda_rs::identity::Author;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::errors::LogStorageError;
 use p2panda_rs::storage_provider::traits::{AsStorageLog, LogStore};
-use sqlx::{query, query_scalar};
 
-use crate::db::models::log::LogRow;
 use crate::db::provider::SqlStorage;
 
-impl AsStorageLog for LogRow {
-    fn new(author: &Author, schema: &SchemaId, document: &DocumentId, log_id: &LogId) -> Self {
+pub struct StorageLog {
+    author: Author,
+    log_id: LogId,
+    document_id: DocumentId,
+    schema_id: SchemaId,
+}
+
+impl AsStorageLog for StorageLog {
+    fn new(
+        author: &Author,
+        schema_id: &SchemaId,
+        document_id: &DocumentId,
+        log_id: &LogId,
+    ) -> Self {
         Self {
-            author: author.as_str().to_string(),
-            log_id: log_id.as_u64().to_string(),
-            document: document.as_str().to_string(),
-            schema: schema.as_str(),
+            author: author.to_owned(),
+            log_id: log_id.to_owned(),
+            document_id: document_id.to_owned(),
+            schema_id: schema_id.to_owned(),
         }
     }
 
     fn author(&self) -> Author {
-        Author::new(&self.author).unwrap()
+        self.author.clone()
     }
 
     fn id(&self) -> LogId {
-        LogId::from_str(&self.log_id).unwrap()
+        self.log_id
     }
 
     fn document_id(&self) -> DocumentId {
-        let document_id: DocumentId = self.document.parse().unwrap();
-        document_id
+        self.document_id.clone()
     }
 
     fn schema_id(&self) -> SchemaId {
-        SchemaId::new(&self.schema).unwrap()
+        self.schema_id.clone()
     }
 }
 
-/// Trait which handles all storage actions relating to `LogRow`s.
+/// Trait which handles all storage actions relating to `StorageLog`s.
 #[async_trait]
-impl LogStore<LogRow> for SqlStorage {
+impl LogStore<StorageLog> for SqlStorage {
     /// Insert a log into storage.
-    async fn insert_log(&self, log: LogRow) -> Result<bool, LogStorageError> {
+    async fn insert_log(&self, log: StorageLog) -> Result<bool, LogStorageError> {
         let rows_affected = query(
             "
             INSERT INTO
@@ -164,9 +173,9 @@ mod tests {
         AsStorageEntry, AsStorageLog, EntryStore, LogStore, StorageProvider,
     };
 
-    use crate::db::models::entry::EntryRow;
-    use crate::db::models::log::LogRow;
     use crate::db::provider::SqlStorage;
+    use crate::db::stores::entry::StorageEntry;
+    use crate::db::stores::log::StorageLog;
     use crate::test_helpers::{initialize_db, random_entry_hash};
 
     const TEST_AUTHOR: &str = "58223678ab378f1b07d1d8c789e6da01d16a06b1a4d17cc10119a0109181156c";
@@ -195,10 +204,10 @@ mod tests {
         let schema =
             SchemaId::new_application("venue", &Hash::new(&random_entry_hash()).unwrap().into());
 
-        let log = LogRow::new(&author, &schema, &document.clone().into(), &LogId::new(1));
+        let log = StorageLog::new(&author, &schema, &document.clone().into(), &LogId::new(1));
         assert!(storage_provider.insert_log(log).await.is_ok());
 
-        let log = LogRow::new(&author, &schema, &document.into(), &LogId::new(1));
+        let log = StorageLog::new(&author, &schema, &document.into(), &LogId::new(1));
         assert!(storage_provider.insert_log(log).await.is_err());
     }
 
@@ -217,7 +226,7 @@ mod tests {
             ]),
         );
 
-        let log = LogRow::new(&author, &schema, &document.into(), &LogId::new(1));
+        let log = StorageLog::new(&author, &schema, &document.into(), &LogId::new(1));
 
         assert!(storage_provider.insert_log(log).await.is_ok());
     }
@@ -253,7 +262,7 @@ mod tests {
                 .await
                 .unwrap();
             assert_eq!(LogId::new(n.into()), log_id);
-            let log = LogRow::new(&author, &schema, &doc, &log_id);
+            let log = StorageLog::new(&author, &schema, &doc, &log_id);
             storage_provider.insert_log(log).await.unwrap();
         }
     }
@@ -292,12 +301,12 @@ mod tests {
             None
         );
 
-        let entry = EntryRow::new(&entry_encoded.clone(), &operation_encoded).unwrap();
+        let entry = StorageEntry::new(&entry_encoded.clone(), &operation_encoded).unwrap();
 
         // Store entry in database
         assert!(storage_provider.insert_entry(entry).await.is_ok());
 
-        let log = LogRow::new(
+        let log = StorageLog::new(
             &author,
             &schema,
             &entry_encoded.hash().into(),
@@ -347,8 +356,8 @@ mod tests {
         let storage_provider = SqlStorage { pool };
 
         // Register two log ids at the beginning
-        let log_1 = LogRow::new(&author, &schema, &document_first.into(), &LogId::new(1));
-        let log_2 = LogRow::new(&author, &schema, &document_second.into(), &LogId::new(2));
+        let log_1 = StorageLog::new(&author, &schema, &document_first.into(), &LogId::new(1));
+        let log_2 = StorageLog::new(&author, &schema, &document_second.into(), &LogId::new(2));
 
         storage_provider.insert_log(log_1).await.unwrap();
         storage_provider.insert_log(log_2).await.unwrap();
@@ -357,7 +366,7 @@ mod tests {
         let log_id = storage_provider.next_log_id(&author).await.unwrap();
         assert_eq!(log_id, LogId::new(3));
 
-        let log_3 = LogRow::new(&author, &schema, &document_third.into(), &log_id);
+        let log_3 = StorageLog::new(&author, &schema, &document_third.into(), &log_id);
 
         storage_provider.insert_log(log_3).await.unwrap();
 
@@ -365,7 +374,7 @@ mod tests {
         let log_id = storage_provider.next_log_id(&author).await.unwrap();
         assert_eq!(log_id, LogId::new(4));
 
-        let log_4 = LogRow::new(&author, &schema, &document_forth.into(), &log_id);
+        let log_4 = StorageLog::new(&author, &schema, &document_forth.into(), &log_id);
 
         storage_provider.insert_log(log_4).await.unwrap();
 
