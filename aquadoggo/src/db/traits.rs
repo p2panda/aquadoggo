@@ -34,8 +34,7 @@ pub trait OperationStore<StorageOperation: AsStorageOperation> {
     /// Insert an operation into the db.
     ///
     /// The passed operation must implement the `AsStorageOperation` trait. Errors when
-    /// a fatal DB error occurs, returns true or false depending if the expected number
-    /// of insertions occured.
+    /// a fatal DB error occurs.
     async fn insert_operation(
         &self,
         operation: &StorageOperation,
