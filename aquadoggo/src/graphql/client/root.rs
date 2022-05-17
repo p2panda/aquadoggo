@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_graphql::{Context, Error, Object, Result, SimpleObject};
-use bamboo_rs_core_ed25519_yasmf::entry::is_lipmaa_required as is_skiplink_required;
 use p2panda_rs::document::DocumentId;
-use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
 use p2panda_rs::storage_provider::traits::StorageProvider;
 
 use crate::db::provider::SqlStorage;
 use crate::db::Pool;
-use crate::rpc::{EntryArgsRequest, EntryArgsResponse};
+
+use super::{EntryArgsRequest, EntryArgsResponse};
 
 //
 #[derive(SimpleObject)]

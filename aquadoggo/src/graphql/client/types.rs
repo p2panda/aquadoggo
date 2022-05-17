@@ -5,11 +5,15 @@ use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::{AsEntryArgsRequest, AsPublishEntryRequest};
 use p2panda_rs::storage_provider::ValidationError;
 use p2panda_rs::Validate;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-use p2panda_rs::entry::{decode_entry, EntrySigned};
+use p2panda_rs::entry::{decode_entry, EntrySigned, LogId, SeqNum};
+use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::OperationEncoded;
+use p2panda_rs::storage_provider::traits::{AsEntryArgsResponse, AsPublishEntryResponse};
+
+use crate::db::models::entry::EntryRow;
 
 /// Request body of `panda_getEntryArguments`.
 #[derive(Deserialize, Debug)]
@@ -46,6 +50,34 @@ impl Validate for EntryArgsRequest {
     }
 }
 
+/// Response body of `panda_getEntryArguments`.
+///
+/// `seq_num` and `log_id` are returned as strings to be able to represent large integers in JSON.
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct EntryArgsResponse {
+    pub entry_hash_backlink: Option<Hash>,
+    pub entry_hash_skiplink: Option<Hash>,
+    pub seq_num: SeqNum,
+    pub log_id: LogId,
+}
+
+impl AsEntryArgsResponse for EntryArgsResponse {
+    fn new(
+        entry_hash_backlink: Option<Hash>,
+        entry_hash_skiplink: Option<Hash>,
+        seq_num: SeqNum,
+        log_id: LogId,
+    ) -> Self {
+        EntryArgsResponse {
+            entry_hash_backlink,
+            entry_hash_skiplink,
+            seq_num,
+            log_id,
+        }
+    }
+}
+
 /// Request body of `panda_publishEntry`.
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -79,4 +111,38 @@ impl Validate for PublishEntryRequest {
 #[serde(rename_all = "camelCase")]
 pub struct QueryEntriesRequest {
     pub schema: SchemaId,
+}
+
+/// Response body of `panda_publishEntry`.
+///
+/// `seq_num` and `log_id` are returned as strings to be able to represent large integers in JSON.
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct PublishEntryResponse {
+    pub entry_hash_backlink: Option<Hash>,
+    pub entry_hash_skiplink: Option<Hash>,
+    pub seq_num: SeqNum,
+    pub log_id: LogId,
+}
+
+impl AsPublishEntryResponse for PublishEntryResponse {
+    fn new(
+        entry_hash_backlink: Option<Hash>,
+        entry_hash_skiplink: Option<Hash>,
+        seq_num: SeqNum,
+        log_id: LogId,
+    ) -> Self {
+        PublishEntryResponse {
+            entry_hash_backlink,
+            entry_hash_skiplink,
+            seq_num,
+            log_id,
+        }
+    }
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct QueryEntriesResponse {
+    pub entries: Vec<EntryRow>,
 }

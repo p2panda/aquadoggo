@@ -3,7 +3,7 @@
 use async_graphql::{EmptyMutation, EmptySubscription, MergedObject, Schema};
 
 use crate::db::Pool;
-use crate::graphql::ClientRoot;
+use crate::graphql::client::ClientRoot;
 
 #[derive(MergedObject, Debug)]
 pub struct QueryRoot(pub ClientRoot);

@@ -10,7 +10,9 @@ use crate::db::stores::entry::StorageEntry;
 use crate::db::stores::log::StorageLog;
 use crate::db::Pool;
 use crate::errors::StorageProviderResult;
-use crate::rpc::{EntryArgsRequest, EntryArgsResponse, PublishEntryRequest, PublishEntryResponse};
+use crate::graphql::client::{
+    EntryArgsRequest, EntryArgsResponse, PublishEntryRequest, PublishEntryResponse,
+};
 
 pub struct SqlStorage {
     pub(crate) pool: Pool,

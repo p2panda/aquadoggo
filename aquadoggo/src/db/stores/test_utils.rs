@@ -16,7 +16,7 @@ use p2panda_rs::storage_provider::traits::StorageProvider;
 use p2panda_rs::test_utils::constants::{DEFAULT_HASH, DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
 
 use crate::db::provider::SqlStorage;
-use crate::rpc::{EntryArgsRequest, PublishEntryRequest};
+use crate::graphql::client::{EntryArgsRequest, PublishEntryRequest};
 use crate::test_helpers::initialize_db;
 
 pub fn test_operation() -> Operation {
