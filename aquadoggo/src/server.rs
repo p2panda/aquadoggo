@@ -12,7 +12,6 @@ use tower_http::cors::{Any, CorsLayer};
 use crate::bus::ServiceSender;
 use crate::context::Context;
 use crate::graphql::{handle_graphql_playground, handle_graphql_query};
-use crate::rpc::{handle_get_http_request, handle_http_request};
 use crate::manager::Shutdown;
 
 /// Build HTTP server with GraphQL API.
@@ -24,10 +23,6 @@ pub fn build_server(context: Context) -> Router {
         .allow_origin(Any);
 
     Router::new()
-        // Add JSON RPC routes
-        // @TODO: The JSON RPC is deprecated and will be replaced soon by GraphQL. See:
-        // https://github.com/p2panda/aquadoggo/issues/60
-        .route("/", get(handle_get_http_request).post(handle_http_request))
         // Add GraphQL routes
         .route(
             "/graphql",
@@ -63,20 +58,6 @@ mod tests {
     use crate::test_helpers::{initialize_db, TestClient};
 
     use super::build_server;
-
-    #[tokio::test]
-    async fn rpc_respond_with_method_not_allowed() {
-        let pool = initialize_db().await;
-        let context = Context::new(pool, Configuration::default());
-        let client = TestClient::new(build_server(context));
-
-        let response = client.get("/").send().await;
-
-        assert_eq!(
-            response.text().await,
-            "Used HTTP Method is not allowed. POST or OPTIONS is required"
-        );
-    }
 
     #[tokio::test]
     async fn graphql_endpoint() {

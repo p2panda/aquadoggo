@@ -6,7 +6,6 @@ use std::sync::Arc;
 use crate::config::Configuration;
 use crate::db::Pool;
 use crate::graphql::{build_static_schema, StaticSchema};
-use crate::rpc::{build_rpc_api_service, RpcApiService};
 
 /// Inner data shared across all services.
 pub struct Data {
@@ -18,23 +17,17 @@ pub struct Data {
 
     /// Static GraphQL schema.
     pub schema: StaticSchema,
-
-    /// JSON RPC service with RPC handlers.
-    // @TODO: This will be removed soon. See: https://github.com/p2panda/aquadoggo/issues/60
-    pub rpc_service: RpcApiService,
 }
 
 impl Data {
     /// Initialize new data instance with shared database connection pool.
     pub fn new(pool: Pool, config: Configuration) -> Self {
         let schema = build_static_schema(pool.clone());
-        let rpc_service = build_rpc_api_service(pool.clone());
 
         Self {
             config,
             pool,
             schema,
-            rpc_service,
         }
     }
 }

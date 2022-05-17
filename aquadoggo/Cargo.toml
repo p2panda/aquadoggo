@@ -23,6 +23,7 @@ bamboo-rs-core-ed25519-yasmf = "0.1.1"
 crossbeam-queue = "0.3.5"
 directories = "3.0.2"
 envy = "0.4.2"
+futures = "0.3.17"
 hex = "0.4.3"
 jsonrpc-v2 = { version = "0.10.1", features = [
     "easy-errors",
@@ -32,6 +33,7 @@ log = "0.4.14"
 openssl-probe = "0.1.4"
 # We can not publish the `aquadoggo` crate yet, since `p2panda-rs` is an
 # unpublished dependency.
+# @TODO: This points at a WIP branch in p2panda_rs which is used as long as things are slightly unstable
 p2panda-rs = { git = "https://github.com/p2panda/p2panda", branch = "main" }
 rand = "0.8.4"
 serde = { version = "1.0.130", features = ["derive"] }
@@ -59,6 +61,7 @@ reqwest = { version = "0.11.9", default-features = false, features = [
     "json",
     "stream",
 ] }
+rstest = "0.12.0"
 tower-service = "0.3.1"
 hyper = "0.14.17"
 http = "0.2.6"
