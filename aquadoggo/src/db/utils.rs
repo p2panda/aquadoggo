@@ -9,8 +9,8 @@ use p2panda_rs::operation::{
 };
 use p2panda_rs::schema::SchemaId;
 
-use crate::db::models::operation::OperationFieldsJoinedRow;
-use crate::db::stores::operation::OperationStorage;
+use crate::db::models::OperationFieldsJoinedRow;
+use crate::db::stores::OperationStorage;
 
 /// Takes a vector of `OperationFieldsJoinedRow` and parses them into an `OperationStorage`
 /// struct.
@@ -201,7 +201,7 @@ mod tests {
         AsOperation, OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList,
     };
 
-    use crate::db::models::operation::OperationFieldsJoinedRow;
+    use crate::db::models::OperationFieldsJoinedRow;
     use crate::db::stores::test_utils::test_create_operation;
     use crate::db::traits::AsStorageOperation;
 

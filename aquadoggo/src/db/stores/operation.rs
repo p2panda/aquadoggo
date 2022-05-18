@@ -13,7 +13,7 @@ use p2panda_rs::schema::SchemaId;
 use sqlx::{query, query_as, query_scalar};
 
 use crate::db::errors::OperationStorageError;
-use crate::db::models::operation::OperationFieldsJoinedRow;
+use crate::db::models::OperationFieldsJoinedRow;
 use crate::db::provider::SqlStorage;
 use crate::db::traits::{AsStorageOperation, OperationStore, PreviousOperations};
 use crate::db::utils::{parse_operation_rows, parse_value_to_string_vec};
