@@ -100,10 +100,15 @@ mod tests {
             backlink: None,
             skiplink: None,
         };
-        assert_eq!(
-            response.data,
-            value!({ "nextEntryArgs": async_graphql::to_value(expected_entry_args).unwrap() })
-        )
+        let received_entry_args: EntryArgsResponse = match response.data {
+            async_graphql::Value::Object(result_outer) => {
+                async_graphql::from_value(result_outer.get("nextEntryArgs").unwrap().to_owned())
+                    .unwrap()
+            }
+            _ => panic!("Expected return value to be an object"),
+        };
+
+        assert_eq!(received_entry_args, expected_entry_args);
     }
 
     #[tokio::test]

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_graphql::Object;
-use serde::ser::SerializeStruct;
-use serde::{Serialize, Serializer};
+use serde::de::Error;
+use serde::{Deserialize, Deserializer, Serialize};
 
 use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::hash::Hash;
@@ -10,14 +10,22 @@ use p2panda_rs::storage_provider::traits::{AsEntryArgsResponse, AsPublishEntryRe
 
 use crate::db::models::EntryRow;
 
+use super::utils::U64StringVisitor;
+
 /// Response body of `panda_getEntryArguments`.
 ///
 /// `seq_num` and `log_id` are returned as strings to be able to represent large integers in JSON.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Deserialize, Debug, Eq, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct EntryArgsResponse {
+    #[serde(deserialize_with = "deserialize_log_id_string")]
     pub log_id: LogId,
+
+    #[serde(deserialize_with = "deserialize_seq_num_string")]
     pub seq_num: SeqNum,
+
     pub backlink: Option<Hash>,
+
     pub skiplink: Option<Hash>,
 }
 
@@ -42,6 +50,22 @@ impl EntryArgsResponse {
     }
 }
 
+fn deserialize_log_id_string<'de, D>(deserializer: D) -> Result<LogId, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let u64_val = deserializer.deserialize_u64(U64StringVisitor)?;
+    Ok(LogId::new(u64_val))
+}
+
+fn deserialize_seq_num_string<'de, D>(deserializer: D) -> Result<SeqNum, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let u64_val = deserializer.deserialize_u64(U64StringVisitor)?;
+    SeqNum::new(u64_val).map_err(D::Error::custom)
+}
+
 impl AsEntryArgsResponse for EntryArgsResponse {
     fn new(backlink: Option<Hash>, skiplink: Option<Hash>, seq_num: SeqNum, log_id: LogId) -> Self {
         EntryArgsResponse {
@@ -50,28 +74,6 @@ impl AsEntryArgsResponse for EntryArgsResponse {
             backlink,
             skiplink,
         }
-    }
-}
-
-impl Serialize for EntryArgsResponse {
-    /// Serialise using camel case  and converting `u64` values to `String`.
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        // 3 is the number of fields in the struct.
-        let mut state = serializer.serialize_struct("EntryArgsResponse", 4)?;
-        state.serialize_field("logId", &self.log_id.as_u64().to_string())?;
-        state.serialize_field("seqNum", &self.seq_num.as_u64().to_string())?;
-        state.serialize_field(
-            "backlink",
-            &self.backlink.clone().map(|hash| hash.as_str().to_string()),
-        )?;
-        state.serialize_field(
-            "skiplink",
-            &self.skiplink.clone().map(|hash| hash.as_str().to_string()),
-        )?;
-        state.end()
     }
 }
 
