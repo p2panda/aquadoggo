@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_graphql::SimpleObject;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::hash::Hash;
@@ -12,7 +12,7 @@ use crate::db::models::EntryRow;
 /// Response body of `panda_getEntryArguments`.
 ///
 /// `seq_num` and `log_id` are returned as strings to be able to represent large integers in JSON.
-#[derive(Serialize, Debug, SimpleObject)]
+#[derive(Serialize, Deserialize, Debug, SimpleObject, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct EntryArgsResponse {
     pub backlink: Option<String>,

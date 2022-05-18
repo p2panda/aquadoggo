@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use async_graphql::{Context, Error, Object, Result, SimpleObject};
+use async_graphql::{Context, Error, Object, Result};
 use p2panda_rs::document::DocumentId;
 use p2panda_rs::identity::Author;
 use p2panda_rs::storage_provider::traits::StorageProvider;
@@ -42,7 +42,7 @@ impl ClientRoot {
         };
 
         // Prepare database connection
-        let pool = ctx.data::<Pool>().map_err(|err| Error::from(err))?;
+        let pool = ctx.data::<Pool>()?;
         let provider = SqlStorage {
             pool: pool.to_owned(),
         };
@@ -56,10 +56,12 @@ impl ClientRoot {
 
 #[cfg(test)]
 mod tests {
+    use async_graphql::{value, Response};
     use serde_json::json;
 
     use crate::config::Configuration;
     use crate::context::Context;
+    use crate::graphql::client::EntryArgsResponse;
     use crate::server::build_server;
     use crate::test_helpers::{initialize_db, TestClient};
 
@@ -86,22 +88,22 @@ mod tests {
                 }"#,
             }))
             .send()
+            .await
+            // .json::<GQLResponse<EntryArgsGQLResponse>>()
+            .json::<Response>()
             .await;
 
+        let expected_entry_args = EntryArgsResponse {
+            backlink: None,
+            skiplink: None,
+            seq_num: "1".to_string(),
+            log_id: "1".to_string(),
+        };
+
         assert_eq!(
-            response.text().await,
-            json!({
-                "data": {
-                    "nextEntryArgs": {
-                        "logId": "1",
-                        "seqNum": "1",
-                        "backlink": null,
-                        "skiplink": null
-                    }
-                }
-            })
-            .to_string()
-        );
+            response.data,
+            value!({ "nextEntryArgs": async_graphql::to_value(expected_entry_args).unwrap() })
+        )
     }
 
     #[tokio::test]
@@ -125,7 +127,10 @@ mod tests {
             .send()
             .await;
 
-        let response_text = response.text().await;
-        assert!(response_text.contains("invalid hex encoding in author string"));
+        let response: Response = response.json().await;
+        assert_eq!(
+            response.errors[0].message,
+            "invalid hex encoding in author string"
+        )
     }
 }
