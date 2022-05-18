@@ -18,6 +18,17 @@ use crate::db::provider::SqlStorage;
 use crate::db::traits::{AsStorageOperation, OperationStore, PreviousOperations};
 use crate::db::utils::{parse_operation_rows, parse_value_to_string_vec};
 
+/// A decoded operation, the public key of it's author, it's `OperationId` and the id
+/// of the document it is part of.
+///
+/// Operations describe mutations to data which is stored on the p2panda network. They
+/// are published and signed by authors, and can be verified by looking into their
+/// accompanying entry. This struct augments the actual published operation with meta
+/// data which is needed when efficiently querying operations and materialising the
+/// documents they are part of.
+///
+/// This struct implements the `AsStorageOperation` trait which is required when
+/// constructing the `OperationStore`.
 #[derive(Debug, Clone)]
 pub struct OperationStorage {
     author: Author,
@@ -74,6 +85,16 @@ impl AsStorageOperation for OperationStorage {
     }
 }
 
+/// Implementation of `OperationStore` trait which is required when constructing a
+/// `StorageProvider`.
+///
+/// Handles storage and retrieval of operations in the form of `StorageOperation` which
+/// implements the required `AsStorageOperation` trait.
+///
+/// There are several intermediary structs defined in `db/models/` which represent
+/// rows from tables in the database where this entry, it's fields and opreation
+/// relations are stored. These are used in conjunction with the `sqlx` library
+/// to coerce raw values into structs when querying the database.
 #[async_trait]
 impl OperationStore<OperationStorage> for SqlStorage {
     /// Get the id of the document an operation is part of.
