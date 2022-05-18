@@ -3,7 +3,8 @@
 use serde::Serialize;
 use sqlx::FromRow;
 
-/// Struct representing the actual SQL row of `Entry`.
+/// Representation of a row from the entries table as stored in the database. This is required
+/// when coercing the returned results from a query with the `sqlx` library.
 ///
 /// We store the u64 integer values of `log_id` and `seq_num` as strings since SQLite doesn't
 /// support storing unsigned 64 bit integers.
