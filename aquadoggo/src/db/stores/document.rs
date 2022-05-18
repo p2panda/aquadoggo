@@ -1,85 +1,25 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::collections::btree_map::Iter;
 use std::collections::BTreeMap;
 
 use async_trait::async_trait;
 use futures::future::try_join_all;
-use p2panda_rs::document::{
-    Document, DocumentId, DocumentView, DocumentViewFields, DocumentViewId, DocumentViewValue,
-};
+use p2panda_rs::document::{Document, DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::schema::SchemaId;
 use sqlx::{query, query_as};
 
 use crate::db::errors::DocumentStorageError;
 use crate::db::models::document::DocumentViewFieldRow;
 use crate::db::provider::SqlStorage;
-use crate::db::traits::{AsStorageDocument, AsStorageDocumentView, DocumentStore};
+use crate::db::traits::DocumentStore;
 use crate::db::utils::parse_document_view_field_rows;
 
-/// Aquadoggo struct which will implement AsStorageDocumentView trait.
-#[derive(Debug, Clone, PartialEq)]
-pub struct StorageDocumentView(DocumentView);
-
-impl StorageDocumentView {
-    pub fn new(id: &DocumentViewId, fields: &DocumentViewFields) -> Self {
-        Self(DocumentView::new(id, fields))
-    }
-}
-
-impl AsStorageDocumentView for StorageDocumentView {
-    type AsStorageDocumentViewError = DocumentStorageError;
-
-    fn id(&self) -> &DocumentViewId {
-        self.0.id()
-    }
-
-    fn iter(&self) -> Iter<String, DocumentViewValue> {
-        self.0.iter()
-    }
-
-    fn get(&self, key: &str) -> Option<&DocumentViewValue> {
-        self.0.get(key)
-    }
-
-    fn fields(&self) -> &DocumentViewFields {
-        self.0.fields()
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct StorageDocument(Document);
-
-impl AsStorageDocument for StorageDocument {
-    type AsStorageDocumentError = DocumentStorageError;
-
-    fn id(&self) -> &DocumentId {
-        self.0.id()
-    }
-
-    fn schema_id(&self) -> &SchemaId {
-        self.0.schema()
-    }
-
-    fn view(&self) -> Option<&DocumentView> {
-        self.0.view()
-    }
-
-    fn view_id(&self) -> &DocumentViewId {
-        self.0.view_id()
-    }
-
-    fn is_deleted(&self) -> bool {
-        self.0.is_deleted()
-    }
-}
-
 #[async_trait]
-impl DocumentStore<StorageDocumentView, StorageDocument> for SqlStorage {
+impl DocumentStore for SqlStorage {
     /// Insert a document_view into the db.
     async fn insert_document_view(
         &self,
-        document_view: &StorageDocumentView,
+        document_view: &DocumentView,
         schema_id: &SchemaId,
     ) -> Result<(), DocumentStorageError> {
         // Start a transaction, any db insertions after this point, and before the `commit()`
@@ -155,7 +95,7 @@ impl DocumentStore<StorageDocumentView, StorageDocument> for SqlStorage {
     async fn get_document_view_by_id(
         &self,
         id: &DocumentViewId,
-    ) -> Result<Option<StorageDocumentView>, DocumentStorageError> {
+    ) -> Result<Option<DocumentView>, DocumentStorageError> {
         let document_view_field_rows = query_as::<_, DocumentViewFieldRow>(
             "
             SELECT
@@ -183,7 +123,7 @@ impl DocumentStore<StorageDocumentView, StorageDocument> for SqlStorage {
         let view = if document_view_field_rows.is_empty() {
             None
         } else {
-            Some(StorageDocumentView::new(
+            Some(DocumentView::new(
                 &id.to_owned(),
                 &parse_document_view_field_rows(document_view_field_rows),
             ))
@@ -197,10 +137,7 @@ impl DocumentStore<StorageDocumentView, StorageDocument> for SqlStorage {
     /// Note: "out-of-date" document views will remain in storage when a document already
     /// existed and is updated. If they are not needed for anything else they can be garbage
     /// collected.
-    async fn insert_document(
-        &self,
-        document: &StorageDocument,
-    ) -> Result<(), DocumentStorageError> {
+    async fn insert_document(&self, document: &Document) -> Result<(), DocumentStorageError> {
         // Insert document view into the db
         let document_insertion_result = query(
             "
@@ -218,7 +155,7 @@ impl DocumentStore<StorageDocumentView, StorageDocument> for SqlStorage {
         .bind(document.id().as_str())
         .bind(document.view_id().as_str())
         .bind(document.is_deleted())
-        .bind(document.schema_id().as_str())
+        .bind(document.schema().as_str())
         .execute(&self.pool)
         .await
         .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
@@ -231,9 +168,9 @@ impl DocumentStore<StorageDocumentView, StorageDocument> for SqlStorage {
 
         if !document.is_deleted() && document.view().is_some() {
             let document_view =
-                StorageDocumentView::new(document.view_id(), document.view().unwrap().fields());
+                DocumentView::new(document.view_id(), document.view().unwrap().fields());
 
-            self.insert_document_view(&document_view, document.schema_id())
+            self.insert_document_view(&document_view, document.schema())
                 .await?;
         };
 
@@ -244,7 +181,7 @@ impl DocumentStore<StorageDocumentView, StorageDocument> for SqlStorage {
     async fn get_document_by_id(
         &self,
         id: &DocumentId,
-    ) -> Result<Option<StorageDocumentView>, DocumentStorageError> {
+    ) -> Result<Option<DocumentView>, DocumentStorageError> {
         let document_view_field_rows = query_as::<_, DocumentViewFieldRow>(
             "
             SELECT
@@ -276,7 +213,7 @@ impl DocumentStore<StorageDocumentView, StorageDocument> for SqlStorage {
             return Ok(None);
         }
 
-        Ok(Some(StorageDocumentView::new(
+        Ok(Some(DocumentView::new(
             &document_view_field_rows[0]
                 .document_view_id
                 .parse()
@@ -289,7 +226,7 @@ impl DocumentStore<StorageDocumentView, StorageDocument> for SqlStorage {
     async fn get_documents_by_schema(
         &self,
         schema_id: &SchemaId,
-    ) -> Result<Vec<StorageDocumentView>, DocumentStorageError> {
+    ) -> Result<Vec<DocumentView>, DocumentStorageError> {
         let document_view_field_rows = query_as::<_, DocumentViewFieldRow>(
             "
                 SELECT
@@ -333,11 +270,11 @@ impl DocumentStore<StorageDocumentView, StorageDocument> for SqlStorage {
             };
         }
 
-        let document_views: Vec<StorageDocumentView> = grouped_document_field_rows
+        let document_views: Vec<DocumentView> = grouped_document_field_rows
             .iter()
             .map(|(id, document_field_row)| {
                 let fields = parse_document_view_field_rows(document_field_row.to_owned());
-                StorageDocumentView::new(&id.parse().unwrap(), &fields)
+                DocumentView::new(&id.parse().unwrap(), &fields)
             })
             .collect();
 
@@ -361,14 +298,14 @@ mod tests {
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
     use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
 
-    use crate::db::stores::document::{DocumentStore, StorageDocumentView};
+    use crate::db::stores::document::{DocumentStore, DocumentView};
     use crate::db::stores::entry::StorageEntry;
     use crate::db::stores::test_utils::{test_create_operation, test_db};
-    use crate::db::traits::{AsStorageDocumentView, OperationStore};
+    use crate::db::traits::OperationStore;
 
-    use super::StorageDocument;
+    use super::Document;
 
-    fn entries_to_document_views(entries: &[StorageEntry]) -> Vec<StorageDocumentView> {
+    fn entries_to_document_views(entries: &[StorageEntry]) -> Vec<DocumentView> {
         let mut document_views = Vec::new();
         let mut current_document_view_fields = DocumentViewFields::new();
         for entry in entries {
@@ -386,7 +323,7 @@ mod tests {
                 &entry.operation().fields().unwrap(),
             );
             let document_view =
-                StorageDocumentView::new(&operation_id.clone().into(), &document_view_fields);
+                DocumentView::new(&operation_id.clone().into(), &document_view_fields);
             document_views.push(document_view)
         }
         document_views
@@ -405,10 +342,10 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        // Construct a `StorageDocumentView`
+        // Construct a `DocumentView`
         let operation_id: OperationId = entry.hash().into();
         let document_view_id: DocumentViewId = operation_id.clone().into();
-        let document_view = StorageDocumentView::new(
+        let document_view = DocumentView::new(
             &document_view_id,
             &DocumentViewFields::new_from_operation_fields(
                 &operation_id,
@@ -516,7 +453,7 @@ mod tests {
         let document_id = documents.get(0).unwrap();
         let operation_id: OperationId = Hash::new_from_bytes(vec![0, 1, 2]).unwrap().into();
 
-        let document_view = StorageDocumentView::new(
+        let document_view = DocumentView::new(
             &document_id.as_str().parse().unwrap(),
             &DocumentViewFields::new_from_operation_fields(
                 &operation_id,
@@ -555,9 +492,7 @@ mod tests {
         .build()
         .unwrap();
 
-        let result = storage_provider
-            .insert_document(&StorageDocument(document.clone()))
-            .await;
+        let result = storage_provider.insert_document(&document).await;
 
         assert!(result.is_ok());
 
@@ -605,9 +540,7 @@ mod tests {
         .build()
         .unwrap();
 
-        let result = storage_provider
-            .insert_document(&StorageDocument(document.clone()))
-            .await;
+        let result = storage_provider.insert_document(&document).await;
 
         assert!(result.is_ok());
 
@@ -655,9 +588,7 @@ mod tests {
         .build()
         .unwrap();
 
-        let result = storage_provider
-            .insert_document(&StorageDocument(document.clone()))
-            .await;
+        let result = storage_provider.insert_document(&document).await;
 
         assert!(result.is_ok());
 
