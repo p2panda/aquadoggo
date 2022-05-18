@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_graphql::Object;
-use serde::de::Error;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 
 use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::hash::Hash;
@@ -10,18 +9,16 @@ use p2panda_rs::storage_provider::traits::{AsEntryArgsResponse, AsPublishEntryRe
 
 use crate::db::models::EntryRow;
 
-use super::utils::U64StringVisitor;
-
 /// Response body of `panda_getEntryArguments`.
 ///
 /// `seq_num` and `log_id` are returned as strings to be able to represent large integers in JSON.
 #[derive(Deserialize, Debug, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct EntryArgsResponse {
-    #[serde(deserialize_with = "deserialize_log_id_string")]
+    #[serde(with = "super::u64_string::log_id_string_serialisation")]
     pub log_id: LogId,
 
-    #[serde(deserialize_with = "deserialize_seq_num_string")]
+    #[serde(with = "super::u64_string::seq_num_string_serialisation")]
     pub seq_num: SeqNum,
 
     pub backlink: Option<Hash>,
@@ -48,22 +45,6 @@ impl EntryArgsResponse {
     async fn skiplink(&self) -> Option<String> {
         self.skiplink.clone().map(|hash| hash.as_str().to_string())
     }
-}
-
-fn deserialize_log_id_string<'de, D>(deserializer: D) -> Result<LogId, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let u64_val = deserializer.deserialize_u64(U64StringVisitor)?;
-    Ok(LogId::new(u64_val))
-}
-
-fn deserialize_seq_num_string<'de, D>(deserializer: D) -> Result<SeqNum, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let u64_val = deserializer.deserialize_u64(U64StringVisitor)?;
-    SeqNum::new(u64_val).map_err(D::Error::custom)
 }
 
 impl AsEntryArgsResponse for EntryArgsResponse {

@@ -3,7 +3,7 @@
 mod request;
 mod response;
 mod root;
-pub(crate) mod utils;
+pub(crate) mod u64_string;
 
 pub use request::{EntryArgsRequest, PublishEntryRequest};
 pub use response::{EntryArgsResponse, PublishEntryResponse};
