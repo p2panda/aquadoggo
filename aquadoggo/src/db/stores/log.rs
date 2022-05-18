@@ -12,6 +12,12 @@ use p2panda_rs::storage_provider::traits::{AsStorageLog, LogStore};
 
 use crate::db::provider::SqlStorage;
 
+/// Tracks the assigment of an author's logs to documents and records their schema.
+///
+/// This serves as an indexing layer on top of the lower-level bamboo entries. The node updates
+/// this data according to what it sees in the newly incoming entries.
+///
+/// `StorageLog` implements the trait `AsStorageLog` which is requied when defining a `LogStore`.
 pub struct StorageLog {
     author: Author,
     log_id: LogId,
@@ -51,7 +57,12 @@ impl AsStorageLog for StorageLog {
     }
 }
 
-/// Trait which handles all storage actions relating to `StorageLog`s.
+/// Implementation of `LogStore` trait which is required when constructing a
+/// `StorageProvider`.
+///
+/// Handles storage and retrieval of logs in the form of `StorageLog` which
+/// implements the required `AsStorageLog` trait. An intermediary struct `LogRow`
+/// is also used when retrieving a log from the database.
 #[async_trait]
 impl LogStore<StorageLog> for SqlStorage {
     /// Insert a log into storage.

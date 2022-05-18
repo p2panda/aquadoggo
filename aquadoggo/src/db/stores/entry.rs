@@ -17,8 +17,13 @@ use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
 use crate::db::models::EntryRow;
 use crate::db::provider::SqlStorage;
 
-/// Struct which wraps a signed entry with it's encoded operation and implements
-/// the `AsStorageEntry`. This is required for constructing the `EntryStore`.
+/// A signed entry and it's encoded operation. Entries are the lowest level data
+/// type on the p2panda network, they are signed by authors and form bamboo append
+/// only logs. The operation is an entries' payload, it contains the data mutations
+/// which authors publish.
+///
+/// This struct implements the `AsStorageEntry` trait which is required when
+/// constructing the `EntryStore`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StorageEntry {
     entry_signed: EntrySigned,
@@ -117,7 +122,7 @@ impl AsStorageEntry for StorageEntry {
     }
 }
 
-/// Implementation of `AsEntryStore` trait which is required when constructing a
+/// Implementation of `EntryStore` trait which is required when constructing a
 /// `StorageProvider`.
 ///
 /// Handles storage and retrieval of entries in the form of`StorageEntry` which
