@@ -2,8 +2,6 @@
 
 use async_trait::async_trait;
 use lipmaa_link::get_lipmaa_links_back_to;
-use p2panda_rs::storage_provider::ValidationError;
-use p2panda_rs::Validate;
 use sqlx::{query, query_as};
 
 use p2panda_rs::entry::{decode_entry, Entry, EntrySigned, LogId, SeqNum};
@@ -13,6 +11,8 @@ use p2panda_rs::operation::{Operation, OperationEncoded};
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::errors::EntryStorageError;
 use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
+use p2panda_rs::storage_provider::ValidationError;
+use p2panda_rs::Validate;
 
 use crate::db::models::EntryRow;
 use crate::db::provider::SqlStorage;
