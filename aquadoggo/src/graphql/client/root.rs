@@ -107,7 +107,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn next_entry_args_invalid_author() {
+    async fn next_entry_args_error_response() {
         let pool = initialize_db().await;
         let context = Context::new(pool.clone(), Configuration::default());
         let client = TestClient::new(build_server(context));
