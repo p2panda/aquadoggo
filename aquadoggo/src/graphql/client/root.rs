@@ -57,6 +57,7 @@ impl ClientRoot {
 #[cfg(test)]
 mod tests {
     use async_graphql::{value, Response};
+    use p2panda_rs::entry::{LogId, SeqNum};
     use serde_json::json;
 
     use crate::config::Configuration;
@@ -80,9 +81,9 @@ mod tests {
                     nextEntryArgs(
                         publicKey: "8b52ae153142288402382fd6d9619e018978e015e6bc372b1b0c7bd40c6a240a"
                     ) {
-                        backlink,
                         logId,
                         seqNum,
+                        backlink,
                         skiplink
                     }
                 }"#,
@@ -94,12 +95,11 @@ mod tests {
             .await;
 
         let expected_entry_args = EntryArgsResponse {
+            log_id: LogId::new(1),
+            seq_num: SeqNum::new(1).unwrap(),
             backlink: None,
             skiplink: None,
-            seq_num: "1".to_string(),
-            log_id: "1".to_string(),
         };
-
         assert_eq!(
             response.data,
             value!({ "nextEntryArgs": async_graphql::to_value(expected_entry_args).unwrap() })

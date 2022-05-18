@@ -414,9 +414,7 @@ mod tests {
     use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
-    use p2panda_rs::operation::{
-        Operation, OperationEncoded, OperationFields, OperationId, OperationValue,
-    };
+    use p2panda_rs::operation::{Operation, OperationEncoded, OperationFields, OperationValue};
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, StorageProvider};
     use p2panda_rs::test_utils::constants::{DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
@@ -443,7 +441,7 @@ mod tests {
             .hash()
             .into();
 
-        let entry_args = storage_provider
+        let next_entry_args = storage_provider
             .get_entry_args(&EntryArgsRequest {
                 author: author.clone(),
                 document: Some(document_id.clone()),
@@ -458,22 +456,17 @@ mod tests {
 
         let update_operation = Operation::new_update(
             schema.clone(),
-            vec![entry_args
-                .backlink
-                .clone()
-                .map(|val| val.parse::<OperationId>().unwrap())
-                .unwrap()
-                .into()],
+            vec![next_entry_args.backlink.clone().unwrap().into()],
             fields.clone(),
         )
         .unwrap();
 
         let update_entry = Entry::new(
-            &entry_args.log_id.parse().unwrap(),
+            &next_entry_args.log_id,
             Some(&update_operation),
-            entry_args.skiplink.map(|val| val.parse().unwrap()).as_ref(),
-            entry_args.backlink.map(|val| val.parse().unwrap()).as_ref(),
-            &entry_args.seq_num.parse().unwrap(),
+            next_entry_args.skiplink.as_ref(),
+            next_entry_args.backlink.as_ref(),
+            &next_entry_args.seq_num,
         )
         .unwrap();
 
