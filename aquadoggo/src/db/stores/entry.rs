@@ -17,6 +17,8 @@ use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
 use crate::db::models::EntryRow;
 use crate::db::provider::SqlStorage;
 
+/// Struct which wraps a signed entry with it's encoded operation and implements
+/// the `AsStorageEntry`. This is required for constructing the `EntryStore`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StorageEntry {
     entry_signed: EntrySigned,
@@ -51,6 +53,9 @@ impl Validate for StorageEntry {
     }
 }
 
+/// `From` implementation for converting an `EntryRow` into a `StorageEntry`. This is useful
+/// when retrieving entries from the database. The `sqlx` crate coerces returned entry rows
+/// into `EntryRow` but we normally want them as `StorageEntry`.
 impl From<EntryRow> for StorageEntry {
     fn from(entry_row: EntryRow) -> Self {
         // Unwrapping everything here as we assume values coming from the database are valid.
@@ -112,7 +117,12 @@ impl AsStorageEntry for StorageEntry {
     }
 }
 
-/// Trait which handles all storage actions relating to `Entries`.
+/// Implementation of `AsEntryStore` trait which is required when constructing a
+/// `StorageProvider`.
+///
+/// Handles storage and retrieval of entries in the form of`StorageEntry` which
+/// implements the required `AsStorageEntry` trait. An intermediary struct `EntryRow`
+/// is also used when retrieving an entry from the database.
 #[async_trait]
 impl EntryStore<StorageEntry> for SqlStorage {
     /// Insert an entry into storage.
