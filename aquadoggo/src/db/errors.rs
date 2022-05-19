@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use p2panda_rs::{
-    document::{DocumentId, DocumentViewId},
-    operation::OperationId,
-};
+use p2panda_rs::document::{DocumentId, DocumentViewId};
 
 /// `DocumentStore` errors.
 #[derive(thiserror::Error, Debug)]
