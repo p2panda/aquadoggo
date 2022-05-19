@@ -4,6 +4,7 @@ pub mod document;
 mod entry;
 mod log;
 mod operation;
+mod schema;
 
 pub use self::log::LogRow;
 pub use entry::EntryRow;
