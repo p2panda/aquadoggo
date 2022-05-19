@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improve `Signal` efficiency in `ServiceManager` [#95](https://github.com/p2panda/aquadoggo/pull/95)
 - `EntryStore` improvements [#123](https://github.com/p2panda/aquadoggo/pull/123)
 - Improvements for log and entry table layout [#124](https://github.com/p2panda/aquadoggo/issues/122)
+- Update `StorageProvider` API after `p2panda-rs` changes [129](https://github.com/p2panda/aquadoggo/pull/129)
 
 ## [0.2.0]
 
