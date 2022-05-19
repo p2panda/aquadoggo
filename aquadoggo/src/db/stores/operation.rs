@@ -10,12 +10,12 @@ use p2panda_rs::operation::{
     AsOperation, Operation, OperationAction, OperationFields, OperationId,
 };
 use p2panda_rs::schema::SchemaId;
+use p2panda_rs::storage_provider::errors::OperationStorageError;
+use p2panda_rs::storage_provider::traits::{AsStorageOperation, OperationStore};
 use sqlx::{query, query_as, query_scalar};
 
-use crate::db::errors::OperationStorageError;
 use crate::db::models::OperationFieldsJoinedRow;
 use crate::db::provider::SqlStorage;
-use crate::db::traits::{AsStorageOperation, OperationStore, PreviousOperations};
 use crate::db::utils::{parse_operation_rows, parse_value_to_string_vec};
 
 /// A decoded operation, the public key of it's author, it's `OperationId` and the id
@@ -80,7 +80,7 @@ impl AsStorageOperation for OperationStorage {
         self.operation.fields()
     }
 
-    fn previous_operations(&self) -> PreviousOperations {
+    fn previous_operations(&self) -> Vec<OperationId> {
         self.operation.previous_operations().unwrap_or_default()
     }
 }
@@ -378,15 +378,15 @@ mod tests {
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::OperationId;
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, StorageProvider};
+    use p2panda_rs::storage_provider::traits::{AsStorageOperation, OperationStore};
     use p2panda_rs::test_utils::constants::{DEFAULT_HASH, DEFAULT_PRIVATE_KEY};
 
     use crate::db::provider::SqlStorage;
     use crate::db::stores::test_utils::{
         test_create_operation, test_db, test_delete_operation, test_update_operation,
     };
-    use crate::db::traits::AsStorageOperation;
 
-    use super::{OperationStorage, OperationStore};
+    use super::OperationStorage;
 
     async fn insert_get_assert(storage_provider: SqlStorage, operation: OperationStorage) {
         // Insert the doggo operation into the db, returns Ok(true) when succesful.

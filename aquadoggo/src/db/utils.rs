@@ -200,10 +200,10 @@ mod tests {
     use p2panda_rs::operation::{
         AsOperation, OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList,
     };
+    use p2panda_rs::storage_provider::traits::AsStorageOperation;
 
     use crate::db::models::OperationFieldsJoinedRow;
     use crate::db::stores::test_utils::test_create_operation;
-    use crate::db::traits::AsStorageOperation;
 
     use super::{parse_operation_rows, parse_value_to_string_vec};
 
