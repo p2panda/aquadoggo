@@ -17,12 +17,18 @@ pub struct Mutation;
 #[Object]
 impl Mutation {
     /// Publish an entry using parameters obtained through `nextEntryArgs` query.
+    ///
+    /// Returns arguments for publishing the next entry in the same log.
     async fn publish_entry(
         &self,
         ctx: &Context<'_>,
         #[graphql(name = "entryEncoded", desc = "Encoded entry to publish")]
         entry_encoded_param: String,
-        #[graphql(name = "operationEncoded", desc = "Encoded entry payload.")]
+        #[graphql(
+            name = "operationEncoded",
+            desc = "Encoded entry payload, which contains a p2panda operation matching the \
+            provided encoded entry."
+        )]
         operation_encoded_param: String,
     ) -> Result<PublishEntryResponse> {
         // Parse and validate parameters
