@@ -51,6 +51,10 @@ impl OperationStorage {
             document_id: document_id.clone(),
         }
     }
+
+    fn raw_operation(&self) -> Operation {
+        self.operation.clone()
+    }
 }
 
 impl AsStorageOperation for OperationStorage {
@@ -82,10 +86,6 @@ impl AsStorageOperation for OperationStorage {
 
     fn previous_operations(&self) -> Vec<OperationId> {
         self.operation.previous_operations().unwrap_or_default()
-    }
-
-    fn raw_operation(&self) -> Operation {
-        self.operation.clone()
     }
 }
 
