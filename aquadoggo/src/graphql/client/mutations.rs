@@ -46,7 +46,7 @@ impl Mutation {
 
 #[cfg(test)]
 mod tests {
-    use async_graphql::{value, Request, Variables};
+    use async_graphql::{from_value, value, Request, Value, Variables};
     use p2panda_rs::entry::{LogId, SeqNum};
 
     use crate::context::Context;
@@ -54,20 +54,21 @@ mod tests {
     use crate::test_helpers::initialize_db;
     use crate::Configuration;
 
+    const ENTRY_ENCODED: &str =
+        "00bedabb435758855968b3e2de2aa1f653adfbb392fcf9cb2295a68b2eca3cfb0301\
+    01a200204b771d59d76e820cbae493682003e99b795e4e7c86a8d6b4c9ad836dc4c9bf1d3970fb39f21542099ba\
+    2fbfd6ec5076152f26c02445c621b43a7e2898d203048ec9f35d8c2a1547f2b83da8e06cadd8a60bb45d3b50045\
+    1e63f7cccbcbd64d09";
+
+    const OPERATION_ENCODED: &str = "a466616374696f6e6663726561746566736368656d61784a76656e7565\
+    5f30303230633635353637616533376566656132393365333461396337643133663866326266323364626463336\
+    235633762396162343632393331313163343866633738626776657273696f6e01666669656c6473a1676d657373\
+    616765a26474797065637374726576616c7565764f68682c206d79206669727374206d65737361676521";
+
     #[tokio::test]
     async fn publish_entry() {
         let pool = initialize_db().await;
         let context = Context::new(pool.clone(), Configuration::default());
-
-        let entry_encoded = "00bedabb435758855968b3e2de2aa1f653adfbb392fcf9cb2295a68b2eca3cfb0301\
-        01a200204b771d59d76e820cbae493682003e99b795e4e7c86a8d6b4c9ad836dc4c9bf1d3970fb39f21542099ba\
-        2fbfd6ec5076152f26c02445c621b43a7e2898d203048ec9f35d8c2a1547f2b83da8e06cadd8a60bb45d3b50045\
-        1e63f7cccbcbd64d09";
-
-        let operation_encoded = "a466616374696f6e6663726561746566736368656d61784a76656e7565\
-        5f30303230633635353637616533376566656132393365333461396337643133663866326266323364626463336\
-        235633762396162343632393331313163343866633738626776657273696f6e01666669656c6473a1676d657373\
-        616765a26474797065637374726576616c7565764f68682c206d79206669727374206d65737361676521";
 
         let query = r#"
             mutation TestPublishEntry($entryEncoded: String!, $operationEncoded: String!) {
@@ -79,19 +80,19 @@ mod tests {
                 }
             }"#;
         let parameters = Variables::from_value(value!({
-            "entryEncoded": entry_encoded,
-            "operationEncoded": operation_encoded
+            "entryEncoded": ENTRY_ENCODED,
+            "operationEncoded": OPERATION_ENCODED
         }));
         let request = Request::new(query).variables(parameters);
         let response = context.0.schema.execute(request).await;
 
         let received: PublishEntryResponse = match response.data {
-            async_graphql::Value::Object(result_outer) => {
-                async_graphql::from_value(result_outer.get("publishEntry").unwrap().to_owned())
-                    .unwrap()
+            Value::Object(result_outer) => {
+                from_value(result_outer.get("publishEntry").unwrap().to_owned()).unwrap()
             }
             _ => panic!("Expected return value to be an object"),
         };
+        // The response should contain args for the next entry in the same log.
         let expected = PublishEntryResponse {
             log_id: LogId::new(1),
             seq_num: SeqNum::new(2).unwrap(),
@@ -102,7 +103,34 @@ mod tests {
             ),
             skiplink: None,
         };
-
         assert_eq!(expected, received);
+    }
+
+    #[tokio::test]
+    async fn publish_entry_error_handling() {
+        let pool = initialize_db().await;
+        let context = Context::new(pool.clone(), Configuration::default());
+
+        let query = r#"
+            mutation TestPublishEntry($entryEncoded: String!, $operationEncoded: String!) {
+                publishEntry(entryEncoded: $entryEncoded, operationEncoded: $operationEncoded) {
+                    logId,
+                    seqNum,
+                    backlink,
+                    skiplink
+                }
+            }"#;
+        let parameters = Variables::from_value(value!({
+            "entryEncoded": ENTRY_ENCODED,
+            "operationEncoded": "".to_string()
+        }));
+        let request = Request::new(query).variables(parameters);
+        let response = context.0.schema.execute(request).await;
+
+        assert!(response.is_err());
+        assert_eq!(
+            "operation needs to match payload hash of encoded entry".to_string(),
+            response.errors[0].to_string()
+        );
     }
 }
