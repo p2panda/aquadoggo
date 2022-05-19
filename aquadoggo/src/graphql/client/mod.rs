@@ -10,3 +10,4 @@ pub use mutations::Mutation;
 pub use queries::Query;
 pub use request::{EntryArgsRequest, PublishEntryRequest};
 pub use response::{EntryArgsResponse, PublishEntryResponse};
+pub use root::ClientRoot;
