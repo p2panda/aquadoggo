@@ -2,8 +2,8 @@
 
 CREATE TABLE IF NOT EXISTS document_view_fields (
     document_view_id            TEXT            NOT NULL,
-    operation_id                VARCHAR(64)     NOT NULL,
-    name                        VARCHAR(128)    NOT NULL,
+    operation_id                TEXT            NOT NULL,
+    name                        TEXT            NOT NULL,
     FOREIGN KEY(operation_id)   REFERENCES      operations_v1(operation_id)
 );
 
@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS document_views (
 );
 
 CREATE TABLE IF NOT EXISTS documents (
-    document_id                 VARCHAR(64)     NOT NULL UNIQUE,
+    document_id                 TEXT            NOT NULL UNIQUE,
     document_view_id            TEXT            NOT NULL,
     schema_id                   TEXT            NOT NULL,
     is_deleted                  BOOLEAN         NOT NULL,
