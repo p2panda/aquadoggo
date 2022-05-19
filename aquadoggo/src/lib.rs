@@ -22,7 +22,6 @@ mod graphql;
 mod manager;
 mod materializer;
 mod node;
-mod rpc;
 mod server;
 
 #[cfg(test)]

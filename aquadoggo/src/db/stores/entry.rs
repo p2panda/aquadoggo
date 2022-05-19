@@ -421,7 +421,7 @@ mod tests {
 
     use crate::db::stores::entry::StorageEntry;
     use crate::db::stores::test_utils::test_db;
-    use crate::rpc::EntryArgsRequest;
+    use crate::graphql::client::EntryArgsRequest;
 
     #[tokio::test]
     async fn insert_entry() {
@@ -456,7 +456,7 @@ mod tests {
 
         let update_operation = Operation::new_update(
             schema.clone(),
-            vec![next_entry_args.entry_hash_backlink.clone().unwrap().into()],
+            vec![next_entry_args.backlink.clone().unwrap().into()],
             fields.clone(),
         )
         .unwrap();
@@ -464,8 +464,8 @@ mod tests {
         let update_entry = Entry::new(
             &next_entry_args.log_id,
             Some(&update_operation),
-            next_entry_args.entry_hash_skiplink.as_ref(),
-            next_entry_args.entry_hash_backlink.as_ref(),
+            next_entry_args.skiplink.as_ref(),
+            next_entry_args.backlink.as_ref(),
             &next_entry_args.seq_num,
         )
         .unwrap();

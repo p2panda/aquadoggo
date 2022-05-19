@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use crate::config::Configuration;
 use crate::db::Pool;
-use crate::graphql::{build_static_schema, StaticSchema};
+use crate::graphql::{build_root_schema, RootSchema};
 
 /// Inner data shared across all services.
 pub struct Data {
@@ -16,13 +16,13 @@ pub struct Data {
     pub pool: Pool,
 
     /// Static GraphQL schema.
-    pub schema: StaticSchema,
+    pub schema: RootSchema,
 }
 
 impl Data {
     /// Initialize new data instance with shared database connection pool.
     pub fn new(pool: Pool, config: Configuration) -> Self {
-        let schema = build_static_schema(pool.clone());
+        let schema = build_root_schema(pool.clone());
 
         Self {
             config,

@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Refactor module structure, propagate errors in worker to service manager [#97](https://github.com/p2panda/aquadoggo/pull/97)
 - Restructure storage modules and remove JSON RPC [#101](https://github.com/p2panda/aquadoggo/pull/101)
 - Implement new methods required for replication defined by `EntryStore` trait [#102](https://github.com/p2panda/aquadoggo/pull/102)
+- GraphQL client API [#119](https://github.com/p2panda/aquadoggo/pull/119)
 
 ### Changed
 
