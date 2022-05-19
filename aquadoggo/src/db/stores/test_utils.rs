@@ -12,17 +12,19 @@ use p2panda_rs::operation::{
     PinnedRelationList, Relation, RelationList,
 };
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::storage_provider::traits::OperationStore;
-use p2panda_rs::storage_provider::traits::StorageProvider;
+use p2panda_rs::storage_provider::traits::{
+    AsStorageEntry, AsStorageLog, LogStore, StorageProvider,
+};
+use p2panda_rs::storage_provider::traits::{EntryStore, OperationStore};
 use p2panda_rs::test_utils::constants::{DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
 
 use crate::db::provider::SqlStorage;
-use crate::graphql::client::{EntryArgsRequest, PublishEntryRequest};
+use crate::graphql::client::EntryArgsRequest;
 use crate::test_helpers::initialize_db;
 
-use super::entry::StorageEntry;
-use super::log::StorageLog;
-use super::operation::OperationStorage;
+use crate::db::stores::OperationStorage;
+use crate::db::stores::StorageEntry;
+use crate::db::stores::StorageLog;
 
 pub fn test_create_operation() -> Operation {
     let mut fields = OperationFields::new();
@@ -151,14 +153,10 @@ pub async fn test_db(
             let next_operation = if index == 0 {
                 test_create_operation()
             } else if index == (no_of_entries - 1) && with_delete {
-                test_delete_operation(vec![next_entry_args
-                    .entry_hash_backlink
-                    .clone()
-                    .unwrap()
-                    .into()])
+                test_delete_operation(vec![next_entry_args.backlink.clone().unwrap().into()])
             } else {
                 test_update_operation(
-                    vec![next_entry_args.entry_hash_backlink.clone().unwrap().into()],
+                    vec![next_entry_args.backlink.clone().unwrap().into()],
                     "yoyo",
                 )
             };
@@ -166,8 +164,8 @@ pub async fn test_db(
             let next_entry = Entry::new(
                 &next_entry_args.log_id,
                 Some(&next_operation),
-                next_entry_args.entry_hash_skiplink.as_ref(),
-                next_entry_args.entry_hash_backlink.as_ref(),
+                next_entry_args.backlink.as_ref(),
+                next_entry_args.backlink.as_ref(),
                 &next_entry_args.seq_num,
             )
             .unwrap();

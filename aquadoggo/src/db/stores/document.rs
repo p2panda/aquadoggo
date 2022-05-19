@@ -295,15 +295,12 @@ mod tests {
     use p2panda_rs::identity::Author;
     use p2panda_rs::operation::{AsOperation, OperationId, OperationValue};
     use p2panda_rs::schema::SchemaId;
-    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
+    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, OperationStore};
     use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
 
     use crate::db::stores::document::{DocumentStore, DocumentView};
     use crate::db::stores::entry::StorageEntry;
     use crate::db::stores::test_utils::{test_create_operation, test_db};
-    use crate::db::traits::OperationStore;
-
-    use super::Document;
 
     fn entries_to_document_views(entries: &[StorageEntry]) -> Vec<DocumentView> {
         let mut document_views = Vec::new();
