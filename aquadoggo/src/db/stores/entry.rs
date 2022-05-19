@@ -358,7 +358,7 @@ impl EntryStore<StorageEntry> for SqlStorage {
     /// It is worth noting that this method doesn't check if the certificate pool
     /// is complete, it only returns entries which are part of the pool and found
     /// in storage. If an entry was not stored, then the pool may be incomplete.
-    async fn get_all_skiplink_entries_for_entry(
+    async fn get_certificate_pool(
         &self,
         author: &Author,
         log_id: &LogId,
@@ -648,11 +648,7 @@ mod tests {
         let author = Author::try_from(*key_pair.public_key()).unwrap();
 
         let entries = storage_provider
-            .get_all_skiplink_entries_for_entry(
-                &author,
-                &LogId::default(),
-                &SeqNum::new(20).unwrap(),
-            )
+            .get_certificate_pool(&author, &LogId::default(), &SeqNum::new(20).unwrap())
             .await
             .unwrap();
 
