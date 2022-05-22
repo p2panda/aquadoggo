@@ -27,19 +27,6 @@ pub struct OperationRow {
     pub previous_operations: String,
 }
 
-/// A struct representing a single previous operation relation row as it is inserted in the database.
-#[derive(FromRow, Debug)]
-pub struct PreviousOperationRelationRow {
-    /// The parent in this operation relation. This is the operation
-    /// being appended to, it lies nearer the root in a graph structure.
-    parent_operation_id: String,
-
-    /// The child in this operation relation. This is the operation
-    /// which has a depenency on the parent, it lies nearer the tip/leaves
-    /// in a graph structure.
-    child_operation_id: String,
-}
-
 /// A struct representing a single operation field row as it is inserted in the database.
 #[derive(FromRow, Debug)]
 pub struct OperationFieldRow {

@@ -184,32 +184,8 @@ impl OperationStore<OperationStorage> for SqlStorage {
         .await
         .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
 
-        // Loop over all previous operations and insert one row for
-        // each, construct and execute the queries, return their futures
-        // and execute all of them with `try_join_all()`.
-        let previous_operations_insertion_result =
-            try_join_all(operation.previous_operations().iter().map(|prev_op_id| {
-                query(
-                    "
-                    INSERT INTO
-                        previous_operations_v1 (
-                            parent_operation_id,
-                            child_operation_id
-                        )
-                    VALUES
-                        ($1, $2)
-                    ",
-                )
-                .bind(prev_op_id.as_str())
-                .bind(operation.id().as_str().to_owned())
-                .execute(&self.pool)
-            }))
-            .await
-            // If any of database errors occur we will catch that here
-            .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
-
-        // Same pattern as above but now for operation_fields. Construct and execute the
-        // queries, return their futures and execute all of them with `try_join_all()`.
+        // Construct and execute the queries, return their futures and execute
+        // all of them with `try_join_all()`.
         let fields_insertion_result = match operation.fields() {
             Some(fields) => {
                 let result = try_join_all(fields.iter().flat_map(|(name, value)| {
@@ -254,9 +230,6 @@ impl OperationStore<OperationStorage> for SqlStorage {
 
         // Check every insertion performed affected exactly 1 row.
         if operation_insertion_result.rows_affected() != 1
-            || previous_operations_insertion_result
-                .iter()
-                .any(|query_result| query_result.rows_affected() != 1)
             || fields_insertion_result
                 .unwrap_or_default()
                 .iter()
