@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::collections::BTreeMap;
+
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
@@ -43,8 +45,8 @@ pub fn parse_operation_rows(
             .collect();
     }
 
-    let mut relation_list: Vec<DocumentId> = Vec::new();
-    let mut pinned_relation_list: Vec<DocumentViewId> = Vec::new();
+    let mut relation_lists: BTreeMap<String, Vec<DocumentId>> = BTreeMap::new();
+    let mut pinned_relation_lists: BTreeMap<String, Vec<DocumentViewId>> = BTreeMap::new();
 
     let mut operation_fields = OperationFields::new();
 
@@ -95,7 +97,17 @@ pub fn parse_operation_rows(
             }
             // This is a list item, so we push it to a vec but _don't_ add it
             // to the operation_fields yet.
-            "relation_list" => relation_list.push(row.value.parse::<DocumentId>().unwrap()),
+            "relation_list" => {
+                match relation_lists.get_mut(&row.name) {
+                    Some(list) => list.push(row.value.parse::<DocumentId>().unwrap()),
+                    None => {
+                        relation_lists.insert(
+                            row.name.clone(),
+                            vec![row.value.parse::<DocumentId>().unwrap()],
+                        );
+                    }
+                };
+            }
             "pinned_relation" => {
                 operation_fields
                     .add(
@@ -109,37 +121,33 @@ pub fn parse_operation_rows(
             // This is a list item, so we push it to a vec but _don't_ add it
             // to the operation_fields yet.
             "pinned_relation_list" => {
-                pinned_relation_list.push(row.value.parse::<DocumentViewId>().unwrap())
+                match pinned_relation_lists.get_mut(&row.name) {
+                    Some(list) => list.push(row.value.parse::<DocumentViewId>().unwrap()),
+                    None => {
+                        pinned_relation_lists.insert(
+                            row.name.clone(),
+                            vec![row.value.parse::<DocumentViewId>().unwrap()],
+                        );
+                    }
+                };
             }
             _ => (),
         };
     });
 
-    // Find if there is at least one field containing a "relation_list" type
-    let relation_list_field = &operation_rows
-        .iter()
-        .find(|row| row.field_type == "relation_list");
-
-    // If so, then parse the `relation_list` vec into an operation value and add it to the document view fields
-    if let Some(relation_list_field) = relation_list_field {
+    for (field_name, relation_list) in relation_lists {
         operation_fields
             .add(
-                relation_list_field.name.as_str(),
+                field_name.as_str(),
                 OperationValue::RelationList(RelationList::new(relation_list)),
             )
             .unwrap();
     }
 
-    // Find if there is at least one field containing a "pinned_relation_list" type
-    let pinned_relation_list_field = &operation_rows
-        .iter()
-        .find(|row| row.field_type == "pinned_relation_list");
-
-    // If so, then parse the `pinned_relation_list` vec into an operation value and add it to the document view fields
-    if let Some(pinned_relation_list_field) = pinned_relation_list_field {
+    for (field_name, pinned_relation_list) in pinned_relation_lists {
         operation_fields
             .add(
-                pinned_relation_list_field.name.as_str(),
+                field_name.as_str(),
                 OperationValue::PinnedRelationList(PinnedRelationList::new(pinned_relation_list)),
             )
             .unwrap();
@@ -362,6 +370,46 @@ mod tests {
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
                 previous_operations: "".to_string(),
+                name: "many_special_dog_pictures".to_string(),
+                field_type: "pinned_relation_list".to_string(),
+                value: "0020bcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbc"
+                    .to_string(),
+            },
+            OperationFieldsJoinedRow {
+                author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
+                    .to_string(),
+                document_id: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                    .to_string(),
+                operation_id:
+                    "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                        .to_string(),
+                action: "create".to_string(),
+                entry_hash: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                    .to_string(),
+                schema_id:
+                    "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
+                        .to_string(),
+                previous_operations: "".to_string(),
+                name: "many_special_dog_pictures".to_string(),
+                field_type: "pinned_relation_list".to_string(),
+                value: "0020abababababababababababababababababababababababababababababababab"
+                    .to_string(),
+            },
+            OperationFieldsJoinedRow {
+                author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
+                    .to_string(),
+                document_id: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                    .to_string(),
+                operation_id:
+                    "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                        .to_string(),
+                action: "create".to_string(),
+                entry_hash: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                    .to_string(),
+                schema_id:
+                    "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
+                        .to_string(),
+                previous_operations: "".to_string(),
                 name: "profile_picture".to_string(),
                 field_type: "relation".to_string(),
                 value: "0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
@@ -456,6 +504,22 @@ mod tests {
                     .unwrap(),
             ]))
         );
+        assert_eq!(
+            operation
+                .fields()
+                .unwrap()
+                .get("many_special_dog_pictures")
+                .unwrap(),
+            &OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
+                "0020bcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbc"
+                    .parse()
+                    .unwrap(),
+                "0020abababababababababababababababababababababababababababababababab"
+                    .parse()
+                    .unwrap(),
+            ]))
+        );
+
         assert_eq!(
             operation.fields().unwrap().get("profile_picture").unwrap(),
             &OperationValue::Relation(Relation::new(
