@@ -3,6 +3,8 @@
 use async_trait::async_trait;
 use p2panda_rs::schema::{Schema, SchemaId};
 
+use crate::db::provider::SqlStorage;
+
 /// `SchemaStore` errors.
 #[derive(thiserror::Error, Debug)]
 pub enum SchemaStoreError {
@@ -16,4 +18,15 @@ pub trait SchemaStore {
     async fn insert_schema(&self, schema: &Schema) -> Result<(), SchemaStoreError>;
 
     async fn get_schema_by_id(&self, id: &SchemaId) -> Result<Schema, SchemaStoreError>;
+}
+
+#[async_trait]
+impl SchemaStore for SqlStorage {
+    async fn insert_schema(&self, schema: &Schema) -> Result<(), SchemaStoreError> {
+        todo!()
+    }
+
+    async fn get_schema_by_id(&self, id: &SchemaId) -> Result<Schema, SchemaStoreError> {
+        todo!()
+    }
 }
