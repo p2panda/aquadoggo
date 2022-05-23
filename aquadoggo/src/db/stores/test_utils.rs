@@ -19,7 +19,7 @@ use p2panda_rs::storage_provider::traits::{EntryStore, OperationStore};
 use p2panda_rs::test_utils::constants::{DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
 
 use crate::db::provider::SqlStorage;
-use crate::graphql::client::EntryArgsRequest;
+use crate::graphql::client::{EntryArgsRequest, PublishEntryRequest};
 use crate::test_helpers::initialize_db;
 
 use crate::db::stores::OperationStorage;
@@ -114,6 +114,36 @@ pub fn test_update_operation(previous_operations: Vec<OperationId>, username: &s
         fields,
     )
     .unwrap()
+}
+
+pub async fn construct_publish_entry_request(
+    provider: &SqlStorage,
+    operation: &Operation,
+    key_pair: &KeyPair,
+    document_id: Option<&DocumentId>,
+) -> PublishEntryRequest {
+    let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+    let entry_args_request = EntryArgsRequest {
+        author: author.clone(),
+        document: document_id.cloned(),
+    };
+    let next_entry_args = provider.get_entry_args(&entry_args_request).await.unwrap();
+
+    let entry = Entry::new(
+        &next_entry_args.log_id,
+        Some(operation),
+        next_entry_args.skiplink.as_ref(),
+        next_entry_args.backlink.as_ref(),
+        &next_entry_args.seq_num,
+    )
+    .unwrap();
+
+    let entry_encoded = sign_and_encode(&entry, key_pair).unwrap();
+    let operation_encoded = OperationEncoded::try_from(operation).unwrap();
+    PublishEntryRequest {
+        entry_encoded,
+        operation_encoded,
+    }
 }
 
 pub fn test_delete_operation(previous_operations: Vec<OperationId>) -> Operation {

@@ -51,19 +51,16 @@ pub trait SchemaStore {
 impl SchemaStore for SqlStorage {
     async fn get_schema_by_id(&self, id: &DocumentViewId) -> Result<Schema, SchemaStoreError> {
         // Fetch the document view rows for each of the schema
-        let schema_rows: Vec<DocumentViewFieldRow> = vec![];
-        let schema_view: SchemaView =
-            DocumentView::new(id, &parse_document_view_field_rows(schema_rows)).try_into()?;
+        let schema_document_view = self.get_document_view_by_id(id).await?.unwrap(); // Don't unwrap here.
+        let schema_view: SchemaView = schema_document_view.try_into()?;
 
-        // Fetch the document view rows for each of the schema fields
-        let mut schema_fields: Vec<SchemaFieldView> = vec![];
+        let mut schema_fields = vec![];
 
         for field in schema_view.fields().iter() {
             // Fetch schema field document views
-            let schema_field_rows: Vec<DocumentViewFieldRow> = vec![];
-            let scheme_field_view: SchemaFieldView =
-                DocumentView::new(id, &parse_document_view_field_rows(schema_field_rows))
-                    .try_into()?;
+            let scheme_field_document_view = self.get_document_view_by_id(&field).await?.unwrap(); // Don't unwrap here.
+
+            let scheme_field_view: SchemaFieldView = scheme_field_document_view.try_into()?;
             schema_fields.push(scheme_field_view);
         }
 
@@ -105,5 +102,151 @@ impl SchemaStore for SqlStorage {
         }
 
         Ok(all_schema)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::convert::TryFrom;
+    use std::str::FromStr;
+
+    use p2panda_rs::document::{
+        DocumentBuilder, DocumentId, DocumentView, DocumentViewFields, DocumentViewId,
+        DocumentViewValue,
+    };
+    use p2panda_rs::entry::{Entry, LogId, SeqNum};
+    use p2panda_rs::hash::Hash;
+    use p2panda_rs::identity::{Author, KeyPair};
+    use p2panda_rs::operation::{
+        AsOperation, Operation, OperationFields, OperationId, OperationValue, PinnedRelationList,
+    };
+    use p2panda_rs::schema::system::{SchemaFieldView, SchemaView};
+    use p2panda_rs::schema::{FieldType, SchemaId};
+    use p2panda_rs::storage_provider::traits::{
+        AsStorageEntry, EntryStore, OperationStore, StorageProvider,
+    };
+    use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
+
+    use crate::db::stores::test_utils::{construct_publish_entry_request, test_db};
+    use crate::db::stores::OperationStorage;
+    use crate::db::traits::DocumentStore;
+    use crate::graphql::client::PublishEntryRequest;
+
+    use super::SchemaStore;
+
+    #[tokio::test]
+    async fn inserts_gets_one_document_view() {
+        let (storage_provider, key_pairs, _documents) = test_db(0, 0, false).await;
+        let key_pair = KeyPair::new();
+        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+
+        let mut schema_name_field_definition_operation_fields = OperationFields::new();
+        schema_name_field_definition_operation_fields
+            .add("name", OperationValue::Text("venue_name".to_string()))
+            .unwrap();
+        schema_name_field_definition_operation_fields
+            .add("type", FieldType::String.into())
+            .unwrap();
+        let schema_name_field_definition_operation = Operation::new_create(
+            SchemaId::new("schema_field_definition_v1").unwrap(),
+            schema_name_field_definition_operation_fields,
+        )
+        .unwrap();
+
+        let request = construct_publish_entry_request(
+            &storage_provider,
+            &schema_name_field_definition_operation,
+            &key_pair,
+            None,
+        )
+        .await;
+
+        let operation_id: OperationId = request.entry_encoded.hash().into();
+        let document_id: DocumentId = request.entry_encoded.hash().into();
+        let document_view_id: DocumentViewId = request.entry_encoded.hash().into();
+
+        storage_provider.publish_entry(&request).await.unwrap();
+        storage_provider
+            .insert_operation(&OperationStorage::new(
+                &author,
+                &schema_name_field_definition_operation,
+                &operation_id,
+                &document_id,
+            ))
+            .await
+            .unwrap();
+
+        let document_view_fields = DocumentViewFields::new_from_operation_fields(
+            &operation_id,
+            &schema_name_field_definition_operation.fields().unwrap(),
+        );
+        storage_provider
+            .insert_document_view(
+                &DocumentView::new(&document_view_id, &document_view_fields),
+                &SchemaId::new("schema_field_definition_v1").unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let mut schema_definition_operation_fields = OperationFields::new();
+        schema_definition_operation_fields
+            .add("name", OperationValue::Text("venue".to_string()))
+            .unwrap();
+        schema_definition_operation_fields
+            .add("description", OperationValue::Text("My venue".to_string()))
+            .unwrap();
+        schema_definition_operation_fields
+            .add(
+                "fields",
+                OperationValue::PinnedRelationList(PinnedRelationList::new(vec![document_view_id])),
+            )
+            .unwrap();
+        let schema_definition_operation = Operation::new_create(
+            SchemaId::new("schema_definition_v1").unwrap(),
+            schema_definition_operation_fields,
+        )
+        .unwrap();
+
+        let request = construct_publish_entry_request(
+            &storage_provider,
+            &schema_definition_operation,
+            &key_pair,
+            None,
+        )
+        .await;
+
+        let operation_id: OperationId = request.entry_encoded.hash().into();
+        let document_id: DocumentId = request.entry_encoded.hash().into();
+        let document_view_id: DocumentViewId = request.entry_encoded.hash().into();
+
+        storage_provider.publish_entry(&request).await.unwrap();
+        storage_provider
+            .insert_operation(&OperationStorage::new(
+                &author,
+                &schema_definition_operation,
+                &operation_id,
+                &document_id,
+            ))
+            .await
+            .unwrap();
+
+        let document_view_fields = DocumentViewFields::new_from_operation_fields(
+            &operation_id,
+            &schema_definition_operation.fields().unwrap(),
+        );
+        storage_provider
+            .insert_document_view(
+                &DocumentView::new(&document_view_id, &document_view_fields),
+                &SchemaId::new("schema_definition_v1").unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let schema = storage_provider
+            .get_schema_by_id(&document_view_id)
+            .await
+            .unwrap();
+
+        println!("{}", schema)
     }
 }
