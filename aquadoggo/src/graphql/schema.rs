@@ -1,16 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use super::client::{Mutation as ClientMutationRoot, Query as ClientQueryRoot};
 use super::ping::PingRoot;
 use super::replication::ReplicationRoot;
-use super::client::{Query as ClientQueryRoot, Mutation as ClientMutationRoot };
 use super::Context;
 use crate::db::provider::SqlStorage;
 use async_graphql::{EmptySubscription, MergedObject, Schema};
 
-/// All of the graphql sub modules merged into one top level root
+/// All of the graphql query sub modules merged into one top level root
 #[derive(MergedObject, Debug)]
-pub struct QueryRoot(pub PingRoot, pub ReplicationRoot<SqlStorage>, pub ClientQueryRoot);
+pub struct QueryRoot(
+    pub PingRoot,
+    pub ReplicationRoot<SqlStorage>,
+    pub ClientQueryRoot,
+);
 
+/// All of the graphql mutation sub modules merged into one top level root
 #[derive(MergedObject, Debug, Copy, Clone)]
 pub struct MutationRoot(pub ClientMutationRoot);
 

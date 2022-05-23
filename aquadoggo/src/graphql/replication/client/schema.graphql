@@ -58,6 +58,12 @@ type EntryAndPayloadEdge {
 	"""
 	cursor: String!
 }
+type EntryArgsResponse {
+	logId: String!
+	seqNum: String!
+	backlink: String
+	skiplink: String
+}
 scalar EntryHash
 scalar LogId
 """
@@ -84,7 +90,7 @@ type PageInfo {
 scalar Payload
 scalar PublicKey
 """
-All of the graphql sub modules merged into one top level root
+All of the graphql query sub modules merged into one top level root
 """
 type QueryRoot {
 	ping: String!
@@ -96,7 +102,7 @@ type QueryRoot {
 	Get any entries that are newer than the provided sequence_number for a given author and
 	log_id
 	"""
-	getEntriesNewerThanSeq(logId: LogId!, sequenceNumber: SequenceNumber!, first: Int, after: String): EntryAndPayloadConnection!
+	getEntriesNewerThanSeq(logId: LogId!, author: Author!, sequenceNumber: SequenceNumber!, first: Int, after: String): EntryAndPayloadConnection!
 	"""
 	Get a single entry by its log_id, sequence_number and author
 	"""
@@ -106,6 +112,10 @@ type QueryRoot {
 	bandwidth.
 	"""
 	authorAliases(publicKeys: [PublicKey!]!): [AliasedAuthor!]!
+	"""
+	Return required arguments for publishing the next entry.
+	"""
+	nextEntryArgs(publicKey: String!, documentId: String): EntryArgsResponse!
 }
 scalar SequenceNumber
 type SingleEntryAndPayload {
