@@ -80,7 +80,7 @@ $ cargo add aquadoggo
 
 ### Regenerate graphql schema
 
-When you update the graphql code you'll need to manually regenerate the schema files used to create the replication graphql client
+When you update the graphql code you'll need to manually regenerate the graphql schema files.
 
 ```sh
 cargo run --bin dump_gql_schema > aquadoggo/src/graphql/replication/client/schema.graphql
