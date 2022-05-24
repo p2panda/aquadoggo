@@ -51,7 +51,7 @@ impl StorageProvider<StorageEntry, StorageLog> for SqlStorage {
         )
         .bind(entry_hash.as_str())
         .fetch_optional(&self.pool)
-        .await.unwrap();
+        .await?;
 
         // Unwrap here since we validate hashes before storing them in the db.
         let hash = result.map(|str| {

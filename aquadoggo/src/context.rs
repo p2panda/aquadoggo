@@ -23,7 +23,6 @@ pub struct Data {
 impl Data {
     /// Initialize new data instance with shared database connection pool.
     pub fn new(pool: Pool, config: Configuration) -> Self {
-        //let schema = build_root_schema(pool.clone());
         let graphql_context = GraphQLContext::new(pool.clone());
         let schema = build_root_schema(graphql_context);
 
