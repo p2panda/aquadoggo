@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_graphql::{Context, Error, Object, Result};
-use p2panda_rs::document::DocumentId;
+use p2panda_rs::document::{Document, DocumentBuilder, DocumentId, DocumentView};
 use p2panda_rs::identity::Author;
+use p2panda_rs::operation::{Operation, OperationFields, OperationValue, OperationWithMeta};
+use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::StorageProvider;
 
 use crate::db::provider::SqlStorage;
 use crate::db::Pool;
 
+use super::response::DocumentResponse;
 use super::{EntryArgsRequest, EntryArgsResponse};
 
 #[derive(Default, Debug, Copy, Clone)]
@@ -52,6 +55,37 @@ impl Query {
             .await
             .map_err(|err| Error::from(err))
     }
+
+    async fn document(&self, _ctx: &Context<'_>, document: String) -> Result<DocumentResponse> {
+        let document_id = document.parse::<DocumentId>()?;
+
+        let document = get_document_by_id(document_id);
+
+        Ok(DocumentResponse {
+            view: document.view().map(|view| view.to_owned()),
+        })
+    }
+}
+
+fn get_document_by_id(_document: DocumentId) -> Document {
+    let schema = "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
+        .parse()
+        .unwrap();
+    let mut fields = OperationFields::new();
+    fields
+        .add("name", OperationValue::Text("test".to_string()))
+        .unwrap();
+    let public_key =
+        Author::new("7cf4f58a2d89e93313f2de99604a814ecea9800cf217b140e9c3a7ba59a5d982").unwrap();
+    let create_operation = Operation::new_create(schema, fields).unwrap();
+    let operation_id = "00201c221b573b1e0c67c5e2c624a93419774cdf46b3d62414c44a698df1237b1c16"
+        .parse()
+        .unwrap();
+    let verified_operation =
+        OperationWithMeta::new(&public_key, &operation_id, &create_operation).unwrap();
+    DocumentBuilder::new(vec![verified_operation])
+        .build()
+        .unwrap()
 }
 
 #[cfg(test)]

@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use async_graphql::Object;
+use async_graphql::{scalar, Object};
+use p2panda_rs::document::DocumentView;
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 
 use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::hash::Hash;
@@ -112,8 +114,27 @@ impl AsPublishEntryResponse for PublishEntryResponse {
     }
 }
 
-#[derive(Serialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct QueryEntriesResponse {
-    pub entries: Vec<EntryRow>,
+#[derive(Debug, PartialEq)]
+pub struct DocumentResponse {
+    pub view: Option<DocumentView>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct DocumentField(String, String);
+scalar!(DocumentField);
+
+#[Object]
+impl DocumentResponse {
+    async fn view(&self) -> Vec<DocumentField> {
+        match self.view.clone() {
+            Some(view) => view
+                .iter()
+                .map(|(field, value)| {
+                    let value = format!("{:?}", value.value());
+                    DocumentField(field.to_owned(), value)
+                })
+                .collect(),
+            None => vec![],
+        }
+    }
 }
