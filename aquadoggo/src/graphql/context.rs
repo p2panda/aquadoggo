@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use crate::db::{provider::SqlStorage, Pool};
 use std::sync::Arc;
+
 use tokio::sync::Mutex;
+
+use crate::db::{provider::SqlStorage, Pool};
 
 use super::replication::context::Context as ReplicationContext;
 
@@ -25,7 +27,7 @@ impl Context {
 
         Self {
             replication_context,
-            pool
+            pool,
         }
     }
 }

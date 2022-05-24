@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use super::public_key::PublicKey;
+use std::convert::TryFrom;
+
 use anyhow::{anyhow, Error};
 use async_graphql::*;
-use std::convert::TryFrom;
+
+use super::public_key::PublicKey;
 
 /// Either the `public_key` or the `alias` of that author.
 #[derive(Debug, InputObject)]

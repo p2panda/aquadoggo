@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use async_graphql::*;
+
 use crate::db::stores::StorageEntry;
 
 use super::payload::Payload;
 use super::Entry;
-use async_graphql::*;
 
 /// An and entry with an optional payload
 #[derive(SimpleObject, Debug)]

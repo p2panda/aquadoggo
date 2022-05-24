@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::convert::TryFrom;
+
 use async_graphql::*;
 use p2panda_rs::entry::{SeqNum as PandaSeqNum, SeqNumError};
 use serde::{Deserialize, Serialize};
-use std::convert::TryFrom;
 
 /// The sequence number of an entry
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]

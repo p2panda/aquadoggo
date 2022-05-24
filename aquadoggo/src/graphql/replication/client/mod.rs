@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use graphql_client::GraphQLQuery;
+
 use super::Entry;
 use super::EntryHash;
-use graphql_client::GraphQLQuery;
 
 // The paths are relative to the directory where your `Cargo.toml` is located.
 // Both json and the GraphQL schema language are supported as sources for the schema

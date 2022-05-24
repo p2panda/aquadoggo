@@ -2,15 +2,19 @@
 
 use std::convert::TryInto;
 use std::marker::PhantomData;
+use std::sync::Arc;
 
 use async_graphql::connection::{query, Connection, Edge, EmptyFields};
 use async_graphql::Object;
 use async_graphql::*;
-use std::sync::Arc;
+use p2panda_rs::storage_provider::traits::EntryStore;
 use tokio::sync::Mutex;
+
+use crate::db::stores::StorageEntry;
 
 pub mod aliased_author;
 pub mod author;
+pub mod client;
 pub mod context;
 pub mod entry;
 pub mod entry_and_payload;
@@ -21,7 +25,6 @@ pub mod public_key;
 pub mod sequence_number;
 pub mod single_entry_and_payload;
 
-use crate::db::stores::StorageEntry;
 pub use aliased_author::AliasedAuthor;
 pub use author::{Author, AuthorOrAlias};
 pub use context::Context as ReplicationContext;
@@ -29,13 +32,10 @@ pub use entry::Entry;
 pub use entry_and_payload::EntryAndPayload;
 pub use entry_hash::EntryHash;
 pub use log_id::LogId;
-use p2panda_rs::storage_provider::traits::EntryStore;
 pub use payload::Payload;
 pub use public_key::PublicKey;
 pub use sequence_number::SequenceNumber;
 pub use single_entry_and_payload::SingleEntryAndPayload;
-
-pub mod client;
 
 #[derive(Debug)]
 /// The root graphql object for replication

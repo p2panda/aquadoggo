@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use async_graphql::*;
+
 use crate::db::stores::StorageEntry;
+use crate::graphql::Context as GraphQLContext;
 
 use super::payload::Payload;
 use super::Entry;
-use crate::graphql::Context as GraphQLContext;
-use async_graphql::*;
 
 /// A p2panda entry with optional payload and the collection of skiplinks required to verify it.
 #[derive(Debug)]
