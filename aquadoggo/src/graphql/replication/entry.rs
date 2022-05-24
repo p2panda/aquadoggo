@@ -21,3 +21,9 @@ impl From<Entry> for Value {
         async_graphql::ScalarType::to_value(&entry)
     }
 }
+
+impl From<PandaEntry> for Entry {
+    fn from(panda_entry: PandaEntry) -> Self {
+        Entry(panda_entry)
+    }
+}

@@ -14,7 +14,7 @@ use super::SingleEntryAndPayload;
 use anyhow::{anyhow, Result};
 use async_graphql::ID;
 use lru::LruCache;
-use p2panda_rs::entry::SeqNum;
+use p2panda_rs::entry::{decode_entry, SeqNum};
 use p2panda_rs::storage_provider::traits::EntryStore;
 
 #[derive(Debug)]
@@ -91,11 +91,17 @@ impl<ES: EntryStore<StorageEntry>> Context<ES> {
     }
 
     pub async fn get_skiplinks<'a>(&mut self, entry: &Entry) -> Result<Vec<Entry>> {
-        let entry = entry.as_ref();
-        todo!();
-        //let result = self.entry_store
-        //    .get_all_lipmaa_entries_for_entry(&entry.author(), &entry.log_id() )
-        //todo!()
+        let author = entry.as_ref().author();
+        let entry = decode_entry(entry.as_ref(), None)?;
+        let result = self
+            .entry_store
+            .get_certificate_pool(&author, entry.log_id(), entry.seq_num())
+            .await?
+            .into_iter()
+            .map(|entry| entry.entry_signed().clone().into())
+            .collect();
+
+        Ok(result)
     }
 
     pub async fn get_entries_newer_than_seq(
@@ -153,58 +159,58 @@ mod tests {
     use p2panda_rs::storage_provider::traits::EntryStore;
     use std::convert::TryInto;
 
-//    #[tokio::test]
-//    async fn entry_by_log_id_and_sequence() {
-//        let expected_log_id = 123;
-//        let expected_seq_num = 345u64;
-//        let expected_author_id = 987u64;
-//        let expected_author_string =
-//            "7cf4f58a2d89e93313f2de99604a814ecea9800cf217b140e9c3a7ba59a5d982".to_string();
-//
-//        let log_id: GraphQLLogId = expected_log_id.into();
-//        let sequence_number: SequenceNumber = expected_seq_num.try_into().unwrap();
-//        let author = Author::new(&expected_author_string).unwrap();
-//        let author_id = GraphQLAuthor {
-//            alias: None,
-//            public_key: Some(PublicKey(author)),
-//        };
-//
-//        mock! {
-//            pub MockEntryStore {}
-//            #[async_trait]
-//            impl EntryStore<StorageEntry> for MockEntryStore {
-//                async fn insert_entry(&self, _value: StorageEntry) -> Result<bool, EntryStorageError>;
-//
-//                async fn get_entry_at_seq_num(
-//                    &self,
-//                    author: &Author,
-//                    log_id: &LogId,
-//                    seq_num: &SeqNum,
-//                ) -> Result<Option<StorageEntry>, EntryStorageError>;
-//
-//                async fn latest_entry(
-//                    &self,
-//                    _author: &Author,
-//                    _log_id: &LogId,
-//                ) -> Result<Option<StorageEntry>, EntryStorageError>;
-//
-//            }
-//        }
-//
-//        let mut mock_entry_store = MockMockEntryStore::new();
-//        mock_entry_store
-//            .expect_entry_at_seq_num()
-//            .withf(move |author, log_id, seq_num| author.as_str() == expected_author_string)
-//            .times(1)
-//            .returning(|_, _, _| Ok(None));
-//
-//        let mut context = Context::new(1, mock_entry_store);
-//
-//        let result = context
-//            .entry_by_log_id_and_sequence(log_id, sequence_number, author_id.try_into().unwrap())
-//            .await;
-//
-//        println!("{:?}", result);
-//        assert!(result.is_ok());
-//    }
+    //    #[tokio::test]
+    //    async fn entry_by_log_id_and_sequence() {
+    //        let expected_log_id = 123;
+    //        let expected_seq_num = 345u64;
+    //        let expected_author_id = 987u64;
+    //        let expected_author_string =
+    //            "7cf4f58a2d89e93313f2de99604a814ecea9800cf217b140e9c3a7ba59a5d982".to_string();
+    //
+    //        let log_id: GraphQLLogId = expected_log_id.into();
+    //        let sequence_number: SequenceNumber = expected_seq_num.try_into().unwrap();
+    //        let author = Author::new(&expected_author_string).unwrap();
+    //        let author_id = GraphQLAuthor {
+    //            alias: None,
+    //            public_key: Some(PublicKey(author)),
+    //        };
+    //
+    //        mock! {
+    //            pub MockEntryStore {}
+    //            #[async_trait]
+    //            impl EntryStore<StorageEntry> for MockEntryStore {
+    //                async fn insert_entry(&self, _value: StorageEntry) -> Result<bool, EntryStorageError>;
+    //
+    //                async fn get_entry_at_seq_num(
+    //                    &self,
+    //                    author: &Author,
+    //                    log_id: &LogId,
+    //                    seq_num: &SeqNum,
+    //                ) -> Result<Option<StorageEntry>, EntryStorageError>;
+    //
+    //                async fn latest_entry(
+    //                    &self,
+    //                    _author: &Author,
+    //                    _log_id: &LogId,
+    //                ) -> Result<Option<StorageEntry>, EntryStorageError>;
+    //
+    //            }
+    //        }
+    //
+    //        let mut mock_entry_store = MockMockEntryStore::new();
+    //        mock_entry_store
+    //            .expect_entry_at_seq_num()
+    //            .withf(move |author, log_id, seq_num| author.as_str() == expected_author_string)
+    //            .times(1)
+    //            .returning(|_, _, _| Ok(None));
+    //
+    //        let mut context = Context::new(1, mock_entry_store);
+    //
+    //        let result = context
+    //            .entry_by_log_id_and_sequence(log_id, sequence_number, author_id.try_into().unwrap())
+    //            .await;
+    //
+    //        println!("{:?}", result);
+    //        assert!(result.is_ok());
+    //    }
 }
