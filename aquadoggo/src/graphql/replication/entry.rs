@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 use async_graphql::*;
 use p2panda_rs::entry::EntrySigned as PandaEntry;
 use serde::{Deserialize, Serialize};

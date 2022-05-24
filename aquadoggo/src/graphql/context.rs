@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 use crate::db::{provider::SqlStorage, Pool};
 use std::sync::Arc;
 use tokio::sync::Mutex;

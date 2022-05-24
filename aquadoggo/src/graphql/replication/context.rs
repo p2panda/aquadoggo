@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 use crate::db::stores::StorageEntry;
 
 pub use super::aliased_author::AliasedAuthor;

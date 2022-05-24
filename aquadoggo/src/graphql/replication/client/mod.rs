@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 use super::Entry;
 use super::EntryHash;
 use graphql_client::GraphQLQuery;
