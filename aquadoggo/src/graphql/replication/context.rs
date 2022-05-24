@@ -143,75 +143,102 @@ impl<ES: EntryStore<StorageEntry>> Context<ES> {
 
 #[cfg(test)]
 mod tests {
-    use std::num::NonZeroU64;
 
     use super::Context;
-    use crate::db::models::EntryRow;
     use crate::db::stores::StorageEntry;
     use crate::graphql::replication::{
-        Author as GraphQLAuthor, LogId as GraphQLLogId, PublicKey, SequenceNumber, ID,
+        Author as GraphQLAuthor, LogId as GraphQLLogId, PublicKey, SequenceNumber
     };
     use async_trait::async_trait;
     use mockall::mock;
     use p2panda_rs::entry::{LogId, SeqNum};
+    use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::Author;
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::storage_provider::errors::EntryStorageError;
     use p2panda_rs::storage_provider::traits::EntryStore;
     use std::convert::TryInto;
 
-    //    #[tokio::test]
-    //    async fn entry_by_log_id_and_sequence() {
-    //        let expected_log_id = 123;
-    //        let expected_seq_num = 345u64;
-    //        let expected_author_id = 987u64;
-    //        let expected_author_string =
-    //            "7cf4f58a2d89e93313f2de99604a814ecea9800cf217b140e9c3a7ba59a5d982".to_string();
-    //
-    //        let log_id: GraphQLLogId = expected_log_id.into();
-    //        let sequence_number: SequenceNumber = expected_seq_num.try_into().unwrap();
-    //        let author = Author::new(&expected_author_string).unwrap();
-    //        let author_id = GraphQLAuthor {
-    //            alias: None,
-    //            public_key: Some(PublicKey(author)),
-    //        };
-    //
-    //        mock! {
-    //            pub MockEntryStore {}
-    //            #[async_trait]
-    //            impl EntryStore<StorageEntry> for MockEntryStore {
-    //                async fn insert_entry(&self, _value: StorageEntry) -> Result<bool, EntryStorageError>;
-    //
-    //                async fn get_entry_at_seq_num(
-    //                    &self,
-    //                    author: &Author,
-    //                    log_id: &LogId,
-    //                    seq_num: &SeqNum,
-    //                ) -> Result<Option<StorageEntry>, EntryStorageError>;
-    //
-    //                async fn latest_entry(
-    //                    &self,
-    //                    _author: &Author,
-    //                    _log_id: &LogId,
-    //                ) -> Result<Option<StorageEntry>, EntryStorageError>;
-    //
-    //            }
-    //        }
-    //
-    //        let mut mock_entry_store = MockMockEntryStore::new();
-    //        mock_entry_store
-    //            .expect_entry_at_seq_num()
-    //            .withf(move |author, log_id, seq_num| author.as_str() == expected_author_string)
-    //            .times(1)
-    //            .returning(|_, _, _| Ok(None));
-    //
-    //        let mut context = Context::new(1, mock_entry_store);
-    //
-    //        let result = context
-    //            .entry_by_log_id_and_sequence(log_id, sequence_number, author_id.try_into().unwrap())
-    //            .await;
-    //
-    //        println!("{:?}", result);
-    //        assert!(result.is_ok());
-    //    }
+    mock! {
+        pub MockEntryStore {}
+        #[async_trait]
+        impl EntryStore<StorageEntry> for MockEntryStore {
+            async fn insert_entry(&self, value: StorageEntry) -> Result<(), EntryStorageError>;
+
+            async fn get_entry_at_seq_num(
+                &self,
+                author: &Author,
+                log_id: &LogId,
+                seq_num: &SeqNum,
+                ) -> Result<Option<StorageEntry>, EntryStorageError>;
+
+            async fn get_entry_by_hash(
+                &self,
+                hash: &Hash,
+                ) -> Result<Option<StorageEntry>, EntryStorageError>;
+
+            async fn get_latest_entry(
+                &self,
+                author: &Author,
+                log_id: &LogId,
+                ) -> Result<Option<StorageEntry>, EntryStorageError>;
+
+            async fn get_entries_by_schema(
+                &self,
+                schema: &SchemaId,
+                ) -> Result<Vec<StorageEntry>, EntryStorageError>;
+
+            async fn get_paginated_log_entries(
+                &self,
+                author: &Author,
+                log_id: &LogId,
+                seq_num: &SeqNum,
+                max_number_of_entries: usize,
+                ) -> Result<Vec<StorageEntry>, EntryStorageError>;
+
+            async fn get_certificate_pool(
+                &self,
+                author_id: &Author,
+                log_id: &LogId,
+                seq_num: &SeqNum,
+                ) -> Result<Vec<StorageEntry>, EntryStorageError>;
+
+        }
+
+    }
+
+    #[tokio::test]
+    async fn entry_by_log_id_and_sequence() {
+        let expected_log_id = 123;
+        let expected_seq_num = 345u64;
+        let expected_author_string =
+            "7cf4f58a2d89e93313f2de99604a814ecea9800cf217b140e9c3a7ba59a5d982".to_string();
+
+        let log_id: GraphQLLogId = expected_log_id.into();
+        let sequence_number: SequenceNumber = expected_seq_num.try_into().unwrap();
+        let author = Author::new(&expected_author_string).unwrap();
+        let author_id = GraphQLAuthor {
+            alias: None,
+            public_key: Some(PublicKey(author)),
+        };
+
+        let mut mock_entry_store = MockMockEntryStore::new();
+        mock_entry_store
+            .expect_get_entry_at_seq_num()
+            .withf(move |author, log_id, seq_num| {
+                author.as_str() == expected_author_string
+                    && log_id.as_u64() == expected_log_id
+                    && seq_num.as_u64() == expected_seq_num
+            })
+            .times(1)
+            .returning(|_, _, _| Ok(None));
+
+        let mut context = Context::new(1, mock_entry_store);
+
+        let result = context
+            .entry_by_log_id_and_sequence(log_id, sequence_number, author_id.try_into().unwrap())
+            .await;
+
+        assert!(result.is_ok());
+    }
 }
