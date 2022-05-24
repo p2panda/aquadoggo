@@ -7,6 +7,7 @@ use std::sync::Arc;
 use async_graphql::connection::{query, Connection, Edge, EmptyFields};
 use async_graphql::Object;
 use async_graphql::*;
+use p2panda_rs::entry::decode_entry;
 use p2panda_rs::storage_provider::traits::EntryStore;
 use tokio::sync::Mutex;
 
@@ -82,9 +83,9 @@ impl<ES: 'static + EntryStore<StorageEntry> + Sync + Send> ReplicationRoot<ES> {
         let author: AuthorOrAlias = author.try_into()?;
         query(after, None, first, None, |after, _, first, _| async move {
             let start =
-                sequence_number.as_ref().as_u64() + after.map(|a| a as u64 + 1).unwrap_or(0);
-            // TODO: clamp an upper limit here
-            let first = first.unwrap_or(10);
+                sequence_number.as_ref().as_u64() + after.map(|a| a as u64).unwrap_or(0);
+
+            let first = first.map(|n| n.clamp(0, 10000)).unwrap_or(10);
 
             let edges = ctx
                 .lock()
@@ -92,8 +93,10 @@ impl<ES: 'static + EntryStore<StorageEntry> + Sync + Send> ReplicationRoot<ES> {
                 .get_entries_newer_than_seq(log_id, author, sequence_number, first, start)
                 .await?
                 .into_iter()
-                // FIXME: need to create a cursor from the entry here, not pass 0
-                .map(|entry| Edge::new(0usize, entry.into()));
+                .map(|entry| {
+                    let decoded = decode_entry(entry.entry.as_ref(), None).unwrap();
+                    Edge::new(decoded.seq_num().as_u64() as usize, entry.into())
+                });
 
             let mut connection = Connection::new(false, start < first as u64);
 
