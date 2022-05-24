@@ -1,18 +1,11 @@
-use aquadoggo::db::provider::SqlStorage;
-use aquadoggo::graphql::{PingRoot, QueryRoot, ReplicationRoot, ClientRoot};
-use async_graphql::{EmptyMutation, EmptySubscription, Schema};
+use aquadoggo::db::connection_pool;
+use aquadoggo::graphql::{build_root_schema, Context};
 
-fn main() {
-    let ping_root: PingRoot = Default::default();
-    let replication_root = ReplicationRoot::<SqlStorage>::new();
-    let client_root = Default::default();
-    let query_root = QueryRoot(ping_root, replication_root, client_root);
-    let schema = Schema::build(query_root, EmptyMutation, EmptySubscription)
-        //.data(context.replication_context)
-        // Add more contexts here if you need, eg:
-        //.data(context.ping_context)
-        .finish();
-
+#[tokio::main]
+async fn main() {
+    let pool = connection_pool("sqlite::memory:", 1).await.unwrap();
+    let context = Context::new(pool);
+    let schema = build_root_schema(context);
     let sdl = schema.sdl();
 
     println!("{sdl}");

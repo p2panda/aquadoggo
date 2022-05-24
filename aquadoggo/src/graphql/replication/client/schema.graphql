@@ -67,6 +67,17 @@ type EntryArgsResponse {
 scalar EntryHash
 scalar LogId
 """
+All of the graphql mutation sub modules merged into one top level root
+"""
+type MutationRoot {
+	"""
+	Publish an entry using parameters obtained through `nextEntryArgs` query.
+	
+	Returns arguments for publishing the next entry in the same log.
+	"""
+	publishEntry(entryEncoded: String!, operationEncoded: String!): PublishEntryResponse!
+}
+"""
 Information about pagination in a connection
 """
 type PageInfo {
@@ -89,6 +100,12 @@ type PageInfo {
 }
 scalar Payload
 scalar PublicKey
+type PublishEntryResponse {
+	logId: String!
+	seqNum: String!
+	backlink: String
+	skiplink: String
+}
 """
 All of the graphql query sub modules merged into one top level root
 """
@@ -134,5 +151,6 @@ type SingleEntryAndPayload {
 }
 schema {
 	query: QueryRoot
+	mutation: MutationRoot
 }
 

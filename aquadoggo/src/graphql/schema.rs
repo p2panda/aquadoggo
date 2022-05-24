@@ -16,7 +16,7 @@ pub struct QueryRoot(
 );
 
 /// All of the graphql mutation sub modules merged into one top level root
-#[derive(MergedObject, Debug, Copy, Clone)]
+#[derive(MergedObject, Debug, Copy, Clone, Default)]
 pub struct MutationRoot(pub ClientMutationRoot);
 
 /// GraphQL schema for p2panda node.
