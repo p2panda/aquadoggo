@@ -126,13 +126,13 @@ impl OperationStore<OperationStorage> for SqlStorage {
 
     /// Insert an operation into storage.
     ///
-    /// This requires a DoggoOperation to be composed elsewhere, it contains an Author,
-    /// DocumentId, OperationId and the actual Operation we want to store.
+    /// This requires a DoggoOperation to be composed elsewhere, it contains an `Author`,
+    /// `DocumentId`, `OperationId` and the actual `Operation` we want to store.
     ///
     /// Returns a result containing `true` when one insertion occured, and false
     /// when no insertions occured. Errors when a fatal storage error occurs.
     ///
-    /// In aquadoggo we store an operatin in the database in three different tables:
+    /// In aquadoggo we store an operation in the database in three different tables:
     /// `operations`, `previous_operations` and `operation_fields`. This means that
     /// this method actually makes 3 different sets of insertions.
     async fn insert_operation(
@@ -247,9 +247,9 @@ impl OperationStore<OperationStorage> for SqlStorage {
         Ok(())
     }
 
-    /// Get an operation identified by it's OperationId.
+    /// Get an operation identified by it's `OperationId`.
     ///
-    /// Returns a result containing an OperationStorage wrapped in an option, if no
+    /// Returns a result containing an `OperationStorage` wrapped in an option, if no
     /// operation with this id was found, returns none. Errors if a fatal storage
     /// error occured.
     async fn get_operation_by_id(
@@ -287,6 +287,7 @@ impl OperationStore<OperationStorage> for SqlStorage {
         Ok(operation)
     }
 
+    /// Get all operations that are part of a given document.
     async fn get_operations_by_document_id(
         &self,
         id: &DocumentId,
