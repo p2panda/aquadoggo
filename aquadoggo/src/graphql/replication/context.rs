@@ -5,6 +5,7 @@ use async_graphql::ID;
 use lru::LruCache;
 use p2panda_rs::entry::{decode_entry, SeqNum};
 use p2panda_rs::storage_provider::traits::EntryStore;
+use mockall::automock;
 
 use crate::db::stores::StorageEntry;
 
@@ -19,13 +20,14 @@ use super::SequenceNumber;
 use super::SingleEntryAndPayload;
 
 #[derive(Debug)]
-pub struct Context<ES: EntryStore<StorageEntry>> {
+pub struct Context<ES: 'static + EntryStore<StorageEntry>> {
     author_aliases: LruCache<ID, PublicKey>,
     next_alias: usize,
     entry_store: ES,
 }
 
-impl<ES: EntryStore<StorageEntry>> Context<ES> {
+#[automock]
+impl<ES: 'static + EntryStore<StorageEntry>> Context<ES> {
     pub fn new(author_aliases_cache_size: usize, entry_store: ES) -> Self {
         Self {
             author_aliases: LruCache::new(author_aliases_cache_size),
@@ -145,67 +147,12 @@ impl<ES: EntryStore<StorageEntry>> Context<ES> {
 mod tests {
 
     use super::Context;
-    use crate::db::stores::StorageEntry;
     use crate::graphql::replication::{
         Author as GraphQLAuthor, LogId as GraphQLLogId, PublicKey, SequenceNumber
     };
-    use async_trait::async_trait;
-    use mockall::mock;
-    use p2panda_rs::entry::{LogId, SeqNum};
-    use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::Author;
-    use p2panda_rs::schema::SchemaId;
-    use p2panda_rs::storage_provider::errors::EntryStorageError;
-    use p2panda_rs::storage_provider::traits::EntryStore;
     use std::convert::TryInto;
-
-    mock! {
-        pub MockEntryStore {}
-        #[async_trait]
-        impl EntryStore<StorageEntry> for MockEntryStore {
-            async fn insert_entry(&self, value: StorageEntry) -> Result<(), EntryStorageError>;
-
-            async fn get_entry_at_seq_num(
-                &self,
-                author: &Author,
-                log_id: &LogId,
-                seq_num: &SeqNum,
-                ) -> Result<Option<StorageEntry>, EntryStorageError>;
-
-            async fn get_entry_by_hash(
-                &self,
-                hash: &Hash,
-                ) -> Result<Option<StorageEntry>, EntryStorageError>;
-
-            async fn get_latest_entry(
-                &self,
-                author: &Author,
-                log_id: &LogId,
-                ) -> Result<Option<StorageEntry>, EntryStorageError>;
-
-            async fn get_entries_by_schema(
-                &self,
-                schema: &SchemaId,
-                ) -> Result<Vec<StorageEntry>, EntryStorageError>;
-
-            async fn get_paginated_log_entries(
-                &self,
-                author: &Author,
-                log_id: &LogId,
-                seq_num: &SeqNum,
-                max_number_of_entries: usize,
-                ) -> Result<Vec<StorageEntry>, EntryStorageError>;
-
-            async fn get_certificate_pool(
-                &self,
-                author_id: &Author,
-                log_id: &LogId,
-                seq_num: &SeqNum,
-                ) -> Result<Vec<StorageEntry>, EntryStorageError>;
-
-        }
-
-    }
+    use super::super::testing::MockEntryStore;
 
     #[tokio::test]
     async fn entry_by_log_id_and_sequence() {
@@ -222,7 +169,7 @@ mod tests {
             public_key: Some(PublicKey(author)),
         };
 
-        let mut mock_entry_store = MockMockEntryStore::new();
+        let mut mock_entry_store = MockEntryStore::new();
         mock_entry_store
             .expect_get_entry_at_seq_num()
             .withf(move |author, log_id, seq_num| {
