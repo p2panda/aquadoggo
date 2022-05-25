@@ -108,38 +108,31 @@ impl SchemaStore for SqlStorage {
 #[cfg(test)]
 mod tests {
     use std::convert::TryFrom;
-    use std::str::FromStr;
 
-    use p2panda_rs::document::{
-        DocumentBuilder, DocumentId, DocumentView, DocumentViewFields, DocumentViewId,
-        DocumentViewValue,
-    };
-    use p2panda_rs::entry::{Entry, LogId, SeqNum};
-    use p2panda_rs::hash::Hash;
+    use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewFields, DocumentViewId};
+
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::{
         AsOperation, Operation, OperationFields, OperationId, OperationValue, PinnedRelationList,
     };
-    use p2panda_rs::schema::system::{SchemaFieldView, SchemaView};
     use p2panda_rs::schema::{FieldType, SchemaId};
-    use p2panda_rs::storage_provider::traits::{
-        AsStorageEntry, EntryStore, OperationStore, StorageProvider,
-    };
-    use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
+    use p2panda_rs::storage_provider;
+    use p2panda_rs::storage_provider::traits::{OperationStore, StorageProvider};
 
-    use crate::db::stores::test_utils::{construct_publish_entry_request, test_db};
+    use crate::db::stores::test_utils::{
+        construct_publish_entry_request, insert_entry_operation_and_view, test_db,
+    };
     use crate::db::stores::OperationStorage;
     use crate::db::traits::DocumentStore;
-    use crate::graphql::client::PublishEntryRequest;
 
     use super::SchemaStore;
 
     #[tokio::test]
-    async fn inserts_gets_one_document_view() {
-        let (storage_provider, key_pairs, _documents) = test_db(0, 0, false).await;
+    async fn get_schema() {
+        let (storage_provider, _key_pairs, _documents) = test_db(0, 0, false).await;
         let key_pair = KeyPair::new();
-        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
+        // Construct a CREATE operation for the field of the schema we want to publish
         let mut schema_name_field_definition_operation_fields = OperationFields::new();
         schema_name_field_definition_operation_fields
             .add("name", OperationValue::Text("venue_name".to_string()))
@@ -153,41 +146,17 @@ mod tests {
         )
         .unwrap();
 
-        let request = construct_publish_entry_request(
+        // Publish it encoded in an entry, insert the operation and materialised document view into the db
+        let (_document_id, document_view_id) = insert_entry_operation_and_view(
             &storage_provider,
-            &schema_name_field_definition_operation,
             &key_pair,
+            &SchemaId::new("schema_field_definition_v1").unwrap(),
             None,
+            &schema_name_field_definition_operation,
         )
         .await;
 
-        let operation_id: OperationId = request.entry_encoded.hash().into();
-        let document_id: DocumentId = request.entry_encoded.hash().into();
-        let document_view_id: DocumentViewId = request.entry_encoded.hash().into();
-
-        storage_provider.publish_entry(&request).await.unwrap();
-        storage_provider
-            .insert_operation(&OperationStorage::new(
-                &author,
-                &schema_name_field_definition_operation,
-                &operation_id,
-                &document_id,
-            ))
-            .await
-            .unwrap();
-
-        let document_view_fields = DocumentViewFields::new_from_operation_fields(
-            &operation_id,
-            &schema_name_field_definition_operation.fields().unwrap(),
-        );
-        storage_provider
-            .insert_document_view(
-                &DocumentView::new(&document_view_id, &document_view_fields),
-                &SchemaId::new("schema_field_definition_v1").unwrap(),
-            )
-            .await
-            .unwrap();
-
+        // Construct a CREATE operation for the schema definition we want to publish.
         let mut schema_definition_operation_fields = OperationFields::new();
         schema_definition_operation_fields
             .add("name", OperationValue::Text("venue".to_string()))
@@ -198,6 +167,7 @@ mod tests {
         schema_definition_operation_fields
             .add(
                 "fields",
+                // This pinned relation points at the previously published field.
                 OperationValue::PinnedRelationList(PinnedRelationList::new(vec![document_view_id])),
             )
             .unwrap();
@@ -207,46 +177,22 @@ mod tests {
         )
         .unwrap();
 
-        let request = construct_publish_entry_request(
+        // Publish it encoded in an entry, insert the operation and materialised document view into the db
+        let (_document_id, document_view_id) = insert_entry_operation_and_view(
             &storage_provider,
-            &schema_definition_operation,
             &key_pair,
+            &SchemaId::new("schema_definition_v1").unwrap(),
             None,
+            &schema_definition_operation,
         )
         .await;
 
-        let operation_id: OperationId = request.entry_encoded.hash().into();
-        let document_id: DocumentId = request.entry_encoded.hash().into();
-        let document_view_id: DocumentViewId = request.entry_encoded.hash().into();
-
-        storage_provider.publish_entry(&request).await.unwrap();
-        storage_provider
-            .insert_operation(&OperationStorage::new(
-                &author,
-                &schema_definition_operation,
-                &operation_id,
-                &document_id,
-            ))
-            .await
-            .unwrap();
-
-        let document_view_fields = DocumentViewFields::new_from_operation_fields(
-            &operation_id,
-            &schema_definition_operation.fields().unwrap(),
-        );
-        storage_provider
-            .insert_document_view(
-                &DocumentView::new(&document_view_id, &document_view_fields),
-                &SchemaId::new("schema_definition_v1").unwrap(),
-            )
-            .await
-            .unwrap();
-
+        // Retrieve the schema by it's document_view_id.
         let schema = storage_provider
             .get_schema_by_id(&document_view_id)
             .await
             .unwrap();
 
-        println!("{}", schema)
+        assert_eq!(schema.as_cddl(), "venue_name = { type: \"str\", value: tstr, }\ncreate-fields = { venue_name }\nupdate-fields = { + ( venue_name ) }")
     }
 }
