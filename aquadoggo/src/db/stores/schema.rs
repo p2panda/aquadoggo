@@ -63,9 +63,6 @@ impl SchemaStore for SqlStorage {
             .filter_map(|view| SchemaFieldView::try_from(view).ok())
             .collect();
 
-        println!("{:#?}", schema_views);
-        println!("{:#?}", schema_field_views);
-
         let mut all_schema = vec![];
 
         for schema_view in schema_views {
