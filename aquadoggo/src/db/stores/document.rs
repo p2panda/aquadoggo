@@ -394,6 +394,7 @@ mod tests {
             "many_profile_pictures",
             "special_profile_picture",
             "many_special_profile_pictures",
+            "another_relation_field",
         ] {
             assert!(retrieved_document_view.get(key).is_some());
             assert_eq!(retrieved_document_view.get(key), document_view.get(key));
@@ -532,6 +533,7 @@ mod tests {
             "many_profile_pictures",
             "special_profile_picture",
             "many_special_profile_pictures",
+            "another_relation_field",
         ] {
             assert!(document_view.get(key).is_some());
             assert_eq!(document_view.get(key), expected_document_view.get(key));
@@ -580,6 +582,7 @@ mod tests {
             "many_profile_pictures",
             "special_profile_picture",
             "many_special_profile_pictures",
+            "another_relation_field",
         ] {
             assert!(document_view.get(key).is_some());
             assert_eq!(document_view.get(key), expected_document_view.get(key));

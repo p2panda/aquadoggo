@@ -86,6 +86,19 @@ pub fn test_create_operation() -> Operation {
             ])),
         )
         .unwrap();
+    fields
+        .add(
+            "another_relation_field",
+            OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
+                Hash::new("0020abababababababababababababababababababababababababababababababab")
+                    .unwrap()
+                    .into(),
+                Hash::new("0020cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd")
+                    .unwrap()
+                    .into(),
+            ])),
+        )
+        .unwrap();
     Operation::new_create(SchemaId::from_str(TEST_SCHEMA_ID).unwrap(), fields).unwrap()
 }
 
