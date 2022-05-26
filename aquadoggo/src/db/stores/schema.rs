@@ -63,6 +63,9 @@ impl SchemaStore for SqlStorage {
             .filter_map(|view| SchemaFieldView::try_from(view).ok())
             .collect();
 
+        println!("{:#?}", schema_views);
+        println!("{:#?}", schema_field_views);
+
         let mut all_schema = vec![];
 
         for schema_view in schema_views {
@@ -86,19 +89,20 @@ impl SchemaStore for SqlStorage {
 
 #[cfg(test)]
 mod tests {
+    use p2panda_rs::document::DocumentViewId;
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::{Operation, OperationFields, OperationValue, PinnedRelationList};
     use p2panda_rs::schema::{FieldType, SchemaId};
 
+    use crate::db::provider::SqlStorage;
     use crate::db::stores::test_utils::{insert_entry_operation_and_view, test_db};
 
     use super::SchemaStore;
 
-    #[tokio::test]
-    async fn get_schema() {
-        let (storage_provider, _key_pairs, _documents) = test_db(0, 0, false).await;
-        let key_pair = KeyPair::new();
-
+    async fn create_venue_schema(
+        storage_provider: &SqlStorage,
+        key_pair: &KeyPair,
+    ) -> DocumentViewId {
         // Construct a CREATE operation for the field of the schema we want to publish
         let mut schema_name_field_definition_operation_fields = OperationFields::new();
         schema_name_field_definition_operation_fields
@@ -115,8 +119,8 @@ mod tests {
 
         // Publish it encoded in an entry, insert the operation and materialised document view into the db
         let (_document_id, document_view_id) = insert_entry_operation_and_view(
-            &storage_provider,
-            &key_pair,
+            storage_provider,
+            key_pair,
             &SchemaId::new("schema_field_definition_v1").unwrap(),
             None,
             &schema_name_field_definition_operation,
@@ -146,13 +150,23 @@ mod tests {
 
         // Publish it encoded in an entry, insert the operation and materialised document view into the db
         let (_document_id, document_view_id) = insert_entry_operation_and_view(
-            &storage_provider,
-            &key_pair,
+            storage_provider,
+            key_pair,
             &SchemaId::new("schema_definition_v1").unwrap(),
             None,
             &schema_definition_operation,
         )
         .await;
+
+        document_view_id
+    }
+
+    #[tokio::test]
+    async fn get_schema() {
+        let (storage_provider, _key_pairs, _documents) = test_db(0, 0, false).await;
+        let key_pair = KeyPair::new();
+
+        let document_view_id = create_venue_schema(&storage_provider, &key_pair).await;
 
         // Retrieve the schema by it's document_view_id.
         let schema = storage_provider
@@ -161,5 +175,17 @@ mod tests {
             .unwrap();
 
         assert_eq!(schema.as_cddl(), "venue_name = { type: \"str\", value: tstr, }\ncreate-fields = { venue_name }\nupdate-fields = { + ( venue_name ) }")
+    }
+
+    #[tokio::test]
+    async fn get_all_schema() {
+        let (storage_provider, _key_pairs, _documents) = test_db(0, 0, false).await;
+        let key_pair = KeyPair::new();
+
+        create_venue_schema(&storage_provider, &key_pair).await;
+
+        let schemas = storage_provider.get_all_schema().await.unwrap();
+
+        assert_eq!(schemas.len(), 1)
     }
 }
