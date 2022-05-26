@@ -12,10 +12,10 @@ use super::{EntryArgsRequest, EntryArgsResponse};
 
 #[derive(Default, Debug, Copy, Clone)]
 /// The GraphQL root for the client api that p2panda clients can use to connect to a node.
-pub struct ClientRoot;
+pub struct Query;
 
 #[Object]
-impl ClientRoot {
+impl Query {
     /// Return required arguments for publishing the next entry.
     async fn next_entry_args(
         &self,
@@ -56,7 +56,7 @@ impl ClientRoot {
 
 #[cfg(test)]
 mod tests {
-    use async_graphql::{value, Response};
+    use async_graphql::Response;
     use p2panda_rs::entry::{LogId, SeqNum};
     use serde_json::json;
 
