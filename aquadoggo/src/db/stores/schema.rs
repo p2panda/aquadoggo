@@ -3,49 +3,16 @@
 use std::convert::{TryFrom, TryInto};
 
 use async_trait::async_trait;
-use p2panda_rs::{
-    document::{DocumentView, DocumentViewId},
-    schema::{
-        system::{SchemaFieldView, SchemaView, SystemSchemaError},
-        Schema, SchemaError, SchemaId, SchemaIdError,
-    },
+
+use p2panda_rs::document::DocumentViewId;
+use p2panda_rs::schema::{
+    system::{SchemaFieldView, SchemaView},
+    Schema, SchemaId,
 };
 
-use crate::db::{
-    errors::DocumentStorageError, models::document::DocumentViewFieldRow, provider::SqlStorage,
-    traits::DocumentStore, utils::parse_document_view_field_rows,
-};
-
-/// `SchemaStore` errors.
-#[derive(thiserror::Error, Debug)]
-pub enum SchemaStoreError {
-    /// Catch all error which implementers can use for passing their own errors up the chain.
-    #[error("Error occured in DocumentStore: {0}")]
-    Custom(String),
-
-    /// Error returned from converting p2panda-rs `DocumentView` into `SchemaView.
-    #[error(transparent)]
-    SystemSchemaError(#[from] SystemSchemaError),
-
-    /// Error returned from p2panda-rs `Schema` methods.
-    #[error(transparent)]
-    SchemaError(#[from] SchemaError),
-
-    /// Error returned from p2panda-rs `Schema` methods.
-    #[error(transparent)]
-    SchemaIdError(#[from] SchemaIdError),
-
-    /// Error returned from `DocumentStore` methods.
-    #[error(transparent)]
-    DocumentStorageError(#[from] DocumentStorageError),
-}
-
-#[async_trait]
-pub trait SchemaStore {
-    async fn get_schema_by_id(&self, id: &DocumentViewId) -> Result<Schema, SchemaStoreError>;
-
-    async fn get_all_schema(&self) -> Result<Vec<Schema>, SchemaStoreError>;
-}
+use crate::db::errors::SchemaStoreError;
+use crate::db::traits::SchemaStore;
+use crate::db::{provider::SqlStorage, traits::DocumentStore};
 
 #[async_trait]
 impl SchemaStore for SqlStorage {
