@@ -3,7 +3,9 @@
 use std::convert::TryFrom;
 use std::str::FromStr;
 
-use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewFields, DocumentViewId};
+use p2panda_rs::document::{
+    DocumentBuilder, DocumentId, DocumentView, DocumentViewFields, DocumentViewId,
+};
 use p2panda_rs::entry::{sign_and_encode, Entry};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::{Author, KeyPair};
@@ -172,10 +174,17 @@ pub async fn insert_entry_operation_and_view(
     document_id: Option<&DocumentId>,
     operation: &Operation,
 ) -> (DocumentId, DocumentViewId) {
+    if !operation.is_create() && document_id.is_none() {
+        panic!("UPDATE and DELETE operations require a DocumentId to be passed")
+    }
+
     let request = construct_publish_entry_request(provider, operation, key_pair, document_id).await;
 
     let operation_id: OperationId = request.entry_encoded.hash().into();
-    let document_id: DocumentId = request.entry_encoded.hash().into();
+    let document_id = document_id
+        .cloned()
+        .unwrap_or_else(|| request.entry_encoded.hash().into());
+
     let document_view_id: DocumentViewId = request.entry_encoded.hash().into();
 
     let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
@@ -191,15 +200,21 @@ pub async fn insert_entry_operation_and_view(
         .await
         .unwrap();
 
-    let document_view_fields =
-        DocumentViewFields::new_from_operation_fields(&operation_id, &operation.fields().unwrap());
-    provider
-        .insert_document_view(
-            &DocumentView::new(&document_view_id, &document_view_fields),
-            schema,
-        )
+    let document_operations = provider
+        .get_operations_by_document_id(&document_id)
         .await
         .unwrap();
+
+    let document = DocumentBuilder::new(
+        document_operations
+            .into_iter()
+            .map(|operation| operation.into())
+            .collect(),
+    )
+    .build()
+    .unwrap();
+
+    provider.insert_document(&document).await.unwrap();
 
     (document_id, document_view_id)
 }
