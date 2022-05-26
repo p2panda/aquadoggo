@@ -621,15 +621,32 @@ mod tests {
 
     #[tokio::test]
     async fn gets_documents_by_schema() {
-        let (storage_provider, _key_pairs, _documents) = test_db(1, 2, false).await;
-
+        let (storage_provider, _key_pairs, documents) = test_db(1, 2, false).await;
         let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
 
-        let schema_entries = storage_provider
-            .get_entries_by_schema(&schema_id)
+        for document_id in documents {
+            let document_operations = storage_provider
+                .get_operations_by_document_id(&document_id)
+                .await
+                .unwrap();
+
+            let document = DocumentBuilder::new(
+                document_operations
+                    .into_iter()
+                    .map(|operation| operation.into())
+                    .collect(),
+            )
+            .build()
+            .unwrap();
+
+            storage_provider.insert_document(&document).await.unwrap();
+        }
+
+        let schema_documents = storage_provider
+            .get_documents_by_schema(&schema_id)
             .await
             .unwrap();
 
-        assert_eq!(schema_entries.len(), 2)
+        assert_eq!(schema_documents.len(), 2)
     }
 }
