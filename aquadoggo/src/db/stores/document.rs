@@ -17,6 +17,12 @@ use crate::db::utils::parse_document_view_field_rows;
 #[async_trait]
 impl DocumentStore for SqlStorage {
     /// Insert a document_view into the db.
+    ///
+    /// Internally, this method performs two different operations:
+    /// - insert a row for every document_view_field present on this view
+    /// - insert a row for the document_view itself
+    ///
+    /// If either of these operations fail and error is returned.
     async fn insert_document_view(
         &self,
         document_view: &DocumentView,
@@ -92,6 +98,11 @@ impl DocumentStore for SqlStorage {
     }
 
     /// Get a document view from the database by it's id.
+    ///
+    /// Internally, this method retrieve all document rows related to this document view id
+    /// and then from these constructs the document view itself.
+    ///
+    /// An error is returned if any of the above steps fail or a fatal database error occured.
     async fn get_document_view_by_id(
         &self,
         id: &DocumentViewId,
@@ -133,6 +144,9 @@ impl DocumentStore for SqlStorage {
     }
 
     /// Insert a document and it's latest document view into the database.
+    ///
+    /// This method inserts or updates a row into the documents table and then makes a call
+    /// to `insert_document_view()` to insert the new document view for this document.
     ///
     /// Note: "out-of-date" document views will remain in storage when a document already
     /// existed and is updated. If they are not needed for anything else they can be garbage
@@ -178,6 +192,10 @@ impl DocumentStore for SqlStorage {
     }
 
     /// Get a documents' latest document view from the database by it's `DocumentId`.
+    ///
+    /// Retrieve the current document view for a specified document. If the document
+    /// has been deleted then None is returned. An error is returned is a fatal database
+    /// error occurs.
     async fn get_document_by_id(
         &self,
         id: &DocumentId,
@@ -223,6 +241,10 @@ impl DocumentStore for SqlStorage {
     }
 
     /// Get all documents which follow the passed schema id from the database
+    ///
+    /// Retrieve the latest document view for all documents which follow the specified schema.
+    ///
+    /// An error is returned is a fatal database error occurs.
     async fn get_documents_by_schema(
         &self,
         schema_id: &SchemaId,
