@@ -16,8 +16,17 @@ use crate::db::{provider::SqlStorage, traits::DocumentStore};
 
 #[async_trait]
 impl SchemaStore for SqlStorage {
+    /// Get a Schema from the database by it's document view id.
+    ///
+    /// Internally, this method performs three steps:
+    /// - fetch the document view for the schema definition
+    /// - fetch the document views for every field defined in the schema definition
+    /// - combine the returned fields into a Schema struct
+    ///
+    /// If any of these steps fail then an error is returned, otherwise a completed Schema struct
+    /// which can be used to validate application operations is returned.
     async fn get_schema_by_id(&self, id: &DocumentViewId) -> Result<Schema, SchemaStoreError> {
-        // Fetch the document view rows for each of the schema
+        // Fetch the document view for the schema
         let schema_document_view = self.get_document_view_by_id(id).await?.unwrap(); // Don't unwrap here.
         let schema_view: SchemaView = schema_document_view.try_into()?;
 
@@ -36,6 +45,9 @@ impl SchemaStore for SqlStorage {
         Ok(schema)
     }
 
+    /// Get all Schema which have been published to this node.
+    ///
+    /// Returns an error if a fatal db error occured.
     async fn get_all_schema(&self) -> Result<Vec<Schema>, SchemaStoreError> {
         let schema_views: Vec<SchemaView> = self
             .get_documents_by_schema(&SchemaId::new("schema_definition_v1")?)
