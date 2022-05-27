@@ -134,9 +134,19 @@ pub fn test_key_pairs(no_of_authors: usize) -> Vec<KeyPair> {
     key_pairs
 }
 
+/// Construct and return a storage provider instance backed by a pre-polpulated database. Passed parameters
+/// define what the db should contain. The first entry in each log contains a valid CREATE operation
+/// following entries contain duplicate UPDATE operations. If the with_delete flag is set to true
+/// the last entry in all logs contain be a DELETE operation.
+///
+/// Returns a storage provider instance, a vector of key pairs for all authors in the db, and a vector
+/// of the ids for all documents.
 pub async fn test_db(
+    // Number of entries per log/document
     no_of_entries: usize,
+    // Number of authors, each with a log populated as defined above
     no_of_authors: usize,
+    // A boolean flag for wether all logs should contain a delete operation
     with_delete: bool,
 ) -> (SqlStorage, Vec<KeyPair>, Vec<DocumentId>) {
     let pool = initialize_db().await;
