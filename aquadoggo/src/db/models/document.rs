@@ -2,7 +2,7 @@
 
 use sqlx::FromRow;
 
-/// A struct representing a joined OperationRow and OperationFieldRow.
+/// A struct representing a single row with joins from the document_view_fields table.
 #[derive(FromRow, Debug, Clone)]
 pub struct DocumentViewFieldRow {
     /// The id of this operation.
