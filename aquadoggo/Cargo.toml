@@ -20,8 +20,7 @@ async-graphql = "3.0.35"
 async-graphql-axum = "3.0.35"
 axum = "0.5.1"
 bamboo-rs-core-ed25519-yasmf = "0.1.1"
-crossbeam-queue = "0.3.5"
-deadqueue = { version = "0.2.2", default-feaatures = false, features = ["unlimited"] }
+deadqueue = { version = "0.2.2", default-features = false, features = ["unlimited"] }
 directories = "3.0.2"
 envy = "0.4.2"
 futures = "0.3.17"
