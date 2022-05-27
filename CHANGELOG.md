@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement SQL `OperationStore` [103](https://github.com/p2panda/aquadoggo/pull/103)
 - GraphQL client API with endpoint for retrieving next entry arguments [#119](https://github.com/p2panda/aquadoggo/pull/119)
 - GraphQL endpoint for publishing entries [#123](https://github.com/p2panda/aquadoggo/pull/132)
-- Implement SQLite `DocumentStore` [118](https://github.com/p2panda/aquadoggo/pull/118)
+- Implement SQL `DocumentStore` [#118](https://github.com/p2panda/aquadoggo/pull/118)
 
 ### Changed
 
