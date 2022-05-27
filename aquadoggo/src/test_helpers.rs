@@ -15,6 +15,7 @@ use sqlx::migrate::MigrateDatabase;
 use tower::make::Shared;
 use tower_service::Service;
 
+use crate::db::provider::SqlStorage;
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
 
 const DB_URL: &str = "sqlite::memory:";
@@ -137,6 +138,12 @@ pub async fn initialize_db() -> Pool {
     run_pending_migrations(&pool).await.unwrap();
 
     pool
+}
+
+// Create storage provider API around test database
+pub async fn initialize_store() -> SqlStorage {
+    let pool = initialize_db().await;
+    SqlStorage::new(pool)
 }
 
 // Delete test database
