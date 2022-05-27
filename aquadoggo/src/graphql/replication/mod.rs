@@ -148,25 +148,16 @@ impl<ES: 'static + EntryStore<StorageEntry> + Sync + Send> ReplicationRoot<ES> {
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryFrom;
     use std::sync::Arc;
 
     use async_graphql::{EmptyMutation, EmptySubscription, Request, Schema};
-    use p2panda_rs::identity::Author;
     use tokio::sync::Mutex;
 
     use super::testing::MockEntryStore;
-    use super::{
-        Author as GraphQLAuthor, LogId, PublicKey, ReplicationContext, ReplicationRoot,
-        SequenceNumber,
-        AuthorOrAlias,
-    };
+    use super::{AuthorOrAlias, ReplicationContext, ReplicationRoot};
 
     #[tokio::test]
     async fn get_entries_newer_than_seq_cursor_addition_is_ok() {
-        let mut mock_entry_store = MockEntryStore::new();
-        mock_entry_store.expect_get_entry_at_seq_num().never();
-
         let mut replication_context: ReplicationContext<MockEntryStore> =
             ReplicationContext::default();
 
@@ -174,21 +165,30 @@ mod tests {
         let sequence_number = 123u64;
         let author_string =
             "7cf4f58a2d89e93313f2de99604a814ecea9800cf217b140e9c3a7ba59a5d982".to_string();
+        let after = 2;
+        let first = 3;
+
+        let expected_start = sequence_number + after;
 
         replication_context
             .expect_get_entries_newer_than_seq()
             .withf({
                 let author_string = author_string.clone();
 
-                move|log_id_, author_, sequence_number_, first_, start_| {
-                let author_matches = match author_ {
-                    AuthorOrAlias::PublicKey(public_key) => public_key.0.as_str() == author_string,
-                    _ => false
-                };
-                log_id_.as_ref().as_u64() == log_id && author_matches
-
-
-            }})
+                move |log_id_, author_, sequence_number_, first_, start_| {
+                    let author_matches = match author_ {
+                        AuthorOrAlias::PublicKey(public_key) => {
+                            public_key.0.as_str() == author_string
+                        }
+                        _ => false,
+                    };
+                    sequence_number_.as_ref().as_u64() == sequence_number
+                        && *start_ == expected_start
+                        && log_id_.as_ref().as_u64() == log_id
+                        && author_matches
+                        && *first_ == first as usize
+                }
+            })
             .returning(|_, _, _, _, _| Ok(vec![]))
             .once();
 
@@ -197,13 +197,13 @@ mod tests {
         let gql_query = format!(
             "
         query{{
-          getEntriesNewerThanSeq(logId: {}, author: {{publicKey: \"{}\" }}, sequenceNumber:{}){{
+          getEntriesNewerThanSeq(logId: {}, author: {{publicKey: \"{}\" }}, sequenceNumber:{}, first: {}, after: \"{}\" ){{
             pageInfo {{
               hasNextPage
             }}
           }}
         }}",
-            log_id, author_string, sequence_number
+            log_id, author_string, sequence_number, first, after
         );
 
         let schema = Schema::build(replication_root, EmptyMutation, EmptySubscription)
@@ -211,6 +211,6 @@ mod tests {
             .finish();
 
         let result = schema.execute(Request::new(gql_query)).await;
-        println!("{:?}", result);
+        assert!(result.is_ok());
     }
 }
