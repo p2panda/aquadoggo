@@ -82,7 +82,7 @@ use std::hash::Hash;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use crossbeam_queue::SegQueue;
+use deadqueue::unlimited::Queue;
 use log::{error, info};
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::broadcast::{channel, Sender};
@@ -131,7 +131,7 @@ where
     input_index: Arc<Mutex<HashSet<IN>>>,
 
     /// FIFO queue of all tasks for this worker pool.
-    queue: Arc<SegQueue<QueueItem<IN>>>,
+    queue: Arc<Queue<QueueItem<IN>>>,
 }
 
 impl<IN> WorkerManager<IN>
@@ -142,7 +142,7 @@ where
     pub fn new() -> Self {
         Self {
             input_index: Arc::new(Mutex::new(HashSet::new())),
-            queue: Arc::new(SegQueue::new()),
+            queue: Arc::new(Queue::new()),
         }
     }
 }
@@ -409,50 +409,45 @@ where
             task::spawn(async move {
                 loop {
                     // Wait until there is a new task arriving in the queue
-                    match queue.pop() {
-                        Some(item) => {
-                            // Take this task and do work ..
-                            let result = work.call(context.clone(), item.input()).await;
+                    let item = queue.pop().await;
 
-                            // Remove input index from queue
-                            match input_index.lock() {
-                                Ok(mut index) => {
-                                    index.remove(&item.input());
-                                }
-                                Err(err) => {
-                                    error!("Error while locking input index: {}", err);
-                                    error_signal.trigger();
-                                }
-                            }
+                    // Take this task and do work ..
+                    let result = work.call(context.clone(), item.input()).await;
 
-                            // .. check the task result ..
-                            match result {
-                                Ok(Some(list)) => {
-                                    // Tasks succeeded and dispatches new, subsequent tasks
-                                    for task in list {
-                                        match tx.send(task) {
-                                            Err(err) => {
-                                                error!("Error while broadcasting task: {}", err);
-                                                error_signal.trigger();
-                                            }
-                                            _ => (),
-                                        }
+                    // Remove input index from queue
+                    match input_index.lock() {
+                        Ok(mut index) => {
+                            index.remove(&item.input());
+                        }
+                        Err(err) => {
+                            error!("Error while locking input index: {}", err);
+                            error_signal.trigger();
+                        }
+                    }
+
+                    // .. check the task result ..
+                    match result {
+                        Ok(Some(list)) => {
+                            // Tasks succeeded and dispatches new, subsequent tasks
+                            for task in list {
+                                match tx.send(task) {
+                                    Err(err) => {
+                                        error!("Error while broadcasting task: {}", err);
+                                        error_signal.trigger();
                                     }
+                                    _ => (),
                                 }
-                                Err(TaskError::Critical) => {
-                                    // Something really horrible happened, we need to crash!
-                                    error!("Critical error in task {:?}", item);
-                                    error_signal.trigger();
-                                }
-                                Err(TaskError::Failure) => {
-                                    // Silently fail .. maybe write something to the log or retry?
-                                }
-                                _ => (), // Task succeeded, but nothing to dispatch
                             }
                         }
-                        // Call the waker to avoid async runtime starvation when this loop runs
-                        // forever ..
-                        None => task::yield_now().await,
+                        Err(TaskError::Critical) => {
+                            // Something really horrible happened, we need to crash!
+                            error!("Critical error in task {:?}", item);
+                            error_signal.trigger();
+                        }
+                        Err(TaskError::Failure) => {
+                            // Silently fail .. maybe write something to the log or retry?
+                        }
+                        _ => (), // Task succeeded, but nothing to dispatch
                     }
                 }
             });
