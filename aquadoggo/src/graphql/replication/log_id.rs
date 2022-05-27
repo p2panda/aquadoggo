@@ -8,6 +8,12 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct LogId(pub PandaLogId);
 
+impl LogId {
+    pub fn as_u64(&self) -> u64 {
+        self.0.as_u64()
+    }
+}
+
 impl From<u64> for LogId {
     fn from(n: u64) -> Self {
         Self(PandaLogId::new(n))

@@ -1,4 +1,3 @@
-
 use async_trait::async_trait;
 use mockall::mock;
 use mockall_double::double;
@@ -8,7 +7,6 @@ use p2panda_rs::identity::Author;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::errors::EntryStorageError;
 use p2panda_rs::storage_provider::traits::EntryStore;
-
 
 use crate::db::stores::StorageEntry;
 

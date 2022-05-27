@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use async_graphql::connection::{query, Connection, Edge, EmptyFields};
+use anyhow::Error as AnyhowError;
+use async_graphql::connection::{query, Connection, CursorType, Edge, EmptyFields};
 use async_graphql::Object;
 use async_graphql::*;
 use mockall_double::double;
@@ -84,31 +86,38 @@ impl<ES: 'static + EntryStore<StorageEntry> + Sync + Send> ReplicationRoot<ES> {
         sequence_number: SequenceNumber,
         first: Option<i32>,
         after: Option<String>,
-    ) -> Result<Connection<usize, EntryAndPayload, EmptyFields, EmptyFields>> {
+    ) -> Result<Connection<SequenceNumber, EntryAndPayload, EmptyFields, EmptyFields>> {
         let ctx: &Arc<Mutex<ReplicationContext<ES>>> = ctx.data()?;
         let author: AuthorOrAlias = author.try_into()?;
-        query(after, None, first, None, |after, _, first, _| async move {
-            let start = sequence_number.as_ref().as_u64() + after.map(|a| a as u64).unwrap_or(0);
+        query(
+            after,
+            None,
+            first,
+            None,
+            |after: Option<SequenceNumber>, _, first, _| async move {
+                let start: u64 = sequence_number.as_u64() + after.map(|a| a.as_u64()).unwrap_or(0);
 
-            let first = first.map(|n| n.clamp(0, 10000)).unwrap_or(10);
+                let first = first.map(|n| n.clamp(0, 10000)).unwrap_or(10);
 
-            let edges = ctx
-                .lock()
-                .await
-                .get_entries_newer_than_seq(log_id, author, sequence_number, first, start)
-                .await?
-                .into_iter()
-                .map(|entry| {
-                    let decoded = decode_entry(entry.entry.as_ref(), None).unwrap();
-                    Edge::new(decoded.seq_num().as_u64() as usize, entry.into())
-                });
+                let edges = ctx
+                    .lock()
+                    .await
+                    .get_entries_newer_than_seq(log_id, author, sequence_number, first, start)
+                    .await?
+                    .into_iter()
+                    .map(|entry| {
+                        let decoded = decode_entry(entry.entry.as_ref(), None).unwrap();
+                        let sequence_number = SequenceNumber(decoded.seq_num().clone());
+                        Edge::new(sequence_number, entry.into())
+                    });
 
-            let mut connection = Connection::new(false, start < first as u64);
+                let mut connection = Connection::new(false, start < first as u64);
 
-            connection.append(edges);
+                connection.append(edges);
 
-            Result::<_, Error>::Ok(connection)
-        })
+                Result::<_, Error>::Ok(connection)
+            },
+        )
         .await
     }
 
@@ -146,15 +155,32 @@ impl<ES: 'static + EntryStore<StorageEntry> + Sync + Send> ReplicationRoot<ES> {
     }
 }
 
+impl CursorType for SequenceNumber {
+    type Error = AnyhowError;
+
+    fn decode_cursor(s: &str) -> Result<Self, Self::Error> {
+        let num: u64 = s.parse()?;
+        let result = SequenceNumber::try_from(num)?;
+        Ok(result)
+    }
+
+    fn encode_cursor(&self) -> String {
+        self.0.as_u64().to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::convert::TryFrom;
     use std::sync::Arc;
 
-    use async_graphql::{EmptyMutation, EmptySubscription, Request, Schema};
+    use async_graphql::{
+        connection::CursorType, EmptyMutation, EmptySubscription, Request, Schema,
+    };
     use tokio::sync::Mutex;
 
     use super::testing::MockEntryStore;
-    use super::{AuthorOrAlias, ReplicationContext, ReplicationRoot};
+    use super::{AuthorOrAlias, ReplicationContext, ReplicationRoot, SequenceNumber};
 
     #[tokio::test]
     async fn get_entries_newer_than_seq_cursor_addition_is_ok() {
@@ -165,10 +191,14 @@ mod tests {
         let sequence_number = 123u64;
         let author_string =
             "7cf4f58a2d89e93313f2de99604a814ecea9800cf217b140e9c3a7ba59a5d982".to_string();
-        let after = 2;
+
+        // This isn't the best because it knows that the cursor is just a stringified number. It's
+        // supposed to be an opaque type.
+        let after = SequenceNumber::try_from(sequence_number).unwrap();
+
         let first = 3;
 
-        let expected_start = sequence_number + after;
+        let expected_start = sequence_number + after.as_u64();
 
         replication_context
             .expect_get_entries_newer_than_seq()
@@ -182,11 +212,11 @@ mod tests {
                         }
                         _ => false,
                     };
-                    sequence_number_.as_ref().as_u64() == sequence_number
+                    sequence_number_.as_u64() == sequence_number
                         && *start_ == expected_start
-                        && log_id_.as_ref().as_u64() == log_id
+                        && log_id_.as_u64() == log_id
                         && author_matches
-                        && *first_ == first as usize
+                        && *first_ == first
                 }
             })
             .returning(|_, _, _, _, _| Ok(vec![]))
@@ -203,7 +233,7 @@ mod tests {
             }}
           }}
         }}",
-            log_id, author_string, sequence_number, first, after
+            log_id, author_string, sequence_number, first, after.encode_cursor()
         );
 
         let schema = Schema::build(replication_root, EmptyMutation, EmptySubscription)

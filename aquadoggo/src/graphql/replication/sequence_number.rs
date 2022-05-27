@@ -10,6 +10,12 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct SequenceNumber(pub PandaSeqNum);
 
+impl SequenceNumber {
+    pub fn as_u64(self) -> u64 {
+        self.0.as_u64()
+    }
+}
+
 impl AsRef<PandaSeqNum> for SequenceNumber {
     fn as_ref(&self) -> &PandaSeqNum {
         &self.0

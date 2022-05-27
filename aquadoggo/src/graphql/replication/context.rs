@@ -3,9 +3,9 @@
 use anyhow::{anyhow, Result};
 use async_graphql::ID;
 use lru::LruCache;
+use mockall::automock;
 use p2panda_rs::entry::{decode_entry, SeqNum};
 use p2panda_rs::storage_provider::traits::EntryStore;
-use mockall::automock;
 
 use crate::db::stores::StorageEntry;
 
@@ -146,13 +146,13 @@ impl<ES: 'static + EntryStore<StorageEntry>> Context<ES> {
 #[cfg(test)]
 mod tests {
 
+    use super::super::testing::MockEntryStore;
     use super::Context;
     use crate::graphql::replication::{
-        Author as GraphQLAuthor, LogId as GraphQLLogId, PublicKey, SequenceNumber
+        Author as GraphQLAuthor, LogId as GraphQLLogId, PublicKey, SequenceNumber,
     };
     use p2panda_rs::identity::Author;
     use std::convert::TryInto;
-    use super::super::testing::MockEntryStore;
 
     #[tokio::test]
     async fn entry_by_log_id_and_sequence() {
