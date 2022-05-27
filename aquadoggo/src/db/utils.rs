@@ -212,8 +212,9 @@ pub fn parse_value_to_string_vec(value: &OperationValue) -> Vec<String> {
 pub fn parse_document_view_field_rows(
     document_field_rows: Vec<DocumentViewFieldRow>,
 ) -> DocumentViewFields {
-    let mut relation_list: Vec<DocumentId> = Vec::new();
-    let mut pinned_relation_list: Vec<DocumentViewId> = Vec::new();
+    let mut relation_lists: BTreeMap<String, (OperationId, Vec<DocumentId>)> = BTreeMap::new();
+    let mut pinned_relation_lists: BTreeMap<String, (OperationId, Vec<DocumentViewId>)> =
+        BTreeMap::new();
 
     let mut document_view_fields = DocumentViewFields::new();
 
@@ -272,7 +273,20 @@ pub fn parse_document_view_field_rows(
             }
             // This is a list item, so we push it to a vec but _don't_ add it
             // to the document_view_fields yet.
-            "relation_list" => relation_list.push(row.value.parse::<DocumentId>().unwrap()),
+            "relation_list" => {
+                match relation_lists.get_mut(&row.name) {
+                    Some((_, list)) => list.push(row.value.parse::<DocumentId>().unwrap()),
+                    None => {
+                        relation_lists.insert(
+                            row.name.clone(),
+                            (
+                                row.operation_id.parse().unwrap(),
+                                vec![row.value.parse::<DocumentId>().unwrap()],
+                            ),
+                        );
+                    }
+                };
+            }
             "pinned_relation" => {
                 document_view_fields.insert(
                     &row.name,
@@ -287,45 +301,38 @@ pub fn parse_document_view_field_rows(
             // This is a list item, so we push it to a vec but _don't_ add it
             // to the document_view_fields yet.
             "pinned_relation_list" => {
-                pinned_relation_list.push(row.value.parse::<DocumentViewId>().unwrap())
+                match pinned_relation_lists.get_mut(&row.name) {
+                    Some((_, list)) => list.push(row.value.parse::<DocumentViewId>().unwrap()),
+                    None => {
+                        pinned_relation_lists.insert(
+                            row.name.clone(),
+                            (
+                                row.operation_id.parse().unwrap(),
+                                vec![row.value.parse::<DocumentViewId>().unwrap()],
+                            ),
+                        );
+                    }
+                };
             }
             _ => (),
         };
     });
 
-    // Find if there is at least one field containing a "relation_list" type
-    let relation_list_field = &document_field_rows
-        .iter()
-        .find(|row| row.field_type == "relation_list");
-
-    // If so, then parse the `relation_list` vec into an operation value and add it to the document view fields
-    if let Some(relation_list_field) = relation_list_field {
+    for (field_name, (operation_id, relation_list)) in relation_lists {
         document_view_fields.insert(
-            &relation_list_field.name,
+            &field_name,
             DocumentViewValue::new(
-                &relation_list_field
-                    .operation_id
-                    .parse::<OperationId>()
-                    .unwrap(),
+                &operation_id,
                 &OperationValue::RelationList(RelationList::new(relation_list)),
             ),
         );
     }
 
-    // Find if there is at least one field containing a "pinned_relation_list" type
-    let pinned_relation_list_field = &document_field_rows
-        .iter()
-        .find(|row| row.field_type == "pinned_relation_list");
-
-    // If so, then parse the `pinned_relation_list` vec into an operation value and add it to the document view fields
-    if let Some(pinned_relation_list_field) = pinned_relation_list_field {
+    for (field_name, (operation_id, pinned_relation_list)) in pinned_relation_lists {
         document_view_fields.insert(
-            &pinned_relation_list_field.name,
+            &field_name,
             DocumentViewValue::new(
-                &pinned_relation_list_field
-                    .operation_id
-                    .parse::<OperationId>()
-                    .unwrap(),
+                &operation_id,
                 &OperationValue::PinnedRelationList(PinnedRelationList::new(pinned_relation_list)),
             ),
         );
@@ -680,6 +687,8 @@ mod tests {
     fn operation_values_to_string_vec() {
         let expected_list = vec![
             "28",
+            "0020abababababababababababababababababababababababababababababababab",
+            "0020cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
             "3.5",
             "false",
             "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
