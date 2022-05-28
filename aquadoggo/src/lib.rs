@@ -23,6 +23,7 @@ pub mod graphql;
 mod manager;
 mod materializer;
 mod node;
+mod replication;
 mod server;
 
 #[cfg(test)]

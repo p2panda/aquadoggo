@@ -4,7 +4,7 @@ mod api;
 /// Graphql types for clients
 pub mod client;
 mod context;
-mod replication;
+pub mod replication;
 mod schema;
 
 pub use api::{handle_graphql_playground, handle_graphql_query};

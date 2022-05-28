@@ -9,6 +9,7 @@ use crate::db::provider::SqlStorage;
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
 use crate::manager::ServiceManager;
 use crate::materializer::materializer_service;
+use crate::replication::replication_service;
 use crate::server::http_service;
 
 /// Makes sure database is created and migrated before returning connection pool.
@@ -57,6 +58,9 @@ impl Node {
 
         // Start materializer service
         manager.add("materializer", materializer_service);
+
+        // Start replication service
+        manager.add("replication", replication_service);
 
         // Start HTTP server with GraphQL API
         manager.add("http", http_service);
