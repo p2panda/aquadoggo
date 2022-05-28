@@ -110,7 +110,6 @@ type PublishEntryResponse {
 All of the graphql query sub modules merged into one top level root
 """
 type QueryRoot {
-	ping: String!
 	"""
 	Get an entry by its hash
 	"""
