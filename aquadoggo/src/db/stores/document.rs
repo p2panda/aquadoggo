@@ -41,15 +41,15 @@ impl DocumentStore for SqlStorage {
             try_join_all(document_view.iter().map(|(name, value)| {
                 query(
                     "
-                    INSERT INTO
-                        document_view_fields (
-                            document_view_id,
-                            operation_id,
-                            name
-                        )
-                    VALUES
-                        ($1, $2, $3)
-                    ",
+                        INSERT INTO
+                            document_view_fields (
+                                document_view_id,
+                                operation_id,
+                                name
+                            )
+                        VALUES
+                            ($1, $2, $3)
+                        ",
                 )
                 .bind(document_view.id().as_str())
                 .bind(value.id().as_str().to_owned())
