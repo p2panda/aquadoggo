@@ -502,7 +502,7 @@ mod tests {
             .await
             .unwrap();
 
-        // We're accessing the wrapped `Operation` here, I think there could be a nicer pattern for this, see: https://github.com/p2panda/p2panda/issues/320
+        // @TODO: We're accessing the wrapped `Operation` here, I think there could be a nicer pattern for this, see: https://github.com/p2panda/p2panda/issues/320
         let document = DocumentBuilder::new(
             document_operations
                 .into_iter()
