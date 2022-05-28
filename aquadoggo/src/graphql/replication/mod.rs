@@ -95,24 +95,33 @@ impl<ES: 'static + EntryStore<StorageEntry> + Sync + Send> ReplicationRoot<ES> {
             first,
             None,
             |after: Option<SequenceNumber>, _, first, _| async move {
+                // Add the sequence_number to the after cursor to get the starting sequence number.
                 let start: u64 = sequence_number.as_u64() + after.map(|a| a.as_u64()).unwrap_or(0);
+                let start_sequence = SequenceNumber::new(start)?;
 
                 // Limit the maximum number of entries to 10k, set a default value of 10
-                let first = first.map(|n| n.clamp(0, 10000)).unwrap_or(10);
+                let max_number_of_entries = first.map(|n| n.clamp(0, 10000)).unwrap_or(10);
 
                 let edges = ctx
                     .lock()
                     .await
-                    .get_entries_newer_than_seq(log_id, author, sequence_number, first, start)
+                    .get_entries_newer_than_seq(
+                        log_id,
+                        author,
+                        start_sequence,
+                        max_number_of_entries,
+                    )
                     .await?
                     .into_iter()
                     .map(|entry| {
                         let decoded = decode_entry(entry.entry.as_ref(), None).unwrap();
                         let sequence_number = SequenceNumber(decoded.seq_num().clone());
                         Edge::new(sequence_number, entry.into())
-                    });
+                    })
+                    .collect::<Vec<_>>();
 
-                let mut connection = Connection::new(false, start < first as u64);
+                let has_next_page = edges.len() == max_number_of_entries;
+                let mut connection = Connection::new(false, has_next_page);
 
                 connection.append(edges);
 
@@ -176,7 +185,7 @@ mod tests {
     use std::sync::Arc;
 
     use async_graphql::{
-        connection::CursorType, EmptyMutation, EmptySubscription, Request, Schema, Value,
+        connection::CursorType, EmptyMutation, EmptySubscription, Request, Schema,
     };
     use tokio::sync::Mutex;
 
@@ -219,21 +228,20 @@ mod tests {
             .withf({
                 let author_string = author_string.clone();
 
-                move |log_id_, author_, sequence_number_, first_, start_| {
+                move |log_id_, author_, sequence_number_, max_number_of_entries_| {
                     let author_matches = match author_ {
                         AuthorOrAlias::PublicKey(public_key) => {
                             public_key.0.as_str() == author_string
                         }
                         _ => false,
                     };
-                    sequence_number_.as_u64() == sequence_number
-                        && *start_ == expected_start
+                    sequence_number_.as_u64() == expected_start
                         && log_id_.as_u64() == log_id
                         && author_matches
-                        && *first_ == first
+                        && *max_number_of_entries_ == first
                 }
             })
-            .returning(|_, _, _, _, _| Ok(vec![]))
+            .returning(|_, _, _, _| Ok(vec![]))
             .once();
 
         // Build up a schema with our mocks that can handle gql query strings
@@ -250,8 +258,8 @@ mod tests {
         // Check that we get the Ok returned from get_entries_newer_than_seq
         assert!(result.is_ok());
 
-        // The should not be a next page because we returned an empty vec from
-        // get_entries_newer_than_seq
+        // There should not be a next page because we returned an empty vec from
+        // get_entries_newer_than_seq and it's length is not == `first` == 5;
         let json_value = result.data.into_json().unwrap();
         let has_next_page = &json_value["getEntriesNewerThanSeq"]["pageInfo"]["hasNextPage"];
         assert!(!has_next_page.as_bool().unwrap());

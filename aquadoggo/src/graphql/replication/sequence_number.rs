@@ -3,12 +3,20 @@
 use std::convert::TryFrom;
 
 use async_graphql::*;
+use anyhow::Result;
 use p2panda_rs::entry::{SeqNum as PandaSeqNum, SeqNumError};
 use serde::{Deserialize, Serialize};
 
 /// The sequence number of an entry
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct SequenceNumber(pub PandaSeqNum);
+
+impl SequenceNumber{
+    pub fn new(seq: u64) -> Result<Self>{
+        let panda_seq_num = PandaSeqNum::new(seq)?;
+        Ok(Self(panda_seq_num))
+    }
+}
 
 impl SequenceNumber {
     pub fn as_u64(self) -> u64 {

@@ -112,14 +112,12 @@ impl<ES: 'static + EntryStore<StorageEntry>> Context<ES> {
         log_id: LogId,
         author: AuthorOrAlias,
         sequence_number: SequenceNumber,
-        first: usize,
-        after: u64,
+        max_number_of_entries: usize,
     ) -> Result<Vec<EntryAndPayload>> {
         let author = self.get_author(author)?;
-        let seq_num = SeqNum::new(sequence_number.as_ref().as_u64() + after)?;
         let result = self
             .entry_store
-            .get_paginated_log_entries(&author.0, &log_id.0, &seq_num, first)
+            .get_paginated_log_entries(&author.0, &log_id.0, sequence_number.as_ref(), max_number_of_entries)
             .await?
             .into_iter()
             .map(|entry| entry.into())
@@ -153,6 +151,8 @@ mod tests {
     };
     use p2panda_rs::identity::Author;
     use std::convert::TryInto;
+
+    // TODO: test author aliases
 
     #[tokio::test]
     async fn entry_by_log_id_and_sequence() {
