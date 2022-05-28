@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_trait::async_trait;
-
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::schema::Schema;
 
@@ -21,6 +20,6 @@ pub trait SchemaStore {
     /// Get all published Schema from storage.
     ///
     /// Returns a vector of Schema, or an empty vector if none were found. Returns
-    /// an error when a fatal storage error occured.  
+    /// an error when a fatal storage error occured or a schema could not be constructed.  
     async fn get_all_schema(&self) -> Result<Vec<Schema>, SchemaStoreError>;
 }

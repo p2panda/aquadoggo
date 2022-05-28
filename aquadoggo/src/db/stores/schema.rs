@@ -3,12 +3,9 @@
 use std::convert::{TryFrom, TryInto};
 
 use async_trait::async_trait;
-
 use p2panda_rs::document::DocumentViewId;
-use p2panda_rs::schema::{
-    system::{SchemaFieldView, SchemaView},
-    Schema, SchemaId,
-};
+use p2panda_rs::schema::system::{SchemaFieldView, SchemaView};
+use p2panda_rs::schema::{Schema, SchemaId};
 
 use crate::db::errors::SchemaStoreError;
 use crate::db::traits::SchemaStore;
