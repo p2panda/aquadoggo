@@ -100,6 +100,7 @@ impl SchemaStore for SqlStorage {
 #[cfg(test)]
 mod tests {
     use p2panda_rs::document::DocumentViewId;
+    use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::{Operation, OperationFields, OperationValue, PinnedRelationList};
     use p2panda_rs::schema::{FieldType, SchemaId};
@@ -197,5 +198,51 @@ mod tests {
         let schemas = storage_provider.get_all_schema().await.unwrap();
 
         assert_eq!(schemas.len(), 1)
+    }
+
+    #[tokio::test]
+    async fn missing_fields_error() {
+        let (storage_provider, _key_pairs, _documents) = test_db(0, 0, false).await;
+        let key_pair = KeyPair::new();
+
+        let field_view_id: DocumentViewId = Hash::new_from_bytes(vec![1, 2, 3]).unwrap().into();
+
+        // Construct a CREATE operation for the schema definition we want to publish.
+        let mut schema_definition_operation_fields = OperationFields::new();
+        schema_definition_operation_fields
+            .add("name", OperationValue::Text("venue".to_string()))
+            .unwrap();
+        schema_definition_operation_fields
+            .add("description", OperationValue::Text("My venue".to_string()))
+            .unwrap();
+        schema_definition_operation_fields
+            .add(
+                "fields",
+                // This pinned relation points at the previously published field.
+                OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
+                    field_view_id.clone()
+                ])),
+            )
+            .unwrap();
+        let schema_definition_operation = Operation::new_create(
+            SchemaId::new("schema_definition_v1").unwrap(),
+            schema_definition_operation_fields,
+        )
+        .unwrap();
+
+        // Publish it encoded in an entry, insert the operation and materialised document view into the db
+        let (_document_id, document_view_id) = insert_entry_operation_and_view(
+            &storage_provider,
+            &key_pair,
+            &SchemaId::new("schema_definition_v1").unwrap(),
+            None,
+            &schema_definition_operation,
+        )
+        .await;
+
+        // Retrieve the schema by it's document_view_id.
+        let schema = storage_provider.get_schema_by_id(&document_view_id).await;
+
+        assert_eq!(schema.unwrap_err().to_string(), format!("No document view found for schema field definition with id: {0} which is required by schema definition {1}", field_view_id, document_view_id))
     }
 }

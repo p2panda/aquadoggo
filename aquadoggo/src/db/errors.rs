@@ -35,8 +35,7 @@ pub enum SchemaStoreError {
 
     /// Error returned when no document view existed for the required schema field definition
     #[error(
-        "No document view found for schema field definition with id: {0} which is required 
-    by schema definition {1}"
+        "No document view found for schema field definition with id: {0} which is required by schema definition {1}"
     )]
     MissingSchemaFieldDefinition(DocumentViewId, DocumentViewId),
 
