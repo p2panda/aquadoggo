@@ -97,6 +97,7 @@ impl<ES: 'static + EntryStore<StorageEntry> + Sync + Send> ReplicationRoot<ES> {
             |after: Option<SequenceNumber>, _, first, _| async move {
                 let start: u64 = sequence_number.as_u64() + after.map(|a| a.as_u64()).unwrap_or(0);
 
+                // Limit the maximum number of entries to 10k, set a default value of 10
                 let first = first.map(|n| n.clamp(0, 10000)).unwrap_or(10);
 
                 let edges = ctx
@@ -165,7 +166,7 @@ impl CursorType for SequenceNumber {
     }
 
     fn encode_cursor(&self) -> String {
-        self.0.as_u64().to_string()
+        self.as_u64().to_string()
     }
 }
 
@@ -175,7 +176,7 @@ mod tests {
     use std::sync::Arc;
 
     use async_graphql::{
-        connection::CursorType, EmptyMutation, EmptySubscription, Request, Schema,
+        connection::CursorType, EmptyMutation, EmptySubscription, Request, Schema, Value,
     };
     use tokio::sync::Mutex;
 
@@ -184,22 +185,35 @@ mod tests {
 
     #[tokio::test]
     async fn get_entries_newer_than_seq_cursor_addition_is_ok() {
-        let mut replication_context: ReplicationContext<MockEntryStore> =
-            ReplicationContext::default();
-
+        // Main point of this test is make sure the cursor + sequence_number logic addition is
+        // correct.
         let log_id = 3u64;
         let sequence_number = 123u64;
         let author_string =
             "7cf4f58a2d89e93313f2de99604a814ecea9800cf217b140e9c3a7ba59a5d982".to_string();
-
-        // This isn't the best because it knows that the cursor is just a stringified number. It's
-        // supposed to be an opaque type.
         let after = SequenceNumber::try_from(sequence_number).unwrap();
-
-        let first = 3;
-
+        let first = 5;
         let expected_start = sequence_number + after.as_u64();
 
+        let gql_query = format!(
+            "
+        query{{
+          getEntriesNewerThanSeq(logId: {}, author: {{publicKey: \"{}\" }}, sequenceNumber:{}, first: {}, after: \"{}\" ){{
+            pageInfo {{
+              hasNextPage
+            }}
+          }}
+        }}",
+            log_id, author_string, sequence_number, first, after.encode_cursor()
+        );
+
+        let mut replication_context: ReplicationContext<MockEntryStore> =
+            ReplicationContext::default();
+
+        // Prepare our main assertions.
+        // - Checks that get_entries_newer_than_seq is called with the values we expect
+        // - Checks that get_entries_newer_than_seq is called once
+        // - Configures get_entries_newer_than_seq to return an empty Vec
         replication_context
             .expect_get_entries_newer_than_seq()
             .withf({
@@ -222,25 +236,24 @@ mod tests {
             .returning(|_, _, _, _, _| Ok(vec![]))
             .once();
 
+        // Build up a schema with our mocks that can handle gql query strings
         let replication_root = ReplicationRoot::<MockEntryStore>::new();
-
-        let gql_query = format!(
-            "
-        query{{
-          getEntriesNewerThanSeq(logId: {}, author: {{publicKey: \"{}\" }}, sequenceNumber:{}, first: {}, after: \"{}\" ){{
-            pageInfo {{
-              hasNextPage
-            }}
-          }}
-        }}",
-            log_id, author_string, sequence_number, first, after.encode_cursor()
-        );
-
         let schema = Schema::build(replication_root, EmptyMutation, EmptySubscription)
             .data(Arc::new(Mutex::new(replication_context)))
             .finish();
 
+        // Act
         let result = schema.execute(Request::new(gql_query)).await;
+
+        // Assert
+
+        // Check that we get the Ok returned from get_entries_newer_than_seq
         assert!(result.is_ok());
+
+        // The should not be a next page because we returned an empty vec from
+        // get_entries_newer_than_seq
+        let json_value = result.data.into_json().unwrap();
+        let has_next_page = &json_value["getEntriesNewerThanSeq"]["pageInfo"]["hasNextPage"];
+        assert!(!has_next_page.as_bool().unwrap());
     }
 }
