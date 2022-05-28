@@ -23,26 +23,39 @@ impl SchemaStore for SqlStorage {
     /// - fetch the document views for every field defined in the schema definition
     /// - combine the returned fields into a Schema struct
     ///
-    /// If any of these steps fail then an error is returned, otherwise a completed Schema struct
-    /// which can be used to validate application operations is returned.
-    async fn get_schema_by_id(&self, id: &DocumentViewId) -> Result<Schema, SchemaStoreError> {
+    /// If no schema definition with the passed id is found then None is returned,
+    /// if any of the other steps can't be completed, then an error is returned.
+    async fn get_schema_by_id(
+        &self,
+        id: &DocumentViewId,
+    ) -> Result<Option<Schema>, SchemaStoreError> {
         // Fetch the document view for the schema
-        let schema_document_view = self.get_document_view_by_id(id).await?.unwrap(); // Don't unwrap here.
-        let schema_view: SchemaView = schema_document_view.try_into()?;
+        let schema_view: SchemaView = match self.get_document_view_by_id(id).await? {
+            Some(document_view) => document_view.try_into()?,
+            None => return Ok(None),
+        };
 
         let mut schema_fields = vec![];
 
-        for field in schema_view.fields().iter() {
+        for field_id in schema_view.fields().iter() {
             // Fetch schema field document views
-            let scheme_field_document_view = self.get_document_view_by_id(&field).await?.unwrap(); // Don't unwrap here.
+            let scheme_field_view: SchemaFieldView =
+                match self.get_document_view_by_id(&field_id).await? {
+                    Some(document_view) => document_view.try_into()?,
+                    None => {
+                        return Err(SchemaStoreError::MissingSchemaFieldDefinition(
+                            field_id,
+                            id.to_owned(),
+                        ))
+                    }
+                };
 
-            let scheme_field_view: SchemaFieldView = scheme_field_document_view.try_into()?;
             schema_fields.push(scheme_field_view);
         }
 
         let schema = Schema::new(schema_view, schema_fields)?;
 
-        Ok(schema)
+        Ok(Some(schema))
     }
 
     /// Get all Schema which have been published to this node.
@@ -171,7 +184,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(schema.as_cddl(), "venue_name = { type: \"str\", value: tstr, }\ncreate-fields = { venue_name }\nupdate-fields = { + ( venue_name ) }")
+        assert_eq!(schema.unwrap().as_cddl(), "venue_name = { type: \"str\", value: tstr, }\ncreate-fields = { venue_name }\nupdate-fields = { + ( venue_name ) }")
     }
 
     #[tokio::test]

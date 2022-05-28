@@ -13,7 +13,10 @@ pub trait SchemaStore {
     ///
     /// Returns a Schema or None if no schema was found with this document view id. Returns
     /// an error if a fatal storage error occured.
-    async fn get_schema_by_id(&self, id: &DocumentViewId) -> Result<Schema, SchemaStoreError>;
+    async fn get_schema_by_id(
+        &self,
+        id: &DocumentViewId,
+    ) -> Result<Option<Schema>, SchemaStoreError>;
 
     /// Get all published Schema from storage.
     ///
