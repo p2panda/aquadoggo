@@ -129,7 +129,6 @@ mod tests {
         let (_document_id, document_view_id) = insert_entry_operation_and_view(
             storage_provider,
             key_pair,
-            &SchemaId::new("schema_field_definition_v1").unwrap(),
             None,
             &schema_name_field_definition_operation,
         )
@@ -160,7 +159,6 @@ mod tests {
         let (_document_id, document_view_id) = insert_entry_operation_and_view(
             storage_provider,
             key_pair,
-            &SchemaId::new("schema_definition_v1").unwrap(),
             None,
             &schema_definition_operation,
         )
@@ -231,7 +229,6 @@ mod tests {
         let (_document_id, document_view_id) = insert_entry_operation_and_view(
             &storage_provider,
             &key_pair,
-            &SchemaId::new("schema_definition_v1").unwrap(),
             None,
             &schema_definition_operation,
         )

@@ -119,6 +119,24 @@ pub fn test_update_operation(previous_operations: Vec<OperationId>, username: &s
     .unwrap()
 }
 
+pub fn test_delete_operation(previous_operations: Vec<OperationId>) -> Operation {
+    Operation::new_delete(
+        SchemaId::from_str(TEST_SCHEMA_ID).unwrap(),
+        previous_operations,
+    )
+    .unwrap()
+}
+
+pub fn test_key_pairs(no_of_authors: usize) -> Vec<KeyPair> {
+    let mut key_pairs = vec![KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap()];
+
+    for index in 1..no_of_authors {
+        key_pairs.push(KeyPair::new())
+    }
+
+    key_pairs
+}
+
 pub async fn construct_publish_entry_request(
     provider: &SqlStorage,
     operation: &Operation,
@@ -149,28 +167,9 @@ pub async fn construct_publish_entry_request(
     }
 }
 
-pub fn test_delete_operation(previous_operations: Vec<OperationId>) -> Operation {
-    Operation::new_delete(
-        SchemaId::from_str(TEST_SCHEMA_ID).unwrap(),
-        previous_operations,
-    )
-    .unwrap()
-}
-
-pub fn test_key_pairs(no_of_authors: usize) -> Vec<KeyPair> {
-    let mut key_pairs = vec![KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap()];
-
-    for _index in 1..no_of_authors {
-        key_pairs.push(KeyPair::new())
-    }
-
-    key_pairs
-}
-
 pub async fn insert_entry_operation_and_view(
     provider: &SqlStorage,
     key_pair: &KeyPair,
-    schema: &SchemaId,
     document_id: Option<&DocumentId>,
     operation: &Operation,
 ) -> (DocumentId, DocumentViewId) {
