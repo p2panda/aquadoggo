@@ -5,7 +5,10 @@ query GetEntriesNewerThanSeq($logId: LogId!, $author: Author!, $sequenceNumber: 
         }
         edges {
             cursor,
-            node
+            node {
+                entry,
+                payload
+            }
         }
     }
 }
