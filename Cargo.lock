@@ -92,7 +92,7 @@ dependencies = [
  "async-trait",
  "axum",
  "bamboo-rs-core-ed25519-yasmf",
- "crossbeam-queue",
+ "deadqueue",
  "directories",
  "envy",
  "futures",
@@ -1009,6 +1009,16 @@ dependencies = [
  "darling_core",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "deadqueue"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "455d501abc72bae6432dbe500059887cab4700ba83303045db9ce2e824177d1c"
+dependencies = [
+ "crossbeam-queue",
+ "tokio",
 ]
 
 [[package]]
