@@ -30,6 +30,12 @@ jobs:
           path: ${{ env.cache_path }}
           key: ${{ runner.os }}-test-${{ hashFiles('**/Cargo.lock') }}
 
+      - name: Build binary
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --verbose --manifest-path ${{ env.cargo_manifest }}
+
       - name: Run tests
         uses: actions-rs/cargo@v1
         with:
