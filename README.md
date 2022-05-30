@@ -11,6 +11,10 @@
   <a href="https://github.com/p2panda/aquadoggo/actions">
     <img src="https://img.shields.io/github/workflow/status/p2panda/aquadoggo/tests?style=flat-square" alt="CI Status" />
   </a>
+  <!-- Codecov report -->
+  <a href="https://app.codecov.io/gh/p2panda/aquadoggo/">
+    <img src="https://img.shields.io/codecov/c/gh/p2panda/aquadoggo?style=flat-square" alt="Codecov Report" />
+  </a>
   <!-- Crates version -->
   <a href="https://crates.io/crates/aquadoggo">
     <img src="https://img.shields.io/crates/v/aquadoggo.svg?style=flat-square" alt="Crates.io version" />
