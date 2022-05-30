@@ -17,7 +17,7 @@ use crate::db::provider::SqlStorage;
 /// This serves as an indexing layer on top of the lower-level bamboo entries. The node updates
 /// this data according to what it sees in the newly incoming entries.
 ///
-/// `StorageLog` implements the trait `AsStorageLog` which is requied when defining a `LogStore`.
+/// `StorageLog` implements the trait `AsStorageLog` which is required when defining a `LogStore`.
 pub struct StorageLog {
     author: Author,
     log_id: LogId,
