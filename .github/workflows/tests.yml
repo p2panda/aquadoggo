@@ -10,12 +10,12 @@ env:
   cargo_manifest: aquadoggo/Cargo.toml
 
 jobs:
-  rust-test:
+  rust-test-sqlite:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Setup Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -25,7 +25,7 @@ jobs:
           override: true
 
       - name: Restore from cargo cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ${{ env.cache_path }}
           key: ${{ runner.os }}-test-${{ hashFiles('**/Cargo.lock') }}
@@ -34,7 +34,9 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: build
-          args: --verbose --manifest-path ${{ env.cargo_manifest }}
+          args: >-
+            --verbose
+            --manifest-path ${{ env.cargo_manifest }}
 
       - name: Run tests
         uses: actions-rs/cargo@v1
@@ -50,7 +52,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Setup Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -60,7 +62,7 @@ jobs:
           override: true
 
       - name: Restore from cargo cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ${{ env.cache_path }}
           key: ${{ runner.os }}-check-${{ hashFiles('**/Cargo.lock') }}
@@ -76,7 +78,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Setup Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -87,7 +89,7 @@ jobs:
           override: true
 
       - name: Restore from cargo cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ${{ env.cache_path }}
           key: ${{ runner.os }}-fmt-${{ hashFiles('**/Cargo.lock') }}
@@ -103,7 +105,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Setup Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -114,7 +116,7 @@ jobs:
           override: true
 
       - name: Restore from cargo cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ${{ env.cache_path }}
           key: ${{ runner.os }}-clippy-${{ hashFiles('**/Cargo.lock') }}
@@ -130,7 +132,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Setup Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -140,7 +142,7 @@ jobs:
           override: true
 
       - name: Restore from cargo cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ${{ env.cache_path }}
           key: ${{ runner.os }}-tarpaulin-${{ hashFiles('**/Cargo.lock') }}
