@@ -68,9 +68,6 @@ impl Drop for Signal {
     fn drop(&mut self) {
         // Fires the signal automatically on drop
         self.trigger();
-
-        // And now, drop it!
-        drop(self);
     }
 }
 
