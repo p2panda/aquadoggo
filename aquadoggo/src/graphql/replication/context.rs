@@ -4,7 +4,7 @@ use anyhow::{anyhow, Result};
 use async_graphql::ID;
 use lru::LruCache;
 use mockall::automock;
-use p2panda_rs::entry::{decode_entry, SeqNum};
+use p2panda_rs::entry::decode_entry;
 use p2panda_rs::storage_provider::traits::EntryStore;
 
 use crate::db::stores::StorageEntry;
@@ -117,7 +117,12 @@ impl<ES: 'static + EntryStore<StorageEntry>> Context<ES> {
         let author = self.get_author(author)?;
         let result = self
             .entry_store
-            .get_paginated_log_entries(&author.0, &log_id.0, sequence_number.as_ref(), max_number_of_entries)
+            .get_paginated_log_entries(
+                &author.0,
+                &log_id.0,
+                sequence_number.as_ref(),
+                max_number_of_entries,
+            )
             .await?
             .into_iter()
             .map(|entry| entry.into())

@@ -2,8 +2,10 @@
 
 mod entry;
 mod log;
+mod operation;
 #[cfg(test)]
-mod test_utils;
+pub mod test_utils;
 
 pub use self::log::StorageLog;
 pub use entry::StorageEntry;
+pub use operation::OperationStorage;

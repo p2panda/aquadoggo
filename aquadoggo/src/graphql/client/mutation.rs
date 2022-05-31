@@ -43,10 +43,7 @@ impl Mutation {
             pool: pool.to_owned(),
         };
 
-        provider
-            .publish_entry(&args)
-            .await
-            .map_err(|err| Error::from(err))
+        provider.publish_entry(&args).await.map_err(Error::from)
     }
 }
 

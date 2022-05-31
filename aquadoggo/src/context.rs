@@ -54,6 +54,6 @@ impl Deref for Context {
     type Target = Data;
 
     fn deref(&self) -> &Self::Target {
-        &self.0.as_ref()
+        self.0.as_ref()
     }
 }

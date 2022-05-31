@@ -47,10 +47,7 @@ impl Query {
             pool: pool.to_owned(),
         };
 
-        provider
-            .get_entry_args(&args)
-            .await
-            .map_err(|err| Error::from(err))
+        provider.get_entry_args(&args).await.map_err(Error::from)
     }
 }
 
