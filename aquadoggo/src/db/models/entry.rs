@@ -85,6 +85,7 @@ pub struct Entry {
 }
 
 impl Entry {
+    #[allow(clippy::too_many_arguments)]
     pub async fn insert(
         pool: &Pool,
         author: &Author,

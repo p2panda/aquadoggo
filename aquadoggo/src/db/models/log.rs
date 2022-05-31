@@ -16,6 +16,7 @@ use crate::errors::Result;
 /// We store the u64 integer values of `log_id` as a string here since not all database backends
 /// support large numbers.
 #[derive(FromRow, Debug)]
+#[allow(dead_code)]
 pub struct Log {
     /// Public key of the author.
     author: String,

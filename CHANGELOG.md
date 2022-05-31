@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Move to `tokio` async runtime [#75](https://github.com/p2panda/aquadoggo/pull/75)
+- Improve CI, track test coverage [#139](https://github.com/p2panda/aquadoggo/pull/139)
 
 ## [0.2.0]
 

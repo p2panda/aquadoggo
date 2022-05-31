@@ -94,6 +94,7 @@ pub struct Task<IN>(WorkerName, IN);
 
 impl<IN> Task<IN> {
     /// Returns a new task.
+    #[allow(dead_code)]
     pub fn new(worker_name: &str, input: IN) -> Self {
         Self(worker_name.into(), input)
     }
@@ -107,9 +108,11 @@ pub type TaskResult<IN> = Result<Option<Vec<Task<IN>>>, TaskError>;
 /// Possible return values of a failed task.
 pub enum TaskError {
     /// This tasks failed critically and will cause the whole program to panic.
+    #[allow(dead_code)]
     Critical,
 
     /// This task failed silently without any further effects.
+    #[allow(dead_code)]
     Failure,
 }
 
@@ -130,6 +133,7 @@ impl<D: Send + Sync + 'static> Clone for Context<D> {
 
 /// Every registered worker pool is managed by a `WorkerManager` which holds the task queue for
 /// this registered work and an index of all current inputs in the task queue.
+#[allow(dead_code)]
 struct WorkerManager<IN>
 where
     IN: Send + Sync + Clone + Hash + Eq + 'static,
@@ -149,6 +153,7 @@ where
     IN: Send + Sync + Clone + Hash + Eq + 'static,
 {
     /// Returns a new worker manager.
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
             input_index: Arc::new(Mutex::new(HashSet::new())),
@@ -196,6 +201,7 @@ where
 
 /// Every queue consists of items which hold an unique identifier and the task input value.
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct QueueItem<IN>
 where
     IN: Send + Sync + Clone + 'static,
@@ -212,22 +218,26 @@ where
     IN: Send + Sync + Clone + 'static,
 {
     /// Returns a new queue item.
+    #[allow(dead_code)]
     pub fn new(id: u64, input: IN) -> Self {
         Self { id, input }
     }
 
     /// Returns unique identifier of this queue item.
+    #[allow(dead_code)]
     pub fn id(&self) -> u64 {
         self.id
     }
 
     /// Returns generic input values of this queue item.
+    #[allow(dead_code)]
     pub fn input(&self) -> IN {
         self.input.clone()
     }
 }
 
 /// This factory serves as a main entry interface to dispatch, schedule and process tasks.
+#[allow(dead_code)]
 pub struct Factory<IN, D>
 where
     IN: Send + Sync + Clone + Hash + Eq + Debug + 'static,
@@ -256,6 +266,7 @@ where
     ///
     /// Factories will panic if the capacity limit was reached as it will cause the workers to miss
     /// incoming tasks.
+    #[allow(dead_code)]
     pub fn new(data: D, capacity: usize) -> Self {
         let (tx, _) = channel(capacity);
 
@@ -276,6 +287,7 @@ where
     ///
     /// Ideally worker functions should be idempotent: meaning the function won’t cause unintended
     /// effects even if called multiple times with the same arguments.
+    #[allow(dead_code)]
     pub fn register<W: Workable<IN, D> + Send + Sync + Copy + 'static>(
         &mut self,
         name: &str,
@@ -297,6 +309,7 @@ where
     ///
     /// Tasks with duplicate input values which already exist in the queue will be silently
     /// rejected.
+    #[allow(dead_code)]
     pub fn queue(&mut self, task: Task<IN>) {
         self.tx
             .send(task)
@@ -304,6 +317,7 @@ where
     }
 
     /// Returns true if there are no more tasks given for this worker pool.
+    #[allow(dead_code)]
     pub fn is_empty(&self, name: &str) -> bool {
         match self.managers.get(name) {
             Some(manager) => manager.queue.is_empty(),
