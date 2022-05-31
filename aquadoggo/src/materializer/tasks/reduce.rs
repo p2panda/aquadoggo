@@ -6,7 +6,7 @@ use crate::context::Context;
 use crate::materializer::worker::{TaskError, TaskResult};
 use crate::materializer::TaskInput;
 
-pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
+pub async fn reduce_task(_context: Context, _input: TaskInput) -> TaskResult<TaskInput> {
     // @TODO: Load operations from database
     let _document = DocumentBuilder::new(vec![])
         .build()

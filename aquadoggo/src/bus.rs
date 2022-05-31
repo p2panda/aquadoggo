@@ -12,5 +12,6 @@ pub type ServiceSender = Sender<ServiceMessage>;
 #[derive(Clone)]
 pub enum ServiceMessage {
     /// New `Entry` with an `Operation` payload arrived at the node.
+    #[allow(dead_code)]
     NewEntryAndOperation(Entry, Operation),
 }

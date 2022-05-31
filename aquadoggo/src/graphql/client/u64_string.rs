@@ -7,7 +7,6 @@ use serde::de::{self, Unexpected, Visitor};
 /// Serialise log id as strings.
 ///
 /// To be used as a parameter for Serde's `with` field attribute.
-#[allow(dead_code)]
 pub mod log_id_string_serialisation {
     use p2panda_rs::entry::LogId;
     use serde::{Deserializer, Serializer};
@@ -33,7 +32,6 @@ pub mod log_id_string_serialisation {
 /// Serialise sequence numbers as strings.
 ///
 /// To be used as a parameter for Serde's `with` field attribute.
-#[allow(dead_code)]
 pub mod seq_num_string_serialisation {
     use p2panda_rs::entry::SeqNum;
     use serde::de::Error;

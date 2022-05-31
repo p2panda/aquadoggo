@@ -2,8 +2,6 @@
 
 use async_trait::async_trait;
 use lipmaa_link::get_lipmaa_links_back_to;
-use p2panda_rs::storage_provider::ValidationError;
-use p2panda_rs::Validate;
 use sqlx::{query, query_as};
 
 use p2panda_rs::entry::{decode_entry, Entry, EntrySigned, LogId, SeqNum};
@@ -13,10 +11,19 @@ use p2panda_rs::operation::{Operation, OperationEncoded};
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::errors::EntryStorageError;
 use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
+use p2panda_rs::storage_provider::ValidationError;
+use p2panda_rs::Validate;
 
 use crate::db::models::EntryRow;
 use crate::db::provider::SqlStorage;
 
+/// A signed entry and it's encoded operation. Entries are the lowest level data
+/// type on the p2panda network, they are signed by authors and form bamboo append
+/// only logs. The operation is an entries' payload, it contains the data mutations
+/// which authors publish.
+///
+/// This struct implements the `AsStorageEntry` trait which is required when
+/// constructing the `EntryStore`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StorageEntry {
     entry_signed: EntrySigned,
@@ -51,6 +58,9 @@ impl Validate for StorageEntry {
     }
 }
 
+/// `From` implementation for converting an `EntryRow` into a `StorageEntry`. This is useful
+/// when retrieving entries from the database. The `sqlx` crate coerces returned entry rows
+/// into `EntryRow` but we normally want them as `StorageEntry`.
 impl From<EntryRow> for StorageEntry {
     fn from(entry_row: EntryRow) -> Self {
         // Unwrapping everything here as we assume values coming from the database are valid.
@@ -112,7 +122,12 @@ impl AsStorageEntry for StorageEntry {
     }
 }
 
-/// Trait which handles all storage actions relating to `Entries`.
+/// Implementation of `EntryStore` trait which is required when constructing a
+/// `StorageProvider`.
+///
+/// Handles storage and retrieval of entries in the form of`StorageEntry` which
+/// implements the required `AsStorageEntry` trait. An intermediary struct `EntryRow`
+/// is also used when retrieving an entry from the database.
 #[async_trait]
 impl EntryStore<StorageEntry> for SqlStorage {
     /// Insert an entry into storage.

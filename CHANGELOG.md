@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Refactor module structure, propagate errors in worker to service manager [#97](https://github.com/p2panda/aquadoggo/pull/97)
 - Restructure storage modules and remove JSON RPC [#101](https://github.com/p2panda/aquadoggo/pull/101)
 - Implement new methods required for replication defined by `EntryStore` trait [#102](https://github.com/p2panda/aquadoggo/pull/102)
-- Implement SQL `OperationStore` [103](https://github.com/p2panda/aquadoggo/pull/103)
+- Implement SQL `OperationStore` [#103](https://github.com/p2panda/aquadoggo/pull/103)
 - GraphQL client API with endpoint for retrieving next entry arguments [#119](https://github.com/p2panda/aquadoggo/pull/119)
 - GraphQL endpoint for publishing entries [#123](https://github.com/p2panda/aquadoggo/pull/132)
 - Implement SQL `DocumentStore` [#118](https://github.com/p2panda/aquadoggo/pull/118)
@@ -28,7 +28,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improve `Signal` efficiency in `ServiceManager` [#95](https://github.com/p2panda/aquadoggo/pull/95)
 - `EntryStore` improvements [#123](https://github.com/p2panda/aquadoggo/pull/123)
 - Improvements for log and entry table layout [#124](https://github.com/p2panda/aquadoggo/issues/122)
-- Update `StorageProvider` API after `p2panda-rs` changes [129](https://github.com/p2panda/aquadoggo/pull/129)
+- Update `StorageProvider` API after `p2panda-rs` changes [#129](https://github.com/p2panda/aquadoggo/pull/129)
+
+### Fixed
+
+- Fix high CPU usage of idle workers [#136](https://github.com/p2panda/aquadoggo/pull/136)
+- Improve CI, track test coverage [#139](https://github.com/p2panda/aquadoggo/pull/139)
 
 ## [0.2.0]
 
