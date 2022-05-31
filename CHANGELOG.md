@@ -30,6 +30,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update `StorageProvider` API after `p2panda-rs` changes [#129](https://github.com/p2panda/aquadoggo/pull/129)
 - Move `SqlStorage` into shared `Context` [#135](https://github.com/p2panda/aquadoggo/pull/135)
 
+### Fixed
+
+- Fix high CPU usage of idle workers [#136](https://github.com/p2panda/aquadoggo/pull/136)
+- Improve CI, track test coverage [#139](https://github.com/p2panda/aquadoggo/pull/139)
+
 ## [0.2.0]
 
 *Please note: `aquadoggo-rs` crate is not published yet, due to unpublished dependencies.*

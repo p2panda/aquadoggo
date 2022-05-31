@@ -68,9 +68,6 @@ impl Drop for Signal {
     fn drop(&mut self) {
         // Fires the signal automatically on drop
         self.trigger();
-
-        // And now, drop it!
-        drop(self);
     }
 }
 
@@ -206,9 +203,8 @@ where
         // error. This is our signal that all services have been finally shut down and we are done
         // for good!
         loop {
-            match rx.recv().await {
-                Err(RecvError::Closed) => break,
-                _ => (),
+            if let Err(RecvError::Closed) = rx.recv().await {
+                break;
             }
         }
     }

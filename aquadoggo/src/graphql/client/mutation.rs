@@ -35,12 +35,8 @@ impl Mutation {
             operation_encoded: OperationEncoded::new(&operation_encoded_param)?,
         };
 
-        // Create entry in database
         let store = ctx.data::<SqlStorage>()?;
-        store
-            .publish_entry(&args)
-            .await
-            .map_err(|err| Error::from(err))
+        store.publish_entry(&args).await.map_err(Error::from)
     }
 }
 

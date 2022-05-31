@@ -41,10 +41,7 @@ impl Query {
 
         // Load and return next entry arguments
         let store = ctx.data::<SqlStorage>()?;
-        store
-            .get_entry_args(&args)
-            .await
-            .map_err(|err| Error::from(err))
+        store.get_entry_args(&args).await.map_err(Error::from)
     }
 }
 
