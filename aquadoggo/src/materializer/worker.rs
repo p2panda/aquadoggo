@@ -96,7 +96,6 @@ pub struct Task<IN>(WorkerName, IN);
 
 impl<IN> Task<IN> {
     /// Returns a new task.
-    #[allow(dead_code)]
     pub fn new(worker_name: &str, input: IN) -> Self {
         Self(worker_name.into(), input)
     }
@@ -114,7 +113,6 @@ pub enum TaskError {
     Critical,
 
     /// This task failed silently without any further effects.
-    #[allow(dead_code)]
     Failure,
 }
 
@@ -123,7 +121,6 @@ pub type WorkerName = String;
 
 /// Every registered worker pool is managed by a `WorkerManager` which holds the task queue for
 /// this registered work and an index of all current inputs in the task queue.
-#[allow(dead_code)]
 struct WorkerManager<IN>
 where
     IN: Send + Sync + Clone + Hash + Eq + 'static,
@@ -143,7 +140,6 @@ where
     IN: Send + Sync + Clone + Hash + Eq + 'static,
 {
     /// Returns a new worker manager.
-    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
             input_index: Arc::new(Mutex::new(HashSet::new())),
@@ -191,7 +187,6 @@ where
 
 /// Every queue consists of items which hold an unique identifier and the task input value.
 #[derive(Debug)]
-#[allow(dead_code)]
 pub struct QueueItem<IN>
 where
     IN: Send + Sync + Clone + 'static,
@@ -208,7 +203,6 @@ where
     IN: Send + Sync + Clone + 'static,
 {
     /// Returns a new queue item.
-    #[allow(dead_code)]
     pub fn new(id: u64, input: IN) -> Self {
         Self { id, input }
     }
@@ -220,14 +214,12 @@ where
     }
 
     /// Returns generic input values of this queue item.
-    #[allow(dead_code)]
     pub fn input(&self) -> IN {
         self.input.clone()
     }
 }
 
 /// This factory serves as a main entry interface to dispatch, schedule and process tasks.
-#[allow(dead_code)]
 pub struct Factory<IN, D>
 where
     IN: Send + Sync + Clone + Hash + Eq + Debug + 'static,
@@ -287,7 +279,6 @@ where
     ///
     /// Ideally worker functions should be idempotent: meaning the function won’t cause unintended
     /// effects even if called multiple times with the same arguments.
-    #[allow(dead_code)]
     pub fn register<W: Workable<IN, D> + Send + Sync + Copy + 'static>(
         &mut self,
         name: &str,
@@ -311,14 +302,10 @@ where
     ///
     /// Tasks with duplicate input values which already exist in the queue will be silently
     /// rejected.
-    #[allow(dead_code)]
     pub fn queue(&mut self, task: Task<IN>) {
-        match self.tx.send(task) {
-            Err(err) => {
-                error!("Error while broadcasting task: {}", err);
-                self.error_signal.trigger();
-            }
-            _ => (),
+        if let Err(err) = self.tx.send(task) {
+            error!("Error while broadcasting task: {}", err);
+            self.error_signal.trigger();
         }
     }
 
@@ -443,12 +430,9 @@ where
                         Ok(Some(list)) => {
                             // Tasks succeeded and dispatches new, subsequent tasks
                             for task in list {
-                                match tx.send(task) {
-                                    Err(err) => {
-                                        error!("Error while broadcasting task: {}", err);
-                                        error_signal.trigger();
-                                    }
-                                    _ => (),
+                                if let Err(err) = tx.send(task) {
+                                    error!("Error while broadcasting task: {}", err);
+                                    error_signal.trigger();
                                 }
                             }
                         }

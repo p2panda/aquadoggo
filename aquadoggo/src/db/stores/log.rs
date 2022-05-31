@@ -117,10 +117,8 @@ impl LogStore<StorageLog> for SqlStorage {
 
         // Wrap u64 inside of `P2PandaLog` instance
         let log_id: Option<LogId> = result.map(|str| {
-            str.parse().expect(&format!(
-                "Corrupt u64 integer found in database: '{0}'",
-                &str
-            ))
+            str.parse()
+                .unwrap_or_else(|_| panic!("Corrupt u64 integer found in database: '{0}'", &str))
         });
 
         Ok(log_id)
@@ -148,10 +146,9 @@ impl LogStore<StorageLog> for SqlStorage {
         let mut log_ids: Vec<LogId> = result
             .iter_mut()
             .map(|str| {
-                str.parse().expect(&format!(
-                    "Corrupt u64 integer found in database: '{0}'",
-                    &str
-                ))
+                str.parse().unwrap_or_else(|_| {
+                    panic!("Corrupt u64 integer found in database: '{0}'", &str)
+                })
             })
             .collect();
 

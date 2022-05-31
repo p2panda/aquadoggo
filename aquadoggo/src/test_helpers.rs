@@ -53,6 +53,7 @@ impl TestClient {
         TestClient { client, addr }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn get(&self, url: &str) -> RequestBuilder {
         RequestBuilder {
             builder: self.client.get(format!("http://{}{}", self.addr, url)),
@@ -77,12 +78,12 @@ impl RequestBuilder {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn body(mut self, body: impl Into<reqwest::Body>) -> Self {
         self.builder = self.builder.body(body);
         self
     }
 
-    #[allow(dead_code)]
     pub(crate) fn json<T>(mut self, json: &T) -> Self
     where
         T: serde::Serialize,
@@ -91,6 +92,7 @@ impl RequestBuilder {
         self
     }
 
+    #[allow(dead_code)]
     pub(crate) fn header<K, V>(mut self, key: K, value: V) -> Self
     where
         HeaderName: TryFrom<K>,
@@ -112,7 +114,6 @@ impl TestResponse {
         self.response.text().await.unwrap()
     }
 
-    #[allow(dead_code)]
     pub(crate) async fn json<T>(self) -> T
     where
         T: serde::de::DeserializeOwned,
