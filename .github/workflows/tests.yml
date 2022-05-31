@@ -1,30 +1,160 @@
-name: tests
+name: aquadoggo
 
 on: push
 
 env:
   CARGO_TERM_COLOR: always
+  cache_path: |
+    target
+    ~/.cargo
+  cargo_manifest: aquadoggo/Cargo.toml
 
 jobs:
-  test:
-    name: build and test
-
+  rust-test-sqlite:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-      - name: Cargo caching
-        uses: actions/cache@v2
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          profile: minimal
+          toolchain: stable
+          override: true
 
-      - name: Build
-        run: cargo build --verbose
+      - name: Restore from cargo cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.cache_path }}
+          key: ${{ runner.os }}-test-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build binary
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: >-
+            --verbose
+            --manifest-path ${{ env.cargo_manifest }}
 
       - name: Run tests
-        run: cargo test --verbose
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --manifest-path ${{ env.cargo_manifest }}
+        # Ensure debug output is also tested
+        env:
+          RUST_LOG: debug
+
+  rust-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Restore from cargo cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.cache_path }}
+          key: ${{ runner.os }}-check-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Check project and dependencies
+        uses: actions-rs/cargo@v1
+        with:
+          command: check
+          args: --manifest-path ${{ env.cargo_manifest }}
+
+  rust-fmt:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          components: rustfmt
+          override: true
+
+      - name: Restore from cargo cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.cache_path }}
+          key: ${{ runner.os }}-fmt-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Check formatting
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --manifest-path ${{ env.cargo_manifest }} -- --check
+
+  rust-clippy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          components: clippy
+          override: true
+
+      - name: Restore from cargo cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.cache_path }}
+          key: ${{ runner.os }}-clippy-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Check code with clippy
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --manifest-path ${{ env.cargo_manifest }} -- -D warnings --no-deps
+
+  rust-coverage:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Restore from cargo cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.cache_path }}
+          key: ${{ runner.os }}-tarpaulin-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run cargo-tarpaulin
+        uses: actions-rs/tarpaulin@v0.1
+        with:
+          # Force cleaning via `--force-clean` flag to prevent buggy code coverage
+          args: --manifest-path ${{ env.cargo_manifest }} --locked --force-clean
+        # Ensure debug output is also tested
+        env:
+          RUST_LOG: debug
+
+      - name: Upload to codecov.io
+        uses: codecov/codecov-action@v2
