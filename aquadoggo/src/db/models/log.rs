@@ -9,7 +9,7 @@ use sqlx::FromRow;
 /// storing unsigned 64 bit integers.
 #[derive(FromRow, Debug, Clone)]
 #[allow(dead_code)]
-pub struct Log {
+pub struct LogRow {
     /// Public key of the author.
     pub author: String,
 
