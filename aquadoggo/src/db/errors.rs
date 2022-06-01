@@ -31,6 +31,7 @@ pub enum DocumentStorageError {
 pub enum SchemaStoreError {
     /// Catch all error which implementers can use for passing their own errors up the chain.
     #[error("Error occured in DocumentStore: {0}")]
+    #[allow(dead_code)]
     Custom(String),
 
     /// Error returned when no document view existed for the required schema field definition

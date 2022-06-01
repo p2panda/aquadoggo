@@ -3,9 +3,7 @@
 use std::convert::TryFrom;
 use std::str::FromStr;
 
-use p2panda_rs::document::{
-    DocumentBuilder, DocumentId, DocumentView, DocumentViewFields, DocumentViewId,
-};
+use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
 use p2panda_rs::entry::{sign_and_encode, Entry};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::{Author, KeyPair};
@@ -130,7 +128,7 @@ pub fn test_delete_operation(previous_operations: Vec<OperationId>) -> Operation
 pub fn test_key_pairs(no_of_authors: usize) -> Vec<KeyPair> {
     let mut key_pairs = vec![KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap()];
 
-    for index in 1..no_of_authors {
+    for _index in 1..no_of_authors {
         key_pairs.push(KeyPair::new())
     }
 
