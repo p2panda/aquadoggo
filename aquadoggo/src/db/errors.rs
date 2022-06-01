@@ -6,6 +6,7 @@ use p2panda_rs::document::{DocumentId, DocumentViewId};
 #[derive(thiserror::Error, Debug)]
 pub enum DocumentStorageError {
     /// Catch all error which implementers can use for passing their own errors up the chain.
+    #[allow(dead_code)]
     #[error("Error occured in DocumentStore: {0}")]
     Custom(String),
 

@@ -135,7 +135,7 @@ impl DocumentStore for SqlStorage {
             None
         } else {
             Some(DocumentView::new(
-                &id.to_owned(),
+                id,
                 &parse_document_view_field_rows(document_view_field_rows),
             ))
         };

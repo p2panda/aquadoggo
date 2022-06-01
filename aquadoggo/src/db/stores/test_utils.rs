@@ -127,7 +127,7 @@ pub fn test_delete_operation(previous_operations: Vec<OperationId>) -> Operation
 pub fn test_key_pairs(no_of_authors: usize) -> Vec<KeyPair> {
     let mut key_pairs = vec![KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap()];
 
-    for index in 1..no_of_authors {
+    for _index in 1..no_of_authors {
         key_pairs.push(KeyPair::new())
     }
 
@@ -193,7 +193,7 @@ pub async fn test_db(
             )
             .unwrap();
 
-            let entry_encoded = sign_and_encode(&next_entry, &key_pair).unwrap();
+            let entry_encoded = sign_and_encode(&next_entry, key_pair).unwrap();
             let operation_encoded = OperationEncoded::try_from(&next_operation).unwrap();
 
             if index == 0 {

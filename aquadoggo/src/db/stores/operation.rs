@@ -89,6 +89,7 @@ impl AsStorageOperation for OperationStorage {
     }
 }
 
+#[allow(clippy::from_over_into)]
 impl Into<OperationWithMeta> for OperationStorage {
     fn into(self) -> OperationWithMeta {
         OperationWithMeta::new(&self.author(), &self.id(), &self.raw_operation()).unwrap()
