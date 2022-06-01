@@ -3,13 +3,13 @@
 use std::convert::TryFrom;
 use std::str::FromStr;
 
-use p2panda_rs::document::DocumentId;
+use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
 use p2panda_rs::entry::{sign_and_encode, Entry};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::{Author, KeyPair};
 use p2panda_rs::operation::{
-    Operation, OperationEncoded, OperationFields, OperationId, OperationValue, PinnedRelation,
-    PinnedRelationList, Relation, RelationList,
+    AsOperation, Operation, OperationEncoded, OperationFields, OperationId, OperationValue,
+    PinnedRelation, PinnedRelationList, Relation, RelationList,
 };
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::{
@@ -19,7 +19,8 @@ use p2panda_rs::storage_provider::traits::{EntryStore, OperationStore};
 use p2panda_rs::test_utils::constants::{DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
 
 use crate::db::provider::SqlStorage;
-use crate::graphql::client::EntryArgsRequest;
+use crate::db::traits::DocumentStore;
+use crate::graphql::client::{EntryArgsRequest, PublishEntryRequest};
 use crate::test_helpers::initialize_db;
 
 use crate::db::stores::OperationStorage;
@@ -132,6 +133,87 @@ pub fn test_key_pairs(no_of_authors: usize) -> Vec<KeyPair> {
     }
 
     key_pairs
+}
+
+pub async fn construct_publish_entry_request(
+    provider: &SqlStorage,
+    operation: &Operation,
+    key_pair: &KeyPair,
+    document_id: Option<&DocumentId>,
+) -> PublishEntryRequest {
+    let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+    let entry_args_request = EntryArgsRequest {
+        author: author.clone(),
+        document: document_id.cloned(),
+    };
+    let next_entry_args = provider.get_entry_args(&entry_args_request).await.unwrap();
+
+    let entry = Entry::new(
+        &next_entry_args.log_id,
+        Some(operation),
+        next_entry_args.skiplink.as_ref(),
+        next_entry_args.backlink.as_ref(),
+        &next_entry_args.seq_num,
+    )
+    .unwrap();
+
+    let entry_encoded = sign_and_encode(&entry, key_pair).unwrap();
+    let operation_encoded = OperationEncoded::try_from(operation).unwrap();
+    PublishEntryRequest {
+        entry_encoded,
+        operation_encoded,
+    }
+}
+
+pub async fn insert_entry_operation_and_view(
+    provider: &SqlStorage,
+    key_pair: &KeyPair,
+    document_id: Option<&DocumentId>,
+    operation: &Operation,
+) -> (DocumentId, DocumentViewId) {
+    if !operation.is_create() && document_id.is_none() {
+        panic!("UPDATE and DELETE operations require a DocumentId to be passed")
+    }
+
+    let request = construct_publish_entry_request(provider, operation, key_pair, document_id).await;
+
+    let operation_id: OperationId = request.entry_encoded.hash().into();
+    let document_id = document_id
+        .cloned()
+        .unwrap_or_else(|| request.entry_encoded.hash().into());
+
+    let document_view_id: DocumentViewId = request.entry_encoded.hash().into();
+
+    let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+
+    provider.publish_entry(&request).await.unwrap();
+    provider
+        .insert_operation(&OperationStorage::new(
+            &author,
+            operation,
+            &operation_id,
+            &document_id,
+        ))
+        .await
+        .unwrap();
+
+    let document_operations = provider
+        .get_operations_by_document_id(&document_id)
+        .await
+        .unwrap();
+
+    let document = DocumentBuilder::new(
+        document_operations
+            .into_iter()
+            .map(|operation| operation.into())
+            .collect(),
+    )
+    .build()
+    .unwrap();
+
+    provider.insert_document(&document).await.unwrap();
+
+    (document_id, document_view_id)
 }
 
 /// Construct and return a storage provider instance backed by a pre-polpulated database. Passed parameters
