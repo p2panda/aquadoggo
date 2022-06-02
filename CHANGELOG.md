@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `EntryStore` improvements [#123](https://github.com/p2panda/aquadoggo/pull/123)
 - Improvements for log and entry table layout [#124](https://github.com/p2panda/aquadoggo/issues/122)
 - Update `StorageProvider` API after `p2panda-rs` changes [#129](https://github.com/p2panda/aquadoggo/pull/129)
+- Move `SqlStorage` into shared `Context` [#135](https://github.com/p2panda/aquadoggo/pull/135)
 
 ### Fixed
 

@@ -14,8 +14,15 @@ use crate::graphql::client::{
     EntryArgsRequest, EntryArgsResponse, PublishEntryRequest, PublishEntryResponse,
 };
 
+#[derive(Clone)]
 pub struct SqlStorage {
     pub(crate) pool: Pool,
+}
+
+impl SqlStorage {
+    pub fn new(pool: Pool) -> Self {
+        Self { pool }
+    }
 }
 
 /// A `StorageProvider` implementation based on `sqlx` that supports SQLite and PostgreSQL databases.
