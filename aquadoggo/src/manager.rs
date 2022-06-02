@@ -223,7 +223,7 @@ mod tests {
     async fn service_manager() {
         let mut manager = ServiceManager::<usize, usize>::new(16, 0);
 
-        manager.add("test", |_, signal: Shutdown, _| async move {
+        manager.add("test", |_, signal: Shutdown, _| async {
             let work = tokio::task::spawn(async {
                 loop {
                     // Doing some very important work here ..
