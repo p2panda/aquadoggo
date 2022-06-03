@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 use aquadoggo::db::connection_pool;
 use aquadoggo::graphql::{build_root_schema, Context};
 
