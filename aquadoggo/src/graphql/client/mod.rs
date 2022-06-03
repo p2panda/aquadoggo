@@ -7,6 +7,6 @@ mod response;
 pub(crate) mod u64_string;
 
 pub use mutation::Mutation;
-pub use query::Query;
+pub use query::{DynamicQuery, QueryRoot, StaticQuery};
 pub use request::{EntryArgsRequest, PublishEntryRequest};
 pub use response::{EntryArgsResponse, PublishEntryResponse};

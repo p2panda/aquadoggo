@@ -1,24 +1,22 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_graphql::{Context, Error, Object, Result};
-use p2panda_rs::document::{Document, DocumentBuilder, DocumentId, DocumentView};
+use p2panda_rs::document::{Document, DocumentBuilder, DocumentId};
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{Operation, OperationFields, OperationValue, OperationWithMeta};
-use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::StorageProvider;
 
 use crate::db::provider::SqlStorage;
 use crate::db::Pool;
-
-use super::response::DocumentResponse;
-use super::{EntryArgsRequest, EntryArgsResponse};
+use crate::graphql::client::response::DocumentResponse;
+use crate::graphql::client::{EntryArgsRequest, EntryArgsResponse};
 
 #[derive(Default, Debug, Copy, Clone)]
 /// The GraphQL root for the client api that p2panda clients can use to connect to a node.
-pub struct Query;
+pub struct StaticQuery;
 
 #[Object]
-impl Query {
+impl StaticQuery {
     /// Return required arguments for publishing the next entry.
     async fn next_entry_args(
         &self,
