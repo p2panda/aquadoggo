@@ -2,21 +2,19 @@
 
 use async_graphql::{EmptySubscription, Schema};
 
-use crate::db::Pool;
+use crate::db::provider::SqlStorage;
 use crate::graphql::client::{Mutation, QueryRoot as ClientQueryRoot};
 
 /// GraphQL schema for p2panda node.
 pub type RootSchema = Schema<ClientQueryRoot, Mutation, EmptySubscription>;
 
-pub fn build_root_schema(pool: Pool) -> RootSchema {
-    let query: ClientQueryRoot = ClientQueryRoot::new(pool.clone());
+pub fn build_root_schema(store: SqlStorage) -> RootSchema {
+    let query: ClientQueryRoot = ClientQueryRoot::new(store.clone());
     let mutation: Mutation = Mutation::default();
 
     let s = Schema::build(query, mutation, EmptySubscription)
-        .data(pool)
+        .data(store)
         .finish();
-
-    println!("{}", &s.sdl());
 
     return s;
 }

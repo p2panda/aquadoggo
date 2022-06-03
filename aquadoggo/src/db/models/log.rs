@@ -2,10 +2,8 @@
 
 use sqlx::FromRow;
 
-/// Tracks the assigment of an author's logs to documents and records their schema.
-///
-/// This serves as an indexing layer on top of the lower-level bamboo entries. The node updates
-/// this data according to what it sees in the newly incoming entries.
+/// Representation of a row from the logs table as stored in the database. This is required
+/// when coercing the returned results from a query with the `sqlx` library.
 ///
 /// We store the u64 integer values of `log_id` as a string here since SQLite doesn't support
 /// storing unsigned 64 bit integers.

@@ -4,7 +4,7 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use crate::config::Configuration;
-use crate::db::Pool;
+use crate::db::provider::SqlStorage;
 use crate::graphql::{build_root_schema, RootSchema};
 
 /// Inner data shared across all services.
@@ -12,8 +12,8 @@ pub struct Data {
     // Node configuration.
     pub config: Configuration,
 
-    /// Database connection pool.
-    pub pool: Pool,
+    /// Storage provider with database connection pool.
+    pub store: SqlStorage,
 
     /// Static GraphQL schema.
     pub schema: RootSchema,
@@ -21,12 +21,12 @@ pub struct Data {
 
 impl Data {
     /// Initialize new data instance with shared database connection pool.
-    pub fn new(pool: Pool, config: Configuration) -> Self {
-        let schema = build_root_schema(pool.clone());
+    pub fn new(store: SqlStorage, config: Configuration) -> Self {
+        let schema = build_root_schema(store.clone());
 
         Self {
             config,
-            pool,
+            store,
             schema,
         }
     }
@@ -37,8 +37,8 @@ pub struct Context(pub Arc<Data>);
 
 impl Context {
     /// Returns a new instance of `Context`.
-    pub fn new(pool: Pool, config: Configuration) -> Self {
-        Self(Arc::new(Data::new(pool, config)))
+    pub fn new(store: SqlStorage, config: Configuration) -> Self {
+        Self(Arc::new(Data::new(store, config)))
     }
 }
 
@@ -52,6 +52,6 @@ impl Deref for Context {
     type Target = Data;
 
     fn deref(&self) -> &Self::Target {
-        &self.0.as_ref()
+        self.0.as_ref()
     }
 }

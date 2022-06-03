@@ -42,16 +42,9 @@ impl StaticQuery {
             document: document_id,
         };
 
-        // Prepare database connection
-        let pool = ctx.data::<Pool>()?;
-        let provider = SqlStorage {
-            pool: pool.to_owned(),
-        };
-
-        provider
-            .get_entry_args(&args)
-            .await
-            .map_err(|err| Error::from(err))
+        // Load and return next entry arguments
+        let store = ctx.data::<SqlStorage>()?;
+        store.get_entry_args(&args).await.map_err(Error::from)
     }
 
     async fn document(&self, _ctx: &Context<'_>, document: String) -> Result<DocumentResponse> {
@@ -96,12 +89,12 @@ mod tests {
     use crate::context::Context;
     use crate::graphql::client::EntryArgsResponse;
     use crate::server::build_server;
-    use crate::test_helpers::{initialize_db, TestClient};
+    use crate::test_helpers::{initialize_store, TestClient};
 
     #[tokio::test]
     async fn next_entry_args_valid_query() {
-        let pool = initialize_db().await;
-        let context = Context::new(pool.clone(), Configuration::default());
+        let store = initialize_store().await;
+        let context = Context::new(store, Configuration::default());
         let client = TestClient::new(build_server(context));
 
         // Selected fields need to be alphabetically sorted because that's what the `json` macro
@@ -122,7 +115,6 @@ mod tests {
             }))
             .send()
             .await
-            // .json::<GQLResponse<EntryArgsGQLResponse>>()
             .json::<Response>()
             .await;
 
@@ -145,13 +137,12 @@ mod tests {
 
     #[tokio::test]
     async fn next_entry_args_error_response() {
-        let pool = initialize_db().await;
-        let context = Context::new(pool.clone(), Configuration::default());
+        let store = initialize_store().await;
+        let context = Context::new(store, Configuration::default());
         let client = TestClient::new(build_server(context));
 
         // Selected fields need to be alphabetically sorted because that's what the `json` macro
         // that is used in the assert below produces.
-
         let response = client
             .post("/graphql")
             .json(&json!({

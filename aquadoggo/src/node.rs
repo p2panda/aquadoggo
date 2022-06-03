@@ -5,6 +5,7 @@ use anyhow::Result;
 use crate::bus::ServiceMessage;
 use crate::config::Configuration;
 use crate::context::Context;
+use crate::db::provider::SqlStorage;
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
 use crate::manager::ServiceManager;
 use crate::materializer::materializer_service;
@@ -47,8 +48,11 @@ impl Node {
             .await
             .expect("Could not initialize database");
 
+        // Prepare storage provider using connection pool
+        let store = SqlStorage::new(pool.clone());
+
         // Create service manager with shared data between services
-        let context = Context::new(pool.clone(), config);
+        let context = Context::new(store, config);
         let mut manager = ServiceManager::<Context, ServiceMessage>::new(1024, context);
 
         // Start materializer service

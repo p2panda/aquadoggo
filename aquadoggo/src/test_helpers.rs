@@ -15,6 +15,7 @@ use sqlx::migrate::MigrateDatabase;
 use tower::make::Shared;
 use tower_service::Service;
 
+use crate::db::provider::SqlStorage;
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
 
 const DB_URL: &str = "sqlite::memory:";
@@ -53,6 +54,7 @@ impl TestClient {
         TestClient { client, addr }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn get(&self, url: &str) -> RequestBuilder {
         RequestBuilder {
             builder: self.client.get(format!("http://{}{}", self.addr, url)),
@@ -77,12 +79,12 @@ impl RequestBuilder {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn body(mut self, body: impl Into<reqwest::Body>) -> Self {
         self.builder = self.builder.body(body);
         self
     }
 
-    #[allow(dead_code)]
     pub(crate) fn json<T>(mut self, json: &T) -> Self
     where
         T: serde::Serialize,
@@ -91,6 +93,7 @@ impl RequestBuilder {
         self
     }
 
+    #[allow(dead_code)]
     pub(crate) fn header<K, V>(mut self, key: K, value: V) -> Self
     where
         HeaderName: TryFrom<K>,
@@ -112,7 +115,6 @@ impl TestResponse {
         self.response.text().await.unwrap()
     }
 
-    #[allow(dead_code)]
     pub(crate) async fn json<T>(self) -> T
     where
         T: serde::de::DeserializeOwned,
@@ -137,6 +139,12 @@ pub async fn initialize_db() -> Pool {
     run_pending_migrations(&pool).await.unwrap();
 
     pool
+}
+
+// Create storage provider API around test database
+pub async fn initialize_store() -> SqlStorage {
+    let pool = initialize_db().await;
+    SqlStorage::new(pool)
 }
 
 // Delete test database

@@ -12,6 +12,8 @@ use async_graphql::{
 use async_trait::async_trait;
 use p2panda_rs::schema::SchemaId;
 
+use crate::db::provider::SqlStorage;
+
 /// Returns the schema of a relation field.
 fn get_schema_for_field(parent_schema: SchemaId, _field_name: &str) -> SchemaId {
     // In this example it's always the same schema.
@@ -89,12 +91,12 @@ fn get_meta_for_schema(schema: SchemaId) -> (MetaType, MetaField) {
 }
 
 /// Container object that injects registered p2panda schemas when it is added to a GraphQL schema.
-pub struct DynamicQuery(crate::db::Pool);
+pub struct DynamicQuery(SqlStorage);
 
 impl DynamicQuery {
     /// Returns a GraphQL container object given a database pool.
-    pub fn new(pool: crate::db::Pool) -> Self {
-        Self(pool)
+    pub fn new(store: SqlStorage) -> Self {
+        Self(store)
     }
     /// Query database for selected field values and return a JSON result.
     fn resolve_dynamic(

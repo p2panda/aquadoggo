@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use crate::db::provider::SqlStorage;
 use async_graphql::MergedObject;
 
 use super::{DynamicQuery, StaticQuery};
@@ -9,7 +10,7 @@ use super::{DynamicQuery, StaticQuery};
 pub struct QueryRoot(StaticQuery, DynamicQuery);
 
 impl QueryRoot {
-    pub fn new(pool: crate::db::Pool) -> Self {
-        QueryRoot(StaticQuery::default(), DynamicQuery::new(pool))
+    pub fn new(store: SqlStorage) -> Self {
+        QueryRoot(StaticQuery::default(), DynamicQuery::new(store))
     }
 }

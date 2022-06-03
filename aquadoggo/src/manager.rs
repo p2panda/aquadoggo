@@ -68,9 +68,6 @@ impl Drop for Signal {
     fn drop(&mut self) {
         // Fires the signal automatically on drop
         self.trigger();
-
-        // And now, drop it!
-        drop(self);
     }
 }
 
@@ -206,9 +203,8 @@ where
         // error. This is our signal that all services have been finally shut down and we are done
         // for good!
         loop {
-            match rx.recv().await {
-                Err(RecvError::Closed) => break,
-                _ => (),
+            if let Err(RecvError::Closed) = rx.recv().await {
+                break;
             }
         }
     }
@@ -227,7 +223,7 @@ mod tests {
     async fn service_manager() {
         let mut manager = ServiceManager::<usize, usize>::new(16, 0);
 
-        manager.add("test", |_, signal: Shutdown, _| async move {
+        manager.add("test", |_, signal: Shutdown, _| async {
             let work = tokio::task::spawn(async {
                 loop {
                     // Doing some very important work here ..

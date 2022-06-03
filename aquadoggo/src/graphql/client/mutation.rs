@@ -6,9 +6,7 @@ use p2panda_rs::operation::OperationEncoded;
 use p2panda_rs::storage_provider::traits::StorageProvider;
 
 use crate::db::provider::SqlStorage;
-use crate::db::Pool;
-
-use super::{PublishEntryRequest, PublishEntryResponse};
+use crate::graphql::client::{PublishEntryRequest, PublishEntryResponse};
 
 /// Mutations for use by p2panda clients.
 #[derive(Default, Debug, Copy, Clone)]
@@ -37,16 +35,8 @@ impl Mutation {
             operation_encoded: OperationEncoded::new(&operation_encoded_param)?,
         };
 
-        // Prepare database connection
-        let pool = ctx.data::<Pool>()?;
-        let provider = SqlStorage {
-            pool: pool.to_owned(),
-        };
-
-        provider
-            .publish_entry(&args)
-            .await
-            .map_err(|err| Error::from(err))
+        let store = ctx.data::<SqlStorage>()?;
+        store.publish_entry(&args).await.map_err(Error::from)
     }
 }
 
@@ -57,7 +47,7 @@ mod tests {
 
     use crate::context::Context;
     use crate::graphql::client::PublishEntryResponse;
-    use crate::test_helpers::initialize_db;
+    use crate::test_helpers::initialize_store;
     use crate::Configuration;
 
     const ENTRY_ENCODED: &str =
@@ -73,8 +63,8 @@ mod tests {
 
     #[tokio::test]
     async fn publish_entry() {
-        let pool = initialize_db().await;
-        let context = Context::new(pool.clone(), Configuration::default());
+        let store = initialize_store().await;
+        let context = Context::new(store, Configuration::default());
 
         let query = r#"
             mutation TestPublishEntry($entryEncoded: String!, $operationEncoded: String!) {
@@ -114,8 +104,8 @@ mod tests {
 
     #[tokio::test]
     async fn publish_entry_error_handling() {
-        let pool = initialize_db().await;
-        let context = Context::new(pool.clone(), Configuration::default());
+        let store = initialize_store().await;
+        let context = Context::new(store, Configuration::default());
 
         let query = r#"
             mutation TestPublishEntry($entryEncoded: String!, $operationEncoded: String!) {
