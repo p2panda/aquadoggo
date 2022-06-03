@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use mockall::mock;
-use mockall_double::double;
+
 use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;

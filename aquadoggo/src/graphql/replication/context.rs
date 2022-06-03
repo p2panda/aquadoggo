@@ -57,7 +57,7 @@ impl<ES: 'static + EntryStore<StorageEntry>> Context<ES> {
     ) -> Result<Vec<Option<PublicKey>>> {
         ids.into_iter()
             .map(|id| {
-                let result = self.author_aliases.get(&id).map(|key| key.clone());
+                let result = self.author_aliases.get(&id).cloned();
                 Ok(result)
             })
             .collect()
@@ -140,7 +140,7 @@ impl<ES: 'static + EntryStore<StorageEntry>> Context<ES> {
                     "author alias did not exist, you may need to re-alias your authors"
                 ))?
                 .clone(),
-            AuthorOrAlias::PublicKey(public_key) => public_key.clone(),
+            AuthorOrAlias::PublicKey(public_key) => public_key,
         };
         Ok(author)
     }

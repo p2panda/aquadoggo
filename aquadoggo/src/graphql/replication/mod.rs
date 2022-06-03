@@ -115,8 +115,8 @@ impl<ES: 'static + EntryStore<StorageEntry> + Sync + Send> ReplicationRoot<ES> {
                     .into_iter()
                     .map(|entry| {
                         let decoded = decode_entry(entry.entry.as_ref(), None).unwrap();
-                        let sequence_number = SequenceNumber(decoded.seq_num().clone());
-                        Edge::new(sequence_number, entry.into())
+                        let sequence_number = SequenceNumber(*decoded.seq_num());
+                        Edge::new(sequence_number, entry)
                     })
                     .collect::<Vec<_>>();
 
