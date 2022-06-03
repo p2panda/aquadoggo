@@ -43,9 +43,9 @@ impl SingleEntryAndPayload {
 }
 
 impl From<StorageEntry> for SingleEntryAndPayload {
-    fn from(entry_row: StorageEntry) -> Self {
-        let entry = Entry(entry_row.entry_signed().to_owned());
-        let payload = entry_row
+    fn from(entry_and_payload: StorageEntry) -> Self {
+        let entry = Entry(entry_and_payload.entry_signed().to_owned());
+        let payload = entry_and_payload
             .operation_encoded()
             .map(|encoded| Payload(encoded.to_owned()));
         Self { entry, payload }
