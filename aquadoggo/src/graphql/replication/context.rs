@@ -148,14 +148,16 @@ impl<ES: 'static + EntryStore<StorageEntry>> Context<ES> {
 
 #[cfg(test)]
 mod tests {
+    use std::convert::TryInto;
 
-    use super::super::testing::MockEntryStore;
-    use super::Context;
+    use p2panda_rs::identity::Author;
+
     use crate::graphql::replication::{
         Author as GraphQLAuthor, LogId as GraphQLLogId, PublicKey, SequenceNumber,
     };
-    use p2panda_rs::identity::Author;
-    use std::convert::TryInto;
+
+    use super::super::testing::MockEntryStore;
+    use super::Context;
 
     // TODO: test author aliases
 
