@@ -57,14 +57,14 @@ mod tests {
 
     use crate::config::Configuration;
     use crate::context::Context;
-    use crate::test_helpers::{initialize_db, TestClient};
+    use crate::test_helpers::{initialize_store, TestClient};
 
     use super::build_server;
 
     #[tokio::test]
     async fn graphql_endpoint() {
-        let pool = initialize_db().await;
-        let context = Context::new(pool, Configuration::default());
+        let store = initialize_store().await;
+        let context = Context::new(store, Configuration::default());
         let client = TestClient::new(build_server(context));
 
         let response = client

@@ -560,7 +560,11 @@ mod tests {
             let tasks: Vec<Task<JigsawPiece>> = input
                 .relations
                 .iter()
-                .filter_map(|id| db.pieces.get(id).map(|piece| Task::new("find", piece.clone())))
+                .filter_map(|id| {
+                    db.pieces
+                        .get(id)
+                        .map(|piece| Task::new("find", piece.clone()))
+                })
                 .collect();
 
             Ok(Some(tasks))
@@ -656,7 +660,8 @@ mod tests {
             let puzzle: Option<JigsawPuzzle> = db
                 .puzzles
                 .values()
-                .find(|item| item.piece_ids.contains(&input.id) && !item.complete).cloned();
+                .find(|item| item.piece_ids.contains(&input.id) && !item.complete)
+                .cloned();
 
             // 2. Check if all piece dependencies are met
             match puzzle {
@@ -776,7 +781,8 @@ mod tests {
             .unwrap()
             .puzzles
             .values()
-            .filter(|puzzle| puzzle.complete).cloned()
+            .filter(|puzzle| puzzle.complete)
+            .cloned()
             .collect();
         assert_eq!(completed.len(), puzzles_count);
     }

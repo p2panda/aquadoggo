@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use p2panda_rs::document::{DocumentId, DocumentViewId};
+use p2panda_rs::document::{DocumentId, DocumentViewFields, DocumentViewId, DocumentViewValue};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{
@@ -11,6 +11,7 @@ use p2panda_rs::operation::{
 };
 use p2panda_rs::schema::SchemaId;
 
+use crate::db::models::document::DocumentViewFieldRow;
 use crate::db::models::OperationFieldsJoinedRow;
 use crate::db::stores::OperationStorage;
 
@@ -202,18 +203,158 @@ pub fn parse_value_to_string_vec(value: &OperationValue) -> Vec<String> {
     }
 }
 
+/// Takes a vector of `DocumentViewFieldRow` and parses them into an `DocumentViewFields`
+/// struct.
+///
+/// Document fields which contain lists of values (RelationList & PinnedRelationList) are
+/// flattened and inserted as indiviual rows. This means we need to reconstruct these fields
+/// when retrieving an document view from the db.
+pub fn parse_document_view_field_rows(
+    document_field_rows: Vec<DocumentViewFieldRow>,
+) -> DocumentViewFields {
+    let mut relation_lists: BTreeMap<String, (OperationId, Vec<DocumentId>)> = BTreeMap::new();
+    let mut pinned_relation_lists: BTreeMap<String, (OperationId, Vec<DocumentViewId>)> =
+        BTreeMap::new();
+
+    let mut document_view_fields = DocumentViewFields::new();
+
+    // Iterate over returned field values, for each value:
+    //  - if it is a simple value type, parse it into an DocumentViewValue and add it to the document_view_fields
+    //  - if it is a relation list value type parse each item into a DocumentId/DocumentViewId and push to
+    //    the suitable vec (instantiated above)
+    document_field_rows.iter().for_each(|row| {
+        match row.field_type.as_str() {
+            "bool" => {
+                document_view_fields.insert(
+                    &row.name,
+                    DocumentViewValue::new(
+                        &row.operation_id.parse::<OperationId>().unwrap(),
+                        &OperationValue::Boolean(row.value.parse::<bool>().unwrap()),
+                    ),
+                );
+            }
+            "int" => {
+                document_view_fields.insert(
+                    &row.name,
+                    DocumentViewValue::new(
+                        &row.operation_id.parse::<OperationId>().unwrap(),
+                        &OperationValue::Integer(row.value.parse::<i64>().unwrap()),
+                    ),
+                );
+            }
+            "float" => {
+                document_view_fields.insert(
+                    &row.name,
+                    DocumentViewValue::new(
+                        &row.operation_id.parse::<OperationId>().unwrap(),
+                        &OperationValue::Float(row.value.parse::<f64>().unwrap()),
+                    ),
+                );
+            }
+            "str" => {
+                document_view_fields.insert(
+                    &row.name,
+                    DocumentViewValue::new(
+                        &row.operation_id.parse::<OperationId>().unwrap(),
+                        &OperationValue::Text(row.value.clone()),
+                    ),
+                );
+            }
+            "relation" => {
+                document_view_fields.insert(
+                    &row.name,
+                    DocumentViewValue::new(
+                        &row.operation_id.parse::<OperationId>().unwrap(),
+                        &OperationValue::Relation(Relation::new(
+                            row.value.parse::<DocumentId>().unwrap(),
+                        )),
+                    ),
+                );
+            }
+            // This is a list item, so we push it to a vec but _don't_ add it
+            // to the document_view_fields yet.
+            "relation_list" => {
+                match relation_lists.get_mut(&row.name) {
+                    Some((_, list)) => list.push(row.value.parse::<DocumentId>().unwrap()),
+                    None => {
+                        relation_lists.insert(
+                            row.name.clone(),
+                            (
+                                row.operation_id.parse().unwrap(),
+                                vec![row.value.parse::<DocumentId>().unwrap()],
+                            ),
+                        );
+                    }
+                };
+            }
+            "pinned_relation" => {
+                document_view_fields.insert(
+                    &row.name,
+                    DocumentViewValue::new(
+                        &row.operation_id.parse::<OperationId>().unwrap(),
+                        &OperationValue::PinnedRelation(PinnedRelation::new(
+                            row.value.parse::<DocumentViewId>().unwrap(),
+                        )),
+                    ),
+                );
+            }
+            // This is a list item, so we push it to a vec but _don't_ add it
+            // to the document_view_fields yet.
+            "pinned_relation_list" => {
+                match pinned_relation_lists.get_mut(&row.name) {
+                    Some((_, list)) => list.push(row.value.parse::<DocumentViewId>().unwrap()),
+                    None => {
+                        pinned_relation_lists.insert(
+                            row.name.clone(),
+                            (
+                                row.operation_id.parse().unwrap(),
+                                vec![row.value.parse::<DocumentViewId>().unwrap()],
+                            ),
+                        );
+                    }
+                };
+            }
+            _ => (),
+        };
+    });
+
+    for (field_name, (operation_id, relation_list)) in relation_lists {
+        document_view_fields.insert(
+            &field_name,
+            DocumentViewValue::new(
+                &operation_id,
+                &OperationValue::RelationList(RelationList::new(relation_list)),
+            ),
+        );
+    }
+
+    for (field_name, (operation_id, pinned_relation_list)) in pinned_relation_lists {
+        document_view_fields.insert(
+            &field_name,
+            DocumentViewValue::new(
+                &operation_id,
+                &OperationValue::PinnedRelationList(PinnedRelationList::new(pinned_relation_list)),
+            ),
+        );
+    }
+
+    document_view_fields
+}
+
 #[cfg(test)]
 mod tests {
 
+    use p2panda_rs::document::DocumentViewValue;
     use p2panda_rs::operation::{
-        AsOperation, OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList,
+        AsOperation, OperationId, OperationValue, PinnedRelation, PinnedRelationList, Relation,
+        RelationList,
     };
     use p2panda_rs::storage_provider::traits::AsStorageOperation;
 
-    use crate::db::models::OperationFieldsJoinedRow;
+    use crate::db::models::{document::DocumentViewFieldRow, OperationFieldsJoinedRow};
     use crate::db::stores::test_utils::test_create_operation;
 
-    use super::{parse_operation_rows, parse_value_to_string_vec};
+    use super::{parse_document_view_field_rows, parse_operation_rows, parse_value_to_string_vec};
 
     #[test]
     fn parses_operation_rows() {
@@ -546,6 +687,8 @@ mod tests {
     fn operation_values_to_string_vec() {
         let expected_list = vec![
             "28",
+            "0020abababababababababababababababababababababababababababababababab",
+            "0020cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
             "3.5",
             "false",
             "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -563,5 +706,202 @@ mod tests {
         }
         let string_value_list: Vec<&String> = string_value_list.iter().flatten().collect();
         assert_eq!(expected_list, string_value_list)
+    }
+
+    #[test]
+    fn parses_document_field_rows() {
+        let document_field_rows = vec![
+            DocumentViewFieldRow {
+                document_view_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                operation_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                name: "age".to_string(),
+                field_type: "int".to_string(),
+                value: "28".to_string(),
+            },
+            DocumentViewFieldRow {
+                document_view_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                operation_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                name: "height".to_string(),
+                field_type: "float".to_string(),
+                value: "3.5".to_string(),
+            },
+            DocumentViewFieldRow {
+                document_view_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                operation_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                name: "is_admin".to_string(),
+                field_type: "bool".to_string(),
+                value: "false".to_string(),
+            },
+            DocumentViewFieldRow {
+                document_view_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                operation_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                name: "many_profile_pictures".to_string(),
+                field_type: "relation_list".to_string(),
+                value: "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                    .to_string(),
+            },
+            DocumentViewFieldRow {
+                document_view_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                operation_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                name: "many_profile_pictures".to_string(),
+                field_type: "relation_list".to_string(),
+                value: "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                    .to_string(),
+            },
+            DocumentViewFieldRow {
+                document_view_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                operation_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                name: "many_special_profile_pictures".to_string(),
+                field_type: "pinned_relation_list".to_string(),
+                value: "0020dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                    .to_string(),
+            },
+            DocumentViewFieldRow {
+                document_view_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                operation_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                name: "many_special_profile_pictures".to_string(),
+                field_type: "pinned_relation_list".to_string(),
+                value: "0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                    .to_string(),
+            },
+            DocumentViewFieldRow {
+                document_view_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                operation_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                name: "profile_picture".to_string(),
+                field_type: "relation".to_string(),
+                value: "0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                    .to_string(),
+            },
+            DocumentViewFieldRow {
+                document_view_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                operation_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                name: "special_profile_picture".to_string(),
+                field_type: "pinned_relation".to_string(),
+                value: "0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                    .to_string(),
+            },
+            DocumentViewFieldRow {
+                document_view_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                operation_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                name: "username".to_string(),
+                field_type: "str".to_string(),
+                value: "bubu".to_string(),
+            },
+        ];
+
+        let document_fields = parse_document_view_field_rows(document_field_rows);
+        let operation_id: OperationId =
+            "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                .parse()
+                .unwrap();
+
+        assert_eq!(
+            document_fields.get("username").unwrap(),
+            &DocumentViewValue::new(&operation_id, &OperationValue::Text("bubu".to_string()))
+        );
+        assert_eq!(
+            document_fields.get("age").unwrap(),
+            &DocumentViewValue::new(&operation_id, &OperationValue::Integer(28))
+        );
+        assert_eq!(
+            document_fields.get("height").unwrap(),
+            &DocumentViewValue::new(&operation_id, &OperationValue::Float(3.5))
+        );
+        assert_eq!(
+            document_fields.get("is_admin").unwrap(),
+            &DocumentViewValue::new(&operation_id, &OperationValue::Boolean(false))
+        );
+        assert_eq!(
+            document_fields.get("many_profile_pictures").unwrap(),
+            &DocumentViewValue::new(
+                &operation_id,
+                &OperationValue::RelationList(RelationList::new(vec![
+                    "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                        .parse()
+                        .unwrap(),
+                    "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                        .parse()
+                        .unwrap(),
+                ]))
+            )
+        );
+        assert_eq!(
+            document_fields
+                .get("many_special_profile_pictures")
+                .unwrap(),
+            &DocumentViewValue::new(
+                &operation_id,
+                &OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
+                    "0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                        .parse()
+                        .unwrap(),
+                    "0020dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                        .parse()
+                        .unwrap(),
+                ]))
+            )
+        );
+        assert_eq!(
+            document_fields.get("profile_picture").unwrap(),
+            &DocumentViewValue::new(
+                &operation_id,
+                &OperationValue::Relation(Relation::new(
+                    "0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                        .parse()
+                        .unwrap()
+                ))
+            )
+        );
+        assert_eq!(
+            document_fields.get("special_profile_picture").unwrap(),
+            &DocumentViewValue::new(
+                &operation_id,
+                &OperationValue::PinnedRelation(PinnedRelation::new(
+                    "0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                        .parse()
+                        .unwrap()
+                ))
+            )
+        )
     }
 }

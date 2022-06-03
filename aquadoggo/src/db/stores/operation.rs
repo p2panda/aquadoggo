@@ -7,7 +7,7 @@ use futures::future::try_join_all;
 use p2panda_rs::document::DocumentId;
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{
-    AsOperation, Operation, OperationAction, OperationFields, OperationId,
+    AsOperation, Operation, OperationAction, OperationFields, OperationId, OperationWithMeta,
 };
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::errors::OperationStorageError;
@@ -51,6 +51,10 @@ impl OperationStorage {
             document_id: document_id.clone(),
         }
     }
+
+    fn raw_operation(&self) -> Operation {
+        self.operation.clone()
+    }
 }
 
 impl AsStorageOperation for OperationStorage {
@@ -82,6 +86,13 @@ impl AsStorageOperation for OperationStorage {
 
     fn previous_operations(&self) -> Vec<OperationId> {
         self.operation.previous_operations().unwrap_or_default()
+    }
+}
+
+#[allow(clippy::from_over_into)]
+impl Into<OperationWithMeta> for OperationStorage {
+    fn into(self) -> OperationWithMeta {
+        OperationWithMeta::new(&self.author(), &self.id(), &self.raw_operation()).unwrap()
     }
 }
 
@@ -382,7 +393,7 @@ mod tests {
 
     #[tokio::test]
     async fn insert_get_create_operation() {
-        let storage_provider = test_db(0, false).await;
+        let (storage_provider, _, _) = test_db(0, 0, false).await;
 
         // Create Author, OperationId and DocumentId in order to compose a OperationStorage.
         let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
@@ -401,7 +412,7 @@ mod tests {
 
     #[tokio::test]
     async fn insert_get_update_operation() {
-        let storage_provider = test_db(0, false).await;
+        let (storage_provider, _, _) = test_db(0, 0, false).await;
 
         // Create Author, OperationId and DocumentId in order to compose a OperationStorage.
         let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
@@ -422,7 +433,7 @@ mod tests {
 
     #[tokio::test]
     async fn insert_get_delete_operation() {
-        let storage_provider = test_db(0, false).await;
+        let (storage_provider, _, _) = test_db(0, 0, false).await;
 
         // Create Author, OperationId and DocumentId in order to compose a OperationStorage.
         let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
@@ -444,7 +455,7 @@ mod tests {
 
     #[tokio::test]
     async fn insert_operation_twice() {
-        let storage_provider = test_db(0, false).await;
+        let (storage_provider, _, _) = test_db(0, 0, false).await;
 
         // Create Author, OperationId and DocumentId in order to compose a OperationStorage.
         let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
@@ -472,7 +483,7 @@ mod tests {
 
     #[tokio::test]
     async fn gets_document_by_operation_id() {
-        let storage_provider = test_db(0, false).await;
+        let (storage_provider, _, _) = test_db(0, 0, false).await;
 
         let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
         let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
@@ -535,7 +546,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_operations_by_document_id() {
-        let storage_provider = test_db(5, false).await;
+        let (storage_provider, _, _) = test_db(5, 1, false).await;
         let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
         let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 

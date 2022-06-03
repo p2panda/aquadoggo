@@ -29,7 +29,7 @@ pub fn build_root_schema(context: Context) -> RootSchema {
     let mutation_root = MutationRoot(client_mutation_root);
     Schema::build(query_root, mutation_root, EmptySubscription)
         .data(context.replication_context)
-        .data(context.pool)
+        .data(context.store)
         // Add more contexts here if you need, eg:
         //.data(context.ping_context)
         .finish()

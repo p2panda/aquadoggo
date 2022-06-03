@@ -136,9 +136,9 @@ impl<ES: 'static + EntryStore<StorageEntry>> Context<ES> {
             AuthorOrAlias::Alias(alias) => self
                 .author_aliases
                 .get(&alias)
-                .ok_or_else(|| anyhow!(
-                    "author alias did not exist, you may need to re-alias your authors"
-                ))?
+                .ok_or_else(|| {
+                    anyhow!("author alias did not exist, you may need to re-alias your authors")
+                })?
                 .clone(),
             AuthorOrAlias::PublicKey(public_key) => public_key,
         };
