@@ -208,7 +208,8 @@ impl OperationStore<OperationStorage> for SqlStorage {
                     // Collect all query futures.
                     db_values
                         .into_iter()
-                        .map(|db_value| {
+                        .enumerate()
+                        .map(|(index, db_value)| {
                             // Compose the query and return it's future.
                             query(
                                 "
@@ -217,16 +218,18 @@ impl OperationStore<OperationStorage> for SqlStorage {
                                     operation_id,
                                     name,
                                     field_type,
-                                    value
+                                    value,
+                                    list_index
                                 )
                             VALUES
-                                ($1, $2, $3, $4)
+                                ($1, $2, $3, $4, $5)
                             ",
                             )
                             .bind(operation.id().as_str().to_owned())
                             .bind(name.to_owned())
                             .bind(value.field_type().to_string())
                             .bind(db_value)
+                            .bind(index.to_string())
                             .execute(&self.pool)
                         })
                         .collect::<Vec<_>>()
@@ -279,7 +282,8 @@ impl OperationStore<OperationStorage> for SqlStorage {
                 operations_v1.previous_operations,
                 operation_fields_v1.name,
                 operation_fields_v1.field_type,
-                operation_fields_v1.value
+                operation_fields_v1.value,
+                operation_fields_v1.list_index
             FROM
                 operations_v1
             LEFT JOIN operation_fields_v1
@@ -287,6 +291,8 @@ impl OperationStore<OperationStorage> for SqlStorage {
                     operation_fields_v1.operation_id = operations_v1.operation_id
             WHERE
                 operations_v1.operation_id = $1
+            ORDER BY
+                operation_fields_v1.list_index ASC
             ",
         )
         .bind(id.as_str())
@@ -315,7 +321,8 @@ impl OperationStore<OperationStorage> for SqlStorage {
                 operations_v1.previous_operations,
                 operation_fields_v1.name,
                 operation_fields_v1.field_type,
-                operation_fields_v1.value
+                operation_fields_v1.value,
+                operation_fields_v1.list_index
             FROM
                 operations_v1
             LEFT JOIN operation_fields_v1
@@ -323,6 +330,8 @@ impl OperationStore<OperationStorage> for SqlStorage {
                     operation_fields_v1.operation_id = operations_v1.operation_id
             WHERE
                 operations_v1.document_id = $1
+            ORDER BY
+                operation_fields_v1.list_index ASC
             ",
         )
         .bind(id.as_str())
