@@ -14,6 +14,7 @@ use crate::graphql::client::{
     EntryArgsRequest, EntryArgsResponse, PublishEntryRequest, PublishEntryResponse,
 };
 
+#[derive(Clone, Debug)]
 pub struct SqlStorage {
     pub(crate) pool: Pool,
 }

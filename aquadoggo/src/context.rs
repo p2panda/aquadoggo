@@ -4,6 +4,7 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use crate::config::Configuration;
+use crate::db::provider::SqlStorage;
 use crate::db::Pool;
 use crate::graphql::{build_root_schema, RootSchema};
 
@@ -13,7 +14,7 @@ pub struct Data {
     pub config: Configuration,
 
     /// Database connection pool.
-    pub pool: Pool,
+    pub provider: SqlStorage,
 
     /// Static GraphQL schema.
     pub schema: RootSchema,
@@ -23,10 +24,11 @@ impl Data {
     /// Initialize new data instance with shared database connection pool.
     pub fn new(pool: Pool, config: Configuration) -> Self {
         let schema = build_root_schema(pool.clone());
+        let provider = SqlStorage { pool };
 
         Self {
             config,
-            pool,
+            provider,
             schema,
         }
     }
