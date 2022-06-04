@@ -4,8 +4,8 @@ use p2panda_rs::document::{DocumentId, DocumentViewId};
 
 #[derive(Clone, Eq, PartialEq, Debug, Hash)]
 pub struct TaskInput {
-    document_id: Option<DocumentId>,
-    document_view_id: Option<DocumentViewId>,
+    pub document_id: Option<DocumentId>,
+    pub document_view_id: Option<DocumentViewId>,
 }
 
 impl TaskInput {
