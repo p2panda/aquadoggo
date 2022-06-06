@@ -113,6 +113,7 @@ impl DocumentStore for SqlStorage {
                 document_view_fields.document_view_id,
                 document_view_fields.operation_id,
                 document_view_fields.name,
+                operation_fields_v1.list_index,
                 operation_fields_v1.field_type,
                 operation_fields_v1.value
             FROM
@@ -124,6 +125,8 @@ impl DocumentStore for SqlStorage {
                     operation_fields_v1.name = document_view_fields.name
             WHERE
                 document_view_fields.document_view_id = $1
+            ORDER BY
+                operation_fields_v1.list_index ASC
             ",
         )
         .bind(id.as_str())
@@ -206,6 +209,7 @@ impl DocumentStore for SqlStorage {
                 document_view_fields.document_view_id,
                 document_view_fields.operation_id,
                 document_view_fields.name,
+                operation_fields_v1.list_index,
                 operation_fields_v1.field_type,
                 operation_fields_v1.value
             FROM
@@ -220,12 +224,16 @@ impl DocumentStore for SqlStorage {
                     document_view_fields.name = operation_fields_v1.name
             WHERE
                 documents.document_id = $1 AND documents.is_deleted = false
+            ORDER BY
+                operation_fields_v1.list_index ASC
             ",
         )
         .bind(id.as_str())
         .fetch_all(&self.pool)
         .await
         .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+
+        println!("{:#?}", document_view_field_rows);
 
         if document_view_field_rows.is_empty() {
             return Ok(None);
@@ -255,6 +263,7 @@ impl DocumentStore for SqlStorage {
                 document_view_fields.document_view_id,
                 document_view_fields.operation_id,
                 document_view_fields.name,
+                operation_fields_v1.list_index,
                 operation_fields_v1.field_type,
                 operation_fields_v1.value
             FROM
@@ -269,6 +278,8 @@ impl DocumentStore for SqlStorage {
                     document_view_fields.name = operation_fields_v1.name
             WHERE
                 documents.schema_id = $1
+            ORDER BY
+                operation_fields_v1.list_index ASC
             ",
         )
         .bind(schema_id.as_str())
