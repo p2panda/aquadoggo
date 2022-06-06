@@ -32,7 +32,7 @@ log = "0.4.14"
 openssl-probe = "0.1.4"
 # We can not publish the `aquadoggo` crate yet, since `p2panda-rs` is an
 # unpublished dependency.
-p2panda-rs = { git = "https://github.com/p2panda/p2panda", branch = "main" }
+p2panda-rs = { git = "https://github.com/p2panda/p2panda", branch = "rework-test-utils" }
 rand = "0.8.4"
 serde = { version = "1.0.130", features = ["derive"] }
 serde_json = "1.0.67"
@@ -64,3 +64,6 @@ tower-service = "0.3.1"
 hyper = "0.14.17"
 http = "0.2.6"
 tower = "0.4.12"
+p2panda-rs = { git = "https://github.com/p2panda/p2panda", branch = "rework-test-utils", features = [
+    "testing",
+] }
