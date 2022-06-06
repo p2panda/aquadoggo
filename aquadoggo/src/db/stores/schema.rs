@@ -97,146 +97,182 @@ impl SchemaStore for SqlStorage {
 #[cfg(test)]
 mod tests {
     use p2panda_rs::document::DocumentViewId;
-    use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::KeyPair;
-    use p2panda_rs::operation::{Operation, OperationFields, OperationValue, PinnedRelationList};
+    use p2panda_rs::operation::{OperationFields, OperationValue, PinnedRelationList};
     use p2panda_rs::schema::{FieldType, SchemaId};
+    use p2panda_rs::test_utils::fixtures::{
+        document_view_id, key_pair, operation, operation_fields,
+    };
+    use rstest::rstest;
 
     use crate::db::provider::SqlStorage;
     use crate::db::stores::test_utils::{insert_entry_operation_and_view, test_db};
 
     use super::SchemaStore;
 
-    async fn create_venue_schema(
+    async fn insert_schema_definition(
         storage_provider: &SqlStorage,
         key_pair: &KeyPair,
+        schema_field_id: &DocumentViewId,
+        mut schema_definition: OperationFields,
     ) -> DocumentViewId {
-        // Construct a CREATE operation for the field of the schema we want to publish
-        let mut schema_name_field_definition_operation_fields = OperationFields::new();
-        schema_name_field_definition_operation_fields
-            .add("name", OperationValue::Text("venue_name".to_string()))
-            .unwrap();
-        schema_name_field_definition_operation_fields
-            .add("type", FieldType::String.into())
-            .unwrap();
-        let schema_name_field_definition_operation = Operation::new_create(
-            SchemaId::new("schema_field_definition_v1").unwrap(),
-            schema_name_field_definition_operation_fields,
-        )
-        .unwrap();
-
-        // Publish it encoded in an entry, insert the operation and materialised document view into the db
-        let (_document_id, document_view_id) = insert_entry_operation_and_view(
-            storage_provider,
-            key_pair,
-            None,
-            &schema_name_field_definition_operation,
-        )
-        .await;
-
-        // Construct a CREATE operation for the schema definition we want to publish.
-        let mut schema_definition_operation_fields = OperationFields::new();
-        schema_definition_operation_fields
-            .add("name", OperationValue::Text("venue".to_string()))
-            .unwrap();
-        schema_definition_operation_fields
-            .add("description", OperationValue::Text("My venue".to_string()))
-            .unwrap();
-        schema_definition_operation_fields
+        schema_definition
             .add(
                 "fields",
                 // This pinned relation points at the previously published field.
-                OperationValue::PinnedRelationList(PinnedRelationList::new(vec![document_view_id])),
+                OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
+                    schema_field_id.clone()
+                ])),
             )
             .unwrap();
-        let schema_definition_operation = Operation::new_create(
-            SchemaId::new("schema_definition_v1").unwrap(),
-            schema_definition_operation_fields,
-        )
-        .unwrap();
 
-        // Publish it encoded in an entry, insert the operation and materialised document view into the db
-        let (_document_id, document_view_id) = insert_entry_operation_and_view(
+        let (_, document_view_id) = insert_entry_operation_and_view(
             storage_provider,
             key_pair,
             None,
-            &schema_definition_operation,
+            &operation(
+                Some(schema_definition),
+                None,
+                Some(SchemaId::new("schema_definition_v1").unwrap()),
+            ),
+        )
+        .await;
+        document_view_id
+    }
+
+    async fn insert_schema_field_definition(
+        storage_provider: &SqlStorage,
+        key_pair: &KeyPair,
+        schema_field_definition: OperationFields,
+    ) -> DocumentViewId {
+        // Publish it encoded in an entry, insert the operation and materialised document view into the db
+        let (_, document_view_id) = insert_entry_operation_and_view(
+            storage_provider,
+            key_pair,
+            None,
+            &operation(
+                Some(schema_field_definition),
+                None,
+                Some(SchemaId::new("schema_field_definition_v1").unwrap()),
+            ),
         )
         .await;
 
         document_view_id
     }
 
+    #[rstest]
+    #[case::valid_schema_and_fields(
+        "venue_name = { type: \"str\", value: tstr, }\ncreate-fields = { venue_name }\nupdate-fields = { + ( venue_name ) }",
+        operation_fields(vec![("name", OperationValue::Text("venue_name".to_string())), ("type", FieldType::String.into())]), 
+        operation_fields(vec![("name", OperationValue::Text("venue".to_string())), ("description", OperationValue::Text("My venue".to_string()))]))]
+    #[should_panic(expected = "missing field \"name\"")]
+    #[case::fields_missing_name_field(
+        "",
+        operation_fields(vec![("type", FieldType::String.into())]), 
+        operation_fields(vec![("name", OperationValue::Text("venue".to_string())), ("description", OperationValue::Text("My venue".to_string()))]))]
+    #[should_panic(expected = "missing field \"type\"")]
+    #[case::fields_missing_type_field(
+        "",
+        operation_fields(vec![("name", OperationValue::Text("venue_name".to_string()))]), 
+        operation_fields(vec![("name", OperationValue::Text("venue".to_string())), ("description", OperationValue::Text("My venue".to_string()))]))]
+    #[should_panic(expected = "missing field \"name\"")]
+    #[case::schema_missing_name_field(
+        "",
+        operation_fields(vec![("name", OperationValue::Text("venue_name".to_string())), ("type", FieldType::String.into())]), 
+        operation_fields(vec![("description", OperationValue::Text("My venue".to_string()))]))]
+    #[should_panic(expected = "missing field \"description\"")]
+    #[case::schema_missing_name_description(
+        "",
+        operation_fields(vec![("name", OperationValue::Text("venue_name".to_string())), ("type", FieldType::String.into())]), 
+        operation_fields(vec![("name", OperationValue::Text("venue".to_string()))]))]
     #[tokio::test]
-    async fn get_schema() {
+    async fn get_schema(
+        #[case] cddl_str: &str,
+        #[case] schema_field_definition: OperationFields,
+        #[case] schema_definition: OperationFields,
+        key_pair: KeyPair,
+    ) {
         let (storage_provider, _key_pairs, _documents) = test_db(0, 0, false).await;
-        let key_pair = KeyPair::new();
 
-        let document_view_id = create_venue_schema(&storage_provider, &key_pair).await;
+        let document_view_id =
+            insert_schema_field_definition(&storage_provider, &key_pair, schema_field_definition)
+                .await;
 
-        // Retrieve the schema by it's document_view_id.
+        let document_view_id = insert_schema_definition(
+            &storage_provider,
+            &key_pair,
+            &document_view_id,
+            schema_definition,
+        )
+        .await;
+
         let schema = storage_provider
             .get_schema_by_id(&document_view_id)
             .await
-            .unwrap();
+            .unwrap_or_else(|e| panic!("{}", e));
 
-        assert_eq!(schema.unwrap().as_cddl(), "venue_name = { type: \"str\", value: tstr, }\ncreate-fields = { venue_name }\nupdate-fields = { + ( venue_name ) }")
+        assert_eq!(schema.unwrap().as_cddl(), cddl_str)
     }
 
+    #[rstest]
+    #[case::works(
+        operation_fields(vec![("name", OperationValue::Text("venue_name".to_string())), ("type", FieldType::String.into())]), 
+        operation_fields(vec![("name", OperationValue::Text("venue".to_string())), ("description", OperationValue::Text("My venue".to_string()))]))]
+    #[should_panic(expected = "invalid fields found for this schema")]
+    #[case::does_not_work(
+        operation_fields(vec![("name", OperationValue::Text("venue_name".to_string()))]), 
+        operation_fields(vec![("name", OperationValue::Text("venue".to_string())), ("description", OperationValue::Text("My venue".to_string()))]))]
     #[tokio::test]
-    async fn get_all_schema() {
+    async fn get_all_schema(
+        #[case] schema_field_definition: OperationFields,
+        #[case] schema_definition: OperationFields,
+        key_pair: KeyPair,
+    ) {
         let (storage_provider, _key_pairs, _documents) = test_db(0, 0, false).await;
-        let key_pair = KeyPair::new();
 
-        create_venue_schema(&storage_provider, &key_pair).await;
+        let document_view_id =
+            insert_schema_field_definition(&storage_provider, &key_pair, schema_field_definition)
+                .await;
 
-        let schemas = storage_provider.get_all_schema().await.unwrap();
+        insert_schema_definition(
+            &storage_provider,
+            &key_pair,
+            &document_view_id,
+            schema_definition,
+        )
+        .await;
+
+        let schemas = storage_provider
+            .get_all_schema()
+            .await
+            .unwrap_or_else(|e| panic!("{}", e));
 
         assert_eq!(schemas.len(), 1)
     }
 
+    #[rstest]
+    #[case::schema_fields_do_not_exist(
+        operation_fields(vec![("name", OperationValue::Text("venue".to_string())), ("description", OperationValue::Text("My venue".to_string()))]))]
     #[tokio::test]
-    async fn missing_fields_error() {
+    async fn schema_fields_do_not_exist(
+        #[case] schema_definition: OperationFields,
+        #[from(document_view_id)] schema_fields_id: DocumentViewId,
+        key_pair: KeyPair,
+    ) {
         let (storage_provider, _key_pairs, _documents) = test_db(0, 0, false).await;
-        let key_pair = KeyPair::new();
 
-        let field_view_id: DocumentViewId = Hash::new_from_bytes(vec![1, 2, 3]).unwrap().into();
-
-        // Construct a CREATE operation for the schema definition we want to publish.
-        let mut schema_definition_operation_fields = OperationFields::new();
-        schema_definition_operation_fields
-            .add("name", OperationValue::Text("venue".to_string()))
-            .unwrap();
-        schema_definition_operation_fields
-            .add("description", OperationValue::Text("My venue".to_string()))
-            .unwrap();
-        schema_definition_operation_fields
-            .add(
-                "fields",
-                // This pinned relation points at the previously published field.
-                OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
-                    field_view_id.clone()
-                ])),
-            )
-            .unwrap();
-        let schema_definition_operation = Operation::new_create(
-            SchemaId::new("schema_definition_v1").unwrap(),
-            schema_definition_operation_fields,
-        )
-        .unwrap();
-
-        // Publish it encoded in an entry, insert the operation and materialised document view into the db
-        let (_document_id, document_view_id) = insert_entry_operation_and_view(
+        let document_view_id = insert_schema_definition(
             &storage_provider,
             &key_pair,
-            None,
-            &schema_definition_operation,
+            &schema_fields_id,
+            schema_definition,
         )
         .await;
 
         // Retrieve the schema by it's document_view_id.
         let schema = storage_provider.get_schema_by_id(&document_view_id).await;
 
-        assert_eq!(schema.unwrap_err().to_string(), format!("No document view found for schema field definition with id: {0} which is required by schema definition {1}", field_view_id, document_view_id))
+        assert_eq!(schema.unwrap_err().to_string(), format!("No document view found for schema field definition with id: {0} which is required by schema definition {1}", schema_fields_id, document_view_id))
     }
 }
