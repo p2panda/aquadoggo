@@ -103,7 +103,7 @@ pub fn test_create_operation() -> Operation {
     Operation::new_create(SchemaId::from_str(TEST_SCHEMA_ID).unwrap(), fields).unwrap()
 }
 
-pub fn test_update_operation(previous_operations: Vec<OperationId>, username: &str) -> Operation {
+pub fn test_update_operation(previous_operations: DocumentViewId, username: &str) -> Operation {
     let mut fields = OperationFields::new();
     fields
         .add("username", OperationValue::Text(username.to_owned()))
@@ -117,7 +117,7 @@ pub fn test_update_operation(previous_operations: Vec<OperationId>, username: &s
     .unwrap()
 }
 
-pub fn test_delete_operation(previous_operations: Vec<OperationId>) -> Operation {
+pub fn test_delete_operation(previous_operations: DocumentViewId) -> Operation {
     Operation::new_delete(
         SchemaId::from_str(TEST_SCHEMA_ID).unwrap(),
         previous_operations,
@@ -258,12 +258,9 @@ pub async fn test_db(
             let next_operation = if index == 0 {
                 test_create_operation()
             } else if index == (no_of_entries - 1) && with_delete {
-                test_delete_operation(vec![next_entry_args.backlink.clone().unwrap().into()])
+                test_delete_operation(next_entry_args.backlink.clone().unwrap().into())
             } else {
-                test_update_operation(
-                    vec![next_entry_args.backlink.clone().unwrap().into()],
-                    "yoyo",
-                )
+                test_update_operation(next_entry_args.backlink.clone().unwrap().into(), "yoyo")
             };
 
             let next_entry = Entry::new(

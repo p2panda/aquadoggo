@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use async_trait::async_trait;
 use futures::future::try_join_all;
-use p2panda_rs::document::DocumentId;
+use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{
     AsOperation, Operation, OperationAction, OperationFields, OperationId, OperationWithMeta,
@@ -84,8 +84,8 @@ impl AsStorageOperation for OperationStorage {
         self.operation.fields()
     }
 
-    fn previous_operations(&self) -> Vec<OperationId> {
-        self.operation.previous_operations().unwrap_or_default()
+    fn previous_operations(&self) -> Option<DocumentViewId> {
+        self.operation.previous_operations()
     }
 }
 
@@ -158,14 +158,6 @@ impl OperationStore<OperationStorage> for SqlStorage {
             .await
             .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
 
-        // TODO: Once we have resolved https://github.com/p2panda/p2panda/issues/315 then
-        // we can derive this string from the previous_operations' `DocumentViewId`
-        let mut prev_op_string = "".to_string();
-        for (i, operation_id) in operation.previous_operations().iter().enumerate() {
-            let separator = if i == 0 { "" } else { "_" };
-            prev_op_string += format!("{}{}", separator, operation_id.as_hash().as_str()).as_str();
-        }
-
         // Consruct query for inserting operation an row, execute it
         // and check exactly one row was affected.
         let operation_insertion_result = query(
@@ -190,7 +182,11 @@ impl OperationStore<OperationStorage> for SqlStorage {
         .bind(operation.id().as_hash().as_str())
         .bind(operation.action().as_str())
         .bind(operation.schema_id().as_str())
-        .bind(prev_op_string.as_str())
+        .bind(
+            operation
+                .previous_operations()
+                .map(|document_view_id| document_view_id.as_str()),
+        )
         .execute(&self.pool)
         .await
         .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
@@ -433,7 +429,7 @@ mod tests {
 
         let update_operation = OperationStorage::new(
             &author,
-            &test_update_operation(vec![prev_op_id], "huhuhu"),
+            &test_update_operation(prev_op_id, "huhuhu"),
             &operation_id,
             &document_id,
         );
@@ -454,7 +450,7 @@ mod tests {
 
         let delete_operation = OperationStorage::new(
             &author,
-            &test_delete_operation(vec![prev_op_id]),
+            &test_delete_operation(prev_op_id),
             &operation_id,
             &document_id,
         );
@@ -531,10 +527,7 @@ mod tests {
 
         let update_operation = OperationStorage::new(
             &author,
-            &test_update_operation(
-                vec![create_operation.id().as_hash().clone().into()],
-                "huhuhu",
-            ),
+            &test_update_operation(create_operation.id().as_hash().clone().into(), "huhuhu"),
             &operation_id,
             &document_id,
         );

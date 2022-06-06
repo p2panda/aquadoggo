@@ -471,7 +471,7 @@ mod tests {
 
         let update_operation = Operation::new_update(
             schema.clone(),
-            vec![next_entry_args.backlink.clone().unwrap().into()],
+            next_entry_args.backlink.clone().unwrap().into(),
             fields.clone(),
         )
         .unwrap();

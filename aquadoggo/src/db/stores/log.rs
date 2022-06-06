@@ -240,7 +240,8 @@ mod tests {
             &DocumentViewId::new(&[
                 Hash::new(&random_entry_hash()).unwrap().into(),
                 Hash::new(&random_entry_hash()).unwrap().into(),
-            ]),
+            ])
+            .unwrap(),
         );
 
         let log = StorageLog::new(&author, &schema, &document.into(), &LogId::new(1));
