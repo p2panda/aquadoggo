@@ -55,6 +55,19 @@ impl OperationStorage {
     fn raw_operation(&self) -> Operation {
         self.operation.clone()
     }
+
+    #[cfg(test)]
+    pub fn new_from_operation(
+        operation: OperationWithMeta,
+        document_id: Option<DocumentId>,
+    ) -> Self {
+        Self::new(
+            operation.public_key(),
+            operation.operation(),
+            operation.operation_id(),
+            &document_id.unwrap_or_else(|| DocumentId::new(operation.operation_id().clone())),
+        )
+    }
 }
 
 impl AsStorageOperation for OperationStorage {
@@ -364,21 +377,39 @@ mod tests {
 
     use p2panda_rs::document::DocumentId;
     use p2panda_rs::entry::LogId;
-    use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
-    use p2panda_rs::operation::OperationId;
+    use p2panda_rs::operation::{Operation, OperationId, OperationWithMeta};
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, StorageProvider};
     use p2panda_rs::storage_provider::traits::{AsStorageOperation, OperationStore};
-    use p2panda_rs::test_utils::constants::{DEFAULT_HASH, DEFAULT_PRIVATE_KEY};
-
-    use crate::db::provider::SqlStorage;
-    use crate::db::stores::test_utils::{
-        test_create_operation, test_db, test_delete_operation, test_update_operation,
+    use p2panda_rs::test_utils::constants::{default_fields, DEFAULT_HASH, DEFAULT_PRIVATE_KEY};
+    use p2panda_rs::test_utils::fixtures::{
+        create_operation, delete_operation, document_id, operation_fields, operation_id,
+        operation_with_meta, public_key, random_previous_operations, update_operation,
     };
+    use rstest::rstest;
+
+    use crate::db::stores::test_utils::test_db;
 
     use super::OperationStorage;
 
-    async fn insert_get_assert(storage_provider: SqlStorage, operation: OperationStorage) {
+    #[rstest]
+    #[case::create_operation(create_operation(&default_fields()))]
+    #[case::update_operation(update_operation(&default_fields(), &DEFAULT_HASH.parse().unwrap()))]
+    #[case::update_operation_many_prev_ops(update_operation(&default_fields(), &random_previous_operations(12)))]
+    #[case::delete_operation(delete_operation(&DEFAULT_HASH.parse().unwrap()))]
+    #[case::delete_operation_many_prev_ops(delete_operation(&random_previous_operations(12)))]
+    #[tokio::test]
+    async fn insert_get_operations(
+        #[case] operation: Operation,
+        #[from(public_key)] author: Author,
+        operation_id: OperationId,
+        document_id: DocumentId,
+    ) {
+        let (storage_provider, _, _) = test_db(0, 0, false).await;
+
+        // Construct the storage operation.
+        let operation = OperationStorage::new(&author, &operation, &operation_id, &document_id);
+
         // Insert the doggo operation into the db, returns Ok(true) when succesful.
         let result = storage_provider.insert_operation(&operation).await;
         assert!(result.is_ok());
@@ -396,154 +427,75 @@ mod tests {
         assert_eq!(returned_operation.document_id(), operation.document_id());
     }
 
+    #[rstest]
     #[tokio::test]
-    async fn insert_get_create_operation() {
+    async fn insert_operation_twice(operation_with_meta: OperationWithMeta) {
         let (storage_provider, _, _) = test_db(0, 0, false).await;
 
-        // Create Author, OperationId and DocumentId in order to compose a OperationStorage.
-        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
-        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
-        let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
-        let document_id = DocumentId::new(operation_id.clone());
-        let create_operation = OperationStorage::new(
-            &author,
-            &test_create_operation(),
-            &operation_id,
-            &document_id,
-        );
+        let create_operation = OperationStorage::new_from_operation(operation_with_meta, None);
 
-        insert_get_assert(storage_provider, create_operation).await;
-    }
-
-    #[tokio::test]
-    async fn insert_get_update_operation() {
-        let (storage_provider, _, _) = test_db(0, 0, false).await;
-
-        // Create Author, OperationId and DocumentId in order to compose a OperationStorage.
-        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
-        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
-
-        let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
-        let document_id = DocumentId::new(operation_id.clone());
-        let prev_op_id = DEFAULT_HASH.parse().unwrap();
-
-        let update_operation = OperationStorage::new(
-            &author,
-            &test_update_operation(prev_op_id, "huhuhu"),
-            &operation_id,
-            &document_id,
-        );
-        insert_get_assert(storage_provider, update_operation).await;
-    }
-
-    #[tokio::test]
-    async fn insert_get_delete_operation() {
-        let (storage_provider, _, _) = test_db(0, 0, false).await;
-
-        // Create Author, OperationId and DocumentId in order to compose a OperationStorage.
-        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
-        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
-
-        let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
-        let document_id = DocumentId::new(operation_id.clone());
-        let prev_op_id = DEFAULT_HASH.parse().unwrap();
-
-        let delete_operation = OperationStorage::new(
-            &author,
-            &test_delete_operation(prev_op_id),
-            &operation_id,
-            &document_id,
-        );
-
-        insert_get_assert(storage_provider, delete_operation).await;
-    }
-
-    #[tokio::test]
-    async fn insert_operation_twice() {
-        let (storage_provider, _, _) = test_db(0, 0, false).await;
-
-        // Create Author, OperationId and DocumentId in order to compose a OperationStorage.
-        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
-        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
-        let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
-        let document_id = DocumentId::new(operation_id.clone());
-        let create_operation = OperationStorage::new(
-            &author,
-            &test_create_operation(),
-            &operation_id,
-            &document_id,
-        );
-
-        let result = storage_provider.insert_operation(&create_operation).await;
-
-        assert!(result.is_ok());
-
-        let result = storage_provider.insert_operation(&create_operation).await;
+        assert!(storage_provider
+            .insert_operation(&create_operation)
+            .await
+            .is_ok());
 
         assert_eq!(
-            result.unwrap_err().to_string(),
+            storage_provider.insert_operation(&create_operation).await.unwrap_err().to_string(),
             "A fatal error occured in OperationStore: error returned from database: UNIQUE constraint failed: operations_v1.entry_hash"
         )
     }
 
+    #[rstest]
     #[tokio::test]
-    async fn gets_document_by_operation_id() {
+    async fn gets_document_by_operation_id(
+        #[from(operation_with_meta)]
+        #[with(Some(operation_fields(default_fields())), None, None, None, Some(DEFAULT_HASH.parse().unwrap()))]
+        create_operation: OperationWithMeta,
+        #[from(operation_with_meta)]
+        #[with(Some(operation_fields(default_fields())), Some(DEFAULT_HASH.parse().unwrap()))]
+        update_operation: OperationWithMeta,
+        document_id: DocumentId,
+    ) {
         let (storage_provider, _, _) = test_db(0, 0, false).await;
 
-        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
-        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
-        let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
-        let document_id = DocumentId::new(operation_id.clone());
+        let create_operation = OperationStorage::new_from_operation(create_operation, None);
 
-        let create_operation = OperationStorage::new(
-            &author,
-            &test_create_operation(),
-            &operation_id,
-            &document_id,
-        );
-
-        let document_id_should_be_none = storage_provider
-            .get_document_by_operation_id(operation_id.clone())
+        assert!(storage_provider
+            .get_document_by_operation_id(create_operation.id())
             .await
-            .unwrap();
-
-        assert!(document_id_should_be_none.is_none());
+            .unwrap()
+            .is_none());
 
         storage_provider
             .insert_operation(&create_operation)
             .await
             .unwrap();
 
-        let expected_document_id: DocumentId = create_operation.id().as_hash().clone().into();
-        let document_id_should_exist = storage_provider
-            .get_document_by_operation_id(operation_id.clone())
-            .await
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(document_id_should_exist, expected_document_id);
-
-        let operation_id = OperationId::new(Hash::new_from_bytes(vec![3, 4, 5]).unwrap());
-
-        let update_operation = OperationStorage::new(
-            &author,
-            &test_update_operation(create_operation.id().as_hash().clone().into(), "huhuhu"),
-            &operation_id,
-            &document_id,
+        assert_eq!(
+            storage_provider
+                .get_document_by_operation_id(create_operation.id())
+                .await
+                .unwrap()
+                .unwrap(),
+            document_id.clone()
         );
+
+        let update_operation =
+            OperationStorage::new_from_operation(update_operation, Some(document_id.clone()));
 
         storage_provider
             .insert_operation(&update_operation)
             .await
             .unwrap();
 
-        let document_id_should_be_the_same = storage_provider
-            .get_document_by_operation_id(update_operation.id())
-            .await
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(document_id_should_be_the_same, expected_document_id);
+        assert_eq!(
+            storage_provider
+                .get_document_by_operation_id(create_operation.id())
+                .await
+                .unwrap()
+                .unwrap(),
+            document_id.clone()
+        );
     }
 
     #[tokio::test]
@@ -557,6 +509,7 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
+
         let document_id = storage_provider
             .get_document_by_entry(&latest_entry.hash())
             .await
