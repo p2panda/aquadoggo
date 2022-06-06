@@ -342,9 +342,10 @@ mod tests {
         RelationList,
     };
     use p2panda_rs::storage_provider::traits::AsStorageOperation;
+    use p2panda_rs::test_utils::fixtures::create_operation;
 
     use crate::db::models::{document::DocumentViewFieldRow, OperationFieldsJoinedRow};
-    use crate::db::stores::test_utils::test_create_operation;
+    use crate::db::stores::test_utils::doggo_test_fields;
 
     use super::{parse_document_view_field_rows, parse_operation_rows, parse_value_to_string_vec};
 
@@ -692,7 +693,7 @@ mod tests {
             "bubu",
         ];
         let mut string_value_list = vec![];
-        let operation = test_create_operation();
+        let operation = create_operation(&doggo_test_fields());
         for (_, value) in operation.fields().unwrap().iter() {
             string_value_list.push(parse_value_to_string_vec(value));
         }

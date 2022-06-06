@@ -106,7 +106,7 @@ mod tests {
     use rstest::rstest;
 
     use crate::db::provider::SqlStorage;
-    use crate::db::stores::test_utils::{insert_entry_operation_and_view, test_db};
+    use crate::db::stores::test_utils::{insert_entry_operation_and_view, test_db, TestSqlStore};
 
     use super::SchemaStore;
 
@@ -192,22 +192,20 @@ mod tests {
         #[case] schema_field_definition: OperationFields,
         #[case] schema_definition: OperationFields,
         key_pair: KeyPair,
+        #[from(test_db)]
+        #[future]
+        db: TestSqlStore,
     ) {
-        let (storage_provider, _key_pairs, _documents) = test_db(0, 0, false).await;
+        let db = db.await;
+        let document_view_id =
+            insert_schema_field_definition(&db.store, &key_pair, schema_field_definition).await;
 
         let document_view_id =
-            insert_schema_field_definition(&storage_provider, &key_pair, schema_field_definition)
+            insert_schema_definition(&db.store, &key_pair, &document_view_id, schema_definition)
                 .await;
 
-        let document_view_id = insert_schema_definition(
-            &storage_provider,
-            &key_pair,
-            &document_view_id,
-            schema_definition,
-        )
-        .await;
-
-        let schema = storage_provider
+        let schema = db
+            .store
             .get_schema_by_id(&document_view_id)
             .await
             .unwrap_or_else(|e| panic!("{}", e));
@@ -228,22 +226,18 @@ mod tests {
         #[case] schema_field_definition: OperationFields,
         #[case] schema_definition: OperationFields,
         key_pair: KeyPair,
+        #[from(test_db)]
+        #[future]
+        db: TestSqlStore,
     ) {
-        let (storage_provider, _key_pairs, _documents) = test_db(0, 0, false).await;
-
+        let db = db.await;
         let document_view_id =
-            insert_schema_field_definition(&storage_provider, &key_pair, schema_field_definition)
-                .await;
+            insert_schema_field_definition(&db.store, &key_pair, schema_field_definition).await;
 
-        insert_schema_definition(
-            &storage_provider,
-            &key_pair,
-            &document_view_id,
-            schema_definition,
-        )
-        .await;
+        insert_schema_definition(&db.store, &key_pair, &document_view_id, schema_definition).await;
 
-        let schemas = storage_provider
+        let schemas = db
+            .store
             .get_all_schema()
             .await
             .unwrap_or_else(|e| panic!("{}", e));
@@ -258,20 +252,18 @@ mod tests {
     async fn schema_fields_do_not_exist(
         #[case] schema_definition: OperationFields,
         #[from(document_view_id)] schema_fields_id: DocumentViewId,
+        #[from(test_db)]
+        #[future]
+        db: TestSqlStore,
         key_pair: KeyPair,
     ) {
-        let (storage_provider, _key_pairs, _documents) = test_db(0, 0, false).await;
-
-        let document_view_id = insert_schema_definition(
-            &storage_provider,
-            &key_pair,
-            &schema_fields_id,
-            schema_definition,
-        )
-        .await;
+        let db = db.await;
+        let document_view_id =
+            insert_schema_definition(&db.store, &key_pair, &schema_fields_id, schema_definition)
+                .await;
 
         // Retrieve the schema by it's document_view_id.
-        let schema = storage_provider.get_schema_by_id(&document_view_id).await;
+        let schema = db.store.get_schema_by_id(&document_view_id).await;
 
         assert_eq!(schema.unwrap_err().to_string(), format!("No document view found for schema field definition with id: {0} which is required by schema definition {1}", schema_fields_id, document_view_id))
     }

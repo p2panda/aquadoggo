@@ -422,86 +422,53 @@ impl EntryStore<StorageEntry> for SqlStorage {
 #[cfg(test)]
 mod tests {
     use std::convert::TryFrom;
-    use std::str::FromStr;
 
-    use p2panda_rs::document::DocumentId;
     use p2panda_rs::entry::{sign_and_encode, Entry};
     use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
-    use p2panda_rs::operation::{Operation, OperationEncoded, OperationFields, OperationValue};
+    use p2panda_rs::operation::OperationEncoded;
     use p2panda_rs::schema::SchemaId;
-    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, StorageProvider};
-    use p2panda_rs::test_utils::constants::{DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
+    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
+    use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
+    use p2panda_rs::test_utils::fixtures::{entry, key_pair};
+    use rstest::rstest;
 
     use crate::db::stores::entry::StorageEntry;
-    use crate::db::stores::test_utils::test_db;
-    use crate::graphql::client::EntryArgsRequest;
+    use crate::db::stores::test_utils::{test_db, TestSqlStore};
 
+    #[rstest]
     #[tokio::test]
-    async fn insert_entry() {
-        let (storage_provider, _key_pairs, _documents) = test_db(100, 1, false).await;
-
-        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
-        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
-        let log_id = LogId::new(1);
-        let schema = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
-
-        // Derive the document_id by fetching the first entry
-        let document_id: DocumentId = storage_provider
-            .get_entry_at_seq_num(&author, &log_id, &SeqNum::new(1).unwrap())
-            .await
-            .unwrap()
-            .unwrap()
-            .hash()
-            .into();
-
-        let next_entry_args = storage_provider
-            .get_entry_args(&EntryArgsRequest {
-                author: author.clone(),
-                document: Some(document_id.clone()),
-            })
-            .await
-            .unwrap();
-
-        let mut fields = OperationFields::new();
-        fields
-            .add("username", OperationValue::Text("stitch".to_owned()))
-            .unwrap();
-
-        let update_operation = Operation::new_update(
-            schema.clone(),
-            next_entry_args.backlink.clone().unwrap().into(),
-            fields.clone(),
-        )
-        .unwrap();
-
-        let update_entry = Entry::new(
-            &next_entry_args.log_id,
-            Some(&update_operation),
-            next_entry_args.skiplink.as_ref(),
-            next_entry_args.backlink.as_ref(),
-            &next_entry_args.seq_num,
-        )
-        .unwrap();
-
-        let entry_encoded = sign_and_encode(&update_entry, &key_pair).unwrap();
-        let operation_encoded = OperationEncoded::try_from(&update_operation).unwrap();
+    async fn insert_entry(
+        key_pair: KeyPair,
+        entry: Entry,
+        #[from(test_db)]
+        #[future]
+        db: TestSqlStore,
+    ) {
+        let db = db.await;
+        let entry_encoded = sign_and_encode(&entry, &key_pair).unwrap();
+        let operation_encoded = OperationEncoded::try_from(entry.operation().unwrap()).unwrap();
         let doggo_entry = StorageEntry::new(&entry_encoded, &operation_encoded).unwrap();
-        let result = storage_provider.insert_entry(doggo_entry).await;
+        let result = db.store.insert_entry(doggo_entry).await;
 
         assert!(result.is_ok())
     }
 
+    #[rstest]
     #[tokio::test]
-    async fn try_insert_non_unique_entry() {
-        let (storage_provider, _key_pairs, _documents) = test_db(100, 1, false).await;
-
-        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
-        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+    async fn try_insert_non_unique_entry(
+        #[from(test_db)]
+        #[with(10, 1)]
+        #[future]
+        db: TestSqlStore,
+    ) {
+        let db = db.await;
+        let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
         let log_id = LogId::new(1);
 
-        let first_entry = storage_provider
+        let first_entry = db
+            .store
             .get_entry_at_seq_num(&author, &log_id, &SeqNum::new(1).unwrap())
             .await
             .unwrap()
@@ -512,7 +479,7 @@ mod tests {
             first_entry.operation_encoded().unwrap(),
         )
         .unwrap();
-        let result = storage_provider.insert_entry(duplicate_doggo_entry).await;
+        let result = db.store.insert_entry(duplicate_doggo_entry).await;
 
         assert_eq!(
             result.unwrap_err().to_string(),
@@ -521,63 +488,81 @@ mod tests {
         )
     }
 
+    #[rstest]
     #[tokio::test]
-    async fn latest_entry() {
-        let (storage_provider, _key_pairs, _documents) = test_db(100, 1, false).await;
-
+    async fn latest_entry(
+        #[from(test_db)]
+        #[with(100, 1)]
+        #[future]
+        db: TestSqlStore,
+    ) {
+        let db = db.await;
         let author_not_in_db = Author::try_from(*KeyPair::new().public_key()).unwrap();
         let log_id = LogId::new(1);
 
-        let latest_entry = storage_provider
+        let latest_entry = db
+            .store
             .get_latest_entry(&author_not_in_db, &log_id)
             .await
             .unwrap();
         assert!(latest_entry.is_none());
 
-        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
-        let author_in_db = Author::try_from(*key_pair.public_key()).unwrap();
+        let author_in_db = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
 
-        let latest_entry = storage_provider
+        let latest_entry = db
+            .store
             .get_latest_entry(&author_in_db, &log_id)
             .await
             .unwrap();
         assert_eq!(latest_entry.unwrap().seq_num(), SeqNum::new(100).unwrap());
     }
 
+    #[rstest]
     #[tokio::test]
-    async fn entries_by_schema() {
-        let (storage_provider, _key_pairs, _documents) = test_db(100, 1, false).await;
-
+    async fn entries_by_schema(
+        #[from(test_db)]
+        #[with(100, 1, false, TEST_SCHEMA_ID.parse().unwrap())]
+        #[future]
+        db: TestSqlStore,
+    ) {
+        let db = db.await;
         let schema_not_in_the_db = SchemaId::new_application(
             "venue",
             &Hash::new_from_bytes(vec![1, 2, 3]).unwrap().into(),
         );
 
-        let entries = storage_provider
+        let entries = db
+            .store
             .get_entries_by_schema(&schema_not_in_the_db)
             .await
             .unwrap();
         assert!(entries.is_empty());
 
-        let schema_in_the_db = SchemaId::new(TEST_SCHEMA_ID).unwrap();
+        let schema_in_the_db = TEST_SCHEMA_ID.parse().unwrap();
 
-        let entries = storage_provider
+        let entries = db
+            .store
             .get_entries_by_schema(&schema_in_the_db)
             .await
             .unwrap();
         assert!(entries.len() == 100);
     }
 
+    #[rstest]
     #[tokio::test]
-    async fn entry_by_seq_num() {
-        let (storage_provider, _key_pairs, _documents) = test_db(100, 1, false).await;
-
-        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
-        let author = Author::try_from(*key_pair.public_key()).unwrap();
+    async fn entry_by_seq_number(
+        #[from(test_db)]
+        #[with(100, 1)]
+        #[future]
+        db: TestSqlStore,
+    ) {
+        let db = db.await;
+        let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
 
         for seq_num in [1, 10, 56, 77, 90] {
             let seq_num = SeqNum::new(seq_num).unwrap();
-            let entry = storage_provider
+            let entry = db
+                .store
                 .get_entry_at_seq_num(&author, &LogId::new(1), &seq_num)
                 .await
                 .unwrap();
@@ -585,44 +570,53 @@ mod tests {
         }
 
         let wrong_log = LogId::new(2);
-        let entry = storage_provider
+        let entry = db
+            .store
             .get_entry_at_seq_num(&author, &wrong_log, &SeqNum::new(1).unwrap())
             .await
             .unwrap();
         assert!(entry.is_none());
 
         let author_not_in_db = Author::try_from(*KeyPair::new().public_key()).unwrap();
-        let entry = storage_provider
+        let entry = db
+            .store
             .get_entry_at_seq_num(&author_not_in_db, &LogId::new(1), &SeqNum::new(1).unwrap())
             .await
             .unwrap();
         assert!(entry.is_none());
 
         let seq_num_not_in_log = SeqNum::new(1000).unwrap();
-        let entry = storage_provider
+        let entry = db
+            .store
             .get_entry_at_seq_num(&author_not_in_db, &LogId::new(1), &seq_num_not_in_log)
             .await
             .unwrap();
         assert!(entry.is_none())
     }
 
+    #[rstest]
     #[tokio::test]
-    async fn get_entry_by_hash() {
-        let (storage_provider, _key_pairs, _documents) = test_db(100, 1, false).await;
-
-        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
-        let author = Author::try_from(*key_pair.public_key()).unwrap();
+    async fn get_entry_by_hash(
+        #[from(test_db)]
+        #[with(100, 1)]
+        #[future]
+        db: TestSqlStore,
+    ) {
+        let db = db.await;
+        let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
 
         for seq_num in [1, 11, 32, 45, 76] {
             let seq_num = SeqNum::new(seq_num).unwrap();
-            let entry = storage_provider
+            let entry = db
+                .store
                 .get_entry_at_seq_num(&author, &LogId::new(1), &seq_num)
                 .await
                 .unwrap()
                 .unwrap();
 
             let entry_hash = entry.hash();
-            let entry_by_hash = storage_provider
+            let entry_by_hash = db
+                .store
                 .get_entry_by_hash(&entry_hash)
                 .await
                 .unwrap()
@@ -631,21 +625,27 @@ mod tests {
         }
 
         let entry_hash_not_in_db = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
-        let entry = storage_provider
+        let entry = db
+            .store
             .get_entry_by_hash(&entry_hash_not_in_db)
             .await
             .unwrap();
         assert!(entry.is_none())
     }
 
+    #[rstest]
     #[tokio::test]
-    async fn get_paginated_log_entries() {
-        let (storage_provider, _key_pairs, _documents) = test_db(50, 1, false).await;
+    async fn paginated_log_entries(
+        #[from(test_db)]
+        #[with(100, 1)]
+        #[future]
+        db: TestSqlStore,
+    ) {
+        let db = db.await;
+        let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
 
-        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
-        let author = Author::try_from(*key_pair.public_key()).unwrap();
-
-        let entries = storage_provider
+        let entries = db
+            .store
             .get_paginated_log_entries(&author, &LogId::default(), &SeqNum::default(), 20)
             .await
             .unwrap();
@@ -655,14 +655,19 @@ mod tests {
         assert_eq!(entries.len(), 20);
     }
 
+    #[rstest]
     #[tokio::test]
-    async fn gets_all_lipmaa_entries_for_entry() {
-        let (storage_provider, _key_pairs, _documents) = test_db(50, 1, false).await;
+    async fn get_lipmaa_link_entries(
+        #[from(test_db)]
+        #[with(100, 1)]
+        #[future]
+        db: TestSqlStore,
+    ) {
+        let db = db.await;
+        let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
 
-        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
-        let author = Author::try_from(*key_pair.public_key()).unwrap();
-
-        let entries = storage_provider
+        let entries = db
+            .store
             .get_certificate_pool(&author, &LogId::default(), &SeqNum::new(20).unwrap())
             .await
             .unwrap();

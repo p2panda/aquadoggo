@@ -106,6 +106,7 @@ dependencies = [
  "rand 0.8.5",
  "reqwest",
  "rstest",
+ "rstest_reuse",
  "serde",
  "serde_json",
  "sqlformat",

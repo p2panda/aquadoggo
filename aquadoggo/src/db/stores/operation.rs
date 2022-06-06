@@ -381,14 +381,14 @@ mod tests {
     use p2panda_rs::operation::{Operation, OperationId, OperationWithMeta};
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, StorageProvider};
     use p2panda_rs::storage_provider::traits::{AsStorageOperation, OperationStore};
-    use p2panda_rs::test_utils::constants::{default_fields, DEFAULT_HASH, DEFAULT_PRIVATE_KEY};
+    use p2panda_rs::test_utils::constants::{default_fields, DEFAULT_HASH};
     use p2panda_rs::test_utils::fixtures::{
-        create_operation, delete_operation, document_id, operation_fields, operation_id,
+        create_operation, delete_operation, document_id, key_pair, operation_fields, operation_id,
         operation_with_meta, public_key, random_previous_operations, update_operation,
     };
     use rstest::rstest;
 
-    use crate::db::stores::test_utils::test_db;
+    use crate::db::stores::test_utils::{test_db, TestSqlStore};
 
     use super::OperationStorage;
 
@@ -404,18 +404,21 @@ mod tests {
         #[from(public_key)] author: Author,
         operation_id: OperationId,
         document_id: DocumentId,
+        #[from(test_db)]
+        #[future]
+        db: TestSqlStore,
     ) {
-        let (storage_provider, _, _) = test_db(0, 0, false).await;
-
+        let db = db.await;
         // Construct the storage operation.
         let operation = OperationStorage::new(&author, &operation, &operation_id, &document_id);
 
         // Insert the doggo operation into the db, returns Ok(true) when succesful.
-        let result = storage_provider.insert_operation(&operation).await;
+        let result = db.store.insert_operation(&operation).await;
         assert!(result.is_ok());
 
         // Request the previously inserted operation by it's id.
-        let returned_operation = storage_provider
+        let returned_operation = db
+            .store
             .get_operation_by_id(operation.id())
             .await
             .unwrap()
@@ -429,18 +432,19 @@ mod tests {
 
     #[rstest]
     #[tokio::test]
-    async fn insert_operation_twice(operation_with_meta: OperationWithMeta) {
-        let (storage_provider, _, _) = test_db(0, 0, false).await;
-
+    async fn insert_operation_twice(
+        operation_with_meta: OperationWithMeta,
+        #[from(test_db)]
+        #[future]
+        db: TestSqlStore,
+    ) {
+        let db = db.await;
         let create_operation = OperationStorage::new_from_operation(operation_with_meta, None);
 
-        assert!(storage_provider
-            .insert_operation(&create_operation)
-            .await
-            .is_ok());
+        assert!(db.store.insert_operation(&create_operation).await.is_ok());
 
         assert_eq!(
-            storage_provider.insert_operation(&create_operation).await.unwrap_err().to_string(),
+            db.store.insert_operation(&create_operation).await.unwrap_err().to_string(),
             "A fatal error occured in OperationStore: error returned from database: UNIQUE constraint failed: operations_v1.entry_hash"
         )
     }
@@ -455,24 +459,24 @@ mod tests {
         #[with(Some(operation_fields(default_fields())), Some(DEFAULT_HASH.parse().unwrap()))]
         update_operation: OperationWithMeta,
         document_id: DocumentId,
+        #[from(test_db)]
+        #[future]
+        db: TestSqlStore,
     ) {
-        let (storage_provider, _, _) = test_db(0, 0, false).await;
-
+        let db = db.await;
         let create_operation = OperationStorage::new_from_operation(create_operation, None);
 
-        assert!(storage_provider
+        assert!(db
+            .store
             .get_document_by_operation_id(create_operation.id())
             .await
             .unwrap()
             .is_none());
 
-        storage_provider
-            .insert_operation(&create_operation)
-            .await
-            .unwrap();
+        db.store.insert_operation(&create_operation).await.unwrap();
 
         assert_eq!(
-            storage_provider
+            db.store
                 .get_document_by_operation_id(create_operation.id())
                 .await
                 .unwrap()
@@ -483,13 +487,10 @@ mod tests {
         let update_operation =
             OperationStorage::new_from_operation(update_operation, Some(document_id.clone()));
 
-        storage_provider
-            .insert_operation(&update_operation)
-            .await
-            .unwrap();
+        db.store.insert_operation(&update_operation).await.unwrap();
 
         assert_eq!(
-            storage_provider
+            db.store
                 .get_document_by_operation_id(create_operation.id())
                 .await
                 .unwrap()
@@ -498,25 +499,34 @@ mod tests {
         );
     }
 
+    #[rstest]
     #[tokio::test]
-    async fn get_operations_by_document_id() {
-        let (storage_provider, _, _) = test_db(5, 1, false).await;
-        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
+    async fn get_operations_by_document_id(
+        key_pair: KeyPair,
+        #[from(test_db)]
+        #[with(5, 1)]
+        #[future]
+        db: TestSqlStore,
+    ) {
+        let db = db.await;
         let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
-        let latest_entry = storage_provider
+        let latest_entry = db
+            .store
             .get_latest_entry(&author, &LogId::default())
             .await
             .unwrap()
             .unwrap();
 
-        let document_id = storage_provider
+        let document_id = db
+            .store
             .get_document_by_entry(&latest_entry.hash())
             .await
             .unwrap()
             .unwrap();
 
-        let operations_by_document_id = storage_provider
+        let operations_by_document_id = db
+            .store
             .get_operations_by_document_id(&document_id)
             .await
             .unwrap();
