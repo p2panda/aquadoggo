@@ -24,6 +24,7 @@ use crate::db::traits::DocumentStore;
 use crate::graphql::client::{EntryArgsRequest, PublishEntryRequest};
 use crate::test_helpers::initialize_db;
 
+/// The fields used as defaults in the tests.
 pub fn doggo_test_fields() -> Vec<(&'static str, OperationValue)> {
     vec![
         ("username", OperationValue::Text("bubu".to_owned())),
@@ -82,6 +83,7 @@ pub fn doggo_test_fields() -> Vec<(&'static str, OperationValue)> {
     ]
 }
 
+/// Helper for creating many key_pairs.
 pub fn test_key_pairs(no_of_authors: usize) -> Vec<KeyPair> {
     let mut key_pairs = vec![KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap()];
 
@@ -92,6 +94,7 @@ pub fn test_key_pairs(no_of_authors: usize) -> Vec<KeyPair> {
     key_pairs
 }
 
+/// Helper for constructing a publish entry request.
 pub async fn construct_publish_entry_request(
     provider: &SqlStorage,
     operation: &Operation,
@@ -122,6 +125,7 @@ pub async fn construct_publish_entry_request(
     }
 }
 
+/// Helper for inserting an entry, operation and document_view into the database.
 pub async fn insert_entry_operation_and_view(
     provider: &SqlStorage,
     key_pair: &KeyPair,
@@ -173,19 +177,21 @@ pub async fn insert_entry_operation_and_view(
     (document_id, document_view_id)
 }
 
+/// Container for `SqlStore` with access to the document ids and key_pairs
+/// used in the pre-populated database for testing.
 pub struct TestSqlStore {
     pub store: SqlStorage,
     pub key_pairs: Vec<KeyPair>,
     pub documents: Vec<DocumentId>,
 }
 
-/// Construct and return a storage provider instance backed by a pre-polpulated database. Passed parameters
-/// define what the db should contain. The first entry in each log contains a valid CREATE operation
-/// following entries contain duplicate UPDATE operations. If the with_delete flag is set to true
-/// the last entry in all logs contain be a DELETE operation.
+/// Fixture for constructing a storage provider instance backed by a pre-polpulated database. Passed
+/// parameters define what the db should contain. The first entry in each log contains a valid CREATE
+/// operation following entries contain duplicate UPDATE operations. If the with_delete flag is set
+/// to true the last entry in all logs contain be a DELETE operation.
 ///
-/// Returns a storage provider instance, a vector of key pairs for all authors in the db, and a vector
-/// of the ids for all documents.
+/// Returns a `TestSqlStore` containing storage provider instance, a vector of key pairs for all authors
+/// in the db, and a vector of the ids for all documents.
 #[fixture]
 pub async fn test_db(
     // Number of entries per log/document
