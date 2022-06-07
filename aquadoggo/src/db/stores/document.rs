@@ -693,7 +693,7 @@ mod tests {
         for document_id in &db.documents {
             let document_operations = db
                 .store
-                .get_operations_by_document_id(&document_id)
+                .get_operations_by_document_id(document_id)
                 .await
                 .unwrap();
 
