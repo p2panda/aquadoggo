@@ -5,7 +5,7 @@ use async_graphql::ID;
 use lru::LruCache;
 use mockall::automock;
 use p2panda_rs::entry::decode_entry;
-use p2panda_rs::storage_provider::traits::EntryStore;
+use p2panda_rs::storage_provider::traits::EntryStore as EntryStoreTrait;
 
 use crate::db::stores::StorageEntry;
 
@@ -20,15 +20,15 @@ use super::SequenceNumber;
 use super::SingleEntryAndPayload;
 
 #[derive(Debug)]
-pub struct Context<ES: 'static + EntryStore<StorageEntry>> {
+pub struct Context<EntryStore: 'static + EntryStoreTrait<StorageEntry>> {
     author_aliases: LruCache<ID, PublicKey>,
     next_alias: usize,
-    entry_store: ES,
+    entry_store: EntryStore,
 }
 
 #[automock]
-impl<ES: 'static + EntryStore<StorageEntry>> Context<ES> {
-    pub fn new(author_aliases_cache_size: usize, entry_store: ES) -> Self {
+impl<EntryStore: 'static + EntryStoreTrait<StorageEntry>> Context<EntryStore> {
+    pub fn new(author_aliases_cache_size: usize, entry_store: EntryStore) -> Self {
         Self {
             author_aliases: LruCache::new(author_aliases_cache_size),
             next_alias: Default::default(),
