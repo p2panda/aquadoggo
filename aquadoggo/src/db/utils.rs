@@ -622,10 +622,10 @@ mod tests {
                 .get("many_profile_pictures")
                 .unwrap(),
             &OperationValue::RelationList(RelationList::new(vec![
-                "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                     .parse()
                     .unwrap(),
-                "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
                     .parse()
                     .unwrap(),
             ]))
@@ -777,7 +777,7 @@ mod tests {
                         .to_string(),
                 name: "many_special_profile_pictures".to_string(),
                 field_type: "pinned_relation_list".to_string(),
-                value: "0020dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                value: "0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
                     .to_string(),
             },
             DocumentViewFieldRow {
@@ -789,7 +789,7 @@ mod tests {
                         .to_string(),
                 name: "many_special_profile_pictures".to_string(),
                 field_type: "pinned_relation_list".to_string(),
-                value: "0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                value: "0020dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
                     .to_string(),
             },
             DocumentViewFieldRow {
@@ -856,10 +856,10 @@ mod tests {
             &DocumentViewValue::new(
                 &operation_id,
                 &OperationValue::RelationList(RelationList::new(vec![
-                    "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                    "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                         .parse()
                         .unwrap(),
-                    "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                    "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
                         .parse()
                         .unwrap(),
                 ]))

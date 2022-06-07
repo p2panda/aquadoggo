@@ -21,15 +21,13 @@ async-graphql = "3.0.38"
 async-graphql-axum = "3.0.35"
 axum = "0.5.1"
 bamboo-rs-core-ed25519-yasmf = "0.1.1"
-deadqueue = { version = "0.2.2", default-features = false, features = ["unlimited"] }
+deadqueue = { version = "0.2.2", default-features = false, features = [
+    "unlimited",
+] }
 directories = "3.0.2"
 envy = "0.4.2"
 graphql_client = "0.10"
 hex = "0.4.3"
-jsonrpc-v2 = { version = "0.10.1", features = [
-    "easy-errors",
-    "bytes-v05",
-], default-features = false }
 lipmaa-link = "0.2.2"
 log = "0.4.14"
 lru = "0.7.5"
@@ -38,8 +36,7 @@ mockall_double = "0.3.0"
 openssl-probe = "0.1.4"
 # We can not publish the `aquadoggo` crate yet, since `p2panda-rs` is an
 # unpublished dependency.
-# @TODO: This points at a WIP branch in p2panda_rs which is used as long as things are slightly unstable
-p2panda-rs = { git = "https://github.com/p2panda/p2panda", branch = "aquadoggo-wip" }
+p2panda-rs = { git = "https://github.com/p2panda/p2panda", branch = "main" }
 rand = "0.8.4"
 serde = { version = "1.0.130", features = ["derive"] }
 serde_json = "1.0.67"
