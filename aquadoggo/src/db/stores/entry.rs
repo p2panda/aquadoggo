@@ -514,7 +514,7 @@ mod tests {
             .get_latest_entry(&author_in_db, &log_id)
             .await
             .unwrap();
-        assert_eq!(latest_entry.unwrap().seq_num(), SeqNum::new(100).unwrap());
+        assert_eq!(latest_entry.unwrap().seq_num(), SeqNum::new(20).unwrap());
     }
 
     #[rstest]
