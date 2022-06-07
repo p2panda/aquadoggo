@@ -366,7 +366,7 @@ mod tests {
     #[tokio::test]
     async fn inserts_gets_one_document_view(
         #[from(test_db)]
-        #[with(100, 1)]
+        #[with(1, 1)]
         #[future]
         db: TestSqlStore,
     ) {

@@ -492,7 +492,7 @@ mod tests {
     #[tokio::test]
     async fn latest_entry(
         #[from(test_db)]
-        #[with(100, 1)]
+        #[with(20, 1)]
         #[future]
         db: TestSqlStore,
     ) {
@@ -521,7 +521,7 @@ mod tests {
     #[tokio::test]
     async fn entries_by_schema(
         #[from(test_db)]
-        #[with(100, 1, false, TEST_SCHEMA_ID.parse().unwrap())]
+        #[with(20, 2, false, TEST_SCHEMA_ID.parse().unwrap())]
         #[future]
         db: TestSqlStore,
     ) {
@@ -545,21 +545,21 @@ mod tests {
             .get_entries_by_schema(&schema_in_the_db)
             .await
             .unwrap();
-        assert!(entries.len() == 100);
+        assert!(entries.len() == 40);
     }
 
     #[rstest]
     #[tokio::test]
     async fn entry_by_seq_number(
         #[from(test_db)]
-        #[with(100, 1)]
+        #[with(10, 1)]
         #[future]
         db: TestSqlStore,
     ) {
         let db = db.await;
         let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
 
-        for seq_num in [1, 10, 56, 77, 90] {
+        for seq_num in 1..10 {
             let seq_num = SeqNum::new(seq_num).unwrap();
             let entry = db
                 .store
@@ -598,14 +598,14 @@ mod tests {
     #[tokio::test]
     async fn get_entry_by_hash(
         #[from(test_db)]
-        #[with(100, 1)]
+        #[with(20, 1)]
         #[future]
         db: TestSqlStore,
     ) {
         let db = db.await;
         let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
 
-        for seq_num in [1, 11, 32, 45, 76] {
+        for seq_num in [1, 11, 18] {
             let seq_num = SeqNum::new(seq_num).unwrap();
             let entry = db
                 .store
@@ -637,7 +637,7 @@ mod tests {
     #[tokio::test]
     async fn paginated_log_entries(
         #[from(test_db)]
-        #[with(100, 1)]
+        #[with(30, 1)]
         #[future]
         db: TestSqlStore,
     ) {
@@ -649,10 +649,20 @@ mod tests {
             .get_paginated_log_entries(&author, &LogId::default(), &SeqNum::default(), 20)
             .await
             .unwrap();
+
         for entry in entries.clone() {
             assert!(entry.seq_num().as_u64() >= 1 && entry.seq_num().as_u64() <= 20)
         }
+
         assert_eq!(entries.len(), 20);
+
+        let entries = db
+            .store
+            .get_paginated_log_entries(&author, &LogId::default(), &SeqNum::new(21).unwrap(), 20)
+            .await
+            .unwrap();
+
+        assert_eq!(entries.len(), 10);
     }
 
     #[rstest]
