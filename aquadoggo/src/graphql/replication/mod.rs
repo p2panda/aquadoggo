@@ -62,7 +62,9 @@ impl<EntryStore> ReplicationRoot<EntryStore> {
 }
 
 #[Object]
-impl<EntryStore: 'static + EntryStoreTrait<StorageEntry> + Sync + Send> ReplicationRoot<EntryStore> {
+impl<EntryStore: 'static + EntryStoreTrait<StorageEntry> + Sync + Send>
+    ReplicationRoot<EntryStore>
+{
     /// Get an entry by its hash
     async fn entry_by_hash<'a>(
         &self,
