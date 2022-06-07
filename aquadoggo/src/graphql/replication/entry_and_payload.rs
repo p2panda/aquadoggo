@@ -7,7 +7,7 @@ use crate::db::stores::StorageEntry;
 use super::payload::Payload;
 use super::Entry;
 
-/// An and entry with an optional payload
+/// An entry with an optional payload
 #[derive(SimpleObject, Debug)]
 pub struct EntryAndPayload {
     /// Get the entry
