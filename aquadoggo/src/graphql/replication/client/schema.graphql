@@ -1,3 +1,13 @@
+"""
+AliasedAuthor is one of either the public_key or an alias
+
+The intention of this is to reduce bandwidth when making requests by using a short "alias"
+rather than the full author public_key
+
+To get an alias of an author, use the `author_aliases` method which will return this type.
+
+When using as an input to a query, exactly one of public_key or alias must be set otherwise it is an error.
+"""
 type AliasedAuthor {
 	"""
 	The author's public key
@@ -23,7 +33,7 @@ input Author {
 }
 scalar Entry
 """
-An and entry with an optional payload
+An entry with an optional payload
 """
 type EntryAndPayload {
 	"""
@@ -144,9 +154,9 @@ type SingleEntryAndPayload {
 	"""
 	payload: Payload
 	"""
-	Get all the skiplinks for this entry that are required to verify the entry is valid
+	Get the certificate pool for this entry that can be used to verify the entry is valid
 	"""
-	skiplinks: [Entry!]!
+	certificatePool: [Entry!]!
 }
 schema {
 	query: QueryRoot

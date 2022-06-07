@@ -8,7 +8,7 @@ use crate::graphql::Context as GraphQLContext;
 use super::payload::Payload;
 use super::Entry;
 
-/// A p2panda entry with optional payload and the collection of skiplinks required to verify it.
+/// A p2panda entry with optional payload and the certificate pool required to verify it.
 #[derive(Debug)]
 pub struct SingleEntryAndPayload {
     pub entry: Entry,
@@ -27,8 +27,8 @@ impl SingleEntryAndPayload {
         self.payload.as_ref()
     }
 
-    /// Get all the skiplinks for this entry that are required to verify the entry is valid
-    async fn skiplinks<'a>(&self, ctx: &Context<'a>) -> Result<Vec<Entry>> {
+    /// Get the certificate pool for this entry that can be used to verify the entry is valid
+    async fn certificate_pool<'a>(&self, ctx: &Context<'a>) -> Result<Vec<Entry>> {
         let ctx: &GraphQLContext = ctx.data()?;
 
         let result = ctx
