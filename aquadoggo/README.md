@@ -82,9 +82,14 @@ $ cargo add aquadoggo
 
 When you update the graphql code you'll need to manually regenerate the graphql schema files.
 
+In the `aquadoggo/aquadoggo` directory:
+
 ```sh
-cargo run --bin dump_gql_schema > aquadoggo/src/graphql/replication/client/schema.graphql
+cargo build --bin dump_gql_schema
+cargo run --bin dump_gql_schema > src/graphql/replication/client/schema.graphql
 ```
+
+Note that the `cargo build` step is required first because the `>` in the run step truncates the schema file which is used for code generation.
 
 ## License
 
