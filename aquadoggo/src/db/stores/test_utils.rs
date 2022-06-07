@@ -200,8 +200,11 @@ pub async fn test_db(
     #[default(0)] no_of_authors: usize,
     // A boolean flag for wether all logs should contain a delete operation
     #[default(false)] with_delete: bool,
+    // The schema used for all operations in the db
     #[default(TEST_SCHEMA_ID.parse().unwrap())] schema: SchemaId,
-    #[default(doggo_test_fields())] operation_fields: Vec<(&'static str, OperationValue)>,
+    // The fields used for every CREATE operation
+    #[default(doggo_test_fields())] create_operation_fields: Vec<(&'static str, OperationValue)>,
+    // The fields used for every UPDATE operation
     #[default(doggo_test_fields())] update_operation_fields: Vec<(&'static str, OperationValue)>,
 ) -> TestSqlStore {
     let mut documents: Vec<DocumentId> = Vec::new();
@@ -232,7 +235,7 @@ pub async fn test_db(
                 .unwrap();
 
             let next_operation = if index == 0 {
-                create_operation(&operation_fields)
+                create_operation(&create_operation_fields)
             } else if index == (no_of_entries - 1) && with_delete {
                 delete_operation(&next_entry_args.backlink.clone().unwrap().into())
             } else {
