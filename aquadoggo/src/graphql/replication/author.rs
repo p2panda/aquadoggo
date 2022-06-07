@@ -30,7 +30,7 @@ impl TryFrom<Author> for AuthorOrAlias {
             (Some(key), None) => Ok(AuthorOrAlias::PublicKey(key)),
             (None, Some(alias)) => Ok(AuthorOrAlias::Alias(alias)),
             _ => Err(anyhow!(
-                "Author must have only one of public_key or alias set"
+                "Author must have either publicKey or alias set, but not both"
             )),
         }
     }
