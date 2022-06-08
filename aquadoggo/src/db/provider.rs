@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use async_trait::async_trait;
+use p2panda_rs::document::DocumentViewId;
+use sqlx::query_as;
 use sqlx::query_scalar;
 
 use p2panda_rs::document::DocumentId;
@@ -13,6 +15,9 @@ use crate::errors::StorageProviderResult;
 use crate::graphql::client::{
     EntryArgsRequest, EntryArgsResponse, PublishEntryRequest, PublishEntryResponse,
 };
+
+use super::errors::DocumentStorageError;
+use super::models::RelationRow;
 
 #[derive(Debug, Clone)]
 /// Sql based storage that implements `StorageProvider`
@@ -69,5 +74,69 @@ impl StorageProvider<StorageEntry, StorageLog> for SqlStorage {
         });
 
         Ok(hash)
+    }
+}
+
+impl SqlStorage {
+    pub async fn get_document_view_dependencies(
+        &self,
+        document_view_id: &DocumentViewId,
+    ) -> StorageProviderResult<Vec<RelationRow>> {
+        let relation_ids = query_as::<_, RelationRow>(
+            "
+                WITH RECURSIVE cte_relation (document_id, document_view_id, operation_id, relation_type, value) AS (
+                    SELECT
+                        documents.document_id,
+                        document_view_fields.document_view_id,
+                        document_view_fields.operation_id,
+                        operation_fields_v1.field_type,
+                        operation_fields_v1.value
+                    FROM
+                        document_view_fields
+                    LEFT JOIN operation_fields_v1
+                        ON
+                            operation_fields_v1.operation_id = document_view_fields.operation_id
+                        AND
+                            operation_fields_v1.name = document_view_fields.name
+                    LEFT JOIN documents
+                        ON
+                            documents.document_view_id = document_view_fields.document_view_id
+                    WHERE
+                        document_view_fields.document_view_id = $1 AND operation_fields_v1.field_type LIKE '%relation%'
+
+                    UNION ALL
+
+                    SELECT
+                        documents.document_id,
+                        document_view_fields.document_view_id,
+                        document_view_fields.operation_id,
+                        operation_fields_v1.field_type,
+                        operation_fields_v1.value
+                    FROM
+                        document_view_fields
+                    LEFT JOIN operation_fields_v1
+                        ON
+                            operation_fields_v1.operation_id = document_view_fields.operation_id
+                        AND
+                            operation_fields_v1.name = document_view_fields.name
+                    LEFT JOIN documents
+                        ON
+                            documents.document_view_id = document_view_fields.document_view_id
+                    JOIN cte_relation
+                        ON
+                            cte_relation.value = document_view_fields.document_view_id
+                        OR
+                            cte_relation.value = documents.document_id
+                )
+
+                SELECT relation_type, value FROM cte_relation;
+            ",
+        )
+        .bind(document_view_id.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+
+        Ok(relation_ids)
     }
 }
