@@ -52,10 +52,20 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
                 TaskInput::new(None, Some(pinned_relation.view_id().to_owned())),
             ),
             OperationValue::RelationList(relation_list) => {
-                next_task_inputs.append(&mut relation_list.iter().map(|document_id|TaskInput::new(Some(document_id), None)).collect());
+                next_task_inputs.append(
+                    &mut relation_list
+                        .iter()
+                        .map(|document_id| TaskInput::new(Some(document_id), None))
+                        .collect(),
+                );
             }
             OperationValue::PinnedRelationList(pinned_relation_list) => {
-                next_task_inputs.append(&mut pinned_relation_list.iter().map(|document_view_id|TaskInput::new(None, Some(document_view_id))).collect());
+                next_task_inputs.append(
+                    &mut pinned_relation_list
+                        .iter()
+                        .map(|document_view_id| TaskInput::new(None, Some(document_view_id)))
+                        .collect(),
+                );
             }
             _ => (),
         };
@@ -97,7 +107,7 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
             if !document.is_deleted() {
                 println!("PARSE NEW TASKS FROM:");
                 println!("{:#?}", document.view().unwrap());
-        
+
                 // Check for relation fields, if found, parse them into new dependency tasks.
                 document.view().unwrap().iter().for_each(parse_new_tasks);
             }
@@ -108,7 +118,8 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
         None
     } else {
         Some(
-            next_task_inputs.clone()
+            next_task_inputs
+                .clone()
                 .into_iter()
                 .map(|input| Task::new("dependency", input))
                 .collect(),
@@ -121,7 +132,9 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
 #[cfg(test)]
 mod tests {
     use p2panda_rs::document::DocumentViewId;
-    use p2panda_rs::operation::{OperationValue, Relation, RelationList, PinnedRelationList, PinnedRelation};
+    use p2panda_rs::operation::{
+        OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList,
+    };
     use p2panda_rs::storage_provider::traits::{AsStorageOperation, OperationStore};
     use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
     use p2panda_rs::test_utils::fixtures::{random_document_id, random_document_view_id};
@@ -229,28 +242,28 @@ mod tests {
     }
 
     #[rstest]
-    #[case(test_db(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), 
-        vec![("profile_picture", OperationValue::Relation(Relation::new(random_document_id())))], 
+    #[case(test_db(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(),
+        vec![("profile_picture", OperationValue::Relation(Relation::new(random_document_id())))],
         vec![]), 1)]
-    #[case(test_db(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), 
-        vec![("favorite_book_images", OperationValue::RelationList(RelationList::new([0; 6].iter().map(|_|random_document_id()).collect())))], 
+    #[case(test_db(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(),
+        vec![("favorite_book_images", OperationValue::RelationList(RelationList::new([0; 6].iter().map(|_|random_document_id()).collect())))],
         vec![]), 6)]
-    #[case(test_db(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), 
-        vec![("something_from_the_past", OperationValue::PinnedRelation(PinnedRelation::new(random_document_view_id())))], 
+    #[case(test_db(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(),
+        vec![("something_from_the_past", OperationValue::PinnedRelation(PinnedRelation::new(random_document_view_id())))],
         vec![]), 1)]
-    #[case(test_db(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), 
-        vec![("many_previous_drafts", OperationValue::PinnedRelationList(PinnedRelationList::new([0; 2].iter().map(|_|random_document_view_id()).collect())))], 
+    #[case(test_db(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(),
+        vec![("many_previous_drafts", OperationValue::PinnedRelationList(PinnedRelationList::new([0; 2].iter().map(|_|random_document_view_id()).collect())))],
         vec![]), 2)]
-    #[case(test_db(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), 
+    #[case(test_db(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(),
         vec![("one_relation_field", OperationValue::PinnedRelationList(PinnedRelationList::new([0; 2].iter().map(|_|random_document_view_id()).collect()))),
-             ("another_relation_field", OperationValue::RelationList(RelationList::new([0; 6].iter().map(|_|random_document_id()).collect())))], 
+             ("another_relation_field", OperationValue::RelationList(RelationList::new([0; 6].iter().map(|_|random_document_id()).collect())))],
         vec![]), 8)]
     #[tokio::test]
     async fn returns_dependency_task_inputs(
         #[case]
         #[future]
         db: TestSqlStore,
-        #[case] expected_next_tasks: usize
+        #[case] expected_next_tasks: usize,
     ) {
         let db = db.await;
         let context = Context::new(db.store.clone(), Configuration::default());
