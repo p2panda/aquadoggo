@@ -55,7 +55,7 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
             context
                 .store
                 // Unwrap as all not deleted documents have a view.
-                .insert_document_view(&document.view().unwrap(), document.schema())
+                .insert_document_view(document.view().unwrap(), document.schema())
                 .await
                 .map_err(|_| TaskError::Failure)?
         }
