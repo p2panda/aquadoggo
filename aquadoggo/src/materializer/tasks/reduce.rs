@@ -16,24 +16,24 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
         // table back for that.
         (None, Some(document_view_id)) => {
             let operation_id = document_view_id.clone().into_iter().next().unwrap();
-            let document_id = context
+            match context
                 .store
                 .get_document_by_operation_id(operation_id)
                 .await
-                .map_err(|_| TaskError::Failure)?;
-            match document_id {
-                Some(id) => Ok(id),
+                .map_err(|_| TaskError::Critical)? // We only get an error here on a critical database error.
+            {
+                Some(document_id) => Ok(document_id),
                 None => Err(TaskError::Failure),
             }
         }
-        (_, _) => todo!(),
+        (_, _) => Err(TaskError::Failure),
     }?;
 
     let operations = context
         .store
         .get_operations_by_document_id(&document_id)
         .await
-        .map_err(|_| TaskError::Failure)?
+        .map_err(|_| TaskError::Critical)?
         .into_iter()
         // TODO: we can avoid this conversion if we do https://github.com/p2panda/p2panda/issues/320
         .map(|op| op.into())
@@ -45,7 +45,7 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
             // what do we want to return?
             let document = DocumentBuilder::new(operations)
                 .build_to_view_id(Some(document_view_id.to_owned()))
-                .map_err(|_| TaskError::Failure)?;
+                .map_err(|_| TaskError::Critical)?;
 
             if document.is_deleted() {
                 return Ok(None);
@@ -55,7 +55,7 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
                     // Unwrap as all not deleted documents have a view.
                     .insert_document_view(document.view().unwrap(), document.schema())
                     .await
-                    .map_err(|_| TaskError::Failure)?;
+                    .map_err(|_| TaskError::Critical)?;
 
                 document_view_id.to_owned()
             }
@@ -87,10 +87,11 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::document::DocumentViewId;
+    use p2panda_rs::document::{DocumentId, DocumentViewId};
     use p2panda_rs::operation::OperationValue;
     use p2panda_rs::storage_provider::traits::{AsStorageOperation, OperationStore};
     use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
+    use p2panda_rs::test_utils::fixtures::{random_document_id, random_document_view_id};
     use rstest::rstest;
 
     use crate::config::Configuration;
@@ -215,5 +216,27 @@ mod tests {
         let next_task_inputs = reduce_task(context.clone(), input).await.unwrap();
 
         assert_eq!(next_task_inputs.is_some(), is_next_task);
+    }
+
+    #[rstest]
+    #[should_panic(expected = "Failure")]
+    #[case(None, None)]
+    #[should_panic(expected = "Failure")]
+    #[case(None, Some(random_document_view_id()))]
+    #[should_panic(expected = "Failure")]
+    #[case(Some(random_document_id()), None)]
+    #[tokio::test]
+    async fn fails_correctly(
+        #[case] document_id: Option<DocumentId>,
+        #[case] document_view_id: Option<DocumentViewId>,
+        #[from(test_db)]
+        #[future]
+        db: TestSqlStore,
+    ) {
+        let db = db.await;
+        let context = Context::new(db.store, Configuration::default());
+        let input = TaskInput::new(document_id, document_view_id);
+
+        reduce_task(context.clone(), input).await.unwrap();
     }
 }

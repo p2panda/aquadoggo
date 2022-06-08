@@ -5,37 +5,40 @@ use crate::materializer::worker::{Task, TaskError, TaskResult};
 use crate::materializer::TaskInput;
 
 pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
+    let document_view_id = match input.document_view_id {
+        Some(id) => id,
+        // We only accept handling dependency tasks for specific document views.
+        None => return Err(TaskError::Failure),
+    };
     let dependencies = context
         .store
-        .get_document_view_dependencies(&input.document_view_id.unwrap())
+        .get_document_view_dependencies(&document_view_id)
         .await
-        .map_err(|e| {
-            println!("{:#?}", e);
-            TaskError::Failure
-        })?;
+        .map_err(|_| TaskError::Critical)?;
 
-    let next_tasks: Vec<Task<TaskInput>> = dependencies
-        .iter()
-        .map(|relation_row| match relation_row.relation_type.as_str() {
-            "relation" => Task::new(
+    let mut next_tasks = Vec::new();
+
+    for relation_row in dependencies.iter() {
+        match relation_row.relation_type.as_str() {
+            "relation" => next_tasks.push(Task::new(
                 "reduce",
                 TaskInput::new(Some(relation_row.value.parse().unwrap()), None),
-            ),
-            "relation_list" => Task::new(
+            )),
+            "relation_list" => next_tasks.push(Task::new(
                 "reduce",
                 TaskInput::new(Some(relation_row.value.parse().unwrap()), None),
-            ),
-            "pinned_relation" => Task::new(
+            )),
+            "pinned_relation" => next_tasks.push(Task::new(
                 "reduce",
                 TaskInput::new(None, Some(relation_row.value.parse().unwrap())),
-            ),
-            "pinned_relation_list" => Task::new(
+            )),
+            "pinned_relation_list" => next_tasks.push(Task::new(
                 "reduce",
                 TaskInput::new(None, Some(relation_row.value.parse().unwrap())),
-            ),
-            _ => panic!("Not a relation type"),
-        })
-        .collect();
+            )),
+            _ => return Err(TaskError::Critical),
+        }
+    }
 
     let next_tasks = if next_tasks.is_empty() {
         None
@@ -48,6 +51,7 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
 
 #[cfg(test)]
 mod tests {
+    use p2panda_rs::document::{DocumentId, DocumentViewId};
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::{
         OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList,
@@ -285,5 +289,27 @@ mod tests {
 
         assert_eq!(reduce_tasks.len(), expected_next_tasks);
         assert!(reduce_tasks_of_unrelated_document.is_none());
+    }
+
+    #[rstest]
+    #[case(None, Some(random_document_view_id()))]
+    #[should_panic(expected = "Failure")]
+    #[case(None, None)]
+    #[should_panic(expected = "Failure")]
+    #[case(Some(random_document_id()), None)]
+    #[tokio::test]
+    async fn fails_correctly(
+        #[case] document_id: Option<DocumentId>,
+        #[case] document_view_id: Option<DocumentViewId>,
+        #[from(test_db)]
+        #[future]
+        db: TestSqlStore,
+    ) {
+        let db = db.await;
+        let context = Context::new(db.store, Configuration::default());
+        let input = TaskInput::new(document_id, document_view_id);
+
+        let next_tasks = dependency_task(context.clone(), input).await.unwrap();
+        assert!(next_tasks.is_none())
     }
 }
