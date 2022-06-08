@@ -77,7 +77,9 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
 
 #[cfg(test)]
 mod tests {
+    use p2panda_rs::document::DocumentViewId;
     use p2panda_rs::operation::OperationValue;
+    use p2panda_rs::storage_provider::traits::{AsStorageOperation, OperationStore};
     use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
     use rstest::rstest;
 
@@ -112,6 +114,51 @@ mod tests {
                 &OperationValue::Text("PANDA".to_string())
             )
         }
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn reduces_document_to_specific_view_id(
+        #[from(test_db)]
+        #[with(2, 1, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::Text("panda".into()))], vec![("username", OperationValue::Text("PANDA".into()))])]
+        #[future]
+        db: TestSqlStore,
+    ) {
+        let db = db.await;
+
+        let mut document_operations = db
+            .store
+            .get_operations_by_document_id(&db.documents[0])
+            .await
+            .unwrap();
+
+        let document_view_id: DocumentViewId = document_operations.pop().unwrap().id().into();
+
+        let context = Context::new(db.store, Configuration::default());
+        let input = TaskInput::new(None, Some(document_view_id.clone()));
+
+        assert!(reduce_task(context.clone(), input).await.is_ok());
+
+        let document_view = context
+            .store
+            .get_document_view_by_id(&document_view_id)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            document_view.unwrap().get("username").unwrap().value(),
+            &OperationValue::Text("PANDA".to_string())
+        );
+
+        // We didn't reduce this document_view_id so it shouldn't exist in the db.
+        let document_view_id: DocumentViewId = document_operations.pop().unwrap().id().into();
+        let document_view = context
+            .store
+            .get_document_view_by_id(&document_view_id)
+            .await
+            .unwrap();
+
+        assert!(document_view.is_none());
     }
 
     #[rstest]
