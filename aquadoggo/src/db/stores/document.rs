@@ -233,8 +233,6 @@ impl DocumentStore for SqlStorage {
         .await
         .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
 
-        println!("{:#?}", document_view_field_rows);
-
         if document_view_field_rows.is_empty() {
             return Ok(None);
         }

@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use p2panda_rs::document::DocumentBuilder;
+use p2panda_rs::document::{DocumentBuilder, DocumentViewValue};
+use p2panda_rs::operation::OperationValue;
 use p2panda_rs::storage_provider::traits::OperationStore;
 
 use crate::context::Context;
 use crate::db::traits::DocumentStore;
-use crate::materializer::worker::{TaskError, TaskResult};
+use crate::materializer::worker::{Task, TaskError, TaskResult};
 use crate::materializer::TaskInput;
 
 pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
@@ -39,6 +40,27 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
         .map(|op| op.into())
         .collect();
 
+    let mut next_task_inputs: Vec<TaskInput> = Vec::new();
+
+    let parse_new_tasks = |view_field: (&String, &DocumentViewValue)| {
+        match view_field.1.value() {
+            OperationValue::Relation(relation) => next_task_inputs.push(TaskInput::new(
+                Some(relation.document_id().to_owned()),
+                None,
+            )),
+            OperationValue::PinnedRelation(pinned_relation) => next_task_inputs.push(
+                TaskInput::new(None, Some(pinned_relation.view_id().to_owned())),
+            ),
+            OperationValue::RelationList(relation_list) => {
+                next_task_inputs.append(&mut relation_list.iter().map(|document_id|TaskInput::new(Some(document_id), None)).collect());
+            }
+            OperationValue::PinnedRelationList(pinned_relation_list) => {
+                next_task_inputs.append(&mut pinned_relation_list.iter().map(|document_view_id|TaskInput::new(None, Some(document_view_id))).collect());
+            }
+            _ => (),
+        };
+    };
+
     match &input.document_view_id {
         Some(document_view_id) => {
             // TODO: If we are resolving a document_view_id, but we are missing operations from it's graph,
@@ -48,16 +70,17 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
                 .map_err(|_| TaskError::Failure)?;
 
             // If the document is deleted, there is no view, so we don't insert it.
-            if document.is_deleted() {
-                return Ok(None);
-            }
+            if !document.is_deleted() {
+                context
+                    .store
+                    // Unwrap as all not deleted documents have a view.
+                    .insert_document_view(document.view().unwrap(), document.schema())
+                    .await
+                    .map_err(|_| TaskError::Failure)?;
 
-            context
-                .store
-                // Unwrap as all not deleted documents have a view.
-                .insert_document_view(document.view().unwrap(), document.schema())
-                .await
-                .map_err(|_| TaskError::Failure)?
+                // Check for relation fields, if found, parse them into new dependency tasks.
+                document.view().unwrap().iter().for_each(parse_new_tasks);
+            }
         }
         None => {
             let document = DocumentBuilder::new(operations)
@@ -68,19 +91,40 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
                 .store
                 .insert_document(&document)
                 .await
-                .map_err(|_| TaskError::Failure)?
+                .map_err(|_| TaskError::Failure)?;
+
+            // If the document is deleted, there is no view
+            if !document.is_deleted() {
+                println!("PARSE NEW TASKS FROM:");
+                println!("{:#?}", document.view().unwrap());
+        
+                // Check for relation fields, if found, parse them into new dependency tasks.
+                document.view().unwrap().iter().for_each(parse_new_tasks);
+            }
         }
     };
 
-    Ok(None)
+    let next_tasks = if next_task_inputs.is_empty() {
+        None
+    } else {
+        Some(
+            next_task_inputs.clone()
+                .into_iter()
+                .map(|input| Task::new("dependency", input))
+                .collect(),
+        )
+    };
+
+    Ok(next_tasks)
 }
 
 #[cfg(test)]
 mod tests {
     use p2panda_rs::document::DocumentViewId;
-    use p2panda_rs::operation::OperationValue;
+    use p2panda_rs::operation::{OperationValue, Relation, RelationList, PinnedRelationList, PinnedRelation};
     use p2panda_rs::storage_provider::traits::{AsStorageOperation, OperationStore};
     use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
+    use p2panda_rs::test_utils::fixtures::{random_document_id, random_document_view_id};
     use rstest::rstest;
 
     use crate::config::Configuration;
@@ -182,5 +226,39 @@ mod tests {
 
             assert!(document_view.is_none(),)
         }
+    }
+
+    #[rstest]
+    #[case(test_db(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), 
+        vec![("profile_picture", OperationValue::Relation(Relation::new(random_document_id())))], 
+        vec![]), 1)]
+    #[case(test_db(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), 
+        vec![("favorite_book_images", OperationValue::RelationList(RelationList::new([0; 6].iter().map(|_|random_document_id()).collect())))], 
+        vec![]), 6)]
+    #[case(test_db(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), 
+        vec![("something_from_the_past", OperationValue::PinnedRelation(PinnedRelation::new(random_document_view_id())))], 
+        vec![]), 1)]
+    #[case(test_db(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), 
+        vec![("many_previous_drafts", OperationValue::PinnedRelationList(PinnedRelationList::new([0; 2].iter().map(|_|random_document_view_id()).collect())))], 
+        vec![]), 2)]
+    #[case(test_db(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), 
+        vec![("one_relation_field", OperationValue::PinnedRelationList(PinnedRelationList::new([0; 2].iter().map(|_|random_document_view_id()).collect()))),
+             ("another_relation_field", OperationValue::RelationList(RelationList::new([0; 6].iter().map(|_|random_document_id()).collect())))], 
+        vec![]), 8)]
+    #[tokio::test]
+    async fn returns_dependency_task_inputs(
+        #[case]
+        #[future]
+        db: TestSqlStore,
+        #[case] expected_next_tasks: usize
+    ) {
+        let db = db.await;
+        let context = Context::new(db.store.clone(), Configuration::default());
+        let document_id = db.documents[0].clone();
+
+        let input = TaskInput::new(Some(document_id.clone()), None);
+        let next_task_inputs = reduce_task(context.clone(), input).await.unwrap().unwrap();
+
+        assert_eq!(next_task_inputs.len(), expected_next_tasks)
     }
 }
