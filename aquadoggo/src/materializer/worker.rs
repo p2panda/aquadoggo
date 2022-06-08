@@ -107,6 +107,7 @@ impl<IN> Task<IN> {
 pub type TaskResult<IN> = Result<Option<Vec<Task<IN>>>, TaskError>;
 
 /// Possible return values of a failed task.
+#[derive(Debug)]
 pub enum TaskError {
     /// This tasks failed critically and will cause the whole program to panic.
     #[allow(dead_code)]

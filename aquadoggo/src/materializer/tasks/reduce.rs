@@ -74,3 +74,66 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
 
     Ok(None)
 }
+
+#[cfg(test)]
+mod tests {
+    use p2panda_rs::operation::OperationValue;
+    use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
+    use rstest::rstest;
+
+    use crate::config::Configuration;
+    use crate::context::Context;
+    use crate::db::stores::test_utils::{test_db, TestSqlStore};
+    use crate::db::traits::DocumentStore;
+    use crate::materializer::tasks::reduce_task;
+    use crate::materializer::TaskInput;
+
+    #[rstest]
+    #[tokio::test]
+    async fn reduces_documents(
+        #[from(test_db)]
+        #[with(2, 20, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::Text("panda".into()))], vec![("username", OperationValue::Text("PANDA".into()))])]
+        #[future]
+        db: TestSqlStore,
+    ) {
+        let db = db.await;
+        let context = Context::new(db.store, Configuration::default());
+
+        for document_id in &db.documents {
+            let input = TaskInput::new(Some(document_id.clone()), None);
+            assert!(reduce_task(context.clone(), input).await.is_ok());
+        }
+
+        for document_id in &db.documents {
+            let document_view = context.store.get_document_by_id(document_id).await.unwrap();
+
+            assert_eq!(
+                document_view.unwrap().get("username").unwrap().value(),
+                &OperationValue::Text("PANDA".to_string())
+            )
+        }
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn deleted_documents_have_no_view(
+        #[from(test_db)]
+        #[with(3, 20, true)]
+        #[future]
+        db: TestSqlStore,
+    ) {
+        let db = db.await;
+        let context = Context::new(db.store, Configuration::default());
+
+        for document_id in &db.documents {
+            let input = TaskInput::new(Some(document_id.clone()), None);
+            assert!(reduce_task(context.clone(), input).await.is_ok());
+        }
+
+        for document_id in &db.documents {
+            let document_view = context.store.get_document_by_id(document_id).await.unwrap();
+
+            assert!(document_view.is_none(),)
+        }
+    }
+}
