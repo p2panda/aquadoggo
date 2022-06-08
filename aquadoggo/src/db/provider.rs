@@ -19,14 +19,12 @@ use crate::graphql::client::{
 use super::errors::DocumentStorageError;
 use super::models::RelationRow;
 
-#[derive(Debug, Clone)]
-/// Sql based storage that implements `StorageProvider`
+#[derive(Clone)]
 pub struct SqlStorage {
     pub(crate) pool: Pool,
 }
 
 impl SqlStorage {
-    /// Create a new `SqlStorage` using the provided db `Pool`
     pub fn new(pool: Pool) -> Self {
         Self { pool }
     }
@@ -104,7 +102,7 @@ impl SqlStorage {
                     WHERE
                         document_view_fields.document_view_id = $1 AND operation_fields_v1.field_type LIKE '%relation%'
 
-                    UNION ALL
+                    UNION
 
                     SELECT
                         documents.document_id,
@@ -127,9 +125,14 @@ impl SqlStorage {
                             cte_relation.value = document_view_fields.document_view_id
                         OR
                             cte_relation.value = documents.document_id
+                        OR
+                            cte_relation.document_id = operation_fields_v1.value
+                        OR
+                            cte_relation.document_view_id = operation_fields_v1.value
                 )
 
-                SELECT relation_type, value FROM cte_relation;
+                SELECT relation_type, value FROM cte_relation
+                WHERE cte_relation.relation_type LIKE '%relation%';
             ",
         )
         .bind(document_view_id.as_str())
