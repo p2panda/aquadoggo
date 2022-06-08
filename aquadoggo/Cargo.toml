@@ -60,7 +60,11 @@ reqwest = { version = "0.11.9", default-features = false, features = [
     "stream",
 ] }
 rstest = "0.12.0"
+rstest_reuse = "0.1.3"
 tower-service = "0.3.1"
 hyper = "0.14.17"
 http = "0.2.6"
 tower = "0.4.12"
+p2panda-rs = { git = "https://github.com/p2panda/p2panda", branch = "main", features = [
+    "testing",
+] }

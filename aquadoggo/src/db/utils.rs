@@ -3,7 +3,6 @@
 use std::collections::BTreeMap;
 
 use p2panda_rs::document::{DocumentId, DocumentViewFields, DocumentViewId, DocumentViewValue};
-use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{
     Operation, OperationFields, OperationId, OperationValue, PinnedRelation, PinnedRelationList,
@@ -34,17 +33,6 @@ pub fn parse_operation_rows(
     let author = Author::new(&first_row.author).unwrap();
     let operation_id = first_row.operation_id.parse().unwrap();
     let document_id = first_row.document_id.parse().unwrap();
-
-    // TODO: Once we have resolved https://github.com/p2panda/p2panda/issues/315 then
-    // we can coerce types here.
-    let mut previous_operations: Vec<OperationId> = Vec::new();
-    if first_row.action != "create" {
-        previous_operations = first_row
-            .previous_operations
-            .rsplit('_')
-            .map(|id_str| Hash::new(id_str).unwrap().into())
-            .collect();
-    }
 
     let mut relation_lists: BTreeMap<String, Vec<DocumentId>> = BTreeMap::new();
     let mut pinned_relation_lists: BTreeMap<String, Vec<DocumentViewId>> = BTreeMap::new();
@@ -156,8 +144,12 @@ pub fn parse_operation_rows(
 
     let operation = match first_row.action.as_str() {
         "create" => Operation::new_create(schema, operation_fields),
-        "update" => Operation::new_update(schema, previous_operations, operation_fields),
-        "delete" => Operation::new_delete(schema, previous_operations),
+        "update" => Operation::new_update(
+            schema,
+            first_row.previous_operations.parse().unwrap(),
+            operation_fields,
+        ),
+        "delete" => Operation::new_delete(schema, first_row.previous_operations.parse().unwrap()),
         _ => panic!("Operation which was not CREATE, UPDATE or DELETE found."),
     }
     // Unwrap as we are sure values coming from the db are validated
@@ -350,9 +342,10 @@ mod tests {
         RelationList,
     };
     use p2panda_rs::storage_provider::traits::AsStorageOperation;
+    use p2panda_rs::test_utils::fixtures::create_operation;
 
     use crate::db::models::{document::DocumentViewFieldRow, OperationFieldsJoinedRow};
-    use crate::db::stores::test_utils::test_create_operation;
+    use crate::db::stores::test_utils::doggo_test_fields;
 
     use super::{parse_document_view_field_rows, parse_operation_rows, parse_value_to_string_vec};
 
@@ -700,7 +693,7 @@ mod tests {
             "bubu",
         ];
         let mut string_value_list = vec![];
-        let operation = test_create_operation();
+        let operation = create_operation(&doggo_test_fields());
         for (_, value) in operation.fields().unwrap().iter() {
             string_value_list.push(parse_value_to_string_vec(value));
         }
