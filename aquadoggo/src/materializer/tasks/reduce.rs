@@ -57,7 +57,7 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
                     .await
                     .map_err(|_| TaskError::Critical)?;
 
-                document_view_id.to_owned()
+                document.view_id().to_owned()
             }
         }
         None => {

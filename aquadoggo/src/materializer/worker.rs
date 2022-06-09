@@ -92,7 +92,7 @@ use triggered::{Listener, Trigger};
 /// A task holding a generic input value and the name of the worker which will process it
 /// eventually.
 #[derive(Debug, Clone)]
-pub struct Task<IN>(WorkerName, IN);
+pub struct Task<IN>(pub WorkerName, IN);
 
 impl<IN> Task<IN> {
     /// Returns a new task.

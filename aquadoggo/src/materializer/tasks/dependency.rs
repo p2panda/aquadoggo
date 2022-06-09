@@ -1,52 +1,180 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use p2panda_rs::document::{DocumentId, DocumentViewId};
+use p2panda_rs::storage_provider::traits::OperationStore;
+
 use crate::context::Context;
+use crate::db::traits::DocumentStore;
 use crate::materializer::worker::{Task, TaskError, TaskResult};
 use crate::materializer::TaskInput;
 
+async fn pinned_relation_task(
+    context: &Context,
+    document_view_id: DocumentViewId,
+) -> Result<Option<Task<TaskInput>>, TaskError> {
+    match context
+        .store
+        .get_document_view_by_id(&document_view_id)
+        .await
+        .map_err(|_| TaskError::Critical)?
+    {
+        Some(_) => Ok(None),
+        None => Ok(Some(Task::new(
+            "reduce",
+            TaskInput::new(None, Some(document_view_id)),
+        ))),
+    }
+}
+
+async fn unpinned_relation_task(
+    context: &Context,
+    document_id: DocumentId,
+) -> Result<Option<Task<TaskInput>>, TaskError> {
+    match context
+        .store
+        .get_document_by_id(&document_id)
+        .await
+        .map_err(|_| TaskError::Critical)?
+    {
+        Some(_) => Ok(None),
+        None => Ok(Some(Task::new(
+            "reduce",
+            TaskInput::new(Some(document_id), None),
+        ))),
+    }
+}
+
 pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
-    let document_view_id = match input.document_view_id {
-        Some(id) => id,
-        // We only accept handling dependency tasks for specific document views.
+    // PARSE INPUT ARGUMENTS //
+
+    // Here we retrive the document view by document id or document view id depending on what was passed into
+    // the task. This is needed so we can access the document view id and also check if a document has been
+    // deleted. We also catch invalid task inputs here (both or neither ids were passed), failing the task
+    // in a non critical way if this is the case.
+    let (document_id, document_view) = match (&input.document_id, &input.document_view_id) {
+        (Some(document_id), None) => {
+            let document_view = context
+                .store
+                .get_document_by_id(document_id)
+                .await
+                .map_err(|_| TaskError::Critical)?;
+            Ok((document_id.to_owned(), document_view))
+        }
+        // TODO: Alt approach: we could have a `get_operations_by_document_view_id()` in `OperationStore`, or
+        // could we even do this with some fancy recursive SQL query? We might need the `previous_operations`
+        // table back for that.
+        (None, Some(document_view_id)) => {
+            let document_view = context
+                .store
+                .get_document_view_by_id(document_view_id)
+                .await
+                .map_err(|_| TaskError::Critical)?;
+
+            let operation_id = document_view_id.clone().into_iter().next().unwrap();
+            match context
+                .store
+                .get_document_by_operation_id(operation_id)
+                .await
+                .map_err(|_| TaskError::Critical)? // We only get an error here on a critical database error.
+            {
+                Some(document_id) => Ok((document_id, document_view)),
+                None => Err(TaskError::Failure),
+            }
+        }
+        (_, _) => Err(TaskError::Failure),
+    }?;
+
+    let document_view = match document_view {
+        Some(document_view) => document_view,
+        // If no document view for the id passed into this task could be retrieved then either
+        // it has been deleted or the id was somehow invalid. In that case we fail the task at this point.
         None => return Err(TaskError::Failure),
     };
-    let dependencies = context
-        .store
-        .get_document_view_dependencies(&document_view_id)
-        .await
-        .map_err(|_| TaskError::Critical)?;
 
-    let mut next_tasks = Vec::new();
+    // FETCH DEPENDENCIES & COMPOSE TASKS //
 
-    for relation_row in dependencies.iter() {
-        match relation_row.relation_type.as_str() {
-            "relation" => next_tasks.push(Task::new(
-                "reduce",
-                TaskInput::new(Some(relation_row.value.parse().unwrap()), None),
-            )),
-            "relation_list" => next_tasks.push(Task::new(
-                "reduce",
-                TaskInput::new(Some(relation_row.value.parse().unwrap()), None),
-            )),
-            "pinned_relation" => next_tasks.push(Task::new(
-                "reduce",
-                TaskInput::new(None, Some(relation_row.value.parse().unwrap())),
-            )),
-            "pinned_relation_list" => next_tasks.push(Task::new(
-                "reduce",
-                TaskInput::new(None, Some(relation_row.value.parse().unwrap())),
-            )),
-            _ => return Err(TaskError::Critical),
+    let mut child_tasks = Vec::new();
+    let mut parent_tasks = Vec::new();
+
+    // First we handle all pinned or unpinned relations defined in this tasks document view.
+    // We can think of these "child" relations. We query the store for every child, if a view is
+    // returned we do nothing. If it doesn't yet exist in the store (it hasn't been materialised)
+    // we compose a "reduce" task for it.
+
+    for (_key, document_view_value) in document_view.fields().iter() {
+        match document_view_value.value() {
+            p2panda_rs::operation::OperationValue::Relation(relation) => {
+                child_tasks
+                    .push(unpinned_relation_task(&context, relation.document_id().clone()).await?);
+            }
+            p2panda_rs::operation::OperationValue::RelationList(relation_list) => {
+                for document_id in relation_list.iter() {
+                    child_tasks.push(unpinned_relation_task(&context, document_id.clone()).await?);
+                }
+            }
+            p2panda_rs::operation::OperationValue::PinnedRelation(pinned_relation) => {
+                child_tasks
+                    .push(pinned_relation_task(&context, pinned_relation.view_id().clone()).await?);
+            }
+            p2panda_rs::operation::OperationValue::PinnedRelationList(pinned_relation_list) => {
+                for document_view_id in pinned_relation_list.iter() {
+                    child_tasks
+                        .push(pinned_relation_task(&context, document_view_id.clone()).await?);
+                }
+            }
+            _ => (),
         }
     }
 
-    let next_tasks = if next_tasks.is_empty() {
-        None
+    // Next we want to find any existing documents in the store which relate to this document view OR document
+    // themselves. We do this for both pinned and unpinned relations incase this is the first time the tasks
+    // document is being materialised. Here we dispatch a "dependency" task for any documents found.
+    context
+        .store
+        .get_parents_with_unpinned_relation(&document_id)
+        .await
+        .map_err(|_| TaskError::Critical)?
+        .iter()
+        .for_each(|document_view_id| {
+            parent_tasks.push(Some(Task::new(
+                "dependency",
+                TaskInput::new(None, Some(document_view_id.clone())),
+            )))
+        });
+
+    context
+        .store
+        .get_parents_with_pinned_relation(document_view.id())
+        .await
+        .map_err(|_| TaskError::Critical)?
+        .into_iter()
+        .for_each(|document_view_id| {
+            parent_tasks.push(Some(Task::new(
+                "dependency",
+                TaskInput::new(None, Some(document_view_id)),
+            )))
+        });
+
+    let mut next_tasks = Vec::new();
+    let mut child_tasks: Vec<Task<TaskInput>> = child_tasks.into_iter().flatten().collect();
+    let mut parent_tasks: Vec<Task<TaskInput>> = parent_tasks.into_iter().flatten().collect();
+
+    if child_tasks.is_empty() {
+        // This means all dependencies this document view relates to are met and we
+        // should dispatch a schema task. We also dispatch all parent dependency tasks
+        // incase they now have all their dependencies met.
+        next_tasks.append(&mut vec![Task::new(
+            "schema",
+            TaskInput::new(None, Some(document_view.id().clone())),
+        )]);
+        next_tasks.append(&mut parent_tasks);
     } else {
-        Some(next_tasks)
+        // If not all dependencies were met, then we want to dispatch all children and parent tasks.
+        next_tasks.append(&mut child_tasks);
+        next_tasks.append(&mut parent_tasks);
     };
 
-    Ok(next_tasks)
+    Ok(Some(next_tasks))
 }
 
 #[cfg(test)]
@@ -96,7 +224,7 @@ mod tests {
              ("another_relation_field", OperationValue::RelationList(RelationList::new([0; 10].iter().map(|_|random_document_id()).collect())))],
     ), 12)]
     #[tokio::test]
-    async fn returns_dependency_task_inputs(
+    async fn dispatches_reduce_tasks_for_child_dependencies(
         #[case]
         #[future]
         db: TestSqlStore,
@@ -125,6 +253,9 @@ mod tests {
                 .unwrap()
                 .unwrap();
             assert_eq!(reduce_tasks.len(), expected_next_tasks);
+            for task in reduce_tasks {
+                assert_eq!(task.0, "reduce")
+            }
         }
     }
 
@@ -143,11 +274,11 @@ mod tests {
              ("another_relation_field", OperationValue::RelationList(RelationList::new([0; 10].iter().map(|_|random_document_id()).collect())))],
     ), 12)]
     #[tokio::test]
-    async fn gets_parent_dependencies_as_well(
+    async fn dispatches_task_for_parent_dependencies_as_well(
         #[case]
         #[future]
         db: TestSqlStore,
-        #[case] expected_next_tasks: usize,
+        #[case] expected_reduce_tasks: usize,
     ) {
         let db = db.await;
         let context = Context::new(db.store.clone(), Configuration::default());
@@ -155,6 +286,9 @@ mod tests {
 
         let input = TaskInput::new(Some(document_id.clone()), None);
         reduce_task(context.clone(), input).await.unwrap().unwrap();
+
+        // Here we have one materialised document, (we are calling it a child as we will shortly be publishing parents)
+        // it contains relations which are not materialised yet so should dispatch a reduce task for each one.
 
         let document_view_of_child = db
             .store
@@ -166,12 +300,17 @@ mod tests {
         let document_view_id_of_child = document_view_of_child.id();
 
         let input = TaskInput::new(None, Some(document_view_id_of_child.clone()));
-        let reduce_tasks = dependency_task(context.clone(), input)
+        let tasks = dependency_task(context.clone(), input)
             .await
             .unwrap()
             .unwrap();
 
-        assert_eq!(reduce_tasks.len(), expected_next_tasks);
+        assert_eq!(tasks.len(), expected_reduce_tasks);
+        for task in tasks {
+            assert_eq!(task.0, "reduce")
+        }
+
+        // Create a new document referencing the existing materialised document.
 
         let operation = create_operation(&[(
             "relation_to_existing_document",
@@ -180,49 +319,130 @@ mod tests {
         let (_, document_view_id_of_parent) =
             insert_entry_operation_and_view(&db.store, &KeyPair::new(), None, &operation).await;
 
+        // The child should now dispatch one dependency task for the parent as well as
+        // reduce tasks for it's children.
+
         let input = TaskInput::new(None, Some(document_view_id_of_child.clone()));
-        let reduce_tasks_of_child = dependency_task(context.clone(), input)
+        let child_tasks = dependency_task(context.clone(), input)
             .await
             .unwrap()
             .unwrap();
+
+        let expected_task_types = [("reduce", expected_reduce_tasks), ("dependency", 1)];
+        assert_eq!(child_tasks.len(), expected_reduce_tasks + 1);
+        for (task_type, count) in expected_task_types {
+            assert_eq!(
+                child_tasks
+                    .iter()
+                    .filter(|task| task.0 == task_type)
+                    .count(),
+                count
+            );
+        }
+
+        // The parent should dispatch one schema task as it has one dependency which was already materialised.
 
         let input = TaskInput::new(None, Some(document_view_id_of_parent.clone()));
-        let reduce_tasks_of_parent = dependency_task(context.clone(), input)
+        let parent_tasks = dependency_task(context.clone(), input)
             .await
             .unwrap()
             .unwrap();
 
-        assert_eq!(reduce_tasks_of_child.len(), expected_next_tasks + 1);
-        assert_eq!(reduce_tasks_of_parent.len(), expected_next_tasks + 1);
+        assert_eq!(parent_tasks.len(), 1);
+        assert_eq!(parent_tasks[0].0, "schema");
 
-        let operation = create_operation(&[(
-            "parent_of_a_parent",
-            OperationValue::PinnedRelation(PinnedRelation::new(document_view_id_of_parent.clone())),
-        )]);
+        // Now we create another document with a pinned relation to the parent and a pinned relation
+        // list with an item pointing to the child document.
+
+        let operation = create_operation(&[
+            (
+                "parent_of",
+                OperationValue::PinnedRelation(PinnedRelation::new(
+                    document_view_id_of_parent.clone(),
+                )),
+            ),
+            (
+                "grandparent_of",
+                OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
+                    document_view_id_of_child.clone(),
+                ])),
+            ),
+        ]);
         let (_, document_view_id_of_grandparent) =
             insert_entry_operation_and_view(&db.store, &KeyPair::new(), None, &operation).await;
 
         let input = TaskInput::new(None, Some(document_view_id_of_child.clone()));
-        let reduce_tasks_of_child = dependency_task(context.clone(), input)
+        let child_tasks = dependency_task(context.clone(), input)
             .await
             .unwrap()
             .unwrap();
 
         let input = TaskInput::new(None, Some(document_view_id_of_parent.clone()));
-        let reduce_tasks_of_parent = dependency_task(context.clone(), input)
+        let parent_tasks = dependency_task(context.clone(), input)
             .await
             .unwrap()
             .unwrap();
 
         let input = TaskInput::new(None, Some(document_view_id_of_grandparent));
-        let reduce_tasks_of_grandparent = dependency_task(context.clone(), input)
+        let grandparent_tasks = dependency_task(context.clone(), input)
             .await
             .unwrap()
             .unwrap();
 
-        assert_eq!(reduce_tasks_of_child.len(), expected_next_tasks + 2);
-        assert_eq!(reduce_tasks_of_parent.len(), expected_next_tasks + 2);
-        assert_eq!(reduce_tasks_of_grandparent.len(), expected_next_tasks + 2);
+        // The child dispatches an extra dependency task for it's grand parent.
+
+        let expected_dependency_tasks = 2;
+        let expected_task_types = [
+            ("reduce", expected_reduce_tasks),
+            ("dependency", expected_dependency_tasks),
+        ];
+        assert_eq!(
+            child_tasks.len(),
+            expected_reduce_tasks + expected_dependency_tasks
+        );
+        for (task_type, count) in expected_task_types {
+            assert_eq!(
+                child_tasks
+                    .iter()
+                    .filter(|task| task.0 == task_type)
+                    .count(),
+                count
+            );
+        }
+
+        // The parent dispatches a dependency task for it's parent and schema task for itself.
+
+        let expected_schema_tasks = 1;
+        let expected_dependency_tasks = 1;
+        let expected_task_types = [
+            ("schema", expected_schema_tasks),
+            ("dependency", expected_dependency_tasks),
+        ];
+        assert_eq!(
+            parent_tasks.len(),
+            expected_schema_tasks + expected_dependency_tasks
+        );
+        for (task_type, count) in expected_task_types {
+            assert_eq!(
+                parent_tasks
+                    .iter()
+                    .filter(|task| task.0 == task_type)
+                    .count(),
+                count
+            );
+        }
+
+        // The grandparent dispatches one schema task as all it's dependencies are met.
+
+        let expected_schema_tasks = 1;
+        assert_eq!(grandparent_tasks.len(), expected_schema_tasks);
+        assert_eq!(
+            grandparent_tasks
+                .iter()
+                .filter(|task| task.0 == "schema")
+                .count(),
+            expected_schema_tasks
+        );
     }
 
     #[rstest]
@@ -278,25 +498,31 @@ mod tests {
             insert_entry_operation_and_view(&db.store, &KeyPair::new(), None, &operation).await;
 
         let input = TaskInput::new(None, Some(document_view_id.clone()));
-        let reduce_tasks = dependency_task(context.clone(), input)
+        let tasks = dependency_task(context.clone(), input)
             .await
             .unwrap()
             .unwrap();
 
         let input = TaskInput::new(None, Some(document_view_id_of_unrelated_document.clone()));
-        let reduce_tasks_of_unrelated_document =
-            dependency_task(context.clone(), input).await.unwrap();
+        let tasks_of_unrelated_document = dependency_task(context.clone(), input)
+            .await
+            .unwrap()
+            .unwrap();
 
-        assert_eq!(reduce_tasks.len(), expected_next_tasks);
-        assert!(reduce_tasks_of_unrelated_document.is_none());
+        assert_eq!(tasks.len(), expected_next_tasks);
+        assert_eq!(tasks_of_unrelated_document.len(), 1);
+        assert_eq!(tasks_of_unrelated_document[0].0, "schema");
     }
 
     #[rstest]
+    #[should_panic(expected = "Failure")]
     #[case(None, Some(random_document_view_id()))]
     #[should_panic(expected = "Failure")]
     #[case(None, None)]
     #[should_panic(expected = "Failure")]
     #[case(Some(random_document_id()), None)]
+    #[should_panic(expected = "Failure")]
+    #[case(Some(random_document_id()), Some(random_document_view_id()))]
     #[tokio::test]
     async fn fails_correctly(
         #[case] document_id: Option<DocumentId>,
@@ -311,5 +537,66 @@ mod tests {
 
         let next_tasks = dependency_task(context.clone(), input).await.unwrap();
         assert!(next_tasks.is_none())
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn gets_parent_relations(
+        #[from(test_db)]
+        #[future]
+        #[with(1, 1)]
+        db: TestSqlStore,
+    ) {
+        let db = db.await;
+        let context = Context::new(db.store.clone(), Configuration::default());
+        let document_id = db.documents[0].clone();
+
+        let input = TaskInput::new(Some(document_id.clone()), None);
+        reduce_task(context.clone(), input).await.unwrap().unwrap();
+
+        // Here we have one materialised document, (we are calling it a child as we will shortly be publishing parents).
+
+        let document_view_of_child = db
+            .store
+            .get_document_by_id(&document_id)
+            .await
+            .unwrap()
+            .unwrap();
+
+        let document_view_id_of_child = document_view_of_child.id();
+
+        // Create a new document referencing the existing materialised document by unpinned relation.
+
+        let operation = create_operation(&[(
+            "relation_to_existing_document",
+            OperationValue::Relation(Relation::new(document_id.clone())),
+        )]);
+        let (_, document_view_id_of_parent) =
+            insert_entry_operation_and_view(&db.store, &KeyPair::new(), None, &operation).await;
+
+        let parent_dependencies_unpinned = db
+            .store
+            .get_parents_with_unpinned_relation(&document_id)
+            .await
+            .unwrap();
+        assert_eq!(parent_dependencies_unpinned.len(), 1);
+        assert_eq!(parent_dependencies_unpinned[0], document_view_id_of_parent);
+
+        // Create a new document referencing the existing materialised document by pinned relation.
+
+        let operation = create_operation(&[(
+            "pinned_relation_to_existing_document",
+            OperationValue::PinnedRelation(PinnedRelation::new(document_view_id_of_child.clone())),
+        )]);
+        let (_, document_view_id_of_parent) =
+            insert_entry_operation_and_view(&db.store, &KeyPair::new(), None, &operation).await;
+
+        let parent_dependencies_pinned = db
+            .store
+            .get_parents_with_pinned_relation(document_view_id_of_child)
+            .await
+            .unwrap();
+        assert_eq!(parent_dependencies_pinned.len(), 1);
+        assert_eq!(parent_dependencies_pinned[0], document_view_id_of_parent);
     }
 }

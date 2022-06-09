@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use async_trait::async_trait;
 use p2panda_rs::document::DocumentViewId;
-use sqlx::query_as;
 use sqlx::query_scalar;
 
 use p2panda_rs::document::DocumentId;
@@ -17,7 +16,6 @@ use crate::graphql::client::{
 };
 
 use super::errors::DocumentStorageError;
-use super::models::RelationRow;
 
 #[derive(Clone)]
 pub struct SqlStorage {
@@ -76,69 +74,71 @@ impl StorageProvider<StorageEntry, StorageLog> for SqlStorage {
 }
 
 impl SqlStorage {
-    pub async fn get_document_view_dependencies(
+    pub async fn get_parents_with_pinned_relation(
         &self,
         document_view_id: &DocumentViewId,
-    ) -> StorageProviderResult<Vec<RelationRow>> {
-        let relation_ids = query_as::<_, RelationRow>(
+    ) -> StorageProviderResult<Vec<DocumentViewId>> {
+        let relation_ids = query_scalar(
             "
-                WITH RECURSIVE cte_relation (document_id, document_view_id, operation_id, relation_type, value) AS (
+                WITH parents_pinned_relation (document_view_id, relation_type, value) AS (
                     SELECT
-                        documents.document_id,
                         document_view_fields.document_view_id,
-                        document_view_fields.operation_id,
                         operation_fields_v1.field_type,
                         operation_fields_v1.value
                     FROM
-                        document_view_fields
-                    LEFT JOIN operation_fields_v1
+                        operation_fields_v1
+                    LEFT JOIN document_view_fields
                         ON
-                            operation_fields_v1.operation_id = document_view_fields.operation_id
+                            document_view_fields.operation_id = operation_fields_v1.operation_id
                         AND
-                            operation_fields_v1.name = document_view_fields.name
-                    LEFT JOIN documents
-                        ON
-                            documents.document_view_id = document_view_fields.document_view_id
+                            document_view_fields.name = operation_fields_v1.name
                     WHERE
-                        document_view_fields.document_view_id = $1 AND operation_fields_v1.field_type LIKE '%relation%'
-
-                    UNION
-
-                    SELECT
-                        documents.document_id,
-                        document_view_fields.document_view_id,
-                        document_view_fields.operation_id,
-                        operation_fields_v1.field_type,
-                        operation_fields_v1.value
-                    FROM
-                        document_view_fields
-                    LEFT JOIN operation_fields_v1
-                        ON
-                            operation_fields_v1.operation_id = document_view_fields.operation_id
-                        AND
-                            operation_fields_v1.name = document_view_fields.name
-                    LEFT JOIN documents
-                        ON
-                            documents.document_view_id = document_view_fields.document_view_id
-                    JOIN cte_relation
-                        ON
-                            cte_relation.value = document_view_fields.document_view_id
-                        OR
-                            cte_relation.value = documents.document_id
-                        OR
-                            cte_relation.document_id = operation_fields_v1.value
-                        OR
-                            cte_relation.document_view_id = operation_fields_v1.value
+                        operation_fields_v1.value = $1 AND operation_fields_v1.field_type LIKE 'pinned_relation%'
                 )
-
-                SELECT relation_type, value FROM cte_relation
-                WHERE cte_relation.relation_type LIKE '%relation%';
+                SELECT document_view_id FROM parents_pinned_relation;
             ",
         )
         .bind(document_view_id.as_str())
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+        .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?
+        .iter().map(|id: &String| id.parse().unwrap() ).collect();
+
+        Ok(relation_ids)
+    }
+
+    pub async fn get_parents_with_unpinned_relation(
+        &self,
+        document_view_id: &DocumentId,
+    ) -> StorageProviderResult<Vec<DocumentViewId>> {
+        let relation_ids: Vec<DocumentViewId> = query_scalar(
+            "
+                WITH parents_unpinned_relation (document_view_id, relation_type, value) AS (
+                    SELECT
+                        document_view_fields.document_view_id,
+                        operation_fields_v1.field_type,
+                        operation_fields_v1.value
+                    FROM
+                        operation_fields_v1
+                    LEFT JOIN document_view_fields
+                        ON
+                            document_view_fields.operation_id = operation_fields_v1.operation_id
+                        AND
+                            document_view_fields.name = operation_fields_v1.name
+                    LEFT JOIN documents
+                        ON
+                            documents.document_view_id = document_view_fields.document_view_id
+                    WHERE
+                        operation_fields_v1.value = $1 AND operation_fields_v1.field_type LIKE 'relation%'
+                )
+                SELECT document_view_id FROM parents_unpinned_relation;
+            ",
+        )
+        .bind(document_view_id.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?
+        .iter().map(|id: &String| id.parse().unwrap() ).collect();
 
         Ok(relation_ids)
     }
