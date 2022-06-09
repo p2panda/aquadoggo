@@ -184,6 +184,7 @@ mod tests {
     use p2panda_rs::operation::{
         OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList,
     };
+    use p2panda_rs::storage_provider::traits::{AsStorageOperation, OperationStore};
     use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
     use p2panda_rs::test_utils::fixtures::{
         create_operation, random_document_id, random_document_view_id,
@@ -537,6 +538,45 @@ mod tests {
 
         let next_tasks = dependency_task(context.clone(), input).await.unwrap();
         assert!(next_tasks.is_none())
+    }
+
+    #[rstest]
+    #[should_panic(expected = "Failure")]
+    #[case(test_db(2, 1, true, TEST_SCHEMA_ID.parse().unwrap(),
+        vec![("profile_picture", OperationValue::Relation(Relation::new(random_document_id())))],
+        vec![]))]
+    #[should_panic(expected = "Failure")]
+    #[case(test_db(2, 1, true, TEST_SCHEMA_ID.parse().unwrap(),
+        vec![("one_relation_field", OperationValue::PinnedRelationList(PinnedRelationList::new([0; 2].iter().map(|_|random_document_view_id()).collect()))),
+             ("another_relation_field", OperationValue::RelationList(RelationList::new([0; 6].iter().map(|_|random_document_id()).collect())))],
+        vec![]))]
+    #[tokio::test]
+    async fn fails_on_deleted_documents(
+        #[case]
+        #[future]
+        db: TestSqlStore,
+    ) {
+        let db = db.await;
+        let context = Context::new(db.store.clone(), Configuration::default());
+        let document_id = db.documents[0].clone();
+
+        let input = TaskInput::new(Some(document_id.clone()), None);
+        reduce_task(context.clone(), input).await.unwrap();
+
+        let document_operations = db
+            .store
+            .get_operations_by_document_id(&document_id)
+            .await
+            .unwrap();
+
+        let document_view_id: DocumentViewId = document_operations[1].id().into();
+
+        let input = TaskInput::new(None, Some(document_view_id.clone()));
+
+        dependency_task(context.clone(), input)
+            .await
+            .unwrap()
+            .unwrap();
     }
 
     #[rstest]
