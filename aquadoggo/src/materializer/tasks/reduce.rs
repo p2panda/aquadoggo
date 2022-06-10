@@ -9,74 +9,83 @@ use crate::materializer::worker::{Task, TaskError, TaskResult};
 use crate::materializer::TaskInput;
 
 pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
+    // Parse the task input, if they are invalid (both or neither ids provided) we critically fail
+    // the task at this point. If only a document_view was passed we retrieve the document_id as
+    // it is needed later.
     let document_id = match (&input.document_id, &input.document_view_id) {
         (Some(document_id), None) => Ok(document_id.to_owned()),
-        // TODO: Alt approach: we could have a `get_operations_by_document_view_id()` in `OperationStore`, or
-        // could we even do this with some fancy recursive SQL query? We might need the `previous_operations`
-        // table back for that.
         (None, Some(document_view_id)) => {
+            // TODO: We can skip this step if we implement https://github.com/p2panda/aquadoggo/issues/148
             let operation_id = document_view_id.clone().into_iter().next().unwrap();
             match context
                 .store
                 .get_document_by_operation_id(operation_id)
                 .await
-                .map_err(|_| TaskError::Critical)? // We only get an error here on a critical database error.
+                .map_err(|_| TaskError::Critical)?
             {
                 Some(document_id) => Ok(document_id),
                 None => Err(TaskError::Failure),
             }
         }
-        (_, _) => Err(TaskError::Failure),
+        (_, _) => Err(TaskError::Critical),
     }?;
 
+    // Get all operations for the requested document.
     let operations = context
         .store
         .get_operations_by_document_id(&document_id)
         .await
         .map_err(|_| TaskError::Critical)?
         .into_iter()
-        // TODO: we can avoid this conversion if we do https://github.com/p2panda/p2panda/issues/320
         .map(|op| op.into())
         .collect();
 
     let document_view_id = match &input.document_view_id {
+        // If this task was passed a document_view_id as input then we want to build to document only to the
+        // requested view.
         Some(document_view_id) => {
-            // TODO: If we are resolving a document_view_id, but we are missing operations from it's graph,
-            // what do we want to return?
-            let document = DocumentBuilder::new(operations)
+            let document = match DocumentBuilder::new(operations)
                 .build_to_view_id(Some(document_view_id.to_owned()))
-                .map_err(|_| TaskError::Critical)?;
+            {
+                Ok(document) => {
+                    // If the document was deleted, then we return nothing.
+                    if document.is_deleted() {
+                        return Ok(None);
+                    };
+                    document
+                }
+                Err(_) => return Ok(None),
+            };
 
-            if document.is_deleted() {
-                return Ok(None);
-            } else {
-                context
-                    .store
-                    // Unwrap as all not deleted documents have a view.
-                    .insert_document_view(document.view().unwrap(), document.schema())
-                    .await
-                    .map_err(|_| TaskError::Critical)?;
-
-                document.view_id().to_owned()
-            }
-        }
-        None => {
-            let document = DocumentBuilder::new(operations)
-                .build()
-                .map_err(|_| TaskError::Failure)?;
-
+            // Insert the document document_view into the database.
             context
                 .store
-                .insert_document(&document)
+                .insert_document_view(document.view().unwrap(), document.schema())
                 .await
-                .map_err(|_| TaskError::Failure)?;
+                .map_err(|_| TaskError::Critical)?;
 
-            if document.is_deleted() {
-                return Ok(None);
-            } else {
+            // Return the view id to be used in the resulting dependency task.
+            document.view_id().to_owned()
+        }
+        // If no document_view_id was passed, this is a document_id reduce task.
+        None => match DocumentBuilder::new(operations).build() {
+            Ok(document) => {
+                // Insert this document into storage. If it already existed, this will update it's current
+                // view.
+                context
+                    .store
+                    .insert_document(&document)
+                    .await
+                    .map_err(|_| TaskError::Failure)?;
+
+                if document.is_deleted() {
+                    return Ok(None);
+                }
+                // Return the document_view id to be used in the resulting dependency task.
                 document.view_id().to_owned()
             }
-        }
+            Err(_) => return Ok(None),
+        },
     };
 
     Ok(Some(vec![Task::new(
@@ -87,9 +96,9 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::document::{DocumentId, DocumentViewId};
+    use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
     use p2panda_rs::operation::OperationValue;
-    use p2panda_rs::storage_provider::traits::{AsStorageOperation, OperationStore};
+    use p2panda_rs::storage_provider::traits::OperationStore;
     use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
     use p2panda_rs::test_utils::fixtures::{random_document_id, random_document_view_id};
     use rstest::rstest;
@@ -137,20 +146,31 @@ mod tests {
     ) {
         let db = db.await;
 
-        let mut document_operations = db
+        let document_operations = db
             .store
             .get_operations_by_document_id(&db.documents[0])
             .await
-            .unwrap();
+            .unwrap()
+            .into_iter()
+            .map(|op| op.into())
+            .collect();
 
-        let document_view_id: DocumentViewId = document_operations.pop().unwrap().id().into();
+        let document = DocumentBuilder::new(document_operations).build().unwrap();
+        let mut sorted_document_operations = document.operations().clone();
 
-        let context = Context::new(db.store, Configuration::default());
+        let document_view_id: DocumentViewId = sorted_document_operations
+            .pop()
+            .unwrap()
+            .operation_id()
+            .clone()
+            .into();
+
+        let context = Context::new(db.store.clone(), Configuration::default());
         let input = TaskInput::new(None, Some(document_view_id.clone()));
 
         assert!(reduce_task(context.clone(), input).await.is_ok());
 
-        let document_view = context
+        let document_view = db
             .store
             .get_document_view_by_id(&document_view_id)
             .await
@@ -162,8 +182,14 @@ mod tests {
         );
 
         // We didn't reduce this document_view_id so it shouldn't exist in the db.
-        let document_view_id: DocumentViewId = document_operations.pop().unwrap().id().into();
-        let document_view = context
+        let document_view_id: DocumentViewId = sorted_document_operations
+            .pop()
+            .unwrap()
+            .operation_id()
+            .clone()
+            .into();
+
+        let document_view = db
             .store
             .get_document_view_by_id(&document_view_id)
             .await
@@ -181,18 +207,34 @@ mod tests {
         db: TestSqlStore,
     ) {
         let db = db.await;
-        let context = Context::new(db.store, Configuration::default());
+        let context = Context::new(db.store.clone(), Configuration::default());
 
         for document_id in &db.documents {
             let input = TaskInput::new(Some(document_id.clone()), None);
-            assert!(reduce_task(context.clone(), input).await.is_ok());
+            let tasks = reduce_task(context.clone(), input).await.unwrap();
+            assert!(tasks.is_none());
         }
 
         for document_id in &db.documents {
             let document_view = context.store.get_document_by_id(document_id).await.unwrap();
-
             assert!(document_view.is_none())
         }
+
+        let document_operations = context
+            .store
+            .get_operations_by_document_id(&db.documents[0])
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|op| op.into())
+            .collect();
+
+        let document = DocumentBuilder::new(document_operations).build().unwrap();
+
+        let input = TaskInput::new(None, Some(document.view_id().clone()));
+        let tasks = reduce_task(context.clone(), input).await.unwrap();
+        println!("{:#?}", tasks);
+        assert!(tasks.is_none());
     }
 
     #[rstest]
