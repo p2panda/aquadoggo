@@ -7,10 +7,12 @@ use axum::response::{self, IntoResponse};
 
 use crate::context::Context;
 
-pub async fn handle_graphql_playground() -> impl IntoResponse {
-    response::Html(playground_source(GraphQLPlaygroundConfig::new("/")))
+/// Handle graphql playground requests at the given path
+pub async fn handle_graphql_playground(path: &str) -> impl IntoResponse {
+    response::Html(playground_source(GraphQLPlaygroundConfig::new(path)))
 }
 
+/// Handle graphql requests
 pub async fn handle_graphql_query(
     request: GraphQLRequest,
     Extension(context): Extension<Context>,
