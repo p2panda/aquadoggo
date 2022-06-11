@@ -26,7 +26,7 @@ deadqueue = { version = "0.2.2", default-features = false, features = [
 ] }
 directories = "3.0.2"
 envy = "0.4.2"
-graphql_client = {versioin = "0.10", features = ["reqwest"]}
+graphql_client = {version = "0.10", features = ["reqwest"]}
 hex = "0.4.3"
 lipmaa-link = "0.2.2"
 log = "0.4.14"
