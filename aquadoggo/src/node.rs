@@ -53,15 +53,15 @@ impl Node {
         let store = SqlStorage::new(pool.clone());
 
         // Create service manager with shared data between services
-        let context = Context::new(store, config);
+        let context = Context::new(store, config.clone());
         let mut manager = ServiceManager::<Context, ServiceMessage>::new(1024, context);
 
         // Start materializer service
         manager.add("materializer", materializer_service);
 
         // Start replication service
-        let replication_service_config = ReplicationServiceConfig::default();
-        let replication_service = ReplicationService::new(replication_service_config);
+        let replication_service =
+            ReplicationService::new(config.replication_config.unwrap_or_default());
 
         manager.add("replication", replication_service);
 

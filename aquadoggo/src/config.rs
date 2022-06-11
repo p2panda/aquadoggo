@@ -7,6 +7,8 @@ use anyhow::Result;
 use directories::ProjectDirs;
 use serde::Deserialize;
 
+use crate::replication::Config as ReplicationConfig;
+
 /// Data directory name.
 const DATA_DIR_NAME: &str = "aquadoggo";
 
@@ -21,7 +23,7 @@ const DEFAULT_SQLITE_NAME: &str = "aquadoggo-node.sqlite3";
 /// When no custom directory path is set it reads the process environment $XDG_DATA_HOME variable
 /// to determine the XDG data directory path which is $HOME/.local/share/aquadoggo on Linux by
 /// default.
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(default)]
 pub struct Configuration {
     /// Path to data directory.
@@ -41,6 +43,9 @@ pub struct Configuration {
 
     /// Materializer worker pool size.
     pub worker_pool_size: u32,
+
+    /// Replication configuration
+    pub replication_config: Option<ReplicationConfig>,
 }
 
 impl Default for Configuration {
@@ -52,6 +57,7 @@ impl Default for Configuration {
             http_port: 2020,
             ws_port: 2022,
             worker_pool_size: 16,
+            replication_config: Default::default(),
         }
     }
 }

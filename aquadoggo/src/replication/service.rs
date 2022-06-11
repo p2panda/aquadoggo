@@ -8,6 +8,7 @@ use graphql_client::*;
 use log::{info, trace};
 use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::identity::Author;
+use serde::Deserialize;
 use tokio::task;
 
 use crate::bus::{ServiceMessage, ServiceSender};
@@ -15,7 +16,7 @@ use crate::context::Context;
 use crate::graphql::replication::client::{self, Client};
 use crate::manager::{Service, Shutdown};
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Deserialize)]
 pub struct Config {
     connection_interval: Option<Duration>,
     remote_peers: Vec<String>,
@@ -56,6 +57,7 @@ impl Service<Context, ServiceMessage> for ReplicationService {
 
         let handle = task::spawn(async move {
             loop {
+                trace!("Starting replication with remote peers");
                 for remote_peer in remote_peers.clone().iter() {
                     for (author, log_ids) in authors_to_replicate.clone().iter() {
                         for log_id in log_ids {
