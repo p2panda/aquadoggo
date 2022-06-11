@@ -1,0 +1,4 @@
+[replication_config]
+connection_interval_seconds = 45
+remote_peers = ["http://localhost:2020/graphql"]
+authors_to_replicate = [["df35296307c3d922157d4e41b494d73c6b8ec97d8d9697d594ae5ecc84fcd059", [1]]]

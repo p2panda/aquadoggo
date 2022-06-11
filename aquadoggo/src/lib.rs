@@ -29,6 +29,6 @@ mod server;
 #[cfg(test)]
 mod test_helpers;
 
-pub use config::Configuration;
+pub use crate::config::Configuration;
 pub use db::{connection_pool, provider::SqlStorage};
 pub use node::Node;

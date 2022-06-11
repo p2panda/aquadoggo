@@ -18,7 +18,7 @@ use crate::manager::{Service, Shutdown};
 
 #[derive(Default, Debug, Clone, Deserialize)]
 pub struct Config {
-    connection_interval: Option<Duration>,
+    connection_interval_seconds: Option<u64>,
     remote_peers: Vec<String>,
     authors_to_replicate: Vec<(Author, Vec<LogId>)>,
 }
@@ -30,6 +30,7 @@ pub struct ReplicationService {
 
 impl ReplicationService {
     pub fn new(config: Config) -> Self {
+        trace!("init ReplicationService with config: {:?}", config);
         Self { config }
     }
 }
@@ -48,7 +49,8 @@ impl Service<Context, ServiceMessage> for ReplicationService {
 
         let connection_interval = self
             .config
-            .connection_interval
+            .connection_interval_seconds
+            .map(|s| Duration::from_secs(s))
             .unwrap_or_else(|| Duration::from_secs(30));
 
         let mut client = Client::new();
@@ -66,7 +68,7 @@ impl Service<Context, ServiceMessage> for ReplicationService {
                                     remote_peer,
                                     &log_id,
                                     &author,
-                                    &SeqNum::new(0).unwrap(),
+                                    &SeqNum::new(1).unwrap(),
                                 )
                                 .await;
                             trace!("received entries: {:?}", entries);
@@ -76,9 +78,10 @@ impl Service<Context, ServiceMessage> for ReplicationService {
                 tokio::time::sleep(connection_interval).await;
             }
         });
+
         tokio::select! {
             _ = handle => (),
-            _ = shutdown => (),
+            _ = shutdown => (trace!("shutdown")),
         }
 
         Ok(())

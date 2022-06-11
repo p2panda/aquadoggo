@@ -21,6 +21,7 @@ async-graphql = "3.0.38"
 async-graphql-axum = "3.0.35"
 axum = "0.5.1"
 bamboo-rs-core-ed25519-yasmf = "0.1.1"
+config = "0.13.1"
 deadqueue = { version = "0.2.2", default-features = false, features = [
     "unlimited",
 ] }

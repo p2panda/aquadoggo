@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use config::{Config, ConfigError, Environment, File};
+use std::env;
 use std::fs;
 use std::path::PathBuf;
 
@@ -86,8 +88,25 @@ impl Configuration {
         // Make sure data directory exists
         let base_path = Self::create_data_directory(path)?;
 
-        // Create configuration based on defaults and populate with environment variables
-        let mut config = envy::from_env::<Self>()?;
+        let run_mode = env::var("RUN_MODE").unwrap_or_else(|_| "development".into());
+
+        let config_builder = Config::builder()
+            // Start off by merging in the "default" configuration file
+            .add_source(File::with_name("aquadoggo/config/default"))
+            // Add in the current environment file
+            // Default to 'development' env
+            // Note that this file is _optional_
+            .add_source(File::with_name(&format!("aquadoggo/config/{}", run_mode)).required(false))
+            // Add in a local configuration file
+            // This file shouldn't be checked in to git
+            .add_source(File::with_name("aquadoggo/config/local").required(false))
+            // Add in settings from the environment (with a prefix of APP)
+            // Eg.. `DOGGO_DEBUG=1 ./target/app` would set the `debug` key
+            .add_source(Environment::with_prefix("doggo"))
+            .build()?;
+
+        // You can deserialize (and thus freeze) the entire configuration as
+        let mut config: Self = config_builder.try_deserialize()?;
 
         // Store data directory path in object
         config.base_path = Some(base_path);
