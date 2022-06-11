@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use aquadoggo::db::{connection_pool, provider::SqlStorage};
 use aquadoggo::graphql::{build_root_schema, Context};
+use aquadoggo::{connection_pool, SqlStorage};
 
 #[tokio::main]
 async fn main() {

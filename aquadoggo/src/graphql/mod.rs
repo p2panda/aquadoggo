@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 mod api;
+/// Graphql types for clients
 pub mod client;
 mod context;
 mod replication;

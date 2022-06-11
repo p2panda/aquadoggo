@@ -27,6 +27,7 @@ pub struct Context<EntryStore: 'static + EntryStoreTrait<StorageEntry>> {
 }
 
 #[automock]
+#[allow(dead_code)]
 impl<EntryStore: 'static + EntryStoreTrait<StorageEntry>> Context<EntryStore> {
     pub fn new(author_aliases_cache_size: usize, entry_store: EntryStore) -> Self {
         Self {

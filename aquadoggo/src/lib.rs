@@ -16,8 +16,9 @@
 mod bus;
 mod config;
 mod context;
-pub mod db;
+mod db;
 mod errors;
+/// Aquadoggo graphql types for handling client and replication requests
 pub mod graphql;
 mod manager;
 mod materializer;
@@ -28,4 +29,5 @@ mod server;
 mod test_helpers;
 
 pub use config::Configuration;
+pub use db::{connection_pool, provider::SqlStorage};
 pub use node::Node;

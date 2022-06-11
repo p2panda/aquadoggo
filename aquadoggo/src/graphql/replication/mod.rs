@@ -46,7 +46,7 @@ pub use public_key::PublicKey;
 pub use sequence_number::SequenceNumber;
 pub use single_entry_and_payload::SingleEntryAndPayload;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 /// The root graphql object for replication
 pub struct ReplicationRoot<EntryStore> {
     entry_store: PhantomData<EntryStore>,
