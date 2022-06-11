@@ -34,7 +34,6 @@ impl TryFrom<EntryAndPayload> for StorageEntry {
     type Error = Error;
 
     fn try_from(entry_and_payload: EntryAndPayload) -> Result<Self, Self::Error> {
-
         let entry_signed = entry_and_payload.entry.0;
 
         //TODO: need to find out why StorageEntry enforces having the operation

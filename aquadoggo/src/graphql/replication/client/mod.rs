@@ -11,6 +11,8 @@ use reqwest::IntoUrl;
 
 use super::*;
 
+/// A graphql client for doing replication requests to another aquadoggo node
+#[derive(Debug)]
 pub struct Client {
     reqwest_client: ReqwestClient,
 }
@@ -31,9 +33,9 @@ impl Client {
     pub async fn get_entries_newer_than_seq<U: IntoUrl + Clone>(
         &mut self,
         url: U,
-        log_id: PandaLogId,
-        author: PandaAuthor,
-        sequence_number: PandaSeqNum,
+        log_id: &PandaLogId,
+        author: &PandaAuthor,
+        sequence_number: &PandaSeqNum,
     ) -> Result<Vec<StorageEntry>> {
         let variables =
             create_get_entries_newer_than_seq_request_variable(author, sequence_number, log_id);
@@ -72,18 +74,18 @@ fn convert_edges_to_storage_entries(
 }
 
 fn create_get_entries_newer_than_seq_request_variable(
-    author: PandaAuthor,
-    sequence_number: PandaSeqNum,
-    log_id: PandaLogId,
+    author: &PandaAuthor,
+    sequence_number: &PandaSeqNum,
+    log_id: &PandaLogId,
 ) -> get_entries_newer_than_seq::Variables {
-    let author: Author = author.into();
+    let author: Author = author.clone().into();
     // We have to do this manual type conversion because of this issue: https://github.com/graphql-rust/graphql-client/issues/386
     let author = get_entries_newer_than_seq::Author {
         publicKey: author.public_key.clone(),
         alias: author.alias.clone().map(|id| id.0),
     };
-    let sequence_number = SequenceNumber(sequence_number);
-    let log_id = LogId(log_id);
+    let sequence_number = SequenceNumber(sequence_number.to_owned());
+    let log_id = LogId(log_id.to_owned());
     let variables = get_entries_newer_than_seq::Variables {
         log_id,
         author,
@@ -96,12 +98,12 @@ fn create_get_entries_newer_than_seq_request_variable(
 
 // The paths are relative to the directory where your `Cargo.toml` is located.
 // Both json and the GraphQL schema language are supported as sources for the schema
-#[derive(GraphQLQuery)]
+#[derive(GraphQLQuery, Clone, Copy, Debug)]
 #[graphql(
     schema_path = "src/graphql/replication/client/schema.graphql",
     query_path = "src/graphql/replication/client/queries/get_entry_by_hash.graphql"
 )]
-pub struct GetEntryByHash;
+struct GetEntryByHash;
 
 // The paths are relative to the directory where your `Cargo.toml` is located.
 // Both json and the GraphQL schema language are supported as sources for the schema
@@ -110,6 +112,6 @@ pub struct GetEntryByHash;
     schema_path = "src/graphql/replication/client/schema.graphql",
     query_path = "src/graphql/replication/client/queries/get_entries_newer_than_seq.graphql"
 )]
-pub struct GetEntriesNewerThanSeq;
+struct GetEntriesNewerThanSeq;
 
 //pub async fn get_entries_newer_than_seq()
