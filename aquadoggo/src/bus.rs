@@ -9,7 +9,7 @@ use crate::manager::Sender;
 pub type ServiceSender = Sender<ServiceMessage>;
 
 /// Messages which can be sent on the communication bus.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ServiceMessage {
     /// New `Entry` with an `Operation` payload arrived at the node.
     #[allow(dead_code)]

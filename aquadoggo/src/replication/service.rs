@@ -1,19 +1,17 @@
-use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
-use futures::stream::{self, Stream, StreamExt, TryStreamExt};
-use graphql_client::*;
-use log::{info, trace};
-use p2panda_rs::entry::{LogId, SeqNum};
+use log::{debug, error, warn};
+use p2panda_rs::entry::LogId;
 use p2panda_rs::identity::Author;
+use p2panda_rs::storage_provider::traits::EntryStore;
 use serde::Deserialize;
 use tokio::task;
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
-use crate::graphql::replication::client::{self, Client};
+use crate::graphql::replication::client::Client;
 use crate::manager::{Service, Shutdown};
 
 #[derive(Default, Debug, Clone, Deserialize)]
@@ -30,7 +28,7 @@ pub struct ReplicationService {
 
 impl ReplicationService {
     pub fn new(config: Config) -> Self {
-        trace!("init ReplicationService with config: {:?}", config);
+        debug!("init ReplicationService with config: {:?}", config);
         Self { config }
     }
 }
@@ -38,15 +36,6 @@ impl ReplicationService {
 #[async_trait::async_trait]
 impl Service<Context, ServiceMessage> for ReplicationService {
     async fn call(&self, context: Context, shutdown: Shutdown, tx: ServiceSender) -> Result<()> {
-        // Things this needs to do
-        // - get the ips of remotes who we connect to (comes from config)
-        // - get authors we wish to replicate (comes from config)
-        // - get the authors latest sequences for the log ids we follow
-        // - for each author and each log_id
-        //  - get their latest, paging through until has_next_page is false
-        // - append new entries to the db
-        // - broadcast a notification on the bus?
-
         let connection_interval = self
             .config
             .connection_interval_seconds
@@ -59,19 +48,53 @@ impl Service<Context, ServiceMessage> for ReplicationService {
 
         let handle = task::spawn(async move {
             loop {
-                trace!("Starting replication with remote peers");
+                debug!("Starting replication with remote peers");
                 for remote_peer in remote_peers.clone().iter() {
                     for (author, log_ids) in authors_to_replicate.clone().iter() {
                         for log_id in log_ids {
+                            let latest_entry = context
+                                .0
+                                .store
+                                .get_latest_entry(&author, &log_id)
+                                .await
+                                .ok()
+                                .flatten()
+                                .map(|entry| entry.entry_decoded().seq_num().clone());
+
+                            debug!("Latest entry seq: {:?}", latest_entry);
+
                             let entries = client
                                 .get_entries_newer_than_seq(
                                     remote_peer,
                                     &log_id,
                                     &author,
-                                    None
+                                    latest_entry.as_ref(),
                                 )
                                 .await;
-                            trace!("received entries: {:?}", entries);
+
+                            if let Ok(entries) = entries {
+                                debug!("Received {} new entries", entries.len());
+                                for entry in entries {
+                                    let bus_message = ServiceMessage::NewEntryAndOperation(
+                                        entry.entry_decoded(),
+                                        entry.operation_encoded().unwrap().into(),
+                                    );
+                                    tx.send(bus_message).expect("Expected to be able to send a ServiceMessage on ServiceSender");
+                                    context
+                                        .0
+                                        .store
+                                        .insert_entry(entry.clone())
+                                        .await
+                                        .unwrap_or_else(|err| {
+                                            error!(
+                                                "Failed to insert entry: {:?}, err: {:?}",
+                                                entry, err
+                                            );
+                                        });
+                                }
+                            } else {
+                                warn!("Replication request failed");
+                            }
                         }
                     }
                 }
@@ -81,7 +104,7 @@ impl Service<Context, ServiceMessage> for ReplicationService {
 
         tokio::select! {
             _ = handle => (),
-            _ = shutdown => (trace!("shutdown")),
+            _ = shutdown => (debug!("shutdown")),
         }
 
         Ok(())
