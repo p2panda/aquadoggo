@@ -55,9 +55,12 @@ impl Service<Context, ServiceMessage> for ReplicationService {
                 for remote_peer in remote_peers.clone().iter() {
                     for (author, log_ids) in authors_to_replicate.clone().iter() {
                         for log_id in log_ids {
+
+                            // Get the latest seq we have for this log + author
                             let latest_seq = get_latest_seq(&context, &log_id, &author).await;
                             debug!("Latest entry seq: {:?}", latest_seq);
 
+                            // Make our replication request to the remote peer
                             let entries = client
                                 .get_entries_newer_than_seq(
                                     remote_peer,
@@ -69,6 +72,9 @@ impl Service<Context, ServiceMessage> for ReplicationService {
 
                             if let Ok(entries) = entries {
                                 debug!("Received {} new entries", entries.len());
+
+                                // TODO: verify entries
+
                                 for entry in entries {
                                     context
                                         .0
