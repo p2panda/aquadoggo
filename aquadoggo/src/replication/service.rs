@@ -1,9 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
 use log::{debug, error, warn};
-use p2panda_rs::entry::LogId;
+use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::identity::Author;
 use p2panda_rs::storage_provider::traits::EntryStore;
 use serde::Deserialize;
@@ -11,6 +13,7 @@ use tokio::task;
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
+use crate::db::stores::StorageEntry;
 use crate::graphql::replication::client::Client;
 use crate::manager::{Service, Shutdown};
 
@@ -52,39 +55,29 @@ impl Service<Context, ServiceMessage> for ReplicationService {
                 for remote_peer in remote_peers.clone().iter() {
                     for (author, log_ids) in authors_to_replicate.clone().iter() {
                         for log_id in log_ids {
-                            let latest_entry = context
-                                .0
-                                .store
-                                .get_latest_entry(&author, &log_id)
-                                .await
-                                .ok()
-                                .flatten()
-                                .map(|entry| entry.entry_decoded().seq_num().clone());
-
-                            debug!("Latest entry seq: {:?}", latest_entry);
+                            let latest_seq = get_latest_seq(&context, &log_id, &author).await;
+                            debug!("Latest entry seq: {:?}", latest_seq);
 
                             let entries = client
                                 .get_entries_newer_than_seq(
                                     remote_peer,
                                     &log_id,
                                     &author,
-                                    latest_entry.as_ref(),
+                                    latest_seq.as_ref(),
                                 )
                                 .await;
 
                             if let Ok(entries) = entries {
                                 debug!("Received {} new entries", entries.len());
                                 for entry in entries {
-                                    let bus_message = ServiceMessage::NewEntryAndOperation(
-                                        entry.entry_decoded(),
-                                        entry.operation_encoded().unwrap().into(),
-                                    );
-                                    tx.send(bus_message).expect("Expected to be able to send a ServiceMessage on ServiceSender");
                                     context
                                         .0
                                         .store
                                         .insert_entry(entry.clone())
                                         .await
+                                        .map(|_| {
+                                            send_new_entry_service_message(tx.clone(), &entry);
+                                        })
                                         .unwrap_or_else(|err| {
                                             error!(
                                                 "Failed to insert entry: {:?}, err: {:?}",
@@ -109,4 +102,24 @@ impl Service<Context, ServiceMessage> for ReplicationService {
 
         Ok(())
     }
+}
+
+fn send_new_entry_service_message(tx: ServiceSender, entry: &StorageEntry) {
+    let bus_message = ServiceMessage::NewEntryAndOperation(
+        entry.entry_decoded(),
+        entry.operation_encoded().unwrap().into(),
+    );
+    tx.send(bus_message)
+        .expect("Expected to be able to send a ServiceMessage on ServiceSender");
+}
+
+async fn get_latest_seq(context: &Context, log_id: &LogId, author: &Author) -> Option<SeqNum> {
+    context
+        .0
+        .store
+        .get_latest_entry(&author, &log_id)
+        .await
+        .ok()
+        .flatten()
+        .map(|entry| entry.entry_decoded().seq_num().clone())
 }
