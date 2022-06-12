@@ -68,7 +68,7 @@ impl Service<Context, ServiceMessage> for ReplicationService {
                                     remote_peer,
                                     &log_id,
                                     &author,
-                                    &SeqNum::new(1).unwrap(),
+                                    None
                                 )
                                 .await;
                             trace!("received entries: {:?}", entries);

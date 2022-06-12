@@ -35,7 +35,7 @@ impl Client {
         url: U,
         log_id: &PandaLogId,
         author: &PandaAuthor,
-        sequence_number: &PandaSeqNum,
+        sequence_number: Option<&PandaSeqNum>,
     ) -> Result<Vec<StorageEntry>> {
         let variables =
             create_get_entries_newer_than_seq_request_variable(author, sequence_number, log_id);
@@ -75,7 +75,7 @@ fn convert_edges_to_storage_entries(
 
 fn create_get_entries_newer_than_seq_request_variable(
     author: &PandaAuthor,
-    sequence_number: &PandaSeqNum,
+    sequence_number: Option<&PandaSeqNum>,
     log_id: &PandaLogId,
 ) -> get_entries_newer_than_seq::Variables {
     let author: Author = author.clone().into();
@@ -84,7 +84,7 @@ fn create_get_entries_newer_than_seq_request_variable(
         publicKey: author.public_key.clone(),
         alias: author.alias.clone().map(|id| id.0),
     };
-    let sequence_number = SequenceNumber(sequence_number.to_owned());
+    let sequence_number = sequence_number.map(|sequence_number| SequenceNumber(sequence_number.to_owned()));
     let log_id = LogId(log_id.to_owned());
     let variables = get_entries_newer_than_seq::Variables {
         log_id,

@@ -1,4 +1,4 @@
-query GetEntriesNewerThanSeq($logId: LogId!, $author: Author!, $sequenceNumber: SequenceNumber!, $first: Int, $after: String) {
+query GetEntriesNewerThanSeq($logId: LogId!, $author: Author!, $sequenceNumber: SequenceNumber, $first: Int, $after: String) {
     getEntriesNewerThanSeq(logId: $logId, author: $author, sequenceNumber: $sequenceNumber, first: $first, after: $after){
         pageInfo {
             hasNextPage
