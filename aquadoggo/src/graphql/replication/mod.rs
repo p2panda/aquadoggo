@@ -80,12 +80,14 @@ impl<EntryStore: 'static + EntryStoreTrait<StorageEntry> + Sync + Send>
 
     /// Get any entries that are newer than the provided sequence_number for a given author and
     /// log_id
+    ///
+    /// If you don't provide sequence_number then get all entries starting at the first
     async fn get_entries_newer_than_seq<'a>(
         &self,
         ctx: &Context<'a>,
         log_id: LogId,
         author: Author,
-        sequence_number: SequenceNumber,
+        sequence_number: Option<SequenceNumber>,
         first: Option<i32>,
         after: Option<String>,
     ) -> Result<Connection<SequenceNumber, EntryAndPayload, EmptyFields, EmptyFields>> {
@@ -97,9 +99,10 @@ impl<EntryStore: 'static + EntryStoreTrait<StorageEntry> + Sync + Send>
             first,
             None,
             |after: Option<SequenceNumber>, _, first, _| async move {
+                let sequence_number = sequence_number.map(|seq| seq.as_u64()).unwrap_or_else(|| 0);
+
                 // Add the sequence_number to the after cursor to get the starting sequence number.
-                let start: u64 = sequence_number.as_u64() + after.map(|a| a.as_u64()).unwrap_or(0);
-                let start_sequence = SequenceNumber::new(start)?;
+                let start: u64 = sequence_number + after.map(|a| a.as_u64()).unwrap_or(0);
 
                 // Limit the maximum number of entries to 10k, set a default value of 10
                 let max_number_of_entries = first.map(|n| n.clamp(0, 10000)).unwrap_or(10);
@@ -107,12 +110,7 @@ impl<EntryStore: 'static + EntryStoreTrait<StorageEntry> + Sync + Send>
                 let edges = ctx
                     .lock()
                     .await
-                    .get_entries_newer_than_seq(
-                        log_id,
-                        author,
-                        start_sequence,
-                        max_number_of_entries,
-                    )
+                    .get_entries_newer_than_seq(log_id, author, start, max_number_of_entries)
                     .await?
                     .into_iter()
                     .map(|entry| {
@@ -237,7 +235,7 @@ mod tests {
                         }
                         _ => false,
                     };
-                    sequence_number_.as_u64() == expected_start
+                    sequence_number_ == &expected_start
                         && log_id_.as_u64() == log_id
                         && author_matches
                         && *max_number_of_entries_ == first

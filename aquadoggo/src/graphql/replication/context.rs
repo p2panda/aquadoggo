@@ -5,6 +5,7 @@ use async_graphql::ID;
 use lru::LruCache;
 use mockall::automock;
 use p2panda_rs::entry::decode_entry;
+use p2panda_rs::entry::SeqNum;
 use p2panda_rs::storage_provider::traits::EntryStore as EntryStoreTrait;
 
 use crate::db::stores::StorageEntry;
@@ -112,16 +113,20 @@ impl<EntryStore: 'static + EntryStoreTrait<StorageEntry>> Context<EntryStore> {
         &mut self,
         log_id: LogId,
         author: AuthorOrAlias,
-        sequence_number: SequenceNumber,
+        sequence_number: u64,
         max_number_of_entries: usize,
     ) -> Result<Vec<EntryAndPayload>> {
         let author = self.get_author(author)?;
+
+        // `get_paginated_log_entries` is inclusive of sequence_number. Whereas our sequence_number
+        // should not be included. So we add 1 to the the sequence_number we were passed.
+        let sequence_number = SeqNum::new(sequence_number + 1)?;
         let result = self
             .entry_store
             .get_paginated_log_entries(
                 &author.0,
                 &log_id.0,
-                sequence_number.as_ref(),
+                &sequence_number,
                 max_number_of_entries,
             )
             .await?

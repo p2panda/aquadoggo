@@ -127,8 +127,10 @@ type QueryRoot {
 	"""
 	Get any entries that are newer than the provided sequence_number for a given author and
 	log_id
+	
+	If you don't provide sequence_number then get all entries starting at the first
 	"""
-	getEntriesNewerThanSeq(logId: LogId!, author: Author!, sequenceNumber: SequenceNumber!, first: Int, after: String): EntryAndPayloadConnection!
+	getEntriesNewerThanSeq(logId: LogId!, author: Author!, sequenceNumber: SequenceNumber, first: Int, after: String): EntryAndPayloadConnection!
 	"""
 	Get a single entry by its log_id, sequence_number and author
 	"""
