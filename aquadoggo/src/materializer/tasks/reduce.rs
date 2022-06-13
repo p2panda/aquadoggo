@@ -24,7 +24,7 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
                 .map_err(|_| TaskError::Critical)?
             {
                 Some(document_id) => Ok(document_id),
-                None => Err(TaskError::Failure),
+                None => return Ok(None),
             }
         }
         (_, _) => Err(TaskError::Critical),
@@ -76,7 +76,7 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
                     .store
                     .insert_document(&document)
                     .await
-                    .map_err(|_| TaskError::Failure)?;
+                    .map_err(|_| TaskError::Critical)?;
 
                 if document.is_deleted() {
                     return Ok(None);
@@ -100,7 +100,6 @@ mod tests {
     use p2panda_rs::operation::OperationValue;
     use p2panda_rs::storage_provider::traits::OperationStore;
     use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
-    use p2panda_rs::test_utils::fixtures::{random_document_id, random_document_view_id};
     use rstest::rstest;
 
     use crate::config::Configuration;
@@ -233,7 +232,7 @@ mod tests {
 
         let input = TaskInput::new(None, Some(document.view_id().clone()));
         let tasks = reduce_task(context.clone(), input).await.unwrap();
-        println!("{:#?}", tasks);
+
         assert!(tasks.is_none());
     }
 
@@ -261,12 +260,8 @@ mod tests {
     }
 
     #[rstest]
-    #[should_panic(expected = "Failure")]
+    #[should_panic(expected = "Critical")]
     #[case(None, None)]
-    #[should_panic(expected = "Failure")]
-    #[case(None, Some(random_document_view_id()))]
-    #[should_panic(expected = "Failure")]
-    #[case(Some(random_document_id()), None)]
     #[tokio::test]
     async fn fails_correctly(
         #[case] document_id: Option<DocumentId>,
