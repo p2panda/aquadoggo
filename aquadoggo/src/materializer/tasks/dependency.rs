@@ -172,6 +172,12 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
         // This means all dependencies this document view relates to are met and we
         // should dispatch a schema task. We also dispatch all parent dependency tasks
         // incase they now have all their dependencies met.
+        //
+        // NOTE: We don't have access to the `SchemaId` of a document in this task at the moment,
+        // so we just dispatch a schema task for any documents who have their dependencies
+        // met. This is quite wasteful... we would need to add a storage method for accessing the
+        // schema id for any document/document_view id, or re-work `DocumentView` to contain the
+        // the schema id itself.
         next_tasks.append(&mut vec![Task::new(
             "schema",
             TaskInput::new(None, Some(document_view.id().clone())),
