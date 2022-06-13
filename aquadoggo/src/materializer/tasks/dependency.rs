@@ -57,6 +57,7 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
     // in a non critical way if this is the case.
     let (document_id, document_view) = match (&input.document_id, &input.document_view_id) {
         (Some(document_id), None) => {
+            // Fetch the current document view for this document.
             let document_view = context
                 .store
                 .get_document_by_id(document_id)
@@ -68,13 +69,17 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
         // could we even do this with some fancy recursive SQL query? We might need the `previous_operations`
         // table back for that.
         (None, Some(document_view_id)) => {
+            // Fetch the document_view from the store by it's document view id.
             let document_view = context
                 .store
                 .get_document_view_by_id(document_view_id)
                 .await
                 .map_err(|_| TaskError::Critical)?;
 
+            // This is a tip operation which we can use to get the document_id from the store.
             let operation_id = document_view_id.clone().into_iter().next().unwrap();
+
+            // Get the document_id for the passed document_view_id.
             match context
                 .store
                 .get_document_by_operation_id(operation_id)
@@ -101,7 +106,7 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
     let mut parent_tasks = Vec::new();
 
     // First we handle all pinned or unpinned relations defined in this tasks document view.
-    // We can think of these "child" relations. We query the store for every child, if a view is
+    // We can think of these as "child" relations. We query the store for every child, if a view is
     // returned we do nothing. If it doesn't yet exist in the store (it hasn't been materialised)
     // we compose a "reduce" task for it.
 
