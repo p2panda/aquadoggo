@@ -17,7 +17,7 @@ use crate::db::utils::{parse_operation_rows, parse_value_to_string_vec};
 /// Implementation of `OperationStore` trait which is required when constructing a
 /// `StorageProvider`.
 ///
-/// Handles storage and retrieval of operations in the form of `StorageOperation` which
+/// Handles storage and retrieval of operations in the form of `VerifiedOperation` which
 /// implements the required `AsVerifiedOperation` trait.
 ///
 /// There are several intermediary structs defined in `db/models/` which represent
