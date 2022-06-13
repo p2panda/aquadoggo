@@ -13,6 +13,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "addr2line"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b9ecd88a8c8378ca913a680cd98f0f13ac67383d35993f86c90a70e3f137816b"
+dependencies = [
+ "gimli",
+]
+
+[[package]]
+name = "adler"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f26201604c87b1e01bd3d98f8d5d9a8fcbb815e8cedb41ffccbeb4bf593a35fe"
+
+[[package]]
 name = "aead"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -505,6 +520,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "backtrace"
+version = "0.3.65"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "11a17d453482a265fd5f8479f2a3f405566e6ca627837aaddb85af8b1ab8ef61"
+dependencies = [
+ "addr2line",
+ "cc",
+ "cfg-if",
+ "libc",
+ "miniz_oxide",
+ "object",
+ "rustc-demangle",
+]
+
+[[package]]
 name = "bamboo-rs-core-ed25519-yasmf"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -890,7 +920,6 @@ dependencies = [
  "generic-array 0.14.5",
  "rand_core 0.6.3",
  "subtle",
- "zeroize",
 ]
 
 [[package]]
@@ -1118,24 +1147,12 @@ checksum = "1435fa1053d8b2fbbe9be7e97eca7f33d37b28409959813daefc1446a14247f1"
 
 [[package]]
 name = "ecdsa"
-version = "0.12.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43ee23aa5b4f68c7a092b5c3beb25f50c406adc75e2363634f242f28ab255372"
-dependencies = [
- "der 0.4.5",
- "elliptic-curve 0.10.6",
- "hmac 0.11.0",
- "signature",
-]
-
-[[package]]
-name = "ecdsa"
 version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0d69ae62e0ce582d56380743515fefaf1a8c70cec685d9677636d7e30ae9dc9"
 dependencies = [
  "der 0.5.1",
- "elliptic-curve 0.11.12",
+ "elliptic-curve",
  "rfc6979",
  "signature",
 ]
@@ -1174,22 +1191,6 @@ checksum = "e78d4f1cc4ae33bbfc157ed5d5a5ef3bc29227303d595861deb238fcec4e9457"
 
 [[package]]
 name = "elliptic-curve"
-version = "0.10.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "beca177dcb8eb540133e7680baff45e7cc4d93bf22002676cec549f82343721b"
-dependencies = [
- "crypto-bigint 0.2.11",
- "ff 0.10.1",
- "generic-array 0.14.5",
- "group 0.10.0",
- "pkcs8 0.7.6",
- "rand_core 0.6.3",
- "subtle",
- "zeroize",
-]
-
-[[package]]
-name = "elliptic-curve"
 version = "0.11.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "25b477563c2bfed38a3b7a60964c49e058b2510ad3f12ba3483fd8f62c2306d6"
@@ -1197,9 +1198,9 @@ dependencies = [
  "base16ct",
  "crypto-bigint 0.3.2",
  "der 0.5.1",
- "ff 0.11.1",
+ "ff",
  "generic-array 0.14.5",
- "group 0.11.0",
+ "group",
  "rand_core 0.6.3",
  "sec1",
  "subtle",
@@ -1283,16 +1284,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3fcf0cee53519c866c09b5de1f6c56ff9d647101f81c1964fa632e148896cdf"
 dependencies = [
  "instant",
-]
-
-[[package]]
-name = "ff"
-version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d0f40b2dcd8bc322217a5f6559ae5f9e9d1de202a2ecee2e9eafcbece7562a4f"
-dependencies = [
- "rand_core 0.6.3",
- "subtle",
 ]
 
 [[package]]
@@ -1536,6 +1527,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "gimli"
+version = "0.26.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "78cc372d058dcf6d5ecd98510e7fbc9e5aec4d21de70f65fea8fecebcd881bd4"
+
+[[package]]
 name = "gloo-timers"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1549,22 +1546,11 @@ dependencies = [
 
 [[package]]
 name = "group"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c363a5301b8f153d80747126a04b3c82073b9fe3130571a9d170cacdeaf7912"
-dependencies = [
- "ff 0.10.1",
- "rand_core 0.6.3",
- "subtle",
-]
-
-[[package]]
-name = "group"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc5ac374b108929de78460075f3dc439fa66df9d8fc77e8f12caa5165fcf0c89"
 dependencies = [
- "ff 0.11.1",
+ "ff",
  "rand_core 0.6.3",
  "subtle",
 ]
@@ -1663,16 +1649,6 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "hkdf"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01706d578d5c281058480e673ae4086a9f4710d8df1ad80a5b03e39ece5f886b"
-dependencies = [
- "digest 0.9.0",
- "hmac 0.11.0",
-]
-
-[[package]]
-name = "hkdf"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "791a029f6b9fc27657f6f188ec6e5e43f6911f6f878e0dc5501396e09809d437"
@@ -1735,9 +1711,9 @@ dependencies = [
  "aes-gcm",
  "chacha20poly1305",
  "getrandom 0.2.6",
- "hkdf 0.12.3",
+ "hkdf",
  "hpke-rs-crypto",
- "p256 0.10.1",
+ "p256",
  "p384",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -2016,14 +1992,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "memory_keystore"
-version = "0.1.0"
-source = "git+https://github.com/adzialocha/openmls?branch=p2panda#bc9cb746862e4a9b7acaf4b53f23351131df7300"
-dependencies = [
- "openmls_traits",
-]
-
-[[package]]
 name = "merlin"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2046,6 +2014,15 @@ name = "minimal-lexical"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
+
+[[package]]
+name = "miniz_oxide"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6f5c75688da582b8ffc1f1799e9db273f32133c49e048f614d22ec3256773ccc"
+dependencies = [
+ "adler",
+]
 
 [[package]]
 name = "mio"
@@ -2191,6 +2168,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "object"
+version = "0.28.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e42c982f2d955fac81dd7e1d0e1426a7d702acd9c98d19ab01083a6a0328c424"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2210,24 +2196,60 @@ checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 
 [[package]]
 name = "openmls"
-version = "0.3.0"
-source = "git+https://github.com/adzialocha/openmls?branch=p2panda#bc9cb746862e4a9b7acaf4b53f23351131df7300"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da59259a2515986c65e58490aa29b0170a47ca312dd72c84ed2ef4393b5c3c2c"
 dependencies = [
+ "backtrace",
  "getrandom 0.2.6",
- "lazy_static",
  "log",
  "openmls_traits",
+ "rayon",
  "serde",
  "serde_json",
+ "thiserror",
  "tls_codec",
  "typetag",
- "uuid",
+ "uuid 1.1.2",
+]
+
+[[package]]
+name = "openmls_memory_keystore"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13e801764b63c379bc2ef38b474ed52306dc3243a43fb23ef0a68707be8357d9"
+dependencies = [
+ "openmls_traits",
+]
+
+[[package]]
+name = "openmls_rust_crypto"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "590e265c1458618f3c3634b4c9eede9774da5f4ed88662d87364c4f259ed15ec"
+dependencies = [
+ "aes-gcm",
+ "chacha20poly1305",
+ "ed25519-dalek",
+ "hkdf",
+ "hmac 0.12.1",
+ "hpke-rs",
+ "hpke-rs-crypto",
+ "hpke-rs-rust-crypto",
+ "openmls_memory_keystore",
+ "openmls_traits",
+ "p256",
+ "rand 0.7.3",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "sha2 0.10.2",
 ]
 
 [[package]]
 name = "openmls_traits"
 version = "0.1.0"
-source = "git+https://github.com/adzialocha/openmls?branch=p2panda#bc9cb746862e4a9b7acaf4b53f23351131df7300"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "014a9f65ac7ac2ec7ed6802d02065434f99632a9d92eab6343f3b828a51163d1"
 dependencies = [
  "serde",
  "tls_codec",
@@ -2241,23 +2263,12 @@ checksum = "ff011a302c396a5197692431fc1948019154afc178baf7d8e37367442a4601cf"
 
 [[package]]
 name = "p256"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d053368e1bae4c8a672953397bd1bd7183dde1c72b0b7612a15719173148d186"
-dependencies = [
- "ecdsa 0.12.4",
- "elliptic-curve 0.10.6",
- "sha2 0.9.9",
-]
-
-[[package]]
-name = "p256"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19736d80675fbe9fe33426268150b951a3fb8f5cfca2a23a17c85ef3adb24e3b"
 dependencies = [
- "ecdsa 0.13.4",
- "elliptic-curve 0.11.12",
+ "ecdsa",
+ "elliptic-curve",
  "sec1",
  "sha2 0.9.9",
 ]
@@ -2265,7 +2276,7 @@ dependencies = [
 [[package]]
 name = "p2panda-rs"
 version = "0.3.0"
-source = "git+https://github.com/p2panda/p2panda?branch=main#047f0511b8c2482405bc1187479f1bac6b752d94"
+source = "git+https://github.com/p2panda/p2panda?branch=rework-operation-traits#8243289b37de33a877919139fafe0c6462b34f31"
 dependencies = [
  "arrayvec 0.5.2",
  "async-trait",
@@ -2280,15 +2291,15 @@ dependencies = [
  "lazy_static",
  "lipmaa-link 0.2.2",
  "log",
- "memory_keystore",
  "mockall",
  "openmls",
+ "openmls_memory_keystore",
+ "openmls_rust_crypto",
  "openmls_traits",
  "rand 0.7.3",
  "regex",
  "rstest",
  "rstest_reuse",
- "rust_crypto",
  "serde",
  "serde-wasm-bindgen",
  "serde_repr",
@@ -2304,7 +2315,7 @@ version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "755d8266e41f57bd8562ed9b6e93cdcf73ead050e1e8c3a27ea3871b6643a20c"
 dependencies = [
- "elliptic-curve 0.11.12",
+ "elliptic-curve",
  "sec1",
 ]
 
@@ -2869,25 +2880,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "rust_crypto"
-version = "0.1.0"
-source = "git+https://github.com/adzialocha/openmls?branch=p2panda#bc9cb746862e4a9b7acaf4b53f23351131df7300"
-dependencies = [
- "aes-gcm",
- "chacha20poly1305",
- "ed25519-dalek",
- "hkdf 0.11.0",
- "hmac 0.11.0",
- "hpke-rs",
- "hpke-rs-crypto",
- "hpke-rs-rust-crypto",
- "openmls_traits",
- "p256 0.9.0",
- "rand 0.7.3",
- "rand 0.8.5",
- "rand_chacha 0.3.1",
- "sha2 0.9.9",
-]
+name = "rustc-demangle"
+version = "0.1.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ef03e0a2b150c7a90d01faf6254c9c48a41e95fb2a8c2ac1c6f0d2b9aefc342"
 
 [[package]]
 name = "rustc_version"
@@ -3309,7 +3305,7 @@ dependencies = [
  "stringprep",
  "thiserror",
  "url",
- "uuid",
+ "uuid 0.8.2",
  "webpki",
  "webpki-roots",
  "whoami",
@@ -3882,6 +3878,12 @@ name = "uuid"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
+
+[[package]]
+name = "uuid"
+version = "1.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd6469f4314d5f1ffec476e05f17cc9a78bc7a27a6a857842170bdf8d6f98d2f"
 dependencies = [
  "getrandom 0.2.6",
 ]
