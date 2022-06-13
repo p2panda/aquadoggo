@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use p2panda_rs::document::{DocumentId, DocumentViewId};
-use p2panda_rs::storage_provider::traits::OperationStore;
+use p2panda_rs::document::DocumentViewId;
 
 use crate::context::Context;
 use crate::db::traits::DocumentStore;
@@ -27,26 +26,6 @@ async fn pinned_relation_task(
         ))),
     }
 }
-
-// /// helper method for retrieving a document view by a documents' id and if it doesn't exist in
-// /// the store, composing a "reduce" task for this document.
-// async fn unpinned_relation_task(
-//     context: &Context,
-//     document_id: DocumentId,
-// ) -> Result<Option<Task<TaskInput>>, TaskError> {
-//     match context
-//         .store
-//         .get_document_by_id(&document_id)
-//         .await
-//         .map_err(|_| TaskError::Critical)?
-//     {
-//         Some(_) => Ok(None),
-//         None => Ok(Some(Task::new(
-//             "reduce",
-//             TaskInput::new(Some(document_id), None),
-//         ))),
-//     }
-// }
 
 pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
     // PARSE INPUT ARGUMENTS //
@@ -259,75 +238,6 @@ mod tests {
         assert_eq!(tasks[0].0, "reduce");
     }
 
-    // #[rstest]
-    // #[case(test_db(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(),
-    //     vec![("profile_picture", OperationValue::Relation(Relation::new(random_document_id())))],
-    //     vec![]), 1)]
-    // #[case(test_db(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(),
-    //     vec![("one_relation_field", OperationValue::PinnedRelationList(PinnedRelationList::new([0; 2].iter().map(|_|random_document_view_id()).collect()))),
-    //          ("another_relation_field", OperationValue::RelationList(RelationList::new([0; 6].iter().map(|_|random_document_id()).collect())))],
-    //     vec![]), 8)]
-    // #[case(test_db(4, 1, false, TEST_SCHEMA_ID.parse().unwrap(),
-    //     vec![("one_relation_field", OperationValue::PinnedRelationList(PinnedRelationList::new([0; 2].iter().map(|_|random_document_view_id()).collect()))),
-    //          ("another_relation_field", OperationValue::RelationList(RelationList::new([0; 6].iter().map(|_|random_document_id()).collect())))],
-    //     vec![("one_relation_field", OperationValue::PinnedRelationList(PinnedRelationList::new([0; 2].iter().map(|_|random_document_view_id()).collect()))),
-    //          ("another_relation_field", OperationValue::RelationList(RelationList::new([0; 10].iter().map(|_|random_document_id()).collect())))],
-    // ), 12)]
-    // #[tokio::test]
-    // async fn ignores_fields_which_look_like_relations_but_are_not(
-    //     #[case]
-    //     #[future]
-    //     db: TestSqlStore,
-    //     #[case] expected_next_tasks: usize,
-    // ) {
-    //     let db = db.await;
-    //     let context = Context::new(db.store.clone(), Configuration::default());
-    //     let document_id = db.documents[0].clone();
-
-    //     let input = TaskInput::new(Some(document_id.clone()), None);
-    //     reduce_task(context.clone(), input).await.unwrap().unwrap();
-
-    //     let document_view = db
-    //         .store
-    //         .get_document_by_id(&document_id)
-    //         .await
-    //         .unwrap()
-    //         .unwrap();
-
-    //     let document_view_id = document_view.id();
-
-    //     let input = TaskInput::new(None, Some(document_view_id.clone()));
-
-    //     dependency_task(context.clone(), input)
-    //         .await
-    //         .unwrap()
-    //         .unwrap();
-
-    //     let operation = create_operation(&[(
-    //         "not_a_relation_but_contains_a_hash",
-    //         OperationValue::Text(document_id.as_str().to_string()),
-    //     )]);
-
-    //     let (_, document_view_id_of_unrelated_document) =
-    //         insert_entry_operation_and_view(&db.store, &KeyPair::new(), None, &operation).await;
-
-    //     let input = TaskInput::new(None, Some(document_view_id.clone()));
-    //     let tasks = dependency_task(context.clone(), input)
-    //         .await
-    //         .unwrap()
-    //         .unwrap();
-
-    //     let input = TaskInput::new(None, Some(document_view_id_of_unrelated_document.clone()));
-    //     let tasks_of_unrelated_document = dependency_task(context.clone(), input)
-    //         .await
-    //         .unwrap()
-    //         .unwrap();
-
-    //     assert_eq!(tasks.len(), expected_next_tasks);
-    //     assert_eq!(tasks_of_unrelated_document.len(), 1);
-    //     assert_eq!(tasks_of_unrelated_document[0].0, "schema");
-    // }
-
     #[rstest]
     #[should_panic(expected = "Critical")]
     #[case(None, Some(random_document_view_id()))]
@@ -391,65 +301,4 @@ mod tests {
             .unwrap()
             .unwrap();
     }
-
-    // #[rstest]
-    // #[tokio::test]
-    // async fn gets_parent_relations(
-    //     #[from(test_db)]
-    //     #[future]
-    //     #[with(1, 1)]
-    //     db: TestSqlStore,
-    // ) {
-    //     let db = db.await;
-    //     let context = Context::new(db.store.clone(), Configuration::default());
-    //     let document_id = db.documents[0].clone();
-
-    //     let input = TaskInput::new(Some(document_id.clone()), None);
-    //     reduce_task(context.clone(), input).await.unwrap().unwrap();
-
-    //     // Here we have one materialised document, (we are calling it a child as we will shortly be publishing parents).
-
-    //     let document_view_of_child = db
-    //         .store
-    //         .get_document_by_id(&document_id)
-    //         .await
-    //         .unwrap()
-    //         .unwrap();
-
-    //     let document_view_id_of_child = document_view_of_child.id();
-
-    //     // Create a new document referencing the existing materialised document by unpinned relation.
-
-    //     let operation = create_operation(&[(
-    //         "relation_to_existing_document",
-    //         OperationValue::Relation(Relation::new(document_id.clone())),
-    //     )]);
-    //     let (_, document_view_id_of_parent) =
-    //         insert_entry_operation_and_view(&db.store, &KeyPair::new(), None, &operation).await;
-
-    //     let parent_dependencies_unpinned = db
-    //         .store
-    //         .get_parents_with_unpinned_relation(&document_id)
-    //         .await
-    //         .unwrap();
-    //     assert_eq!(parent_dependencies_unpinned.len(), 1);
-    //     assert_eq!(parent_dependencies_unpinned[0], document_view_id_of_parent);
-
-    //     // Create a new document referencing the existing materialised document by pinned relation.
-
-    //     let operation = create_operation(&[(
-    //         "pinned_relation_to_existing_document",
-    //         OperationValue::PinnedRelation(PinnedRelation::new(document_view_id_of_child.clone())),
-    //     )]);
-    //     let (_, document_view_id_of_parent) =
-    //         insert_entry_operation_and_view(&db.store, &KeyPair::new(), None, &operation).await;
-
-    //     let parent_dependencies_pinned = db
-    //         .store
-    //         .get_parents_with_pinned_relation(document_view_id_of_child)
-    //         .await
-    //         .unwrap();
-    //     assert_eq!(parent_dependencies_pinned.len(), 1);
-    //     assert_eq!(parent_dependencies_pinned[0], document_view_id_of_parent);
-    // }
 }
