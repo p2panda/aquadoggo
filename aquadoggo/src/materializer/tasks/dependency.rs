@@ -8,6 +8,8 @@ use crate::db::traits::DocumentStore;
 use crate::materializer::worker::{Task, TaskError, TaskResult};
 use crate::materializer::TaskInput;
 
+/// helper method for retrieving a document view by it's document view id and if it doesn't exist in
+/// the store, composing a "reduce" task for this specific document view.
 async fn pinned_relation_task(
     context: &Context,
     document_view_id: DocumentViewId,
@@ -26,6 +28,8 @@ async fn pinned_relation_task(
     }
 }
 
+/// helper method for retrieving a document view by a documents' id and if it doesn't exist in
+/// the store, composing a "reduce" task for this document.
 async fn unpinned_relation_task(
     context: &Context,
     document_id: DocumentId,
