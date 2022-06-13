@@ -110,10 +110,10 @@ pub type TaskResult<IN> = Result<Option<Vec<Task<IN>>>, TaskError>;
 #[derive(Debug)]
 pub enum TaskError {
     /// This tasks failed critically and will cause the whole program to panic.
-    #[allow(dead_code)]
     Critical,
 
     /// This task failed silently without any further effects.
+    #[allow(dead_code)]
     Failure,
 }
 
