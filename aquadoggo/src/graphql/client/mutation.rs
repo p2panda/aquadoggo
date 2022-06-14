@@ -81,23 +81,36 @@ impl ClientMutationRoot {
 #[cfg(test)]
 mod tests {
     use async_graphql::{from_value, value, Request, Value, Variables};
-    use p2panda_rs::entry::{LogId, SeqNum};
+    use p2panda_rs::entry::{EntrySigned, LogId, SeqNum};
     use tokio::sync::broadcast;
 
+    use crate::bus::ServiceMessage;
     use crate::graphql::client::PublishEntryResponse;
     use crate::http::HttpServiceContext;
     use crate::test_helpers::initialize_store;
 
-    const ENTRY_ENCODED: &str =
-        "00bedabb435758855968b3e2de2aa1f653adfbb392fcf9cb2295a68b2eca3cfb0301\
-    01a200204b771d59d76e820cbae493682003e99b795e4e7c86a8d6b4c9ad836dc4c9bf1d3970fb39f21542099ba\
-    2fbfd6ec5076152f26c02445c621b43a7e2898d203048ec9f35d8c2a1547f2b83da8e06cadd8a60bb45d3b50045\
-    1e63f7cccbcbd64d09";
+    const ENTRY_ENCODED: &str = "00bedabb435758855968b3e2de2aa1f653adfbb392fcf9cb2295a68b2eca3c\
+                                 fb030101a200204b771d59d76e820cbae493682003e99b795e4e7c86a8d6b4\
+                                 c9ad836dc4c9bf1d3970fb39f21542099ba2fbfd6ec5076152f26c02445c62\
+                                 1b43a7e2898d203048ec9f35d8c2a1547f2b83da8e06cadd8a60bb45d3b500\
+                                 451e63f7cccbcbd64d09";
 
     const OPERATION_ENCODED: &str = "a466616374696f6e6663726561746566736368656d61784a76656e7565\
-    5f30303230633635353637616533376566656132393365333461396337643133663866326266323364626463336\
-    235633762396162343632393331313163343866633738626776657273696f6e01666669656c6473a1676d657373\
-    616765a26474797065637374726576616c7565764f68682c206d79206669727374206d65737361676521";
+                                     5f30303230633635353637616533376566656132393365333461396337\
+                                     6431336638663262663233646264633362356337623961623436323933\
+                                     31313163343866633738626776657273696f6e01666669656c6473a167\
+                                     6d657373616765a26474797065637374726576616c7565764f68682c20\
+                                     6d79206669727374206d65737361676521";
+
+    const PUBLISH_ENTRY_QUERY: &str = r#"
+        mutation TestPublishEntry($entryEncoded: String!, $operationEncoded: String!) {
+            publishEntry(entryEncoded: $entryEncoded, operationEncoded: $operationEncoded) {
+                logId,
+                seqNum,
+                backlink,
+                skiplink
+            }
+        }"#;
 
     #[tokio::test]
     async fn publish_entry() {
@@ -106,22 +119,13 @@ mod tests {
         let context = HttpServiceContext::new(store, tx);
 
         // Prepare GraphQL mutation publishing an entry
-        let query = r#"
-            mutation TestPublishEntry($entryEncoded: String!, $operationEncoded: String!) {
-                publishEntry(entryEncoded: $entryEncoded, operationEncoded: $operationEncoded) {
-                    logId,
-                    seqNum,
-                    backlink,
-                    skiplink
-                }
-            }"#;
         let parameters = Variables::from_value(value!({
             "entryEncoded": ENTRY_ENCODED,
             "operationEncoded": OPERATION_ENCODED
         }));
 
         // Process mutation with given schema
-        let request = Request::new(query).variables(parameters);
+        let request = Request::new(PUBLISH_ENTRY_QUERY).variables(parameters);
         let response = context.schema.execute(request).await;
         let received: PublishEntryResponse = match response.data {
             Value::Object(result_outer) => {
@@ -145,25 +149,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn sends_message_on_communication_bus() {
+        let (tx, mut rx) = broadcast::channel(16);
+        let store = initialize_store().await;
+        let context = HttpServiceContext::new(store, tx);
+
+        // Prepare GraphQL mutation publishing an entry
+        let parameters = Variables::from_value(value!({
+            "entryEncoded": ENTRY_ENCODED,
+            "operationEncoded": OPERATION_ENCODED
+        }));
+
+        // Process mutation with given schema
+        let request = Request::new(PUBLISH_ENTRY_QUERY).variables(parameters);
+        context.schema.execute(request).await;
+
+        // Find out hash of test entry to determine operation id
+        let entry_encoded = EntrySigned::new(ENTRY_ENCODED).unwrap();
+
+        // Expect receiver to receive sent message
+        let message = rx.recv().await.unwrap();
+        assert_eq!(
+            message,
+            ServiceMessage::NewOperation(entry_encoded.hash().into())
+        );
+    }
+
+    #[tokio::test]
     async fn publish_entry_error_handling() {
         let (tx, _rx) = broadcast::channel(16);
         let store = initialize_store().await;
         let context = HttpServiceContext::new(store, tx);
 
-        let query = r#"
-            mutation TestPublishEntry($entryEncoded: String!, $operationEncoded: String!) {
-                publishEntry(entryEncoded: $entryEncoded, operationEncoded: $operationEncoded) {
-                    logId,
-                    seqNum,
-                    backlink,
-                    skiplink
-                }
-            }"#;
         let parameters = Variables::from_value(value!({
             "entryEncoded": ENTRY_ENCODED,
             "operationEncoded": "".to_string()
         }));
-        let request = Request::new(query).variables(parameters);
+        let request = Request::new(PUBLISH_ENTRY_QUERY).variables(parameters);
         let response = context.schema.execute(request).await;
 
         assert!(response.is_err());
