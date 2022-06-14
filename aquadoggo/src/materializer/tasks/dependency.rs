@@ -7,8 +7,8 @@ use crate::db::traits::DocumentStore;
 use crate::materializer::worker::{Task, TaskError, TaskResult};
 use crate::materializer::TaskInput;
 
-/// Helper method for retrieving a document view by it's document view id and if it doesn't exist in
-/// the store, composing a "reduce" task for this specific document view.
+/// Returns a _reduce_ task for a given document view only if that view does not yet exist in the
+/// store.
 async fn construct_relation_task(
     context: &Context,
     document_view_id: DocumentViewId,
@@ -27,6 +27,10 @@ async fn construct_relation_task(
     }
 }
 
+/// A dependency task prepares _reduce_ tasks for all pinned relations of a given document view.
+///
+/// Expects a _reduce_ task to have completed successfully for the given document view itself and
+/// returns a critical error otherwise.
 pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
     // Here we retrive the document view by document view id.
     let document_view = match input.document_view_id {
@@ -49,7 +53,7 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
 
     let mut next_tasks = Vec::new();
 
-    // First we handle all pinned or unpinned relations defined in this tasks document view.
+    // First we handle all pinned or unpinned relations defined in this task's document view.
     // We can think of these as "child" relations.
     for (_key, document_view_value) in document_view.fields().iter() {
         match document_view_value.value() {
