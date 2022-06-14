@@ -2,9 +2,10 @@
 
 use async_graphql::{Context, Error, Object, Result};
 use p2panda_rs::entry::EntrySigned;
-use p2panda_rs::operation::{Operation, OperationEncoded, VerifiedOperation};
+use p2panda_rs::operation::{Operation, OperationEncoded, OperationId, VerifiedOperation};
 use p2panda_rs::storage_provider::traits::{OperationStore, StorageProvider};
 
+use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::provider::SqlStorage;
 use crate::graphql::client::{PublishEntryRequest, PublishEntryResponse};
 
@@ -30,6 +31,7 @@ impl ClientMutationRoot {
         operation_encoded_param: String,
     ) -> Result<PublishEntryResponse> {
         let store = ctx.data::<SqlStorage>()?;
+        let tx = ctx.data::<ServiceSender>()?;
 
         // Parse and validate parameters
         let args = PublishEntryRequest {
@@ -50,10 +52,11 @@ impl ClientMutationRoot {
         {
             Some(document_id) => {
                 let operation = Operation::from(&args.operation_encoded);
+                let operation_id: OperationId = args.entry_encoded.hash().into();
 
                 let verified_operation = VerifiedOperation::new(
                     &args.entry_encoded.author(),
-                    &args.entry_encoded.hash().into(),
+                    &operation_id,
                     &operation,
                 )?;
 
@@ -63,11 +66,15 @@ impl ClientMutationRoot {
                 store
                     .insert_operation(&verified_operation, &document_id)
                     .await?;
-            }
-            None => return Err(Error::new("No related document found in database")),
-        }
 
-        Ok(response)
+                // Send new operation on service communication bus, this will arrive eventually at
+                // the materializer service
+                tx.send(ServiceMessage::NewOperation(operation_id))?;
+
+                Ok(response)
+            }
+            None => Err(Error::new("No related document found in database")),
+        }
     }
 }
 
@@ -94,10 +101,11 @@ mod tests {
 
     #[tokio::test]
     async fn publish_entry() {
-        let (tx, _) = broadcast::channel(16);
+        let (tx, _rx) = broadcast::channel(16);
         let store = initialize_store().await;
         let context = HttpServiceContext::new(store, tx);
 
+        // Prepare GraphQL mutation publishing an entry
         let query = r#"
             mutation TestPublishEntry($entryEncoded: String!, $operationEncoded: String!) {
                 publishEntry(entryEncoded: $entryEncoded, operationEncoded: $operationEncoded) {
@@ -111,16 +119,18 @@ mod tests {
             "entryEncoded": ENTRY_ENCODED,
             "operationEncoded": OPERATION_ENCODED
         }));
+
+        // Process mutation with given schema
         let request = Request::new(query).variables(parameters);
         let response = context.schema.execute(request).await;
-
         let received: PublishEntryResponse = match response.data {
             Value::Object(result_outer) => {
                 from_value(result_outer.get("publishEntry").unwrap().to_owned()).unwrap()
             }
             _ => panic!("Expected return value to be an object"),
         };
-        // The response should contain args for the next entry in the same log.
+
+        // The response should contain args for the next entry in the same log
         let expected = PublishEntryResponse {
             log_id: LogId::new(1),
             seq_num: SeqNum::new(2).unwrap(),
@@ -136,7 +146,7 @@ mod tests {
 
     #[tokio::test]
     async fn publish_entry_error_handling() {
-        let (tx, _) = broadcast::channel(16);
+        let (tx, _rx) = broadcast::channel(16);
         let store = initialize_store().await;
         let context = HttpServiceContext::new(store, tx);
 

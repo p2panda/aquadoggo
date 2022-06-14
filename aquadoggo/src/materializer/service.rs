@@ -34,7 +34,7 @@ pub async fn materializer_service(
 
     // Listen to incoming new entries and operations and move them into task queue
     let handle = task::spawn(async move {
-        while let Ok(ServiceMessage::NewEntryAndOperation(_entry, _operation)) = rx.recv().await {
+        while let Ok(ServiceMessage::NewOperation(_operation_id)) = rx.recv().await {
             // @TODO: Identify document id from operation by asking the database
             factory.queue(Task::new("reduce", TaskInput::new(None, None)));
         }
