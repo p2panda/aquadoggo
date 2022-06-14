@@ -80,7 +80,7 @@ mod tests {
             "operationEncoded": OPERATION_ENCODED
         }));
         let request = Request::new(query).variables(parameters);
-        let response = context.0.schema.execute(request).await;
+        let response = context.0.graphql_schema.execute(request).await;
 
         let received: PublishEntryResponse = match response.data {
             Value::Object(result_outer) => {
@@ -121,7 +121,7 @@ mod tests {
             "operationEncoded": "".to_string()
         }));
         let request = Request::new(query).variables(parameters);
-        let response = context.0.schema.execute(request).await;
+        let response = context.0.graphql_schema.execute(request).await;
 
         assert!(response.is_err());
         assert_eq!(

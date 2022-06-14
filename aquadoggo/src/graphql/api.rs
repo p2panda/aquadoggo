@@ -16,5 +16,9 @@ pub async fn handle_graphql_query(
     request: GraphQLRequest,
     Extension(context): Extension<Context>,
 ) -> GraphQLResponse {
-    context.schema.execute(request.into_inner()).await.into()
+    context
+        .graphql_schema
+        .execute(request.into_inner())
+        .await
+        .into()
 }

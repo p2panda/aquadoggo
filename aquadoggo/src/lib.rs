@@ -22,6 +22,7 @@ mod graphql;
 mod manager;
 mod materializer;
 mod node;
+mod schema_service;
 mod server;
 
 #[cfg(test)]

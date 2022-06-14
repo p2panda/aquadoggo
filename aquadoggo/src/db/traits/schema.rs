@@ -20,6 +20,6 @@ pub trait SchemaStore {
     /// Get all published Schema from storage.
     ///
     /// Returns a vector of Schema, or an empty vector if none were found. Returns
-    /// an error when a fatal storage error occured or a schema could not be constructed.  
+    /// an error when a fatal storage error occured or a schema could not be constructed.
     async fn get_all_schema(&self) -> Result<Vec<Schema>, SchemaStoreError>;
 }

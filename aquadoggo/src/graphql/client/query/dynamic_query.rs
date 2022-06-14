@@ -1,33 +1,36 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::borrow::Cow;
-use std::fmt::Error;
 
 use async_graphql::indexmap::IndexMap;
 use async_graphql::parser::types::Field;
 use async_graphql::registry::{MetaType, MetaTypeId};
 use async_graphql::{
-    ContainerType, ContextSelectionSet, Name, OutputType, Positioned, SelectionField, ServerError,
-    ServerResult, Value,
+    ContainerType, ContextSelectionSet, Name, OutputType, Positioned, SelectionField, ServerResult,
+    Value,
 };
 use async_recursion::async_recursion;
 use async_trait::async_trait;
-use p2panda_rs::operation::{PinnedRelation, PinnedRelationList};
-use p2panda_rs::schema::{FieldType, SchemaId};
-use serde_json::json;
+use p2panda_rs::schema::{FieldType, Schema, SchemaId};
 
 use crate::db::provider::SqlStorage;
-use crate::db::traits::SchemaStore;
+use crate::schema_service::{SchemaService, TempFile};
 
-use super::schema::{get_schema_metafield, get_schema_metatype, load_temp};
+use super::schema::{get_schema_metafield, get_schema_metatype};
 
 /// Container object that injects registered p2panda schemas when it is added to a GraphQL schema.
-pub struct DynamicQuery(SqlStorage);
+pub struct DynamicQuery {
+    store: SqlStorage,
+    schema_service: SchemaService<SqlStorage>,
+}
 
 impl DynamicQuery {
     /// Returns a GraphQL container object given a database pool.
-    pub fn new(store: SqlStorage) -> Self {
-        Self(store)
+    pub fn new(store: SqlStorage, schema_service: SchemaService<SqlStorage>) -> Self {
+        Self {
+            store,
+            schema_service,
+        }
     }
 
     /// Query database for selected field values and return a JSON result.
@@ -37,10 +40,13 @@ impl DynamicQuery {
         schema_id: SchemaId,
         ctx: SelectionField<'async_recursion>,
     ) -> ServerResult<Option<Value>> {
-        // let schema = self.0.get_schema_by_id(&schema_id).await.unwrap().unwrap();
+        let schema = self
+            .schema_service
+            .get_schema(schema_id)
+            .await
+            .unwrap()
+            .unwrap();
 
-        let schemas = load_temp();
-        let schema = schemas.iter().find(|s| s.id() == &schema_id).unwrap();
         let mut fields: IndexMap<Name, Value> = IndexMap::new();
 
         let selected_fields = ctx
@@ -51,25 +57,27 @@ impl DynamicQuery {
                     .iter()
                     .find(|f| f.0 == field.name())
                     .unwrap();
-                (field, field_name.clone(), field_type.clone())
+                (field, field_name.to_owned(), field_type.to_owned())
             })
             .collect::<Vec<(SelectionField, String, FieldType)>>();
 
-        for (field, field_name, p2panda_field_type) in selected_fields {
+        for (graphql_field, field_name, p2panda_field_type) in selected_fields {
             let value = match p2panda_field_type {
                 FieldType::Bool => Some(Value::Boolean(true)),
                 FieldType::Int => Some(Value::Number(5u8.into())),
                 FieldType::Float => Some(1.5f32.into()),
                 FieldType::String => Some("Hello".into()),
-                FieldType::Relation(schema) => self.resolve_dynamic(schema, field).await.unwrap(),
+                FieldType::Relation(schema) => {
+                    self.resolve_dynamic(schema, graphql_field).await.unwrap()
+                }
                 FieldType::RelationList(schema) => {
-                    self.resolve_dynamic(schema, field).await.unwrap()
+                    self.resolve_dynamic(schema, graphql_field).await.unwrap()
                 }
                 FieldType::PinnedRelation(schema) => {
-                    self.resolve_dynamic(schema, field).await.unwrap()
+                    self.resolve_dynamic(schema, graphql_field).await.unwrap()
                 }
                 FieldType::PinnedRelationList(schema) => {
-                    self.resolve_dynamic(schema, field).await.unwrap()
+                    self.resolve_dynamic(schema, graphql_field).await.unwrap()
                 }
             }
             .unwrap();
@@ -101,14 +109,15 @@ impl OutputType for DynamicQuery {
             // Insert queries for all registered schemas.
             let mut fields = IndexMap::new();
 
-            let schemas = load_temp();
+            // Load schema definitions and keep them in memory until the node shuts down.
+            let schemas: &'static Vec<Schema> = TempFile::load_static("./aquadoggo-schemas.temp");
             for schema in schemas.iter() {
                 // Insert GraphQL types for all registered schemas.
-                let metatype = get_schema_metatype(&schema);
+                let metatype = get_schema_metatype(schema);
                 reg.types.insert(schema.id().as_str(), metatype);
 
                 // Insert queries.
-                let metafield = get_schema_metafield(&schema);
+                let metafield = get_schema_metafield(schema);
                 fields.insert(schema.id().as_str(), metafield);
             }
 
