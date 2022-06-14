@@ -7,9 +7,9 @@ use crate::db::traits::DocumentStore;
 use crate::materializer::worker::{Task, TaskError, TaskResult};
 use crate::materializer::TaskInput;
 
-/// helper method for retrieving a document view by it's document view id and if it doesn't exist in
+/// Helper method for retrieving a document view by it's document view id and if it doesn't exist in
 /// the store, composing a "reduce" task for this specific document view.
-async fn pinned_relation_task(
+async fn construct_relation_task(
     context: &Context,
     document_view_id: DocumentViewId,
 ) -> Result<Option<Task<TaskInput>>, TaskError> {
@@ -28,37 +28,24 @@ async fn pinned_relation_task(
 }
 
 pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
-    // PARSE INPUT ARGUMENTS //
-
-    // Here we retrive the document view by document id or document view id depending on what was passed into
-    // the task. This is needed so we can access the document view id and also check if a document has been
-    // deleted. We also catch invalid task inputs here (both or neither ids were passed), failing the task
-    // in a non critical way if this is the case.
-    let document_view = match (&input.document_id, &input.document_view_id) {
-        // TODO: Alt approach: we could have a `get_operations_by_document_view_id()` in `OperationStore`, or
-        // could we even do this with some fancy recursive SQL query? We might need the `previous_operations`
-        // table back for that.
-        (None, Some(document_view_id)) => {
-            // Fetch the document_view from the store by it's document view id.
-            context
-                .store
-                .get_document_view_by_id(document_view_id)
-                .await
-                .map_err(|_| TaskError::Critical)
-        }
-        (_, _) => Err(TaskError::Critical),
+    // Here we retrive the document view by document view id.
+    let document_view = match input.document_view_id {
+        Some(view_id) => match context
+            .store
+            .get_document_view_by_id(&view_id)
+            .await
+            .map_err(|_| TaskError::Critical)?
+        {
+            Some(document_view) => Ok(document_view),
+            // If no document view for the id passed into this task could be retrieved then this
+            // document has been deleted or the document view id was invalid. As "dependency" tasks
+            // are only dispatched after a successful "reduce" task, neither `None` case should
+            // happen, so this is a critical error.
+            None => Err(TaskError::Critical),
+        },
+        // We only expect to handle document_view_ids in a dependency task.
+        None => Err(TaskError::Critical),
     }?;
-
-    let document_view = match document_view {
-        Some(document_view) => document_view,
-        // If no document view for the id passed into this task could be retrieved then this
-        // document has been deleted or the document view id was invalid. As "dependency" tasks
-        // are only dispatched after a successful "reduce" task, neither `None` case should
-        // happen, so this is a critical error.
-        None => return Err(TaskError::Critical),
-    };
-
-    // FETCH DEPENDENCIES & COMPOSE TASKS //
 
     let mut next_tasks = Vec::new();
 
@@ -81,14 +68,15 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
                 // but this view wasn't pinned yet, so hasn't been materialised. To make sure it is
                 // materialised when possible, we dispatch a "reduce" task for any pinned relations
                 // which aren't found.
-                next_tasks
-                    .push(pinned_relation_task(&context, pinned_relation.view_id().clone()).await?);
+                next_tasks.push(
+                    construct_relation_task(&context, pinned_relation.view_id().clone()).await?,
+                );
             }
             p2panda_rs::operation::OperationValue::PinnedRelationList(pinned_relation_list) => {
                 // same as above...
                 for document_view_id in pinned_relation_list.iter() {
                     next_tasks
-                        .push(pinned_relation_task(&context, document_view_id.clone()).await?);
+                        .push(construct_relation_task(&context, document_view_id.clone()).await?);
                 }
             }
             _ => (),
