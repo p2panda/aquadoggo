@@ -103,9 +103,10 @@ mod tests {
     use p2panda_rs::document::{DocumentId, DocumentViewId};
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::{
-        OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList,
+        AsVerifiedOperation, OperationValue, PinnedRelation, PinnedRelationList, Relation,
+        RelationList,
     };
-    use p2panda_rs::storage_provider::traits::{AsStorageOperation, OperationStore};
+    use p2panda_rs::storage_provider::traits::OperationStore;
     use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
     use p2panda_rs::test_utils::fixtures::{
         create_operation, random_document_id, random_document_view_id,
@@ -292,7 +293,7 @@ mod tests {
             .await
             .unwrap();
 
-        let document_view_id: DocumentViewId = document_operations[1].id().into();
+        let document_view_id: DocumentViewId = document_operations[1].operation_id().clone().into();
 
         let input = TaskInput::new(None, Some(document_view_id.clone()));
 

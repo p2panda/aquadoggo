@@ -19,7 +19,7 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
             let operation_id = document_view_id.clone().into_iter().next().unwrap();
             match context
                 .store
-                .get_document_by_operation_id(operation_id)
+                .get_document_by_operation_id(&operation_id)
                 .await
                 .map_err(|_| TaskError::Critical)?
             {
@@ -35,10 +35,7 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
         .store
         .get_operations_by_document_id(&document_id)
         .await
-        .map_err(|_| TaskError::Critical)?
-        .into_iter()
-        .map(|op| op.into())
-        .collect();
+        .map_err(|_| TaskError::Critical)?;
 
     let document_view_id = match &input.document_view_id {
         // If this task was passed a document_view_id as input then we want to build to document only to the
@@ -97,7 +94,7 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
 #[cfg(test)]
 mod tests {
     use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
-    use p2panda_rs::operation::OperationValue;
+    use p2panda_rs::operation::{AsVerifiedOperation, OperationValue};
     use p2panda_rs::storage_provider::traits::OperationStore;
     use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
     use rstest::rstest;
@@ -149,10 +146,7 @@ mod tests {
             .store
             .get_operations_by_document_id(&db.documents[0])
             .await
-            .unwrap()
-            .into_iter()
-            .map(|op| op.into())
-            .collect();
+            .unwrap();
 
         let document = DocumentBuilder::new(document_operations).build().unwrap();
         let mut sorted_document_operations = document.operations().clone();
@@ -223,10 +217,7 @@ mod tests {
             .store
             .get_operations_by_document_id(&db.documents[0])
             .await
-            .unwrap()
-            .into_iter()
-            .map(|op| op.into())
-            .collect();
+            .unwrap();
 
         let document = DocumentBuilder::new(document_operations).build().unwrap();
 
