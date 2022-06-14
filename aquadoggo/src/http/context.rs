@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use crate::bus::ServiceSender;
 use crate::db::provider::SqlStorage;
 use crate::graphql::{build_root_schema, RootSchema};
-use crate::bus::ServiceSender;
 
 #[derive(Clone)]
 pub struct HttpServiceContext {
