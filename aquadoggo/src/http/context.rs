@@ -2,6 +2,7 @@
 
 use crate::db::provider::SqlStorage;
 use crate::graphql::{build_root_schema, RootSchema};
+use crate::bus::ServiceSender;
 
 #[derive(Clone)]
 pub struct HttpServiceContext {
@@ -11,9 +12,9 @@ pub struct HttpServiceContext {
 
 impl HttpServiceContext {
     /// Create a new HttpServiceContext.
-    pub fn new(store: SqlStorage) -> Self {
+    pub fn new(store: SqlStorage, tx: ServiceSender) -> Self {
         Self {
-            schema: build_root_schema(store),
+            schema: build_root_schema(store, tx),
         }
     }
 }

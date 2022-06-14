@@ -75,6 +75,7 @@ impl ClientMutationRoot {
 mod tests {
     use async_graphql::{from_value, value, Request, Value, Variables};
     use p2panda_rs::entry::{LogId, SeqNum};
+    use tokio::sync::broadcast;
 
     use crate::graphql::client::PublishEntryResponse;
     use crate::http::HttpServiceContext;
@@ -93,8 +94,9 @@ mod tests {
 
     #[tokio::test]
     async fn publish_entry() {
+        let (tx, _) = broadcast::channel(16);
         let store = initialize_store().await;
-        let context = HttpServiceContext::new(store);
+        let context = HttpServiceContext::new(store, tx);
 
         let query = r#"
             mutation TestPublishEntry($entryEncoded: String!, $operationEncoded: String!) {
@@ -134,8 +136,9 @@ mod tests {
 
     #[tokio::test]
     async fn publish_entry_error_handling() {
+        let (tx, _) = broadcast::channel(16);
         let store = initialize_store().await;
-        let context = HttpServiceContext::new(store);
+        let context = HttpServiceContext::new(store, tx);
 
         let query = r#"
             mutation TestPublishEntry($entryEncoded: String!, $operationEncoded: String!) {

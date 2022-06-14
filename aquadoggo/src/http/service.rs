@@ -38,12 +38,12 @@ pub fn build_server(http_context: HttpServiceContext) -> Router {
 }
 
 /// Start HTTP server.
-pub async fn http_service(context: Context, signal: Shutdown, _tx: ServiceSender) -> Result<()> {
+pub async fn http_service(context: Context, signal: Shutdown, tx: ServiceSender) -> Result<()> {
     let http_port = context.config.http_port;
     let http_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), http_port);
 
     // Introduce a new context for all HTTP routes
-    let http_context = HttpServiceContext::new(context.store.clone());
+    let http_context = HttpServiceContext::new(context.store.clone(), tx);
 
     axum::Server::try_bind(&http_address)?
         .serve(build_server(http_context).into_make_service())
@@ -58,6 +58,7 @@ pub async fn http_service(context: Context, signal: Shutdown, _tx: ServiceSender
 #[cfg(test)]
 mod tests {
     use serde_json::json;
+    use tokio::sync::broadcast;
 
     use crate::http::context::HttpServiceContext;
     use crate::test_helpers::{initialize_store, TestClient};
@@ -66,8 +67,9 @@ mod tests {
 
     #[tokio::test]
     async fn graphql_endpoint() {
+        let (tx, _) = broadcast::channel(16);
         let store = initialize_store().await;
-        let context = HttpServiceContext::new(store);
+        let context = HttpServiceContext::new(store, tx);
         let client = TestClient::new(build_server(context));
 
         let response = client

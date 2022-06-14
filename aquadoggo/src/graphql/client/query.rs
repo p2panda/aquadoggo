@@ -50,6 +50,7 @@ mod tests {
     use async_graphql::Response;
     use p2panda_rs::entry::{LogId, SeqNum};
     use serde_json::json;
+    use tokio::sync::broadcast;
 
     use crate::graphql::client::EntryArgsResponse;
     use crate::http::build_server;
@@ -58,8 +59,9 @@ mod tests {
 
     #[tokio::test]
     async fn next_entry_args_valid_query() {
+        let (tx, _) = broadcast::channel(16);
         let store = initialize_store().await;
-        let context = HttpServiceContext::new(store);
+        let context = HttpServiceContext::new(store, tx);
         let client = TestClient::new(build_server(context));
 
         // Selected fields need to be alphabetically sorted because that's what the `json` macro
@@ -102,8 +104,9 @@ mod tests {
 
     #[tokio::test]
     async fn next_entry_args_error_response() {
+        let (tx, _) = broadcast::channel(16);
         let store = initialize_store().await;
-        let context = HttpServiceContext::new(store);
+        let context = HttpServiceContext::new(store, tx);
         let client = TestClient::new(build_server(context));
 
         // Selected fields need to be alphabetically sorted because that's what the `json` macro

@@ -5,6 +5,7 @@ use std::sync::Arc;
 use async_graphql::{EmptySubscription, MergedObject, Schema};
 use tokio::sync::Mutex;
 
+use crate::bus::ServiceSender;
 use crate::db::provider::SqlStorage;
 use crate::graphql::client::{ClientMutationRoot, ClientRoot};
 use crate::graphql::replication::context::ReplicationContext;
@@ -22,7 +23,7 @@ pub struct MutationRoot(pub ClientMutationRoot);
 pub type RootSchema = Schema<QueryRoot, MutationRoot, EmptySubscription>;
 
 /// Build the root graphql schema that can handle graphql requests.
-pub fn build_root_schema(store: SqlStorage) -> RootSchema {
+pub fn build_root_schema(store: SqlStorage, tx: ServiceSender) -> RootSchema {
     let replication_context = Arc::new(Mutex::new(ReplicationContext::new(1000, store.clone())));
 
     let replication_root = ReplicationRoot::<SqlStorage>::new();
@@ -35,5 +36,6 @@ pub fn build_root_schema(store: SqlStorage) -> RootSchema {
     Schema::build(query_root, mutation_root, EmptySubscription)
         .data(replication_context)
         .data(store)
+        .data(tx)
         .finish()
 }
