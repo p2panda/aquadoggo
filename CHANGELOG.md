@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement SQL `DocumentStore` [#118](https://github.com/p2panda/aquadoggo/pull/118)
 - Implement SQL `SchemaStore` [#130](https://github.com/p2panda/aquadoggo/pull/130)
 - GraphQL endpoints for replication [#100](https://github.com/p2panda/aquadoggo/pull/100)
+- Inform materialization service about new operations [#161](https://github.com/p2panda/aquadoggo/pull/161)
 
 ### Changed
 
