@@ -2,8 +2,8 @@
 
 use async_graphql::{Context, Error, Object, Result};
 use p2panda_rs::entry::EntrySigned;
-use p2panda_rs::operation::OperationEncoded;
-use p2panda_rs::storage_provider::traits::StorageProvider;
+use p2panda_rs::operation::{Operation, OperationEncoded, VerifiedOperation};
+use p2panda_rs::storage_provider::traits::{OperationStore, StorageProvider};
 
 use crate::db::provider::SqlStorage;
 use crate::graphql::client::{PublishEntryRequest, PublishEntryResponse};
@@ -29,14 +29,45 @@ impl Mutation {
         )]
         operation_encoded_param: String,
     ) -> Result<PublishEntryResponse> {
+        let store = ctx.data::<SqlStorage>()?;
+
         // Parse and validate parameters
         let args = PublishEntryRequest {
             entry_encoded: EntrySigned::new(&entry_encoded_param)?,
             operation_encoded: OperationEncoded::new(&operation_encoded_param)?,
         };
 
-        let store = ctx.data::<SqlStorage>()?;
-        store.publish_entry(&args).await.map_err(Error::from)
+        // Validate and store entry in database
+        // @TODO: Check all validation steps here for both entries and operations. Also, there is
+        // probably overlap in what replication needs in terms of validation?
+        let response = store.publish_entry(&args).await.map_err(Error::from)?;
+
+        // Load related document from database
+        // @TODO: We probably have this instance already inside of "publish_entry"?
+        match store
+            .get_document_by_entry(&args.entry_encoded.hash())
+            .await?
+        {
+            Some(document_id) => {
+                let operation = Operation::from(&args.operation_encoded);
+
+                let verified_operation = VerifiedOperation::new(
+                    &args.entry_encoded.author(),
+                    &args.entry_encoded.hash().into(),
+                    &operation,
+                )?;
+
+                // Store operation in database
+                // @TODO: This is not done by "publish_entry", maybe it needs to move there as
+                // well?
+                store
+                    .insert_operation(&verified_operation, &document_id)
+                    .await?;
+            }
+            None => return Err(Error::new("No related document found in database")),
+        }
+
+        Ok(response)
     }
 }
 
