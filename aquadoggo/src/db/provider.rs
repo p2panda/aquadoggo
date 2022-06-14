@@ -14,12 +14,14 @@ use crate::graphql::client::{
     EntryArgsRequest, EntryArgsResponse, PublishEntryRequest, PublishEntryResponse,
 };
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
+/// Sql based storage that implements `StorageProvider`
 pub struct SqlStorage {
     pub(crate) pool: Pool,
 }
 
 impl SqlStorage {
+    /// Create a new `SqlStorage` using the provided db `Pool`
     pub fn new(pool: Pool) -> Self {
         Self { pool }
     }

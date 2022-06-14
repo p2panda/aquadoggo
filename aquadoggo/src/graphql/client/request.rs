@@ -14,7 +14,9 @@ use p2panda_rs::operation::OperationEncoded;
 /// Request body of `panda_getEntryArguments`.
 #[derive(Deserialize, Debug)]
 pub struct EntryArgsRequest {
+    /// The entry author
     pub author: Author,
+    /// The entry document
     pub document: Option<DocumentId>,
 }
 
@@ -50,7 +52,9 @@ impl Validate for EntryArgsRequest {
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct PublishEntryRequest {
+    /// The encoded entry
     pub entry_encoded: EntrySigned,
+    /// The encoded operation
     pub operation_encoded: OperationEncoded,
 }
 
