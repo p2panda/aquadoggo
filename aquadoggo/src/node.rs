@@ -7,9 +7,9 @@ use crate::config::Configuration;
 use crate::context::Context;
 use crate::db::provider::SqlStorage;
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
+use crate::http::http_service;
 use crate::manager::ServiceManager;
 use crate::materializer::materializer_service;
-use crate::server::http_service;
 
 /// Makes sure database is created and migrated before returning connection pool.
 async fn initialize_db(config: &Configuration) -> Result<Pool> {

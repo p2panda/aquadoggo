@@ -20,7 +20,7 @@ use super::SequenceNumber;
 use super::SingleEntryAndPayload;
 
 #[derive(Debug)]
-pub struct Context<EntryStore: 'static + EntryStoreTrait<StorageEntry>> {
+pub struct ReplicationContext<EntryStore: 'static + EntryStoreTrait<StorageEntry>> {
     author_aliases: LruCache<ID, PublicKey>,
     next_alias: usize,
     entry_store: EntryStore,
@@ -28,7 +28,7 @@ pub struct Context<EntryStore: 'static + EntryStoreTrait<StorageEntry>> {
 
 #[automock]
 #[allow(dead_code)]
-impl<EntryStore: 'static + EntryStoreTrait<StorageEntry>> Context<EntryStore> {
+impl<EntryStore: 'static + EntryStoreTrait<StorageEntry>> ReplicationContext<EntryStore> {
     pub fn new(author_aliases_cache_size: usize, entry_store: EntryStore) -> Self {
         Self {
             author_aliases: LruCache::new(author_aliases_cache_size),
@@ -158,7 +158,7 @@ mod tests {
     };
 
     use super::super::testing::MockEntryStore;
-    use super::Context;
+    use super::ReplicationContext;
 
     // TODO: test author aliases
 
@@ -188,7 +188,7 @@ mod tests {
             .times(1)
             .returning(|_, _, _| Ok(None));
 
-        let mut context = Context::new(1, mock_entry_store);
+        let mut context = ReplicationContext::new(1, mock_entry_store);
 
         let result = context
             .entry_by_log_id_and_sequence(log_id, sequence_number, author_id.try_into().unwrap())

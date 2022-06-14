@@ -10,10 +10,10 @@ use crate::graphql::client::{PublishEntryRequest, PublishEntryResponse};
 
 /// Mutations for use by p2panda clients.
 #[derive(Default, Debug, Copy, Clone)]
-pub struct Mutation;
+pub struct ClientMutationRoot;
 
 #[Object]
-impl Mutation {
+impl ClientMutationRoot {
     /// Publish an entry using parameters obtained through `nextEntryArgs` query.
     ///
     /// Returns arguments for publishing the next entry in the same log.
@@ -76,10 +76,9 @@ mod tests {
     use async_graphql::{from_value, value, Request, Value, Variables};
     use p2panda_rs::entry::{LogId, SeqNum};
 
-    use crate::context::Context;
     use crate::graphql::client::PublishEntryResponse;
+    use crate::http::HttpServiceContext;
     use crate::test_helpers::initialize_store;
-    use crate::Configuration;
 
     const ENTRY_ENCODED: &str =
         "00bedabb435758855968b3e2de2aa1f653adfbb392fcf9cb2295a68b2eca3cfb0301\
@@ -95,7 +94,7 @@ mod tests {
     #[tokio::test]
     async fn publish_entry() {
         let store = initialize_store().await;
-        let context = Context::new(store, Configuration::default());
+        let context = HttpServiceContext::new(store);
 
         let query = r#"
             mutation TestPublishEntry($entryEncoded: String!, $operationEncoded: String!) {
@@ -111,7 +110,7 @@ mod tests {
             "operationEncoded": OPERATION_ENCODED
         }));
         let request = Request::new(query).variables(parameters);
-        let response = context.0.schema.execute(request).await;
+        let response = context.schema.execute(request).await;
 
         let received: PublishEntryResponse = match response.data {
             Value::Object(result_outer) => {
@@ -136,7 +135,7 @@ mod tests {
     #[tokio::test]
     async fn publish_entry_error_handling() {
         let store = initialize_store().await;
-        let context = Context::new(store, Configuration::default());
+        let context = HttpServiceContext::new(store);
 
         let query = r#"
             mutation TestPublishEntry($entryEncoded: String!, $operationEncoded: String!) {
@@ -152,7 +151,7 @@ mod tests {
             "operationEncoded": "".to_string()
         }));
         let request = Request::new(query).variables(parameters);
-        let response = context.0.schema.execute(request).await;
+        let response = context.schema.execute(request).await;
 
         assert!(response.is_err());
         assert_eq!(

@@ -10,10 +10,10 @@ use crate::graphql::client::{EntryArgsRequest, EntryArgsResponse};
 
 /// The GraphQL root for the client api that p2panda clients can use to connect to a node.
 #[derive(Default, Debug, Copy, Clone)]
-pub struct Query;
+pub struct ClientRoot;
 
 #[Object]
-impl Query {
+impl ClientRoot {
     /// Return required arguments for publishing the next entry.
     async fn next_entry_args(
         &self,
@@ -51,16 +51,15 @@ mod tests {
     use p2panda_rs::entry::{LogId, SeqNum};
     use serde_json::json;
 
-    use crate::config::Configuration;
-    use crate::context::Context;
     use crate::graphql::client::EntryArgsResponse;
-    use crate::server::build_server;
+    use crate::http::build_server;
+    use crate::http::HttpServiceContext;
     use crate::test_helpers::{initialize_store, TestClient};
 
     #[tokio::test]
     async fn next_entry_args_valid_query() {
         let store = initialize_store().await;
-        let context = Context::new(store, Configuration::default());
+        let context = HttpServiceContext::new(store);
         let client = TestClient::new(build_server(context));
 
         // Selected fields need to be alphabetically sorted because that's what the `json` macro
@@ -104,7 +103,7 @@ mod tests {
     #[tokio::test]
     async fn next_entry_args_error_response() {
         let store = initialize_store().await;
-        let context = Context::new(store, Configuration::default());
+        let context = HttpServiceContext::new(store);
         let client = TestClient::new(build_server(context));
 
         // Selected fields need to be alphabetically sorted because that's what the `json` macro

@@ -36,7 +36,7 @@ pub use aliased_author::AliasedAuthor;
 pub use author::{Author, AuthorOrAlias};
 
 #[double]
-pub use context::Context as ReplicationContext;
+pub use context::ReplicationContext;
 pub use entry::Entry;
 pub use entry_and_payload::EntryAndPayload;
 pub use entry_hash::EntryHash;
@@ -48,11 +48,11 @@ pub use single_entry_and_payload::SingleEntryAndPayload;
 
 #[derive(Debug, Default)]
 /// The root graphql object for replication
-pub struct ReplicationRoot<EntryStore> {
-    entry_store: PhantomData<EntryStore>,
+pub struct ReplicationRoot<E> {
+    entry_store: PhantomData<E>,
 }
 
-impl<EntryStore> ReplicationRoot<EntryStore> {
+impl<E> ReplicationRoot<E> {
     /// Create a new ReplicationRoot
     pub fn new() -> Self {
         Self {
@@ -62,19 +62,15 @@ impl<EntryStore> ReplicationRoot<EntryStore> {
 }
 
 #[Object]
-impl<EntryStore: 'static + EntryStoreTrait<StorageEntry> + Sync + Send>
-    ReplicationRoot<EntryStore>
-{
+impl<E: 'static + EntryStoreTrait<StorageEntry> + Sync + Send> ReplicationRoot<E> {
     /// Get an entry by its hash
     async fn entry_by_hash<'a>(
         &self,
         ctx: &Context<'a>,
         hash: EntryHash,
     ) -> Result<Option<SingleEntryAndPayload>> {
-        let ctx: &Arc<Mutex<ReplicationContext<EntryStore>>> = ctx.data()?;
-
+        let ctx: &Arc<Mutex<ReplicationContext<E>>> = ctx.data()?;
         let result = ctx.lock().await.entry_by_hash(hash).await?;
-
         Ok(result)
     }
 
@@ -89,7 +85,7 @@ impl<EntryStore: 'static + EntryStoreTrait<StorageEntry> + Sync + Send>
         first: Option<i32>,
         after: Option<String>,
     ) -> Result<Connection<SequenceNumber, EntryAndPayload, EmptyFields, EmptyFields>> {
-        let ctx: &Arc<Mutex<ReplicationContext<EntryStore>>> = ctx.data()?;
+        let ctx: &Arc<Mutex<ReplicationContext<E>>> = ctx.data()?;
         let author: AuthorOrAlias = author.try_into()?;
         query(
             after,
@@ -141,7 +137,7 @@ impl<EntryStore: 'static + EntryStoreTrait<StorageEntry> + Sync + Send>
         sequence_number: SequenceNumber,
         author: Author,
     ) -> Result<Option<SingleEntryAndPayload>> {
-        let ctx: &Arc<Mutex<ReplicationContext<EntryStore>>> = ctx.data()?;
+        let ctx: &Arc<Mutex<ReplicationContext<E>>> = ctx.data()?;
         let author: AuthorOrAlias = author.try_into()?;
         let result = ctx
             .lock()
@@ -160,7 +156,7 @@ impl<EntryStore: 'static + EntryStoreTrait<StorageEntry> + Sync + Send>
         ctx: &Context<'a>,
         public_keys: Vec<PublicKey>,
     ) -> Result<Vec<AliasedAuthor>> {
-        let ctx: &Arc<Mutex<ReplicationContext<EntryStore>>> = ctx.data()?;
+        let ctx: &Arc<Mutex<ReplicationContext<E>>> = ctx.data()?;
         let result = ctx.lock().await.insert_author_aliases(public_keys);
 
         Ok(result)
