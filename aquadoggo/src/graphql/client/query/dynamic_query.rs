@@ -1,94 +1,25 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::borrow::Cow;
+use std::fmt::Error;
 
 use async_graphql::indexmap::IndexMap;
 use async_graphql::parser::types::Field;
-use async_graphql::registry::{MetaField, MetaType, MetaTypeId};
+use async_graphql::registry::{MetaType, MetaTypeId};
 use async_graphql::{
-    ContainerType, ContextSelectionSet, Name, OutputType, Positioned, SelectionField, ServerResult,
-    Value,
+    ContainerType, ContextSelectionSet, Name, OutputType, Positioned, SelectionField, ServerError,
+    ServerResult, Value,
 };
+use async_recursion::async_recursion;
 use async_trait::async_trait;
-use p2panda_rs::schema::SchemaId;
+use p2panda_rs::operation::{PinnedRelation, PinnedRelationList};
+use p2panda_rs::schema::{FieldType, SchemaId};
+use serde_json::json;
 
 use crate::db::provider::SqlStorage;
+use crate::db::traits::SchemaStore;
 
-/// Returns the schema of a relation field.
-fn get_schema_for_field(parent_schema: SchemaId, _field_name: &str) -> SchemaId {
-    // In this example it's always the same schema.
-    parent_schema
-}
-
-// Generate graphql query and type information for a schema.
-fn get_meta_for_schema(schema: SchemaId) -> (MetaType, MetaField) {
-    let mut fields = IndexMap::new();
-    fields.insert(
-        "test".to_string(),
-        MetaField {
-            name: "test".to_string(),
-            description: Some("A simple field with string value."),
-            args: Default::default(),
-            ty: "String!".to_string(),
-            deprecation: Default::default(),
-            cache_control: Default::default(),
-            external: false,
-            requires: None,
-            provides: None,
-            visible: None,
-            compute_complexity: None,
-            oneof: false,
-        },
-    );
-    fields.insert(
-        "fk_test".to_string(),
-        MetaField {
-            name: "fk_test".to_string(),
-            description: Some("A relation field where related documents can be queried."),
-            args: Default::default(),
-            ty: "events_00201c221b573b1e0c67c5e2c624a93419774cdf46b3d62414c44a698df1237b1c16!"
-                .to_string(),
-            deprecation: Default::default(),
-            cache_control: Default::default(),
-            external: false,
-            requires: None,
-            provides: None,
-            visible: None,
-            compute_complexity: None,
-            oneof: false,
-        },
-    );
-
-    // The graphql type of the test schema's documents.
-    let metatype = MetaType::Object {
-        name: schema.as_str(),
-        description: Some("A test schema with a simple field and a relation field."),
-        visible: Some(|_| true),
-        fields,
-        cache_control: Default::default(),
-        extends: false,
-        keys: None,
-        is_subscription: false,
-        rust_typename: "__fake2__",
-    };
-
-    // Allows querying the schema
-    let metafield = MetaField {
-        name: schema.name().to_owned(),
-        description: Some("Query documents of the test schema with this."),
-        args: Default::default(),
-        ty: schema.as_str(),
-        deprecation: Default::default(),
-        cache_control: Default::default(),
-        external: false,
-        requires: None,
-        provides: None,
-        visible: None,
-        compute_complexity: None,
-        oneof: false,
-    };
-    (metatype, metafield)
-}
+use super::schema::{get_schema_metafield, get_schema_metatype, load_temp};
 
 /// Container object that injects registered p2panda schemas when it is added to a GraphQL schema.
 pub struct DynamicQuery(SqlStorage);
@@ -98,27 +29,51 @@ impl DynamicQuery {
     pub fn new(store: SqlStorage) -> Self {
         Self(store)
     }
+
     /// Query database for selected field values and return a JSON result.
-    fn resolve_dynamic(
+    #[async_recursion]
+    async fn resolve_dynamic(
         &self,
-        schema: SchemaId,
-        ctx: SelectionField,
+        schema_id: SchemaId,
+        ctx: SelectionField<'async_recursion>,
     ) -> ServerResult<Option<Value>> {
+        // let schema = self.0.get_schema_by_id(&schema_id).await.unwrap().unwrap();
+
+        let schemas = load_temp();
+        let schema = schemas.iter().find(|s| s.id() == &schema_id).unwrap();
         let mut fields: IndexMap<Name, Value> = IndexMap::new();
-        for field in ctx.selection_set() {
-            let selection: Vec<SelectionField> = field.selection_set().collect();
-            // this should really do schema introspection to decide whether to recurse
-            if selection.len() == 0 {
-                // this field is not a relation and the document view value should be returned.
-                fields.insert(Name::new(field.name()), "Hello".into());
-            } else {
-                // This is a relation so the field's schema is used
-                let schema = get_schema_for_field(schema.clone(), field.name());
-                match self.resolve_dynamic(schema, field)? {
-                    Some(value) => fields.insert(Name::new(field.name()), value),
-                    None => None,
-                };
+
+        let selected_fields = ctx
+            .selection_set()
+            .map(|field| {
+                let (field_name, field_type) = schema
+                    .fields()
+                    .iter()
+                    .find(|f| f.0 == field.name())
+                    .unwrap();
+                (field, field_name.clone(), field_type.clone())
+            })
+            .collect::<Vec<(SelectionField, String, FieldType)>>();
+
+        for (field, field_name, p2panda_field_type) in selected_fields {
+            let value = match p2panda_field_type {
+                FieldType::Bool => Some(Value::Boolean(true)),
+                FieldType::Int => Some(Value::Number(5u8.into())),
+                FieldType::Float => Some(1.5f32.into()),
+                FieldType::String => Some("Hello".into()),
+                FieldType::Relation(schema) => self.resolve_dynamic(schema, field).await.unwrap(),
+                FieldType::RelationList(schema) => {
+                    self.resolve_dynamic(schema, field).await.unwrap()
+                }
+                FieldType::PinnedRelation(schema) => {
+                    self.resolve_dynamic(schema, field).await.unwrap()
+                }
+                FieldType::PinnedRelationList(schema) => {
+                    self.resolve_dynamic(schema, field).await.unwrap()
+                }
             }
+            .unwrap();
+            fields.insert(Name::new(field_name), value);
         }
         Ok(Some(Value::List(vec![Value::Object(fields)])))
     }
@@ -128,7 +83,7 @@ impl DynamicQuery {
 impl ContainerType for DynamicQuery {
     async fn resolve_field(&self, ctx: &async_graphql::Context<'_>) -> ServerResult<Option<Value>> {
         let schema: SchemaId = ctx.field().name().parse().unwrap();
-        self.resolve_dynamic(schema, ctx.field())
+        self.resolve_dynamic(schema, ctx.field()).await
     }
 }
 
@@ -143,21 +98,23 @@ impl OutputType for DynamicQuery {
     fn create_type_info(registry: &mut async_graphql::registry::Registry) -> String {
         // This callback is given a mutable reference to the registry!
         registry.create_output_type::<DynamicQuery, _>(MetaTypeId::Object, |reg| {
-            let schema: SchemaId =
-                "events_00201c221b573b1e0c67c5e2c624a93419774cdf46b3d62414c44a698df1237b1c16"
-                    .parse()
-                    .unwrap();
-            let (metatype, metafield) = get_meta_for_schema(schema.clone());
-
-            // Insert (return) types for all registered schemas.
-            reg.types.insert(schema.as_str(), metatype);
-
             // Insert queries for all registered schemas.
             let mut fields = IndexMap::new();
-            fields.insert(schema.as_str(), metafield);
+
+            let schemas = load_temp();
+            for schema in schemas.iter() {
+                // Insert GraphQL types for all registered schemas.
+                let metatype = get_schema_metatype(&schema);
+                reg.types.insert(schema.id().as_str(), metatype);
+
+                // Insert queries.
+                let metafield = get_schema_metafield(&schema);
+                fields.insert(schema.id().as_str(), metafield);
+            }
+
             MetaType::Object {
                 name: "document_container".into(),
-                description: Some("Test event input type"),
+                description: Some("Container for dynamically generated document api"),
                 visible: Some(|_| true),
                 fields,
                 cache_control: Default::default(),

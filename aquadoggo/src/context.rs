@@ -21,8 +21,8 @@ pub struct Data {
 
 impl Data {
     /// Initialize new data instance with shared database connection pool.
-    pub fn new(store: SqlStorage, config: Configuration) -> Self {
-        let schema = build_root_schema(store.clone());
+    pub async fn new(store: SqlStorage, config: Configuration) -> Self {
+        let schema = build_root_schema(store.clone()).await;
 
         Self {
             config,
@@ -37,8 +37,8 @@ pub struct Context(pub Arc<Data>);
 
 impl Context {
     /// Returns a new instance of `Context`.
-    pub fn new(store: SqlStorage, config: Configuration) -> Self {
-        Self(Arc::new(Data::new(store, config)))
+    pub async fn new(store: SqlStorage, config: Configuration) -> Self {
+        Self(Arc::new(Data::new(store, config).await))
     }
 }
 

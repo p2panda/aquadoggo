@@ -64,7 +64,7 @@ mod tests {
     #[tokio::test]
     async fn publish_entry() {
         let store = initialize_store().await;
-        let context = Context::new(store, Configuration::default());
+        let context = Context::new(store, Configuration::default()).await;
 
         let query = r#"
             mutation TestPublishEntry($entryEncoded: String!, $operationEncoded: String!) {
@@ -105,7 +105,7 @@ mod tests {
     #[tokio::test]
     async fn publish_entry_error_handling() {
         let store = initialize_store().await;
-        let context = Context::new(store, Configuration::default());
+        let context = Context::new(store, Configuration::default()).await;
 
         let query = r#"
             mutation TestPublishEntry($entryEncoded: String!, $operationEncoded: String!) {

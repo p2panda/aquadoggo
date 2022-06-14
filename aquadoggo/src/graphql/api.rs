@@ -16,9 +16,5 @@ pub async fn handle_graphql_query(
     request: GraphQLRequest,
     Extension(context): Extension<Context>,
 ) -> GraphQLResponse {
-    let graphql_request = request.into_inner();
-    if graphql_request.operation_name != Some("IntrospectionQuery".into()) {
-        println!("Received query: {}", graphql_request.query);
-    }
-    context.schema.execute(graphql_request).await.into()
+    context.schema.execute(request.into_inner()).await.into()
 }

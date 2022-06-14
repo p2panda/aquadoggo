@@ -62,7 +62,7 @@ mod tests {
     #[tokio::test]
     async fn graphql_endpoint() {
         let store = initialize_store().await;
-        let context = Context::new(store, Configuration::default());
+        let context = Context::new(store, Configuration::default()).await;
         let client = TestClient::new(build_server(context));
 
         let response = client

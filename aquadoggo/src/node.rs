@@ -52,7 +52,7 @@ impl Node {
         let store = SqlStorage::new(pool.clone());
 
         // Create service manager with shared data between services
-        let context = Context::new(store, config);
+        let context = Context::new(store, config).await;
         let mut manager = ServiceManager::<Context, ServiceMessage>::new(1024, context);
 
         // Start materializer service

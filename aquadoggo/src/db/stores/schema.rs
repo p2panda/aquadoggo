@@ -3,7 +3,6 @@
 use std::convert::{TryFrom, TryInto};
 
 use async_trait::async_trait;
-use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::schema::system::{SchemaFieldView, SchemaView};
 use p2panda_rs::schema::{Schema, SchemaId};
 
@@ -22,12 +21,14 @@ impl SchemaStore for SqlStorage {
     ///
     /// If no schema definition with the passed id is found then None is returned,
     /// if any of the other steps can't be completed, then an error is returned.
-    async fn get_schema_by_id(
-        &self,
-        id: &DocumentViewId,
-    ) -> Result<Option<Schema>, SchemaStoreError> {
+    async fn get_schema_by_id(&self, id: &SchemaId) -> Result<Option<Schema>, SchemaStoreError> {
+        let view_id = match id {
+            SchemaId::Application(_, view_id) => view_id,
+            _ => panic!("System schemas not supported yet"),
+        };
+
         // Fetch the document view for the schema
-        let schema_view: SchemaView = match self.get_document_view_by_id(id).await? {
+        let schema_view: SchemaView = match self.get_document_view_by_id(view_id).await? {
             Some(document_view) => document_view.try_into()?,
             None => return Ok(None),
         };
@@ -42,7 +43,7 @@ impl SchemaStore for SqlStorage {
                     None => {
                         return Err(SchemaStoreError::MissingSchemaFieldDefinition(
                             field_id,
-                            id.to_owned(),
+                            view_id.to_owned(),
                         ))
                     }
                 };
@@ -55,10 +56,10 @@ impl SchemaStore for SqlStorage {
         Ok(Some(schema))
     }
 
-    /// Get all Schema which have been published to this node.
+    /// Get all schemas which have been published to this node.
     ///
     /// Returns an error if a fatal db error occured.
-    async fn get_all_schema(&self) -> Result<Vec<Schema>, SchemaStoreError> {
+    async fn get_application_schemas(&self) -> Result<Vec<Schema>, SchemaStoreError> {
         let schema_views: Vec<SchemaView> = self
             .get_documents_by_schema(&SchemaId::new("schema_definition_v1")?)
             .await?
@@ -107,10 +108,7 @@ mod tests {
 
     use super::SchemaStore;
 
-    async fn create_venue_schema(
-        storage_provider: &SqlStorage,
-        key_pair: &KeyPair,
-    ) -> DocumentViewId {
+    async fn create_venue_schema(storage_provider: &SqlStorage, key_pair: &KeyPair) -> SchemaId {
         // Construct a CREATE operation for the field of the schema we want to publish
         let mut schema_name_field_definition_operation_fields = OperationFields::new();
         schema_name_field_definition_operation_fields
@@ -164,7 +162,7 @@ mod tests {
         )
         .await;
 
-        document_view_id
+        SchemaId::Application("venue".to_string(), document_view_id)
     }
 
     #[tokio::test]
@@ -184,13 +182,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_all_schema() {
+    async fn get_application_schemas() {
         let (storage_provider, _key_pairs, _documents) = test_db(0, 0, false).await;
         let key_pair = KeyPair::new();
 
         create_venue_schema(&storage_provider, &key_pair).await;
 
-        let schemas = storage_provider.get_all_schema().await.unwrap();
+        let schemas = storage_provider.get_application_schemas().await.unwrap();
 
         assert_eq!(schemas.len(), 1)
     }
@@ -235,7 +233,12 @@ mod tests {
         .await;
 
         // Retrieve the schema by it's document_view_id.
-        let schema = storage_provider.get_schema_by_id(&document_view_id).await;
+        let schema = storage_provider
+            .get_schema_by_id(&SchemaId::Application(
+                "venue".to_string(),
+                document_view_id,
+            ))
+            .await;
 
         assert_eq!(schema.unwrap_err().to_string(), format!("No document view found for schema field definition with id: {0} which is required by schema definition {1}", field_view_id, document_view_id))
     }

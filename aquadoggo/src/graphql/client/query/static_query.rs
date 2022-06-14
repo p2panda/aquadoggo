@@ -94,7 +94,7 @@ mod tests {
     #[tokio::test]
     async fn next_entry_args_valid_query() {
         let store = initialize_store().await;
-        let context = Context::new(store, Configuration::default());
+        let context = Context::new(store, Configuration::default()).await;
         let client = TestClient::new(build_server(context));
 
         // Selected fields need to be alphabetically sorted because that's what the `json` macro
@@ -138,7 +138,7 @@ mod tests {
     #[tokio::test]
     async fn next_entry_args_error_response() {
         let store = initialize_store().await;
-        let context = Context::new(store, Configuration::default());
+        let context = Context::new(store, Configuration::default()).await;
         let client = TestClient::new(build_server(context));
 
         // Selected fields need to be alphabetically sorted because that's what the `json` macro
