@@ -548,15 +548,7 @@ mod tests {
             .await
             .unwrap();
 
-        // @TODO: We're accessing the wrapped `Operation` here, I think there could be a nicer pattern for this, see: https://github.com/p2panda/p2panda/issues/320
-        let document = DocumentBuilder::new(
-            document_operations
-                .into_iter()
-                .map(|operation| operation.into())
-                .collect(),
-        )
-        .build()
-        .unwrap();
+        let document = DocumentBuilder::new(document_operations).build().unwrap();
 
         let result = db.store.insert_document(&document).await;
 
@@ -604,15 +596,7 @@ mod tests {
             .await
             .unwrap();
 
-        // We're accessing the wrapped `Operation` here, I think there could be a nicer pattern for this, see: https://github.com/p2panda/p2panda/issues/320
-        let document = DocumentBuilder::new(
-            document_operations
-                .into_iter()
-                .map(|operation| operation.into())
-                .collect(),
-        )
-        .build()
-        .unwrap();
+        let document = DocumentBuilder::new(document_operations).build().unwrap();
 
         let result = db.store.insert_document(&document).await;
 
@@ -660,15 +644,7 @@ mod tests {
             .await
             .unwrap();
 
-        // We're accessing the wrapped `Operation` here, I think there could be a nicer pattern for this, see: https://github.com/p2panda/p2panda/issues/320
-        let document = DocumentBuilder::new(
-            document_operations
-                .into_iter()
-                .map(|operation| operation.into())
-                .collect(),
-        )
-        .build()
-        .unwrap();
+        let document = DocumentBuilder::new(document_operations).build().unwrap();
 
         let result = db.store.insert_document(&document).await;
 
@@ -697,14 +673,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            let document = DocumentBuilder::new(
-                document_operations
-                    .into_iter()
-                    .map(|operation| operation.into())
-                    .collect(),
-            )
-            .build()
-            .unwrap();
+            let document = DocumentBuilder::new(document_operations).build().unwrap();
 
             db.store.insert_document(&document).await.unwrap();
         }
