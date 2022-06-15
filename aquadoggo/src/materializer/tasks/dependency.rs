@@ -50,8 +50,7 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
                 // This is a relation to a document, if it doesn't exist in the db yet, then that
                 // means we either have no entries for this document, or we are not materialising
                 // it for some reason. We don't want to kick of a "reduce" or "dependency" task in
-                // either of these cases, however in the future we may want to flag it as a "wanted"
-                // schema.
+                // either of these cases.
             }
             p2panda_rs::operation::OperationValue::RelationList(_relation_list) => {
                 // same as above...
