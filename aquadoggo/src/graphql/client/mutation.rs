@@ -2,7 +2,7 @@
 
 use async_graphql::{Context, Error, Object, Result};
 use p2panda_rs::entry::EntrySigned;
-use p2panda_rs::operation::{Operation, OperationEncoded, OperationId, VerifiedOperation};
+use p2panda_rs::operation::{AsVerifiedOperation, OperationEncoded, VerifiedOperation};
 use p2panda_rs::storage_provider::traits::{OperationStore, StorageProvider};
 
 use crate::bus::{ServiceMessage, ServiceSender};
@@ -51,13 +51,9 @@ impl ClientMutationRoot {
             .await?
         {
             Some(document_id) => {
-                let operation = Operation::from(&args.operation_encoded);
-                let operation_id: OperationId = args.entry_encoded.hash().into();
-
-                let verified_operation = VerifiedOperation::new(
-                    &args.entry_encoded.author(),
-                    &operation_id,
-                    &operation,
+                let verified_operation = VerifiedOperation::new_from_entry(
+                    &args.entry_encoded,
+                    &args.operation_encoded,
                 )?;
 
                 // Store operation in database
@@ -69,7 +65,9 @@ impl ClientMutationRoot {
 
                 // Send new operation on service communication bus, this will arrive eventually at
                 // the materializer service
-                tx.send(ServiceMessage::NewOperation(operation_id))?;
+                tx.send(ServiceMessage::NewOperation(
+                    verified_operation.operation_id().to_owned(),
+                ))?;
 
                 Ok(response)
             }
