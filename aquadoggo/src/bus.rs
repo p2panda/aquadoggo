@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use p2panda_rs::entry::Entry;
-use p2panda_rs::operation::Operation;
+use p2panda_rs::operation::OperationId;
 
 use crate::manager::Sender;
 
@@ -9,9 +8,8 @@ use crate::manager::Sender;
 pub type ServiceSender = Sender<ServiceMessage>;
 
 /// Messages which can be sent on the communication bus.
-#[derive(Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ServiceMessage {
-    /// New `Entry` with an `Operation` payload arrived at the node.
-    #[allow(dead_code)]
-    NewEntryAndOperation(Entry, Operation),
+    /// A new operation arrived at the node.
+    NewOperation(OperationId),
 }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use anyhow::Result;
+use p2panda_rs::storage_provider::traits::OperationStore;
 use tokio::task;
 
 use crate::bus::{ServiceMessage, ServiceSender};
@@ -19,7 +20,7 @@ pub async fn materializer_service(
 ) -> Result<()> {
     // Create worker factory with task queue
     let pool_size = context.config.worker_pool_size as usize;
-    let mut factory = Factory::<TaskInput, Context>::new(context, CHANNEL_CAPACITY);
+    let mut factory = Factory::<TaskInput, Context>::new(context.clone(), CHANNEL_CAPACITY);
 
     // Register worker functions in factory
     factory.register("reduce", pool_size, reduce_task);
@@ -34,9 +35,26 @@ pub async fn materializer_service(
 
     // Listen to incoming new entries and operations and move them into task queue
     let handle = task::spawn(async move {
-        while let Ok(ServiceMessage::NewEntryAndOperation(_entry, _operation)) = rx.recv().await {
-            // @TODO: Identify document id from operation by asking the database
-            factory.queue(Task::new("reduce", TaskInput::new(None, None)));
+        while let Ok(ServiceMessage::NewOperation(operation_id)) = rx.recv().await {
+            // Resolve document id of regarding operation
+            match context
+                .store
+                .get_document_by_operation_id(&operation_id)
+                .await
+                .unwrap()
+            {
+                Some(document_id) => {
+                    // Dispatch "reduce" task which will materialize the regarding document
+                    factory.queue(Task::new("reduce", TaskInput::new(Some(document_id), None)));
+                }
+                None => {
+                    // Panic when we couldn't find the regarding document in the database. We can
+                    // safely assure that this is due to a critical bug affecting the database
+                    // integrity. Panicking here will close `handle` and by that signal a node
+                    // shutdown.
+                    panic!("Could not find document for operation_id {}", operation_id);
+                }
+            }
         }
     });
 

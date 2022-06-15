@@ -20,10 +20,10 @@ mod db;
 mod errors;
 /// Aquadoggo graphql types for handling client and replication requests
 pub mod graphql;
+mod http;
 mod manager;
 mod materializer;
 mod node;
-mod server;
 
 #[cfg(test)]
 mod test_helpers;

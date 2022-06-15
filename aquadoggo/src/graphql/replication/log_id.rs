@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 pub struct LogId(pub PandaLogId);
 
 impl LogId {
+    #[allow(dead_code)]
     pub fn as_u64(&self) -> u64 {
         self.0.as_u64()
     }

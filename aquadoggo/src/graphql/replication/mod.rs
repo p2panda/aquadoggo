@@ -36,7 +36,7 @@ pub use aliased_author::AliasedAuthor;
 pub use author::{Author, AuthorOrAlias};
 
 #[double]
-pub use context::Context as ReplicationContext;
+pub use context::ReplicationContext;
 pub use entry::Entry;
 pub use entry_and_payload::EntryAndPayload;
 pub use entry_hash::EntryHash;
@@ -72,9 +72,7 @@ impl<EntryStore: 'static + EntryStoreTrait<StorageEntry> + Sync + Send>
         hash: EntryHash,
     ) -> Result<Option<SingleEntryAndPayload>> {
         let ctx: &Arc<Mutex<ReplicationContext<EntryStore>>> = ctx.data()?;
-
         let result = ctx.lock().await.entry_by_hash(hash).await?;
-
         Ok(result)
     }
 
