@@ -9,6 +9,13 @@ use crate::materializer::TaskInput;
 
 /// A dependency task prepares _reduce_ tasks for all pinned relations of a given document view.
 ///
+/// This task is dispatched after a reduce task completes. It identifies any pinned relations
+/// present in a given document view as we need to guarantee the required document views are
+/// materialised and stored in the database. We may have the required operations on the node
+/// already, but they were never materialised to the document view required by the pinned
+/// relation. In order to guarantee all required document views are present we dispatch a
+/// reduce task for the view of each pinned relation found.
+///
 /// Expects a _reduce_ task to have completed successfully for the given document view itself and
 /// returns a critical error otherwise.
 pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
