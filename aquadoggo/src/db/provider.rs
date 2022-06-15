@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
 use async_trait::async_trait;
 use sqlx::query_scalar;
 
@@ -14,7 +15,8 @@ use crate::graphql::client::{
     EntryArgsRequest, EntryArgsResponse, PublishEntryRequest, PublishEntryResponse,
 };
 
-#[derive(Clone)]
+/// Sql based storage that implements `StorageProvider`
+#[derive(Clone, Debug)]
 pub struct SqlStorage {
     pub(crate) pool: Pool,
 }
