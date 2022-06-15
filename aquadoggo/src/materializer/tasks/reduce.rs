@@ -8,6 +8,12 @@ use crate::db::traits::DocumentStore;
 use crate::materializer::worker::{Task, TaskError, TaskResult};
 use crate::materializer::TaskInput;
 
+/// A reduce task is dispatched for every entry and operation pair which arrives at a node. They
+/// may also be dispatched from a dependency task when a pinned relations is present on an already
+/// materialised document view.
+///
+/// After succesfully reducing and storing a document view an array of dependency tasks is returned.
+/// If invalid inputs were passed or a fatal db error occured a critical error is returned.
 pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
     // Parse the task input, if they are invalid (both or neither ids provided) we critically fail
     // the task at this point. If only a document_view was passed we retrieve the document_id as
