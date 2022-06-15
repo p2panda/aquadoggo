@@ -248,7 +248,7 @@ pub async fn test_db(
             let next_entry = Entry::new(
                 &next_entry_args.log_id,
                 Some(&next_operation),
-                next_entry_args.backlink.as_ref(),
+                next_entry_args.skiplink.as_ref(),
                 next_entry_args.backlink.as_ref(),
                 &next_entry_args.seq_num,
             )
