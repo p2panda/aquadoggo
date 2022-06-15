@@ -7,26 +7,6 @@ use crate::db::traits::DocumentStore;
 use crate::materializer::worker::{Task, TaskError, TaskResult};
 use crate::materializer::TaskInput;
 
-/// Returns a _reduce_ task for a given document view only if that view does not yet exist in the
-/// store.
-async fn construct_relation_task(
-    context: &Context,
-    document_view_id: DocumentViewId,
-) -> Result<Option<Task<TaskInput>>, TaskError> {
-    match context
-        .store
-        .get_document_view_by_id(&document_view_id)
-        .await
-        .map_err(|_| TaskError::Critical)?
-    {
-        Some(_) => Ok(None),
-        None => Ok(Some(Task::new(
-            "reduce",
-            TaskInput::new(None, Some(document_view_id)),
-        ))),
-    }
-}
-
 /// A dependency task prepares _reduce_ tasks for all pinned relations of a given document view.
 ///
 /// Expects a _reduce_ task to have completed successfully for the given document view itself and
@@ -34,20 +14,22 @@ async fn construct_relation_task(
 pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
     // Here we retrive the document view by document view id.
     let document_view = match input.document_view_id {
-        Some(view_id) => match context
+        Some(view_id) => context
             .store
             .get_document_view_by_id(&view_id)
             .await
-            .map_err(|_| TaskError::Critical)?
-        {
-            Some(document_view) => Ok(document_view),
-            // If no document view for the id passed into this task could be retrieved then this
-            // document has been deleted or the document view id was invalid. As "dependency" tasks
-            // are only dispatched after a successful "reduce" task, neither `None` case should
-            // happen, so this is a critical error.
-            None => Err(TaskError::Critical),
-        },
-        // We only expect to handle document_view_ids in a dependency task.
+            .map_err(|_| TaskError::Critical)
+        ,
+        // We expect to handle document_view_ids in a dependency task.
+        None => Err(TaskError::Critical),
+    }?;
+
+    let document_view = match document_view {
+        Some(document_view) => Ok(document_view),
+        // If no document view for the id passed into this task could be retrieved then this
+        // document has been deleted or the document view id was invalid. As "dependency" tasks
+        // are only dispatched after a successful "reduce" task, neither `None` case should
+        // happen, so this is a critical error.
         None => Err(TaskError::Critical),
     }?;
 
@@ -88,6 +70,26 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
     }
 
     Ok(Some(next_tasks.into_iter().flatten().collect()))
+}
+
+/// Returns a _reduce_ task for a given document view only if that view does not yet exist in the
+/// store.
+async fn construct_relation_task(
+    context: &Context,
+    document_view_id: DocumentViewId,
+) -> Result<Option<Task<TaskInput>>, TaskError> {
+    match context
+        .store
+        .get_document_view_by_id(&document_view_id)
+        .await
+        .map_err(|_| TaskError::Critical)?
+    {
+        Some(_) => Ok(None),
+        None => Ok(Some(Task::new(
+            "reduce",
+            TaskInput::new(None, Some(document_view_id)),
+        ))),
+    }
 }
 
 #[cfg(test)]
