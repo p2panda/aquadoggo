@@ -11,12 +11,6 @@ use crate::schema::errors::SchemaProviderError;
 /// A schema provides gives access to system and application schemas during runtime.
 ///
 /// System schemas are built-in and can be accessed without creating a `SchemaProvider` instance.
-///
-/// ```
-/// let schema = SchemaProvider::get_system("schema_definition_v1".parse().unwrap());
-/// assert!(schema.is_ok());
-/// assert_eq!(schema.name(), "schema_definition".to_string());
-/// ```
 #[derive(Clone, Debug)]
 pub struct SchemaProvider<T>(T)
 where
