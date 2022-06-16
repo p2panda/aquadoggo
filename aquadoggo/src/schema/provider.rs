@@ -19,8 +19,11 @@ pub struct SchemaProvider(Arc<Mutex<HashMap<SchemaId, Schema>>>);
 impl SchemaProvider {
     /// Returns a `SchemaProvider` containing the given application schemas and all system schemas.
     pub fn new(application_schemas: Vec<Schema>) -> Self {
+        // Collect all system and application schemas.
         let mut schemas = Self::all_system();
         schemas.extend(application_schemas);
+
+        // Build hash map from schemas for fast lookup.
         let mut index = HashMap::new();
         for schema in schemas {
             index.insert(schema.id().to_owned(), schema.to_owned());
