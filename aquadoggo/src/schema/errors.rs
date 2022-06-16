@@ -4,8 +4,8 @@ use p2panda_rs::schema::{SchemaId, SchemaIdError};
 
 /// Errors returned by schema service.
 #[derive(thiserror::Error, Debug)]
-pub enum SchemaServiceError {
-    /// Schema service can only handle application schemas it has definitions for.
+pub enum SchemaProviderError {
+    /// Schema provider can only handle application schemas it has definitions for.
     #[error("not a known application schema: {0}")]
     UnknownApplicationSchema(SchemaId),
 
@@ -13,7 +13,7 @@ pub enum SchemaServiceError {
     #[error("invalid schema: {0}, {1}")]
     InvalidSchema(SchemaId, String),
 
-    /// Schema service can only handle valid schema ids.
+    /// Schema provider can only handle valid schema ids.
     #[error(transparent)]
     InvalidSchemaId(#[from] SchemaIdError),
 }

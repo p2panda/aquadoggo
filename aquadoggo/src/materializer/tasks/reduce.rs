@@ -301,7 +301,11 @@ mod tests {
         #[case] is_next_task: bool,
     ) {
         let db = db.await;
-        let context = Context::new(db.store.clone(), Configuration::default());
+        let context = Context::new(
+            db.store.clone(),
+            Configuration::default(),
+            SchemaProvider::new(db.store.clone()),
+        );
         let document_id = db.documents[0].clone();
 
         let input = TaskInput::new(Some(document_id.clone()), None);
@@ -322,7 +326,11 @@ mod tests {
         db: TestSqlStore,
     ) {
         let db = db.await;
-        let context = Context::new(db.store, Configuration::default());
+        let context = Context::new(
+            db.store,
+            Configuration::default(),
+            SchemaProvider::new(db.store.clone()),
+        );
         let input = TaskInput::new(document_id, document_view_id);
 
         reduce_task(context.clone(), input).await.unwrap();

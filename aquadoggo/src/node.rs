@@ -10,6 +10,7 @@ use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
 use crate::http::http_service;
 use crate::manager::ServiceManager;
 use crate::materializer::materializer_service;
+use crate::schema::SchemaProvider;
 
 /// Makes sure database is created and migrated before returning connection pool.
 async fn initialize_db(config: &Configuration) -> Result<Pool> {
@@ -43,22 +44,23 @@ impl Node {
     /// Start p2panda node with your configuration. This method can be used to run the node within
     /// other applications.
     pub async fn start(config: Configuration) -> Self {
-        // Initialize database and get connection pool
+        // Initialize database and get connection pool.
         let pool = initialize_db(&config)
             .await
             .expect("Could not initialize database");
 
-        // Prepare storage provider using connection pool
+        // Prepare storage and schema providers using connection pool.
         let store = SqlStorage::new(pool.clone());
+        let schemas = SchemaProvider::new(store.clone());
 
-        // Create service manager with shared data between services
-        let context = Context::new(store, config);
+        // Create service manager with shared data between services.
+        let context = Context::new(store, config, schemas);
         let mut manager = ServiceManager::<Context, ServiceMessage>::new(1024, context);
 
-        // Start materializer service
+        // Start materializer service.
         manager.add("materializer", materializer_service);
 
-        // Start HTTP server with GraphQL API
+        // Start HTTP server with GraphQL API.
         manager.add("http", http_service);
 
         Self { pool, manager }

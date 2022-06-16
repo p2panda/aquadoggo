@@ -1,5 +1,5 @@
 mod errors;
-mod service;
+mod provider;
 mod temp_file;
 
-pub use service::SchemaService;
+pub use provider::SchemaProvider;

@@ -6,31 +6,31 @@ use p2panda_rs::storage_provider::traits::StorageProvider;
 
 use crate::db::stores::{StorageEntry, StorageLog};
 use crate::db::traits::SchemaStore;
-use crate::schema::errors::SchemaServiceError;
+use crate::schema::errors::SchemaProviderError;
 
-/// A schema service provides access to system and application schemas during runtime.
+/// A schema provides gives access to system and application schemas during runtime.
 ///
-/// System schemas are built-in and can be accessed without creating a `SchemaService` instance.
+/// System schemas are built-in and can be accessed without creating a `SchemaProvider` instance.
 ///
 /// ```
-/// let schema = SchemaService::get_system("schema_definition_v1".parse().unwrap());
+/// let schema = SchemaProvider::get_system("schema_definition_v1".parse().unwrap());
 /// assert!(schema.is_ok());
 /// assert_eq!(schema.name(), "schema_definition".to_string());
 /// ```
 #[derive(Clone, Debug)]
-pub struct SchemaService<T>(T)
+pub struct SchemaProvider<T>(T)
 where
     // A storage provider with a schema store.
     T: StorageProvider<StorageEntry, StorageLog> + SchemaStore + Clone;
 
-impl<T: StorageProvider<StorageEntry, StorageLog> + SchemaStore + Clone> SchemaService<T> {
-    /// Initializes a new `SchemaService` using a provided [`StorageProvider`].
+impl<T: StorageProvider<StorageEntry, StorageLog> + SchemaStore + Clone> SchemaProvider<T> {
+    /// Initializes a new `SchemaProvider` using a provided [`StorageProvider`].
     pub fn new(store: T) -> Self {
         Self(store)
     }
 
     /// Retrieve a schema that may be a system or application schema by its schema id.
-    pub async fn get(&self, schema_id: SchemaId) -> Result<Option<Schema>, SchemaServiceError> {
+    pub async fn get(&self, schema_id: SchemaId) -> Result<Option<Schema>, SchemaProviderError> {
         match schema_id {
             SchemaId::Application(_, _) => self.get_application(schema_id).await,
             _ => Ok(Some(Self::get_system(schema_id)?)),
@@ -38,14 +38,14 @@ impl<T: StorageProvider<StorageEntry, StorageLog> + SchemaStore + Clone> SchemaS
     }
 
     /// Returns all system and application schemas.
-    pub async fn all(&self) -> Result<Vec<Schema>, SchemaServiceError> {
+    pub async fn all(&self) -> Result<Vec<Schema>, SchemaProviderError> {
         let mut schemas = Self::all_system();
         schemas.append(&mut self.all_application().await?);
         Ok(schemas)
     }
 
     /// Enumerate all known application schemas.
-    pub async fn all_application(&self) -> Result<Vec<Schema>, SchemaServiceError> {
+    pub async fn all_application(&self) -> Result<Vec<Schema>, SchemaProviderError> {
         Ok(self.0.get_all_schema().await.unwrap())
     }
 
@@ -53,10 +53,10 @@ impl<T: StorageProvider<StorageEntry, StorageLog> + SchemaStore + Clone> SchemaS
     pub async fn get_application(
         &self,
         schema_id: SchemaId,
-    ) -> Result<Option<Schema>, SchemaServiceError> {
+    ) -> Result<Option<Schema>, SchemaProviderError> {
         let view_id = match schema_id {
             SchemaId::Application(_, view_id) => Ok(view_id),
-            _ => Err(SchemaServiceError::InvalidSchema(
+            _ => Err(SchemaProviderError::InvalidSchema(
                 schema_id,
                 "requires an application schema".to_string(),
             )),
@@ -78,8 +78,12 @@ impl<T: StorageProvider<StorageEntry, StorageLog> + SchemaStore + Clone> SchemaS
     }
 
     /// Retrieve a system schema by its schema id.
-    pub fn get_system(schema_id: SchemaId) -> Result<Schema, SchemaServiceError> {
+    pub fn get_system(schema_id: SchemaId) -> Result<Schema, SchemaProviderError> {
         Ok(get_system_schema(schema_id)?)
+    }
+
+    pub(crate) fn update_schema(&self, schema: Schema) {
+        todo!()
     }
 }
 
@@ -99,8 +103,8 @@ mod test {
         db: TestSqlStore,
     ) {
         let db = db.await;
-        let schema_service = SchemaService::new(db.store);
-        let result = schema_service.all().await;
+        let schemas = SchemaProvider::new(db.store);
+        let result = schemas.all().await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 2);
     }
