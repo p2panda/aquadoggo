@@ -14,7 +14,7 @@ use p2panda_rs::schema::{Schema, SchemaId, SchemaIdError};
 #[derive(Clone, Debug)]
 pub struct SchemaProvider(Arc<Mutex<HashMap<SchemaId, Schema>>>);
 
-// Dead code allowed until this is used for https://github.com/p2panda/aquadoggo/pull/137
+// Dead code allowed until this is used for https://github.com/p2panda/aquadoggo/pull/141
 #[allow(dead_code)]
 impl SchemaProvider {
     /// Returns a `SchemaProvider` containing the given application schemas and all system schemas.
