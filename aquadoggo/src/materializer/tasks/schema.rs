@@ -43,14 +43,20 @@ pub async fn schema_task(context: Context, input: TaskInput) -> TaskResult<TaskI
         _ => Err(TaskError::Critical),
     }?;
 
+    if updated_schema_definitions.is_empty() {
+        return Err(TaskError::Failure);
+    }
+
     for view_id in updated_schema_definitions.iter() {
         match context
             .store
             .get_schema_by_id(view_id)
             .await
-            .map_err(|_err| TaskError::Failure)?
+            .map_err(|_err| TaskError::Critical)?
         {
-            Some(schema) => context.schemas.update_schema(schema),
+            Some(schema) => {
+                context.schemas.update(schema);
+            }
             None => (),
         };
     }

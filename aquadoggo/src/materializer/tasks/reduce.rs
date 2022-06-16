@@ -165,6 +165,7 @@ mod tests {
     use crate::db::traits::DocumentStore;
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
+    use crate::schema::SchemaProvider;
 
     #[rstest]
     #[tokio::test]
@@ -175,7 +176,11 @@ mod tests {
         db: TestSqlStore,
     ) {
         let db = db.await;
-        let context = Context::new(db.store, Configuration::default());
+        let context = Context::new(
+            db.store,
+            Configuration::default(),
+            SchemaProvider::new(Vec::new()),
+        );
 
         for document_id in &db.documents {
             let input = TaskInput::new(Some(document_id.clone()), None);
@@ -218,7 +223,11 @@ mod tests {
             .clone()
             .into();
 
-        let context = Context::new(db.store.clone(), Configuration::default());
+        let context = Context::new(
+            db.store.clone(),
+            Configuration::default(),
+            SchemaProvider::new(Vec::new()),
+        );
         let input = TaskInput::new(None, Some(document_view_id.clone()));
 
         assert!(reduce_task(context.clone(), input).await.is_ok());
@@ -260,7 +269,11 @@ mod tests {
         db: TestSqlStore,
     ) {
         let db = db.await;
-        let context = Context::new(db.store.clone(), Configuration::default());
+        let context = Context::new(
+            db.store.clone(),
+            Configuration::default(),
+            SchemaProvider::new(Vec::new()),
+        );
 
         for document_id in &db.documents {
             let input = TaskInput::new(Some(document_id.clone()), None);
@@ -304,7 +317,7 @@ mod tests {
         let context = Context::new(
             db.store.clone(),
             Configuration::default(),
-            SchemaProvider::new(db.store.clone()),
+            SchemaProvider::new(Vec::new()),
         );
         let document_id = db.documents[0].clone();
 
@@ -329,7 +342,7 @@ mod tests {
         let context = Context::new(
             db.store,
             Configuration::default(),
-            SchemaProvider::new(db.store.clone()),
+            SchemaProvider::new(Vec::new()),
         );
         let input = TaskInput::new(document_id, document_view_id);
 

@@ -1,61 +1,41 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+
 use p2panda_rs::schema::system::get_system_schema;
 use p2panda_rs::schema::{Schema, SchemaId};
-use p2panda_rs::storage_provider::traits::StorageProvider;
 
-use crate::db::stores::{StorageEntry, StorageLog};
-use crate::db::traits::SchemaStore;
 use crate::schema::errors::SchemaProviderError;
 
-/// A schema provides gives access to system and application schemas during runtime.
+/// Provides fast access to system and application schemas during runtime.
 ///
 /// System schemas are built-in and can be accessed without creating a `SchemaProvider` instance.
+///
+/// Schemas can be updated and removed.
 #[derive(Clone, Debug)]
-pub struct SchemaProvider<T>(T)
-where
-    // A storage provider with a schema store.
-    T: StorageProvider<StorageEntry, StorageLog> + SchemaStore + Clone;
+pub struct SchemaProvider(Arc<Mutex<HashMap<SchemaId, Schema>>>);
 
-impl<T: StorageProvider<StorageEntry, StorageLog> + SchemaStore + Clone> SchemaProvider<T> {
-    /// Initializes a new `SchemaProvider` using a provided [`StorageProvider`].
-    pub fn new(store: T) -> Self {
-        Self(store)
+impl SchemaProvider {
+    /// Returns a `SchemaProvider` containing the given application schemas and all system schemas.
+    pub fn new(application_schemas: Vec<Schema>) -> Self {
+        let mut schemas = Self::all_system();
+        schemas.extend(application_schemas);
+        let mut index = HashMap::new();
+        for schema in schemas {
+            index.insert(schema.id().to_owned(), schema.to_owned());
+        }
+        Self(Arc::new(Mutex::new(index)))
     }
 
     /// Retrieve a schema that may be a system or application schema by its schema id.
-    pub async fn get(&self, schema_id: SchemaId) -> Result<Option<Schema>, SchemaProviderError> {
-        match schema_id {
-            SchemaId::Application(_, _) => self.get_application(schema_id).await,
-            _ => Ok(Some(Self::get_system(schema_id)?)),
-        }
+    pub fn get(&self, schema_id: &SchemaId) -> Option<Schema> {
+        self.0.lock().unwrap().get(schema_id).cloned()
     }
 
     /// Returns all system and application schemas.
-    pub async fn all(&self) -> Result<Vec<Schema>, SchemaProviderError> {
-        let mut schemas = Self::all_system();
-        schemas.append(&mut self.all_application().await?);
-        Ok(schemas)
-    }
-
-    /// Enumerate all known application schemas.
-    pub async fn all_application(&self) -> Result<Vec<Schema>, SchemaProviderError> {
-        Ok(self.0.get_all_schema().await.unwrap())
-    }
-
-    /// Retrieve a specific application schema by its schema id.
-    pub async fn get_application(
-        &self,
-        schema_id: SchemaId,
-    ) -> Result<Option<Schema>, SchemaProviderError> {
-        let view_id = match schema_id {
-            SchemaId::Application(_, view_id) => Ok(view_id),
-            _ => Err(SchemaProviderError::InvalidSchema(
-                schema_id,
-                "requires an application schema".to_string(),
-            )),
-        }?;
-        Ok(self.0.get_schema_by_id(&view_id).await.unwrap())
+    pub fn all(&self) -> Vec<Schema> {
+        self.0.lock().unwrap().values().cloned().collect()
     }
 
     /// Returns all known system schemas.
@@ -76,8 +56,19 @@ impl<T: StorageProvider<StorageEntry, StorageLog> + SchemaStore + Clone> SchemaP
         Ok(get_system_schema(schema_id)?)
     }
 
-    pub(crate) fn update_schema(&self, schema: Schema) {
-        todo!()
+    /// Inserts or updates the given schema in this provider.
+    ///
+    /// Returns `true` if a schema was updated and `false` if it was inserted.
+    pub fn update(&self, schema: Schema) -> bool {
+        let mut schemas = self.0.lock().unwrap();
+        schemas.insert(schema.id().clone(), schema).is_some()
+    }
+
+    /// Remove a schema from this provider.
+    ///
+    /// Returns true if the schema existed.
+    pub fn remove(&self, schema_id: &SchemaId) -> bool {
+        self.0.lock().unwrap().remove(schema_id).is_some()
     }
 }
 
@@ -89,17 +80,10 @@ mod test {
     use crate::db::stores::test_utils::{test_db, TestSqlStore};
     use crate::db::traits::SchemaStore;
 
-    #[rstest]
     #[tokio::test]
-    async fn test_get_all_schemas(
-        #[from(test_db)]
-        #[future]
-        db: TestSqlStore,
-    ) {
-        let db = db.await;
-        let schemas = SchemaProvider::new(db.store);
-        let result = schemas.all().await;
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().len(), 2);
+    async fn test_get_all_schemas() {
+        let schemas = SchemaProvider::new(vec![]);
+        let result = schemas.all();
+        assert_eq!(result.len(), 2);
     }
 }

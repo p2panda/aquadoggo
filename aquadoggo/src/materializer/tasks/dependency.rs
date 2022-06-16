@@ -119,6 +119,7 @@ mod tests {
     use crate::db::traits::DocumentStore;
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
+    use crate::schema::SchemaProvider;
 
     use super::dependency_task;
 
@@ -154,7 +155,11 @@ mod tests {
         #[case] expected_next_tasks: usize,
     ) {
         let db = db.await;
-        let context = Context::new(db.store.clone(), Configuration::default());
+        let context = Context::new(
+            db.store.clone(),
+            Configuration::default(),
+            SchemaProvider::new(Vec::new()),
+        );
 
         for document_id in &db.documents {
             let input = TaskInput::new(Some(document_id.clone()), None);
@@ -191,7 +196,11 @@ mod tests {
         db: TestSqlStore,
     ) {
         let db = db.await;
-        let context = Context::new(db.store.clone(), Configuration::default());
+        let context = Context::new(
+            db.store.clone(),
+            Configuration::default(),
+            SchemaProvider::new(Vec::new()),
+        );
         let document_id = db.documents[0].clone();
 
         let input = TaskInput::new(Some(document_id.clone()), None);
@@ -257,7 +266,11 @@ mod tests {
         db: TestSqlStore,
     ) {
         let db = db.await;
-        let context = Context::new(db.store, Configuration::default());
+        let context = Context::new(
+            db.store,
+            Configuration::default(),
+            SchemaProvider::new(Vec::new()),
+        );
         let input = TaskInput::new(document_id, document_view_id);
 
         let next_tasks = dependency_task(context.clone(), input).await.unwrap();
@@ -281,7 +294,11 @@ mod tests {
         db: TestSqlStore,
     ) {
         let db = db.await;
-        let context = Context::new(db.store.clone(), Configuration::default());
+        let context = Context::new(
+            db.store.clone(),
+            Configuration::default(),
+            SchemaProvider::new(Vec::new()),
+        );
         let document_id = db.documents[0].clone();
 
         let input = TaskInput::new(Some(document_id.clone()), None);

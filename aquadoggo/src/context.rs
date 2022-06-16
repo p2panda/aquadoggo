@@ -17,15 +17,11 @@ pub struct Data {
     pub store: SqlStorage,
 
     /// Schema provider gives access to system and application schemas.
-    pub schemas: SchemaProvider<SqlStorage>,
+    pub schemas: SchemaProvider,
 }
 
 impl Data {
-    pub fn new(
-        store: SqlStorage,
-        config: Configuration,
-        schemas: SchemaProvider<SqlStorage>,
-    ) -> Self {
+    pub fn new(store: SqlStorage, config: Configuration, schemas: SchemaProvider) -> Self {
         Self {
             config,
             store,
@@ -40,11 +36,7 @@ pub struct Context(pub Arc<Data>);
 
 impl Context {
     /// Returns a new instance of `Context`.
-    pub fn new(
-        store: SqlStorage,
-        config: Configuration,
-        schemas: SchemaProvider<SqlStorage>,
-    ) -> Self {
+    pub fn new(store: SqlStorage, config: Configuration, schemas: SchemaProvider) -> Self {
         Self(Arc::new(Data::new(store, config, schemas)))
     }
 }
