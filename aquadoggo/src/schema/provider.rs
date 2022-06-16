@@ -4,9 +4,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use p2panda_rs::schema::system::get_system_schema;
-use p2panda_rs::schema::{Schema, SchemaId};
-
-use crate::schema::errors::SchemaProviderError;
+use p2panda_rs::schema::{Schema, SchemaId, SchemaIdError};
 
 /// Provides fast access to system and application schemas during runtime.
 ///
@@ -55,7 +53,9 @@ impl SchemaProvider {
     }
 
     /// Retrieve a system schema by its schema id.
-    pub fn get_system(schema_id: SchemaId) -> Result<Schema, SchemaProviderError> {
+    ///
+    /// Returns an error if the `schema_id` parameter is not a system schema id.
+    pub fn get_system(schema_id: SchemaId) -> Result<Schema, SchemaIdError> {
         Ok(get_system_schema(schema_id)?)
     }
 
