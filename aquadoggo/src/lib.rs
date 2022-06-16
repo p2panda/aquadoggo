@@ -24,6 +24,7 @@ mod http;
 mod manager;
 mod materializer;
 mod node;
+mod schema;
 
 #[cfg(test)]
 mod test_helpers;
