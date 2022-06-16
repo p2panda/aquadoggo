@@ -14,6 +14,8 @@ use p2panda_rs::schema::{Schema, SchemaId, SchemaIdError};
 #[derive(Clone, Debug)]
 pub struct SchemaProvider(Arc<Mutex<HashMap<SchemaId, Schema>>>);
 
+// Dead code allowed until this is used for https://github.com/p2panda/aquadoggo/pull/137
+#[allow(dead_code)]
 impl SchemaProvider {
     /// Returns a `SchemaProvider` containing the given application schemas and all system schemas.
     pub fn new(application_schemas: Vec<Schema>) -> Self {
@@ -56,7 +58,7 @@ impl SchemaProvider {
     ///
     /// Returns an error if the `schema_id` parameter is not a system schema id.
     pub fn get_system(schema_id: SchemaId) -> Result<Schema, SchemaIdError> {
-        Ok(get_system_schema(schema_id)?)
+        get_system_schema(schema_id)
     }
 
     /// Inserts or updates the given schema in this provider.
