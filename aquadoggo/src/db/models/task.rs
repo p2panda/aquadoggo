@@ -12,6 +12,9 @@ pub struct TaskRow {
     /// Name of the task worker.
     pub name: String,
 
-    /// Related `OperationId` of the pending task.
-    pub operation_id: String,
+    /// `DocumentId` of the task input.
+    pub document_id: String,
+
+    /// `DocumentViewId` of the task input.
+    pub document_view_id: String,
 }

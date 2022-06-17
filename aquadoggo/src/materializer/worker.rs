@@ -85,7 +85,7 @@ use std::sync::{Arc, Mutex};
 use deadqueue::unlimited::Queue;
 use log::{error, info};
 use tokio::sync::broadcast::error::RecvError;
-use tokio::sync::broadcast::{channel, Sender};
+use tokio::sync::broadcast::{channel, Receiver, Sender};
 use tokio::task;
 use triggered::{Listener, Trigger};
 
@@ -115,6 +115,16 @@ pub enum TaskError {
     /// This task failed silently without any further effects.
     #[allow(dead_code)]
     Failure,
+}
+
+/// Enum representing status of a task.
+#[derive(Debug, Clone)]
+pub enum TaskStatus<IN> {
+    /// Task just got scheduled and waiting to be processed.
+    Pending(Task<IN>),
+
+    /// Task completed successfully.
+    Completed(Task<IN>),
 }
 
 /// Workers are identified by simple string values.
@@ -235,6 +245,9 @@ where
     /// Broadcast channel to inform worker pools about new tasks.
     tx: Sender<Task<IN>>,
 
+    /// Broadcast channel to inform callbacks about pending or completed tasks.
+    tx_status: Sender<TaskStatus<IN>>,
+
     /// Sender of error signal.
     error_signal: Trigger,
 
@@ -259,12 +272,14 @@ where
     /// incoming tasks.
     pub fn new(context: D, capacity: usize) -> Self {
         let (tx, _) = channel(capacity);
+        let (tx_status, _) = channel(capacity);
         let (error_signal, error_handle) = triggered::trigger();
 
         Self {
             context,
             managers: HashMap::new(),
             tx,
+            tx_status,
             error_signal,
             error_handle,
         }
@@ -324,6 +339,11 @@ where
         self.error_handle.clone()
     }
 
+    /// Subscribe to status changes of tasks.
+    pub fn on_update(&self) -> Receiver<TaskStatus<IN>> {
+        self.tx_status.subscribe()
+    }
+
     /// Spawns a task which listens to broadcast channel for incoming new tasks which might be
     /// added to the worker queue.
     fn spawn_dispatcher(&self, name: &str) {
@@ -332,6 +352,9 @@ where
 
         // Subscribe to the broadcast channel
         let mut rx = self.tx.subscribe();
+
+        // Create handle to send task status updates
+        let tx_status = self.tx_status.clone();
 
         // Initialise a new counter to provide unique task ids
         let counter = AtomicU64::new(0);
@@ -345,6 +368,15 @@ where
         let error_signal = self.error_signal.clone();
 
         task::spawn(async move {
+            // Inform status subscribers that we've just scheduled a new task
+            let on_pending = |task: Task<IN>| match tx_status.send(TaskStatus::Pending(task)) {
+                Err(err) => {
+                    error!("Error while sending task status: {}", err);
+                    error_signal.trigger();
+                }
+                _ => (),
+            };
+
             loop {
                 match rx.recv().await {
                     // A new task got announced in the broadcast channel!
@@ -359,6 +391,9 @@ where
                                 if index.contains(&task.1) {
                                     continue; // Task already exists
                                 } else {
+                                    // Trigger status update
+                                    on_pending(task.clone());
+
                                     // Generate a unique id for this new task and add it to queue
                                     let next_id = counter.fetch_add(1, Ordering::Relaxed);
                                     queue.push(QueueItem::new(next_id, task.1.clone()));
@@ -403,11 +438,26 @@ where
             let queue = manager.queue.clone();
             let input_index = manager.input_index.clone();
             let tx = self.tx.clone();
+            let name = name.to_string();
 
             // Create handle for error signal
             let error_signal = self.error_signal.clone();
 
+            // Create handle to send task status updates
+            let tx_status = self.tx_status.clone();
+
             task::spawn(async move {
+                // Inform status subscribers that we just completed a task
+                let on_complete = |input: IN| match tx_status
+                    .send(TaskStatus::Completed(Task::new(&name, input)))
+                {
+                    Err(err) => {
+                        error!("Error while sending task status: {}", err);
+                        error_signal.trigger();
+                    }
+                    _ => (),
+                };
+
                 loop {
                     // Wait until there is a new task arriving in the queue
                     let item = queue.pop().await;
@@ -429,6 +479,9 @@ where
                     // .. check the task result ..
                     match result {
                         Ok(Some(list)) => {
+                            // Trigger status update
+                            on_complete(item.input());
+
                             // Tasks succeeded and dispatches new, subsequent tasks
                             for task in list {
                                 if let Err(err) = tx.send(task) {

@@ -9,7 +9,7 @@ use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
 use crate::manager::Shutdown;
 use crate::materializer::tasks::{dependency_task, reduce_task, schema_task};
-use crate::materializer::worker::{Factory, Task};
+use crate::materializer::worker::{Factory, Task, TaskStatus};
 use crate::materializer::TaskInput;
 
 const CHANNEL_CAPACITY: usize = 1024;
@@ -37,15 +37,50 @@ pub async fn materializer_service(
     // Get a listener for error signal from factory
     let on_error = factory.on_error();
 
-    // Subscribe to communication bus
-    let mut rx = tx.subscribe();
+    // Subscribe to status changes of tasks
+    let mut on_update = factory.on_update();
+    let store = context.store.clone();
+
+    let status_handle = task::spawn(async move {
+        loop {
+            match on_update.recv().await {
+                Ok(TaskStatus::Pending(task)) => {
+                    store
+                        .insert_task(&task)
+                        .await
+                        // @TODO
+                        .expect("Failed inserting task");
+                }
+                Ok(TaskStatus::Completed(task)) => {
+                    store
+                        .remove_task(&task)
+                        .await
+                        // @TODO
+                        .expect("Failed removing task");
+                }
+                Err(_) => {
+                    // @TODO
+                    panic!("Failed")
+                }
+            }
+        }
+    });
 
     // Reschedule tasks from last time which did not complete
-    let tasks = pending_tasks().await?;
+    let tasks = context
+        .store
+        .get_tasks()
+        .await
+        .expect("Failed retreiving pending tasks from database");
+
     debug!("Dispatch {} pending tasks from last runtime", tasks.len());
+
     tasks.iter().for_each(|task| {
         factory.queue(task.to_owned());
     });
+
+    // Subscribe to communication bus
+    let mut rx = tx.subscribe();
 
     // Listen to incoming new entries and operations and move them into task queue
     let handle = task::spawn(async move {
@@ -55,8 +90,10 @@ pub async fn materializer_service(
                 .store
                 .get_document_by_operation_id(&operation_id)
                 .await
-                .unwrap()
-            {
+                .expect(&format!(
+                    "Failed database query when retreiving document for operation_id {}",
+                    operation_id
+                )) {
                 Some(document_id) => {
                     // Dispatch "reduce" task which will materialize the regarding document
                     factory.queue(Task::new("reduce", TaskInput::new(Some(document_id), None)));
@@ -75,18 +112,10 @@ pub async fn materializer_service(
     // Wait until we received the application shutdown signal or handle closed
     tokio::select! {
         _ = handle => (),
+        _ = status_handle => (),
         _ = shutdown => (),
         _ = on_error => (),
     }
 
     Ok(())
-}
-
-/// Retreives a list of pending tasks from the database and returns them as inputs for the task
-/// queue.
-///
-/// This list represents all tasks which were not completed during the last runtime, as the node
-/// exited before.
-async fn pending_tasks() -> Result<Vec<Task<TaskInput>>> {
-    Ok(vec![])
 }
