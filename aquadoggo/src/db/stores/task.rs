@@ -15,11 +15,31 @@ impl SqlStorage {
     pub async fn insert_task(&self, task: &Task<TaskInput>) -> Result<(), SqlStorageError> {
         // Convert task input to correct database types
         let task_input = task.input();
-        let document_id = task_input.document_id.as_ref().map(|id| id.to_string());
+        let document_id = task_input.document_id.as_ref().map(|id| id.as_str());
         let document_view_id = task_input
             .document_view_id
             .as_ref()
             .map(|view_id| view_id.as_str());
+
+        // Check first if this task already exists, to avoid duplicate rows
+        let task_row = query_as::<_, TaskRow>(
+            "
+            SELECT
+                name,
+                document_id,
+                document_view_id
+            FROM
+                tasks
+            ",
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|err| SqlStorageError::Transaction(err.to_string()))?;
+
+        // If yes, we are already done here
+        if task_row.is_some() {
+            return Ok(())
+        }
 
         // Insert task into database
         let result = query(
@@ -52,7 +72,7 @@ impl SqlStorage {
     pub async fn remove_task(&self, task: &Task<TaskInput>) -> Result<(), SqlStorageError> {
         // Convert task input to correct database types
         let task_input = task.input();
-        let document_id = task_input.document_id.as_ref().map(|id| id.to_string());
+        let document_id = task_input.document_id.as_ref().map(|id| id.as_str());
         let document_view_id = task_input
             .document_view_id
             .as_ref()
