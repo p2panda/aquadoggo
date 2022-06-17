@@ -6,5 +6,5 @@
 CREATE TABLE IF NOT EXISTS tasks (
     name              TEXT      NOT NULL,
     document_id       TEXT      NULL,
-    document_view_id  TEXT      NULL,
+    document_view_id  TEXT      NULL
 );
