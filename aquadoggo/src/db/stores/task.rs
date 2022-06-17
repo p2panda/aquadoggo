@@ -84,7 +84,7 @@ impl SqlStorage {
             DELETE FROM
                 tasks
             WHERE
-                name IS $1
+                name = $1
                 AND document_id IS $2
                 AND document_view_id IS $3
             ",
