@@ -81,10 +81,10 @@ mod tests {
     use async_graphql::{from_value, value, Request, Value, Variables};
     use p2panda_rs::entry::{EntrySigned, LogId, SeqNum};
     use p2panda_rs::operation::{Operation, OperationEncoded, OperationValue};
-    use p2panda_rs::test_utils::constants::DEFAULT_HASH;
+    use p2panda_rs::test_utils::constants::{DEFAULT_HASH, DEFAULT_PRIVATE_KEY};
     use p2panda_rs::test_utils::fixtures::{
-        document_view_id, entry, entry_signed_encoded, operation, operation_encoded,
-        operation_fields, random_hash, random_key_pair,
+        entry, entry_signed_encoded, key_pair, operation, operation_encoded, operation_fields,
+        random_hash,
     };
     use rstest::{fixture, rstest};
     use serde_json::json;
@@ -118,6 +118,12 @@ mod tests {
                 skiplink
             }
         }"#;
+
+    const UPDATE_OPERATION_NO_PREVIOUS_OPS: &str = "A466616374696F6E6675706461746566736368656D617849636861745F30303230633635353637616533376566656132393365333461396337643133663866326266323364626463336235633762396162343632393331313163343866633738626776657273696F6E01666669656C6473A1676D657373616765A26474797065637374726576616C7565764F68682C206D79206669727374206D65737361676521";
+
+    const CREATE_OPERATION_WITH_PREVIOUS_OPS: &str = "A566616374696F6E6663726561746566736368656D617849636861745F30303230633635353637616533376566656132393365333461396337643133663866326266323364626463336235633762396162343632393331313163343866633738626776657273696F6E017370726576696F75735F6F7065726174696F6E738178443030323036356637346636666438316562316261653139656230643864636531343566616136613536643762343037366437666261343338353431303630396232626165666669656C6473A1676D657373616765A26474797065637374726576616C75657357686963682049206E6F77207570646174652E";
+
+    const DELETE_OPERATION_NO_PREVIOUS_OPS: &str = "A366616374696F6E6664656C65746566736368656D617849636861745F30303230633635353637616533376566656132393365333461396337643133663866326266323364626463336235633762396162343632393331313163343866633738626776657273696F6E01";
 
     #[fixture]
     fn publish_entry_request(
@@ -239,16 +245,11 @@ mod tests {
     // TODO: This shouldn't actually panic....
     // The error is `DecodeInputIsLengthZero`
     #[should_panic]
-    #[case::no_entry("", "", "invalid hex encoding in entry")]
+    #[case::no_entry("", "", "DecodeInputIsLengthZero")]
     // TODO: This shouldn't actually panic....
     // The error is `DecodeAuthorError`
     #[should_panic]
-    #[case::invalid_entry_bytes("AB01", "", "")]
-    #[case::invalid_entry_hex_encoding(
-        "-/74='4,.=4-=235m-0   34.6-3",
-        "",
-        "invalid hex encoding in entry"
-    )]
+    #[case::invalid_entry_bytes("AB01", "", "DecodeAuthorError")]
     #[case::invalid_entry_hex_encoding(
         "-/74='4,.=4-=235m-0   34.6-3",
         OPERATION_ENCODED,
@@ -284,57 +285,70 @@ mod tests {
         OPERATION_ENCODED,
         "invalid hex encoding in entry"
     )]
-    // This shouldn't actually panic....
+    // TODO: This shouldn't actually panic....
     #[should_panic(expected = "InvalidLinks")]
     #[case::should_not_have_skiplink(
-        &{entry_signed_encoded(entry(1, 1, None, Some(random_hash()), Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))), random_key_pair()).as_str().to_owned()},
+        &{entry_signed_encoded(entry(1, 1, None, Some(random_hash()), Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))), key_pair(DEFAULT_PRIVATE_KEY)).as_str().to_owned()},
         OPERATION_ENCODED,
-        ""
+        "InvalidLinks"
     )]
-    // This shouldn't actually panic....
+    // TODO: This shouldn't actually panic....
     #[should_panic(expected = "InvalidLinks")]
     #[case::should_not_have_backlink(
-            &{entry_signed_encoded(entry(1, 1, Some(random_hash()), None, Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))), random_key_pair()).as_str().to_owned()},
-            OPERATION_ENCODED,
-            ""
-        )]
-    // This shouldn't actually panic....
+        &{entry_signed_encoded(entry(1, 1, Some(random_hash()), None, Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))), key_pair(DEFAULT_PRIVATE_KEY)).as_str().to_owned()},
+        OPERATION_ENCODED,
+        "InvalidLinks"
+    )]
+    // TODO: This shouldn't actually panic....
     #[should_panic(expected = "InvalidLinks")]
     #[case::should_not_have_backlink_or_skiplink(
-                &{entry_signed_encoded(entry(1, 1, Some(random_hash()), Some(random_hash()), Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))), random_key_pair()).as_str().to_owned()},
-                OPERATION_ENCODED,
-                ""
-            )]
-    // This shouldn't actually panic....
+        &{entry_signed_encoded(entry(1, 1, Some(random_hash()), Some(random_hash()), Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))), key_pair(DEFAULT_PRIVATE_KEY)).as_str().to_owned()},
+        OPERATION_ENCODED,
+        "InvalidLinks"
+    )]
+    // TODO: This shouldn't actually panic....
     #[should_panic(expected = "InvalidLinks")]
     #[case::missing_backlink(
-        &{entry_signed_encoded(entry(2, 1, None, None, Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))), random_key_pair()).as_str().to_owned()},
+        &{entry_signed_encoded(entry(2, 1, None, None, Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))), key_pair(DEFAULT_PRIVATE_KEY)).as_str().to_owned()},
         OPERATION_ENCODED,
-        ""
+        "InvalidLinks"
     )]
-    // This shouldn't actually panic....
+    // TODO: This shouldn't actually panic....
     #[should_panic(expected = "InvalidLinks")]
     #[case::missing_skiplink(
-            &{entry_signed_encoded(entry(8, 1, Some(random_hash()), None, Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))), random_key_pair()).as_str().to_owned()},
-            OPERATION_ENCODED,
-            ""
-        )]
-    // This shouldn't actually panic....
-    #[should_panic(expected = "InvalidLinks")]
-    #[case::backlink_and_skiplink_not_in_db(
-            &{entry_signed_encoded(entry(8, 1, Some(random_hash()), Some(random_hash()), Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))), random_key_pair()).as_str().to_owned()},
-            OPERATION_ENCODED,
-            ""
-        )]
-    #[case::seq_two_before_one(
-        &{entry_signed_encoded(entry(2, 1, Some(random_hash()), None, Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))), random_key_pair()).as_str().to_owned()},
+        &{entry_signed_encoded(entry(8, 1, Some(random_hash()), None, Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))), key_pair(DEFAULT_PRIVATE_KEY)).as_str().to_owned()},
         OPERATION_ENCODED,
-        "Could not find expected backlink in database for entry with id:"
+        "InvalidLinks"
     )]
-    #[case::previous_operations_do_not_exist(
-        &{entry_signed_encoded(entry(1, 1, None, None, Some(operation(Some(operation_fields(vec![("silly", OperationValue::Text("Sausage".to_string()))])), Some(document_view_id(vec![DEFAULT_HASH])), None))), random_key_pair()).as_str().to_owned()},
-        &{operation_encoded(Some(operation_fields(vec![("silly", OperationValue::Text("Sausage".to_string()))])), Some(document_view_id(vec![DEFAULT_HASH])), None).as_str().to_owned()},
-        "POOP"
+    #[case::backlink_and_skiplink_not_in_db(
+        &{entry_signed_encoded(entry(8, 1, Some(DEFAULT_HASH.parse().unwrap()), Some(DEFAULT_HASH.parse().unwrap()), Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))), key_pair(DEFAULT_PRIVATE_KEY)).as_str().to_owned()},
+        OPERATION_ENCODED,
+        "Could not find expected backlink in database for entry with id: <Hash 1bbde6>"
+    )]
+    #[case::backlink_not_in_db(
+        &{entry_signed_encoded(entry(2, 1, Some(DEFAULT_HASH.parse().unwrap()), None, Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))), key_pair(DEFAULT_PRIVATE_KEY)).as_str().to_owned()},
+        OPERATION_ENCODED,
+        "Could not find expected backlink in database for entry with id: <Hash d3832b>"
+    )]
+    #[case::previous_operations_not_in_db(
+        &{entry_signed_encoded(entry(1, 1, None, None, Some(operation(Some(operation_fields(vec![("silly", OperationValue::Text("Sausage".to_string()))])), Some(DEFAULT_HASH.parse().unwrap()), None))), key_pair(DEFAULT_PRIVATE_KEY)).as_str().to_owned()},
+        &{operation_encoded(Some(operation_fields(vec![("silly", OperationValue::Text("Sausage".to_string()))])), Some(DEFAULT_HASH.parse().unwrap()), None).as_str().to_owned()},
+        "Could not find document for entry in database with id: <Hash f03236>"
+    )]
+    #[case::create_operation_with_previous_operations(
+        &{entry_signed_encoded(entry(1, 1, None, None, Some(Operation::from(&OperationEncoded::new(CREATE_OPERATION_WITH_PREVIOUS_OPS).unwrap()))), key_pair(DEFAULT_PRIVATE_KEY)).as_str().to_owned()},
+        CREATE_OPERATION_WITH_PREVIOUS_OPS,
+        "previous_operations field should be empty"
+    )]
+    #[case::update_operation_no_previous_operations(
+        &{entry_signed_encoded(entry(1, 1, None, None, Some(Operation::from(&OperationEncoded::new(UPDATE_OPERATION_NO_PREVIOUS_OPS).unwrap()))), key_pair(DEFAULT_PRIVATE_KEY)).as_str().to_owned()},
+        UPDATE_OPERATION_NO_PREVIOUS_OPS,
+        "previous_operations field can not be empty"
+    )]
+    #[case::delete_operation_no_previous_operations(
+        &{entry_signed_encoded(entry(1, 1, None, None, Some(Operation::from(&OperationEncoded::new(DELETE_OPERATION_NO_PREVIOUS_OPS).unwrap()))), key_pair(DEFAULT_PRIVATE_KEY)).as_str().to_owned()},
+        DELETE_OPERATION_NO_PREVIOUS_OPS,
+        "previous_operations field can not be empty"
     )]
     #[tokio::test]
     async fn invalid_requests_fail(
@@ -365,12 +379,10 @@ mod tests {
 
         let response = response.json::<serde_json::Value>().await;
         for error in response.get("errors").unwrap().as_array().unwrap() {
-            assert!(error
-                .get("message")
-                .unwrap()
-                .as_str()
-                .unwrap()
-                .contains(expected_error_message))
+            assert_eq!(
+                error.get("message").unwrap().as_str().unwrap(),
+                expected_error_message
+            )
         }
     }
 }
