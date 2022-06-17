@@ -99,6 +99,16 @@ impl<IN> Task<IN> {
     pub fn new(worker_name: &str, input: IN) -> Self {
         Self(worker_name.into(), input)
     }
+
+    /// Returns worker name of task;
+    pub fn worker_name(&self) -> &WorkerName {
+        &self.0
+    }
+
+    /// Returns task input;
+    pub fn input(&self) -> &IN {
+        &self.1
+    }
 }
 
 /// Return value of every processed task indicating if it succeeded or failed.

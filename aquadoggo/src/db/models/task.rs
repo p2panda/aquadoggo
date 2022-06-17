@@ -13,8 +13,8 @@ pub struct TaskRow {
     pub name: String,
 
     /// `DocumentId` of the task input.
-    pub document_id: String,
+    pub document_id: Option<String>,
 
     /// `DocumentViewId` of the task input.
-    pub document_view_id: String,
+    pub document_view_id: Option<String>,
 }
