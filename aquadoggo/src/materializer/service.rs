@@ -41,6 +41,8 @@ pub async fn materializer_service(
     let mut on_update = factory.on_update();
     let store = context.store.clone();
 
+    // Keep track of status changes and persist it in the database. This allows us to pick up
+    // uncompleted tasks next time we come back here.
     let status_handle = task::spawn(async move {
         loop {
             match on_update.recv().await {
@@ -48,19 +50,16 @@ pub async fn materializer_service(
                     store
                         .insert_task(&task)
                         .await
-                        // @TODO
-                        .expect("Failed inserting task");
+                        .expect("Failed inserting pending task into database");
                 }
                 Ok(TaskStatus::Completed(task)) => {
                     store
                         .remove_task(&task)
                         .await
-                        // @TODO
-                        .expect("Failed removing task");
+                        .expect("Failed removing completed task from database");
                 }
-                Err(_) => {
-                    // @TODO
-                    panic!("Failed")
+                Err(err) => {
+                    panic!("Failed receiving task status updates: {}", err)
                 }
             }
         }
@@ -116,6 +115,9 @@ pub async fn materializer_service(
         _ = shutdown => (),
         _ = on_error => (),
     }
+
+    // @TODO: Wait until all pending tasks have been completed. Related issue:
+    // https://github.com/p2panda/aquadoggo/issues/164
 
     Ok(())
 }
