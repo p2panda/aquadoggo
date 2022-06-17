@@ -38,7 +38,7 @@ impl SqlStorage {
 
         // If yes, we are already done here
         if task_row.is_some() {
-            return Ok(())
+            return Ok(());
         }
 
         // Insert task into database
