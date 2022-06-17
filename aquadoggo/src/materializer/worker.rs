@@ -128,7 +128,7 @@ pub enum TaskError {
 }
 
 /// Enum representing status of a task.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum TaskStatus<IN> {
     /// Task just got scheduled and waiting to be processed.
     Pending(Task<IN>),
@@ -483,12 +483,14 @@ where
                         }
                     }
 
-                    // .. check the task result ..
+                    // Trigger status update when successful
+                    if result.is_ok() {
+                        on_complete(item.input());
+                    }
+
+                    // Check the result
                     match result {
                         Ok(Some(list)) => {
-                            // Trigger status update
-                            on_complete(item.input());
-
                             // Tasks succeeded and dispatches new, subsequent tasks
                             for task in list {
                                 if let Err(err) = tx.send(task) {
@@ -522,7 +524,7 @@ mod tests {
     use rand::seq::SliceRandom;
     use rand::Rng;
 
-    use super::{Factory, Task, TaskError, TaskResult};
+    use super::{Factory, Task, TaskError, TaskResult, TaskStatus};
 
     #[tokio::test]
     async fn factory() {
@@ -564,6 +566,44 @@ mod tests {
         assert_eq!(database.lock().unwrap().len(), 8);
         assert!(factory.is_empty("first"));
         assert!(factory.is_empty("second"));
+    }
+
+    #[tokio::test]
+    async fn on_update_subscription() {
+        type Input = usize;
+        type Data = usize;
+
+        // Initialise factory
+        let mut factory = Factory::<Input, Data>::new(1, 1024);
+
+        // Record all status changes in this array
+        let messages: Arc<Mutex<Vec<TaskStatus<Input>>>> = Arc::new(Mutex::new(Vec::new()));
+
+        // Subscribe to updates and record them
+        let mut on_update = factory.on_update();
+        let messages_clone = messages.clone();
+        tokio::task::spawn(async move {
+            loop {
+                let message = on_update.recv().await.unwrap();
+                messages_clone.lock().unwrap().push(message);
+            }
+        });
+
+        // Define worker and register it
+        factory.register("test", 1, |_, _| async { Ok(None) });
+
+        // Queue a couple of tasks
+        for i in 0..3 {
+            factory.queue(Task::new("test", i));
+        }
+
+        // Wait until work was done ..
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(factory.is_empty("test"));
+
+        // We expect a total of 6 recorded status messages: 3 tasks have been scheduled, and 3
+        // completed
+        assert_eq!(messages.lock().unwrap().len(), 6);
     }
 
     #[tokio::test]
