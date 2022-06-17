@@ -145,8 +145,8 @@ impl SqlStorage {
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::document::DocumentViewId;
-    use p2panda_rs::test_utils::fixtures::document_view_id;
+    use p2panda_rs::document::{DocumentId, DocumentViewId};
+    use p2panda_rs::test_utils::fixtures::{document_id, document_view_id};
     use rstest::rstest;
 
     use crate::db::stores::test_utils::{test_db, TestSqlStore};
@@ -180,5 +180,31 @@ mod tests {
         // Check if all tasks got removed
         let result = db.store.get_tasks().await;
         assert_eq!(result.unwrap(), vec![]);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn avoid_duplicates(
+        document_id: DocumentId,
+        #[from(test_db)]
+        #[future]
+        db: TestSqlStore,
+    ) {
+        let db = db.await;
+
+        // Prepare test data
+        let task = Task::new("reduce", TaskInput::new(Some(document_id), None));
+
+        // Insert task
+        let result = db.store.insert_task(&task).await;
+        assert!(result.is_ok(), "{:?}", result);
+
+        // Insert the same thing again, it should silently fail
+        let result = db.store.insert_task(&task).await;
+        assert!(result.is_ok(), "{:?}", result);
+
+        // Check for duplicates
+        let result = db.store.get_tasks().await;
+        assert_eq!(result.unwrap().len(), 1);
     }
 }
