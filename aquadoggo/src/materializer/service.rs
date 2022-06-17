@@ -112,12 +112,12 @@ pub async fn materializer_service(
     tokio::select! {
         _ = handle => (),
         _ = status_handle => (),
-        _ = shutdown => (),
+        _ = shutdown => {
+            // @TODO: Wait until all pending tasks have been completed during graceful shutdown.
+            // Related issue: https://github.com/p2panda/aquadoggo/issues/164
+        },
         _ = on_error => (),
     }
-
-    // @TODO: Wait until all pending tasks have been completed. Related issue:
-    // https://github.com/p2panda/aquadoggo/issues/164
 
     Ok(())
 }
