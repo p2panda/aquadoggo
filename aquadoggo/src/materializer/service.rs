@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use anyhow::Result;
+use log::debug;
 use p2panda_rs::storage_provider::traits::OperationStore;
 use tokio::task;
 
@@ -14,10 +15,10 @@ use crate::materializer::TaskInput;
 const CHANNEL_CAPACITY: usize = 1024;
 
 /// The materializer service waits for incoming new operations to transform them into actual useful
-/// application and system data, like document views or schemas.
+/// application- and system data, like document views or schemas.
 ///
 /// Internally the service uses a task queue which gives us the right architecture to deal with
-/// operations coming in random order and avoid race-conditions which would occure otherwise when
+/// operations coming in random order and avoid race-conditions which would occur otherwise when
 /// working on the same data in separate threads.
 pub async fn materializer_service(
     context: Context,
@@ -40,7 +41,9 @@ pub async fn materializer_service(
     let mut rx = tx.subscribe();
 
     // Reschedule tasks from last time which did not complete
-    pending_tasks().await?.iter().for_each(|task| {
+    let tasks = pending_tasks().await?;
+    debug!("Dispatch {} pending tasks from last runtime", tasks.len());
+    tasks.iter().for_each(|task| {
         factory.queue(task.to_owned());
     });
 
