@@ -85,6 +85,7 @@ mod tests {
     use tokio::sync::broadcast;
 
     use crate::bus::ServiceMessage;
+    use crate::db::stores::test_utils::{test_db, TestSqlStore};
     use crate::graphql::client::PublishEntryResponse;
     use crate::http::{build_server, HttpServiceContext};
     use crate::test_helpers::{initialize_store, TestClient};
@@ -114,8 +115,8 @@ mod tests {
 
     #[fixture]
     fn publish_entry_request(
-        #[default(Some(ENTRY_ENCODED))] entry_encoded: Option<&str>,
-        #[default(Some(OPERATION_ENCODED))] operation_encoded: Option<&str>,
+        #[default(ENTRY_ENCODED)] entry_encoded: &str,
+        #[default(OPERATION_ENCODED)] operation_encoded: &str,
     ) -> Request {
         // Prepare GraphQL mutation publishing an entry
         let parameters = Variables::from_value(value!({
@@ -226,5 +227,43 @@ mod tests {
                 }
             })
         );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    #[case("adf", "", "invalid hex encoding in entry")]
+    async fn invalid_requests_fail(
+        #[case] entry_encoded: &str,
+        #[case] operation_encoded: &str,
+        #[case] expected_error_message: &str,
+        #[future]
+        #[from(test_db)]
+        db: TestSqlStore,
+    ) {
+        let db = db.await;
+
+        let (tx, _rx) = broadcast::channel(16);
+        let context = HttpServiceContext::new(db.store, tx);
+        let client = TestClient::new(build_server(context));
+
+        let publish_entry_request = publish_entry_request(entry_encoded, operation_encoded);
+
+        let response = client
+            .post("/graphql")
+            .json(&json!({
+              "query": publish_entry_request.query,
+              "variables": publish_entry_request.variables
+            }
+            ))
+            .send()
+            .await;
+
+        let response = response.json::<serde_json::Value>().await;
+        for error in response.get("errors").unwrap().as_array().unwrap() {
+            assert_eq!(
+                error.get("message").unwrap().as_str().unwrap(),
+                expected_error_message
+            )
+        }
     }
 }
