@@ -3,7 +3,7 @@
 use log::debug;
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::operation::{AsOperation, AsVerifiedOperation, OperationValue};
-use p2panda_rs::schema::{Schema, SchemaId};
+use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::OperationStore;
 
 use crate::context::Context;
