@@ -93,10 +93,12 @@ pub async fn materializer_service(
                 .store
                 .get_document_by_operation_id(&operation_id)
                 .await
-                .expect(&format!(
-                    "Failed database query when retreiving document for operation_id {}",
-                    operation_id
-                )) {
+                .unwrap_or_else(|_| {
+                    panic!(
+                        "Failed database query when retreiving document for operation_id {}",
+                        operation_id
+                    )
+                }) {
                 Some(document_id) => {
                     // Dispatch "reduce" task which will materialize the regarding document
                     factory.queue(Task::new("reduce", TaskInput::new(Some(document_id), None)));

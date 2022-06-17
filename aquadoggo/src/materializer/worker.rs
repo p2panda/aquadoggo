@@ -379,12 +379,11 @@ where
 
         task::spawn(async move {
             // Inform status subscribers that we've just scheduled a new task
-            let on_pending = |task: Task<IN>| match tx_status.send(TaskStatus::Pending(task)) {
-                Err(err) => {
+            let on_pending = |task: Task<IN>| {
+                if let Err(err) = tx_status.send(TaskStatus::Pending(task)) {
                     error!("Error while sending task status: {}", err);
                     error_signal.trigger();
                 }
-                _ => (),
             };
 
             loop {
@@ -458,14 +457,12 @@ where
 
             task::spawn(async move {
                 // Inform status subscribers that we just completed a task
-                let on_complete = |input: IN| match tx_status
-                    .send(TaskStatus::Completed(Task::new(&name, input)))
-                {
-                    Err(err) => {
+                let on_complete = |input: IN| {
+                    if let Err(err) = tx_status.send(TaskStatus::Completed(Task::new(&name, input)))
+                    {
                         error!("Error while sending task status: {}", err);
                         error_signal.trigger();
                     }
-                    _ => (),
                 };
 
                 loop {
