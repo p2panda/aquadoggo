@@ -197,8 +197,8 @@ mod tests {
 
     #[rstest]
     #[tokio::test]
-    async fn post_gql_mutation() {
-        let (tx, _) = broadcast::channel(16);
+    async fn post_gql_mutation(publish_entry_request: Request) {
+        let (tx, _rx) = broadcast::channel(16);
         let store = initialize_store().await;
         let context = HttpServiceContext::new(store, tx);
         let client = TestClient::new(build_server(context));
@@ -206,26 +206,25 @@ mod tests {
         let response = client
             .post("/graphql")
             .json(&json!({
-              "query": "mutation TestPublishEntry($entryEncoded: String!, $operationEncoded: String!) {
-                publishEntry(entryEncoded: $entryEncoded, operationEncoded: $operationEncoded) {
-                    logId,
-                    seqNum,
-                    backlink,
-                    skiplink
-                }
-            }",
-              "variables": {"entryEncoded": ENTRY_ENCODED, "operationEncoded": OPERATION_ENCODED}
+              "query": publish_entry_request.query,
+              "variables": publish_entry_request.variables
             }
             ))
             .send()
             .await;
 
         assert_eq!(
-            response.text().await,
+            response.json::<serde_json::Value>().await,
             json!({
-                "data": "..."
+                "data": {
+                    "publishEntry": {
+                        "logId":"1",
+                        "seqNum":"2",
+                        "backlink":"00201c221b573b1e0c67c5e2c624a93419774cdf46b3d62414c44a698df1237b1c16",
+                        "skiplink":null
+                    }
+                }
             })
-            .to_string()
         );
     }
 }
