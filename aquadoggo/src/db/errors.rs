@@ -8,10 +8,13 @@ use p2panda_rs::schema::{SchemaError, SchemaIdError};
 #[derive(thiserror::Error, Debug)]
 pub enum SqlStorageError {
     #[error("SQL query failed: {0}")]
-    TransactionFailed(String),
+    Transaction(String),
 
     #[error("Insertion of row into table {0} did not show any effect")]
-    InsertionFailed(String),
+    Insertion(String),
+
+    #[error("Deletion of row from table {0} did not show any effect")]
+    Deletion(String),
 }
 
 /// `DocumentStore` errors.

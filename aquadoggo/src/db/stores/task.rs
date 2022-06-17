@@ -19,7 +19,7 @@ impl SqlStorage {
         let document_view_id = task_input
             .document_view_id
             .as_ref()
-            .map(|view_id| view_id.to_string());
+            .map(|view_id| view_id.as_str());
 
         // Insert task into database
         let result = query(
@@ -39,10 +39,10 @@ impl SqlStorage {
         .bind(document_view_id)
         .execute(&self.pool)
         .await
-        .map_err(|err| SqlStorageError::TransactionFailed(err.to_string()))?;
+        .map_err(|err| SqlStorageError::Transaction(err.to_string()))?;
 
         if result.rows_affected() != 1 {
-            Err(SqlStorageError::InsertionFailed("tasks".into()))
+            Err(SqlStorageError::Insertion("tasks".into()))
         } else {
             Ok(())
         }
@@ -56,18 +56,17 @@ impl SqlStorage {
         let document_view_id = task_input
             .document_view_id
             .as_ref()
-            .map(|view_id| view_id.to_string());
+            .map(|view_id| view_id.as_str());
 
         // Remove task from database
-        query(
+        let result = query(
             "
-            DELETE
-            FROM
+            DELETE FROM
                 tasks
             WHERE
-                name = $1
-                    AND document_id = $2
-                    AND document_view_id = $3
+                name IS $1
+                AND document_id IS $2
+                AND document_view_id IS $3
             ",
         )
         .bind(task.worker_name())
@@ -75,9 +74,13 @@ impl SqlStorage {
         .bind(document_view_id)
         .execute(&self.pool)
         .await
-        .map_err(|err| SqlStorageError::TransactionFailed(err.to_string()))?;
+        .map_err(|err| SqlStorageError::Transaction(err.to_string()))?;
 
-        Ok(())
+        if result.rows_affected() != 1 {
+            Err(SqlStorageError::Deletion("tasks".into()))
+        } else {
+            Ok(())
+        }
     }
 
     /// Returns "pending" tasks of the materialization service worker.
@@ -85,7 +88,7 @@ impl SqlStorage {
         let task_rows = query_as::<_, TaskRow>(
             "
             SELECT
-                name
+                name,
                 document_id,
                 document_view_id
             FROM
@@ -94,19 +97,20 @@ impl SqlStorage {
         )
         .fetch_all(&self.pool)
         .await
-        .map_err(|err| SqlStorageError::TransactionFailed(err.to_string()))?;
+        .map_err(|err| SqlStorageError::Transaction(err.to_string()))?;
 
         // Convert database rows into correct p2panda types
         let mut tasks: Vec<Task<TaskInput>> = Vec::new();
         for task in task_rows {
-            let document_id: Option<DocumentId> = task
-                .document_id
-                .map(|id| id.parse().expect("Invalid document id stored in database"));
+            let document_id: Option<DocumentId> = task.document_id.map(|id| {
+                id.parse()
+                    .unwrap_or_else(|_| panic!("Invalid document id stored in database {}", id))
+            });
 
             let document_view_id: Option<DocumentViewId> = task.document_view_id.map(|view_id| {
-                view_id
-                    .parse()
-                    .expect("Invalid document view id stored in database")
+                view_id.parse().unwrap_or_else(|_| {
+                    panic!("Invalid document view id stored in database: {}", view_id)
+                })
             });
 
             tasks.push(Task::new(
@@ -116,5 +120,45 @@ impl SqlStorage {
         }
 
         Ok(tasks)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use p2panda_rs::document::DocumentViewId;
+    use p2panda_rs::test_utils::fixtures::document_view_id;
+    use rstest::rstest;
+
+    use crate::db::stores::test_utils::{test_db, TestSqlStore};
+    use crate::materializer::{Task, TaskInput};
+
+    #[rstest]
+    #[tokio::test]
+    async fn insert_get_remove_tasks(
+        document_view_id: DocumentViewId,
+        #[from(test_db)]
+        #[future]
+        db: TestSqlStore,
+    ) {
+        let db = db.await;
+
+        // Prepare test data
+        let task = Task::new("reduce", TaskInput::new(None, Some(document_view_id)));
+
+        // Insert task
+        let result = db.store.insert_task(&task).await;
+        assert!(result.is_ok(), "{:?}", result);
+
+        // Check if task exists in database
+        let result = db.store.get_tasks().await;
+        assert_eq!(result.unwrap(), vec![task.clone()]);
+
+        // Remove task
+        let result = db.store.remove_task(&task).await;
+        assert!(result.is_ok(), "{:?}", result);
+
+        // Check if all tasks got removed
+        let result = db.store.get_tasks().await;
+        assert_eq!(result.unwrap(), vec![]);
     }
 }
