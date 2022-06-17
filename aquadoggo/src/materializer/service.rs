@@ -13,6 +13,12 @@ use crate::materializer::TaskInput;
 
 const CHANNEL_CAPACITY: usize = 1024;
 
+/// The materializer service waits for incoming new operations to transform them into actual useful
+/// application and system data, like document views or schemas.
+///
+/// Internally the service uses a task queue which gives us the right architecture to deal with
+/// operations coming in random order and avoid race-conditions which would occure otherwise when
+/// working on the same data in separate threads.
 pub async fn materializer_service(
     context: Context,
     shutdown: Shutdown,
@@ -32,6 +38,11 @@ pub async fn materializer_service(
 
     // Subscribe to communication bus
     let mut rx = tx.subscribe();
+
+    // Reschedule tasks from last time which did not complete
+    pending_tasks().await?.iter().for_each(|task| {
+        factory.queue(task.to_owned());
+    });
 
     // Listen to incoming new entries and operations and move them into task queue
     let handle = task::spawn(async move {
@@ -66,4 +77,13 @@ pub async fn materializer_service(
     }
 
     Ok(())
+}
+
+/// Retreives a list of pending tasks from the database and returns them as inputs for the task
+/// queue.
+///
+/// This list represents all tasks which were not completed during the last runtime, as the node
+/// exited before.
+async fn pending_tasks() -> Result<Vec<Task<TaskInput>>> {
+    Ok(vec![])
 }
