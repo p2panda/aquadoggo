@@ -92,7 +92,7 @@ use triggered::{Listener, Trigger};
 /// A task holding a generic input value and the name of the worker which will process it
 /// eventually.
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Task<IN>(pub WorkerName, IN);
+pub struct Task<IN>(WorkerName, IN);
 
 impl<IN> Task<IN> {
     /// Returns a new task.
@@ -390,7 +390,7 @@ where
                 match rx.recv().await {
                     // A new task got announced in the broadcast channel!
                     Ok(task) => {
-                        if task.0 != name {
+                        if task.worker_name() != &name {
                             continue; // This is not for us ..
                         }
 
