@@ -589,21 +589,25 @@ mod tests {
             }
         });
 
-        // Define worker and register it
-        factory.register("test", 1, |_, _| async { Ok(None) });
+        // Define workers and register them
+        factory.register("one", 1, |_, input: Input| async move {
+            Ok(Some(vec![Task::new("two", input)]))
+        });
+        factory.register("two", 1, |_, _| async { Ok(None) });
 
         // Queue a couple of tasks
         for i in 0..3 {
-            factory.queue(Task::new("test", i));
+            factory.queue(Task::new("one", i));
         }
 
         // Wait until work was done ..
         tokio::time::sleep(Duration::from_millis(100)).await;
-        assert!(factory.is_empty("test"));
+        assert!(factory.is_empty("one"));
 
-        // We expect a total of 6 recorded status messages: 3 tasks have been scheduled, and 3
-        // completed
-        assert_eq!(messages.lock().unwrap().len(), 6);
+        // We expect a total of 12 recorded status messages:
+        // - 3x "one" and 3x "two" tasks have been scheduled
+        // - 3x "one" and 3x "two" tasks have been completed
+        assert_eq!(messages.lock().unwrap().len(), 12);
     }
 
     #[tokio::test]
