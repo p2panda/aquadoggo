@@ -65,9 +65,12 @@ impl ClientMutationRoot {
 
                 // Send new operation on service communication bus, this will arrive eventually at
                 // the materializer service
-                tx.send(ServiceMessage::NewOperation(
+                if let Err(_) = tx.send(ServiceMessage::NewOperation(
                     verified_operation.operation_id().to_owned(),
-                ))?;
+                )) {
+                    // Silently fail here as we don't mind if there are no subscribers. We have
+                    // tests in other places to check if messages arrive.
+                }
 
                 Ok(response)
             }
