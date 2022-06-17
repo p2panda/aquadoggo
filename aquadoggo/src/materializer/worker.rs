@@ -380,7 +380,7 @@ where
         task::spawn(async move {
             // Inform status subscribers that we've just scheduled a new task
             let on_pending = |task: Task<IN>| {
-                if let Err(_) = tx_status.send(TaskStatus::Pending(task)) {
+                if tx_status.send(TaskStatus::Pending(task)).is_err() {
                     // Silently fail here since an error only occurs here when there are no
                     // subscribers, but we don't mind that.
                 }
@@ -459,7 +459,7 @@ where
                 // Inform status subscribers that we just completed a task
                 let on_complete = |input: IN| {
                     let status = TaskStatus::Completed(Task::new(&name, input));
-                    if let Err(_) = tx_status.send(status) {
+                    if tx_status.send(status).is_err() {
                         // Silently fail here since an error only occurs here when there are no
                         // subscribers, but we don't mind that.
                     }
