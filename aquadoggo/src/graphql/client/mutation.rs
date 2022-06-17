@@ -78,10 +78,15 @@ impl ClientMutationRoot {
 
 #[cfg(test)]
 mod tests {
+    use std::convert::TryFrom;
+
     use async_graphql::{from_value, value, Request, Value, Variables};
+    use bamboo_rs_core_ed25519_yasmf::entry::is_lipmaa_required;
     use p2panda_rs::entry::{EntrySigned, LogId, SeqNum};
+    use p2panda_rs::identity::Author;
     use p2panda_rs::operation::{Operation, OperationEncoded, OperationValue};
-    use p2panda_rs::test_utils::constants::{DEFAULT_HASH, DEFAULT_PRIVATE_KEY};
+    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
+    use p2panda_rs::test_utils::constants::{DEFAULT_HASH, DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
     use p2panda_rs::test_utils::fixtures::{
         entry, entry_signed_encoded, key_pair, operation, operation_encoded, operation_fields,
         random_hash,
@@ -383,6 +388,113 @@ mod tests {
                 error.get("message").unwrap().as_str().unwrap(),
                 expected_error_message
             )
+        }
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn publish_many_entries(
+        #[from(test_db)]
+        #[future]
+        #[with(100, 1, true, TEST_SCHEMA_ID.parse().unwrap())]
+        db: TestSqlStore,
+    ) {
+        // test db populated with 100 entries.
+        let populated_db = db.await;
+        // Get the author.
+        let author = Author::try_from(
+            populated_db
+                .key_pairs
+                .first()
+                .unwrap()
+                .public_key()
+                .to_owned(),
+        )
+        .unwrap();
+
+        // Setup the server and client with a new empty store.
+        let (tx, _rx) = broadcast::channel(16);
+        let store = initialize_store().await;
+        let context = HttpServiceContext::new(store, tx);
+        let client = TestClient::new(build_server(context));
+
+        // Get the entries from the prepopulated store.
+        let mut entries = populated_db
+            .store
+            .get_entries_by_schema(&TEST_SCHEMA_ID.parse().unwrap())
+            .await
+            .unwrap();
+
+        // Sort them by seq_num.
+        entries.sort_by_key(|entry| entry.seq_num().as_u64());
+
+        for entry in entries {
+            // Prepare a publish entry request for each entry.
+            let publish_entry_request = publish_entry_request(
+                entry.entry_signed().as_str(),
+                entry.operation_encoded().unwrap().as_str(),
+            );
+
+            // Publish the entry and parse response.
+            let response = client
+                .post("/graphql")
+                .json(&json!({
+                  "query": publish_entry_request.query,
+                  "variables": publish_entry_request.variables
+                }
+                ))
+                .send()
+                .await;
+
+            let response = response.json::<serde_json::Value>().await;
+            let publish_entry_response = response.get("data").unwrap().get("publishEntry").unwrap();
+
+            // Calculate the skiplink we expect in the repsonse.
+            let next_seq_num = entry.seq_num().next().unwrap();
+            let skiplink_seq_num = next_seq_num.skiplink_seq_num();
+            let skiplink_entry = match skiplink_seq_num {
+                Some(seq_num) if is_lipmaa_required(next_seq_num.as_u64()) => populated_db
+                    .store
+                    .get_entry_at_seq_num(&author, &entry.log_id(), &seq_num)
+                    .await
+                    .unwrap()
+                    .map(|entry| entry.hash().as_str().to_owned()),
+                _ => None,
+            };
+
+            // Assert the returned log_id, seq_num, backlink and skiplink match our expectations.
+            assert_eq!(
+                publish_entry_response
+                    .get("logId")
+                    .unwrap()
+                    .as_str()
+                    .unwrap(),
+                "1"
+            );
+            assert_eq!(
+                publish_entry_response
+                    .get("seqNum")
+                    .unwrap()
+                    .as_str()
+                    .unwrap(),
+                next_seq_num.as_u64().to_string()
+            );
+            assert_eq!(
+                publish_entry_response
+                    .get("skiplink")
+                    .unwrap()
+                    .as_str()
+                    .map(|hash| hash.to_string()),
+                skiplink_entry
+            );
+            assert_eq!(
+                publish_entry_response
+                    .get("backlink")
+                    .unwrap()
+                    .as_str()
+                    .unwrap(),
+                entry.hash().as_str()
+            );
         }
     }
 }
