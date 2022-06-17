@@ -497,4 +497,55 @@ mod tests {
             );
         }
     }
+
+    #[rstest]
+    #[tokio::test]
+    async fn duplicate_publishing_of_entries(
+        #[from(test_db)]
+        #[future]
+        #[with(1, 1, false, TEST_SCHEMA_ID.parse().unwrap())]
+        db: TestSqlStore,
+    ) {
+        let populated_db = db.await;
+
+        let (tx, _rx) = broadcast::channel(16);
+        let context = HttpServiceContext::new(populated_db.store.clone(), tx);
+        let client = TestClient::new(build_server(context));
+
+        // Get the entries from the prepopulated store.
+        let mut entries = populated_db
+            .store
+            .get_entries_by_schema(&TEST_SCHEMA_ID.parse().unwrap())
+            .await
+            .unwrap();
+
+        // Sort them by seq_num.
+        entries.sort_by_key(|entry| entry.seq_num().as_u64());
+
+        let duplicate_entry = entries.first().unwrap();
+
+        // Prepare a publish entry request for each entry.
+        let publish_entry_request = publish_entry_request(
+            duplicate_entry.entry_signed().as_str(),
+            duplicate_entry.operation_encoded().unwrap().as_str(),
+        );
+
+        // Publish the entry and parse response.
+        let response = client
+            .post("/graphql")
+            .json(&json!({
+              "query": publish_entry_request.query,
+              "variables": publish_entry_request.variables
+            }
+            ))
+            .send()
+            .await;
+
+        let response = response.json::<serde_json::Value>().await;
+
+        // TODO: I think we'd like a nicer error message here.
+        for error in response.get("errors").unwrap().as_array().unwrap() {
+            assert_eq!(error.get("message").unwrap().as_str().unwrap(), "Error occured during `LogStorage` request in storage provider: error returned from database: UNIQUE constraint failed: logs.author, logs.log_id")
+        }
+    }
 }
