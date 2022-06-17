@@ -80,6 +80,12 @@ impl ClientMutationRoot {
 mod tests {
     use async_graphql::{from_value, value, Request, Value, Variables};
     use p2panda_rs::entry::{EntrySigned, LogId, SeqNum};
+    use p2panda_rs::operation::{Operation, OperationEncoded, OperationValue};
+    use p2panda_rs::test_utils::constants::DEFAULT_HASH;
+    use p2panda_rs::test_utils::fixtures::{
+        document_view_id, entry, entry_signed_encoded, operation, operation_encoded,
+        operation_fields, random_hash, random_key_pair,
+    };
     use rstest::{fixture, rstest};
     use serde_json::json;
     use tokio::sync::broadcast;
@@ -230,8 +236,107 @@ mod tests {
     }
 
     #[rstest]
+    // TODO: This shouldn't actually panic....
+    // The error is `DecodeInputIsLengthZero`
+    #[should_panic]
+    #[case::no_entry("", "", "invalid hex encoding in entry")]
+    // TODO: This shouldn't actually panic....
+    // The error is `DecodeAuthorError`
+    #[should_panic]
+    #[case::invalid_entry_bytes("AB01", "", "")]
+    #[case::invalid_entry_hex_encoding(
+        "-/74='4,.=4-=235m-0   34.6-3",
+        "",
+        "invalid hex encoding in entry"
+    )]
+    #[case::invalid_entry_hex_encoding(
+        "-/74='4,.=4-=235m-0   34.6-3",
+        OPERATION_ENCODED,
+        "invalid hex encoding in entry"
+    )]
+    #[case::no_operation(
+        ENTRY_ENCODED,
+        "",
+        "operation needs to match payload hash of encoded entry"
+    )]
+    #[case::invalid_operation_bytes(
+        ENTRY_ENCODED,
+        "AB01",
+        "operation needs to match payload hash of encoded entry"
+    )]
+    #[case::invalid_operation_hex_encoding(
+        ENTRY_ENCODED,
+        "0-25.-%5930n3544[{{{   @@@",
+        "invalid hex encoding in operation"
+    )]
+    #[case::operation_does_not_match(
+        ENTRY_ENCODED,
+        &{operation_encoded(Some(operation_fields(vec![("silly", OperationValue::Text("Sausage".to_string()))])), None, None).as_str().to_owned()},
+        "operation needs to match payload hash of encoded entry"
+    )]
+    #[case::valid_entry_with_extra_hex_char_at_end(
+        &{ENTRY_ENCODED.to_string() + "A"},
+        OPERATION_ENCODED,
+        "invalid hex encoding in entry"
+    )]
+    #[case::valid_entry_with_extra_hex_char_at_start(
+        &{"A".to_string() + ENTRY_ENCODED},
+        OPERATION_ENCODED,
+        "invalid hex encoding in entry"
+    )]
+    // This shouldn't actually panic....
+    #[should_panic(expected = "InvalidLinks")]
+    #[case::should_not_have_skiplink(
+        &{entry_signed_encoded(entry(1, 1, None, Some(random_hash()), Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))), random_key_pair()).as_str().to_owned()},
+        OPERATION_ENCODED,
+        ""
+    )]
+    // This shouldn't actually panic....
+    #[should_panic(expected = "InvalidLinks")]
+    #[case::should_not_have_backlink(
+            &{entry_signed_encoded(entry(1, 1, Some(random_hash()), None, Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))), random_key_pair()).as_str().to_owned()},
+            OPERATION_ENCODED,
+            ""
+        )]
+    // This shouldn't actually panic....
+    #[should_panic(expected = "InvalidLinks")]
+    #[case::should_not_have_backlink_or_skiplink(
+                &{entry_signed_encoded(entry(1, 1, Some(random_hash()), Some(random_hash()), Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))), random_key_pair()).as_str().to_owned()},
+                OPERATION_ENCODED,
+                ""
+            )]
+    // This shouldn't actually panic....
+    #[should_panic(expected = "InvalidLinks")]
+    #[case::missing_backlink(
+        &{entry_signed_encoded(entry(2, 1, None, None, Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))), random_key_pair()).as_str().to_owned()},
+        OPERATION_ENCODED,
+        ""
+    )]
+    // This shouldn't actually panic....
+    #[should_panic(expected = "InvalidLinks")]
+    #[case::missing_skiplink(
+            &{entry_signed_encoded(entry(8, 1, Some(random_hash()), None, Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))), random_key_pair()).as_str().to_owned()},
+            OPERATION_ENCODED,
+            ""
+        )]
+    // This shouldn't actually panic....
+    #[should_panic(expected = "InvalidLinks")]
+    #[case::backlink_and_skiplink_not_in_db(
+            &{entry_signed_encoded(entry(8, 1, Some(random_hash()), Some(random_hash()), Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))), random_key_pair()).as_str().to_owned()},
+            OPERATION_ENCODED,
+            ""
+        )]
+    #[case::seq_two_before_one(
+        &{entry_signed_encoded(entry(2, 1, Some(random_hash()), None, Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))), random_key_pair()).as_str().to_owned()},
+        OPERATION_ENCODED,
+        "Could not find expected backlink in database for entry with id:"
+    )]
+    #[case::previous_operations_do_not_exist(
+        &{entry_signed_encoded(entry(1, 1, None, None, Some(operation(Some(operation_fields(vec![("silly", OperationValue::Text("Sausage".to_string()))])), Some(document_view_id(vec![DEFAULT_HASH])), None))), random_key_pair()).as_str().to_owned()},
+        &{operation_encoded(Some(operation_fields(vec![("silly", OperationValue::Text("Sausage".to_string()))])), Some(document_view_id(vec![DEFAULT_HASH])), None).as_str().to_owned()},
+        "POOP"
+    )]
     #[tokio::test]
-    #[case("adf", "", "invalid hex encoding in entry")]
     async fn invalid_requests_fail(
         #[case] entry_encoded: &str,
         #[case] operation_encoded: &str,
@@ -260,10 +365,12 @@ mod tests {
 
         let response = response.json::<serde_json::Value>().await;
         for error in response.get("errors").unwrap().as_array().unwrap() {
-            assert_eq!(
-                error.get("message").unwrap().as_str().unwrap(),
-                expected_error_message
-            )
+            assert!(error
+                .get("message")
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .contains(expected_error_message))
         }
     }
 }
