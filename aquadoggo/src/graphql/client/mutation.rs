@@ -80,6 +80,8 @@ impl ClientMutationRoot {
 mod tests {
     use async_graphql::{from_value, value, Request, Value, Variables};
     use p2panda_rs::entry::{EntrySigned, LogId, SeqNum};
+    use p2panda_rs::operation::OperationEncoded;
+    use rstest::{fixture, rstest};
     use tokio::sync::broadcast;
 
     use crate::bus::ServiceMessage;
@@ -110,21 +112,28 @@ mod tests {
             }
         }"#;
 
+    #[fixture]
+    fn publish_entry_request(
+        #[default(Some(ENTRY_ENCODED))] entry_encoded: Option<&str>,
+        #[default(Some(OPERATION_ENCODED))] operation_encoded: Option<&str>,
+    ) -> Request {
+        // Prepare GraphQL mutation publishing an entry
+        let parameters = Variables::from_value(value!({
+            "entryEncoded": entry_encoded,
+            "operationEncoded": operation_encoded,
+        }));
+
+        Request::new(PUBLISH_ENTRY_QUERY).variables(parameters)
+    }
+
+    #[rstest]
     #[tokio::test]
-    async fn publish_entry() {
+    async fn publish_entry(publish_entry_request: Request) {
         let (tx, _rx) = broadcast::channel(16);
         let store = initialize_store().await;
         let context = HttpServiceContext::new(store, tx);
 
-        // Prepare GraphQL mutation publishing an entry
-        let parameters = Variables::from_value(value!({
-            "entryEncoded": ENTRY_ENCODED,
-            "operationEncoded": OPERATION_ENCODED
-        }));
-
-        // Process mutation with given schema
-        let request = Request::new(PUBLISH_ENTRY_QUERY).variables(parameters);
-        let response = context.schema.execute(request).await;
+        let response = context.schema.execute(publish_entry_request).await;
         let received: PublishEntryResponse = match response.data {
             Value::Object(result_outer) => {
                 from_value(result_outer.get("publishEntry").unwrap().to_owned()).unwrap()
@@ -146,21 +155,14 @@ mod tests {
         assert_eq!(expected, received);
     }
 
+    #[rstest]
     #[tokio::test]
-    async fn sends_message_on_communication_bus() {
+    async fn sends_message_on_communication_bus(publish_entry_request: Request) {
         let (tx, mut rx) = broadcast::channel(16);
         let store = initialize_store().await;
         let context = HttpServiceContext::new(store, tx);
 
-        // Prepare GraphQL mutation publishing an entry
-        let parameters = Variables::from_value(value!({
-            "entryEncoded": ENTRY_ENCODED,
-            "operationEncoded": OPERATION_ENCODED
-        }));
-
-        // Process mutation with given schema
-        let request = Request::new(PUBLISH_ENTRY_QUERY).variables(parameters);
-        context.schema.execute(request).await;
+        context.schema.execute(publish_entry_request).await;
 
         // Find out hash of test entry to determine operation id
         let entry_encoded = EntrySigned::new(ENTRY_ENCODED).unwrap();
