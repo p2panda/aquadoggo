@@ -12,6 +12,10 @@ use crate::materializer::tasks::{dependency_task, reduce_task, schema_task};
 use crate::materializer::worker::{Factory, Task, TaskStatus};
 use crate::materializer::TaskInput;
 
+/// Capacity of the internal broadcast channels used inside the worker factory.
+///
+/// This gives an upper bound to maximum status messages and incoming tasks being moved into worker
+/// queues the channels can handle at once.
 const CHANNEL_CAPACITY: usize = 1024;
 
 /// The materializer service waits for incoming new operations to transform them into actual useful
@@ -42,11 +46,16 @@ pub async fn materializer_service(
     let store = context.store.clone();
 
     // Keep track of status changes and persist it in the database. This allows us to pick up
-    // uncompleted tasks next time we come back here.
+    // uncompleted tasks next time we start the node.
     let status_handle = task::spawn(async move {
         loop {
             match on_update.recv().await {
                 Ok(TaskStatus::Pending(task)) => {
+                    debug!(
+                        "Scheduled new task for worker {} with input {}",
+                        task.0, task.1
+                    );
+
                     store
                         .insert_task(&task)
                         .await
