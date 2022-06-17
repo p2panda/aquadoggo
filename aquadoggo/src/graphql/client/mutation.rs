@@ -80,14 +80,14 @@ impl ClientMutationRoot {
 mod tests {
     use async_graphql::{from_value, value, Request, Value, Variables};
     use p2panda_rs::entry::{EntrySigned, LogId, SeqNum};
-    use p2panda_rs::operation::OperationEncoded;
     use rstest::{fixture, rstest};
+    use serde_json::json;
     use tokio::sync::broadcast;
 
     use crate::bus::ServiceMessage;
     use crate::graphql::client::PublishEntryResponse;
-    use crate::http::HttpServiceContext;
-    use crate::test_helpers::initialize_store;
+    use crate::http::{build_server, HttpServiceContext};
+    use crate::test_helpers::{initialize_store, TestClient};
 
     const ENTRY_ENCODED: &str = "00bedabb435758855968b3e2de2aa1f653adfbb392fcf9cb2295a68b2eca3c\
                                  fb030101a200204b771d59d76e820cbae493682003e99b795e4e7c86a8d6b4\
@@ -192,6 +192,40 @@ mod tests {
         assert_eq!(
             "operation needs to match payload hash of encoded entry".to_string(),
             response.errors[0].to_string()
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn post_gql_mutation() {
+        let (tx, _) = broadcast::channel(16);
+        let store = initialize_store().await;
+        let context = HttpServiceContext::new(store, tx);
+        let client = TestClient::new(build_server(context));
+
+        let response = client
+            .post("/graphql")
+            .json(&json!({
+              "query": "mutation TestPublishEntry($entryEncoded: String!, $operationEncoded: String!) {
+                publishEntry(entryEncoded: $entryEncoded, operationEncoded: $operationEncoded) {
+                    logId,
+                    seqNum,
+                    backlink,
+                    skiplink
+                }
+            }",
+              "variables": {"entryEncoded": ENTRY_ENCODED, "operationEncoded": OPERATION_ENCODED}
+            }
+            ))
+            .send()
+            .await;
+
+        assert_eq!(
+            response.text().await,
+            json!({
+                "data": "..."
+            })
+            .to_string()
         );
     }
 }
