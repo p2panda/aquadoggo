@@ -51,11 +51,6 @@ pub async fn materializer_service(
         loop {
             match on_update.recv().await {
                 Ok(TaskStatus::Pending(task)) => {
-                    debug!(
-                        "Scheduled new task for worker {} with input {}",
-                        task.0, task.1
-                    );
-
                     store
                         .insert_task(&task)
                         .await
