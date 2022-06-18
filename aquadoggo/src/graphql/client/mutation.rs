@@ -88,8 +88,7 @@ mod tests {
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
     use p2panda_rs::test_utils::constants::{DEFAULT_HASH, DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
     use p2panda_rs::test_utils::fixtures::{
-        entry, entry_signed_encoded, key_pair, operation, operation_encoded, operation_fields,
-        random_hash,
+        entry_signed_encoded_unvalidated, key_pair, operation, operation_encoded, operation_fields,
     };
     use rstest::{fixture, rstest};
     use serde_json::json;
@@ -247,14 +246,8 @@ mod tests {
     }
 
     #[rstest]
-    // TODO: This shouldn't actually panic....
-    // The error is `DecodeInputIsLengthZero`
-    #[should_panic]
-    #[case::no_entry("", "", "DecodeInputIsLengthZero")]
-    // TODO: This shouldn't actually panic....
-    // The error is `DecodeAuthorError`
-    #[should_panic]
-    #[case::invalid_entry_bytes("AB01", "", "DecodeAuthorError")]
+    #[case::no_entry("", "", "Bytes to decode had length of 0")]
+    #[case::invalid_entry_bytes("AB01", "", "Could not decode author public key from bytes")]
     #[case::invalid_entry_hex_encoding(
         "-/74='4,.=4-=235m-0   34.6-3",
         OPERATION_ENCODED,
@@ -291,32 +284,32 @@ mod tests {
         "invalid hex encoding in entry"
     )]
     #[case::backlink_and_skiplink_not_in_db(
-        &{entry_signed_encoded(entry(8, 1, Some(DEFAULT_HASH.parse().unwrap()), Some(DEFAULT_HASH.parse().unwrap()), Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))), key_pair(DEFAULT_PRIVATE_KEY)).as_str().to_owned()},
+        &entry_signed_encoded_unvalidated(8, 1, Some(DEFAULT_HASH.parse().unwrap()), Some(DEFAULT_HASH.parse().unwrap()), Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())), key_pair(DEFAULT_PRIVATE_KEY)),
         OPERATION_ENCODED,
         "Could not find expected backlink in database for entry with id: <Hash 1bbde6>"
     )]
     #[case::backlink_not_in_db(
-        &{entry_signed_encoded(entry(2, 1, Some(DEFAULT_HASH.parse().unwrap()), None, Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))), key_pair(DEFAULT_PRIVATE_KEY)).as_str().to_owned()},
+        &entry_signed_encoded_unvalidated(2, 1, Some(DEFAULT_HASH.parse().unwrap()), None, Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())), key_pair(DEFAULT_PRIVATE_KEY)),
         OPERATION_ENCODED,
         "Could not find expected backlink in database for entry with id: <Hash d3832b>"
     )]
     #[case::previous_operations_not_in_db(
-        &{entry_signed_encoded(entry(1, 1, None, None, Some(operation(Some(operation_fields(vec![("silly", OperationValue::Text("Sausage".to_string()))])), Some(DEFAULT_HASH.parse().unwrap()), None))), key_pair(DEFAULT_PRIVATE_KEY)).as_str().to_owned()},
+        &entry_signed_encoded_unvalidated(1, 1, None, None, Some(operation(Some(operation_fields(vec![("silly", OperationValue::Text("Sausage".to_string()))])), Some(DEFAULT_HASH.parse().unwrap()), None)), key_pair(DEFAULT_PRIVATE_KEY)),
         &{operation_encoded(Some(operation_fields(vec![("silly", OperationValue::Text("Sausage".to_string()))])), Some(DEFAULT_HASH.parse().unwrap()), None).as_str().to_owned()},
         "Could not find document for entry in database with id: <Hash f03236>"
     )]
     #[case::create_operation_with_previous_operations(
-        &{entry_signed_encoded(entry(1, 1, None, None, Some(Operation::from(&OperationEncoded::new(CREATE_OPERATION_WITH_PREVIOUS_OPS).unwrap()))), key_pair(DEFAULT_PRIVATE_KEY)).as_str().to_owned()},
+        &entry_signed_encoded_unvalidated(1, 1, None, None, Some(Operation::from(&OperationEncoded::new(CREATE_OPERATION_WITH_PREVIOUS_OPS).unwrap())), key_pair(DEFAULT_PRIVATE_KEY)),
         CREATE_OPERATION_WITH_PREVIOUS_OPS,
         "previous_operations field should be empty"
     )]
     #[case::update_operation_no_previous_operations(
-        &{entry_signed_encoded(entry(1, 1, None, None, Some(Operation::from(&OperationEncoded::new(UPDATE_OPERATION_NO_PREVIOUS_OPS).unwrap()))), key_pair(DEFAULT_PRIVATE_KEY)).as_str().to_owned()},
+        &entry_signed_encoded_unvalidated(1, 1, None, None, Some(Operation::from(&OperationEncoded::new(UPDATE_OPERATION_NO_PREVIOUS_OPS).unwrap())), key_pair(DEFAULT_PRIVATE_KEY)),
         UPDATE_OPERATION_NO_PREVIOUS_OPS,
         "previous_operations field can not be empty"
     )]
     #[case::delete_operation_no_previous_operations(
-        &{entry_signed_encoded(entry(1, 1, None, None, Some(Operation::from(&OperationEncoded::new(DELETE_OPERATION_NO_PREVIOUS_OPS).unwrap()))), key_pair(DEFAULT_PRIVATE_KEY)).as_str().to_owned()},
+        &entry_signed_encoded_unvalidated(1, 1, None, None, Some(Operation::from(&OperationEncoded::new(DELETE_OPERATION_NO_PREVIOUS_OPS).unwrap())), key_pair(DEFAULT_PRIVATE_KEY)),
         DELETE_OPERATION_NO_PREVIOUS_OPS,
         "previous_operations field can not be empty"
     )]
