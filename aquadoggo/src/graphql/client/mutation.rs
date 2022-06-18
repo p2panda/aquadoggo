@@ -89,6 +89,7 @@ mod tests {
     use p2panda_rs::test_utils::constants::{DEFAULT_HASH, DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
     use p2panda_rs::test_utils::fixtures::{
         entry_signed_encoded_unvalidated, key_pair, operation, operation_encoded, operation_fields,
+        random_hash,
     };
     use rstest::{fixture, rstest};
     use serde_json::json;
@@ -282,6 +283,92 @@ mod tests {
         &{"A".to_string() + ENTRY_ENCODED},
         OPERATION_ENCODED,
         "invalid hex encoding in entry"
+    )]
+    #[case::should_not_have_skiplink(
+        &entry_signed_encoded_unvalidated(
+            1,
+            1,
+            None,
+            Some(random_hash()),
+            Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())),
+            key_pair(DEFAULT_PRIVATE_KEY)
+        ),
+        OPERATION_ENCODED,
+        "Could not decode payload hash DecodeError"
+    )]
+    #[case::should_not_have_backlink(
+        &entry_signed_encoded_unvalidated(
+            1,
+            1,
+            Some(random_hash()),
+            None,
+            Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())),
+            key_pair(DEFAULT_PRIVATE_KEY)
+        ),
+        OPERATION_ENCODED,
+        "Could not decode payload hash DecodeError"
+    )]
+    #[case::should_not_have_backlink_or_skiplink(
+        &entry_signed_encoded_unvalidated(
+                1,
+                1,
+                Some(DEFAULT_HASH.parse().unwrap()),
+                Some(DEFAULT_HASH.parse().unwrap()),
+                Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))
+,
+            key_pair(DEFAULT_PRIVATE_KEY)
+        ),
+        OPERATION_ENCODED,
+        "Could not decode payload hash DecodeError"
+    )]
+    #[case::missing_backlink(
+        &entry_signed_encoded_unvalidated(
+            2,
+            1,
+            None,
+            None,
+            Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())),
+            key_pair(DEFAULT_PRIVATE_KEY)
+        ),
+        OPERATION_ENCODED,
+        "Could not decode backlink yamf hash: DecodeError"
+    )]
+    #[case::missing_skiplink(
+        &entry_signed_encoded_unvalidated(
+            8,
+            1,
+            Some(random_hash()),
+            None,
+            Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())),
+            key_pair(DEFAULT_PRIVATE_KEY)
+        ),
+        OPERATION_ENCODED,
+        "Could not decode backlink yamf hash: DecodeError"
+    )]
+    #[case::should_not_include_skiplink(
+        &entry_signed_encoded_unvalidated(
+                14,
+                1,
+                Some(DEFAULT_HASH.parse().unwrap()),
+                Some(DEFAULT_HASH.parse().unwrap()),
+                Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))
+,
+            key_pair(DEFAULT_PRIVATE_KEY)
+        ), 
+        OPERATION_ENCODED, 
+        "Could not decode payload hash DecodeError"
+    )]
+    #[case::payload_hash_and_size_missing(
+        &entry_signed_encoded_unvalidated(
+                14,
+                1,
+                Some(random_hash()),
+                Some(DEFAULT_HASH.parse().unwrap()),
+                None,
+            key_pair(DEFAULT_PRIVATE_KEY)
+        ), 
+        OPERATION_ENCODED, 
+        "Could not decode payload hash DecodeError"
     )]
     #[case::backlink_and_skiplink_not_in_db(
         &entry_signed_encoded_unvalidated(8, 1, Some(DEFAULT_HASH.parse().unwrap()), Some(DEFAULT_HASH.parse().unwrap()), Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())), key_pair(DEFAULT_PRIVATE_KEY)),
