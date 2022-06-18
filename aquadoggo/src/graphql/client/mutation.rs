@@ -290,41 +290,6 @@ mod tests {
         OPERATION_ENCODED,
         "invalid hex encoding in entry"
     )]
-    // TODO: This shouldn't actually panic....
-    #[should_panic(expected = "InvalidLinks")]
-    #[case::should_not_have_skiplink(
-        &{entry_signed_encoded(entry(1, 1, None, Some(random_hash()), Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))), key_pair(DEFAULT_PRIVATE_KEY)).as_str().to_owned()},
-        OPERATION_ENCODED,
-        "InvalidLinks"
-    )]
-    // TODO: This shouldn't actually panic....
-    #[should_panic(expected = "InvalidLinks")]
-    #[case::should_not_have_backlink(
-        &{entry_signed_encoded(entry(1, 1, Some(random_hash()), None, Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))), key_pair(DEFAULT_PRIVATE_KEY)).as_str().to_owned()},
-        OPERATION_ENCODED,
-        "InvalidLinks"
-    )]
-    // TODO: This shouldn't actually panic....
-    #[should_panic(expected = "InvalidLinks")]
-    #[case::should_not_have_backlink_or_skiplink(
-        &{entry_signed_encoded(entry(1, 1, Some(random_hash()), Some(random_hash()), Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))), key_pair(DEFAULT_PRIVATE_KEY)).as_str().to_owned()},
-        OPERATION_ENCODED,
-        "InvalidLinks"
-    )]
-    // TODO: This shouldn't actually panic....
-    #[should_panic(expected = "InvalidLinks")]
-    #[case::missing_backlink(
-        &{entry_signed_encoded(entry(2, 1, None, None, Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))), key_pair(DEFAULT_PRIVATE_KEY)).as_str().to_owned()},
-        OPERATION_ENCODED,
-        "InvalidLinks"
-    )]
-    // TODO: This shouldn't actually panic....
-    #[should_panic(expected = "InvalidLinks")]
-    #[case::missing_skiplink(
-        &{entry_signed_encoded(entry(8, 1, Some(random_hash()), None, Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))), key_pair(DEFAULT_PRIVATE_KEY)).as_str().to_owned()},
-        OPERATION_ENCODED,
-        "InvalidLinks"
-    )]
     #[case::backlink_and_skiplink_not_in_db(
         &{entry_signed_encoded(entry(8, 1, Some(DEFAULT_HASH.parse().unwrap()), Some(DEFAULT_HASH.parse().unwrap()), Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))), key_pair(DEFAULT_PRIVATE_KEY)).as_str().to_owned()},
         OPERATION_ENCODED,
