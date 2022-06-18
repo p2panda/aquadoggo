@@ -354,8 +354,8 @@ mod tests {
                 Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))
 ,
             key_pair(DEFAULT_PRIVATE_KEY)
-        ), 
-        OPERATION_ENCODED, 
+        ),
+        OPERATION_ENCODED,
         "Could not decode payload hash DecodeError"
     )]
     #[case::payload_hash_and_size_missing(
@@ -366,8 +366,8 @@ mod tests {
                 Some(DEFAULT_HASH.parse().unwrap()),
                 None,
             key_pair(DEFAULT_PRIVATE_KEY)
-        ), 
-        OPERATION_ENCODED, 
+        ),
+        OPERATION_ENCODED,
         "Could not decode payload hash DecodeError"
     )]
     #[case::backlink_and_skiplink_not_in_db(
