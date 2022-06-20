@@ -15,27 +15,28 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1.0.43"
+arrayvec = "0.5.2"
 async-trait = "0.1.53"
-async-graphql = "3.0.35"
+async-graphql = "3.0.38"
 async-graphql-axum = "3.0.35"
 axum = "0.5.1"
 bamboo-rs-core-ed25519-yasmf = "0.1.1"
-deadqueue = { version = "0.2.2", default-features = false, features = ["unlimited"] }
+deadqueue = { version = "0.2.2", default-features = false, features = [
+    "unlimited",
+] }
 directories = "3.0.2"
 envy = "0.4.2"
-futures = "0.3.17"
+graphql_client = "0.10"
 hex = "0.4.3"
-jsonrpc-v2 = { version = "0.10.1", features = [
-    "easy-errors",
-    "bytes-v05",
-], default-features = false }
 lipmaa-link = "0.2.2"
 log = "0.4.14"
+lru = "0.7.5"
+mockall = "0.11.0"
+mockall_double = "0.3.0"
 openssl-probe = "0.1.4"
 # We can not publish the `aquadoggo` crate yet, since `p2panda-rs` is an
 # unpublished dependency.
-# @TODO: This points at a WIP branch in p2panda_rs which is used as long as things are slightly unstable
-p2panda-rs = { path="../../p2panda/p2panda-rs" }
+p2panda-rs = { git = "https://github.com/p2panda/p2panda", branch = "schema-service-2" }
 rand = "0.8.4"
 serde = { version = "1.0.130", features = ["derive"] }
 serde_json = "1.0.67"
@@ -49,6 +50,7 @@ tokio = { version = "1.17.0", features = [
     "macros",
     "net",
     "rt",
+    "rt-multi-thread",
     "sync",
     "time",
 ] }
@@ -59,14 +61,19 @@ triggered = "0.1.2"
 apollo-parser = "0.2.6"
 sea-query = "0.24.6"
 async-recursion = "1.0.0"
+futures = "0.3.21"
 
 [dev-dependencies]
+hyper = "0.14.17"
+http = "0.2.6"
 reqwest = { version = "0.11.9", default-features = false, features = [
     "json",
     "stream",
 ] }
 rstest = "0.12.0"
+rstest_reuse = "0.1.3"
 tower-service = "0.3.1"
-hyper = "0.14.17"
-http = "0.2.6"
 tower = "0.4.12"
+p2panda-rs = { git = "https://github.com/p2panda/p2panda", branch = "schema-service-2", features = [
+    "testing",
+] }

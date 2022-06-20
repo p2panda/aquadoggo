@@ -3,16 +3,15 @@
 use async_graphql::{Context, Error, Object, Result};
 use p2panda_rs::document::{Document, DocumentBuilder, DocumentId};
 use p2panda_rs::identity::Author;
-use p2panda_rs::operation::{Operation, OperationFields, OperationValue, OperationWithMeta};
+use p2panda_rs::operation::{Operation, OperationFields, OperationValue, VerifiedOperation};
 use p2panda_rs::storage_provider::traits::StorageProvider;
 
 use crate::db::provider::SqlStorage;
-use crate::db::Pool;
 use crate::graphql::client::response::DocumentResponse;
 use crate::graphql::client::{EntryArgsRequest, EntryArgsResponse};
 
-#[derive(Default, Debug, Copy, Clone)]
 /// The GraphQL root for the client api that p2panda clients can use to connect to a node.
+#[derive(Default, Debug, Copy, Clone)]
 pub struct StaticQuery;
 
 #[Object]
@@ -73,7 +72,7 @@ fn get_document_by_id(_document: DocumentId) -> Document {
         .parse()
         .unwrap();
     let verified_operation =
-        OperationWithMeta::new(&public_key, &operation_id, &create_operation).unwrap();
+        VerifiedOperation::new(&public_key, &operation_id, &create_operation).unwrap();
     DocumentBuilder::new(vec![verified_operation])
         .build()
         .unwrap()
@@ -84,17 +83,20 @@ mod tests {
     use async_graphql::Response;
     use p2panda_rs::entry::{LogId, SeqNum};
     use serde_json::json;
+    use tokio::sync::broadcast;
 
-    use crate::config::Configuration;
-    use crate::context::Context;
     use crate::graphql::client::EntryArgsResponse;
-    use crate::server::build_server;
+    use crate::http::build_server;
+    use crate::http::HttpServiceContext;
+    use crate::schema_service::SchemaService;
     use crate::test_helpers::{initialize_store, TestClient};
 
     #[tokio::test]
     async fn next_entry_args_valid_query() {
+        let (tx, _) = broadcast::channel(16);
         let store = initialize_store().await;
-        let context = Context::new(store, Configuration::default()).await;
+        let schema_service = SchemaService::new(store.clone());
+        let context = HttpServiceContext::new(store, tx, schema_service);
         let client = TestClient::new(build_server(context));
 
         // Selected fields need to be alphabetically sorted because that's what the `json` macro
@@ -137,8 +139,10 @@ mod tests {
 
     #[tokio::test]
     async fn next_entry_args_error_response() {
+        let (tx, _) = broadcast::channel(16);
         let store = initialize_store().await;
-        let context = Context::new(store, Configuration::default()).await;
+        let schema_service = SchemaService::new(store.clone());
+        let context = HttpServiceContext::new(store, tx, schema_service);
         let client = TestClient::new(build_server(context));
 
         // Selected fields need to be alphabetically sorted because that's what the `json` macro

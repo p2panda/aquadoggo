@@ -3,13 +3,10 @@
 use async_graphql::{scalar, Object};
 use p2panda_rs::document::DocumentView;
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
 
 use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::storage_provider::traits::{AsEntryArgsResponse, AsPublishEntryResponse};
-
-use crate::db::models::EntryRow;
 
 /// Response body of `panda_getEntryArguments`.
 ///
@@ -17,14 +14,18 @@ use crate::db::models::EntryRow;
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct EntryArgsResponse {
+    /// The log id of the entry
     #[serde(with = "super::u64_string::log_id_string_serialisation")]
     pub log_id: LogId,
 
+    /// The sequence number of the entry
     #[serde(with = "super::u64_string::seq_num_string_serialisation")]
     pub seq_num: SeqNum,
 
+    /// The hash of the entry backlink
     pub backlink: Option<Hash>,
 
+    /// The hash of the entry skiplink
     pub skiplink: Option<Hash>,
 }
 
@@ -66,14 +67,18 @@ impl AsEntryArgsResponse for EntryArgsResponse {
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PublishEntryResponse {
+    /// The log id of the entry
     #[serde(with = "super::u64_string::log_id_string_serialisation")]
     pub log_id: LogId,
 
+    /// The sequence number of the entry
     #[serde(with = "super::u64_string::seq_num_string_serialisation")]
     pub seq_num: SeqNum,
 
+    /// The optional hash of the backlink
     pub backlink: Option<Hash>,
 
+    /// The optional hash of the skiplink
     pub skiplink: Option<Hash>,
 }
 

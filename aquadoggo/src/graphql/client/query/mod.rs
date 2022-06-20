@@ -6,5 +6,5 @@ mod schema;
 mod static_query;
 
 pub use dynamic_query::DynamicQuery;
-pub use root::QueryRoot;
+pub use root::ClientRoot;
 pub use static_query::StaticQuery;

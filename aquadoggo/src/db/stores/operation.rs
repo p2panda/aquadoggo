@@ -5,109 +5,27 @@ use std::collections::BTreeMap;
 use async_trait::async_trait;
 use futures::future::try_join_all;
 use p2panda_rs::document::DocumentId;
-use p2panda_rs::identity::Author;
-use p2panda_rs::operation::{
-    AsOperation, Operation, OperationAction, OperationFields, OperationId, OperationWithMeta,
-};
-use p2panda_rs::schema::SchemaId;
+use p2panda_rs::operation::{AsOperation, AsVerifiedOperation, OperationId, VerifiedOperation};
 use p2panda_rs::storage_provider::errors::OperationStorageError;
-use p2panda_rs::storage_provider::traits::{AsStorageOperation, OperationStore};
+use p2panda_rs::storage_provider::traits::OperationStore;
 use sqlx::{query, query_as, query_scalar};
 
 use crate::db::models::OperationFieldsJoinedRow;
 use crate::db::provider::SqlStorage;
 use crate::db::utils::{parse_operation_rows, parse_value_to_string_vec};
 
-/// A decoded operation, the public key of it's author, it's `OperationId` and the id
-/// of the document it is part of.
-///
-/// Operations describe mutations to data which is stored on the p2panda network. They
-/// are published and signed by authors, and can be verified by looking into their
-/// accompanying entry. This struct augments the actual published operation with meta
-/// data which is needed when efficiently querying operations and materialising the
-/// documents they are part of.
-///
-/// This struct implements the `AsStorageOperation` trait which is required when
-/// constructing the `OperationStore`.
-#[derive(Debug, Clone)]
-pub struct OperationStorage {
-    author: Author,
-    operation: Operation,
-    id: OperationId,
-    document_id: DocumentId,
-}
-
-impl OperationStorage {
-    pub fn new(
-        author: &Author,
-        operation: &Operation,
-        operation_id: &OperationId,
-        document_id: &DocumentId,
-    ) -> Self {
-        Self {
-            author: author.clone(),
-            operation: operation.clone(),
-            id: operation_id.clone(),
-            document_id: document_id.clone(),
-        }
-    }
-
-    fn raw_operation(&self) -> Operation {
-        self.operation.clone()
-    }
-}
-
-impl AsStorageOperation for OperationStorage {
-    type AsStorageOperationError = OperationStorageError;
-
-    fn action(&self) -> OperationAction {
-        self.operation.action()
-    }
-
-    fn author(&self) -> Author {
-        self.author.clone()
-    }
-
-    fn id(&self) -> OperationId {
-        self.id.clone()
-    }
-
-    fn document_id(&self) -> DocumentId {
-        self.document_id.clone()
-    }
-
-    fn schema_id(&self) -> SchemaId {
-        self.operation.schema()
-    }
-
-    fn fields(&self) -> Option<OperationFields> {
-        self.operation.fields()
-    }
-
-    fn previous_operations(&self) -> Vec<OperationId> {
-        self.operation.previous_operations().unwrap_or_default()
-    }
-}
-
-#[allow(clippy::from_over_into)]
-impl Into<OperationWithMeta> for OperationStorage {
-    fn into(self) -> OperationWithMeta {
-        OperationWithMeta::new(&self.author(), &self.id(), &self.raw_operation()).unwrap()
-    }
-}
-
 /// Implementation of `OperationStore` trait which is required when constructing a
 /// `StorageProvider`.
 ///
-/// Handles storage and retrieval of operations in the form of `StorageOperation` which
-/// implements the required `AsStorageOperation` trait.
+/// Handles storage and retrieval of operations in the form of `VerifiedOperation` which
+/// implements the required `AsVerifiedOperation` trait.
 ///
 /// There are several intermediary structs defined in `db/models/` which represent
 /// rows from tables in the database where this entry, it's fields and opreation
 /// relations are stored. These are used in conjunction with the `sqlx` library
 /// to coerce raw values into structs when querying the database.
 #[async_trait]
-impl OperationStore<OperationStorage> for SqlStorage {
+impl OperationStore<VerifiedOperation> for SqlStorage {
     /// Get the id of the document an operation is part of.
     ///
     /// Returns a result containing a `DocumentId` wrapped in an option. If no
@@ -115,7 +33,7 @@ impl OperationStore<OperationStorage> for SqlStorage {
     /// storage error occurs.
     async fn get_document_by_operation_id(
         &self,
-        id: OperationId,
+        id: &OperationId,
     ) -> Result<Option<DocumentId>, OperationStorageError> {
         let document_id: Option<String> = query_scalar(
             "
@@ -148,7 +66,8 @@ impl OperationStore<OperationStorage> for SqlStorage {
     /// this method actually makes 3 different sets of insertions.
     async fn insert_operation(
         &self,
-        operation: &OperationStorage,
+        operation: &VerifiedOperation,
+        document_id: &DocumentId,
     ) -> Result<(), OperationStorageError> {
         // Start a transaction, any db insertions after this point, and before the `commit()`
         // will be rolled back in the event of an error.
@@ -157,14 +76,6 @@ impl OperationStore<OperationStorage> for SqlStorage {
             .begin()
             .await
             .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
-
-        // TODO: Once we have resolved https://github.com/p2panda/p2panda/issues/315 then
-        // we can derive this string from the previous_operations' `DocumentViewId`
-        let mut prev_op_string = "".to_string();
-        for (i, operation_id) in operation.previous_operations().iter().enumerate() {
-            let separator = if i == 0 { "" } else { "_" };
-            prev_op_string += format!("{}{}", separator, operation_id.as_hash().as_str()).as_str();
-        }
 
         // Consruct query for inserting operation an row, execute it
         // and check exactly one row was affected.
@@ -184,13 +95,17 @@ impl OperationStore<OperationStorage> for SqlStorage {
                 ($1, $2, $3, $4, $5, $6, $7)
             ",
         )
-        .bind(operation.author().as_str())
-        .bind(operation.document_id().as_str())
-        .bind(operation.id().as_str())
-        .bind(operation.id().as_hash().as_str())
+        .bind(operation.public_key().as_str())
+        .bind(document_id.as_str())
+        .bind(operation.operation_id().as_str())
+        .bind(operation.operation_id().as_hash().as_str())
         .bind(operation.action().as_str())
-        .bind(operation.schema_id().as_str())
-        .bind(prev_op_string.as_str())
+        .bind(operation.schema().as_str())
+        .bind(
+            operation
+                .previous_operations()
+                .map(|document_view_id| document_view_id.as_str()),
+        )
         .execute(&self.pool)
         .await
         .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
@@ -208,7 +123,8 @@ impl OperationStore<OperationStorage> for SqlStorage {
                     // Collect all query futures.
                     db_values
                         .into_iter()
-                        .map(|db_value| {
+                        .enumerate()
+                        .map(|(index, db_value)| {
                             // Compose the query and return it's future.
                             query(
                                 "
@@ -217,16 +133,18 @@ impl OperationStore<OperationStorage> for SqlStorage {
                                     operation_id,
                                     name,
                                     field_type,
-                                    value
+                                    value,
+                                    list_index
                                 )
                             VALUES
-                                ($1, $2, $3, $4)
+                                ($1, $2, $3, $4, $5)
                             ",
                             )
-                            .bind(operation.id().as_str().to_owned())
+                            .bind(operation.operation_id().as_str().to_owned())
                             .bind(name.to_owned())
                             .bind(value.field_type().to_string())
                             .bind(db_value)
+                            .bind(index.to_string())
                             .execute(&self.pool)
                         })
                         .collect::<Vec<_>>()
@@ -246,7 +164,9 @@ impl OperationStore<OperationStorage> for SqlStorage {
                 .iter()
                 .any(|query_result| query_result.rows_affected() != 1)
         {
-            return Err(OperationStorageError::InsertionError(operation.id()));
+            return Err(OperationStorageError::InsertionError(
+                operation.operation_id().clone(),
+            ));
         }
 
         // Commit the transaction.
@@ -260,13 +180,13 @@ impl OperationStore<OperationStorage> for SqlStorage {
 
     /// Get an operation identified by it's `OperationId`.
     ///
-    /// Returns a result containing an `OperationStorage` wrapped in an option, if no
+    /// Returns a result containing an `VerifiedOperation` wrapped in an option, if no
     /// operation with this id was found, returns none. Errors if a fatal storage
     /// error occured.
     async fn get_operation_by_id(
         &self,
-        id: OperationId,
-    ) -> Result<Option<OperationStorage>, OperationStorageError> {
+        id: &OperationId,
+    ) -> Result<Option<VerifiedOperation>, OperationStorageError> {
         let operation_rows = query_as::<_, OperationFieldsJoinedRow>(
             "
             SELECT
@@ -279,7 +199,8 @@ impl OperationStore<OperationStorage> for SqlStorage {
                 operations_v1.previous_operations,
                 operation_fields_v1.name,
                 operation_fields_v1.field_type,
-                operation_fields_v1.value
+                operation_fields_v1.value,
+                operation_fields_v1.list_index
             FROM
                 operations_v1
             LEFT JOIN operation_fields_v1
@@ -287,6 +208,8 @@ impl OperationStore<OperationStorage> for SqlStorage {
                     operation_fields_v1.operation_id = operations_v1.operation_id
             WHERE
                 operations_v1.operation_id = $1
+            ORDER BY
+                operation_fields_v1.list_index ASC
             ",
         )
         .bind(id.as_str())
@@ -302,7 +225,7 @@ impl OperationStore<OperationStorage> for SqlStorage {
     async fn get_operations_by_document_id(
         &self,
         id: &DocumentId,
-    ) -> Result<Vec<OperationStorage>, OperationStorageError> {
+    ) -> Result<Vec<VerifiedOperation>, OperationStorageError> {
         let operation_rows = query_as::<_, OperationFieldsJoinedRow>(
             "
             SELECT
@@ -315,7 +238,8 @@ impl OperationStore<OperationStorage> for SqlStorage {
                 operations_v1.previous_operations,
                 operation_fields_v1.name,
                 operation_fields_v1.field_type,
-                operation_fields_v1.value
+                operation_fields_v1.value,
+                operation_fields_v1.list_index
             FROM
                 operations_v1
             LEFT JOIN operation_fields_v1
@@ -323,6 +247,8 @@ impl OperationStore<OperationStorage> for SqlStorage {
                     operation_fields_v1.operation_id = operations_v1.operation_id
             WHERE
                 operations_v1.document_id = $1
+            ORDER BY
+                operation_fields_v1.list_index ASC
             ",
         )
         .bind(id.as_str())
@@ -344,7 +270,7 @@ impl OperationStore<OperationStorage> for SqlStorage {
             };
         }
 
-        let operations: Vec<OperationStorage> = grouped_operation_rows
+        let operations: Vec<VerifiedOperation> = grouped_operation_rows
             .iter()
             .filter_map(|(_id, operation_rows)| parse_operation_rows(operation_rows.to_owned()))
             .collect();
@@ -359,209 +285,161 @@ mod tests {
 
     use p2panda_rs::document::DocumentId;
     use p2panda_rs::entry::LogId;
-    use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
-    use p2panda_rs::operation::OperationId;
-    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, StorageProvider};
-    use p2panda_rs::storage_provider::traits::{AsStorageOperation, OperationStore};
-    use p2panda_rs::test_utils::constants::{DEFAULT_HASH, DEFAULT_PRIVATE_KEY};
-
-    use crate::db::provider::SqlStorage;
-    use crate::db::stores::test_utils::{
-        test_create_operation, test_db, test_delete_operation, test_update_operation,
+    use p2panda_rs::operation::{
+        AsOperation, AsVerifiedOperation, Operation, OperationId, VerifiedOperation,
     };
+    use p2panda_rs::storage_provider::traits::OperationStore;
+    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, StorageProvider};
+    use p2panda_rs::test_utils::constants::{default_fields, DEFAULT_HASH};
+    use p2panda_rs::test_utils::fixtures::{
+        create_operation, delete_operation, document_id, key_pair, operation_fields, operation_id,
+        public_key, random_previous_operations, update_operation, verified_operation,
+    };
+    use rstest::rstest;
 
-    use super::OperationStorage;
+    use crate::db::stores::test_utils::{test_db, TestSqlStore};
 
-    async fn insert_get_assert(storage_provider: SqlStorage, operation: OperationStorage) {
+    #[rstest]
+    #[case::create_operation(create_operation(&default_fields()))]
+    #[case::update_operation(update_operation(&default_fields(), &DEFAULT_HASH.parse().unwrap()))]
+    #[case::update_operation_many_prev_ops(update_operation(&default_fields(), &random_previous_operations(12)))]
+    #[case::delete_operation(delete_operation(&DEFAULT_HASH.parse().unwrap()))]
+    #[case::delete_operation_many_prev_ops(delete_operation(&random_previous_operations(12)))]
+    #[tokio::test]
+    async fn insert_get_operations(
+        #[case] operation: Operation,
+        #[from(public_key)] author: Author,
+        operation_id: OperationId,
+        document_id: DocumentId,
+        #[from(test_db)]
+        #[future]
+        db: TestSqlStore,
+    ) {
+        let db = db.await;
+        // Construct the storage operation.
+        let operation = VerifiedOperation::new(&author, &operation_id, &operation).unwrap();
+
         // Insert the doggo operation into the db, returns Ok(true) when succesful.
-        let result = storage_provider.insert_operation(&operation).await;
+        let result = db.store.insert_operation(&operation, &document_id).await;
         assert!(result.is_ok());
 
         // Request the previously inserted operation by it's id.
-        let returned_operation = storage_provider
-            .get_operation_by_id(operation.id())
+        let returned_operation = db
+            .store
+            .get_operation_by_id(operation.operation_id())
             .await
             .unwrap()
             .unwrap();
 
-        assert_eq!(returned_operation.author(), operation.author());
+        assert_eq!(returned_operation.public_key(), operation.public_key());
         assert_eq!(returned_operation.fields(), operation.fields());
-        assert_eq!(returned_operation.id(), operation.id());
-        assert_eq!(returned_operation.document_id(), operation.document_id());
+        assert_eq!(returned_operation.operation_id(), operation.operation_id());
     }
 
+    #[rstest]
     #[tokio::test]
-    async fn insert_get_create_operation() {
-        let (storage_provider, _, _) = test_db(0, 0, false).await;
+    async fn insert_operation_twice(
+        #[from(verified_operation)] verified_operation: VerifiedOperation,
+        document_id: DocumentId,
+        #[from(test_db)]
+        #[future]
+        db: TestSqlStore,
+    ) {
+        let db = db.await;
 
-        // Create Author, OperationId and DocumentId in order to compose a OperationStorage.
-        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
-        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
-        let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
-        let document_id = DocumentId::new(operation_id.clone());
-        let create_operation = OperationStorage::new(
-            &author,
-            &test_create_operation(),
-            &operation_id,
-            &document_id,
-        );
-
-        insert_get_assert(storage_provider, create_operation).await;
-    }
-
-    #[tokio::test]
-    async fn insert_get_update_operation() {
-        let (storage_provider, _, _) = test_db(0, 0, false).await;
-
-        // Create Author, OperationId and DocumentId in order to compose a OperationStorage.
-        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
-        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
-
-        let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
-        let document_id = DocumentId::new(operation_id.clone());
-        let prev_op_id = DEFAULT_HASH.parse().unwrap();
-
-        let update_operation = OperationStorage::new(
-            &author,
-            &test_update_operation(vec![prev_op_id], "huhuhu"),
-            &operation_id,
-            &document_id,
-        );
-        insert_get_assert(storage_provider, update_operation).await;
-    }
-
-    #[tokio::test]
-    async fn insert_get_delete_operation() {
-        let (storage_provider, _, _) = test_db(0, 0, false).await;
-
-        // Create Author, OperationId and DocumentId in order to compose a OperationStorage.
-        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
-        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
-
-        let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
-        let document_id = DocumentId::new(operation_id.clone());
-        let prev_op_id = DEFAULT_HASH.parse().unwrap();
-
-        let delete_operation = OperationStorage::new(
-            &author,
-            &test_delete_operation(vec![prev_op_id]),
-            &operation_id,
-            &document_id,
-        );
-
-        insert_get_assert(storage_provider, delete_operation).await;
-    }
-
-    #[tokio::test]
-    async fn insert_operation_twice() {
-        let (storage_provider, _, _) = test_db(0, 0, false).await;
-
-        // Create Author, OperationId and DocumentId in order to compose a OperationStorage.
-        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
-        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
-        let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
-        let document_id = DocumentId::new(operation_id.clone());
-        let create_operation = OperationStorage::new(
-            &author,
-            &test_create_operation(),
-            &operation_id,
-            &document_id,
-        );
-
-        let result = storage_provider.insert_operation(&create_operation).await;
-
-        assert!(result.is_ok());
-
-        let result = storage_provider.insert_operation(&create_operation).await;
+        assert!(db
+            .store
+            .insert_operation(&verified_operation, &document_id)
+            .await
+            .is_ok());
 
         assert_eq!(
-            result.unwrap_err().to_string(),
+            db.store.insert_operation(&verified_operation, &document_id).await.unwrap_err().to_string(),
             "A fatal error occured in OperationStore: error returned from database: UNIQUE constraint failed: operations_v1.entry_hash"
         )
     }
 
+    #[rstest]
     #[tokio::test]
-    async fn gets_document_by_operation_id() {
-        let (storage_provider, _, _) = test_db(0, 0, false).await;
+    async fn gets_document_by_operation_id(
+        #[from(verified_operation)]
+        #[with(Some(operation_fields(default_fields())), None, None, None, Some(DEFAULT_HASH.parse().unwrap()))]
+        create_operation: VerifiedOperation,
+        #[from(verified_operation)]
+        #[with(Some(operation_fields(default_fields())), Some(DEFAULT_HASH.parse().unwrap()))]
+        update_operation: VerifiedOperation,
+        document_id: DocumentId,
+        #[from(test_db)]
+        #[future]
+        db: TestSqlStore,
+    ) {
+        let db = db.await;
 
-        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
-        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
-        let operation_id = OperationId::new(DEFAULT_HASH.parse().unwrap());
-        let document_id = DocumentId::new(operation_id.clone());
-
-        let create_operation = OperationStorage::new(
-            &author,
-            &test_create_operation(),
-            &operation_id,
-            &document_id,
-        );
-
-        let document_id_should_be_none = storage_provider
-            .get_document_by_operation_id(operation_id.clone())
-            .await
-            .unwrap();
-
-        assert!(document_id_should_be_none.is_none());
-
-        storage_provider
-            .insert_operation(&create_operation)
-            .await
-            .unwrap();
-
-        let expected_document_id: DocumentId = create_operation.id().as_hash().clone().into();
-        let document_id_should_exist = storage_provider
-            .get_document_by_operation_id(operation_id.clone())
+        assert!(db
+            .store
+            .get_document_by_operation_id(create_operation.operation_id())
             .await
             .unwrap()
+            .is_none());
+
+        db.store
+            .insert_operation(&create_operation, &document_id)
+            .await
             .unwrap();
 
-        assert_eq!(document_id_should_exist, expected_document_id);
-
-        let operation_id = OperationId::new(Hash::new_from_bytes(vec![3, 4, 5]).unwrap());
-
-        let update_operation = OperationStorage::new(
-            &author,
-            &test_update_operation(
-                vec![create_operation.id().as_hash().clone().into()],
-                "huhuhu",
-            ),
-            &operation_id,
-            &document_id,
+        assert_eq!(
+            db.store
+                .get_document_by_operation_id(create_operation.operation_id())
+                .await
+                .unwrap()
+                .unwrap(),
+            document_id.clone()
         );
 
-        storage_provider
-            .insert_operation(&update_operation)
+        db.store
+            .insert_operation(&update_operation, &document_id)
             .await
             .unwrap();
 
-        let document_id_should_be_the_same = storage_provider
-            .get_document_by_operation_id(update_operation.id())
-            .await
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(document_id_should_be_the_same, expected_document_id);
+        assert_eq!(
+            db.store
+                .get_document_by_operation_id(create_operation.operation_id())
+                .await
+                .unwrap()
+                .unwrap(),
+            document_id.clone()
+        );
     }
 
+    #[rstest]
     #[tokio::test]
-    async fn get_operations_by_document_id() {
-        let (storage_provider, _, _) = test_db(5, 1, false).await;
-        let key_pair = KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap();
+    async fn get_operations_by_document_id(
+        key_pair: KeyPair,
+        #[from(test_db)]
+        #[with(5, 1)]
+        #[future]
+        db: TestSqlStore,
+    ) {
+        let db = db.await;
         let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
-        let latest_entry = storage_provider
+        let latest_entry = db
+            .store
             .get_latest_entry(&author, &LogId::default())
             .await
             .unwrap()
             .unwrap();
-        let document_id = storage_provider
+
+        let document_id = db
+            .store
             .get_document_by_entry(&latest_entry.hash())
             .await
             .unwrap()
             .unwrap();
 
-        let operations_by_document_id = storage_provider
+        let operations_by_document_id = db
+            .store
             .get_operations_by_document_id(&document_id)
             .await
             .unwrap();

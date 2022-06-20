@@ -92,7 +92,7 @@ use triggered::{Listener, Trigger};
 /// A task holding a generic input value and the name of the worker which will process it
 /// eventually.
 #[derive(Debug, Clone)]
-pub struct Task<IN>(WorkerName, IN);
+pub struct Task<IN>(pub WorkerName, IN);
 
 impl<IN> Task<IN> {
     /// Returns a new task.
@@ -107,12 +107,13 @@ impl<IN> Task<IN> {
 pub type TaskResult<IN> = Result<Option<Vec<Task<IN>>>, TaskError>;
 
 /// Possible return values of a failed task.
+#[derive(Debug)]
 pub enum TaskError {
     /// This tasks failed critically and will cause the whole program to panic.
-    #[allow(dead_code)]
     Critical,
 
     /// This task failed silently without any further effects.
+    #[allow(dead_code)]
     Failure,
 }
 
@@ -560,9 +561,10 @@ mod tests {
             let tasks: Vec<Task<JigsawPiece>> = input
                 .relations
                 .iter()
-                .filter_map(|id| match db.pieces.get(&id) {
-                    Some(piece) => Some(Task::new("find", piece.clone())),
-                    None => None,
+                .filter_map(|id| {
+                    db.pieces
+                        .get(id)
+                        .map(|piece| Task::new("find", piece.clone()))
                 })
                 .collect();
 
@@ -585,7 +587,7 @@ mod tests {
 
                 // Add another piece to list of ids. Unwrap as we know the list is not empty.
                 let id = candidates.pop().unwrap();
-                ids.push(id.clone());
+                ids.push(id);
 
                 // Get all related pieces of this piece
                 match db.pieces.get(&id) {
@@ -594,7 +596,7 @@ mod tests {
                             // Check if we have already visited all relations of this piece,
                             // otherwise add them to list
                             if !ids.contains(relation_id) && !candidates.contains(relation_id) {
-                                candidates.push(relation_id.clone());
+                                candidates.push(*relation_id);
                             }
                         }
                     }
@@ -611,7 +613,7 @@ mod tests {
                 //    of them as the future puzzle!
                 if puzzle_id.is_none() {
                     for id in &ids {
-                        if puzzle.piece_ids.contains(&id) {
+                        if puzzle.piece_ids.contains(id) {
                             puzzle_id = Some(puzzle.id);
                         }
                     }
@@ -660,18 +662,18 @@ mod tests {
                 .puzzles
                 .values()
                 .find(|item| item.piece_ids.contains(&input.id) && !item.complete)
-                .map(|item| item.clone());
+                .cloned();
 
             // 2. Check if all piece dependencies are met
             match puzzle {
                 None => Err(TaskError::Failure),
                 Some(mut puzzle) => {
                     for piece_id in &puzzle.piece_ids {
-                        match db.pieces.get(&piece_id) {
+                        match db.pieces.get(piece_id) {
                             None => return Err(TaskError::Failure),
                             Some(piece) => {
                                 for relation_piece_id in &piece.relations {
-                                    if !puzzle.piece_ids.contains(&relation_piece_id) {
+                                    if !puzzle.piece_ids.contains(relation_piece_id) {
                                         return Err(TaskError::Failure);
                                     }
                                 }
@@ -681,7 +683,7 @@ mod tests {
 
                     // Mark puzzle as complete! We are done here!
                     puzzle.complete = true;
-                    db.puzzles.insert(puzzle.id, puzzle.clone());
+                    db.puzzles.insert(puzzle.id, puzzle);
                     Ok(None)
                 }
             }
@@ -730,7 +732,7 @@ mod tests {
                 for _ in 0..size {
                     let mut relations: Vec<usize> = Vec::new();
 
-                    id = id + 1;
+                    id += 1;
 
                     if id % size != 0 {
                         // Add related piece to the right
@@ -759,7 +761,7 @@ mod tests {
                 }
             }
 
-            offset = offset + (size * size);
+            offset += size * size;
         }
 
         // Mix all puzzle pieces to a large chaotic pile
@@ -781,7 +783,7 @@ mod tests {
             .puzzles
             .values()
             .filter(|puzzle| puzzle.complete)
-            .map(|puzzle| puzzle.clone())
+            .cloned()
             .collect();
         assert_eq!(completed.len(), puzzles_count);
     }

@@ -1,68 +1,53 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::convert::TryFrom;
-use std::str::FromStr;
 
 use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
 use p2panda_rs::entry::{sign_and_encode, Entry};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::{Author, KeyPair};
 use p2panda_rs::operation::{
-    AsOperation, Operation, OperationEncoded, OperationFields, OperationId, OperationValue,
-    PinnedRelation, PinnedRelationList, Relation, RelationList,
+    AsOperation, Operation, OperationEncoded, OperationId, OperationValue, PinnedRelation,
+    PinnedRelationList, Relation, RelationList, VerifiedOperation,
 };
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::{
-    AsStorageEntry, AsStorageLog, LogStore, StorageProvider,
+    AsStorageEntry, AsStorageLog, EntryStore, LogStore, OperationStore, StorageProvider,
 };
-use p2panda_rs::storage_provider::traits::{EntryStore, OperationStore};
 use p2panda_rs::test_utils::constants::{DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
+use p2panda_rs::test_utils::fixtures::{create_operation, delete_operation, update_operation};
+use rstest::fixture;
 
 use crate::db::provider::SqlStorage;
+use crate::db::stores::{StorageEntry, StorageLog};
 use crate::db::traits::DocumentStore;
 use crate::graphql::client::{EntryArgsRequest, PublishEntryRequest};
 use crate::test_helpers::initialize_db;
 
-use crate::db::stores::OperationStorage;
-use crate::db::stores::StorageEntry;
-use crate::db::stores::StorageLog;
-
-pub fn test_create_operation() -> Operation {
-    let mut fields = OperationFields::new();
-    fields
-        .add("username", OperationValue::Text("bubu".to_owned()))
-        .unwrap();
-
-    fields.add("height", OperationValue::Float(3.5)).unwrap();
-
-    fields.add("age", OperationValue::Integer(28)).unwrap();
-
-    fields
-        .add("is_admin", OperationValue::Boolean(false))
-        .unwrap();
-
-    fields
-        .add(
+/// The fields used as defaults in the tests.
+pub fn doggo_test_fields() -> Vec<(&'static str, OperationValue)> {
+    vec![
+        ("username", OperationValue::Text("bubu".to_owned())),
+        ("height", OperationValue::Float(3.5)),
+        ("age", OperationValue::Integer(28)),
+        ("is_admin", OperationValue::Boolean(false)),
+        (
             "profile_picture",
             OperationValue::Relation(Relation::new(
                 Hash::new("0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
                     .unwrap()
                     .into(),
             )),
-        )
-        .unwrap();
-    fields
-        .add(
+        ),
+        (
             "special_profile_picture",
             OperationValue::PinnedRelation(PinnedRelation::new(
                 Hash::new("0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
                     .unwrap()
                     .into(),
             )),
-        )
-        .unwrap();
-    fields
-        .add(
+        ),
+        (
             "many_profile_pictures",
             OperationValue::RelationList(RelationList::new(vec![
                 Hash::new("0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
@@ -72,10 +57,8 @@ pub fn test_create_operation() -> Operation {
                     .unwrap()
                     .into(),
             ])),
-        )
-        .unwrap();
-    fields
-        .add(
+        ),
+        (
             "many_special_profile_pictures",
             OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
                 Hash::new("0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")
@@ -85,10 +68,8 @@ pub fn test_create_operation() -> Operation {
                     .unwrap()
                     .into(),
             ])),
-        )
-        .unwrap();
-    fields
-        .add(
+        ),
+        (
             "another_relation_field",
             OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
                 Hash::new("0020abababababababababababababababababababababababababababababababab")
@@ -98,33 +79,11 @@ pub fn test_create_operation() -> Operation {
                     .unwrap()
                     .into(),
             ])),
-        )
-        .unwrap();
-    Operation::new_create(SchemaId::from_str(TEST_SCHEMA_ID).unwrap(), fields).unwrap()
+        ),
+    ]
 }
 
-pub fn test_update_operation(previous_operations: Vec<OperationId>, username: &str) -> Operation {
-    let mut fields = OperationFields::new();
-    fields
-        .add("username", OperationValue::Text(username.to_owned()))
-        .unwrap();
-
-    Operation::new_update(
-        SchemaId::from_str(TEST_SCHEMA_ID).unwrap(),
-        previous_operations,
-        fields,
-    )
-    .unwrap()
-}
-
-pub fn test_delete_operation(previous_operations: Vec<OperationId>) -> Operation {
-    Operation::new_delete(
-        SchemaId::from_str(TEST_SCHEMA_ID).unwrap(),
-        previous_operations,
-    )
-    .unwrap()
-}
-
+/// Helper for creating many key_pairs.
 pub fn test_key_pairs(no_of_authors: usize) -> Vec<KeyPair> {
     let mut key_pairs = vec![KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap()];
 
@@ -135,6 +94,7 @@ pub fn test_key_pairs(no_of_authors: usize) -> Vec<KeyPair> {
     key_pairs
 }
 
+/// Helper for constructing a publish entry request.
 pub async fn construct_publish_entry_request(
     provider: &SqlStorage,
     operation: &Operation,
@@ -165,6 +125,7 @@ pub async fn construct_publish_entry_request(
     }
 }
 
+/// Helper for inserting an entry, operation and document_view into the database.
 pub async fn insert_entry_operation_and_view(
     provider: &SqlStorage,
     key_pair: &KeyPair,
@@ -188,12 +149,10 @@ pub async fn insert_entry_operation_and_view(
 
     provider.publish_entry(&request).await.unwrap();
     provider
-        .insert_operation(&OperationStorage::new(
-            &author,
-            operation,
-            &operation_id,
+        .insert_operation(
+            &VerifiedOperation::new(&author, &operation_id, operation).unwrap(),
             &document_id,
-        ))
+        )
         .await
         .unwrap();
 
@@ -202,52 +161,63 @@ pub async fn insert_entry_operation_and_view(
         .await
         .unwrap();
 
-    let document = DocumentBuilder::new(
-        document_operations
-            .into_iter()
-            .map(|operation| operation.into())
-            .collect(),
-    )
-    .build()
-    .unwrap();
+    let document = DocumentBuilder::new(document_operations).build().unwrap();
 
     provider.insert_document(&document).await.unwrap();
 
     (document_id, document_view_id)
 }
 
-/// Construct and return a storage provider instance backed by a pre-polpulated database. Passed parameters
-/// define what the db should contain. The first entry in each log contains a valid CREATE operation
-/// following entries contain duplicate UPDATE operations. If the with_delete flag is set to true
-/// the last entry in all logs contain be a DELETE operation.
+/// Container for `SqlStore` with access to the document ids and key_pairs
+/// used in the pre-populated database for testing.
+pub struct TestSqlStore {
+    pub store: SqlStorage,
+    pub key_pairs: Vec<KeyPair>,
+    pub documents: Vec<DocumentId>,
+}
+
+/// Fixture for constructing a storage provider instance backed by a pre-polpulated database. Passed
+/// parameters define what the db should contain. The first entry in each log contains a valid CREATE
+/// operation following entries contain duplicate UPDATE operations. If the with_delete flag is set
+/// to true the last entry in all logs contain be a DELETE operation.
 ///
-/// Returns a storage provider instance, a vector of key pairs for all authors in the db, and a vector
-/// of the ids for all documents.
+/// Returns a `TestSqlStore` containing storage provider instance, a vector of key pairs for all authors
+/// in the db, and a vector of the ids for all documents.
+#[fixture]
 pub async fn test_db(
     // Number of entries per log/document
-    no_of_entries: usize,
+    #[default(0)] no_of_entries: usize,
     // Number of authors, each with a log populated as defined above
-    no_of_authors: usize,
+    #[default(0)] no_of_authors: usize,
     // A boolean flag for wether all logs should contain a delete operation
-    with_delete: bool,
-) -> (SqlStorage, Vec<KeyPair>, Vec<DocumentId>) {
+    #[default(false)] with_delete: bool,
+    // The schema used for all operations in the db
+    #[default(TEST_SCHEMA_ID.parse().unwrap())] schema: SchemaId,
+    // The fields used for every CREATE operation
+    #[default(doggo_test_fields())] create_operation_fields: Vec<(&'static str, OperationValue)>,
+    // The fields used for every UPDATE operation
+    #[default(doggo_test_fields())] update_operation_fields: Vec<(&'static str, OperationValue)>,
+) -> TestSqlStore {
+    let mut documents: Vec<DocumentId> = Vec::new();
+    let key_pairs = test_key_pairs(no_of_authors);
+
     let pool = initialize_db().await;
-    let storage_provider = SqlStorage { pool };
+    let store = SqlStorage { pool };
 
     // If we don't want any entries in the db return now
     if no_of_entries == 0 {
-        return (storage_provider, Vec::default(), Vec::default());
+        return TestSqlStore {
+            store,
+            key_pairs,
+            documents,
+        };
     }
-
-    let mut documents: Vec<DocumentId> = Vec::new();
-    let schema = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
-    let key_pairs = test_key_pairs(no_of_authors);
 
     for key_pair in &key_pairs {
         let mut document: Option<DocumentId> = None;
         let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
         for index in 0..no_of_entries {
-            let next_entry_args = storage_provider
+            let next_entry_args = store
                 .get_entry_args(&EntryArgsRequest {
                     author: author.clone(),
                     document: document.as_ref().cloned(),
@@ -256,20 +226,20 @@ pub async fn test_db(
                 .unwrap();
 
             let next_operation = if index == 0 {
-                test_create_operation()
+                create_operation(&create_operation_fields)
             } else if index == (no_of_entries - 1) && with_delete {
-                test_delete_operation(vec![next_entry_args.backlink.clone().unwrap().into()])
+                delete_operation(&next_entry_args.backlink.clone().unwrap().into())
             } else {
-                test_update_operation(
-                    vec![next_entry_args.backlink.clone().unwrap().into()],
-                    "yoyo",
+                update_operation(
+                    &update_operation_fields,
+                    &next_entry_args.backlink.clone().unwrap().into(),
                 )
             };
 
             let next_entry = Entry::new(
                 &next_entry_args.log_id,
                 Some(&next_operation),
-                next_entry_args.backlink.as_ref(),
+                next_entry_args.skiplink.as_ref(),
                 next_entry_args.backlink.as_ref(),
                 &next_entry_args.seq_num,
             )
@@ -285,7 +255,7 @@ pub async fn test_db(
 
             let storage_entry = StorageEntry::new(&entry_encoded, &operation_encoded).unwrap();
 
-            storage_provider.insert_entry(storage_entry).await.unwrap();
+            store.insert_entry(storage_entry).await.unwrap();
 
             let storage_log = StorageLog::new(
                 &author,
@@ -295,21 +265,22 @@ pub async fn test_db(
             );
 
             if next_entry_args.seq_num.is_first() {
-                storage_provider.insert_log(storage_log).await.unwrap();
+                store.insert_log(storage_log).await.unwrap();
             }
 
-            let storage_operation = OperationStorage::new(
-                &author,
-                &next_operation,
-                &entry_encoded.hash().into(),
-                &document.as_ref().cloned().unwrap(),
-            );
+            let verified_operation =
+                VerifiedOperation::new(&author, &entry_encoded.hash().into(), &next_operation)
+                    .unwrap();
 
-            storage_provider
-                .insert_operation(&storage_operation)
+            store
+                .insert_operation(&verified_operation, &document.clone().unwrap())
                 .await
                 .unwrap();
         }
     }
-    (storage_provider, key_pairs, documents)
+    TestSqlStore {
+        store,
+        key_pairs,
+        documents,
+    }
 }

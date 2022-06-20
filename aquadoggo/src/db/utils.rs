@@ -3,19 +3,17 @@
 use std::collections::BTreeMap;
 
 use p2panda_rs::document::{DocumentId, DocumentViewFields, DocumentViewId, DocumentViewValue};
-use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{
     Operation, OperationFields, OperationId, OperationValue, PinnedRelation, PinnedRelationList,
-    Relation, RelationList,
+    Relation, RelationList, VerifiedOperation,
 };
 use p2panda_rs::schema::SchemaId;
 
 use crate::db::models::document::DocumentViewFieldRow;
 use crate::db::models::OperationFieldsJoinedRow;
-use crate::db::stores::OperationStorage;
 
-/// Takes a vector of `OperationFieldsJoinedRow` and parses them into an `OperationStorage`
+/// Takes a vector of `OperationFieldsJoinedRow` and parses them into an `VerifiedOperation`
 /// struct.
 ///
 /// Operation fields which contain lists of values (RelationList & PinnedRelationList) are
@@ -23,7 +21,7 @@ use crate::db::stores::OperationStorage;
 /// when retrieving an operation from the db.
 pub fn parse_operation_rows(
     operation_rows: Vec<OperationFieldsJoinedRow>,
-) -> Option<OperationStorage> {
+) -> Option<VerifiedOperation> {
     let first_row = match operation_rows.get(0) {
         Some(row) => row,
         None => return None,
@@ -33,18 +31,6 @@ pub fn parse_operation_rows(
     let schema: SchemaId = first_row.schema_id.parse().unwrap();
     let author = Author::new(&first_row.author).unwrap();
     let operation_id = first_row.operation_id.parse().unwrap();
-    let document_id = first_row.document_id.parse().unwrap();
-
-    // TODO: Once we have resolved https://github.com/p2panda/p2panda/issues/315 then
-    // we can coerce types here.
-    let mut previous_operations: Vec<OperationId> = Vec::new();
-    if first_row.action != "create" {
-        previous_operations = first_row
-            .previous_operations
-            .rsplit('_')
-            .map(|id_str| Hash::new(id_str).unwrap().into())
-            .collect();
-    }
 
     let mut relation_lists: BTreeMap<String, Vec<DocumentId>> = BTreeMap::new();
     let mut pinned_relation_lists: BTreeMap<String, Vec<DocumentViewId>> = BTreeMap::new();
@@ -156,19 +142,18 @@ pub fn parse_operation_rows(
 
     let operation = match first_row.action.as_str() {
         "create" => Operation::new_create(schema, operation_fields),
-        "update" => Operation::new_update(schema, previous_operations, operation_fields),
-        "delete" => Operation::new_delete(schema, previous_operations),
+        "update" => Operation::new_update(
+            schema,
+            first_row.previous_operations.parse().unwrap(),
+            operation_fields,
+        ),
+        "delete" => Operation::new_delete(schema, first_row.previous_operations.parse().unwrap()),
         _ => panic!("Operation which was not CREATE, UPDATE or DELETE found."),
     }
     // Unwrap as we are sure values coming from the db are validated
     .unwrap();
 
-    Some(OperationStorage::new(
-        &author,
-        &operation,
-        &operation_id,
-        &document_id,
-    ))
+    Some(VerifiedOperation::new(&author, &operation_id, &operation).unwrap())
 }
 
 /// Takes a single `OperationValue` and parses it into a vector of string values.
@@ -349,10 +334,10 @@ mod tests {
         AsOperation, OperationId, OperationValue, PinnedRelation, PinnedRelationList, Relation,
         RelationList,
     };
-    use p2panda_rs::storage_provider::traits::AsStorageOperation;
+    use p2panda_rs::test_utils::fixtures::create_operation;
 
     use crate::db::models::{document::DocumentViewFieldRow, OperationFieldsJoinedRow};
-    use crate::db::stores::test_utils::test_create_operation;
+    use crate::db::stores::test_utils::doggo_test_fields;
 
     use super::{parse_document_view_field_rows, parse_operation_rows, parse_value_to_string_vec};
 
@@ -622,10 +607,10 @@ mod tests {
                 .get("many_profile_pictures")
                 .unwrap(),
             &OperationValue::RelationList(RelationList::new(vec![
-                "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                     .parse()
                     .unwrap(),
-                "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
                     .parse()
                     .unwrap(),
             ]))
@@ -700,7 +685,7 @@ mod tests {
             "bubu",
         ];
         let mut string_value_list = vec![];
-        let operation = test_create_operation();
+        let operation = create_operation(&doggo_test_fields());
         for (_, value) in operation.fields().unwrap().iter() {
             string_value_list.push(parse_value_to_string_vec(value));
         }
@@ -777,7 +762,7 @@ mod tests {
                         .to_string(),
                 name: "many_special_profile_pictures".to_string(),
                 field_type: "pinned_relation_list".to_string(),
-                value: "0020dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                value: "0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
                     .to_string(),
             },
             DocumentViewFieldRow {
@@ -789,7 +774,7 @@ mod tests {
                         .to_string(),
                 name: "many_special_profile_pictures".to_string(),
                 field_type: "pinned_relation_list".to_string(),
-                value: "0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                value: "0020dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
                     .to_string(),
             },
             DocumentViewFieldRow {
@@ -856,10 +841,10 @@ mod tests {
             &DocumentViewValue::new(
                 &operation_id,
                 &OperationValue::RelationList(RelationList::new(vec![
-                    "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                    "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                         .parse()
                         .unwrap(),
-                    "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                    "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
                         .parse()
                         .unwrap(),
                 ]))

@@ -19,14 +19,15 @@ use crate::schema_service::{SchemaService, TempFile};
 use super::schema::{get_schema_metafield, get_schema_metatype};
 
 /// Container object that injects registered p2panda schemas when it is added to a GraphQL schema.
+#[derive(Debug,)]
 pub struct DynamicQuery {
     store: SqlStorage,
-    schema_service: SchemaService<SqlStorage>,
+    schema_service: SchemaService,
 }
 
 impl DynamicQuery {
     /// Returns a GraphQL container object given a database pool.
-    pub fn new(store: SqlStorage, schema_service: SchemaService<SqlStorage>) -> Self {
+    pub fn new(store: SqlStorage, schema_service: SchemaService) -> Self {
         Self {
             store,
             schema_service,
@@ -108,6 +109,8 @@ impl OutputType for DynamicQuery {
         registry.create_output_type::<DynamicQuery, _>(MetaTypeId::Object, |reg| {
             // Insert queries for all registered schemas.
             let mut fields = IndexMap::new();
+
+            println!("BLA");
 
             // Load schema definitions and keep them in memory until the node shuts down.
             let schemas: &'static Vec<Schema> = TempFile::load_static("./aquadoggo-schemas.temp");

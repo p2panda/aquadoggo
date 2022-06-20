@@ -18,6 +18,7 @@ use crate::db::provider::SqlStorage;
 /// this data according to what it sees in the newly incoming entries.
 ///
 /// `StorageLog` implements the trait `AsStorageLog` which is required when defining a `LogStore`.
+#[derive(Debug)]
 pub struct StorageLog {
     author: Author,
     log_id: LogId,
@@ -240,7 +241,8 @@ mod tests {
             &DocumentViewId::new(&[
                 Hash::new(&random_entry_hash()).unwrap().into(),
                 Hash::new(&random_entry_hash()).unwrap().into(),
-            ]),
+            ])
+            .unwrap(),
         );
 
         let log = StorageLog::new(&author, &schema, &document.into(), &LogId::new(1));
