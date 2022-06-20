@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use async_graphql::*;
+use std::sync::Arc;
 
+use async_graphql::*;
+use tokio::sync::Mutex;
+
+use crate::db::provider::SqlStorage;
 use crate::db::stores::StorageEntry;
-use crate::graphql::Context as GraphQLContext;
+use crate::graphql::replication::context::ReplicationContext;
 
 use super::payload::Payload;
 use super::Entry;
@@ -27,17 +31,10 @@ impl SingleEntryAndPayload {
         self.payload.as_ref()
     }
 
-    /// Get the certificate pool for this entry that can be used to verify the entry is valid
+    /// Get the certificate pool for this entry that can be used to verify the entry is valid.
     async fn certificate_pool<'a>(&self, ctx: &Context<'a>) -> Result<Vec<Entry>> {
-        let ctx: &GraphQLContext = ctx.data()?;
-
-        let result = ctx
-            .replication_context
-            .lock()
-            .await
-            .get_skiplinks(&self.entry)
-            .await?;
-
+        let ctx: &Arc<Mutex<ReplicationContext<SqlStorage>>> = ctx.data()?;
+        let result = ctx.lock().await.get_skiplinks(&self.entry).await?;
         Ok(result)
     }
 }

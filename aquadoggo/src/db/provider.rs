@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
 use async_trait::async_trait;
 use sqlx::query_scalar;
 
@@ -14,20 +15,21 @@ use crate::graphql::client::{
     EntryArgsRequest, EntryArgsResponse, PublishEntryRequest, PublishEntryResponse,
 };
 
-#[derive(Debug, Clone)]
-/// Sql based storage that implements `StorageProvider`
+/// Sql based storage that implements `StorageProvider`.
+#[derive(Clone, Debug)]
 pub struct SqlStorage {
     pub(crate) pool: Pool,
 }
 
 impl SqlStorage {
-    /// Create a new `SqlStorage` using the provided db `Pool`
+    /// Create a new `SqlStorage` using the provided db `Pool`.
     pub fn new(pool: Pool) -> Self {
         Self { pool }
     }
 }
 
-/// A `StorageProvider` implementation based on `sqlx` that supports SQLite and PostgreSQL databases.
+/// A `StorageProvider` implementation based on `sqlx` that supports SQLite and PostgreSQL
+/// databases.
 #[async_trait]
 impl StorageProvider<StorageEntry, StorageLog> for SqlStorage {
     type EntryArgsResponse = EntryArgsResponse;

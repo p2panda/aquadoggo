@@ -6,15 +6,14 @@ use p2panda_rs::document::{DocumentId, DocumentViewFields, DocumentViewId, Docum
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{
     Operation, OperationFields, OperationId, OperationValue, PinnedRelation, PinnedRelationList,
-    Relation, RelationList,
+    Relation, RelationList, VerifiedOperation,
 };
 use p2panda_rs::schema::SchemaId;
 
 use crate::db::models::document::DocumentViewFieldRow;
 use crate::db::models::OperationFieldsJoinedRow;
-use crate::db::stores::OperationStorage;
 
-/// Takes a vector of `OperationFieldsJoinedRow` and parses them into an `OperationStorage`
+/// Takes a vector of `OperationFieldsJoinedRow` and parses them into an `VerifiedOperation`
 /// struct.
 ///
 /// Operation fields which contain lists of values (RelationList & PinnedRelationList) are
@@ -22,7 +21,7 @@ use crate::db::stores::OperationStorage;
 /// when retrieving an operation from the db.
 pub fn parse_operation_rows(
     operation_rows: Vec<OperationFieldsJoinedRow>,
-) -> Option<OperationStorage> {
+) -> Option<VerifiedOperation> {
     let first_row = match operation_rows.get(0) {
         Some(row) => row,
         None => return None,
@@ -32,7 +31,6 @@ pub fn parse_operation_rows(
     let schema: SchemaId = first_row.schema_id.parse().unwrap();
     let author = Author::new(&first_row.author).unwrap();
     let operation_id = first_row.operation_id.parse().unwrap();
-    let document_id = first_row.document_id.parse().unwrap();
 
     let mut relation_lists: BTreeMap<String, Vec<DocumentId>> = BTreeMap::new();
     let mut pinned_relation_lists: BTreeMap<String, Vec<DocumentViewId>> = BTreeMap::new();
@@ -155,12 +153,7 @@ pub fn parse_operation_rows(
     // Unwrap as we are sure values coming from the db are validated
     .unwrap();
 
-    Some(OperationStorage::new(
-        &author,
-        &operation,
-        &operation_id,
-        &document_id,
-    ))
+    Some(VerifiedOperation::new(&author, &operation_id, &operation).unwrap())
 }
 
 /// Takes a single `OperationValue` and parses it into a vector of string values.
@@ -341,7 +334,6 @@ mod tests {
         AsOperation, OperationId, OperationValue, PinnedRelation, PinnedRelationList, Relation,
         RelationList,
     };
-    use p2panda_rs::storage_provider::traits::AsStorageOperation;
     use p2panda_rs::test_utils::fixtures::create_operation;
 
     use crate::db::models::{document::DocumentViewFieldRow, OperationFieldsJoinedRow};

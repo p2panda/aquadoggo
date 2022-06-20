@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 pub struct SequenceNumber(pub PandaSeqNum);
 
 impl SequenceNumber {
+    #[allow(dead_code)]
     pub fn new(seq: u64) -> Result<Self> {
         let panda_seq_num = PandaSeqNum::new(seq)?;
         Ok(Self(panda_seq_num))

@@ -55,7 +55,6 @@ impl Service<Context, ServiceMessage> for ReplicationService {
                 for remote_peer in remote_peers.clone().iter() {
                     for (author, log_ids) in authors_to_replicate.clone().iter() {
                         for log_id in log_ids {
-
                             // Get the latest seq we have for this log + author
                             let latest_seq = get_latest_seq(&context, &log_id, &author).await;
                             debug!("Latest entry seq: {:?}", latest_seq);
@@ -111,10 +110,7 @@ impl Service<Context, ServiceMessage> for ReplicationService {
 }
 
 fn send_new_entry_service_message(tx: ServiceSender, entry: &StorageEntry) {
-    let bus_message = ServiceMessage::NewEntryAndOperation(
-        entry.entry_decoded(),
-        entry.operation_encoded().unwrap().into(),
-    );
+    let bus_message = ServiceMessage::NewOperation(entry.entry_signed().hash().into());
     tx.send(bus_message)
         .expect("Expected to be able to send a ServiceMessage on ServiceSender");
 }

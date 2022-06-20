@@ -51,11 +51,11 @@ Configurable node server implementation for the [`p2panda`] network running as a
 
 ## Features
 
-- Awaits signed operations from clients via a JSON RPC API.
+- Awaits signed operations from clients via GraphQL.
 - Verifies the consistency, format and signature of operations and rejects invalid ones.
 - Stores operations of the network in a SQL database of your choice (SQLite, PostgreSQL or MySQL).
 - Materializes views on top of the known data.
-- Answers filterable and paginated data queries.
+- Answers filterable and paginated data queries via GraphQL.
 - Discovers other nodes in local network and internet.
 - Replicates data with other nodes.
 

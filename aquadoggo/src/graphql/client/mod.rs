@@ -4,9 +4,9 @@ mod mutation;
 mod query;
 mod request;
 mod response;
-pub(crate) mod u64_string;
+mod u64_string;
 
-pub use mutation::Mutation;
-pub use query::Query;
+pub use mutation::ClientMutationRoot;
+pub use query::ClientRoot;
 pub use request::{EntryArgsRequest, PublishEntryRequest};
 pub use response::{EntryArgsResponse, PublishEntryResponse};

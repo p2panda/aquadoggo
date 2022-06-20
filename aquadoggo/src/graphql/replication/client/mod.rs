@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use anyhow::{anyhow, bail};
+use anyhow::anyhow;
 
 use graphql_client::{reqwest::post_graphql, GraphQLQuery};
 use p2panda_rs::entry::LogId as PandaLogId;
@@ -84,7 +84,8 @@ fn create_get_entries_newer_than_seq_request_variable(
         publicKey: author.public_key.clone(),
         alias: author.alias.clone().map(|id| id.0),
     };
-    let sequence_number = sequence_number.map(|sequence_number| SequenceNumber(sequence_number.to_owned()));
+    let sequence_number =
+        sequence_number.map(|sequence_number| SequenceNumber(sequence_number.to_owned()));
     let log_id = LogId(log_id.to_owned());
     let variables = get_entries_newer_than_seq::Variables {
         log_id,

@@ -8,7 +8,7 @@ use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::{Author, KeyPair};
 use p2panda_rs::operation::{
     AsOperation, Operation, OperationEncoded, OperationId, OperationValue, PinnedRelation,
-    PinnedRelationList, Relation, RelationList,
+    PinnedRelationList, Relation, RelationList, VerifiedOperation,
 };
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::{
@@ -19,7 +19,7 @@ use p2panda_rs::test_utils::fixtures::{create_operation, delete_operation, updat
 use rstest::fixture;
 
 use crate::db::provider::SqlStorage;
-use crate::db::stores::{OperationStorage, StorageEntry, StorageLog};
+use crate::db::stores::{StorageEntry, StorageLog};
 use crate::db::traits::DocumentStore;
 use crate::graphql::client::{EntryArgsRequest, PublishEntryRequest};
 use crate::test_helpers::initialize_db;
@@ -149,12 +149,10 @@ pub async fn insert_entry_operation_and_view(
 
     provider.publish_entry(&request).await.unwrap();
     provider
-        .insert_operation(&OperationStorage::new(
-            &author,
-            operation,
-            &operation_id,
+        .insert_operation(
+            &VerifiedOperation::new(&author, &operation_id, operation).unwrap(),
             &document_id,
-        ))
+        )
         .await
         .unwrap();
 
@@ -163,14 +161,7 @@ pub async fn insert_entry_operation_and_view(
         .await
         .unwrap();
 
-    let document = DocumentBuilder::new(
-        document_operations
-            .into_iter()
-            .map(|operation| operation.into())
-            .collect(),
-    )
-    .build()
-    .unwrap();
+    let document = DocumentBuilder::new(document_operations).build().unwrap();
 
     provider.insert_document(&document).await.unwrap();
 
@@ -248,7 +239,7 @@ pub async fn test_db(
             let next_entry = Entry::new(
                 &next_entry_args.log_id,
                 Some(&next_operation),
-                next_entry_args.backlink.as_ref(),
+                next_entry_args.skiplink.as_ref(),
                 next_entry_args.backlink.as_ref(),
                 &next_entry_args.seq_num,
             )
@@ -277,14 +268,14 @@ pub async fn test_db(
                 store.insert_log(storage_log).await.unwrap();
             }
 
-            let storage_operation = OperationStorage::new(
-                &author,
-                &next_operation,
-                &entry_encoded.hash().into(),
-                &document.as_ref().cloned().unwrap(),
-            );
+            let verified_operation =
+                VerifiedOperation::new(&author, &entry_encoded.hash().into(), &next_operation)
+                    .unwrap();
 
-            store.insert_operation(&storage_operation).await.unwrap();
+            store
+                .insert_operation(&verified_operation, &document.clone().unwrap())
+                .await
+                .unwrap();
         }
     }
     TestSqlStore {
