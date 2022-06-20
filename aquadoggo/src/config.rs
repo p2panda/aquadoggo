@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use config::{Config, Environment, File};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
 
 use anyhow::Result;
+use config::{Config, Environment, File};
 use directories::ProjectDirs;
 use serde::Deserialize;
 
