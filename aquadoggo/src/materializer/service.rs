@@ -42,14 +42,14 @@ pub async fn materializer_service(
     let on_error = factory.on_error();
 
     // Subscribe to status changes of tasks
-    let mut on_update = factory.on_update();
+    let mut on_task_status_change = factory.on_task_status_change();
     let store = context.store.clone();
 
     // Keep track of status changes and persist it in the database. This allows us to pick up
     // uncompleted tasks next time we start the node.
     let status_handle = task::spawn(async move {
         loop {
-            match on_update.recv().await {
+            match on_task_status_change.recv().await {
                 Ok(TaskStatus::Pending(task)) => {
                     store
                         .insert_task(&task)

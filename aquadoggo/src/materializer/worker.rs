@@ -350,7 +350,7 @@ where
     }
 
     /// Subscribe to status changes of tasks.
-    pub fn on_update(&self) -> Receiver<TaskStatus<IN>> {
+    pub fn on_task_status_change(&self) -> Receiver<TaskStatus<IN>> {
         self.tx_status.subscribe()
     }
 
@@ -569,7 +569,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn on_update_subscription() {
+    async fn on_task_status_change_subscription() {
         type Input = usize;
         type Data = usize;
 
@@ -580,11 +580,11 @@ mod tests {
         let messages: Arc<Mutex<Vec<TaskStatus<Input>>>> = Arc::new(Mutex::new(Vec::new()));
 
         // Subscribe to updates and record them
-        let mut on_update = factory.on_update();
+        let mut on_task_status_change = factory.on_task_status_change();
         let messages_clone = messages.clone();
         tokio::task::spawn(async move {
             loop {
-                let message = on_update.recv().await.unwrap();
+                let message = on_task_status_change.recv().await.unwrap();
                 messages_clone.lock().unwrap().push(message);
             }
         });
