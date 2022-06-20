@@ -77,6 +77,12 @@ impl SchemaProvider {
     }
 }
 
+impl Default for SchemaProvider {
+    fn default() -> Self {
+        Self::new(Vec::new())
+    }
+}
+
 #[cfg(test)]
 mod test {
     use rstest::rstest;
@@ -87,7 +93,7 @@ mod test {
 
     #[tokio::test]
     async fn test_get_all_schemas() {
-        let schemas = SchemaProvider::new(vec![]);
+        let schemas = SchemaProvider::default();
         let result = schemas.all();
         assert_eq!(result.len(), 2);
     }
