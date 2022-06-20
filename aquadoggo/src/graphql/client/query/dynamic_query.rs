@@ -19,7 +19,7 @@ use crate::schema_service::{SchemaService, TempFile};
 use super::schema::{get_schema_metafield, get_schema_metatype};
 
 /// Container object that injects registered p2panda schemas when it is added to a GraphQL schema.
-#[derive(Debug,)]
+#[derive(Debug)]
 pub struct DynamicQuery {
     store: SqlStorage,
     schema_service: SchemaService,
