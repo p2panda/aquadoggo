@@ -42,7 +42,7 @@ impl Service<Context, ServiceMessage> for ReplicationService {
         let connection_interval = self
             .config
             .connection_interval_seconds
-            .map(|s| Duration::from_secs(s))
+            .map(Duration::from_secs)
             .unwrap_or_else(|| Duration::from_secs(30));
 
         let mut client = Client::new();
@@ -56,15 +56,15 @@ impl Service<Context, ServiceMessage> for ReplicationService {
                     for (author, log_ids) in authors_to_replicate.clone().iter() {
                         for log_id in log_ids {
                             // Get the latest seq we have for this log + author
-                            let latest_seq = get_latest_seq(&context, &log_id, &author).await;
+                            let latest_seq = get_latest_seq(&context, log_id, author).await;
                             debug!("Latest entry seq: {:?}", latest_seq);
 
                             // Make our replication request to the remote peer
                             let entries = client
                                 .get_entries_newer_than_seq(
                                     remote_peer,
-                                    &log_id,
-                                    &author,
+                                    log_id,
+                                    author,
                                     latest_seq.as_ref(),
                                 )
                                 .await;
@@ -119,9 +119,9 @@ async fn get_latest_seq(context: &Context, log_id: &LogId, author: &Author) -> O
     context
         .0
         .store
-        .get_latest_entry(&author, &log_id)
+        .get_latest_entry(author, log_id)
         .await
         .ok()
         .flatten()
-        .map(|entry| entry.entry_decoded().seq_num().clone())
+        .map(|entry| *entry.entry_decoded().seq_num())
 }

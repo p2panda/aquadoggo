@@ -11,14 +11,14 @@ use reqwest::IntoUrl;
 
 use super::*;
 
-/// A graphql client for doing replication requests to another aquadoggo node
+/// A graphql client for doing replication requests to another aquadoggo node.
 #[derive(Debug)]
 pub struct Client {
     reqwest_client: ReqwestClient,
 }
 
 impl Client {
-    /// Create a new client
+    /// Create a new client.
     pub fn new() -> Self {
         // TODO tls?
         let reqwest_client = ReqwestClient::new();
@@ -29,7 +29,7 @@ impl Client {
     /// Attempts to get entries newer than the given sequence_number for an author + log_id.
     ///
     /// Currently does not use pagination, you will need to call this multiple times and eventually
-    /// you we will get up to date
+    /// you we will get up to date.
     pub async fn get_entries_newer_than_seq<U: IntoUrl + Clone>(
         &mut self,
         url: U,
@@ -47,8 +47,8 @@ impl Client {
         result
             .data
             .and_then(|data| data.get_entries_newer_than_seq.edges)
-            .map(|edges| convert_edges_to_storage_entries(edges))
-            .ok_or(anyhow!("data wasn't in the format expected"))?
+            .map(convert_edges_to_storage_entries)
+            .ok_or_else(|| anyhow!("data wasn't in the format expected"))?
     }
 }
 
@@ -57,10 +57,10 @@ fn convert_edges_to_storage_entries(
         Option<get_entries_newer_than_seq::GetEntriesNewerThanSeqGetEntriesNewerThanSeqEdges>,
     >,
 ) -> Result<Vec<StorageEntry>, Error> {
-    // Ooof, the auto generated types aren't very ergonimic to deal with.
+    // Ooof, the auto generated types aren't very ergonomic to deal with.
     let entries = edges
         .into_iter()
-        .filter_map(|edge| edge)
+        .flatten()
         .map(|edge| -> Result<StorageEntry> {
             let entry_and_payload = EntryAndPayload {
                 entry: edge.node.entry,
@@ -70,6 +70,7 @@ fn convert_edges_to_storage_entries(
             Ok(storage_entry)
         })
         .collect::<Result<Vec<StorageEntry>>>()?;
+
     Ok(entries)
 }
 
@@ -79,26 +80,27 @@ fn create_get_entries_newer_than_seq_request_variable(
     log_id: &PandaLogId,
 ) -> get_entries_newer_than_seq::Variables {
     let author: Author = author.clone().into();
-    // We have to do this manual type conversion because of this issue: https://github.com/graphql-rust/graphql-client/issues/386
+    // We have to do this manual type conversion because of this issue:
+    // https://github.com/graphql-rust/graphql-client/issues/386
     let author = get_entries_newer_than_seq::Author {
         publicKey: author.public_key.clone(),
-        alias: author.alias.clone().map(|id| id.0),
+        alias: author.alias.map(|id| id.0),
     };
     let sequence_number =
         sequence_number.map(|sequence_number| SequenceNumber(sequence_number.to_owned()));
     let log_id = LogId(log_id.to_owned());
-    let variables = get_entries_newer_than_seq::Variables {
+
+    get_entries_newer_than_seq::Variables {
         log_id,
         author,
         sequence_number,
         first: None,
         after: None,
-    };
-    variables
+    }
 }
 
-// The paths are relative to the directory where your `Cargo.toml` is located.
-// Both json and the GraphQL schema language are supported as sources for the schema
+// The paths are relative to the directory where your `Cargo.toml` is located. Both json and the
+// GraphQL schema language are supported as sources for the schema.
 #[derive(GraphQLQuery, Clone, Copy, Debug)]
 #[graphql(
     schema_path = "src/graphql/replication/client/schema.graphql",
@@ -106,8 +108,8 @@ fn create_get_entries_newer_than_seq_request_variable(
 )]
 struct GetEntryByHash;
 
-// The paths are relative to the directory where your `Cargo.toml` is located.
-// Both json and the GraphQL schema language are supported as sources for the schema
+// The paths are relative to the directory where your `Cargo.toml` is located. Both JSON and the
+// GraphQL schema language are supported as sources for the schema.
 #[derive(GraphQLQuery, Debug, Copy, Clone)]
 #[graphql(
     schema_path = "src/graphql/replication/client/schema.graphql",
@@ -115,4 +117,4 @@ struct GetEntryByHash;
 )]
 struct GetEntriesNewerThanSeq;
 
-//pub async fn get_entries_newer_than_seq()
+// pub async fn get_entries_newer_than_seq()
