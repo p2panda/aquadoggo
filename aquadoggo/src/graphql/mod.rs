@@ -4,4 +4,4 @@ pub(crate) mod client;
 pub(crate) mod replication;
 mod schema;
 
-pub use schema::{build_root_schema, QueryRoot, RootSchema};
+pub use schema::{build_root_schema, GraphQLSchemaManager, QueryRoot, RootSchema};
