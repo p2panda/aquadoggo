@@ -14,6 +14,7 @@ use async_trait::async_trait;
 use p2panda_rs::schema::{FieldType, Schema, SchemaId};
 
 use crate::db::provider::SqlStorage;
+use crate::graphql::TEMP_FILE_PATH;
 use crate::schema_service::{SchemaService, TempFile};
 
 use super::schema::{get_schema_metafield, get_schema_metatype};
@@ -113,7 +114,8 @@ impl OutputType for DynamicQuery {
             let mut fields = IndexMap::new();
 
             // Load schema definitions and keep them in memory until the node shuts down.
-            let schemas: &'static Vec<Schema> = TempFile::load_static("./aquadoggo-schemas.temp");
+            let schemas: &'static Vec<Schema> = TempFile::load_static(TEMP_FILE_PATH);
+
             for schema in schemas.iter() {
                 // Insert GraphQL types for all registered schemas.
                 let metatype = get_schema_metatype(schema);
