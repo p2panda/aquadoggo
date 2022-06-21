@@ -10,7 +10,9 @@ use crate::db::provider::SqlStorage;
 use crate::graphql::client::{ClientMutationRoot, ClientRoot};
 use crate::graphql::replication::context::ReplicationContext;
 use crate::graphql::replication::ReplicationRoot;
-use crate::schema_service::SchemaService;
+use crate::schema_service::{SchemaService, TempFile};
+
+pub const TEMP_FILE_PATH: &'static str = "./aquadoggo-schemas.temp";
 
 /// All of the graphql query sub modules merged into one top level root.
 #[derive(MergedObject, Debug)]
@@ -85,12 +87,32 @@ impl GraphQLSchemaManager {
     }
 
     pub async fn build_root_schema(&mut self) {
+        // Store temporary file with all schemas inside on file-system.
+        //
+        // This is a workaround `async_graphql` not being able to introduce new schemas during
+        // runtime: We don't get access to our database from within defining GraphQL schemas but
+        // only to the file system.
+        //
+        // @TODO: We could try to still access the database by creating a static interface to it?
+        let all_schemas = self
+            .shared
+            .schema_service
+            .all_schemas()
+            .await
+            .expect("Loading all schemas from database failed");
+        let temp_file = TempFile::save(&all_schemas, TEMP_FILE_PATH);
+
+        println!("BUILD ROOT SCHEMA");
+
+        // Create the new GraphQL based on the current state of known p2panda application schemas
         let schema = build_root_schema(
             self.shared.store.clone(),
             self.shared.tx.clone(),
             self.shared.schema_service.clone(),
         );
-
         self.schemas.lock().await.push(schema);
+
+        // Remove temporary file after schema got created
+        temp_file.unlink();
     }
 }

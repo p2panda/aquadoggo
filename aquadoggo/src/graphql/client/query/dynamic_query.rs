@@ -82,6 +82,7 @@ impl DynamicQuery {
                 }
             }
             .unwrap();
+
             fields.insert(Name::new(field_name), value);
         }
 
@@ -110,6 +111,8 @@ impl OutputType for DynamicQuery {
         registry.create_output_type::<DynamicQuery, _>(MetaTypeId::Object, |reg| {
             // Insert queries for all registered schemas.
             let mut fields = IndexMap::new();
+
+            println!("LOAD STATIC");
 
             // Load schema definitions and keep them in memory until the node shuts down.
             let schemas: &'static Vec<Schema> = TempFile::load_static("./aquadoggo-schemas.temp");

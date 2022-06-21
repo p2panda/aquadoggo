@@ -54,8 +54,9 @@ impl<Data: Serialize + DeserializeOwned> TempFile<Data> {
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use std::path::Path;
+
+    use super::*;
 
     #[test]
     fn test_temp_file_helper() {
