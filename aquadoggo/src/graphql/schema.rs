@@ -64,9 +64,7 @@ pub struct GraphQLSchemaManager {
 
 impl GraphQLSchemaManager {
     pub fn new(store: SqlStorage, tx: ServiceSender, schema_service: SchemaService) -> Self {
-        let schema = build_root_schema(store.clone(), tx.clone(), schema_service.clone());
-
-        let schemas = Arc::new(Mutex::new(vec![schema]));
+        let schemas = Arc::new(Mutex::new(Vec::new()));
         let shared = GraphQLSharedData {
             store,
             tx,
@@ -101,8 +99,6 @@ impl GraphQLSchemaManager {
             .await
             .expect("Loading all schemas from database failed");
         let temp_file = TempFile::save(&all_schemas, TEMP_FILE_PATH);
-
-        println!("BUILD ROOT SCHEMA");
 
         // Create the new GraphQL based on the current state of known p2panda application schemas
         let schema = build_root_schema(

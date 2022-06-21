@@ -112,8 +112,6 @@ impl OutputType for DynamicQuery {
             // Insert queries for all registered schemas.
             let mut fields = IndexMap::new();
 
-            println!("LOAD STATIC");
-
             // Load schema definitions and keep them in memory until the node shuts down.
             let schemas: &'static Vec<Schema> = TempFile::load_static("./aquadoggo-schemas.temp");
             for schema in schemas.iter() {
