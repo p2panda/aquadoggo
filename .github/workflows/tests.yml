@@ -91,11 +91,11 @@ jobs:
         env:
           DATABASE_URL: >-
             postgresql://
-            ${{ job.services.mariadb.env.POSTGRES_USER }}:
-            ${{ job.services.mariadb.env.POSTGRES_PASSWORD }}
-            @localhost:
-            ${{ job.services.mariadb.ports[5432] }}/
-            ${{ job.services.mariadb.env.POSTGRES_DATABASE }}
+            ${{ job.services.postres.env.POSTGRES_USER }}:
+            ${{ job.services.postres.env.POSTGRES_PASSWORD }}
+            @localhost:5432/
+            ${{ job.services.postres.env.POSTGRES_DATABASE }}
+          RUST_LOG: debug
 
   rust-test-mariadb:
     runs-on: ubuntu-latest
@@ -144,9 +144,9 @@ jobs:
             mysql://
             ${{ job.services.mariadb.env.MYSQL_USER }}:
             ${{ job.services.mariadb.env.MYSQL_PASSWORD }}
-            @localhost:
-            ${{ job.services.mariadb.ports[3306] }}/
+            @localhost:3306/
             ${{ job.services.mariadb.env.MYSQL_DATABASE }}
+          RUST_LOG: debug
 
   rust-check:
     runs-on: ubuntu-latest
