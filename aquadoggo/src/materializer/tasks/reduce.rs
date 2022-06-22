@@ -179,7 +179,7 @@ mod tests {
         let context = Context::new(
             db.store,
             Configuration::default(),
-            SchemaProvider::new(Vec::new()),
+            SchemaProvider::default(),
         );
 
         for document_id in &db.documents {
@@ -226,7 +226,7 @@ mod tests {
         let context = Context::new(
             db.store.clone(),
             Configuration::default(),
-            SchemaProvider::new(Vec::new()),
+            SchemaProvider::default(),
         );
         let input = TaskInput::new(None, Some(document_view_id.clone()));
 
@@ -272,7 +272,7 @@ mod tests {
         let context = Context::new(
             db.store.clone(),
             Configuration::default(),
-            SchemaProvider::new(Vec::new()),
+            SchemaProvider::default(),
         );
 
         for document_id in &db.documents {
@@ -317,7 +317,7 @@ mod tests {
         let context = Context::new(
             db.store.clone(),
             Configuration::default(),
-            SchemaProvider::new(Vec::new()),
+            SchemaProvider::default(),
         );
         let document_id = db.documents[0].clone();
 
@@ -342,7 +342,7 @@ mod tests {
         let context = Context::new(
             db.store,
             Configuration::default(),
-            SchemaProvider::new(Vec::new()),
+            SchemaProvider::default(),
         );
         let input = TaskInput::new(document_id, document_view_id);
 

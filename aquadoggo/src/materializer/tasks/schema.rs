@@ -53,7 +53,7 @@ pub async fn schema_task(context: Context, input: TaskInput) -> TaskResult<TaskI
         {
             // Updated schema was assembled successfully and is now passed to schema provider.
             Some(schema) => {
-                context.schemas.update(schema.clone());
+                context.schema_provider.update(schema.clone());
                 debug!("Schema task updated {}", schema);
             }
             // This schema was not ready to be assembled after all so it is ignored.
@@ -256,7 +256,7 @@ mod tests {
         let context = Context::new(
             db.store.clone(),
             Configuration::default(),
-            SchemaProvider::new(Vec::new()),
+            SchemaProvider::default(),
         );
         // Prepare schema definition and schema field definition
         let (definition_view_id, field_view_id) =
@@ -271,7 +271,7 @@ mod tests {
 
         // The new schema should be available on storage provider.
         assert!(context
-            .schemas
+            .schema_provider
             .all()
             .iter()
             .any(|s| s.version() == SchemaVersion::Application(definition_view_id.clone())));
