@@ -87,7 +87,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --manifest-path ${{ env.cargo_manifest }}
+          args: --manifest-path ${{ env.cargo_manifest }} -- --nocapture
         env:
           DATABASE_URL: >-
             postgresql://
@@ -107,10 +107,10 @@ jobs:
           # Maps TCP port 3306 on service container to the host
           - 3306:3306
         env:
-          MYSQL_USER: user
-          MYSQL_PASSWORD: password
-          MYSQL_DATABASE: test
-          MYSQL_ROOT_PASSWORD: password
+          MYSQL_USER: panda
+          MYSQL_PASSWORD: panda
+          MYSQL_DATABASE: aquadogo-development
+          MYSQL_ROOT_PASSWORD: root
         options: >-
           --health-cmd="mysqladmin ping"
           --health-interval=5s
@@ -138,7 +138,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --manifest-path ${{ env.cargo_manifest }}
+          args: --manifest-path ${{ env.cargo_manifest }} -- --nocapture
         env:
           DATABASE_URL: >-
             mysql://

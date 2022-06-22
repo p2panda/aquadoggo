@@ -8,7 +8,6 @@ use axum::BoxError;
 use http::header::{HeaderName, HeaderValue};
 use http::{Request, StatusCode};
 use hyper::{Body, Server};
-use log::debug;
 use once_cell::sync::Lazy;
 use p2panda_rs::hash::Hash;
 use rand::Rng;
@@ -158,7 +157,7 @@ impl TestResponse {
 
 /// Create test database
 pub async fn initialize_db() -> Pool {
-    debug!("Connecting to {} test database", TEST_CONFIG.database_url);
+    println!("Connecting to {} test database", TEST_CONFIG.database_url);
 
     // Reset database first
     drop_database().await;
