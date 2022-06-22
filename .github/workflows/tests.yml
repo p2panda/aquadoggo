@@ -105,6 +105,7 @@ jobs:
         env:
           MYSQL_USER: panda
           MYSQL_PASSWORD: panda
+          MYSQL_DATABASE: aquadoggo-development
           MYSQL_ROOT_PASSWORD: root
         options: >-
           --health-cmd="mysqladmin ping"
