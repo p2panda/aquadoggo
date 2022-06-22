@@ -117,7 +117,7 @@ async fn reduce_document_view(
         .await
         .map_err(|_| TaskError::Critical)?;
 
-    info!("Stored {}", document);
+    info!("Stored {} view {}", document, document.view_id());
 
     // Return the new view id to be used in the resulting dependency task
     Ok(Some(document.view_id().to_owned()))
