@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GraphQL endpoints for replication [#100](https://github.com/p2panda/aquadoggo/pull/100)
 - Inform materialization service about new operations [#161](https://github.com/p2panda/aquadoggo/pull/161)
 - Reschedule pending tasks on startup [#168](https://github.com/p2panda/aquadoggo/pull/168)
+- Add schema task and schema provider that update when new schema views are materialised [#166](https://github.com/p2panda/aquadoggo/pull/166/files)
 
 ### Changed
 
