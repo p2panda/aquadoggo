@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use log::debug;
+use log::{debug, info};
+
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::operation::{AsOperation, AsVerifiedOperation, OperationValue};
 use p2panda_rs::schema::SchemaId;
@@ -17,7 +18,7 @@ use crate::materializer::TaskInput;
 /// has all its immediate dependencies available in the store. It collects all required views for
 /// the schema, instantiates it and adds it to the schema provider.
 pub async fn schema_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
-    debug!("Schema task requested for {}", input);
+    debug!("Working on task {}", input);
     let input_view_id = match (input.document_id, input.document_view_id) {
         (None, Some(view_id)) => Ok(view_id),
         // The task input must contain only a view id.
@@ -54,7 +55,7 @@ pub async fn schema_task(context: Context, input: TaskInput) -> TaskResult<TaskI
             // Updated schema was assembled successfully and is now passed to schema provider.
             Some(schema) => {
                 context.schema_provider.update(schema.clone());
-                debug!("Schema task updated {}", schema);
+                info!("Completed {}", schema);
             }
             // This schema was not ready to be assembled after all so it is ignored.
             None => (),
