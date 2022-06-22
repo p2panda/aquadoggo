@@ -163,7 +163,9 @@ pub async fn initialize_db() -> Pool {
 
     // Create connection pool and run all migrations
     let pool = connection_pool(&TEST_CONFIG.database_url, 25).await.unwrap();
-    run_pending_migrations(&pool).await.unwrap();
+    if run_pending_migrations(&pool).await.is_err() {
+        pool.close().await;
+    }
 
     pool
 }
