@@ -182,7 +182,6 @@ mod tests {
 
         // Check for duplicates
         let result = db.store.get_tasks().await;
-        // println!("{:?}", result.unwrap());
         assert_eq!(result.unwrap().len(), 1);
     }
 }
