@@ -138,11 +138,6 @@ mod tests {
 
     use super::schema_task;
 
-    /// Init env logger for tests.
-    fn init() {
-        let _ = env_logger::builder().is_test(true).try_init();
-    }
-
     /// Insert a test schema definition and schema field definition and fire reduce tasks for both.
     async fn insert_test_schema(
         context: &Context,
@@ -257,7 +252,6 @@ mod tests {
         #[future]
         db: TestSqlStore,
     ) {
-        init();
         let db = db.await;
         let context = Context::new(
             db.store.clone(),

@@ -76,3 +76,4 @@ tower = "0.4.12"
 p2panda-rs = { git = "https://github.com/p2panda/p2panda", branch = "schema-service-2", features = [
     "testing",
 ] }
+ctor = "0.1.22"
