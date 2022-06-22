@@ -157,14 +157,12 @@ impl TestResponse {
 
 /// Create test database
 pub async fn initialize_db() -> Pool {
-    println!("Connecting to {} test database", TEST_CONFIG.database_url);
-
     // Reset database first
-    drop_database().await;
-    create_database(&TEST_CONFIG.database_url).await.unwrap();
+    // drop_database().await;
+    // create_database(&TEST_CONFIG.database_url).await.unwrap();
 
     // Create connection pool and run all migrations
-    let pool = connection_pool(&TEST_CONFIG.database_url, 5).await.unwrap();
+    let pool = connection_pool(&TEST_CONFIG.database_url, 25).await.unwrap();
     run_pending_migrations(&pool).await.unwrap();
 
     pool
