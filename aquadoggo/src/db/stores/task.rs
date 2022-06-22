@@ -21,30 +21,10 @@ impl SqlStorage {
             .as_ref()
             .map(|view_id| view_id.as_str());
 
-        // Check first if this task already exists, to avoid duplicate rows
-        let task_row = query_as::<_, TaskRow>(
-            "
-            SELECT
-                name,
-                document_id,
-                document_view_id
-            FROM
-                tasks
-            ",
-        )
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|err| SqlStorageError::Transaction(err.to_string()))?;
-
-        // If yes, we are already done here
-        if task_row.is_some() {
-            return Ok(());
-        }
-
         // Insert task into database
-        let result = query(
+        query(
             "
-            INSERT INTO
+            INSERT OR IGNORE INTO
                 tasks (
                     name,
                     document_id,
@@ -61,11 +41,7 @@ impl SqlStorage {
         .await
         .map_err(|err| SqlStorageError::Transaction(err.to_string()))?;
 
-        if result.rows_affected() != 1 {
-            Err(SqlStorageError::Insertion("tasks".into()))
-        } else {
-            Ok(())
-        }
+        Ok(())
     }
 
     /// Removes a "pending" task from the database.
@@ -85,6 +61,7 @@ impl SqlStorage {
                 tasks
             WHERE
                 name = $1
+                -- Use `IS` because these columns can contain `null` values.
                 AND document_id IS $2
                 AND document_view_id IS $3
             ",
@@ -205,6 +182,7 @@ mod tests {
 
         // Check for duplicates
         let result = db.store.get_tasks().await;
+        // println!("{:?}", result.unwrap());
         assert_eq!(result.unwrap().len(), 1);
     }
 }
