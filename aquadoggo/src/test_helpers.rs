@@ -8,8 +8,10 @@ use axum::BoxError;
 use http::header::{HeaderName, HeaderValue};
 use http::{Request, StatusCode};
 use hyper::{Body, Server};
+use once_cell::sync::Lazy;
 use p2panda_rs::hash::Hash;
 use rand::Rng;
+use serde::Deserialize;
 use sqlx::any::Any;
 use sqlx::migrate::MigrateDatabase;
 use tower::make::Shared;
@@ -18,7 +20,32 @@ use tower_service::Service;
 use crate::db::provider::SqlStorage;
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
 
-const DB_URL: &str = "sqlite::memory:";
+/// Configuration used in test helper methods.
+#[derive(Deserialize, Debug)]
+#[serde(default)]
+struct TestConfiguration {
+    /// Database url (sqlite, mysql or postgres)
+    database_url: String,
+}
+
+impl TestConfiguration {
+    /// Create a new configuration object for test environments.
+    pub fn new() -> Self {
+        envy::from_env::<TestConfiguration>()
+            .expect("Could not read environment variables for test configuration")
+    }
+}
+
+impl Default for TestConfiguration {
+    fn default() -> Self {
+        Self {
+            /// SQLite database stored in memory.
+            database_url: "sqlite::memory:".into(),
+        }
+    }
+}
+
+static TEST_CONFIG: Lazy<TestConfiguration> = Lazy::new(|| TestConfiguration::new());
 
 pub(crate) struct TestClient {
     client: reqwest::Client,
@@ -128,20 +155,20 @@ impl TestResponse {
     }
 }
 
-// Create test database
+/// Create test database
 pub async fn initialize_db() -> Pool {
     // Reset database first
     drop_database().await;
-    create_database(DB_URL).await.unwrap();
+    create_database(&TEST_CONFIG.database_url).await.unwrap();
 
     // Create connection pool and run all migrations
-    let pool = connection_pool(DB_URL, 5).await.unwrap();
+    let pool = connection_pool(&TEST_CONFIG.database_url, 5).await.unwrap();
     run_pending_migrations(&pool).await.unwrap();
 
     pool
 }
 
-// Create storage provider API around test database
+/// Create storage provider API around test database
 pub async fn initialize_store() -> SqlStorage {
     let pool = initialize_db().await;
     SqlStorage::new(pool)
@@ -149,12 +176,15 @@ pub async fn initialize_store() -> SqlStorage {
 
 // Delete test database
 pub async fn drop_database() {
-    if Any::database_exists(DB_URL).await.unwrap() {
-        Any::drop_database(DB_URL).await.unwrap();
+    if Any::database_exists(&TEST_CONFIG.database_url)
+        .await
+        .unwrap()
+    {
+        Any::drop_database(&TEST_CONFIG.database_url).await.unwrap();
     }
 }
 
-// Generate random entry hash
+/// Generate random entry hash
 pub fn random_entry_hash() -> String {
     let random_data = rand::thread_rng().gen::<[u8; 32]>().to_vec();
 

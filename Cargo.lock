@@ -121,6 +121,7 @@ dependencies = [
  "lru",
  "mockall",
  "mockall_double",
+ "once_cell",
  "openssl-probe",
  "p2panda-rs",
  "rand 0.8.5",
