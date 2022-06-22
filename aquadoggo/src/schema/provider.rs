@@ -3,8 +3,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use p2panda_rs::schema::system::get_system_schema;
-use p2panda_rs::schema::{Schema, SchemaId, SchemaIdError};
+use p2panda_rs::schema::SYSTEM_SCHEMAS;
+use p2panda_rs::schema::{Schema, SchemaId};
 
 /// Provides fast access to system and application schemas during runtime.
 ///
@@ -20,8 +20,8 @@ impl SchemaProvider {
     /// Returns a `SchemaProvider` containing the given application schemas and all system schemas.
     pub fn new(application_schemas: Vec<Schema>) -> Self {
         // Collect all system and application schemas.
-        let mut schemas = Self::all_system();
-        schemas.extend(application_schemas);
+        let mut schemas = SYSTEM_SCHEMAS.clone();
+        schemas.extend(&application_schemas);
 
         // Build hash map from schemas for fast lookup.
         let mut index = HashMap::new();
@@ -39,26 +39,6 @@ impl SchemaProvider {
     /// Returns all system and application schemas.
     pub fn all(&self) -> Vec<Schema> {
         self.0.lock().unwrap().values().cloned().collect()
-    }
-
-    /// Returns all known system schemas.
-    pub fn all_system() -> Vec<Schema> {
-        let system_schemas = vec![
-            SchemaId::SchemaDefinition(1),
-            SchemaId::SchemaFieldDefinition(1),
-        ]
-        .iter()
-        // Unwrap because tests make sure this works.
-        .map(|schema_id| get_system_schema(schema_id.to_owned()).unwrap())
-        .collect();
-        system_schemas
-    }
-
-    /// Retrieve a system schema by its schema id.
-    ///
-    /// Returns an error if the `schema_id` parameter is not a system schema id.
-    pub fn get_system(schema_id: SchemaId) -> Result<Schema, SchemaIdError> {
-        get_system_schema(schema_id)
     }
 
     /// Inserts or updates the given schema in this provider.

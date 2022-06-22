@@ -50,7 +50,7 @@ impl SchemaStore for SqlStorage {
             schema_fields.push(scheme_field_view);
         }
 
-        let schema = Schema::new(schema_view, schema_fields)?;
+        let schema = Schema::from_views(schema_view, schema_fields)?;
 
         Ok(Some(schema))
     }
@@ -87,7 +87,7 @@ impl SchemaStore for SqlStorage {
                 .map(|field| field.to_owned())
                 .collect();
 
-            all_schema.push(Schema::new(schema_view, schema_fields)?);
+            all_schema.push(Schema::from_views(schema_view, schema_fields)?);
         }
 
         Ok(all_schema)
@@ -164,27 +164,27 @@ mod tests {
     #[rstest]
     #[case::valid_schema_and_fields(
         "venue_name = { type: \"str\", value: tstr, }\ncreate-fields = { venue_name }\nupdate-fields = { + ( venue_name ) }",
-        operation_fields(vec![("name", OperationValue::Text("venue_name".to_string())), ("type", FieldType::String.into())]), 
+        operation_fields(vec![("name", OperationValue::Text("venue_name".to_string())), ("type", FieldType::String.into())]),
         operation_fields(vec![("name", OperationValue::Text("venue".to_string())), ("description", OperationValue::Text("My venue".to_string()))]))]
     #[should_panic(expected = "missing field \"name\"")]
     #[case::fields_missing_name_field(
         "",
-        operation_fields(vec![("type", FieldType::String.into())]), 
+        operation_fields(vec![("type", FieldType::String.into())]),
         operation_fields(vec![("name", OperationValue::Text("venue".to_string())), ("description", OperationValue::Text("My venue".to_string()))]))]
     #[should_panic(expected = "missing field \"type\"")]
     #[case::fields_missing_type_field(
         "",
-        operation_fields(vec![("name", OperationValue::Text("venue_name".to_string()))]), 
+        operation_fields(vec![("name", OperationValue::Text("venue_name".to_string()))]),
         operation_fields(vec![("name", OperationValue::Text("venue".to_string())), ("description", OperationValue::Text("My venue".to_string()))]))]
     #[should_panic(expected = "missing field \"name\"")]
     #[case::schema_missing_name_field(
         "",
-        operation_fields(vec![("name", OperationValue::Text("venue_name".to_string())), ("type", FieldType::String.into())]), 
+        operation_fields(vec![("name", OperationValue::Text("venue_name".to_string())), ("type", FieldType::String.into())]),
         operation_fields(vec![("description", OperationValue::Text("My venue".to_string()))]))]
     #[should_panic(expected = "missing field \"description\"")]
     #[case::schema_missing_name_description(
         "",
-        operation_fields(vec![("name", OperationValue::Text("venue_name".to_string())), ("type", FieldType::String.into())]), 
+        operation_fields(vec![("name", OperationValue::Text("venue_name".to_string())), ("type", FieldType::String.into())]),
         operation_fields(vec![("name", OperationValue::Text("venue".to_string()))]))]
     #[tokio::test]
     async fn get_schema(
@@ -215,11 +215,11 @@ mod tests {
 
     #[rstest]
     #[case::works(
-        operation_fields(vec![("name", OperationValue::Text("venue_name".to_string())), ("type", FieldType::String.into())]), 
+        operation_fields(vec![("name", OperationValue::Text("venue_name".to_string())), ("type", FieldType::String.into())]),
         operation_fields(vec![("name", OperationValue::Text("venue".to_string())), ("description", OperationValue::Text("My venue".to_string()))]))]
     #[should_panic(expected = "invalid fields found for this schema")]
     #[case::does_not_work(
-        operation_fields(vec![("name", OperationValue::Text("venue_name".to_string()))]), 
+        operation_fields(vec![("name", OperationValue::Text("venue_name".to_string()))]),
         operation_fields(vec![("name", OperationValue::Text("venue".to_string())), ("description", OperationValue::Text("My venue".to_string()))]))]
     #[tokio::test]
     async fn get_all_schema(
