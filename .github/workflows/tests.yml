@@ -89,13 +89,7 @@ jobs:
           command: test
           args: --manifest-path ${{ env.cargo_manifest }} -- --nocapture
         env:
-          DATABASE_URL: >-
-            postgresql://
-            ${{ job.services.postres.env.POSTGRES_USER }}:
-            ${{ job.services.postres.env.POSTGRES_PASSWORD }}
-            @localhost:5432/
-            ${{ job.services.postres.env.POSTGRES_DATABASE }}
-          RUST_LOG: debug
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/aquadogo-development
 
   rust-test-mariadb:
     runs-on: ubuntu-latest
@@ -109,7 +103,7 @@ jobs:
         env:
           MYSQL_USER: panda
           MYSQL_PASSWORD: panda
-          MYSQL_DATABASE: aquadogo-development
+          MYSQL_DATABASE: aquadoggo-development
           MYSQL_ROOT_PASSWORD: root
         options: >-
           --health-cmd="mysqladmin ping"
@@ -140,13 +134,7 @@ jobs:
           command: test
           args: --manifest-path ${{ env.cargo_manifest }} -- --nocapture
         env:
-          DATABASE_URL: >-
-            mysql://
-            ${{ job.services.mariadb.env.MYSQL_USER }}:
-            ${{ job.services.mariadb.env.MYSQL_PASSWORD }}
-            @localhost:3306/
-            ${{ job.services.mariadb.env.MYSQL_DATABASE }}
-          RUST_LOG: debug
+          DATABASE_URL: mysql://panda:panda@localhost:3306/aquadogo-development
 
   rust-check:
     runs-on: ubuntu-latest
