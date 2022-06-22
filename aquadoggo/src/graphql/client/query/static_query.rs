@@ -91,15 +91,15 @@ mod tests {
     use crate::graphql::GraphQLSchemaManager;
     use crate::http::build_server;
     use crate::http::HttpServiceContext;
-    use crate::schema_service::SchemaService;
+    use crate::schema::SchemaProvider;
     use crate::test_helpers::{initialize_store, TestClient};
 
     #[tokio::test]
     async fn next_entry_args_valid_query() {
         let (tx, _) = broadcast::channel(16);
         let store = initialize_store().await;
-        let schema_service = SchemaService::new(store.clone());
-        let manager = GraphQLSchemaManager::new(store, tx, schema_service).await;
+        let schema_provider = SchemaProvider::default();
+        let manager = GraphQLSchemaManager::new(store, tx, schema_provider).await;
         let context = HttpServiceContext::new(manager);
         let client = TestClient::new(build_server(context));
 
@@ -145,8 +145,8 @@ mod tests {
     async fn next_entry_args_error_response() {
         let (tx, _) = broadcast::channel(16);
         let store = initialize_store().await;
-        let schema_service = SchemaService::new(store.clone());
-        let manager = GraphQLSchemaManager::new(store, tx, schema_service).await;
+        let schema_provider = SchemaProvider::default();
+        let manager = GraphQLSchemaManager::new(store, tx, schema_provider).await;
         let context = HttpServiceContext::new(manager);
         let client = TestClient::new(build_server(context));
 

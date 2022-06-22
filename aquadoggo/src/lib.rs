@@ -32,6 +32,7 @@ mod test_helpers;
 pub use config::Configuration;
 pub use db::{connection_pool, provider::SqlStorage};
 pub use node::Node;
+pub use schema::SchemaProvider;
 
 /// Init env_logger before the test suite runs to handle logging outputs.
 ///

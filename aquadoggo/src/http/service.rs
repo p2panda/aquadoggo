@@ -11,11 +11,12 @@ use tower_http::cors::{Any, CorsLayer};
 
 use crate::bus::ServiceSender;
 use crate::context::Context;
+use crate::db::traits::SchemaStore;
 use crate::graphql::GraphQLSchemaManager;
 use crate::http::api::{handle_graphql_playground, handle_graphql_query};
 use crate::http::context::HttpServiceContext;
 use crate::manager::Shutdown;
-use crate::schema_service::SchemaService;
+use crate::schema::SchemaProvider;
 
 const GRAPHQL_ROUTE: &str = "/graphql";
 
@@ -45,9 +46,14 @@ pub async fn http_service(context: Context, signal: Shutdown, tx: ServiceSender)
     let http_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), http_port);
 
     // Prepare schema service and dynamic GraphQL schema manager
-    let schema_service = SchemaService::new(context.store.clone());
+    let schemas = context
+        .store
+        .get_all_schema()
+        .await
+        .expect("Unable to load application schemas from store");
+    let schema_provider = SchemaProvider::new(schemas);
     let graphql_schema_manager =
-        GraphQLSchemaManager::new(context.store.clone(), tx, schema_service).await;
+        GraphQLSchemaManager::new(context.store.clone(), tx, schema_provider).await;
 
     // Introduce a new context for all HTTP routes
     let http_context = HttpServiceContext::new(graphql_schema_manager);
@@ -69,7 +75,7 @@ mod tests {
 
     use crate::graphql::GraphQLSchemaManager;
     use crate::http::context::HttpServiceContext;
-    use crate::schema_service::SchemaService;
+    use crate::schema::SchemaProvider;
     use crate::test_helpers::{initialize_store, TestClient};
 
     use super::build_server;
@@ -78,8 +84,8 @@ mod tests {
     async fn graphql_endpoint() {
         let (tx, _) = broadcast::channel(16);
         let store = initialize_store().await;
-        let schema_service = SchemaService::new(store.clone());
-        let graphql_schema_manager = GraphQLSchemaManager::new(store, tx, schema_service).await;
+        let schema_provider = SchemaProvider::default();
+        let graphql_schema_manager = GraphQLSchemaManager::new(store, tx, schema_provider).await;
         let context = HttpServiceContext::new(graphql_schema_manager);
         let client = TestClient::new(build_server(context));
 

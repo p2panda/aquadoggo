@@ -483,7 +483,7 @@ where
                         }
                     }
 
-                    // Trigger status update when successful
+                    // Trigger removing the task from the task store
                     on_complete(item.input());
 
                     // Check the result

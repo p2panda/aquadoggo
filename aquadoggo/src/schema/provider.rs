@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use tokio::sync::broadcast::{channel, Receiver, Sender};
 
 use log::info;
 use p2panda_rs::schema::{Schema, SchemaId, SYSTEM_SCHEMAS};
@@ -12,7 +13,10 @@ use p2panda_rs::schema::{Schema, SchemaId, SYSTEM_SCHEMAS};
 ///
 /// Schemas can be updated and removed.
 #[derive(Clone, Debug)]
-pub struct SchemaProvider(Arc<Mutex<HashMap<SchemaId, Schema>>>);
+pub struct SchemaProvider {
+    schemas: Arc<Mutex<HashMap<SchemaId, Schema>>>,
+    tx: Sender<SchemaId>,
+}
 
 // Dead code allowed until this is used for https://github.com/p2panda/aquadoggo/pull/141
 #[allow(dead_code)]
@@ -28,17 +32,30 @@ impl SchemaProvider {
         for schema in schemas {
             index.insert(schema.id().to_owned(), schema.to_owned());
         }
-        Self(Arc::new(Mutex::new(index)))
+
+        let (tx, _) = channel(64);
+
+        Self {
+            schemas: Arc::new(Mutex::new(index)),
+            tx,
+        }
+    }
+
+    /// Returns receiver for broadcast channel.
+    ///
+    ///
+    pub fn on_schema_added(&self) -> Receiver<SchemaId> {
+        self.tx.subscribe()
     }
 
     /// Retrieve a schema that may be a system or application schema by its schema id.
     pub fn get(&self, schema_id: &SchemaId) -> Option<Schema> {
-        self.0.lock().unwrap().get(schema_id).cloned()
+        self.schemas.lock().unwrap().get(schema_id).cloned()
     }
 
     /// Returns all system and application schemas.
     pub fn all(&self) -> Vec<Schema> {
-        self.0.lock().unwrap().values().cloned().collect()
+        self.schemas.lock().unwrap().values().cloned().collect()
     }
 
     /// Inserts or updates the given schema in this provider.
@@ -46,8 +63,16 @@ impl SchemaProvider {
     /// Returns `true` if a schema was updated and `false` if it was inserted.
     pub fn update(&self, schema: Schema) -> bool {
         info!("Updating {}", schema);
-        let mut schemas = self.0.lock().unwrap();
-        schemas.insert(schema.id().clone(), schema).is_some()
+        let mut schemas = self.schemas.lock().unwrap();
+        let is_update = schemas
+            .insert(schema.id().clone(), schema.clone())
+            .is_some();
+
+        // Inform subscribers about new schema
+        if self.tx.send(schema.id().to_owned()).is_err() {
+            // Do nothing here, as we don't mind if there are no subscribers
+        }
+        is_update
     }
 
     /// Remove a schema from this provider.
@@ -55,7 +80,7 @@ impl SchemaProvider {
     /// Returns true if the schema existed.
     pub fn remove(&self, schema_id: &SchemaId) -> bool {
         info!("Removing {}", schema_id);
-        self.0.lock().unwrap().remove(schema_id).is_some()
+        self.schemas.lock().unwrap().remove(schema_id).is_some()
     }
 }
 

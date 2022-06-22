@@ -13,21 +13,21 @@ use async_recursion::async_recursion;
 use async_trait::async_trait;
 use p2panda_rs::schema::{FieldType, Schema, SchemaId};
 
-use crate::graphql::TEMP_FILE_PATH;
-use crate::schema_service::{SchemaService, TempFile};
+use crate::graphql::{TempFile, TEMP_FILE_PATH};
+use crate::schema::SchemaProvider;
 
 use super::schema::{get_schema_metafield, get_schema_metatype};
 
 /// Container object that injects registered p2panda schemas when it is added to a GraphQL schema.
 #[derive(Debug)]
 pub struct DynamicQuery {
-    schema_service: SchemaService,
+    schema_provider: SchemaProvider,
 }
 
 impl DynamicQuery {
     /// Returns a GraphQL container object given a database pool.
-    pub fn new(schema_service: SchemaService) -> Self {
-        Self { schema_service }
+    pub fn new(schema_provider: SchemaProvider) -> Self {
+        Self { schema_provider }
     }
 
     /// Query database for selected field values and return a JSON result.
@@ -37,12 +37,12 @@ impl DynamicQuery {
         schema_id: SchemaId,
         ctx: SelectionField<'async_recursion>,
     ) -> ServerResult<Option<Value>> {
-        let schema = self
-            .schema_service
-            .get_schema(schema_id)
-            .await
-            .unwrap()
-            .unwrap();
+        let schema = self.schema_provider.get(&schema_id);
+
+        if schema.is_none() {
+            return Ok(None);
+        }
+        let schema = schema.unwrap();
 
         let mut fields: IndexMap<Name, Value> = IndexMap::new();
 

@@ -8,7 +8,7 @@ pub type StorageProviderResult<T> = anyhow::Result<T, Box<dyn std::error::Error 
 
 /// Errors returned by schema service.
 #[derive(Error, Debug)]
-pub enum SchemaServiceError {
+pub enum SchemaProviderError {
     /// Schema service can only handle application schemas it has definitions for.
     #[error("not a known application schema: {0}")]
     UnknownApplicationSchema(SchemaId),

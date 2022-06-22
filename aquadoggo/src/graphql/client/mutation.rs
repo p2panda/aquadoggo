@@ -92,7 +92,7 @@ mod tests {
     use crate::graphql::client::PublishEntryResponse;
     use crate::graphql::GraphQLSchemaManager;
     use crate::http::HttpServiceContext;
-    use crate::schema_service::SchemaService;
+    use crate::schema::SchemaProvider;
     use crate::test_helpers::initialize_store;
 
     const ENTRY_ENCODED: &str = "00bedabb435758855968b3e2de2aa1f653adfbb392fcf9cb2295a68b2eca3c\
@@ -122,8 +122,8 @@ mod tests {
     async fn publish_entry() {
         let (tx, _rx) = broadcast::channel(16);
         let store = initialize_store().await;
-        let schema_service = SchemaService::new(store.clone());
-        let manager = GraphQLSchemaManager::new(store, tx, schema_service).await;
+        let schema_provider = SchemaProvider::default();
+        let manager = GraphQLSchemaManager::new(store, tx, schema_provider).await;
         let context = HttpServiceContext::new(manager);
 
         // Prepare GraphQL mutation publishing an entry
@@ -160,8 +160,8 @@ mod tests {
     async fn sends_message_on_communication_bus() {
         let (tx, mut rx) = broadcast::channel(16);
         let store = initialize_store().await;
-        let schema_service = SchemaService::new(store.clone());
-        let manager = GraphQLSchemaManager::new(store, tx, schema_service).await;
+        let schema_provider = SchemaProvider::default();
+        let manager = GraphQLSchemaManager::new(store, tx, schema_provider).await;
         let context = HttpServiceContext::new(manager);
 
         // Prepare GraphQL mutation publishing an entry
@@ -189,8 +189,8 @@ mod tests {
     async fn publish_entry_error_handling() {
         let (tx, _rx) = broadcast::channel(16);
         let store = initialize_store().await;
-        let schema_service = SchemaService::new(store.clone());
-        let manager = GraphQLSchemaManager::new(store, tx, schema_service).await;
+        let schema_provider = SchemaProvider::default();
+        let manager = GraphQLSchemaManager::new(store, tx, schema_provider).await;
         let context = HttpServiceContext::new(manager);
 
         let parameters = Variables::from_value(value!({
