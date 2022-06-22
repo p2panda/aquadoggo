@@ -239,10 +239,10 @@ jobs:
       - name: Run cargo-tarpaulin
         uses: actions-rs/tarpaulin@v0.1
         with:
+          # Force cleaning via `--force-clean` flag to prevent buggy code coverage
           args: >-
             --manifest-path ${{ env.cargo_manifest }}
             --locked
-            # Force cleaning via `--force-clean` flag to prevent buggy code coverage
             --force-clean
         env:
           # Ensure debug output is also tested
