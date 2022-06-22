@@ -67,11 +67,7 @@ impl Default for SchemaProvider {
 
 #[cfg(test)]
 mod test {
-    use rstest::rstest;
-
     use super::*;
-    use crate::db::stores::test_utils::{test_db, TestSqlStore};
-    use crate::db::traits::SchemaStore;
 
     #[tokio::test]
     async fn test_get_all_schemas() {

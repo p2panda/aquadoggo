@@ -117,7 +117,7 @@ async fn get_related_schema_definitions(
 #[cfg(test)]
 mod tests {
     use log::debug;
-    use std::convert::{TryFrom, TryInto};
+    use std::convert::TryFrom;
 
     use p2panda_rs::document::DocumentViewId;
     use p2panda_rs::entry::{sign_and_encode, Entry};
@@ -126,9 +126,8 @@ mod tests {
         Operation, OperationEncoded, OperationFields, OperationValue, PinnedRelationList,
         VerifiedOperation,
     };
-    use p2panda_rs::schema::{FieldType, Schema, SchemaId, SchemaVersion};
+    use p2panda_rs::schema::{FieldType, SchemaId, SchemaVersion};
     use p2panda_rs::storage_provider::traits::{OperationStore, StorageProvider};
-    use p2panda_rs::test_utils::fixtures::create_operation;
     use rstest::rstest;
 
     use crate::context::Context;

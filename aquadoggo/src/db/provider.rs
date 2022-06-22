@@ -121,7 +121,6 @@ mod tests {
 
     use crate::db::stores::test_utils::{test_db, TestSqlStore};
     use crate::db::traits::DocumentStore;
-    use crate::SqlStorage;
 
     // Get a `DocumentView` that exists in the db.
     async fn insert_document_view(db: &TestSqlStore) -> DocumentViewId {
