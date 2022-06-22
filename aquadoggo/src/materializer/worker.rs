@@ -484,9 +484,7 @@ where
                     }
 
                     // Trigger status update when successful
-                    if result.is_ok() {
-                        on_complete(item.input());
-                    }
+                    on_complete(item.input());
 
                     // Check the result
                     match result {
