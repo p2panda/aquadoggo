@@ -1,16 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_trait::async_trait;
-use p2panda_rs::schema::SchemaId;
-use p2panda_rs::storage_provider::errors::OperationStorageError;
-use sqlx::query_scalar;
-
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::hash::Hash;
+use p2panda_rs::schema::SchemaId;
+use p2panda_rs::storage_provider::errors::OperationStorageError;
 use p2panda_rs::storage_provider::traits::StorageProvider;
+use sqlx::query_scalar;
 
-use crate::db::stores::StorageEntry;
-use crate::db::stores::StorageLog;
+use crate::db::stores::{StorageEntry, StorageLog};
 use crate::db::Pool;
 use crate::errors::StorageProviderResult;
 use crate::graphql::client::{

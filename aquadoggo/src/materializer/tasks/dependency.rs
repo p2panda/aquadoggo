@@ -225,7 +225,7 @@ mod tests {
                 .unwrap();
             assert_eq!(reduce_tasks.len(), expected_next_tasks);
             for task in reduce_tasks {
-                assert_eq!(task.0, "reduce")
+                assert_eq!(task.worker_name(), "reduce")
             }
         }
     }
@@ -288,7 +288,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(tasks.len(), 1);
-        assert_eq!(tasks[0].0, "reduce");
+        assert_eq!(tasks[0].worker_name(), "reduce");
     }
 
     #[rstest]
