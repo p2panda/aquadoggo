@@ -9,6 +9,11 @@ env:
     ~/.cargo
   cargo_manifest: aquadoggo/Cargo.toml
 
+  # PostgreSQL configuration
+  postgres_db: aquadoggo-development
+  postgres_user: panda
+  postgres_password: panda
+
 jobs:
   rust-test-sqlite:
     runs-on: ubuntu-latest
@@ -46,6 +51,45 @@ jobs:
         # Ensure debug output is also tested
         env:
           RUST_LOG: debug
+
+  rust-test-postgres:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Start PostgreSQL service
+        run: |
+          sudo systemctl start postgresql.service
+          pg_isready
+
+      - name: Create database user
+        run: |
+          sudo -u postgres psql "CREATE USER ${{ env.postgres_user }} PASSWORD '${{ env.postgres_password }}'"
+
+      - name: Create database
+        run: sudo -u postgres createdb --owner ${{ env.postgres_user }} ${{ env.postgres_db }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Restore from cargo cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.cache_path }}
+          key: ${{ runner.os }}-test-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run tests
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+        env:
+          DATABASE_URL: postgresql://${{ env.postgres_user }}:${{ env.postgres_password }}@localhost:5432/${{ env.postgres_db }}
 
   rust-check:
     runs-on: ubuntu-latest
