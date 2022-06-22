@@ -83,21 +83,31 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use deadqueue::unlimited::Queue;
-use log::{error, info};
+use log::{debug, error, info};
 use tokio::sync::broadcast::error::RecvError;
-use tokio::sync::broadcast::{channel, Sender};
+use tokio::sync::broadcast::{channel, Receiver, Sender};
 use tokio::task;
 use triggered::{Listener, Trigger};
 
 /// A task holding a generic input value and the name of the worker which will process it
 /// eventually.
-#[derive(Debug, Clone)]
-pub struct Task<IN>(pub WorkerName, IN);
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct Task<IN>(WorkerName, IN);
 
 impl<IN> Task<IN> {
     /// Returns a new task.
     pub fn new(worker_name: &str, input: IN) -> Self {
         Self(worker_name.into(), input)
+    }
+
+    /// Returns worker name of task;
+    pub fn worker_name(&self) -> &WorkerName {
+        &self.0
+    }
+
+    /// Returns task input;
+    pub fn input(&self) -> &IN {
+        &self.1
     }
 }
 
@@ -115,6 +125,16 @@ pub enum TaskError {
     /// This task failed silently without any further effects.
     #[allow(dead_code)]
     Failure,
+}
+
+/// Enum representing status of a task.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum TaskStatus<IN> {
+    /// Task just got scheduled and waiting to be processed.
+    Pending(Task<IN>),
+
+    /// Task completed successfully.
+    Completed(Task<IN>),
 }
 
 /// Workers are identified by simple string values.
@@ -235,6 +255,9 @@ where
     /// Broadcast channel to inform worker pools about new tasks.
     tx: Sender<Task<IN>>,
 
+    /// Broadcast channel to inform callbacks about pending or completed tasks.
+    tx_status: Sender<TaskStatus<IN>>,
+
     /// Sender of error signal.
     error_signal: Trigger,
 
@@ -259,12 +282,14 @@ where
     /// incoming tasks.
     pub fn new(context: D, capacity: usize) -> Self {
         let (tx, _) = channel(capacity);
+        let (tx_status, _) = channel(capacity);
         let (error_signal, error_handle) = triggered::trigger();
 
         Self {
             context,
             managers: HashMap::new(),
             tx,
+            tx_status,
             error_signal,
             error_handle,
         }
@@ -324,6 +349,11 @@ where
         self.error_handle.clone()
     }
 
+    /// Subscribe to status changes of tasks.
+    pub fn on_task_status_change(&self) -> Receiver<TaskStatus<IN>> {
+        self.tx_status.subscribe()
+    }
+
     /// Spawns a task which listens to broadcast channel for incoming new tasks which might be
     /// added to the worker queue.
     fn spawn_dispatcher(&self, name: &str) {
@@ -332,6 +362,9 @@ where
 
         // Subscribe to the broadcast channel
         let mut rx = self.tx.subscribe();
+
+        // Create handle to send task status updates
+        let tx_status = self.tx_status.clone();
 
         // Initialise a new counter to provide unique task ids
         let counter = AtomicU64::new(0);
@@ -345,11 +378,19 @@ where
         let error_signal = self.error_signal.clone();
 
         task::spawn(async move {
+            // Inform status subscribers that we've just scheduled a new task
+            let on_pending = |task: Task<IN>| {
+                if tx_status.send(TaskStatus::Pending(task)).is_err() {
+                    // Silently fail here since an error only occurs here when there are no
+                    // subscribers, but we don't mind that.
+                }
+            };
+
             loop {
                 match rx.recv().await {
                     // A new task got announced in the broadcast channel!
                     Ok(task) => {
-                        if task.0 != name {
+                        if task.worker_name() != &name {
                             continue; // This is not for us ..
                         }
 
@@ -359,6 +400,9 @@ where
                                 if index.contains(&task.1) {
                                     continue; // Task already exists
                                 } else {
+                                    // Trigger status update
+                                    on_pending(task.clone());
+
                                     // Generate a unique id for this new task and add it to queue
                                     let next_id = counter.fetch_add(1, Ordering::Relaxed);
                                     queue.push(QueueItem::new(next_id, task.1.clone()));
@@ -403,11 +447,24 @@ where
             let queue = manager.queue.clone();
             let input_index = manager.input_index.clone();
             let tx = self.tx.clone();
+            let name = name.to_string();
 
             // Create handle for error signal
             let error_signal = self.error_signal.clone();
 
+            // Create handle to send task status updates
+            let tx_status = self.tx_status.clone();
+
             task::spawn(async move {
+                // Inform status subscribers that we just completed a task
+                let on_complete = |input: IN| {
+                    let status = TaskStatus::Completed(Task::new(&name, input));
+                    if tx_status.send(status).is_err() {
+                        // Silently fail here since an error only occurs here when there are no
+                        // subscribers, but we don't mind that.
+                    }
+                };
+
                 loop {
                     // Wait until there is a new task arriving in the queue
                     let item = queue.pop().await;
@@ -426,7 +483,12 @@ where
                         }
                     }
 
-                    // .. check the task result ..
+                    // Trigger status update when successful
+                    if result.is_ok() {
+                        on_complete(item.input());
+                    }
+
+                    // Check the result
                     match result {
                         Ok(Some(list)) => {
                             // Tasks succeeded and dispatches new, subsequent tasks
@@ -443,7 +505,7 @@ where
                             error_signal.trigger();
                         }
                         Err(TaskError::Failure) => {
-                            // Silently fail .. maybe write something to the log or retry?
+                            debug!("Task failed: {:?}", item);
                         }
                         _ => (), // Task succeeded, but nothing to dispatch
                     }
@@ -462,7 +524,7 @@ mod tests {
     use rand::seq::SliceRandom;
     use rand::Rng;
 
-    use super::{Factory, Task, TaskError, TaskResult};
+    use super::{Factory, Task, TaskError, TaskResult, TaskStatus};
 
     #[tokio::test]
     async fn factory() {
@@ -504,6 +566,48 @@ mod tests {
         assert_eq!(database.lock().unwrap().len(), 8);
         assert!(factory.is_empty("first"));
         assert!(factory.is_empty("second"));
+    }
+
+    #[tokio::test]
+    async fn on_task_status_change_subscription() {
+        type Input = usize;
+        type Data = usize;
+
+        // Initialise factory
+        let mut factory = Factory::<Input, Data>::new(1, 1024);
+
+        // Record all status changes in this array
+        let messages: Arc<Mutex<Vec<TaskStatus<Input>>>> = Arc::new(Mutex::new(Vec::new()));
+
+        // Subscribe to updates and record them
+        let mut on_task_status_change = factory.on_task_status_change();
+        let messages_clone = messages.clone();
+        tokio::task::spawn(async move {
+            loop {
+                let message = on_task_status_change.recv().await.unwrap();
+                messages_clone.lock().unwrap().push(message);
+            }
+        });
+
+        // Define workers and register them
+        factory.register("one", 1, |_, input: Input| async move {
+            Ok(Some(vec![Task::new("two", input)]))
+        });
+        factory.register("two", 1, |_, _| async { Ok(None) });
+
+        // Queue a couple of tasks
+        for i in 0..3 {
+            factory.queue(Task::new("one", i));
+        }
+
+        // Wait until work was done ..
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(factory.is_empty("one"));
+
+        // We expect a total of 12 recorded status messages:
+        // - 3x "one" and 3x "two" tasks have been scheduled
+        // - 3x "one" and 3x "two" tasks have been completed
+        assert_eq!(messages.lock().unwrap().len(), 12);
     }
 
     #[tokio::test]

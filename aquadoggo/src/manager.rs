@@ -71,14 +71,14 @@ impl Drop for Signal {
     }
 }
 
-// Service manager for orchestration of long-running concurrent processes.
-//
-// This manager offers a message bus between services for cross-service communication. It also
-// sends a shutdown signal to allow services to react to it gracefully.
-//
-// Stopped services (because of a panic, error or successful return) will send an exit signal which
-// can be subscribed to via the `on_exit` method. Usually stopped services indicate system failure
-// and it is recommended to stop the application when this events occurs.
+/// Service manager for orchestration of long-running concurrent processes.
+///
+/// This manager offers a message bus between services for cross-service communication. It also
+/// sends a shutdown signal to allow services to react to it gracefully.
+///
+/// Stopped services (because of a panic, error or successful return) will send an exit signal which
+/// can be subscribed to via the `on_exit` method. Usually stopped services indicate system failure
+/// and it is recommended to stop the application when this events occurs.
 pub struct ServiceManager<D, M>
 where
     D: Clone + Send + Sync + 'static,

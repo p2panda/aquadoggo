@@ -168,8 +168,8 @@ pub async fn insert_entry_operation_and_view(
     (document_id, document_view_id)
 }
 
-/// Container for `SqlStore` with access to the document ids and key_pairs
-/// used in the pre-populated database for testing.
+/// Container for `SqlStore` with access to the document ids and key_pairs used in the
+/// pre-populated database for testing.
 pub struct TestSqlStore {
     pub store: SqlStorage,
     pub key_pairs: Vec<KeyPair>,

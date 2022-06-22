@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use log::{debug, info};
 use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
 use p2panda_rs::operation::VerifiedOperation;
 use p2panda_rs::storage_provider::traits::OperationStore;
@@ -17,6 +18,8 @@ use crate::materializer::TaskInput;
 /// After succesfully reducing and storing a document view an array of dependency tasks is returned.
 /// If invalid inputs were passed or a fatal db error occured a critical error is returned.
 pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
+    debug!("Working on {}", input);
+
     // Find out which document we are handling
     let document_id = resolve_document_id(&context, &input).await?;
 
@@ -101,6 +104,7 @@ async fn reduce_document_view(
             document
         }
         Err(_) => {
+            debug!("Reduce task: failed building");
             // There is not enough operations yet to materialise this view. Maybe next time!
             return Ok(None);
         }
@@ -112,6 +116,8 @@ async fn reduce_document_view(
         .insert_document_view(document.view().unwrap(), document.schema())
         .await
         .map_err(|_| TaskError::Critical)?;
+
+    info!("Stored {} view {}", document, document.view_id());
 
     // Return the new view id to be used in the resulting dependency task
     Ok(Some(document.view_id().to_owned()))
@@ -141,6 +147,8 @@ async fn reduce_document(
                 return Ok(None);
             }
 
+            info!("Stored {} view {}", document, document.view_id());
+
             // Return the new document_view id to be used in the resulting dependency task
             Ok(Some(document.view_id().to_owned()))
         }
@@ -165,6 +173,7 @@ mod tests {
     use crate::db::traits::DocumentStore;
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
+    use crate::schema::SchemaProvider;
 
     #[rstest]
     #[tokio::test]
@@ -175,7 +184,11 @@ mod tests {
         db: TestSqlStore,
     ) {
         let db = db.await;
-        let context = Context::new(db.store, Configuration::default());
+        let context = Context::new(
+            db.store,
+            Configuration::default(),
+            SchemaProvider::default(),
+        );
 
         for document_id in &db.documents {
             let input = TaskInput::new(Some(document_id.clone()), None);
@@ -218,7 +231,11 @@ mod tests {
             .clone()
             .into();
 
-        let context = Context::new(db.store.clone(), Configuration::default());
+        let context = Context::new(
+            db.store.clone(),
+            Configuration::default(),
+            SchemaProvider::default(),
+        );
         let input = TaskInput::new(None, Some(document_view_id.clone()));
 
         assert!(reduce_task(context.clone(), input).await.is_ok());
@@ -260,7 +277,11 @@ mod tests {
         db: TestSqlStore,
     ) {
         let db = db.await;
-        let context = Context::new(db.store.clone(), Configuration::default());
+        let context = Context::new(
+            db.store.clone(),
+            Configuration::default(),
+            SchemaProvider::default(),
+        );
 
         for document_id in &db.documents {
             let input = TaskInput::new(Some(document_id.clone()), None);
@@ -301,7 +322,11 @@ mod tests {
         #[case] is_next_task: bool,
     ) {
         let db = db.await;
-        let context = Context::new(db.store.clone(), Configuration::default());
+        let context = Context::new(
+            db.store.clone(),
+            Configuration::default(),
+            SchemaProvider::default(),
+        );
         let document_id = db.documents[0].clone();
 
         let input = TaskInput::new(Some(document_id.clone()), None);
@@ -322,7 +347,11 @@ mod tests {
         db: TestSqlStore,
     ) {
         let db = db.await;
-        let context = Context::new(db.store, Configuration::default());
+        let context = Context::new(
+            db.store,
+            Configuration::default(),
+            SchemaProvider::default(),
+        );
         let input = TaskInput::new(document_id, document_view_id);
 
         reduce_task(context.clone(), input).await.unwrap();

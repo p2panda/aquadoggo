@@ -119,8 +119,10 @@ dependencies = [
  "async-trait",
  "axum",
  "bamboo-rs-core-ed25519-yasmf",
+ "ctor",
  "deadqueue",
  "directories",
+ "env_logger",
  "envy",
  "futures",
  "graphql_client",
@@ -157,6 +159,7 @@ version = "0.1.0"
 dependencies = [
  "aquadoggo",
  "env_logger",
+ "log",
  "structopt",
  "tokio",
 ]

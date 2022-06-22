@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use crate::config::Configuration;
 use crate::db::provider::SqlStorage;
+use crate::schema::SchemaProvider;
 
 /// Inner data shared across all services.
 #[derive(Debug)]
@@ -14,11 +15,18 @@ pub struct Data {
 
     /// Storage provider with database connection pool.
     pub store: SqlStorage,
+
+    /// Schema provider gives access to system and application schemas.
+    pub schema_provider: SchemaProvider,
 }
 
 impl Data {
-    pub fn new(store: SqlStorage, config: Configuration) -> Self {
-        Self { config, store }
+    pub fn new(store: SqlStorage, config: Configuration, schema_provider: SchemaProvider) -> Self {
+        Self {
+            config,
+            store,
+            schema_provider,
+        }
     }
 }
 
@@ -28,8 +36,8 @@ pub struct Context(pub Arc<Data>);
 
 impl Context {
     /// Returns a new instance of `Context`.
-    pub fn new(store: SqlStorage, config: Configuration) -> Self {
-        Self(Arc::new(Data::new(store, config)))
+    pub fn new(store: SqlStorage, config: Configuration, schema_provider: SchemaProvider) -> Self {
+        Self(Arc::new(Data::new(store, config, schema_provider)))
     }
 }
 
