@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use log::{debug, info};
+use log::debug;
 
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::operation::{AsOperation, AsVerifiedOperation, OperationValue};
@@ -42,6 +42,7 @@ pub async fn schema_task(context: Context, input: TaskInput) -> TaskResult<TaskI
 
     // The affected schema definitions are not known yet to this node so we mark this task failed.
     if updated_schema_definitions.is_empty() {
+        debug!("Failed: Affected schema definition not found");
         return Err(TaskError::Failure);
     }
 
@@ -55,10 +56,11 @@ pub async fn schema_task(context: Context, input: TaskInput) -> TaskResult<TaskI
             // Updated schema was assembled successfully and is now passed to schema provider.
             Some(schema) => {
                 context.schema_provider.update(schema.clone());
-                info!("Completed {}", schema);
             }
             // This schema was not ready to be assembled after all so it is ignored.
-            None => (),
+            None => {
+                debug!("Not yet ready to build schema for {}", view_id)
+            }
         };
     }
 

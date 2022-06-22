@@ -83,7 +83,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use deadqueue::unlimited::Queue;
-use log::{error, info};
+use log::{debug, error, info};
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::broadcast::{channel, Sender};
 use tokio::task;
@@ -443,7 +443,7 @@ where
                             error_signal.trigger();
                         }
                         Err(TaskError::Failure) => {
-                            // Silently fail .. maybe write something to the log or retry?
+                            debug!("Task failed: {:?}", item);
                         }
                         _ => (), // Task succeeded, but nothing to dispatch
                     }

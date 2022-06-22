@@ -3,8 +3,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use p2panda_rs::schema::SYSTEM_SCHEMAS;
-use p2panda_rs::schema::{Schema, SchemaId};
+use log::info;
+use p2panda_rs::schema::{Schema, SchemaId, SYSTEM_SCHEMAS};
 
 /// Provides fast access to system and application schemas during runtime.
 ///
@@ -45,6 +45,7 @@ impl SchemaProvider {
     ///
     /// Returns `true` if a schema was updated and `false` if it was inserted.
     pub fn update(&self, schema: Schema) -> bool {
+        info!("Updating {}", schema);
         let mut schemas = self.0.lock().unwrap();
         schemas.insert(schema.id().clone(), schema).is_some()
     }
@@ -53,6 +54,7 @@ impl SchemaProvider {
     ///
     /// Returns true if the schema existed.
     pub fn remove(&self, schema_id: &SchemaId) -> bool {
+        info!("Removing {}", schema_id);
         self.0.lock().unwrap().remove(schema_id).is_some()
     }
 }

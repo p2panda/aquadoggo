@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use log::debug;
+use log::{debug, info};
 use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
 use p2panda_rs::operation::VerifiedOperation;
 use p2panda_rs::storage_provider::traits::OperationStore;
@@ -104,6 +104,7 @@ async fn reduce_document_view(
             document
         }
         Err(_) => {
+            debug!("Reduce task: failed building");
             // There is not enough operations yet to materialise this view. Maybe next time!
             return Ok(None);
         }
@@ -115,6 +116,8 @@ async fn reduce_document_view(
         .insert_document_view(document.view().unwrap(), document.schema())
         .await
         .map_err(|_| TaskError::Critical)?;
+
+    info!("Stored {}", document);
 
     // Return the new view id to be used in the resulting dependency task
     Ok(Some(document.view_id().to_owned()))
@@ -143,6 +146,8 @@ async fn reduce_document(
             if document.is_deleted() {
                 return Ok(None);
             }
+
+            info!("Stored {} view {}", document, document.view_id());
 
             // Return the new document_view id to be used in the resulting dependency task
             Ok(Some(document.view_id().to_owned()))
