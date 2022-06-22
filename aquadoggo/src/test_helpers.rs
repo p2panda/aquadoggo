@@ -185,6 +185,7 @@ pub async fn drop_database() {
 }
 
 /// Generate random entry hash
+// @TODO: Use rstest fixtures instead
 pub fn random_entry_hash() -> String {
     let random_data = rand::thread_rng().gen::<[u8; 32]>().to_vec();
 
