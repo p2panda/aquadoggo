@@ -46,6 +46,7 @@ impl StaticQuery {
         store.get_entry_args(&args).await.map_err(Error::from)
     }
 
+    // @TODO
     async fn document(&self, _ctx: &Context<'_>, document: String) -> Result<DocumentResponse> {
         let document_id = document.parse::<DocumentId>()?;
 
@@ -57,6 +58,7 @@ impl StaticQuery {
     }
 }
 
+// @TODO
 fn get_document_by_id(_document: DocumentId) -> Document {
     let schema = "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
         .parse()
@@ -86,6 +88,7 @@ mod tests {
     use tokio::sync::broadcast;
 
     use crate::graphql::client::EntryArgsResponse;
+    use crate::graphql::GraphQLSchemaManager;
     use crate::http::build_server;
     use crate::http::HttpServiceContext;
     use crate::schema_service::SchemaService;
@@ -96,7 +99,8 @@ mod tests {
         let (tx, _) = broadcast::channel(16);
         let store = initialize_store().await;
         let schema_service = SchemaService::new(store.clone());
-        let context = HttpServiceContext::new(store, tx, schema_service);
+        let manager = GraphQLSchemaManager::new(store, tx, schema_service).await;
+        let context = HttpServiceContext::new(manager);
         let client = TestClient::new(build_server(context));
 
         // Selected fields need to be alphabetically sorted because that's what the `json` macro
@@ -142,7 +146,8 @@ mod tests {
         let (tx, _) = broadcast::channel(16);
         let store = initialize_store().await;
         let schema_service = SchemaService::new(store.clone());
-        let context = HttpServiceContext::new(store, tx, schema_service);
+        let manager = GraphQLSchemaManager::new(store, tx, schema_service).await;
+        let context = HttpServiceContext::new(manager);
         let client = TestClient::new(build_server(context));
 
         // Selected fields need to be alphabetically sorted because that's what the `json` macro

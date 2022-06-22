@@ -84,6 +84,7 @@ mod tests {
 
     use crate::bus::ServiceMessage;
     use crate::graphql::client::PublishEntryResponse;
+    use crate::graphql::GraphQLSchemaManager;
     use crate::http::HttpServiceContext;
     use crate::schema_service::SchemaService;
     use crate::test_helpers::initialize_store;
@@ -116,7 +117,8 @@ mod tests {
         let (tx, _rx) = broadcast::channel(16);
         let store = initialize_store().await;
         let schema_service = SchemaService::new(store.clone());
-        let context = HttpServiceContext::new(store, tx, schema_service);
+        let manager = GraphQLSchemaManager::new(store, tx, schema_service).await;
+        let context = HttpServiceContext::new(manager);
 
         // Prepare GraphQL mutation publishing an entry
         let parameters = Variables::from_value(value!({
@@ -153,7 +155,8 @@ mod tests {
         let (tx, mut rx) = broadcast::channel(16);
         let store = initialize_store().await;
         let schema_service = SchemaService::new(store.clone());
-        let context = HttpServiceContext::new(store, tx, schema_service);
+        let manager = GraphQLSchemaManager::new(store, tx, schema_service).await;
+        let context = HttpServiceContext::new(manager);
 
         // Prepare GraphQL mutation publishing an entry
         let parameters = Variables::from_value(value!({
@@ -181,7 +184,8 @@ mod tests {
         let (tx, _rx) = broadcast::channel(16);
         let store = initialize_store().await;
         let schema_service = SchemaService::new(store.clone());
-        let context = HttpServiceContext::new(store, tx, schema_service);
+        let manager = GraphQLSchemaManager::new(store, tx, schema_service).await;
+        let context = HttpServiceContext::new(manager);
 
         let parameters = Variables::from_value(value!({
             "entryEncoded": ENTRY_ENCODED,

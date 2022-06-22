@@ -46,9 +46,8 @@ pub async fn http_service(context: Context, signal: Shutdown, tx: ServiceSender)
 
     // Prepare schema service and dynamic GraphQL schema manager
     let schema_service = SchemaService::new(context.store.clone());
-    let mut graphql_schema_manager =
-        GraphQLSchemaManager::new(context.store.clone(), tx, schema_service);
-    graphql_schema_manager.build_root_schema().await;
+    let graphql_schema_manager =
+        GraphQLSchemaManager::new(context.store.clone(), tx, schema_service).await;
 
     // Introduce a new context for all HTTP routes
     let http_context = HttpServiceContext::new(graphql_schema_manager);
@@ -68,6 +67,7 @@ mod tests {
     use serde_json::json;
     use tokio::sync::broadcast;
 
+    use crate::graphql::GraphQLSchemaManager;
     use crate::http::context::HttpServiceContext;
     use crate::schema_service::SchemaService;
     use crate::test_helpers::{initialize_store, TestClient};
@@ -79,7 +79,8 @@ mod tests {
         let (tx, _) = broadcast::channel(16);
         let store = initialize_store().await;
         let schema_service = SchemaService::new(store.clone());
-        let context = HttpServiceContext::new(store, tx, schema_service);
+        let graphql_schema_manager = GraphQLSchemaManager::new(store, tx, schema_service).await;
+        let context = HttpServiceContext::new(graphql_schema_manager);
         let client = TestClient::new(build_server(context));
 
         let response = client

@@ -13,7 +13,6 @@ use async_recursion::async_recursion;
 use async_trait::async_trait;
 use p2panda_rs::schema::{FieldType, Schema, SchemaId};
 
-use crate::db::provider::SqlStorage;
 use crate::graphql::TEMP_FILE_PATH;
 use crate::schema_service::{SchemaService, TempFile};
 
@@ -22,17 +21,13 @@ use super::schema::{get_schema_metafield, get_schema_metatype};
 /// Container object that injects registered p2panda schemas when it is added to a GraphQL schema.
 #[derive(Debug)]
 pub struct DynamicQuery {
-    store: SqlStorage,
     schema_service: SchemaService,
 }
 
 impl DynamicQuery {
     /// Returns a GraphQL container object given a database pool.
-    pub fn new(store: SqlStorage, schema_service: SchemaService) -> Self {
-        Self {
-            store,
-            schema_service,
-        }
+    pub fn new(schema_service: SchemaService) -> Self {
+        Self { schema_service }
     }
 
     /// Query database for selected field values and return a JSON result.
@@ -94,6 +89,7 @@ impl DynamicQuery {
 #[async_trait]
 impl ContainerType for DynamicQuery {
     async fn resolve_field(&self, ctx: &async_graphql::Context<'_>) -> ServerResult<Option<Value>> {
+        // @TODO: This needs to return `None` if that schema does not exist
         let schema: SchemaId = ctx.field().name().parse().unwrap();
         self.resolve_dynamic(schema, ctx.field()).await
     }

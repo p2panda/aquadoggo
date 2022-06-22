@@ -2,7 +2,6 @@
 
 use async_graphql::MergedObject;
 
-use crate::db::provider::SqlStorage;
 use crate::graphql::client::query::{DynamicQuery, StaticQuery};
 use crate::schema_service::SchemaService;
 
@@ -11,10 +10,7 @@ use crate::schema_service::SchemaService;
 pub struct ClientRoot(StaticQuery, DynamicQuery);
 
 impl ClientRoot {
-    pub fn new(store: SqlStorage, schema_service: SchemaService) -> Self {
-        Self(
-            StaticQuery::default(),
-            DynamicQuery::new(store, schema_service),
-        )
+    pub fn new(schema_service: SchemaService) -> Self {
+        Self(StaticQuery::default(), DynamicQuery::new(schema_service))
     }
 }
