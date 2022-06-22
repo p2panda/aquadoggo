@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_trait::async_trait;
-use p2panda_rs::schema::{Schema, SchemaId};
+use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::errors::OperationStorageError;
 use sqlx::query_scalar;
 
