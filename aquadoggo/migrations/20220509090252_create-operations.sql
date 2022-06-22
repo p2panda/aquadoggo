@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS operation_fields_v1 (
     operation_id            TEXT             NOT NULL,
     name                    TEXT             NOT NULL,
     field_type              TEXT             NOT NULL,
-    value                   BLOB             NULL,
+    value                   TEXT             NULL,
     list_index              NUMERIC          NOT NULL,
     FOREIGN KEY(operation_id) REFERENCES operations_v1(operation_id)
 );
