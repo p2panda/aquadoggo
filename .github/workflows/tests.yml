@@ -89,7 +89,7 @@ jobs:
           command: test
           args: >-
             --manifest-path ${{ env.cargo_manifest }}
-            --jobs 1
+            -- --test-threads 1
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/aquadoggo-development
 
@@ -136,7 +136,7 @@ jobs:
           command: test
           args: >-
             --manifest-path ${{ env.cargo_manifest }}
-            --jobs 1
+            -- --test-threads 1
         env:
           DATABASE_URL: mysql://panda:panda@localhost:3306/aquadoggo-development
 
