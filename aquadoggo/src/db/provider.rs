@@ -16,7 +16,6 @@ use crate::errors::StorageProviderResult;
 use crate::graphql::client::{
     EntryArgsRequest, EntryArgsResponse, PublishEntryRequest, PublishEntryResponse,
 };
-use crate::schema::SchemaProvider;
 
 /// Sql based storage that implements `StorageProvider`.
 #[derive(Clone, Debug)]
@@ -81,8 +80,7 @@ impl SqlStorage {
     pub async fn get_schema_by_document_view(
         &self,
         view_id: &DocumentViewId,
-        schema_provider: &SchemaProvider,
-    ) -> StorageProviderResult<Option<Schema>> {
+    ) -> StorageProviderResult<Option<SchemaId>> {
         let result: Option<String> = query_scalar(
             "
             SELECT
@@ -96,10 +94,8 @@ impl SqlStorage {
         .bind(view_id.as_str())
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?
-        .unwrap();
+        .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
 
-        let schema_id = result.unwrap().parse::<SchemaId>().unwrap();
-        Ok(schema_provider.get(&schema_id))
+        Ok(result.map(|id_str| id_str.parse().unwrap()))
     }
 }

@@ -84,7 +84,7 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
     if !next_tasks.iter().any(|t| t.is_some()) {
         let task_input_schema = context
             .store
-            .get_schema_by_document_view(document_view.id(), &context.schema_provider)
+            .get_schema_by_document_view(document_view.id())
             .await
             .map_err(|e| {
                 log::error!(
@@ -93,8 +93,8 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
                     e.to_string()
                 );
                 TaskError::Critical
-            })
-            .unwrap()
+            })?
+            // Unwrap because we expect the task input to still be in the db.
             .unwrap();
 
         // Helper that returns a schema task for the current task input.
@@ -104,7 +104,7 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
                 TaskInput::new(None, Some(document_view.id().clone())),
             ))
         };
-        match task_input_schema.id() {
+        match task_input_schema {
             // Start `schema` task when a schema (field) definition view is completed with
             // dependencies
             SchemaId::SchemaDefinition(_) => next_tasks.push(schema_task()),
