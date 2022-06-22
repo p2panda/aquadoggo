@@ -2,6 +2,7 @@
 
 use log::debug;
 use p2panda_rs::document::DocumentViewId;
+use p2panda_rs::schema::SchemaId;
 
 use crate::context::Context;
 use crate::db::traits::DocumentStore;
@@ -77,6 +78,45 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
             _ => (),
         }
     }
+
+    // Construct additional tasks if the task input matches certain system schemas and all
+    // dependencies have been reduced.
+    if !next_tasks.iter().any(|t| t.is_some()) {
+        let task_input_schema = context
+            .store
+            .get_schema_by_document_view(document_view.id(), &context.schema_provider)
+            .await
+            .map_err(|e| {
+                log::error!(
+                    "Failed loading schema for task input {}: {}",
+                    document_view,
+                    e.to_string()
+                );
+                TaskError::Critical
+            })
+            .unwrap()
+            .unwrap();
+
+        // Helper that returns a schema task for the current task input.
+        let schema_task = || {
+            Some(Task::new(
+                "schema",
+                TaskInput::new(None, Some(document_view.id().clone())),
+            ))
+        };
+        match task_input_schema.id() {
+            // Start `schema` task when a schema (field) definition view is completed with
+            // dependencies
+            SchemaId::SchemaDefinition(_) => next_tasks.push(schema_task()),
+            SchemaId::SchemaFieldDefinition(_) => next_tasks.push(schema_task()),
+            _ => {}
+        }
+    }
+
+    debug!(
+        "Scheduling {} reduce tasks",
+        next_tasks.iter().filter(|t| t.is_some()).count()
+    );
 
     Ok(Some(next_tasks.into_iter().flatten().collect()))
 }

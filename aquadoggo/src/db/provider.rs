@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_trait::async_trait;
+use p2panda_rs::schema::{Schema, SchemaId};
+use p2panda_rs::storage_provider::errors::OperationStorageError;
 use sqlx::query_scalar;
 
-use p2panda_rs::document::DocumentId;
+use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::storage_provider::traits::StorageProvider;
 
@@ -14,6 +16,7 @@ use crate::errors::StorageProviderResult;
 use crate::graphql::client::{
     EntryArgsRequest, EntryArgsResponse, PublishEntryRequest, PublishEntryResponse,
 };
+use crate::schema::SchemaProvider;
 
 /// Sql based storage that implements `StorageProvider`.
 #[derive(Clone, Debug)]
@@ -71,5 +74,32 @@ impl StorageProvider<StorageEntry, StorageLog> for SqlStorage {
         });
 
         Ok(hash)
+    }
+}
+
+impl SqlStorage {
+    pub async fn get_schema_by_document_view(
+        &self,
+        view_id: &DocumentViewId,
+        schema_provider: &SchemaProvider,
+    ) -> StorageProviderResult<Option<Schema>> {
+        let result: Option<String> = query_scalar(
+            "
+            SELECT
+                schema_id
+            FROM
+                document_views
+            WHERE
+                document_view_id = $1
+            ",
+        )
+        .bind(view_id.as_str())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?
+        .unwrap();
+
+        let schema_id = result.unwrap().parse::<SchemaId>().unwrap();
+        Ok(schema_provider.get(&schema_id))
     }
 }
