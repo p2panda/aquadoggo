@@ -87,9 +87,9 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --manifest-path ${{ env.cargo_manifest }} -- --nocapture
+          args: --manifest-path ${{ env.cargo_manifest }}
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/aquadogo-development
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/aquadoggo-development
 
   rust-test-mariadb:
     runs-on: ubuntu-latest
@@ -132,9 +132,9 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --manifest-path ${{ env.cargo_manifest }} -- --nocapture
+          args: --manifest-path ${{ env.cargo_manifest }}
         env:
-          DATABASE_URL: mysql://panda:panda@localhost:3306/aquadogo-development
+          DATABASE_URL: mysql://panda:panda@localhost:3306/aquadoggo-development
 
   rust-check:
     runs-on: ubuntu-latest
