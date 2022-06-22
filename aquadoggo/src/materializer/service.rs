@@ -143,6 +143,7 @@ mod tests {
     use crate::db::stores::test_utils::{test_db, TestSqlStore};
     use crate::db::traits::DocumentStore;
     use crate::materializer::{Task, TaskInput};
+    use crate::schema::SchemaProvider;
     use crate::Configuration;
 
     use super::materializer_service;
@@ -178,7 +179,11 @@ mod tests {
             .is_none());
 
         // Prepare arguments for service
-        let context = Context::new(db.store.clone(), Configuration::default());
+        let context = Context::new(
+            db.store.clone(),
+            Configuration::default(),
+            SchemaProvider::default(),
+        );
         let shutdown = task::spawn(async {
             loop {
                 // Do this forever .. this means that the shutdown handler will never resolve
@@ -249,7 +254,11 @@ mod tests {
             .unwrap();
 
         // Prepare arguments for service
-        let context = Context::new(db.store.clone(), Configuration::default());
+        let context = Context::new(
+            db.store.clone(),
+            Configuration::default(),
+            SchemaProvider::default(),
+        );
         let shutdown = task::spawn(async {
             loop {
                 // Do this forever .. this means that the shutdown handler will never resolve
