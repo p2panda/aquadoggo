@@ -342,6 +342,11 @@ mod tests {
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
+            let _result = db
+                .store
+                .insert_operation(&verified_operation, &document_id)
+                .await;
+
             assert!(db
                 .store
                 .insert_operation(&verified_operation, &document_id)

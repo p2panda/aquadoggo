@@ -239,13 +239,9 @@ mod tests {
     }
 
     #[rstest]
-    #[should_panic(expected = "Critical")]
     #[case(None, Some(random_document_view_id()))]
-    #[should_panic(expected = "Critical")]
     #[case(None, None)]
-    #[should_panic(expected = "Critical")]
     #[case(Some(random_document_id()), None)]
-    #[should_panic(expected = "Critical")]
     #[case(Some(random_document_id()), Some(random_document_view_id()))]
     fn fails_correctly(
         #[case] document_id: Option<DocumentId>,
@@ -256,17 +252,15 @@ mod tests {
             let context = Context::new(db.store.clone(), Configuration::default());
             let input = TaskInput::new(document_id, document_view_id);
 
-            let next_tasks = dependency_task(context.clone(), input).await.unwrap();
-            assert!(next_tasks.is_none())
+            let next_tasks = dependency_task(context.clone(), input).await;
+            assert!(next_tasks.is_err())
         });
     }
 
     #[rstest]
-    #[should_panic(expected = "Critical")]
     #[case(test_db(2, 1, true, TEST_SCHEMA_ID.parse().unwrap(),
         vec![("profile_picture", OperationValue::Relation(Relation::new(random_document_id())))],
         vec![]))]
-    #[should_panic(expected = "Critical")]
     #[case(test_db(2, 1, true, TEST_SCHEMA_ID.parse().unwrap(),
         vec![("one_relation_field", OperationValue::PinnedRelationList(PinnedRelationList::new([0; 2].iter().map(|_|random_document_view_id()).collect()))),
              ("another_relation_field", OperationValue::RelationList(RelationList::new([0; 6].iter().map(|_|random_document_id()).collect())))],
@@ -290,10 +284,9 @@ mod tests {
 
             let input = TaskInput::new(None, Some(document_view_id.clone()));
 
-            dependency_task(context.clone(), input)
-                .await
-                .unwrap()
-                .unwrap();
+            let result = dependency_task(context.clone(), input).await;
+
+            assert!(result.is_err())
         });
     }
 }

@@ -305,7 +305,6 @@ mod tests {
     }
 
     #[rstest]
-    #[should_panic(expected = "Critical")]
     #[case(None, None)]
     fn fails_correctly(
         #[case] document_id: Option<DocumentId>,
@@ -316,7 +315,7 @@ mod tests {
             let context = Context::new(db.store.clone(), Configuration::default());
             let input = TaskInput::new(document_id, document_view_id);
 
-            reduce_task(context.clone(), input).await.unwrap();
+            assert!(reduce_task(context.clone(), input).await.is_err());
         });
     }
 }
