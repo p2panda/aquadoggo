@@ -144,10 +144,23 @@ pub fn parse_operation_rows(
         "create" => Operation::new_create(schema, operation_fields),
         "update" => Operation::new_update(
             schema,
-            first_row.previous_operations.parse().unwrap(),
+            first_row
+                .previous_operations
+                .as_ref()
+                .unwrap()
+                .parse()
+                .unwrap(),
             operation_fields,
         ),
-        "delete" => Operation::new_delete(schema, first_row.previous_operations.parse().unwrap()),
+        "delete" => Operation::new_delete(
+            schema,
+            first_row
+                .previous_operations
+                .as_ref()
+                .unwrap()
+                .parse()
+                .unwrap(),
+        ),
         _ => panic!("Operation which was not CREATE, UPDATE or DELETE found."),
     }
     // Unwrap as we are sure values coming from the db are validated
@@ -357,7 +370,7 @@ mod tests {
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
-                previous_operations: "".to_string(),
+                previous_operations: None,
                 name: "age".to_string(),
                 field_type: "int".to_string(),
                 value: "28".to_string(),
@@ -376,7 +389,7 @@ mod tests {
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
-                previous_operations: "".to_string(),
+                previous_operations: None,
                 name: "height".to_string(),
                 field_type: "float".to_string(),
                 value: "3.5".to_string(),
@@ -395,7 +408,7 @@ mod tests {
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
-                previous_operations: "".to_string(),
+                previous_operations: None,
                 name: "is_admin".to_string(),
                 field_type: "bool".to_string(),
                 value: "false".to_string(),
@@ -414,7 +427,7 @@ mod tests {
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
-                previous_operations: "".to_string(),
+                previous_operations: None,
                 name: "many_profile_pictures".to_string(),
                 field_type: "relation_list".to_string(),
                 value: "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -434,7 +447,7 @@ mod tests {
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
-                previous_operations: "".to_string(),
+                previous_operations: None,
                 name: "many_profile_pictures".to_string(),
                 field_type: "relation_list".to_string(),
                 value: "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -454,7 +467,7 @@ mod tests {
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
-                previous_operations: "".to_string(),
+                previous_operations: None,
                 name: "many_special_profile_pictures".to_string(),
                 field_type: "pinned_relation_list".to_string(),
                 value: "0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
@@ -474,7 +487,7 @@ mod tests {
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
-                previous_operations: "".to_string(),
+                previous_operations: None,
                 name: "many_special_profile_pictures".to_string(),
                 field_type: "pinned_relation_list".to_string(),
                 value: "0020dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
@@ -494,7 +507,7 @@ mod tests {
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
-                previous_operations: "".to_string(),
+                previous_operations: None,
                 name: "many_special_dog_pictures".to_string(),
                 field_type: "pinned_relation_list".to_string(),
                 value: "0020bcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbc"
@@ -514,7 +527,7 @@ mod tests {
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
-                previous_operations: "".to_string(),
+                previous_operations: None,
                 name: "many_special_dog_pictures".to_string(),
                 field_type: "pinned_relation_list".to_string(),
                 value: "0020abababababababababababababababababababababababababababababababab"
@@ -534,7 +547,7 @@ mod tests {
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
-                previous_operations: "".to_string(),
+                previous_operations: None,
                 name: "profile_picture".to_string(),
                 field_type: "relation".to_string(),
                 value: "0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
@@ -554,7 +567,7 @@ mod tests {
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
-                previous_operations: "".to_string(),
+                previous_operations: None,
                 name: "special_profile_picture".to_string(),
                 field_type: "pinned_relation".to_string(),
                 value: "0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
@@ -574,7 +587,7 @@ mod tests {
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
-                previous_operations: "".to_string(),
+                previous_operations: None,
                 name: "username".to_string(),
                 field_type: "str".to_string(),
                 value: "bubu".to_string(),
