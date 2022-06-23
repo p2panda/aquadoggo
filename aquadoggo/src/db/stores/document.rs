@@ -589,8 +589,6 @@ mod tests {
 
         // Disconnect from database
         db.close().await;
-
-        println!("HAHA");
     }
 
     #[rstest]

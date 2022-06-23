@@ -144,7 +144,7 @@ impl OperationStore<VerifiedOperation> for SqlStorage {
                             .bind(name.to_owned())
                             .bind(value.field_type().to_string())
                             .bind(db_value)
-                            .bind(index.to_string())
+                            .bind(index as i32)
                             .execute(&self.pool)
                         })
                         .collect::<Vec<_>>()

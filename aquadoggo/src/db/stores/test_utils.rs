@@ -205,8 +205,6 @@ pub async fn test_db(
     // The fields used for every UPDATE operation
     #[default(doggo_test_fields())] update_operation_fields: Vec<(&'static str, OperationValue)>,
 ) -> TestSqlStore {
-    println!("CREATE");
-
     let mut documents: Vec<DocumentId> = Vec::new();
     let key_pairs = test_key_pairs(no_of_authors);
 
