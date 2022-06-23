@@ -135,7 +135,11 @@ impl GraphQLSchemaManager {
 
         // Create manager instance and spawn internal watch task
         let manager = Self { schemas, shared };
-        manager.spawn_schema_added_task().await;
+        manager
+            .spawn_schema_added_task()
+            .await
+            .map_err(|err| panic!("Failed building initial schema: {}", err))
+            .unwrap();
 
         manager
     }
