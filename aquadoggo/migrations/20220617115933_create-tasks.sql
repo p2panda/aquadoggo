@@ -11,8 +11,8 @@ CREATE TABLE IF NOT EXISTS tasks (
 -- but we want to check for equality including `null` values.
 CREATE UNIQUE INDEX ux_tasks ON tasks (
     name,
-    COALESCE(document_id, 0),
-    COALESCE(document_view_id, 0)
+    COALESCE(document_id, '0'),
+    COALESCE(document_view_id, '0')
 );
 
 -- Create an index because primary keys can not contain `null` columns.
