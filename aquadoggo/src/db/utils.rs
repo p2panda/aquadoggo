@@ -41,100 +41,106 @@ pub fn parse_operation_rows(
     //  - if it is a simple value type, parse it into an OperationValue and add it to the operation_fields
     //  - if it is a relation list value type parse each item into a DocumentId/DocumentViewId and push to
     //    the suitable vec (instantiated above)
-    operation_rows.iter().for_each(|row| {
-        match row.field_type.as_str() {
-            "bool" => {
-                operation_fields
-                    .add(
-                        row.name.as_str(),
-                        OperationValue::Boolean(row.value.parse::<bool>().unwrap()),
-                    )
-                    .unwrap();
-            }
-            "int" => {
-                operation_fields
-                    .add(
-                        row.name.as_str(),
-                        OperationValue::Integer(row.value.parse::<i64>().unwrap()),
-                    )
-                    .unwrap();
-            }
-            "float" => {
-                operation_fields
-                    .add(
-                        row.name.as_str(),
-                        OperationValue::Float(row.value.parse::<f64>().unwrap()),
-                    )
-                    .unwrap();
-            }
-            "str" => {
-                operation_fields
-                    .add(row.name.as_str(), OperationValue::Text(row.value.clone()))
-                    .unwrap();
-            }
-            "relation" => {
-                operation_fields
-                    .add(
-                        row.name.as_str(),
-                        OperationValue::Relation(Relation::new(
-                            row.value.parse::<DocumentId>().unwrap(),
-                        )),
-                    )
-                    .unwrap();
-            }
-            // This is a list item, so we push it to a vec but _don't_ add it
-            // to the operation_fields yet.
-            "relation_list" => {
-                match relation_lists.get_mut(&row.name) {
-                    Some(list) => list.push(row.value.parse::<DocumentId>().unwrap()),
-                    None => {
-                        relation_lists.insert(
-                            row.name.clone(),
-                            vec![row.value.parse::<DocumentId>().unwrap()],
-                        );
-                    }
-                };
-            }
-            "pinned_relation" => {
-                operation_fields
-                    .add(
-                        row.name.as_str(),
-                        OperationValue::PinnedRelation(PinnedRelation::new(
-                            row.value.parse::<DocumentViewId>().unwrap(),
-                        )),
-                    )
-                    .unwrap();
-            }
-            // This is a list item, so we push it to a vec but _don't_ add it
-            // to the operation_fields yet.
-            "pinned_relation_list" => {
-                match pinned_relation_lists.get_mut(&row.name) {
-                    Some(list) => list.push(row.value.parse::<DocumentViewId>().unwrap()),
-                    None => {
-                        pinned_relation_lists.insert(
-                            row.name.clone(),
-                            vec![row.value.parse::<DocumentViewId>().unwrap()],
-                        );
-                    }
-                };
-            }
-            _ => (),
-        };
-    });
+    if first_row.action != "delete" {
+        operation_rows.iter().for_each(|row| {
+            let field_type = row.field_type.as_ref().unwrap();
+            let field_name = row.name.as_ref().unwrap();
+            let field_value = row.value.as_ref().unwrap();
 
-    for (field_name, relation_list) in relation_lists {
+            match field_type.as_str() {
+                "bool" => {
+                    operation_fields
+                        .add(
+                            field_name,
+                            OperationValue::Boolean(field_value.parse::<bool>().unwrap()),
+                        )
+                        .unwrap();
+                }
+                "int" => {
+                    operation_fields
+                        .add(
+                            field_name,
+                            OperationValue::Integer(field_value.parse::<i64>().unwrap()),
+                        )
+                        .unwrap();
+                }
+                "float" => {
+                    operation_fields
+                        .add(
+                            field_name,
+                            OperationValue::Float(field_value.parse::<f64>().unwrap()),
+                        )
+                        .unwrap();
+                }
+                "str" => {
+                    operation_fields
+                        .add(field_name, OperationValue::Text(field_value.clone()))
+                        .unwrap();
+                }
+                "relation" => {
+                    operation_fields
+                        .add(
+                            field_name,
+                            OperationValue::Relation(Relation::new(
+                                field_value.parse::<DocumentId>().unwrap(),
+                            )),
+                        )
+                        .unwrap();
+                }
+                // This is a list item, so we push it to a vec but _don't_ add it
+                // to the operation_fields yet.
+                "relation_list" => {
+                    match relation_lists.get_mut(field_name) {
+                        Some(list) => list.push(field_value.parse::<DocumentId>().unwrap()),
+                        None => {
+                            relation_lists.insert(
+                                field_name.clone(),
+                                vec![field_value.parse::<DocumentId>().unwrap()],
+                            );
+                        }
+                    };
+                }
+                "pinned_relation" => {
+                    operation_fields
+                        .add(
+                            field_name,
+                            OperationValue::PinnedRelation(PinnedRelation::new(
+                                field_value.parse::<DocumentViewId>().unwrap(),
+                            )),
+                        )
+                        .unwrap();
+                }
+                // This is a list item, so we push it to a vec but _don't_ add it
+                // to the operation_fields yet.
+                "pinned_relation_list" => {
+                    match pinned_relation_lists.get_mut(field_name) {
+                        Some(list) => list.push(field_value.parse::<DocumentViewId>().unwrap()),
+                        None => {
+                            pinned_relation_lists.insert(
+                                field_name.clone(),
+                                vec![field_value.parse::<DocumentViewId>().unwrap()],
+                            );
+                        }
+                    };
+                }
+                _ => (),
+            };
+        })
+    };
+
+    for (ref field_name, relation_list) in relation_lists {
         operation_fields
             .add(
-                field_name.as_str(),
+                field_name,
                 OperationValue::RelationList(RelationList::new(relation_list)),
             )
             .unwrap();
     }
 
-    for (field_name, pinned_relation_list) in pinned_relation_lists {
+    for (ref field_name, pinned_relation_list) in pinned_relation_lists {
         operation_fields
             .add(
-                field_name.as_str(),
+                field_name,
                 OperationValue::PinnedRelationList(PinnedRelationList::new(pinned_relation_list)),
             )
             .unwrap();
@@ -371,9 +377,9 @@ mod tests {
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
                 previous_operations: None,
-                name: "age".to_string(),
-                field_type: "int".to_string(),
-                value: "28".to_string(),
+                name: Some("age".to_string()),
+                field_type: Some("int".to_string()),
+                value: Some("28".to_string()),
             },
             OperationFieldsJoinedRow {
                 author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -390,9 +396,9 @@ mod tests {
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
                 previous_operations: None,
-                name: "height".to_string(),
-                field_type: "float".to_string(),
-                value: "3.5".to_string(),
+                name: Some("height".to_string()),
+                field_type: Some("float".to_string()),
+                value: Some("3.5".to_string()),
             },
             OperationFieldsJoinedRow {
                 author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -409,9 +415,9 @@ mod tests {
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
                 previous_operations: None,
-                name: "is_admin".to_string(),
-                field_type: "bool".to_string(),
-                value: "false".to_string(),
+                name: Some("is_admin".to_string()),
+                field_type: Some("bool".to_string()),
+                value: Some("false".to_string()),
             },
             OperationFieldsJoinedRow {
                 author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -428,10 +434,12 @@ mod tests {
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
                 previous_operations: None,
-                name: "many_profile_pictures".to_string(),
-                field_type: "relation_list".to_string(),
-                value: "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-                    .to_string(),
+                name: Some("many_profile_pictures".to_string()),
+                field_type: Some("relation_list".to_string()),
+                value: Some(
+                    "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                        .to_string(),
+                ),
             },
             OperationFieldsJoinedRow {
                 author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -448,10 +456,12 @@ mod tests {
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
                 previous_operations: None,
-                name: "many_profile_pictures".to_string(),
-                field_type: "relation_list".to_string(),
-                value: "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-                    .to_string(),
+                name: Some("many_profile_pictures".to_string()),
+                field_type: Some("relation_list".to_string()),
+                value: Some(
+                    "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                        .to_string(),
+                ),
             },
             OperationFieldsJoinedRow {
                 author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -468,10 +478,12 @@ mod tests {
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
                 previous_operations: None,
-                name: "many_special_profile_pictures".to_string(),
-                field_type: "pinned_relation_list".to_string(),
-                value: "0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
-                    .to_string(),
+                name: Some("many_special_profile_pictures".to_string()),
+                field_type: Some("pinned_relation_list".to_string()),
+                value: Some(
+                    "0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                        .to_string(),
+                ),
             },
             OperationFieldsJoinedRow {
                 author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -488,10 +500,12 @@ mod tests {
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
                 previous_operations: None,
-                name: "many_special_profile_pictures".to_string(),
-                field_type: "pinned_relation_list".to_string(),
-                value: "0020dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
-                    .to_string(),
+                name: Some("many_special_profile_pictures".to_string()),
+                field_type: Some("pinned_relation_list".to_string()),
+                value: Some(
+                    "0020dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                        .to_string(),
+                ),
             },
             OperationFieldsJoinedRow {
                 author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -508,10 +522,12 @@ mod tests {
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
                 previous_operations: None,
-                name: "many_special_dog_pictures".to_string(),
-                field_type: "pinned_relation_list".to_string(),
-                value: "0020bcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbc"
-                    .to_string(),
+                name: Some("many_special_dog_pictures".to_string()),
+                field_type: Some("pinned_relation_list".to_string()),
+                value: Some(
+                    "0020bcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbc"
+                        .to_string(),
+                ),
             },
             OperationFieldsJoinedRow {
                 author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -528,10 +544,12 @@ mod tests {
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
                 previous_operations: None,
-                name: "many_special_dog_pictures".to_string(),
-                field_type: "pinned_relation_list".to_string(),
-                value: "0020abababababababababababababababababababababababababababababababab"
-                    .to_string(),
+                name: Some("many_special_dog_pictures".to_string()),
+                field_type: Some("pinned_relation_list".to_string()),
+                value: Some(
+                    "0020abababababababababababababababababababababababababababababababab"
+                        .to_string(),
+                ),
             },
             OperationFieldsJoinedRow {
                 author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -548,10 +566,12 @@ mod tests {
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
                 previous_operations: None,
-                name: "profile_picture".to_string(),
-                field_type: "relation".to_string(),
-                value: "0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
-                    .to_string(),
+                name: Some("profile_picture".to_string()),
+                field_type: Some("relation".to_string()),
+                value: Some(
+                    "0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                        .to_string(),
+                ),
             },
             OperationFieldsJoinedRow {
                 author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -568,10 +588,12 @@ mod tests {
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
                 previous_operations: None,
-                name: "special_profile_picture".to_string(),
-                field_type: "pinned_relation".to_string(),
-                value: "0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-                    .to_string(),
+                name: Some("special_profile_picture".to_string()),
+                field_type: Some("pinned_relation".to_string()),
+                value: Some(
+                    "0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                        .to_string(),
+                ),
             },
             OperationFieldsJoinedRow {
                 author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -588,9 +610,9 @@ mod tests {
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
                 previous_operations: None,
-                name: "username".to_string(),
-                field_type: "str".to_string(),
-                value: "bubu".to_string(),
+                name: Some("username".to_string()),
+                field_type: Some("str".to_string()),
+                value: Some("bubu".to_string()),
             },
         ];
 

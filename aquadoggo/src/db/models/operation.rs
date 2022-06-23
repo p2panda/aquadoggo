@@ -68,11 +68,17 @@ pub struct OperationFieldsJoinedRow {
     pub previous_operations: Option<String>,
 
     /// The name of this field.
-    pub name: String,
+    ///
+    /// This is an Option as a delete operation contains no fields.
+    pub name: Option<String>,
 
     /// The type of this field.
-    pub field_type: String,
+    ///
+    /// This is an Option as a delete operation contains no fields.
+    pub field_type: Option<String>,
 
     /// The actual value contained in this field.
-    pub value: String,
+    ///
+    /// This is an Option as a delete operation contains no fields.
+    pub value: Option<String>,
 }
