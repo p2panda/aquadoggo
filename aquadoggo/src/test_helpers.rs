@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::convert::TryFrom;
+use std::fmt::Debug;
 use std::net::{SocketAddr, TcpListener};
 
 use axum::body::HttpBody;
@@ -12,8 +13,7 @@ use once_cell::sync::Lazy;
 use p2panda_rs::hash::Hash;
 use rand::Rng;
 use serde::Deserialize;
-use sqlx::any::Any;
-use sqlx::migrate::MigrateDatabase;
+use sqlx::Any;
 use tower::make::Shared;
 use tower_service::Service;
 
@@ -162,7 +162,9 @@ pub async fn initialize_db() -> Pool {
     create_database(&TEST_CONFIG.database_url).await.unwrap();
 
     // Create connection pool and run all migrations
-    let pool = connection_pool(&TEST_CONFIG.database_url, 25).await.unwrap();
+    let pool = connection_pool(&TEST_CONFIG.database_url, 25)
+        .await
+        .unwrap();
     if run_pending_migrations(&pool).await.is_err() {
         pool.close().await;
     }
