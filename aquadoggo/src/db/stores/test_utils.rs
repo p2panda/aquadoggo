@@ -210,6 +210,7 @@ impl TestDatabaseRunner {
     pub fn with_db_teardown<F: AsyncTestFn + Send + Sync + 'static>(&self, test: F) {
         let runtime = Builder::new_current_thread()
             .worker_threads(1)
+            .enable_all()
             .thread_name("with_db_teardown")
             .build()
             .expect("Could not build tokio Runtime for test");
