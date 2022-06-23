@@ -2,6 +2,7 @@
 
 use std::convert::TryFrom;
 
+use futures::Future;
 use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
 use p2panda_rs::entry::{sign_and_encode, Entry};
 use p2panda_rs::hash::Hash;
@@ -17,6 +18,7 @@ use p2panda_rs::storage_provider::traits::{
 use p2panda_rs::test_utils::constants::{DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
 use p2panda_rs::test_utils::fixtures::{create_operation, delete_operation, update_operation};
 use rstest::fixture;
+use tokio::runtime::Builder;
 
 use crate::db::provider::SqlStorage;
 use crate::db::stores::{StorageEntry, StorageLog};
@@ -168,30 +170,96 @@ pub async fn insert_entry_operation_and_view(
     (document_id, document_view_id)
 }
 
-/// Container for `SqlStore` with access to the document ids and key_pairs used in the
-/// pre-populated database for testing.
-pub struct TestSqlStore {
-    pub store: SqlStorage,
-    pub key_pairs: Vec<KeyPair>,
-    pub documents: Vec<DocumentId>,
+#[async_trait::async_trait]
+pub trait AsyncTestFn {
+    async fn call(self, db: TestDatabase);
 }
 
-impl TestSqlStore {
-    /// Close database connection.
-    pub async fn close(&self) {
-        self.store.pool.close().await;
+#[async_trait::async_trait]
+impl<FN, F> AsyncTestFn for FN
+where
+    FN: FnOnce(TestDatabase) -> F + Sync + Send,
+    F: Future<Output = ()> + Send,
+{
+    async fn call(self, db: TestDatabase) {
+        self(db).await
     }
 }
 
-/// Fixture for constructing a storage provider instance backed by a pre-polpulated database. Passed
-/// parameters define what the db should contain. The first entry in each log contains a valid CREATE
-/// operation following entries contain duplicate UPDATE operations. If the with_delete flag is set
-/// to true the last entry in all logs contain be a DELETE operation.
+pub struct TestDatabaseRunner {
+    /// Number of entries per log/document.
+    no_of_entries: usize,
+
+    /// Number of authors, each with a log populated as defined above.
+    no_of_authors: usize,
+
+    /// A boolean flag for wether all logs should contain a delete operation.
+    with_delete: bool,
+
+    /// The schema used for all operations in the db.
+    schema: SchemaId,
+
+    /// The fields used for every CREATE operation.
+    create_operation_fields: Vec<(&'static str, OperationValue)>,
+
+    /// The fields used for every UPDATE operation.
+    update_operation_fields: Vec<(&'static str, OperationValue)>,
+}
+
+impl TestDatabaseRunner {
+    pub fn with_db_teardown<F: AsyncTestFn + Send + Sync + 'static>(&self, test: F) {
+        let runtime = Builder::new_current_thread()
+            .worker_threads(1)
+            .thread_name("with_db_teardown")
+            .build()
+            .expect("Could not build tokio Runtime for test");
+
+        runtime.block_on(async {
+            // Initialise test database
+            let db = create_test_db(
+                self.no_of_entries,
+                self.no_of_authors,
+                self.with_delete,
+                self.schema.clone(),
+                self.create_operation_fields.clone(),
+                self.update_operation_fields.clone(),
+            )
+            .await;
+
+            // Get a handle of the underlying database connection pool
+            let pool = db.store.pool.clone();
+
+            // Spawn the test in a separate task to make sure we have control over the possible
+            // panics which might happen inside of it
+            let handle = tokio::task::spawn(async move {
+                // Execute the actual test
+                test.call(db).await;
+            });
+
+            // Get a handle of the task so we can use it later
+            let result = handle.await;
+
+            // Unwind the test by closing down the connection to the database pool. This will
+            // be reached even when the test panicked
+            pool.close().await;
+
+            // Panic here when test failed to propagate it further
+            assert!(result.is_ok());
+        });
+    }
+}
+
+/// Fixture for constructing a storage provider instance backed by a pre-populated database.
 ///
-/// Returns a `TestSqlStore` containing storage provider instance, a vector of key pairs for all authors
-/// in the db, and a vector of the ids for all documents.
+/// Returns a `TestDatabaseRunner` which allows to bootstrap a safe async test environment
+/// connecting to a database. It makes sure the runner disconnects properly from the connection
+/// pool after the test succeeded or even failed.
+///
+/// Passed parameters define what the database should contain. The first entry in each log contains
+/// a valid CREATE operation following entries contain duplicate UPDATE operations. If the
+/// with_delete flag is set to true the last entry in all logs contain be a DELETE operation.
 #[fixture]
-pub async fn test_db(
+pub fn test_db(
     // Number of entries per log/document
     #[default(0)] no_of_entries: usize,
     // Number of authors, each with a log populated as defined above
@@ -204,7 +272,44 @@ pub async fn test_db(
     #[default(doggo_test_fields())] create_operation_fields: Vec<(&'static str, OperationValue)>,
     // The fields used for every UPDATE operation
     #[default(doggo_test_fields())] update_operation_fields: Vec<(&'static str, OperationValue)>,
-) -> TestSqlStore {
+) -> TestDatabaseRunner {
+    TestDatabaseRunner {
+        no_of_entries,
+        no_of_authors,
+        with_delete,
+        schema,
+        create_operation_fields,
+        update_operation_fields,
+    }
+}
+
+/// Container for `SqlStore` with access to the document ids and key_pairs used in the
+/// pre-populated database for testing.
+pub struct TestDatabase {
+    pub store: SqlStorage,
+    pub key_pairs: Vec<KeyPair>,
+    pub documents: Vec<DocumentId>,
+}
+
+/// Helper method for constructing a storage provider instance backed by a pre-populated database.
+///
+/// Passed parameters define what the db should contain. The first entry in each log contains a
+/// valid CREATE operation following entries contain duplicate UPDATE operations. If the
+/// with_delete flag is set to true the last entry in all logs contain be a DELETE operation.
+///
+/// Returns a `TestDatabase` containing storage provider instance, a vector of key pairs for all
+/// authors in the db, and a vector of the ids for all documents.
+///
+/// Note: This helper should not be used directly in tests as it does not assure that the database
+/// connection will be closed after the test finished or failed. Please use `test_db` instead.
+async fn create_test_db(
+    no_of_entries: usize,
+    no_of_authors: usize,
+    with_delete: bool,
+    schema: SchemaId,
+    create_operation_fields: Vec<(&'static str, OperationValue)>,
+    update_operation_fields: Vec<(&'static str, OperationValue)>,
+) -> TestDatabase {
     let mut documents: Vec<DocumentId> = Vec::new();
     let key_pairs = test_key_pairs(no_of_authors);
 
@@ -213,7 +318,7 @@ pub async fn test_db(
 
     // If we don't want any entries in the db return now
     if no_of_entries == 0 {
-        return TestSqlStore {
+        return TestDatabase {
             store,
             key_pairs,
             documents,
@@ -286,7 +391,7 @@ pub async fn test_db(
         }
     }
 
-    TestSqlStore {
+    TestDatabase {
         store,
         key_pairs,
         documents,

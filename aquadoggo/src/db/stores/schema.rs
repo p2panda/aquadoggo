@@ -106,7 +106,9 @@ mod tests {
     use rstest::rstest;
 
     use crate::db::provider::SqlStorage;
-    use crate::db::stores::test_utils::{insert_entry_operation_and_view, test_db, TestSqlStore};
+    use crate::db::stores::test_utils::{
+        insert_entry_operation_and_view, test_db, TestDatabase, TestDatabaseRunner,
+    };
 
     use super::SchemaStore;
 
@@ -161,110 +163,109 @@ mod tests {
         document_view_id
     }
 
-    #[rstest]
+    /* #[rstest]
     #[case::valid_schema_and_fields(
         "venue_name = { type: \"str\", value: tstr, }\ncreate-fields = { venue_name }\nupdate-fields = { + ( venue_name ) }",
-        operation_fields(vec![("name", OperationValue::Text("venue_name".to_string())), ("type", FieldType::String.into())]), 
+        operation_fields(vec![("name", OperationValue::Text("venue_name".to_string())), ("type", FieldType::String.into())]),
         operation_fields(vec![("name", OperationValue::Text("venue".to_string())), ("description", OperationValue::Text("My venue".to_string()))]))]
     #[should_panic(expected = "missing field \"name\"")]
     #[case::fields_missing_name_field(
         "",
-        operation_fields(vec![("type", FieldType::String.into())]), 
+        operation_fields(vec![("type", FieldType::String.into())]),
         operation_fields(vec![("name", OperationValue::Text("venue".to_string())), ("description", OperationValue::Text("My venue".to_string()))]))]
     #[should_panic(expected = "missing field \"type\"")]
     #[case::fields_missing_type_field(
         "",
-        operation_fields(vec![("name", OperationValue::Text("venue_name".to_string()))]), 
+        operation_fields(vec![("name", OperationValue::Text("venue_name".to_string()))]),
         operation_fields(vec![("name", OperationValue::Text("venue".to_string())), ("description", OperationValue::Text("My venue".to_string()))]))]
     #[should_panic(expected = "missing field \"name\"")]
     #[case::schema_missing_name_field(
         "",
-        operation_fields(vec![("name", OperationValue::Text("venue_name".to_string())), ("type", FieldType::String.into())]), 
+        operation_fields(vec![("name", OperationValue::Text("venue_name".to_string())), ("type", FieldType::String.into())]),
         operation_fields(vec![("description", OperationValue::Text("My venue".to_string()))]))]
     #[should_panic(expected = "missing field \"description\"")]
     #[case::schema_missing_name_description(
         "",
-        operation_fields(vec![("name", OperationValue::Text("venue_name".to_string())), ("type", FieldType::String.into())]), 
+        operation_fields(vec![("name", OperationValue::Text("venue_name".to_string())), ("type", FieldType::String.into())]),
         operation_fields(vec![("name", OperationValue::Text("venue".to_string()))]))]
-    #[tokio::test]
-    async fn get_schema(
-        #[case] cddl_str: &str,
+    fn get_schema(
+        #[case] cddl_str: &'static str,
         #[case] schema_field_definition: OperationFields,
         #[case] schema_definition: OperationFields,
         key_pair: KeyPair,
-        #[from(test_db)]
-        #[future]
-        db: TestSqlStore,
+        #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        let db = db.await;
-        let document_view_id =
-            insert_schema_field_definition(&db.store, &key_pair, schema_field_definition).await;
+        runner.with_db_teardown(|db: TestDatabase| async {
+            let document_view_id =
+                insert_schema_field_definition(&db.store, &key_pair, schema_field_definition).await;
 
-        let document_view_id =
-            insert_schema_definition(&db.store, &key_pair, &document_view_id, schema_definition)
-                .await;
+            let document_view_id = insert_schema_definition(
+                &db.store,
+                &key_pair,
+                &document_view_id,
+                schema_definition,
+            )
+            .await;
 
-        let schema = db
-            .store
-            .get_schema_by_id(&document_view_id)
-            .await
-            .unwrap_or_else(|e| panic!("{}", e));
+            let schema = db
+                .store
+                .get_schema_by_id(&document_view_id)
+                .await
+                .unwrap_or_else(|e| panic!("{}", e));
 
-        assert_eq!(schema.unwrap().as_cddl(), cddl_str)
-    }
+            assert_eq!(schema.unwrap().as_cddl(), cddl_str);
+        });
+    } */
 
     #[rstest]
     #[case::works(
-        operation_fields(vec![("name", OperationValue::Text("venue_name".to_string())), ("type", FieldType::String.into())]), 
+        operation_fields(vec![("name", OperationValue::Text("venue_name".to_string())), ("type", FieldType::String.into())]),
         operation_fields(vec![("name", OperationValue::Text("venue".to_string())), ("description", OperationValue::Text("My venue".to_string()))]))]
     #[should_panic(expected = "invalid fields found for this schema")]
     #[case::does_not_work(
-        operation_fields(vec![("name", OperationValue::Text("venue_name".to_string()))]), 
+        operation_fields(vec![("name", OperationValue::Text("venue_name".to_string()))]),
         operation_fields(vec![("name", OperationValue::Text("venue".to_string())), ("description", OperationValue::Text("My venue".to_string()))]))]
-    #[tokio::test]
-    async fn get_all_schema(
+    fn get_all_schema(
         #[case] schema_field_definition: OperationFields,
         #[case] schema_definition: OperationFields,
         key_pair: KeyPair,
-        #[from(test_db)]
-        #[future]
-        db: TestSqlStore,
+        #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        let db = db.await;
-        let document_view_id =
-            insert_schema_field_definition(&db.store, &key_pair, schema_field_definition).await;
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let document_view_id =
+                insert_schema_field_definition(&db.store, &key_pair, schema_field_definition).await;
 
-        insert_schema_definition(&db.store, &key_pair, &document_view_id, schema_definition).await;
+            insert_schema_definition(&db.store, &key_pair, &document_view_id, schema_definition)
+                .await;
 
-        let schemas = db
-            .store
-            .get_all_schema()
-            .await
-            .unwrap_or_else(|e| panic!("{}", e));
+            let schemas = db
+                .store
+                .get_all_schema()
+                .await
+                .unwrap_or_else(|e| panic!("{}", e));
 
-        assert_eq!(schemas.len(), 1)
+            assert_eq!(schemas.len(), 1);
+        });
     }
 
     #[rstest]
     #[case::schema_fields_do_not_exist(
         operation_fields(vec![("name", OperationValue::Text("venue".to_string())), ("description", OperationValue::Text("My venue".to_string()))]))]
-    #[tokio::test]
-    async fn schema_fields_do_not_exist(
+    fn schema_fields_do_not_exist(
         #[case] schema_definition: OperationFields,
         #[from(document_view_id)] schema_fields_id: DocumentViewId,
-        #[from(test_db)]
-        #[future]
-        db: TestSqlStore,
+        #[from(test_db)] runner: TestDatabaseRunner,
         key_pair: KeyPair,
     ) {
-        let db = db.await;
-        let document_view_id =
-            insert_schema_definition(&db.store, &key_pair, &schema_fields_id, schema_definition)
-                .await;
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let document_view_id =
+                insert_schema_definition(&db.store, &key_pair, &schema_fields_id, schema_definition)
+                    .await;
 
-        // Retrieve the schema by it's document_view_id.
-        let schema = db.store.get_schema_by_id(&document_view_id).await;
+            // Retrieve the schema by it's document_view_id.
+            let schema = db.store.get_schema_by_id(&document_view_id).await;
 
-        assert_eq!(schema.unwrap_err().to_string(), format!("No document view found for schema field definition with id: {0} which is required by schema definition {1}", schema_fields_id, document_view_id))
+            assert_eq!(schema.unwrap_err().to_string(), format!("No document view found for schema field definition with id: {0} which is required by schema definition {1}", schema_fields_id, document_view_id));
+        });
     }
 }

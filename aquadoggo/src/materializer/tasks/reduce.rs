@@ -161,139 +161,126 @@ mod tests {
 
     use crate::config::Configuration;
     use crate::context::Context;
-    use crate::db::stores::test_utils::{test_db, TestSqlStore};
+    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
     use crate::db::traits::DocumentStore;
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
 
     #[rstest]
-    #[tokio::test]
-    async fn reduces_documents(
+    fn reduces_documents(
         #[from(test_db)]
         #[with(2, 20, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::Text("panda".into()))], vec![("username", OperationValue::Text("PANDA".into()))])]
-        #[future]
-        db: TestSqlStore,
+        runner: TestDatabaseRunner,
     ) {
-        let db = db.await;
-        let context = Context::new(db.store.clone(), Configuration::default());
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let context = Context::new(db.store.clone(), Configuration::default());
 
-        for document_id in &db.documents {
-            let input = TaskInput::new(Some(document_id.clone()), None);
+            for document_id in &db.documents {
+                let input = TaskInput::new(Some(document_id.clone()), None);
+                assert!(reduce_task(context.clone(), input).await.is_ok());
+            }
+
+            for document_id in &db.documents {
+                let document_view = context.store.get_document_by_id(document_id).await.unwrap();
+
+                assert_eq!(
+                    document_view.unwrap().get("username").unwrap().value(),
+                    &OperationValue::Text("PANDA".to_string())
+                )
+            }
+        });
+    }
+
+    #[rstest]
+    fn reduces_document_to_specific_view_id(
+        #[from(test_db)]
+        #[with(2, 1, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::Text("panda".into()))], vec![("username", OperationValue::Text("PANDA".into()))])]
+        runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let document_operations = db
+                .store
+                .get_operations_by_document_id(&db.documents[0])
+                .await
+                .unwrap();
+
+            let document = DocumentBuilder::new(document_operations).build().unwrap();
+            let mut sorted_document_operations = document.operations().clone();
+
+            let document_view_id: DocumentViewId = sorted_document_operations
+                .pop()
+                .unwrap()
+                .operation_id()
+                .clone()
+                .into();
+
+            let context = Context::new(db.store.clone(), Configuration::default());
+            let input = TaskInput::new(None, Some(document_view_id.clone()));
+
             assert!(reduce_task(context.clone(), input).await.is_ok());
-        }
 
-        for document_id in &db.documents {
-            let document_view = context.store.get_document_by_id(document_id).await.unwrap();
+            let document_view = db
+                .store
+                .get_document_view_by_id(&document_view_id)
+                .await
+                .unwrap();
 
             assert_eq!(
                 document_view.unwrap().get("username").unwrap().value(),
                 &OperationValue::Text("PANDA".to_string())
-            )
-        }
+            );
 
-        // Disconnect from database
-        db.close().await;
+            // We didn't reduce this document_view_id so it shouldn't exist in the db.
+            let document_view_id: DocumentViewId = sorted_document_operations
+                .pop()
+                .unwrap()
+                .operation_id()
+                .clone()
+                .into();
+
+            let document_view = db
+                .store
+                .get_document_view_by_id(&document_view_id)
+                .await
+                .unwrap();
+
+            assert!(document_view.is_none());
+        });
     }
 
     #[rstest]
-    #[tokio::test]
-    async fn reduces_document_to_specific_view_id(
-        #[from(test_db)]
-        #[with(2, 1, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::Text("panda".into()))], vec![("username", OperationValue::Text("PANDA".into()))])]
-        #[future]
-        db: TestSqlStore,
-    ) {
-        let db = db.await;
-
-        let document_operations = db
-            .store
-            .get_operations_by_document_id(&db.documents[0])
-            .await
-            .unwrap();
-
-        let document = DocumentBuilder::new(document_operations).build().unwrap();
-        let mut sorted_document_operations = document.operations().clone();
-
-        let document_view_id: DocumentViewId = sorted_document_operations
-            .pop()
-            .unwrap()
-            .operation_id()
-            .clone()
-            .into();
-
-        let context = Context::new(db.store.clone(), Configuration::default());
-        let input = TaskInput::new(None, Some(document_view_id.clone()));
-
-        assert!(reduce_task(context.clone(), input).await.is_ok());
-
-        let document_view = db
-            .store
-            .get_document_view_by_id(&document_view_id)
-            .await
-            .unwrap();
-
-        assert_eq!(
-            document_view.unwrap().get("username").unwrap().value(),
-            &OperationValue::Text("PANDA".to_string())
-        );
-
-        // We didn't reduce this document_view_id so it shouldn't exist in the db.
-        let document_view_id: DocumentViewId = sorted_document_operations
-            .pop()
-            .unwrap()
-            .operation_id()
-            .clone()
-            .into();
-
-        let document_view = db
-            .store
-            .get_document_view_by_id(&document_view_id)
-            .await
-            .unwrap();
-
-        assert!(document_view.is_none());
-
-        // Disconnect from database
-        db.close().await;
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn deleted_documents_have_no_view(
+    fn deleted_documents_have_no_view(
         #[from(test_db)]
         #[with(3, 20, true)]
-        #[future]
-        db: TestSqlStore,
+        runner: TestDatabaseRunner,
     ) {
-        let db = db.await;
-        let context = Context::new(db.store.clone(), Configuration::default());
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let context = Context::new(db.store.clone(), Configuration::default());
 
-        for document_id in &db.documents {
-            let input = TaskInput::new(Some(document_id.clone()), None);
+            for document_id in &db.documents {
+                let input = TaskInput::new(Some(document_id.clone()), None);
+                let tasks = reduce_task(context.clone(), input).await.unwrap();
+                assert!(tasks.is_none());
+            }
+
+            for document_id in &db.documents {
+                let document_view = context.store.get_document_by_id(document_id).await.unwrap();
+                assert!(document_view.is_none())
+            }
+
+            let document_operations = context
+                .store
+                .get_operations_by_document_id(&db.documents[0])
+                .await
+                .unwrap();
+
+            let document = DocumentBuilder::new(document_operations).build().unwrap();
+
+            let input = TaskInput::new(None, Some(document.view_id().clone()));
             let tasks = reduce_task(context.clone(), input).await.unwrap();
+
             assert!(tasks.is_none());
-        }
-
-        for document_id in &db.documents {
-            let document_view = context.store.get_document_by_id(document_id).await.unwrap();
-            assert!(document_view.is_none())
-        }
-
-        let document_operations = context
-            .store
-            .get_operations_by_document_id(&db.documents[0])
-            .await
-            .unwrap();
-
-        let document = DocumentBuilder::new(document_operations).build().unwrap();
-
-        let input = TaskInput::new(None, Some(document.view_id().clone()));
-        let tasks = reduce_task(context.clone(), input).await.unwrap();
-
-        assert!(tasks.is_none());
-
-        // Disconnect from database
-        db.close().await;
+        });
     }
 
     #[rstest]
@@ -302,44 +289,34 @@ mod tests {
     // This document is deleted, it shouldn't spawn a dependency task.
     #[case(test_db(3, 1, true, TEST_SCHEMA_ID.parse().unwrap(),
         vec![("username", OperationValue::Text("panda".into()))], vec![("username", OperationValue::Text("PANDA".into()))]), false)]
-    #[tokio::test]
-    async fn returns_dependency_task_inputs(
-        #[case]
-        #[future]
-        db: TestSqlStore,
+    fn returns_dependency_task_inputs(
+        #[case] runner: TestDatabaseRunner,
         #[case] is_next_task: bool,
     ) {
-        let db = db.await;
-        let context = Context::new(db.store.clone(), Configuration::default());
-        let document_id = db.documents[0].clone();
+        runner.with_db_teardown(move |db: TestDatabase| async move {
+            let context = Context::new(db.store.clone(), Configuration::default());
+            let document_id = db.documents[0].clone();
 
-        let input = TaskInput::new(Some(document_id.clone()), None);
-        let next_task_inputs = reduce_task(context.clone(), input).await.unwrap();
+            let input = TaskInput::new(Some(document_id.clone()), None);
+            let next_task_inputs = reduce_task(context.clone(), input).await.unwrap();
 
-        assert_eq!(next_task_inputs.is_some(), is_next_task);
-
-        // Disconnect from database
-        db.close().await;
+            assert_eq!(next_task_inputs.is_some(), is_next_task);
+        });
     }
 
     #[rstest]
     #[should_panic(expected = "Critical")]
     #[case(None, None)]
-    #[tokio::test]
-    async fn fails_correctly(
+    fn fails_correctly(
         #[case] document_id: Option<DocumentId>,
         #[case] document_view_id: Option<DocumentViewId>,
-        #[from(test_db)]
-        #[future]
-        db: TestSqlStore,
+        #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        let db = db.await;
-        let context = Context::new(db.store.clone(), Configuration::default());
-        let input = TaskInput::new(document_id, document_view_id);
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let context = Context::new(db.store.clone(), Configuration::default());
+            let input = TaskInput::new(document_id, document_view_id);
 
-        reduce_task(context.clone(), input).await.unwrap();
-
-        // Disconnect from database
-        db.close().await;
+            reduce_task(context.clone(), input).await.unwrap();
+        });
     }
 }
