@@ -24,7 +24,7 @@ pub struct OperationRow {
     pub schema_id: String,
 
     /// The previous operations of this operation concatenated into string format with `_` seperator.
-    pub previous_operations: String,
+    pub previous_operations: Option<String>,
 }
 
 /// A struct representing a single operation field row as it is inserted in the database.
