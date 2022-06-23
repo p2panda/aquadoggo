@@ -5,8 +5,8 @@ use std::collections::BTreeMap;
 use p2panda_rs::document::{DocumentId, DocumentViewFields, DocumentViewId, DocumentViewValue};
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{
-    Operation, OperationFields, OperationId, OperationValue, PinnedRelation, PinnedRelationList,
-    Relation, RelationList, VerifiedOperation,
+    AsVerifiedOperation, Operation, OperationFields, OperationId, OperationValue, PinnedRelation,
+    PinnedRelationList, Relation, RelationList, VerifiedOperation,
 };
 use p2panda_rs::schema::SchemaId;
 

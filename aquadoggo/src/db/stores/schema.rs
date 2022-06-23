@@ -50,7 +50,7 @@ impl SchemaStore for SqlStorage {
             schema_fields.push(scheme_field_view);
         }
 
-        let schema = Schema::new(schema_view, schema_fields)?;
+        let schema = Schema::from_views(schema_view, schema_fields)?;
 
         Ok(Some(schema))
     }
@@ -87,7 +87,7 @@ impl SchemaStore for SqlStorage {
                 .map(|field| field.to_owned())
                 .collect();
 
-            all_schema.push(Schema::new(schema_view, schema_fields)?);
+            all_schema.push(Schema::from_views(schema_view, schema_fields)?);
         }
 
         Ok(all_schema)
