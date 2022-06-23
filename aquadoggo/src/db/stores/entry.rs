@@ -484,7 +484,7 @@ mod tests {
         .unwrap();
         let result = db.store.insert_entry(duplicate_doggo_entry).await;
 
-        assert!(result.is_error());
+        assert!(result.is_err());
 
         //         assert_eq!(
         //             result.unwrap_err().to_string(),
