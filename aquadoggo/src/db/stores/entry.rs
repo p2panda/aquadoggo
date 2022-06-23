@@ -345,7 +345,7 @@ impl EntryStore<StorageEntry> for SqlStorage {
             WHERE
                 author = $1
                 AND log_id = $2
-                AND CAST(seq_num AS NUMERIC) BETWEEN $3 and $4
+                AND CAST(seq_num AS NUMERIC) BETWEEN CAST($3 AS NUMERIC) and CAST($4 AS NUMERIC)
             ORDER BY
                 CAST(seq_num AS NUMERIC)
             ",
