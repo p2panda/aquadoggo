@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_trait::async_trait;
+use p2panda_rs::operation::VerifiedOperation;
 use sqlx::query_scalar;
 
 use p2panda_rs::document::DocumentId;
@@ -31,7 +32,7 @@ impl SqlStorage {
 /// A `StorageProvider` implementation based on `sqlx` that supports SQLite and PostgreSQL
 /// databases.
 #[async_trait]
-impl StorageProvider<StorageEntry, StorageLog> for SqlStorage {
+impl StorageProvider<StorageEntry, StorageLog, VerifiedOperation> for SqlStorage {
     type EntryArgsResponse = EntryArgsResponse;
     type EntryArgsRequest = EntryArgsRequest;
     type PublishEntryResponse = PublishEntryResponse;

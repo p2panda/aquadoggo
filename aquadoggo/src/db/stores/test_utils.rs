@@ -7,8 +7,8 @@ use p2panda_rs::entry::{sign_and_encode, Entry};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::{Author, KeyPair};
 use p2panda_rs::operation::{
-    AsOperation, Operation, OperationEncoded, OperationId, OperationValue, PinnedRelation,
-    PinnedRelationList, Relation, RelationList, VerifiedOperation,
+    AsOperation, AsVerifiedOperation, Operation, OperationEncoded, OperationId, OperationValue,
+    PinnedRelation, PinnedRelationList, Relation, RelationList, VerifiedOperation,
 };
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::{

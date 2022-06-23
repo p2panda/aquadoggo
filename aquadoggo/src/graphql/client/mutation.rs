@@ -83,6 +83,7 @@ mod tests {
     use async_graphql::{from_value, value, Request, Value, Variables};
     use bamboo_rs_core_ed25519_yasmf::entry::is_lipmaa_required;
     use p2panda_rs::entry::{EntrySigned, LogId, SeqNum};
+    use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::Author;
     use p2panda_rs::operation::{Operation, OperationEncoded, OperationValue};
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
@@ -371,9 +372,9 @@ mod tests {
         "Could not decode payload hash DecodeError"
     )]
     #[case::backlink_and_skiplink_not_in_db(
-        &entry_signed_encoded_unvalidated(8, 1, Some(DEFAULT_HASH.parse().unwrap()), Some(DEFAULT_HASH.parse().unwrap()), Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())), key_pair(DEFAULT_PRIVATE_KEY)),
+        &entry_signed_encoded_unvalidated(8, 1, Some(DEFAULT_HASH.parse().unwrap()), Some(Hash::new_from_bytes(vec![2, 3, 4]).unwrap()), Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())), key_pair(DEFAULT_PRIVATE_KEY)),
         OPERATION_ENCODED,
-        "Could not find expected backlink in database for entry with id: <Hash 1bbde6>"
+        "Could not find expected backlink in database for entry with id: <Hash f7c017>"
     )]
     #[case::backlink_not_in_db(
         &entry_signed_encoded_unvalidated(2, 1, Some(DEFAULT_HASH.parse().unwrap()), None, Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())), key_pair(DEFAULT_PRIVATE_KEY)),
