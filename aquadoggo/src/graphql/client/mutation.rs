@@ -152,80 +152,87 @@ mod tests {
     }
 
     #[rstest]
-    #[tokio::test]
-    async fn publish_entry(publish_entry_request: Request) {
-        let (tx, _rx) = broadcast::channel(16);
-        let store = initialize_store().await;
-        let context = HttpServiceContext::new(store, tx);
+    fn publish_entry(#[from(test_db)] runner: TestDatabaseRunner, publish_entry_request: Request) {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
+            let (tx, _rx) = broadcast::channel(16);
+            let context = HttpServiceContext::new(db.store, tx);
 
-        let response = context.schema.execute(publish_entry_request).await;
-        let received: PublishEntryResponse = match response.data {
-            Value::Object(result_outer) => {
-                from_value(result_outer.get("publishEntry").unwrap().to_owned()).unwrap()
-            }
-            _ => panic!("Expected return value to be an object"),
-        };
+            let response = context.schema.execute(publish_entry_request).await;
+            let received: PublishEntryResponse = match response.data {
+                Value::Object(result_outer) => {
+                    from_value(result_outer.get("publishEntry").unwrap().to_owned()).unwrap()
+                }
+                _ => panic!("Expected return value to be an object"),
+            };
 
-        // The response should contain args for the next entry in the same log
-        let expected = PublishEntryResponse {
-            log_id: LogId::new(1),
-            seq_num: SeqNum::new(2).unwrap(),
-            backlink: Some(
-                "00201c221b573b1e0c67c5e2c624a93419774cdf46b3d62414c44a698df1237b1c16"
-                    .parse()
-                    .unwrap(),
-            ),
-            skiplink: None,
-        };
-        assert_eq!(expected, received);
+            // The response should contain args for the next entry in the same log
+            let expected = PublishEntryResponse {
+                log_id: LogId::new(1),
+                seq_num: SeqNum::new(2).unwrap(),
+                backlink: Some(
+                    "00201c221b573b1e0c67c5e2c624a93419774cdf46b3d62414c44a698df1237b1c16"
+                        .parse()
+                        .unwrap(),
+                ),
+                skiplink: None,
+            };
+            assert_eq!(expected, received);
+        })
     }
 
     #[rstest]
-    #[tokio::test]
-    async fn sends_message_on_communication_bus(publish_entry_request: Request) {
-        let (tx, mut rx) = broadcast::channel(16);
-        let store = initialize_store().await;
-        let context = HttpServiceContext::new(store, tx);
+    fn sends_message_on_communication_bus(
+        #[from(test_db)] runner: TestDatabaseRunner,
+        publish_entry_request: Request,
+    ) {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
+            let (tx, mut rx) = broadcast::channel(16);
+            let context = HttpServiceContext::new(db.store, tx);
 
-        context.schema.execute(publish_entry_request).await;
+            context.schema.execute(publish_entry_request).await;
 
-        // Find out hash of test entry to determine operation id
-        let entry_encoded = EntrySigned::new(ENTRY_ENCODED).unwrap();
+            // Find out hash of test entry to determine operation id
+            let entry_encoded = EntrySigned::new(ENTRY_ENCODED).unwrap();
 
-        // Expect receiver to receive sent message
-        let message = rx.recv().await.unwrap();
-        assert_eq!(
-            message,
-            ServiceMessage::NewOperation(entry_encoded.hash().into())
-        );
-    }
-
-    #[tokio::test]
-    async fn publish_entry_error_handling() {
-        let (tx, _rx) = broadcast::channel(16);
-        let store = initialize_store().await;
-        let context = HttpServiceContext::new(store, tx);
-
-        let parameters = Variables::from_value(value!({
-            "entryEncoded": ENTRY_ENCODED,
-            "operationEncoded": "".to_string()
-        }));
-        let request = Request::new(PUBLISH_ENTRY_QUERY).variables(parameters);
-        let response = context.schema.execute(request).await;
-
-        assert!(response.is_err());
-        assert_eq!(
-            "operation needs to match payload hash of encoded entry".to_string(),
-            response.errors[0].to_string()
-        );
+            // Expect receiver to receive sent message
+            let message = rx.recv().await.unwrap();
+            assert_eq!(
+                message,
+                ServiceMessage::NewOperation(entry_encoded.hash().into())
+            );
+        })
     }
 
     #[rstest]
-    #[tokio::test]
-    async fn post_gql_mutation(publish_entry_request: Request) {
+    fn publish_entry_error_handling(#[from(test_db)] runner: TestDatabaseRunner) {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
+            let (tx, _rx) = broadcast::channel(16);
+            let context = HttpServiceContext::new(db.store, tx);
+
+            let parameters = Variables::from_value(value!({
+                "entryEncoded": ENTRY_ENCODED,
+                "operationEncoded": "".to_string()
+            }));
+            let request = Request::new(PUBLISH_ENTRY_QUERY).variables(parameters);
+            let response = context.schema.execute(request).await;
+
+            assert!(response.is_err());
+            assert_eq!(
+                "operation needs to match payload hash of encoded entry".to_string(),
+                response.errors[0].to_string()
+            );
+        })
+    }
+
+    #[rstest]
+    fn post_gql_mutation(
+        #[from(test_db)] runner: TestDatabaseRunner,
+        publish_entry_request: Request,
+    ) {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
+
         let (tx, _rx) = broadcast::channel(16);
-        let store = initialize_store().await;
-        let context = HttpServiceContext::new(store, tx);
+        let context = HttpServiceContext::new(db.store, tx);
         let client = TestClient::new(build_server(context));
 
         let response = client
@@ -250,7 +257,7 @@ mod tests {
                     }
                 }
             })
-        );
+        );})
     }
 
     #[rstest]
