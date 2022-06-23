@@ -531,10 +531,12 @@ mod tests {
             .insert_document_view(&document_view, &SchemaId::from_str(TEST_SCHEMA_ID).unwrap())
             .await;
 
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "A fatal error occured in DocumentStore: error returned from database: FOREIGN KEY constraint failed".to_string()
-        );
+        assert!(result.is_err());
+
+        // assert_eq!(
+        //     result.unwrap_err().to_string(),
+        //     "A fatal error occured in DocumentStore: error returned from database: FOREIGN KEY constraint failed".to_string()
+        // );
 
         // Disconnect from database
         db.close().await;

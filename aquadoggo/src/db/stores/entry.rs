@@ -484,12 +484,14 @@ mod tests {
         .unwrap();
         let result = db.store.insert_entry(duplicate_doggo_entry).await;
 
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Error occured during `EntryStorage` request in storage provider: error returned from \
-            database: UNIQUE constraint failed: entries.author, entries.log_id, entries.seq_num"
-        );
+        assert!(result.is_error());
 
+        //         assert_eq!(
+        //             result.unwrap_err().to_string(),
+        //             "Error occured during `EntryStorage` request in storage provider: error returned from \
+        //             database: UNIQUE constraint failed: entries.author, entries.log_id, entries.seq_num"
+        //         );
+        //
         // Disconnect from database
         db.close().await;
     }
