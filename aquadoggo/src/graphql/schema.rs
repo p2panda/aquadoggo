@@ -149,30 +149,34 @@ impl GraphQLSchemaManager {
     async fn spawn_schema_added_task(&self) -> Result<(), DynamicSchemaError> {
         let shared = self.shared.clone();
         let schemas = self.schemas.clone();
+
         let mut on_schema_added = shared.schema_provider.on_schema_added();
 
         // Create the new GraphQL based on the current state of known p2panda application schemas
-        async fn build(
+        async fn rebuild(
             shared: GraphQLSharedData,
             schemas: GraphQLSchemas,
         ) -> Result<(), DynamicSchemaError> {
-            info!("Building new GraphQL schema");
             let schema = build_schema_with_workaround(shared).await?;
             schemas.lock().await.push(schema);
             Ok(())
         }
 
         // Always build a schema right at the beginning as we don't have one yet
-        build(shared.clone(), schemas.clone()).await?;
+        rebuild(shared.clone(), schemas.clone()).await?;
 
         // Spawn a task which reacts to newly registered p2panda schemas
         tokio::task::spawn(async move {
             loop {
-                if let Ok(_schema_id) = on_schema_added.recv().await {
-                    info!("Adding schema");
-                    let result = build(shared.clone(), schemas.clone()).await;
-                    if let Err(err) = result {
-                        error!("Error updating graphql schema: {}", err);
+                match on_schema_added.recv().await {
+                    Ok(schema_id) => {
+                        info!("Changed schema {}, rebuilding GraphQL API", schema_id);
+                        if let Err(err) = rebuild(shared.clone(), schemas.clone()).await {
+                            error!("Error updating graphql schema: {}", err);
+                        }
+                    }
+                    Err(err) => {
+                        panic!("Failed receiving schema updates: {}", err)
                     }
                 }
             }
