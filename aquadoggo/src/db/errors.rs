@@ -1,9 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use p2panda_rs::{
-    document::{DocumentId, DocumentViewId},
-    schema::{system::SystemSchemaError, SchemaError, SchemaIdError},
-};
+use p2panda_rs::document::{DocumentId, DocumentViewId};
+use p2panda_rs::schema::system::SystemSchemaError;
+use p2panda_rs::schema::{SchemaError, SchemaIdError};
+
+/// `SQLStorage` errors.
+#[derive(thiserror::Error, Debug)]
+pub enum SqlStorageError {
+    #[error("SQL query failed: {0}")]
+    Transaction(String),
+
+    #[error("Insertion of row into table {0} did not show any effect")]
+    Insertion(String),
+
+    #[error("Deletion of row from table {0} did not show any effect")]
+    Deletion(String),
+}
 
 /// `DocumentStore` errors.
 #[derive(thiserror::Error, Debug)]

@@ -328,7 +328,6 @@ pub fn parse_document_view_field_rows(
 
 #[cfg(test)]
 mod tests {
-
     use p2panda_rs::document::DocumentViewValue;
     use p2panda_rs::operation::{
         AsOperation, OperationId, OperationValue, PinnedRelation, PinnedRelationList, Relation,
