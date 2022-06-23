@@ -2391,7 +2391,7 @@ dependencies = [
 [[package]]
 name = "p2panda-rs"
 version = "0.3.0"
-source = "git+https://github.com/p2panda/p2panda?branch=improve-validation-in-entry-signed#dee7d02a566784c757f1c4604bb4912addb54b08"
+source = "git+https://github.com/p2panda/p2panda?branch=main#da6cb0d41047261e23d043a45f204ba37cbbfad2"
 dependencies = [
  "arrayvec 0.5.2",
  "async-trait",
