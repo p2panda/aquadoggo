@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::convert::TryFrom;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{Error, Result};
 use log::{debug, error, warn};
-use p2panda_rs::entry::{LogId, SeqNum};
-use p2panda_rs::identity::Author;
+pub use p2panda_rs::entry::LogId;
+use p2panda_rs::entry::SeqNum;
+pub use p2panda_rs::identity::Author;
 use p2panda_rs::storage_provider::traits::EntryStore;
 use serde::Deserialize;
 use tokio::task;
@@ -17,11 +19,28 @@ use crate::db::stores::StorageEntry;
 use crate::graphql::replication::client::Client;
 use crate::manager::{Service, Shutdown};
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct AuthorToReplicate(Author, Vec<LogId>);
+
+impl TryFrom<(String, Vec<u64>)> for AuthorToReplicate {
+    type Error = Error;
+
+    fn try_from(value: (String, Vec<u64>)) -> Result<Self, Self::Error> {
+        let author = Author::new(&value.0)?;
+        let log_ids = value.1.into_iter().map(LogId::new).collect();
+        Ok(Self(author, log_ids))
+    }
+}
+
+/// Configuration for the replication service
 #[derive(Default, Debug, Clone, Deserialize)]
 pub struct Config {
-    connection_interval_seconds: Option<u64>,
-    remote_peers: Vec<String>,
-    authors_to_replicate: Vec<(Author, Vec<LogId>)>,
+    /// How often to connect to remote nodes for replication.
+    pub connection_interval_seconds: Option<u64>,
+    /// The addresses of remote peers to replicate from.
+    pub remote_peers: Vec<String>,
+    /// The authors to replicate and their log ids.
+    pub authors_to_replicate: Vec<AuthorToReplicate>,
 }
 
 #[derive(Default, Debug, Clone)]
@@ -53,18 +72,21 @@ impl Service<Context, ServiceMessage> for ReplicationService {
             loop {
                 debug!("Starting replication with remote peers");
                 for remote_peer in remote_peers.clone().iter() {
-                    for (author, log_ids) in authors_to_replicate.clone().iter() {
+                    for author_to_replicate in authors_to_replicate.clone().iter() {
+                        let author = author_to_replicate.0.clone();
+                        let log_ids = author_to_replicate.1.clone();
+
                         for log_id in log_ids {
                             // Get the latest seq we have for this log + author
-                            let latest_seq = get_latest_seq(&context, log_id, author).await;
+                            let latest_seq = get_latest_seq(&context, &log_id, &author).await;
                             debug!("Latest entry seq: {:?}", latest_seq);
 
                             // Make our replication request to the remote peer
                             let entries = client
                                 .get_entries_newer_than_seq(
                                     remote_peer,
-                                    log_id,
-                                    author,
+                                    &log_id,
+                                    &author,
                                     latest_seq.as_ref(),
                                 )
                                 .await;

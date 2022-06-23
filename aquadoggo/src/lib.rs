@@ -28,6 +28,6 @@ mod replication;
 #[cfg(test)]
 mod test_helpers;
 
-pub use crate::config::Configuration;
+pub use crate::config::{Configuration, ReplicationConfig};
 pub use db::{connection_pool, provider::SqlStorage};
 pub use node::Node;
