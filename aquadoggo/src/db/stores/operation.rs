@@ -357,6 +357,7 @@ mod tests {
         assert!(db
             .store
             .insert_operation(&verified_operation, &document_id)
+            .await
             .is_err());
 
         // assert_eq!(
