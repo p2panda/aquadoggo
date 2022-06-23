@@ -13,6 +13,7 @@ use once_cell::sync::Lazy;
 use p2panda_rs::hash::Hash;
 use rand::Rng;
 use serde::Deserialize;
+use sqlx::migrate::MigrateDatabase;
 use sqlx::Any;
 use tower::make::Shared;
 use tower_service::Service;
