@@ -253,326 +253,236 @@ mod tests {
         );
     }
 
-    /* #[rstest]
-        #[case::no_entry("", "", "Bytes to decode had length of 0")]
-        #[case::invalid_entry_bytes("AB01", "", "Could not decode author public key from bytes")]
-        #[case::invalid_entry_hex_encoding(
-            "-/74='4,.=4-=235m-0   34.6-3",
-            OPERATION_ENCODED,
-            "invalid hex encoding in entry"
-        )]
-        #[case::no_operation(
-            ENTRY_ENCODED,
-            "",
-            "operation needs to match payload hash of encoded entry"
-        )]
-        #[case::invalid_operation_bytes(
-            ENTRY_ENCODED,
-            "AB01",
-            "operation needs to match payload hash of encoded entry"
-        )]
-        #[case::invalid_operation_hex_encoding(
-            ENTRY_ENCODED,
-            "0-25.-%5930n3544[{{{   @@@",
-            "invalid hex encoding in operation"
-        )]
-        #[case::operation_does_not_match(
-            ENTRY_ENCODED,
-            &{operation_encoded(Some(operation_fields(vec![("silly", OperationValue::Text("Sausage".to_string()))])), None, None).as_str().to_owned()},
-            "operation needs to match payload hash of encoded entry"
-        )]
-        #[case::valid_entry_with_extra_hex_char_at_end(
-            &{ENTRY_ENCODED.to_string() + "A"},
-            OPERATION_ENCODED,
-            "invalid hex encoding in entry"
-        )]
-        #[case::valid_entry_with_extra_hex_char_at_start(
-            &{"A".to_string() + ENTRY_ENCODED},
-            OPERATION_ENCODED,
-            "invalid hex encoding in entry"
-        )]
-        #[case::should_not_have_skiplink(
-            &entry_signed_encoded_unvalidated(
+    #[rstest]
+    #[case::no_entry("", "", "Bytes to decode had length of 0")]
+    #[case::invalid_entry_bytes("AB01", "", "Could not decode author public key from bytes")]
+    #[case::invalid_entry_hex_encoding(
+        "-/74='4,.=4-=235m-0   34.6-3",
+        OPERATION_ENCODED,
+        "invalid hex encoding in entry"
+    )]
+    #[case::no_operation(
+        ENTRY_ENCODED,
+        "",
+        "operation needs to match payload hash of encoded entry"
+    )]
+    #[case::invalid_operation_bytes(
+        ENTRY_ENCODED,
+        "AB01",
+        "operation needs to match payload hash of encoded entry"
+    )]
+    #[case::invalid_operation_hex_encoding(
+        ENTRY_ENCODED,
+        "0-25.-%5930n3544[{{{   @@@",
+        "invalid hex encoding in operation"
+    )]
+    #[case::operation_does_not_match(
+        ENTRY_ENCODED,
+        &{operation_encoded(Some(operation_fields(vec![("silly", OperationValue::Text("Sausage".to_string()))])), None, None).as_str().to_owned()},
+        "operation needs to match payload hash of encoded entry"
+    )]
+    #[case::valid_entry_with_extra_hex_char_at_end(
+        &{ENTRY_ENCODED.to_string() + "A"},
+        OPERATION_ENCODED,
+        "invalid hex encoding in entry"
+    )]
+    #[case::valid_entry_with_extra_hex_char_at_start(
+        &{"A".to_string() + ENTRY_ENCODED},
+        OPERATION_ENCODED,
+        "invalid hex encoding in entry"
+    )]
+    #[case::should_not_have_skiplink(
+        &entry_signed_encoded_unvalidated(
+            1,
+            1,
+            None,
+            Some(random_hash()),
+            Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())),
+            key_pair(DEFAULT_PRIVATE_KEY)
+        ),
+        OPERATION_ENCODED,
+        "Could not decode payload hash DecodeError"
+    )]
+    #[case::should_not_have_backlink(
+        &entry_signed_encoded_unvalidated(
+            1,
+            1,
+            Some(random_hash()),
+            None,
+            Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())),
+            key_pair(DEFAULT_PRIVATE_KEY)
+        ),
+        OPERATION_ENCODED,
+        "Could not decode payload hash DecodeError"
+    )]
+    #[case::should_not_have_backlink_or_skiplink(
+        &entry_signed_encoded_unvalidated(
                 1,
                 1,
-                None,
+                Some(DEFAULT_HASH.parse().unwrap()),
+                Some(DEFAULT_HASH.parse().unwrap()),
+                Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))
+,
+            key_pair(DEFAULT_PRIVATE_KEY)
+        ),
+        OPERATION_ENCODED,
+        "Could not decode payload hash DecodeError"
+    )]
+    #[case::missing_backlink(
+        &entry_signed_encoded_unvalidated(
+            2,
+            1,
+            None,
+            None,
+            Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())),
+            key_pair(DEFAULT_PRIVATE_KEY)
+        ),
+        OPERATION_ENCODED,
+        "Could not decode backlink yamf hash: DecodeError"
+    )]
+    #[case::missing_skiplink(
+        &entry_signed_encoded_unvalidated(
+            8,
+            1,
+            Some(random_hash()),
+            None,
+            Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())),
+            key_pair(DEFAULT_PRIVATE_KEY)
+        ),
+        OPERATION_ENCODED,
+        "Could not decode backlink yamf hash: DecodeError"
+    )]
+    #[case::should_not_include_skiplink(
+        &entry_signed_encoded_unvalidated(
+                14,
+                1,
+                Some(DEFAULT_HASH.parse().unwrap()),
+                Some(DEFAULT_HASH.parse().unwrap()),
+                Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))
+,
+            key_pair(DEFAULT_PRIVATE_KEY)
+        ),
+        OPERATION_ENCODED,
+        "Could not decode payload hash DecodeError"
+    )]
+    #[case::payload_hash_and_size_missing(
+        &entry_signed_encoded_unvalidated(
+                14,
+                1,
                 Some(random_hash()),
-                Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())),
-                key_pair(DEFAULT_PRIVATE_KEY)
-            ),
-            OPERATION_ENCODED,
-            "Could not decode payload hash DecodeError"
-        )]
-        #[case::should_not_have_backlink(
-            &entry_signed_encoded_unvalidated(
-                1,
-                1,
-                Some(random_hash()),
+                Some(DEFAULT_HASH.parse().unwrap()),
                 None,
-                Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())),
-                key_pair(DEFAULT_PRIVATE_KEY)
-            ),
-            OPERATION_ENCODED,
-            "Could not decode payload hash DecodeError"
-        )]
-        #[case::should_not_have_backlink_or_skiplink(
-            &entry_signed_encoded_unvalidated(
-                    1,
-                    1,
-                    Some(DEFAULT_HASH.parse().unwrap()),
-                    Some(DEFAULT_HASH.parse().unwrap()),
-                    Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))
-    ,
-                key_pair(DEFAULT_PRIVATE_KEY)
-            ),
-            OPERATION_ENCODED,
-            "Could not decode payload hash DecodeError"
-        )]
-        #[case::missing_backlink(
-            &entry_signed_encoded_unvalidated(
-                2,
-                1,
-                None,
-                None,
-                Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())),
-                key_pair(DEFAULT_PRIVATE_KEY)
-            ),
-            OPERATION_ENCODED,
-            "Could not decode backlink yamf hash: DecodeError"
-        )]
-        #[case::missing_skiplink(
-            &entry_signed_encoded_unvalidated(
-                8,
-                1,
-                Some(random_hash()),
-                None,
-                Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())),
-                key_pair(DEFAULT_PRIVATE_KEY)
-            ),
-            OPERATION_ENCODED,
-            "Could not decode backlink yamf hash: DecodeError"
-        )]
-        #[case::should_not_include_skiplink(
-            &entry_signed_encoded_unvalidated(
-                    14,
-                    1,
-                    Some(DEFAULT_HASH.parse().unwrap()),
-                    Some(DEFAULT_HASH.parse().unwrap()),
-                    Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))
-    ,
-                key_pair(DEFAULT_PRIVATE_KEY)
-            ),
-            OPERATION_ENCODED,
-            "Could not decode payload hash DecodeError"
-        )]
-        #[case::payload_hash_and_size_missing(
-            &entry_signed_encoded_unvalidated(
-                    14,
-                    1,
-                    Some(random_hash()),
-                    Some(DEFAULT_HASH.parse().unwrap()),
-                    None,
-                key_pair(DEFAULT_PRIVATE_KEY)
-            ),
-            OPERATION_ENCODED,
-            "Could not decode payload hash DecodeError"
-        )]
-        #[case::backlink_and_skiplink_not_in_db(
-            &entry_signed_encoded_unvalidated(8, 1, Some(DEFAULT_HASH.parse().unwrap()), Some(Hash::new_from_bytes(vec![2, 3, 4]).unwrap()), Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())), key_pair(DEFAULT_PRIVATE_KEY)),
-            OPERATION_ENCODED,
-            "Could not find expected backlink in database for entry with id: <Hash f7c017>"
-        )]
-        #[case::backlink_not_in_db(
-            &entry_signed_encoded_unvalidated(2, 1, Some(DEFAULT_HASH.parse().unwrap()), None, Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())), key_pair(DEFAULT_PRIVATE_KEY)),
-            OPERATION_ENCODED,
-            "Could not find expected backlink in database for entry with id: <Hash d3832b>"
-        )]
-        #[case::previous_operations_not_in_db(
-            &entry_signed_encoded_unvalidated(1, 1, None, None, Some(operation(Some(operation_fields(vec![("silly", OperationValue::Text("Sausage".to_string()))])), Some(DEFAULT_HASH.parse().unwrap()), None)), key_pair(DEFAULT_PRIVATE_KEY)),
-            &{operation_encoded(Some(operation_fields(vec![("silly", OperationValue::Text("Sausage".to_string()))])), Some(DEFAULT_HASH.parse().unwrap()), None).as_str().to_owned()},
-            "Could not find document for entry in database with id: <Hash f03236>"
-        )]
-        #[case::create_operation_with_previous_operations(
-            &entry_signed_encoded_unvalidated(1, 1, None, None, Some(Operation::from(&OperationEncoded::new(CREATE_OPERATION_WITH_PREVIOUS_OPS).unwrap())), key_pair(DEFAULT_PRIVATE_KEY)),
-            CREATE_OPERATION_WITH_PREVIOUS_OPS,
-            "previous_operations field should be empty"
-        )]
-        #[case::update_operation_no_previous_operations(
-            &entry_signed_encoded_unvalidated(1, 1, None, None, Some(Operation::from(&OperationEncoded::new(UPDATE_OPERATION_NO_PREVIOUS_OPS).unwrap())), key_pair(DEFAULT_PRIVATE_KEY)),
-            UPDATE_OPERATION_NO_PREVIOUS_OPS,
-            "previous_operations field can not be empty"
-        )]
-        #[case::delete_operation_no_previous_operations(
-            &entry_signed_encoded_unvalidated(1, 1, None, None, Some(Operation::from(&OperationEncoded::new(DELETE_OPERATION_NO_PREVIOUS_OPS).unwrap())), key_pair(DEFAULT_PRIVATE_KEY)),
-            DELETE_OPERATION_NO_PREVIOUS_OPS,
-            "previous_operations field can not be empty"
-        )]
-        fn invalid_requests_fail(
-            #[case] entry_encoded: &str,
-            #[case] operation_encoded: &str,
-            #[case] expected_error_message: &str,
-            #[from(test_db)] runner: TestDatabaseRunner,
-        ) {
-            runner.with_db_teardown(move |db: TestDatabase| async move {
-                let (tx, _rx) = broadcast::channel(16);
-                let context = HttpServiceContext::new(db.store, tx);
-                let client = TestClient::new(build_server(context));
+            key_pair(DEFAULT_PRIVATE_KEY)
+        ),
+        OPERATION_ENCODED,
+        "Could not decode payload hash DecodeError"
+    )]
+    #[case::backlink_and_skiplink_not_in_db(
+        &entry_signed_encoded_unvalidated(8, 1, Some(DEFAULT_HASH.parse().unwrap()), Some(Hash::new_from_bytes(vec![2, 3, 4]).unwrap()), Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())), key_pair(DEFAULT_PRIVATE_KEY)),
+        OPERATION_ENCODED,
+        "Could not find expected backlink in database for entry with id: <Hash f7c017>"
+    )]
+    #[case::backlink_not_in_db(
+        &entry_signed_encoded_unvalidated(2, 1, Some(DEFAULT_HASH.parse().unwrap()), None, Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())), key_pair(DEFAULT_PRIVATE_KEY)),
+        OPERATION_ENCODED,
+        "Could not find expected backlink in database for entry with id: <Hash d3832b>"
+    )]
+    #[case::previous_operations_not_in_db(
+        &entry_signed_encoded_unvalidated(1, 1, None, None, Some(operation(Some(operation_fields(vec![("silly", OperationValue::Text("Sausage".to_string()))])), Some(DEFAULT_HASH.parse().unwrap()), None)), key_pair(DEFAULT_PRIVATE_KEY)),
+        &{operation_encoded(Some(operation_fields(vec![("silly", OperationValue::Text("Sausage".to_string()))])), Some(DEFAULT_HASH.parse().unwrap()), None).as_str().to_owned()},
+        "Could not find document for entry in database with id: <Hash f03236>"
+    )]
+    #[case::create_operation_with_previous_operations(
+        &entry_signed_encoded_unvalidated(1, 1, None, None, Some(Operation::from(&OperationEncoded::new(CREATE_OPERATION_WITH_PREVIOUS_OPS).unwrap())), key_pair(DEFAULT_PRIVATE_KEY)),
+        CREATE_OPERATION_WITH_PREVIOUS_OPS,
+        "previous_operations field should be empty"
+    )]
+    #[case::update_operation_no_previous_operations(
+        &entry_signed_encoded_unvalidated(1, 1, None, None, Some(Operation::from(&OperationEncoded::new(UPDATE_OPERATION_NO_PREVIOUS_OPS).unwrap())), key_pair(DEFAULT_PRIVATE_KEY)),
+        UPDATE_OPERATION_NO_PREVIOUS_OPS,
+        "previous_operations field can not be empty"
+    )]
+    #[case::delete_operation_no_previous_operations(
+        &entry_signed_encoded_unvalidated(1, 1, None, None, Some(Operation::from(&OperationEncoded::new(DELETE_OPERATION_NO_PREVIOUS_OPS).unwrap())), key_pair(DEFAULT_PRIVATE_KEY)),
+        DELETE_OPERATION_NO_PREVIOUS_OPS,
+        "previous_operations field can not be empty"
+    )]
+    fn invalid_requests_fail(
+        #[case] entry_encoded: &str,
+        #[case] operation_encoded: &str,
+        #[case] expected_error_message: &str,
+        #[from(test_db)] runner: TestDatabaseRunner,
+    ) {
+        let entry_encoded = entry_encoded.to_string();
+        let operation_encoded = operation_encoded.to_string();
+        let expected_error_message = expected_error_message.to_string();
 
-                let publish_entry_request = publish_entry_request(entry_encoded, operation_encoded);
+        runner.with_db_teardown(move |db: TestDatabase| async move {
+            let (tx, _rx) = broadcast::channel(16);
+            let context = HttpServiceContext::new(db.store, tx);
+            let client = TestClient::new(build_server(context));
 
-                let response = client
-                    .post("/graphql")
-                    .json(&json!({
-                      "query": publish_entry_request.query,
-                      "variables": publish_entry_request.variables
-                    }
-                    ))
-                    .send()
-                    .await;
+            let publish_entry_request = publish_entry_request(&entry_encoded, &operation_encoded);
 
-                let response = response.json::<serde_json::Value>().await;
-                for error in response.get("errors").unwrap().as_array().unwrap() {
-                    assert_eq!(
-                        error.get("message").unwrap().as_str().unwrap(),
-                        expected_error_message
-                    )
+            let response = client
+                .post("/graphql")
+                .json(&json!({
+                  "query": publish_entry_request.query,
+                  "variables": publish_entry_request.variables
                 }
-            });
-        }
+                ))
+                .send()
+                .await;
 
-        #[rstest]
-        fn publish_many_entries(
-            #[from(test_db)]
-            #[with(100, 1, true, TEST_SCHEMA_ID.parse().unwrap())]
-            runner: TestDatabaseRunner,
-        ) {
-            runner.with_db_teardown(|populated_db: TestDatabase| async move {
-                // Get the author.
-                let author = Author::try_from(
-                    populated_db
-                        .key_pairs
-                        .first()
-                        .unwrap()
-                        .public_key()
-                        .to_owned(),
+            let response = response.json::<serde_json::Value>().await;
+            for error in response.get("errors").unwrap().as_array().unwrap() {
+                assert_eq!(
+                    error.get("message").unwrap().as_str().unwrap(),
+                    expected_error_message
                 )
+            }
+        });
+    }
+
+    #[rstest]
+    fn publish_many_entries(
+        #[from(test_db)]
+        #[with(100, 1, true, TEST_SCHEMA_ID.parse().unwrap())]
+        runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(|populated_db: TestDatabase| async move {
+            // Get the author.
+            let author = Author::try_from(
+                populated_db
+                    .key_pairs
+                    .first()
+                    .unwrap()
+                    .public_key()
+                    .to_owned(),
+            )
+            .unwrap();
+
+            // Setup the server and client with a new empty store.
+            let (tx, _rx) = broadcast::channel(16);
+            let store = initialize_store().await;
+            let context = HttpServiceContext::new(store, tx);
+            let client = TestClient::new(build_server(context));
+
+            // Get the entries from the prepopulated store.
+            let mut entries = populated_db
+                .store
+                .get_entries_by_schema(&TEST_SCHEMA_ID.parse().unwrap())
+                .await
                 .unwrap();
 
-                // Setup the server and client with a new empty store.
-                let (tx, _rx) = broadcast::channel(16);
-                let store = initialize_store().await;
-                let context = HttpServiceContext::new(store, tx);
-                let client = TestClient::new(build_server(context));
+            // Sort them by seq_num.
+            entries.sort_by_key(|entry| entry.seq_num().as_u64());
 
-                // Get the entries from the prepopulated store.
-                let mut entries = populated_db
-                    .store
-                    .get_entries_by_schema(&TEST_SCHEMA_ID.parse().unwrap())
-                    .await
-                    .unwrap();
-
-                // Sort them by seq_num.
-                entries.sort_by_key(|entry| entry.seq_num().as_u64());
-
-                for entry in entries {
-                    // Prepare a publish entry request for each entry.
-                    let publish_entry_request = publish_entry_request(
-                        entry.entry_signed().as_str(),
-                        entry.operation_encoded().unwrap().as_str(),
-                    );
-
-                    // Publish the entry and parse response.
-                    let response = client
-                        .post("/graphql")
-                        .json(&json!({
-                          "query": publish_entry_request.query,
-                          "variables": publish_entry_request.variables
-                        }
-                        ))
-                        .send()
-                        .await;
-
-                    let response = response.json::<serde_json::Value>().await;
-                    let publish_entry_response =
-                        response.get("data").unwrap().get("publishEntry").unwrap();
-
-                    // Calculate the skiplink we expect in the repsonse.
-                    let next_seq_num = entry.seq_num().next().unwrap();
-                    let skiplink_seq_num = next_seq_num.skiplink_seq_num();
-                    let skiplink_entry = match skiplink_seq_num {
-                        Some(seq_num) if is_lipmaa_required(next_seq_num.as_u64()) => populated_db
-                            .store
-                            .get_entry_at_seq_num(&author, &entry.log_id(), &seq_num)
-                            .await
-                            .unwrap()
-                            .map(|entry| entry.hash().as_str().to_owned()),
-                        _ => None,
-                    };
-
-                    // Assert the returned log_id, seq_num, backlink and skiplink match our expectations.
-                    assert_eq!(
-                        publish_entry_response
-                            .get("logId")
-                            .unwrap()
-                            .as_str()
-                            .unwrap(),
-                        "1"
-                    );
-                    assert_eq!(
-                        publish_entry_response
-                            .get("seqNum")
-                            .unwrap()
-                            .as_str()
-                            .unwrap(),
-                        next_seq_num.as_u64().to_string()
-                    );
-                    assert_eq!(
-                        publish_entry_response
-                            .get("skiplink")
-                            .unwrap()
-                            .as_str()
-                            .map(|hash| hash.to_string()),
-                        skiplink_entry
-                    );
-                    assert_eq!(
-                        publish_entry_response
-                            .get("backlink")
-                            .unwrap()
-                            .as_str()
-                            .unwrap(),
-                        entry.hash().as_str()
-                    );
-                }
-            });
-        }
-
-        #[rstest]
-        fn duplicate_publishing_of_entries(
-            #[from(test_db)]
-            #[with(1, 1, false, TEST_SCHEMA_ID.parse().unwrap())]
-            runner: TestDatabaseRunner,
-        ) {
-            runner.with_db_teardown(|populated_db: TestDatabase| async move {
-                let (tx, _rx) = broadcast::channel(16);
-                let context = HttpServiceContext::new(populated_db.store.clone(), tx);
-                let client = TestClient::new(build_server(context));
-
-                // Get the entries from the prepopulated store.
-                let mut entries = populated_db
-                    .store
-                    .get_entries_by_schema(&TEST_SCHEMA_ID.parse().unwrap())
-                    .await
-                    .unwrap();
-
-                // Sort them by seq_num.
-                entries.sort_by_key(|entry| entry.seq_num().as_u64());
-
-                let duplicate_entry = entries.first().unwrap();
-
+            for entry in entries {
                 // Prepare a publish entry request for each entry.
                 let publish_entry_request = publish_entry_request(
-                    duplicate_entry.entry_signed().as_str(),
-                    duplicate_entry.operation_encoded().unwrap().as_str(),
+                    entry.entry_signed().as_str(),
+                    entry.operation_encoded().unwrap().as_str(),
                 );
 
                 // Publish the entry and parse response.
@@ -587,12 +497,106 @@ mod tests {
                     .await;
 
                 let response = response.json::<serde_json::Value>().await;
+                let publish_entry_response =
+                    response.get("data").unwrap().get("publishEntry").unwrap();
 
-                // @TODO: I think we'd like a nicer error message here:
-                // https://github.com/p2panda/aquadoggo/issues/159
-                for error in response.get("errors").unwrap().as_array().unwrap() {
-                    assert_eq!(error.get("message").unwrap().as_str().unwrap(), "Error occured during `LogStorage` request in storage provider: error returned from database: UNIQUE constraint failed: logs.author, logs.log_id")
+                // Calculate the skiplink we expect in the repsonse.
+                let next_seq_num = entry.seq_num().next().unwrap();
+                let skiplink_seq_num = next_seq_num.skiplink_seq_num();
+                let skiplink_entry = match skiplink_seq_num {
+                    Some(seq_num) if is_lipmaa_required(next_seq_num.as_u64()) => populated_db
+                        .store
+                        .get_entry_at_seq_num(&author, &entry.log_id(), &seq_num)
+                        .await
+                        .unwrap()
+                        .map(|entry| entry.hash().as_str().to_owned()),
+                    _ => None,
+                };
+
+                // Assert the returned log_id, seq_num, backlink and skiplink match our expectations.
+                assert_eq!(
+                    publish_entry_response
+                        .get("logId")
+                        .unwrap()
+                        .as_str()
+                        .unwrap(),
+                    "1"
+                );
+                assert_eq!(
+                    publish_entry_response
+                        .get("seqNum")
+                        .unwrap()
+                        .as_str()
+                        .unwrap(),
+                    next_seq_num.as_u64().to_string()
+                );
+                assert_eq!(
+                    publish_entry_response
+                        .get("skiplink")
+                        .unwrap()
+                        .as_str()
+                        .map(|hash| hash.to_string()),
+                    skiplink_entry
+                );
+                assert_eq!(
+                    publish_entry_response
+                        .get("backlink")
+                        .unwrap()
+                        .as_str()
+                        .unwrap(),
+                    entry.hash().as_str()
+                );
+            }
+        });
+    }
+
+    #[rstest]
+    fn duplicate_publishing_of_entries(
+        #[from(test_db)]
+        #[with(1, 1, false, TEST_SCHEMA_ID.parse().unwrap())]
+        runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(|populated_db: TestDatabase| async move {
+            let (tx, _rx) = broadcast::channel(16);
+            let context = HttpServiceContext::new(populated_db.store.clone(), tx);
+            let client = TestClient::new(build_server(context));
+
+            // Get the entries from the prepopulated store.
+            let mut entries = populated_db
+                .store
+                .get_entries_by_schema(&TEST_SCHEMA_ID.parse().unwrap())
+                .await
+                .unwrap();
+
+            // Sort them by seq_num.
+            entries.sort_by_key(|entry| entry.seq_num().as_u64());
+
+            let duplicate_entry = entries.first().unwrap();
+
+            // Prepare a publish entry request for each entry.
+            let publish_entry_request = publish_entry_request(
+                duplicate_entry.entry_signed().as_str(),
+                duplicate_entry.operation_encoded().unwrap().as_str(),
+            );
+
+            // Publish the entry and parse response.
+            let response = client
+                .post("/graphql")
+                .json(&json!({
+                  "query": publish_entry_request.query,
+                  "variables": publish_entry_request.variables
                 }
-            });
-        } */
+                ))
+                .send()
+                .await;
+
+            let response = response.json::<serde_json::Value>().await;
+
+            // @TODO: I think we'd like a nicer error message here:
+            // https://github.com/p2panda/aquadoggo/issues/159
+            for error in response.get("errors").unwrap().as_array().unwrap() {
+                assert_eq!(error.get("message").unwrap().as_str().unwrap(), "Error occured during `LogStorage` request in storage provider: error returned from database: UNIQUE constraint failed: logs.author, logs.log_id")
+            }
+        });
+    }
 }
