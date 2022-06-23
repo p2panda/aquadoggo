@@ -24,7 +24,7 @@ impl SqlStorage {
         // Insert task into database
         query(
             "
-            INSERT OR IGNORE INTO
+            INSERT INTO
                 tasks (
                     name,
                     document_id,
@@ -32,6 +32,7 @@ impl SqlStorage {
                 )
             VALUES
                 ($1, $2, $3)
+            ON CONFLICT DO NOTHING
             ",
         )
         .bind(task.worker_name())
