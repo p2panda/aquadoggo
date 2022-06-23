@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_graphql::{EmptySubscription, MergedObject, Request, Response, Schema};
-use log::info;
+use log::{error, info, warn};
 use tokio::sync::Mutex;
 
 use crate::bus::ServiceSender;
 use crate::db::provider::SqlStorage;
 use crate::graphql::client::{ClientMutationRoot, ClientRoot};
+use crate::graphql::error::DynamicSchemaError;
 use crate::graphql::replication::context::ReplicationContext;
 use crate::graphql::replication::ReplicationRoot;
 use crate::graphql::TempFile;
@@ -51,7 +53,7 @@ pub fn build_root_schema(
 }
 
 /// Location of the temporary file containing all currently known schemas.
-pub const TEMP_FILE_PATH: &'static str = "./.schemas.tmp.json";
+pub const TEMP_FILE_FNAME: &str = ".schemas.tmp.json";
 
 /// Returns GraphQL API schema for p2panda node with a little trick to make dynamic schemas work.
 ///
@@ -64,12 +66,14 @@ pub const TEMP_FILE_PATH: &'static str = "./.schemas.tmp.json";
 /// the database and serialise them into a JSON file. When `async_graphql` builds the GraphQL
 /// schema we can load this file statically to build the schemas dynamically based on the file's
 /// content.
-async fn build_schema_with_workaround(shared: GraphQLSharedData) -> RootSchema {
+async fn build_schema_with_workaround(
+    shared: GraphQLSharedData,
+) -> Result<RootSchema, DynamicSchemaError> {
     // Store temporary JSON file with all serialised application schemas from database.
     //
     // @TODO: We could try to still access the database by creating a static interface to it?
     let all_schemas = shared.schema_provider.all();
-    let temp_file = TempFile::save(&all_schemas, TEMP_FILE_PATH);
+    let temp_file = TempFile::save(&all_schemas, TEMP_FILE_FNAME)?;
 
     // Build the actual GraphQL root schema, this will internally read the created JSON file and
     // accordingly build the schema
@@ -78,7 +82,7 @@ async fn build_schema_with_workaround(shared: GraphQLSharedData) -> RootSchema {
     // Remove temporary file as we don't need it anymore
     temp_file.unlink();
 
-    schema
+    Ok(schema)
 }
 
 /// List of created GraphQL root schemas.
@@ -142,29 +146,39 @@ impl GraphQLSchemaManager {
     /// schema which will be added to the list.
     // @TODO: This manager does not "clean up" outdated schemas yet, they will just be appended to
     // an ever-growing list.
-    async fn spawn_schema_added_task(&self) {
+    async fn spawn_schema_added_task(&self) -> Result<(), DynamicSchemaError> {
         let shared = self.shared.clone();
         let schemas = self.schemas.clone();
         let mut on_schema_added = shared.schema_provider.on_schema_added();
 
         // Create the new GraphQL based on the current state of known p2panda application schemas
-        let build = |shared: GraphQLSharedData, schemas: GraphQLSchemas| async move {
-            let schema = build_schema_with_workaround(shared).await;
+        async fn build(
+            shared: GraphQLSharedData,
+            schemas: GraphQLSchemas,
+        ) -> Result<(), DynamicSchemaError> {
+            info!("Building new GraphQL schema");
+            let schema = build_schema_with_workaround(shared).await?;
             schemas.lock().await.push(schema);
-        };
+            Ok(())
+        }
 
         // Always build a schema right at the beginning as we don't have one yet
-        build(shared.clone(), schemas.clone()).await;
+        build(shared.clone(), schemas.clone()).await?;
 
         // Spawn a task which reacts to newly registered p2panda schemas
         tokio::task::spawn(async move {
             loop {
                 if let Ok(_schema_id) = on_schema_added.recv().await {
                     info!("Adding schema");
-                    build(shared.clone(), schemas.clone()).await;
+                    let result = build(shared.clone(), schemas.clone()).await;
+                    if let Err(err) = result {
+                        error!("Error updating graphql schema: {}", err);
+                    }
                 }
             }
         });
+
+        Ok(())
     }
 
     /// Executes an incoming GraphQL query.
