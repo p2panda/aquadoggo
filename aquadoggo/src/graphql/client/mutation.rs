@@ -595,7 +595,7 @@ mod tests {
 
         let response = response.json::<serde_json::Value>().await;
 
-        // TODO: I think we'd like a nicer error message here.
+        // TODO: I think we'd like a nicer error message here: https://github.com/p2panda/aquadoggo/issues/159
         for error in response.get("errors").unwrap().as_array().unwrap() {
             assert_eq!(error.get("message").unwrap().as_str().unwrap(), "Error occured during `LogStorage` request in storage provider: error returned from database: UNIQUE constraint failed: logs.author, logs.log_id")
         }
