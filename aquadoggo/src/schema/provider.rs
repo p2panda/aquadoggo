@@ -2,10 +2,10 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use tokio::sync::broadcast::{channel, Receiver, Sender};
 
-use log::info;
+use log::{info, warn};
 use p2panda_rs::schema::{Schema, SchemaId, SYSTEM_SCHEMAS};
+use tokio::sync::broadcast::{channel, Receiver, Sender};
 
 /// Provides fast access to system and application schemas during runtime.
 ///
@@ -18,8 +18,6 @@ pub struct SchemaProvider {
     tx: Sender<SchemaId>,
 }
 
-// Dead code allowed until this is used for https://github.com/p2panda/aquadoggo/pull/141
-#[allow(dead_code)]
 impl SchemaProvider {
     /// Returns a `SchemaProvider` containing the given application schemas and all system schemas.
     pub fn new(application_schemas: Vec<Schema>) -> Self {
@@ -70,8 +68,9 @@ impl SchemaProvider {
 
         // Inform subscribers about new schema
         if self.tx.send(schema.id().to_owned()).is_err() {
-            // Do nothing here, as we don't mind if there are no subscribers
+            warn!("No subscriber has been informed about inserted / updated schema");
         }
+
         is_update
     }
 

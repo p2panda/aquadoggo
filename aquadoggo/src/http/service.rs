@@ -45,15 +45,9 @@ pub async fn http_service(context: Context, signal: Shutdown, tx: ServiceSender)
     let http_port = context.config.http_port;
     let http_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), http_port);
 
-    // Prepare schema service and dynamic GraphQL schema manager
-    let schemas = context
-        .store
-        .get_all_schema()
-        .await
-        .expect("Unable to load application schemas from store");
-    let schema_provider = SchemaProvider::new(schemas);
+    // Prepare GraphQL manager executing incoming GraphQL queries via HTTP
     let graphql_schema_manager =
-        GraphQLSchemaManager::new(context.store.clone(), tx, schema_provider).await;
+        GraphQLSchemaManager::new(context.store.clone(), tx, context.schema_provider.clone()).await;
 
     // Introduce a new context for all HTTP routes
     let http_context = HttpServiceContext::new(graphql_schema_manager);

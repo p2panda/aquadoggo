@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use async_graphql::{EmptySubscription, MergedObject, Request, Response, Schema};
-use log::info;
+use log::{info, warn};
 use tokio::sync::Mutex;
 
 use crate::bus::ServiceSender;
@@ -64,7 +64,7 @@ pub const TEMP_FILE_PATH: &'static str = "./.schemas.tmp.json";
 /// the database and serialise them into a JSON file. When `async_graphql` builds the GraphQL
 /// schema we can load this file statically to build the schemas dynamically based on the file's
 /// content.
-async fn build_schema_with_workaround(shared: GraphQLSharedData) -> RootSchema {
+fn build_schema_with_workaround(shared: GraphQLSharedData) -> RootSchema {
     // Store temporary JSON file with all serialised application schemas from database.
     //
     // @TODO: We could try to still access the database by creating a static interface to it?
@@ -145,23 +145,29 @@ impl GraphQLSchemaManager {
     async fn spawn_schema_added_task(&self) {
         let shared = self.shared.clone();
         let schemas = self.schemas.clone();
+
         let mut on_schema_added = shared.schema_provider.on_schema_added();
 
         // Create the new GraphQL based on the current state of known p2panda application schemas
-        let build = |shared: GraphQLSharedData, schemas: GraphQLSchemas| async move {
-            let schema = build_schema_with_workaround(shared).await;
+        let rebuild = |shared: GraphQLSharedData, schemas: GraphQLSchemas| async move {
+            let schema = build_schema_with_workaround(shared);
             schemas.lock().await.push(schema);
         };
 
         // Always build a schema right at the beginning as we don't have one yet
-        build(shared.clone(), schemas.clone()).await;
+        rebuild(shared.clone(), schemas.clone()).await;
 
         // Spawn a task which reacts to newly registered p2panda schemas
         tokio::task::spawn(async move {
             loop {
-                if let Ok(_schema_id) = on_schema_added.recv().await {
-                    info!("Adding schema");
-                    build(shared.clone(), schemas.clone()).await;
+                match on_schema_added.recv().await {
+                    Ok(schema_id) => {
+                        info!("Changed schema {}, rebuilding GraphQL API", schema_id);
+                        rebuild(shared.clone(), schemas.clone()).await;
+                    }
+                    Err(err) => {
+                        panic!("Failed receiving schema updates: {}", err)
+                    }
                 }
             }
         });
