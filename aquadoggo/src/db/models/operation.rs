@@ -65,7 +65,7 @@ pub struct OperationFieldsJoinedRow {
     pub schema_id: String,
 
     /// The previous operations of this operation concatenated into string format with `_` seperator.
-    pub previous_operations: String,
+    pub previous_operations: Option<String>,
 
     /// The name of this field.
     pub name: String,
