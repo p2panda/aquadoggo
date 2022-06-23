@@ -175,7 +175,7 @@ mod tests {
         db: TestSqlStore,
     ) {
         let db = db.await;
-        let context = Context::new(db.store, Configuration::default());
+        let context = Context::new(db.store.clone(), Configuration::default());
 
         for document_id in &db.documents {
             let input = TaskInput::new(Some(document_id.clone()), None);
@@ -190,6 +190,9 @@ mod tests {
                 &OperationValue::Text("PANDA".to_string())
             )
         }
+
+        // Disconnect from database
+        db.close().await;
     }
 
     #[rstest]
@@ -249,6 +252,9 @@ mod tests {
             .unwrap();
 
         assert!(document_view.is_none());
+
+        // Disconnect from database
+        db.close().await;
     }
 
     #[rstest]
@@ -285,6 +291,9 @@ mod tests {
         let tasks = reduce_task(context.clone(), input).await.unwrap();
 
         assert!(tasks.is_none());
+
+        // Disconnect from database
+        db.close().await;
     }
 
     #[rstest]
@@ -308,6 +317,9 @@ mod tests {
         let next_task_inputs = reduce_task(context.clone(), input).await.unwrap();
 
         assert_eq!(next_task_inputs.is_some(), is_next_task);
+
+        // Disconnect from database
+        db.close().await;
     }
 
     #[rstest]
@@ -322,9 +334,12 @@ mod tests {
         db: TestSqlStore,
     ) {
         let db = db.await;
-        let context = Context::new(db.store, Configuration::default());
+        let context = Context::new(db.store.clone(), Configuration::default());
         let input = TaskInput::new(document_id, document_view_id);
 
         reduce_task(context.clone(), input).await.unwrap();
+
+        // Disconnect from database
+        db.close().await;
     }
 }

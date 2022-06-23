@@ -216,7 +216,7 @@ impl DocumentStore for SqlStorage {
                 documents
             LEFT JOIN document_view_fields
                 ON
-                    documents.document_view_id = document_view_fields.document_view_id    
+                    documents.document_view_id = document_view_fields.document_view_id
             LEFT JOIN operation_fields_v1
                 ON
                     document_view_fields.operation_id = operation_fields_v1.operation_id
@@ -268,7 +268,7 @@ impl DocumentStore for SqlStorage {
                 documents
             LEFT JOIN document_view_fields
                 ON
-                    documents.document_view_id = document_view_fields.document_view_id    
+                    documents.document_view_id = document_view_fields.document_view_id
             LEFT JOIN operation_fields_v1
                 ON
                     document_view_fields.operation_id = operation_fields_v1.operation_id
@@ -419,6 +419,9 @@ mod tests {
             assert!(retrieved_document_view.get(key).is_some());
             assert_eq!(retrieved_document_view.get(key), document_view.get(key));
         }
+
+        // Disconnect from database
+        db.close().await;
     }
 
     #[rstest]
@@ -438,7 +441,10 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(view_does_not_exist.is_none())
+        assert!(view_does_not_exist.is_none());
+
+        // Disconnect from database
+        db.close().await;
     }
 
     #[rstest]
@@ -496,6 +502,9 @@ mod tests {
             };
             assert_eq!(document_view.get("username").unwrap(), &expected_username);
         }
+
+        // Disconnect from database
+        db.close().await;
     }
 
     #[rstest]
@@ -506,7 +515,6 @@ mod tests {
         #[from(test_db)]
         #[future]
         db: TestSqlStore,
-
         operation: Operation,
     ) {
         let db = db.await;
@@ -527,6 +535,9 @@ mod tests {
             result.unwrap_err().to_string(),
             "A fatal error occured in DocumentStore: error returned from database: FOREIGN KEY constraint failed".to_string()
         );
+
+        // Disconnect from database
+        db.close().await;
     }
 
     #[rstest]
@@ -575,6 +586,11 @@ mod tests {
             assert!(document_view.get(key).is_some());
             assert_eq!(document_view.get(key), expected_document_view.get(key));
         }
+
+        // Disconnect from database
+        db.close().await;
+
+        println!("HAHA");
     }
 
     #[rstest]
@@ -623,6 +639,9 @@ mod tests {
             assert!(document_view.get(key).is_some());
             assert_eq!(document_view.get(key), expected_document_view.get(key));
         }
+
+        // Disconnect from database
+        db.close().await;
     }
 
     #[rstest]
@@ -651,6 +670,9 @@ mod tests {
         let document_view = db.store.get_document_by_id(document.id()).await.unwrap();
 
         assert!(document_view.is_none());
+
+        // Disconnect from database
+        db.close().await;
     }
 
     #[rstest]
@@ -678,6 +700,9 @@ mod tests {
 
         let schema_documents = db.store.get_documents_by_schema(&schema_id).await.unwrap();
 
-        assert_eq!(schema_documents.len(), 2)
+        assert_eq!(schema_documents.len(), 2);
+
+        // Disconnect from database
+        db.close().await;
     }
 }

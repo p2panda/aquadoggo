@@ -257,7 +257,7 @@ mod tests {
         db: TestSqlStore,
     ) {
         let db = db.await;
-        let context = Context::new(db.store, Configuration::default());
+        let context = Context::new(db.store.clone(), Configuration::default());
         let input = TaskInput::new(document_id, document_view_id);
 
         let next_tasks = dependency_task(context.clone(), input).await.unwrap();

@@ -452,7 +452,10 @@ mod tests {
         let doggo_entry = StorageEntry::new(&entry_encoded, &operation_encoded).unwrap();
         let result = db.store.insert_entry(doggo_entry).await;
 
-        assert!(result.is_ok())
+        assert!(result.is_ok());
+
+        // Disconnect from database
+        db.close().await;
     }
 
     #[rstest]
@@ -485,7 +488,10 @@ mod tests {
             result.unwrap_err().to_string(),
             "Error occured during `EntryStorage` request in storage provider: error returned from \
             database: UNIQUE constraint failed: entries.author, entries.log_id, entries.seq_num"
-        )
+        );
+
+        // Disconnect from database
+        db.close().await;
     }
 
     #[rstest]
@@ -515,6 +521,9 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(latest_entry.unwrap().seq_num(), SeqNum::new(20).unwrap());
+
+        // Disconnect from database
+        db.close().await;
     }
 
     #[rstest]
@@ -546,6 +555,9 @@ mod tests {
             .await
             .unwrap();
         assert!(entries.len() == 40);
+
+        // Disconnect from database
+        db.close().await;
     }
 
     #[rstest]
@@ -591,7 +603,10 @@ mod tests {
             .get_entry_at_seq_num(&author_not_in_db, &LogId::new(1), &seq_num_not_in_log)
             .await
             .unwrap();
-        assert!(entry.is_none())
+        assert!(entry.is_none());
+
+        // Disconnect from database
+        db.close().await;
     }
 
     #[rstest]
@@ -630,7 +645,10 @@ mod tests {
             .get_entry_by_hash(&entry_hash_not_in_db)
             .await
             .unwrap();
-        assert!(entry.is_none())
+        assert!(entry.is_none());
+
+        // Disconnect from database
+        db.close().await;
     }
 
     #[rstest]
@@ -663,6 +681,9 @@ mod tests {
             .unwrap();
 
         assert_eq!(entries.len(), 10);
+
+        // Disconnect from database
+        db.close().await;
     }
 
     #[rstest]
@@ -689,5 +710,8 @@ mod tests {
 
         assert!(!entries.is_empty());
         assert_eq!(cert_pool_seq_nums, vec![19, 18, 17, 13, 4, 1]);
+
+        // Disconnect from database
+        db.close().await;
     }
 }

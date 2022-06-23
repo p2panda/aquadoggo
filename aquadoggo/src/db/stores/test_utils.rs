@@ -176,6 +176,13 @@ pub struct TestSqlStore {
     pub documents: Vec<DocumentId>,
 }
 
+impl TestSqlStore {
+    /// Close database connection.
+    pub async fn close(&self) {
+        self.store.pool.close().await;
+    }
+}
+
 /// Fixture for constructing a storage provider instance backed by a pre-polpulated database. Passed
 /// parameters define what the db should contain. The first entry in each log contains a valid CREATE
 /// operation following entries contain duplicate UPDATE operations. If the with_delete flag is set
@@ -198,11 +205,13 @@ pub async fn test_db(
     // The fields used for every UPDATE operation
     #[default(doggo_test_fields())] update_operation_fields: Vec<(&'static str, OperationValue)>,
 ) -> TestSqlStore {
+    println!("CREATE");
+
     let mut documents: Vec<DocumentId> = Vec::new();
     let key_pairs = test_key_pairs(no_of_authors);
 
     let pool = initialize_db().await;
-    let store = SqlStorage { pool };
+    let store = SqlStorage::new(pool);
 
     // If we don't want any entries in the db return now
     if no_of_entries == 0 {
@@ -278,6 +287,7 @@ pub async fn test_db(
                 .unwrap();
         }
     }
+
     TestSqlStore {
         store,
         key_pairs,

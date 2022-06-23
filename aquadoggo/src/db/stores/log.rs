@@ -202,7 +202,7 @@ mod tests {
     async fn initial_log_id() {
         let pool = initialize_db().await;
         let author = Author::new(TEST_AUTHOR).unwrap();
-        let storage_provider = SqlStorage { pool };
+        let storage_provider = SqlStorage::new(pool.clone());
 
         let log_id = storage_provider
             .find_document_log_id(&author, None)
@@ -210,12 +210,15 @@ mod tests {
             .unwrap();
 
         assert_eq!(log_id, LogId::new(1));
+
+        // Close connection to database
+        pool.close().await;
     }
 
     #[tokio::test]
     async fn prevent_duplicate_log_ids() {
         let pool = initialize_db().await;
-        let storage_provider = SqlStorage { pool };
+        let storage_provider = SqlStorage::new(pool.clone());
 
         let author = Author::new(TEST_AUTHOR).unwrap();
         let document = Hash::new(&random_entry_hash()).unwrap();
@@ -227,12 +230,15 @@ mod tests {
 
         let log = StorageLog::new(&author, &schema, &document.into(), &LogId::new(1));
         assert!(storage_provider.insert_log(log).await.is_err());
+
+        // Close connection to database
+        pool.close().await;
     }
 
     #[tokio::test]
     async fn with_multi_hash_schema_id() {
         let pool = initialize_db().await;
-        let storage_provider = SqlStorage { pool };
+        let storage_provider = SqlStorage::new(pool.clone());
 
         let author = Author::new(TEST_AUTHOR).unwrap();
         let document = Hash::new(&random_entry_hash()).unwrap();
@@ -248,6 +254,9 @@ mod tests {
         let log = StorageLog::new(&author, &schema, &document.into(), &LogId::new(1));
 
         assert!(storage_provider.insert_log(log).await.is_ok());
+
+        // Close connection to database
+        pool.close().await;
     }
 
     #[tokio::test]
@@ -260,7 +269,7 @@ mod tests {
             &Hash::new_from_bytes(vec![1, 2, 3]).unwrap().into(),
         );
 
-        let storage_provider = SqlStorage { pool };
+        let storage_provider = SqlStorage::new(pool.clone());
 
         let log_id = storage_provider
             .find_document_log_id(&author, None)
@@ -284,6 +293,9 @@ mod tests {
             let log = StorageLog::new(&author, &schema, &doc, &log_id);
             storage_provider.insert_log(log).await.unwrap();
         }
+
+        // Close connection to database
+        pool.close().await;
     }
 
     #[tokio::test]
@@ -309,7 +321,7 @@ mod tests {
         let entry = P2PandaEntry::new(&log_id, Some(&operation), None, None, &seq_num).unwrap();
         let entry_encoded = sign_and_encode(&entry, &key_pair).unwrap();
 
-        let storage_provider = SqlStorage { pool };
+        let storage_provider = SqlStorage::new(pool.clone());
 
         // Expect database to return nothing yet
         assert_eq!(
@@ -353,6 +365,9 @@ mod tests {
                 .unwrap(),
             LogId::default()
         );
+
+        // Close connection to database
+        pool.close().await;
     }
 
     #[tokio::test]
@@ -372,7 +387,7 @@ mod tests {
         let document_third = Hash::new(&random_entry_hash()).unwrap();
         let document_forth = Hash::new(&random_entry_hash()).unwrap();
 
-        let storage_provider = SqlStorage { pool };
+        let storage_provider = SqlStorage::new(pool.clone());
 
         // Register two log ids at the beginning
         let log_1 = StorageLog::new(&author, &schema, &document_first.into(), &LogId::new(1));
@@ -400,5 +415,8 @@ mod tests {
         // Find next free log id
         let log_id = storage_provider.next_log_id(&author).await.unwrap();
         assert_eq!(log_id, LogId::new(5));
+
+        // Close connection to database
+        pool.close().await;
     }
 }
