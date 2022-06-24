@@ -87,16 +87,16 @@ mod tests {
     use std::convert::TryFrom;
 
     use async_graphql::{from_value, value, Request, Value, Variables};
-    use bamboo_rs_core_ed25519_yasmf::entry::is_lipmaa_required;
-    use p2panda_rs::entry::{EntrySigned, LogId, SeqNum};
+    use p2panda_rs::document::DocumentId;
+    use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned, LogId, SeqNum};
     use p2panda_rs::hash::Hash;
-    use p2panda_rs::identity::Author;
+    use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::{Operation, OperationEncoded, OperationValue};
-    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
+    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, StorageProvider};
     use p2panda_rs::test_utils::constants::{DEFAULT_HASH, DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
     use p2panda_rs::test_utils::fixtures::{
-        entry_signed_encoded_unvalidated, key_pair, operation, operation_encoded, operation_fields,
-        random_hash,
+        create_operation, delete_operation, entry_signed_encoded_unvalidated, key_pair, operation,
+        operation_encoded, operation_fields, random_hash, update_operation,
     };
     use rstest::{fixture, rstest};
     use serde_json::json;
@@ -104,9 +104,9 @@ mod tests {
 
     use crate::bus::ServiceMessage;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
-    use crate::graphql::client::PublishEntryResponse;
+    use crate::graphql::client::{EntryArgsRequest, PublishEntryResponse};
     use crate::http::{build_server, HttpServiceContext};
-    use crate::test_helpers::{initialize_store, TestClient};
+    use crate::test_helpers::TestClient;
 
     const ENTRY_ENCODED: &str = "00bedabb435758855968b3e2de2aa1f653adfbb392fcf9cb2295a68b2eca3c\
                                  fb030101a200204b771d59d76e820cbae493682003e99b795e4e7c86a8d6b4\
@@ -452,107 +452,72 @@ mod tests {
     }
 
     #[rstest]
-    fn publish_many_entries(
-        #[from(test_db)]
-        #[with(100, 1, true, TEST_SCHEMA_ID.parse().unwrap())]
-        runner: TestDatabaseRunner,
-    ) {
-        runner.with_db_teardown(|populated_db: TestDatabase| async move {
-            // Get the author.
-            let author = Author::try_from(
-                populated_db
-                    .key_pairs
-                    .first()
-                    .unwrap()
-                    .public_key()
-                    .to_owned(),
-            )
-            .unwrap();
+    fn publish_many_entries(#[from(test_db)] runner: TestDatabaseRunner) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let key_pairs = vec![KeyPair::new(), KeyPair::new()];
+            let num_of_entries = 100;
 
-            // Setup the server and client with a new empty store.
             let (tx, _rx) = broadcast::channel(16);
-            let new_store = initialize_store().await;
-            let context = HttpServiceContext::new(new_store, tx);
+            let context = HttpServiceContext::new(db.store.clone(), tx);
             let client = TestClient::new(build_server(context));
 
-            // Get the entries from the prepopulated store.
-            let mut entries = populated_db
-                .store
-                .get_entries_by_schema(&TEST_SCHEMA_ID.parse().unwrap())
-                .await
-                .unwrap();
-
-            // Sort them by seq_num.
-            entries.sort_by_key(|entry| entry.seq_num().as_u64());
-
-            for entry in entries {
-                // Prepare a publish entry request for each entry.
-                let publish_entry_request = publish_entry_request(
-                    entry.entry_signed().as_str(),
-                    entry.operation_encoded().unwrap().as_str(),
-                );
-
-                // Publish the entry and parse response.
-                let response = client
-                    .post("/graphql")
-                    .json(&json!({
-                      "query": publish_entry_request.query,
-                      "variables": publish_entry_request.variables
-                    }
-                    ))
-                    .send()
-                    .await;
-
-                let response = response.json::<serde_json::Value>().await;
-                let publish_entry_response =
-                    response.get("data").unwrap().get("publishEntry").unwrap();
-
-                // Calculate the skiplink we expect in the repsonse.
-                let next_seq_num = entry.seq_num().next().unwrap();
-                let skiplink_seq_num = next_seq_num.skiplink_seq_num();
-                let skiplink_entry = match skiplink_seq_num {
-                    Some(seq_num) if is_lipmaa_required(next_seq_num.as_u64()) => populated_db
+            for key_pair in &key_pairs {
+                let mut document: Option<DocumentId> = None;
+                let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+                for index in 0..num_of_entries {
+                    let next_entry_args = db
                         .store
-                        .get_entry_at_seq_num(&author, &entry.log_id(), &seq_num)
+                        .get_entry_args(&EntryArgsRequest {
+                            author: author.clone(),
+                            document: document.as_ref().cloned(),
+                        })
                         .await
-                        .unwrap()
-                        .map(|entry| entry.hash().as_str().to_owned()),
-                    _ => None,
-                };
+                        .unwrap();
 
-                // Assert the returned log_id, seq_num, backlink and skiplink match our expectations.
-                assert_eq!(
-                    publish_entry_response
-                        .get("logId")
-                        .unwrap()
-                        .as_str()
-                        .unwrap(),
-                    "1"
-                );
-                assert_eq!(
-                    publish_entry_response
-                        .get("seqNum")
-                        .unwrap()
-                        .as_str()
-                        .unwrap(),
-                    next_seq_num.as_u64().to_string()
-                );
-                assert_eq!(
-                    publish_entry_response
-                        .get("skiplink")
-                        .unwrap()
-                        .as_str()
-                        .map(|hash| hash.to_string()),
-                    skiplink_entry
-                );
-                assert_eq!(
-                    publish_entry_response
-                        .get("backlink")
-                        .unwrap()
-                        .as_str()
-                        .unwrap(),
-                    entry.hash().as_str()
-                );
+                    let operation = if index == 0 {
+                        create_operation(&[("name", OperationValue::Text("Panda".to_string()))])
+                    } else if index == (num_of_entries - 1) {
+                        delete_operation(&next_entry_args.backlink.clone().unwrap().into())
+                    } else {
+                        update_operation(
+                            &[("name", OperationValue::Text("🐼".to_string()))],
+                            &next_entry_args.backlink.clone().unwrap().into(),
+                        )
+                    };
+
+                    let entry = Entry::new(
+                        &next_entry_args.log_id,
+                        Some(&operation),
+                        next_entry_args.skiplink.as_ref(),
+                        next_entry_args.backlink.as_ref(),
+                        &next_entry_args.seq_num,
+                    )
+                    .unwrap();
+
+                    let entry_encoded = sign_and_encode(&entry, key_pair).unwrap();
+                    let operation_encoded = OperationEncoded::try_from(&operation).unwrap();
+
+                    if index == 0 {
+                        document = Some(entry_encoded.hash().into());
+                    }
+
+                    // Prepare a publish entry request for each entry.
+                    let publish_entry_request =
+                        publish_entry_request(entry_encoded.as_str(), operation_encoded.as_str());
+
+                    // Publish the entry.
+                    let result = client
+                        .post("/graphql")
+                        .json(&json!({
+                              "query": publish_entry_request.query,
+                              "variables": publish_entry_request.variables
+                            }
+                        ))
+                        .send()
+                        .await;
+
+                    assert!(result.status().is_success())
+                }
             }
         });
     }
