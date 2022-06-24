@@ -1,15 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Error, Result};
-use log::{debug, error, warn};
+use bamboo_rs_core_ed25519_yasmf::entry::is_lipmaa_required;
+use bamboo_rs_core_ed25519_yasmf::verify::verify_batch;
+use log::{debug, error, trace, warn};
 pub use p2panda_rs::entry::LogId;
 use p2panda_rs::entry::SeqNum;
 pub use p2panda_rs::identity::Author;
-use p2panda_rs::storage_provider::traits::EntryStore;
+use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
 use serde::Deserialize;
 use tokio::task;
 
@@ -81,6 +84,9 @@ impl Service<Context, ServiceMessage> for ReplicationService {
                             let latest_seq = get_latest_seq(&context, &log_id, &author).await;
                             debug!("Latest entry seq: {:?}", latest_seq);
 
+                            // TODO: just for debug
+                            let latest_seq = None;
+
                             // Make our replication request to the remote peer
                             let entries = client
                                 .get_entries_newer_than_seq(
@@ -92,9 +98,84 @@ impl Service<Context, ServiceMessage> for ReplicationService {
                                 .await;
 
                             if let Ok(entries) = entries {
+                                let mut entries = VecDeque::from(entries);
                                 debug!("Received {} new entries", entries.len());
 
-                                // TODO: verify entries
+                                // Get the first entry (assumes they're sorted by seq_num smallest
+                                // to largest)
+                                let first_entry = entries.get(0).map(|entry| entry.clone());
+
+                                match first_entry.as_ref() {
+                                    // If the entry is the first in the log then we can don't need
+                                    // to attempt to get the skiplink and previous
+                                    Some(entry) if entry.seq_num() == SeqNum::new(1).unwrap() => {
+                                        trace!("first entry had seq_num 1 do no need to get previous entries in db");
+                                    }
+                                    Some(entry) => {
+                                        match (entry.skiplink_hash(), entry.backlink_hash()) {
+                                            (Some(skiplink_hash), Some(backlink_hash)) => {
+                                                let skiplink = context
+                                                    .0
+                                                    .store
+                                                    .get_entry_by_hash(&skiplink_hash)
+                                                    .await
+                                                    .expect("expected to get skiplink from db");
+
+                                                let backlink = context
+                                                    .0
+                                                    .store
+                                                    .get_entry_by_hash(&backlink_hash)
+                                                    .await
+                                                    .expect("expected to get backlink from db");
+
+                                                if skiplink.is_none() || backlink.is_none() {
+                                                    warn!("replication error. We received entries but didn't have the required backlink / skiplinks in the db");
+                                                    continue;
+                                                }
+
+                                                entries.push_front(skiplink.unwrap());
+                                                entries.push_front(backlink.unwrap());
+                                            }
+                                            (None, Some(backlink_hash))
+                                                if !is_lipmaa_required(
+                                                    entry.seq_num().as_u64(),
+                                                ) =>
+                                            {
+                                                let backlink = context
+                                                    .0
+                                                    .store
+                                                    .get_entry_by_hash(&backlink_hash)
+                                                    .await
+                                                    .expect("expected to get backlink from db");
+
+                                                if backlink.is_none() {
+                                                    warn!("replication error. We received entries but didn't have the required backlink in the db");
+                                                    continue;
+                                                }
+
+                                                entries.push_front(backlink.unwrap());
+                                            }
+                                            (_, _) => {
+                                                warn!("entry was an invalid format, not adding to our db: {:?}", entry);
+                                            }
+                                        }
+                                    }
+                                    None => {
+                                        continue;
+                                    }
+                                }
+
+                                let entries_to_verify = entries
+                                    .iter()
+                                    .map(|entry| (entry.entry_bytes(), Option::<Vec<u8>>::None))
+                                    .collect::<Vec<_>>();
+
+                                let verification_result = verify_batch(&entries_to_verify);
+
+                                if verification_result.is_err() {
+                                    warn!("couldn't verify entries: {:?}", verification_result);
+                                    continue;
+                                }
 
                                 for entry in entries {
                                     context
