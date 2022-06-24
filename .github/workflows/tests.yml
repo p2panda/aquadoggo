@@ -93,7 +93,7 @@ jobs:
             --manifest-path ${{ env.cargo_manifest }}
             -- --test-threads 1
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/aquadoggo-development
+          DATABASE_URL: postgresql://postgres:postgres@localhost/aquadoggo-development
 
   rust-test-mariadb:
     runs-on: ubuntu-latest
@@ -102,8 +102,7 @@ jobs:
       mariadb:
         image: mariadb:latest
         ports:
-          # Maps TCP port 3306 on service container to the host
-          - 3306:3306
+          - 3306
         env:
           MARIADB_USER: panda
           MARIADB_PASSWORD: panda
@@ -142,7 +141,7 @@ jobs:
             --manifest-path ${{ env.cargo_manifest }}
             -- --test-threads 1
         env:
-          DATABASE_URL: mysql://panda:panda@localhost:3306/aquadoggo-development
+          DATABASE_URL: mysql://panda:panda@localhost/aquadoggo-development
 
   rust-check:
     runs-on: ubuntu-latest
