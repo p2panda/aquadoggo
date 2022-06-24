@@ -3,19 +3,24 @@
 use std::borrow::Cow;
 
 use async_graphql::indexmap::IndexMap;
-use async_graphql::parser::types::Field;
+use async_graphql::parser::types::{Field, Selection, SelectionSet};
 use async_graphql::registry::{MetaType, MetaTypeId};
 use async_graphql::{
-    ContainerType, ContextSelectionSet, Name, OutputType, Positioned, SelectionField, ServerResult,
-    Value,
+    ContainerType, ContextBase, ContextSelectionSet, Name, OutputType, Positioned, SelectionField,
+    ServerResult, Value,
 };
 use async_recursion::async_recursion;
 use async_trait::async_trait;
+use futures::future;
 use log::info;
+use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId, DocumentViewValue};
+use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{FieldType, Schema, SchemaId};
 
+use crate::db::traits::DocumentStore;
 use crate::graphql::{TempFile, TEMP_FILE_FNAME};
 use crate::schema::SchemaProvider;
+use crate::SqlStorage;
 
 use super::schema::{get_schema_metafield, get_schema_metatype};
 
@@ -31,68 +36,115 @@ impl DynamicQuery {
         Self { schema_provider }
     }
 
-    /// Query database for selected field values and return a JSON result.
     #[async_recursion]
-    async fn resolve_dynamic(
+    async fn get_view(
+        &self,
+        view: DocumentView,
+        ctx: &ContextBase<'_, &Positioned<Field>>,
+        sel: Vec<SelectionField<'async_recursion>>,
+    ) -> ServerResult<Option<Value>> {
+        info!("Get {}", view);
+        let store = ctx.data_unchecked::<SqlStorage>();
+        let mut obj = IndexMap::new();
+        for selection in sel {
+            let name = selection.name();
+            let value = view.get(name).unwrap();
+            let value = match value.value() {
+                // single views
+                OperationValue::Relation(rel) => {
+                    let view = store.get_document_by_id(rel.document_id()).await.unwrap();
+                    match view {
+                        Some(view) => self
+                            .get_view(view, ctx, selection.selection_set().collect())
+                            .await
+                            .unwrap()
+                            .unwrap(),
+                        None => Value::String("not found".to_string()),
+                    }
+                }
+                OperationValue::PinnedRelation(rel) => {
+                    let view = store.get_document_view_by_id(rel.view_id()).await.unwrap();
+                    match view {
+                        Some(view) => self
+                            .get_view(view, ctx, selection.selection_set().collect())
+                            .await
+                            .unwrap()
+                            .unwrap(),
+                        None => Value::String("not found".to_string()),
+                    }
+                }
+
+                // view lists
+                OperationValue::RelationList(rel) => {
+                    let mut list = Vec::new();
+                    for doc_id in rel.iter() {
+                        let view = store.get_document_by_id(&doc_id).await.unwrap();
+                        match view {
+                            Some(view) => list.push(
+                                self.get_view(view, ctx, selection.selection_set().collect())
+                                    .await
+                                    .unwrap()
+                                    .unwrap(),
+                            ),
+                            None => list.push(Value::String("not found".to_string())),
+                        };
+                    }
+                    Value::List(list)
+                }
+                OperationValue::PinnedRelationList(rel) => {
+                    let mut list = Vec::new();
+                    for view_id in rel.iter() {
+                        let view = store.get_document_view_by_id(&view_id).await.unwrap();
+                        match view {
+                            Some(view) => list.push(
+                                self.get_view(view, ctx, selection.selection_set().collect())
+                                    .await
+                                    .unwrap()
+                                    .unwrap(),
+                            ),
+                            None => list.push(Value::String("not found".to_string())),
+                        }
+                    }
+                    Value::List(list)
+                }
+
+                // Convert all simple fields to scalar values.
+                _ => gql_scalar(value.value()),
+            };
+            obj.insert(Name::new(name), value);
+        }
+        Ok(Some(Value::Object(obj)))
+    }
+
+    async fn list_schema(
         &self,
         schema_id: SchemaId,
-        ctx: SelectionField<'async_recursion>,
+        ctx: &ContextBase<'_, &Positioned<Field>>,
     ) -> ServerResult<Option<Value>> {
-        let schema = self.schema_provider.get(&schema_id);
-
-        if schema.is_none() {
-            return Ok(None);
-        }
-        let schema = schema.unwrap();
-
-        let mut fields: IndexMap<Name, Value> = IndexMap::new();
-
-        let selected_fields = ctx
-            .selection_set()
-            .map(|field| {
-                let (field_name, field_type) = schema
-                    .fields()
-                    .iter()
-                    .find(|f| f.0 == field.name())
-                    .unwrap();
-                (field, field_name.to_owned(), field_type.to_owned())
-            })
-            .collect::<Vec<(SelectionField, String, FieldType)>>();
-
-        for (graphql_field, field_name, p2panda_field_type) in selected_fields {
-            let value = match p2panda_field_type {
-                FieldType::Bool => Some(Value::Boolean(true)),
-                FieldType::Int => Some(Value::Number(5u8.into())),
-                FieldType::Float => Some(1.5f32.into()),
-                FieldType::String => Some("Hello".into()),
-                FieldType::Relation(schema) => {
-                    self.resolve_dynamic(schema, graphql_field).await.unwrap()
-                }
-                FieldType::RelationList(schema) => {
-                    self.resolve_dynamic(schema, graphql_field).await.unwrap()
-                }
-                FieldType::PinnedRelation(schema) => {
-                    self.resolve_dynamic(schema, graphql_field).await.unwrap()
-                }
-                FieldType::PinnedRelationList(schema) => {
-                    self.resolve_dynamic(schema, graphql_field).await.unwrap()
-                }
+        let mut result = Vec::new();
+        let store = ctx.data_unchecked::<SqlStorage>();
+        let views = store.get_documents_by_schema(&schema_id).await.unwrap();
+        for view in views {
+            if let Some(value) = self
+                .get_view(view, ctx, ctx.field().selection_set().collect())
+                .await?
+            {
+                result.push(value);
             }
-            .unwrap();
-
-            fields.insert(Name::new(field_name), value);
         }
 
-        Ok(Some(Value::List(vec![Value::Object(fields)])))
+        Ok(Some(Value::List(result)))
     }
 }
 
 #[async_trait]
 impl ContainerType for DynamicQuery {
-    async fn resolve_field(&self, ctx: &async_graphql::Context<'_>) -> ServerResult<Option<Value>> {
-        // @TODO: This needs to return `None` if that schema does not exist
+    async fn resolve_field(
+        &self,
+        ctx: &ContextBase<&Positioned<Field>>,
+    ) -> ServerResult<Option<Value>> {
         let schema: SchemaId = ctx.field().name().parse().unwrap();
-        self.resolve_dynamic(schema, ctx.field()).await
+        self.list_schema(schema, ctx).await
     }
 }
 
@@ -154,5 +206,16 @@ impl OutputType for DynamicQuery {
     fn introspection_type_name(&self) -> Cow<'static, str> {
         // I don't know when this is called or whether we need it...
         todo!()
+    }
+}
+
+fn gql_scalar(operation_value: &OperationValue) -> Value {
+    match operation_value {
+        OperationValue::Boolean(value) => value.to_owned().into(),
+        OperationValue::Integer(value) => value.to_owned().into(),
+        OperationValue::Float(value) => value.to_owned().into(),
+        OperationValue::Text(value) => value.to_owned().into(),
+        // only use for scalars
+        _ => panic!("can only return scalar values"),
     }
 }
