@@ -467,16 +467,9 @@ mod tests {
                 first_entry.operation_encoded().unwrap(),
             )
             .unwrap();
+
             let result = db.store.insert_entry(duplicate_doggo_entry).await;
-
             assert!(result.is_err());
-
-            // @TODO
-            //         assert_eq!(
-            //             result.unwrap_err().to_string(),
-            //             "Error occured during `EntryStorage` request in storage provider: error returned from \
-            //             database: UNIQUE constraint failed: entries.author, entries.log_id, entries.seq_num"
-            //         );
         });
     }
 

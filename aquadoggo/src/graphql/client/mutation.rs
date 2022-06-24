@@ -177,7 +177,7 @@ mod tests {
                 skiplink: None,
             };
             assert_eq!(expected, received);
-        })
+        });
     }
 
     #[rstest]
@@ -200,7 +200,7 @@ mod tests {
                 message,
                 ServiceMessage::NewOperation(entry_encoded.hash().into())
             );
-        })
+        });
     }
 
     #[rstest]
@@ -221,7 +221,7 @@ mod tests {
                 "operation needs to match payload hash of encoded entry".to_string(),
                 response.errors[0].to_string()
             );
-        })
+        });
     }
 
     #[rstest]
@@ -230,34 +230,34 @@ mod tests {
         publish_entry_request: Request,
     ) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
+            let (tx, _rx) = broadcast::channel(16);
+            let context = HttpServiceContext::new(db.store, tx);
+            let client = TestClient::new(build_server(context));
 
-        let (tx, _rx) = broadcast::channel(16);
-        let context = HttpServiceContext::new(db.store, tx);
-        let client = TestClient::new(build_server(context));
-
-        let response = client
-            .post("/graphql")
-            .json(&json!({
-              "query": publish_entry_request.query,
-              "variables": publish_entry_request.variables
-            }
-            ))
-            .send()
-            .await;
-
-        assert_eq!(
-            response.json::<serde_json::Value>().await,
-            json!({
-                "data": {
-                    "publishEntry": {
-                        "logId":"1",
-                        "seqNum":"2",
-                        "backlink":"00201c221b573b1e0c67c5e2c624a93419774cdf46b3d62414c44a698df1237b1c16",
-                        "skiplink":null
-                    }
+            let response = client
+                .post("/graphql")
+                .json(&json!({
+                  "query": publish_entry_request.query,
+                  "variables": publish_entry_request.variables
                 }
-            })
-        );})
+                ))
+                .send()
+                .await;
+
+            assert_eq!(
+                response.json::<serde_json::Value>().await,
+                json!({
+                    "data": {
+                        "publishEntry": {
+                            "logId":"1",
+                            "seqNum":"2",
+                            "backlink":"00201c221b573b1e0c67c5e2c624a93419774cdf46b3d62414c44a698df1237b1c16",
+                            "skiplink":null
+                        }
+                    }
+                })
+            );
+        });
     }
 
     #[rstest]
@@ -324,12 +324,11 @@ mod tests {
     )]
     #[case::should_not_have_backlink_or_skiplink(
         &entry_signed_encoded_unvalidated(
-                1,
-                1,
-                Some(DEFAULT_HASH.parse().unwrap()),
-                Some(DEFAULT_HASH.parse().unwrap()),
-                Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))
-,
+            1,
+            1,
+            Some(DEFAULT_HASH.parse().unwrap()),
+            Some(DEFAULT_HASH.parse().unwrap()),
+            Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())) ,
             key_pair(DEFAULT_PRIVATE_KEY)
         ),
         OPERATION_ENCODED,
@@ -361,12 +360,11 @@ mod tests {
     )]
     #[case::should_not_include_skiplink(
         &entry_signed_encoded_unvalidated(
-                14,
-                1,
-                Some(DEFAULT_HASH.parse().unwrap()),
-                Some(DEFAULT_HASH.parse().unwrap()),
-                Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap()))
-,
+            14,
+            1,
+            Some(DEFAULT_HASH.parse().unwrap()),
+            Some(DEFAULT_HASH.parse().unwrap()),
+            Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())),
             key_pair(DEFAULT_PRIVATE_KEY)
         ),
         OPERATION_ENCODED,
@@ -374,43 +372,104 @@ mod tests {
     )]
     #[case::payload_hash_and_size_missing(
         &entry_signed_encoded_unvalidated(
-                14,
-                1,
-                Some(random_hash()),
-                Some(DEFAULT_HASH.parse().unwrap()),
-                None,
+            14,
+            1,
+            Some(random_hash()),
+            Some(DEFAULT_HASH.parse().unwrap()),
+            None,
             key_pair(DEFAULT_PRIVATE_KEY)
         ),
         OPERATION_ENCODED,
         "Could not decode payload hash DecodeError"
     )]
     #[case::backlink_and_skiplink_not_in_db(
-        &entry_signed_encoded_unvalidated(8, 1, Some(DEFAULT_HASH.parse().unwrap()), Some(Hash::new_from_bytes(vec![2, 3, 4]).unwrap()), Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())), key_pair(DEFAULT_PRIVATE_KEY)),
+        &entry_signed_encoded_unvalidated(
+            8,
+            1,
+            Some(DEFAULT_HASH.parse().unwrap()),
+            Some(Hash::new_from_bytes(vec![2, 3, 4]).unwrap()),
+            Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())),
+            key_pair(DEFAULT_PRIVATE_KEY)
+        ),
         OPERATION_ENCODED,
         "Could not find expected backlink in database for entry with id: <Hash f7c017>"
     )]
     #[case::backlink_not_in_db(
-        &entry_signed_encoded_unvalidated(2, 1, Some(DEFAULT_HASH.parse().unwrap()), None, Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())), key_pair(DEFAULT_PRIVATE_KEY)),
+        &entry_signed_encoded_unvalidated(
+            2,
+            1,
+            Some(DEFAULT_HASH.parse().unwrap()),
+            None,
+            Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())),
+            key_pair(DEFAULT_PRIVATE_KEY)
+        ),
         OPERATION_ENCODED,
         "Could not find expected backlink in database for entry with id: <Hash d3832b>"
     )]
     #[case::previous_operations_not_in_db(
-        &entry_signed_encoded_unvalidated(1, 1, None, None, Some(operation(Some(operation_fields(vec![("silly", OperationValue::Text("Sausage".to_string()))])), Some(DEFAULT_HASH.parse().unwrap()), None)), key_pair(DEFAULT_PRIVATE_KEY)),
-        &{operation_encoded(Some(operation_fields(vec![("silly", OperationValue::Text("Sausage".to_string()))])), Some(DEFAULT_HASH.parse().unwrap()), None).as_str().to_owned()},
+        &entry_signed_encoded_unvalidated(
+            1,
+            1,
+            None,
+            None,
+            Some(
+                operation(
+                    Some(
+                        operation_fields(
+                            vec![("silly", OperationValue::Text("Sausage".to_string()))]
+                        )
+                    ),
+                    Some(DEFAULT_HASH.parse().unwrap()),
+                    None
+                )
+            ),
+            key_pair(DEFAULT_PRIVATE_KEY)
+        ),
+        &{operation_encoded(
+                Some(
+                    operation_fields(
+                        vec![("silly", OperationValue::Text("Sausage".to_string()))]
+                    )
+                ),
+                Some(DEFAULT_HASH.parse().unwrap()),
+                None
+            ).as_str().to_owned()
+        },
         "Could not find document for entry in database with id: <Hash f03236>"
     )]
     #[case::create_operation_with_previous_operations(
-        &entry_signed_encoded_unvalidated(1, 1, None, None, Some(Operation::from(&OperationEncoded::new(CREATE_OPERATION_WITH_PREVIOUS_OPS).unwrap())), key_pair(DEFAULT_PRIVATE_KEY)),
+        &entry_signed_encoded_unvalidated(
+            1,
+            1,
+            None,
+            None,
+            Some(Operation::from(&OperationEncoded::new(CREATE_OPERATION_WITH_PREVIOUS_OPS).unwrap())),
+            key_pair(DEFAULT_PRIVATE_KEY)
+        ),
         CREATE_OPERATION_WITH_PREVIOUS_OPS,
         "previous_operations field should be empty"
     )]
     #[case::update_operation_no_previous_operations(
-        &entry_signed_encoded_unvalidated(1, 1, None, None, Some(Operation::from(&OperationEncoded::new(UPDATE_OPERATION_NO_PREVIOUS_OPS).unwrap())), key_pair(DEFAULT_PRIVATE_KEY)),
+        &entry_signed_encoded_unvalidated(
+            1,
+            1,
+            None,
+            None,
+            Some(Operation::from(&OperationEncoded::new(UPDATE_OPERATION_NO_PREVIOUS_OPS).unwrap())),
+            key_pair(DEFAULT_PRIVATE_KEY)
+        ),
         UPDATE_OPERATION_NO_PREVIOUS_OPS,
         "previous_operations field can not be empty"
     )]
     #[case::delete_operation_no_previous_operations(
-        &entry_signed_encoded_unvalidated(1, 1, None, None, Some(Operation::from(&OperationEncoded::new(DELETE_OPERATION_NO_PREVIOUS_OPS).unwrap())), key_pair(DEFAULT_PRIVATE_KEY)),
+        &entry_signed_encoded_unvalidated(
+            1,
+            1,
+            None,
+            None,
+            Some(Operation::from(&OperationEncoded::new(DELETE_OPERATION_NO_PREVIOUS_OPS).unwrap())),
+            key_pair(DEFAULT_PRIVATE_KEY)
+        ),
         DELETE_OPERATION_NO_PREVIOUS_OPS,
         "previous_operations field can not be empty"
     )]
@@ -564,10 +623,10 @@ mod tests {
 
             let response = response.json::<serde_json::Value>().await;
 
-            // @TODO: I think we'd like a nicer error message here:
+            // @TODO: This currently throws an internal SQL error to the API user, I think we'd
+            // like a nicer error message here:
             // https://github.com/p2panda/aquadoggo/issues/159
             for error in response.get("errors").unwrap().as_array().unwrap() {
-                // assert_eq!(error.get("message").unwrap().as_str().unwrap(), "Error occured during `LogStorage` request in storage provider: error returned from database: UNIQUE constraint failed: logs.author, logs.log_id")
                 assert!(error.get("message").is_some())
             }
         });

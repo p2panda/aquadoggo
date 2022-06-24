@@ -342,8 +342,7 @@ mod tests {
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let _result = db
-                .store
+            db.store
                 .insert_operation(&verified_operation, &document_id)
                 .await;
 
@@ -352,12 +351,6 @@ mod tests {
                 .insert_operation(&verified_operation, &document_id)
                 .await
                 .is_err());
-
-            // @TODO
-            // assert_eq!(
-            //     db.store.insert_operation(&verified_operation, &document_id).await.unwrap_err().to_string(),
-            //     "A fatal error occured in OperationStore: error returned from database: UNIQUE constraint failed: operations_v1.entry_hash"
-            // )
         });
     }
 

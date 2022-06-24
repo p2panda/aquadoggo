@@ -522,12 +522,6 @@ mod tests {
                 .await;
 
             assert!(result.is_err());
-
-            // @TODO
-            // assert_eq!(
-            //     result.unwrap_err().to_string(),
-            //     "A fatal error occured in DocumentStore: error returned from database: FOREIGN KEY constraint failed".to_string()
-            // );
         });
     }
 
