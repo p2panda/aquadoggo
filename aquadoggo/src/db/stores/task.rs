@@ -63,8 +63,8 @@ impl SqlStorage {
             WHERE
                 name = $1
                 -- Use `IS` because these columns can contain `null` values.
-                AND COALESCE(document_id, '') = COALESCE($2, '')
-                AND COALESCE(document_view_id, '') = COALESCE($3, '')
+                AND COALESCE(document_id, '0') = COALESCE($2, '0')
+                AND COALESCE(document_view_id, '0') = COALESCE($3, '0')
             ",
         )
         .bind(task.worker_name())
