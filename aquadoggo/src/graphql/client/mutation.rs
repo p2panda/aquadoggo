@@ -471,8 +471,8 @@ mod tests {
 
             // Setup the server and client with a new empty store.
             let (tx, _rx) = broadcast::channel(16);
-            let store = initialize_store().await;
-            let context = HttpServiceContext::new(store, tx);
+            let new_store = initialize_store().await;
+            let context = HttpServiceContext::new(new_store, tx);
             let client = TestClient::new(build_server(context));
 
             // Get the entries from the prepopulated store.
