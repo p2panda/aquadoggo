@@ -11,8 +11,9 @@ use async_graphql::{
 };
 use async_recursion::async_recursion;
 use async_trait::async_trait;
+use futures::future;
 use log::{debug, info};
-use p2panda_rs::document::DocumentView;
+use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{Schema, SchemaId};
 
@@ -35,92 +36,108 @@ impl DynamicQuery {
         Self { schema_provider }
     }
 
+    /// Resolve a document id to a gql value.
+    ///
+    /// Recurses into relations when those are selected in `selected_fields`.
+    #[async_recursion]
+    async fn get_by_document_id(
+        &self,
+        document_id: DocumentId,
+        ctx: &ContextBase<'_, &Positioned<Field>>,
+        selected_fields: Vec<SelectionField<'async_recursion>>,
+    ) -> Value {
+        let store = ctx.data_unchecked::<SqlStorage>();
+        let view = store.get_document_by_id(&document_id).await.unwrap();
+        match view {
+            Some(view) => self
+                .get_view(view, ctx, selected_fields)
+                .await
+                .unwrap()
+                .unwrap(),
+            None => Value::String("not found".to_string()),
+        }
+    }
+
+    /// Resolve a document view id to a gql value.
+    ///
+    /// Recurses into relations when those are selected in `selected_fields`.
+    #[async_recursion]
+    async fn get_by_document_view_id(
+        &self,
+        document_view_id: DocumentViewId,
+        ctx: &ContextBase<'_, &Positioned<Field>>,
+        selected_fields: Vec<SelectionField<'async_recursion>>,
+    ) -> Value {
+        let store = ctx.data_unchecked::<SqlStorage>();
+        let view = store
+            .get_document_view_by_id(&document_view_id)
+            .await
+            .unwrap();
+        match view {
+            Some(view) => self
+                .get_view(view, ctx, selected_fields)
+                .await
+                .unwrap()
+                .unwrap(),
+            None => Value::String("not found".to_string()),
+        }
+    }
+
+    /// Resolves a given view and recurses into relations to produce a gql value.
     #[async_recursion]
     async fn get_view(
         &self,
         view: DocumentView,
         ctx: &ContextBase<'_, &Positioned<Field>>,
-        sel: Vec<SelectionField<'async_recursion>>,
+        selected_fields: Vec<SelectionField<'async_recursion>>,
     ) -> ServerResult<Option<Value>> {
         debug!("Get {}", view);
-        let store = ctx.data_unchecked::<SqlStorage>();
         let mut obj = IndexMap::new();
-        for selection in sel {
-            let name = selection.name();
-            let value = view.get(name).unwrap();
-            let value = match value.value() {
+        for selected_field in selected_fields {
+            let document_view_value = view.get(selected_field.name()).unwrap();
+            let selected_fields: Vec<SelectionField<'async_recursion>> =
+                selected_field.selection_set().collect();
+            let value = match document_view_value.value() {
                 // single views
                 OperationValue::Relation(rel) => {
-                    let view = store.get_document_by_id(rel.document_id()).await.unwrap();
-                    match view {
-                        Some(view) => self
-                            .get_view(view, ctx, selection.selection_set().collect())
-                            .await
-                            .unwrap()
-                            .unwrap(),
-                        None => Value::String("not found".to_string()),
-                    }
+                    self.get_by_document_id(rel.document_id().clone(), ctx, selected_fields)
+                        .await
                 }
                 OperationValue::PinnedRelation(rel) => {
-                    let view = store.get_document_view_by_id(rel.view_id()).await.unwrap();
-                    match view {
-                        Some(view) => self
-                            .get_view(view, ctx, selection.selection_set().collect())
-                            .await
-                            .unwrap()
-                            .unwrap(),
-                        None => Value::String("not found".to_string()),
-                    }
+                    self.get_by_document_view_id(rel.view_id().clone(), ctx, selected_fields)
+                        .await
                 }
 
                 // view lists
                 OperationValue::RelationList(rel) => {
-                    let mut list = Vec::new();
-                    for doc_id in rel.iter() {
-                        let view = store.get_document_by_id(&doc_id).await.unwrap();
-                        match view {
-                            Some(view) => list.push(
-                                self.get_view(view, ctx, selection.selection_set().collect())
-                                    .await
-                                    .unwrap()
-                                    .unwrap(),
-                            ),
-                            None => list.push(Value::String("not found".to_string())),
-                        };
-                    }
-                    Value::List(list)
+                    let queries = rel.iter().map(|doc_id| {
+                        self.get_by_document_id(doc_id, ctx, selected_fields.clone())
+                    });
+                    Value::List(future::join_all(queries).await)
                 }
                 OperationValue::PinnedRelationList(rel) => {
-                    let mut list = Vec::new();
-                    for view_id in rel.iter() {
-                        let view = store.get_document_view_by_id(&view_id).await.unwrap();
-                        match view {
-                            Some(view) => list.push(
-                                self.get_view(view, ctx, selection.selection_set().collect())
-                                    .await
-                                    .unwrap()
-                                    .unwrap(),
-                            ),
-                            None => list.push(Value::String("not found".to_string())),
-                        }
-                    }
-                    Value::List(list)
+                    let queries = rel.iter().map(|view_id| {
+                        self.get_by_document_view_id(view_id, ctx, selected_fields.clone())
+                    });
+                    Value::List(future::join_all(queries).await)
                 }
 
                 // Convert all simple fields to scalar values.
-                _ => gql_scalar(value.value()),
+                _ => gql_scalar(document_view_value.value()),
             };
-            obj.insert(Name::new(name), value);
+            obj.insert(Name::new(selected_field.name()), value);
         }
         Ok(Some(Value::Object(obj)))
     }
 
+    /// Returns all documents for the given schema as a gql value.
     async fn list_schema(
         &self,
         schema_id: SchemaId,
         ctx: &ContextBase<'_, &Positioned<Field>>,
     ) -> ServerResult<Option<Value>> {
         if self.schema_provider.get(&schema_id).is_none() {
+            // Abort resolving this as a document query if we don't know this schema.
             return Ok(None);
         }
         let mut result = Vec::new();
@@ -145,6 +162,8 @@ impl ContainerType for DynamicQuery {
         &self,
         ctx: &ContextBase<&Positioned<Field>>,
     ) -> ServerResult<Option<Value>> {
+        // This resolver is called for all queries but we only want to resolve if the queried field
+        // can actually be parsed as a schema id.
         let schema_parsed = ctx.field().name().parse::<SchemaId>();
         match schema_parsed {
             Ok(schema) => self.list_schema(schema, ctx).await,
