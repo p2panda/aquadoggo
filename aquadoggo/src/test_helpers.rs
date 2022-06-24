@@ -25,7 +25,7 @@ use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
 #[derive(Deserialize, Debug)]
 #[serde(default)]
 struct TestConfiguration {
-    /// Database url (sqlite, mysql or postgres)
+    /// Database url (sqlite or postgres)
     database_url: String,
 }
 
