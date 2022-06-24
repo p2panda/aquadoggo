@@ -87,6 +87,8 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
+          # Make sure the tests run consecutively to avoid accessing the same
+          # database by multiple test threads
           args: >-
             --manifest-path ${{ env.cargo_manifest }}
             -- --test-threads 1
@@ -103,10 +105,10 @@ jobs:
           # Maps TCP port 3306 on service container to the host
           - 3306:3306
         env:
-          MYSQL_USER: panda
-          MYSQL_PASSWORD: panda
-          MYSQL_DATABASE: aquadoggo-development
-          MYSQL_ROOT_PASSWORD: root
+          MARIADB_USER: panda
+          MARIADB_PASSWORD: panda
+          MARIADB_ROOT_PASSWORD: secret
+          MARIADB_DATABASE: aquadoggo-development
         options: >-
           --health-cmd="mysqladmin ping"
           --health-interval=5s
@@ -134,6 +136,8 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
+          # Make sure the tests run consecutively to avoid accessing the same
+          # database by multiple test threads
           args: >-
             --manifest-path ${{ env.cargo_manifest }}
             -- --test-threads 1
