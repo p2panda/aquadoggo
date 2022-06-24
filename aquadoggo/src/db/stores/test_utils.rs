@@ -18,13 +18,16 @@ use p2panda_rs::storage_provider::traits::{
 use p2panda_rs::test_utils::constants::{DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
 use p2panda_rs::test_utils::fixtures::{create_operation, delete_operation, update_operation};
 use rstest::fixture;
+use sqlx::migrate::MigrateDatabase;
+use sqlx::Any;
 use tokio::runtime::Builder;
 
 use crate::db::provider::SqlStorage;
 use crate::db::stores::{StorageEntry, StorageLog};
 use crate::db::traits::DocumentStore;
+use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
 use crate::graphql::client::{EntryArgsRequest, PublishEntryRequest};
-use crate::test_helpers::initialize_db;
+use crate::test_helpers::TEST_CONFIG;
 
 /// The fields used as defaults in the tests.
 pub fn doggo_test_fields() -> Vec<(&'static str, OperationValue)> {
@@ -396,5 +399,36 @@ async fn create_test_db(
         store,
         key_pairs,
         documents,
+    }
+}
+
+/// Create test database.
+///
+/// Note: Make sure to close the connection to the database when using this method in tests. Please
+/// have a look at the `TestDatabaseRunner` in case you need a tool which does that automatically
+/// for you.
+async fn initialize_db() -> Pool {
+    // Reset database first
+    drop_database().await;
+    create_database(&TEST_CONFIG.database_url).await.unwrap();
+
+    // Create connection pool and run all migrations
+    let pool = connection_pool(&TEST_CONFIG.database_url, 25)
+        .await
+        .unwrap();
+    if run_pending_migrations(&pool).await.is_err() {
+        pool.close().await;
+    }
+
+    pool
+}
+
+// Delete test database
+async fn drop_database() {
+    if Any::database_exists(&TEST_CONFIG.database_url)
+        .await
+        .unwrap()
+    {
+        Any::drop_database(&TEST_CONFIG.database_url).await.unwrap();
     }
 }

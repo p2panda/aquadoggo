@@ -13,20 +13,15 @@ use once_cell::sync::Lazy;
 use p2panda_rs::hash::Hash;
 use rand::Rng;
 use serde::Deserialize;
-use sqlx::migrate::MigrateDatabase;
-use sqlx::Any;
 use tower::make::Shared;
 use tower_service::Service;
-
-use crate::db::provider::SqlStorage;
-use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
 
 /// Configuration used in test helper methods.
 #[derive(Deserialize, Debug)]
 #[serde(default)]
-struct TestConfiguration {
+pub struct TestConfiguration {
     /// Database url (sqlite or postgres)
-    database_url: String,
+    pub database_url: String,
 }
 
 impl TestConfiguration {
@@ -46,7 +41,7 @@ impl Default for TestConfiguration {
     }
 }
 
-static TEST_CONFIG: Lazy<TestConfiguration> = Lazy::new(|| TestConfiguration::new());
+pub static TEST_CONFIG: Lazy<TestConfiguration> = Lazy::new(|| TestConfiguration::new());
 
 pub(crate) struct TestClient {
     client: reqwest::Client,
@@ -154,48 +149,4 @@ impl TestResponse {
     pub(crate) fn status(&self) -> StatusCode {
         self.response.status()
     }
-}
-
-/// Create test database
-pub async fn initialize_db() -> Pool {
-    // Reset database first
-    drop_database().await;
-    create_database(&TEST_CONFIG.database_url).await.unwrap();
-
-    // Create connection pool and run all migrations
-    let pool = connection_pool(&TEST_CONFIG.database_url, 25)
-        .await
-        .unwrap();
-    if run_pending_migrations(&pool).await.is_err() {
-        pool.close().await;
-    }
-
-    pool
-}
-
-/// Create storage provider API around test database
-pub async fn initialize_store() -> SqlStorage {
-    let pool = initialize_db().await;
-    SqlStorage::new(pool)
-}
-
-// Delete test database
-pub async fn drop_database() {
-    if Any::database_exists(&TEST_CONFIG.database_url)
-        .await
-        .unwrap()
-    {
-        Any::drop_database(&TEST_CONFIG.database_url).await.unwrap();
-    }
-}
-
-/// Generate random entry hash
-// @TODO: Use rstest fixtures instead
-pub fn random_entry_hash() -> String {
-    let random_data = rand::thread_rng().gen::<[u8; 32]>().to_vec();
-
-    Hash::new_from_bytes(random_data)
-        .unwrap()
-        .as_str()
-        .to_owned()
 }

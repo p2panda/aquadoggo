@@ -179,244 +179,190 @@ impl LogStore<StorageLog> for SqlStorage {
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryFrom;
-
-    use p2panda_rs::document::DocumentViewId;
-    use p2panda_rs::entry::{sign_and_encode, Entry as P2PandaEntry, LogId, SeqNum};
+    use p2panda_rs::document::{DocumentId, DocumentViewId};
+    use p2panda_rs::entry::{EntrySigned, LogId};
     use p2panda_rs::hash::Hash;
-    use p2panda_rs::identity::{Author, KeyPair};
-    use p2panda_rs::operation::{Operation, OperationEncoded, OperationFields, OperationValue};
+    use p2panda_rs::identity::Author;
+    use p2panda_rs::operation::{OperationEncoded, OperationId};
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::storage_provider::traits::{
         AsStorageEntry, AsStorageLog, EntryStore, LogStore, StorageProvider,
     };
+    use p2panda_rs::test_utils::fixtures::{
+        entry_signed_encoded, operation_encoded, public_key, random_document_id,
+        random_operation_id, schema,
+    };
+    use rstest::rstest;
 
-    use crate::db::provider::SqlStorage;
     use crate::db::stores::entry::StorageEntry;
     use crate::db::stores::log::StorageLog;
-    use crate::test_helpers::{initialize_db, random_entry_hash};
+    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
-    const TEST_AUTHOR: &str = "58223678ab378f1b07d1d8c789e6da01d16a06b1a4d17cc10119a0109181156c";
-
-    #[tokio::test]
-    async fn initial_log_id() {
-        let pool = initialize_db().await;
-        let author = Author::new(TEST_AUTHOR).unwrap();
-        let storage_provider = SqlStorage::new(pool.clone());
-
-        let log_id = storage_provider
-            .find_document_log_id(&author, None)
-            .await
-            .unwrap();
-
-        assert_eq!(log_id, LogId::new(1));
-
-        // Close connection to database
-        pool.close().await;
+    #[rstest]
+    fn initial_log_id(
+        #[from(public_key)] author: Author,
+        #[from(test_db)] runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let log_id = db.store.find_document_log_id(&author, None).await.unwrap();
+            assert_eq!(log_id, LogId::new(1));
+        });
     }
 
-    #[tokio::test]
-    async fn prevent_duplicate_log_ids() {
-        let pool = initialize_db().await;
-        let storage_provider = SqlStorage::new(pool.clone());
+    #[rstest]
+    fn prevent_duplicate_log_ids(
+        #[from(public_key)] author: Author,
+        #[from(schema)] schema: SchemaId,
+        #[from(random_document_id)] document: DocumentId,
+        #[from(test_db)] runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let log = StorageLog::new(&author, &schema, &document.clone(), &LogId::new(1));
+            assert!(db.store.insert_log(log).await.is_ok());
 
-        let author = Author::new(TEST_AUTHOR).unwrap();
-        let document = Hash::new(&random_entry_hash()).unwrap();
-        let schema =
-            SchemaId::new_application("venue", &Hash::new(&random_entry_hash()).unwrap().into());
-
-        let log = StorageLog::new(&author, &schema, &document.clone().into(), &LogId::new(1));
-        assert!(storage_provider.insert_log(log).await.is_ok());
-
-        let log = StorageLog::new(&author, &schema, &document.into(), &LogId::new(1));
-        assert!(storage_provider.insert_log(log).await.is_err());
-
-        // Close connection to database
-        pool.close().await;
+            let log = StorageLog::new(&author, &schema, &document, &LogId::new(1));
+            assert!(db.store.insert_log(log).await.is_err());
+        });
     }
 
-    #[tokio::test]
-    async fn with_multi_hash_schema_id() {
-        let pool = initialize_db().await;
-        let storage_provider = SqlStorage::new(pool.clone());
+    #[rstest]
+    fn with_multi_hash_schema_id(
+        #[from(public_key)] author: Author,
+        #[from(random_operation_id)] operation_id_1: OperationId,
+        #[from(random_operation_id)] operation_id_2: OperationId,
+        #[from(random_document_id)] document: DocumentId,
+        #[from(test_db)] runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let schema = SchemaId::new_application(
+                "venue",
+                &DocumentViewId::new(&[operation_id_1, operation_id_2]).unwrap(),
+            );
 
-        let author = Author::new(TEST_AUTHOR).unwrap();
-        let document = Hash::new(&random_entry_hash()).unwrap();
-        let schema = SchemaId::new_application(
-            "venue",
-            &DocumentViewId::new(&[
-                Hash::new(&random_entry_hash()).unwrap().into(),
-                Hash::new(&random_entry_hash()).unwrap().into(),
-            ])
-            .unwrap(),
-        );
+            let log = StorageLog::new(&author, &schema, &document, &LogId::new(1));
 
-        let log = StorageLog::new(&author, &schema, &document.into(), &LogId::new(1));
-
-        assert!(storage_provider.insert_log(log).await.is_ok());
-
-        // Close connection to database
-        pool.close().await;
+            assert!(db.store.insert_log(log).await.is_ok());
+        });
     }
 
-    #[tokio::test]
-    async fn selecting_next_log_id() {
-        let pool = initialize_db().await;
-        let key_pair = KeyPair::new();
-        let author = Author::try_from(*key_pair.public_key()).unwrap();
-        let schema = SchemaId::new_application(
-            "venue",
-            &Hash::new_from_bytes(vec![1, 2, 3]).unwrap().into(),
-        );
+    #[rstest]
+    fn selecting_next_log_id(
+        #[from(public_key)] author: Author,
+        #[from(schema)] schema: SchemaId,
+        #[from(test_db)] runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let log_id = db.store.find_document_log_id(&author, None).await.unwrap();
 
-        let storage_provider = SqlStorage::new(pool.clone());
+            // We expect to be given the next log id when asking for a possible log id for a new
+            // document by the same author
+            assert_eq!(log_id, LogId::default());
 
-        let log_id = storage_provider
-            .find_document_log_id(&author, None)
-            .await
-            .unwrap();
+            // Starting with an empty db, we expect to be able to count up from 1 and expect each
+            // inserted document's log id to be euqal to the count index
+            for n in 1..12 {
+                let doc = Hash::new_from_bytes(vec![1, 2, n]).unwrap().into();
+                let log_id = db.store.find_document_log_id(&author, None).await.unwrap();
 
-        // We expect to be given the next log id when asking for a possible log id for a new
-        // document by the same author
-        assert_eq!(log_id, LogId::default());
+                assert_eq!(LogId::new(n.into()), log_id);
 
-        // Starting with an empty db, we expect to be able to count up from 1 and expect each
-        // inserted document's log id to be euqal to the count index
-        for n in 1..12 {
-            let doc = Hash::new_from_bytes(vec![1, 2, n]).unwrap().into();
-
-            let log_id = storage_provider
-                .find_document_log_id(&author, None)
-                .await
-                .unwrap();
-            assert_eq!(LogId::new(n.into()), log_id);
-            let log = StorageLog::new(&author, &schema, &doc, &log_id);
-            storage_provider.insert_log(log).await.unwrap();
-        }
-
-        // Close connection to database
-        pool.close().await;
+                let log = StorageLog::new(&author, &schema, &doc, &log_id);
+                db.store.insert_log(log).await.unwrap();
+            }
+        });
     }
 
-    #[tokio::test]
-    async fn document_log_id() {
-        let pool = initialize_db().await;
+    #[rstest]
+    fn document_log_id(
+        #[from(schema)] schema: SchemaId,
+        #[from(entry_signed_encoded)] entry_encoded: EntrySigned,
+        #[from(operation_encoded)] operation_encoded: OperationEncoded,
+        #[from(test_db)] runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            // Expect database to return nothing yet
+            assert_eq!(
+                db.store
+                    .get_document_by_entry(&entry_encoded.hash())
+                    .await
+                    .unwrap(),
+                None
+            );
 
-        // Create a new document
-        // TODO: use p2panda-rs test utils once available
-        let key_pair = KeyPair::new();
-        let author = Author::try_from(*key_pair.public_key()).unwrap();
-        let log_id = LogId::new(1);
-        let schema = SchemaId::new_application(
-            "venue",
-            &Hash::new_from_bytes(vec![1, 2, 3]).unwrap().into(),
-        );
-        let seq_num = SeqNum::new(1).unwrap();
-        let mut fields = OperationFields::new();
-        fields
-            .add("test", OperationValue::Text("Hello".to_owned()))
-            .unwrap();
-        let operation = Operation::new_create(schema.clone(), fields).unwrap();
-        let operation_encoded = OperationEncoded::try_from(&operation).unwrap();
-        let entry = P2PandaEntry::new(&log_id, Some(&operation), None, None, &seq_num).unwrap();
-        let entry_encoded = sign_and_encode(&entry, &key_pair).unwrap();
+            let entry = StorageEntry::new(&entry_encoded.clone(), &operation_encoded).unwrap();
+            let author = entry.author();
 
-        let storage_provider = SqlStorage::new(pool.clone());
+            // Store entry in database
+            assert!(db.store.insert_entry(entry).await.is_ok());
 
-        // Expect database to return nothing yet
-        assert_eq!(
-            storage_provider
-                .get_document_by_entry(&entry_encoded.hash())
-                .await
-                .unwrap(),
-            None
-        );
+            let log = StorageLog::new(
+                &author,
+                &schema,
+                &entry_encoded.hash().into(),
+                &LogId::new(1),
+            );
 
-        let entry = StorageEntry::new(&entry_encoded.clone(), &operation_encoded).unwrap();
+            // Store log in database
+            assert!(db.store.insert_log(log).await.is_ok());
 
-        // Store entry in database
-        assert!(storage_provider.insert_entry(entry).await.is_ok());
+            // Expect to find document in database. The document hash should be the same as the
+            // hash of the entry which referred to the `CREATE` operation.
+            assert_eq!(
+                db.store
+                    .get_document_by_entry(&entry_encoded.hash())
+                    .await
+                    .unwrap(),
+                Some(entry_encoded.hash().into())
+            );
 
-        let log = StorageLog::new(
-            &author,
-            &schema,
-            &entry_encoded.hash().into(),
-            &LogId::new(1),
-        );
-
-        // Store log in database
-        assert!(storage_provider.insert_log(log).await.is_ok());
-
-        // Expect to find document in database. The document hash should be the same as the hash of
-        // the entry which referred to the `CREATE` operation.
-        assert_eq!(
-            storage_provider
-                .get_document_by_entry(&entry_encoded.hash())
-                .await
-                .unwrap(),
-            Some(entry_encoded.hash().into())
-        );
-
-        // We expect to find this document in the default log
-        assert_eq!(
-            storage_provider
-                .find_document_log_id(&author, Some(&entry_encoded.hash().into()))
-                .await
-                .unwrap(),
-            LogId::default()
-        );
-
-        // Close connection to database
-        pool.close().await;
+            // We expect to find this document in the default log
+            assert_eq!(
+                db.store
+                    .find_document_log_id(&author, Some(&entry_encoded.hash().into()))
+                    .await
+                    .unwrap(),
+                LogId::default()
+            );
+        });
     }
 
-    #[tokio::test]
-    async fn log_ids() {
-        let pool = initialize_db().await;
+    #[rstest]
+    fn log_ids(
+        #[from(public_key)] author: Author,
+        #[from(test_db)] runner: TestDatabaseRunner,
+        #[from(schema)] schema: SchemaId,
+        #[from(random_document_id)] document_first: DocumentId,
+        #[from(random_document_id)] document_second: DocumentId,
+        #[from(random_document_id)] document_third: DocumentId,
+        #[from(random_document_id)] document_forth: DocumentId,
+    ) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            // Register two log ids at the beginning
+            let log_1 = StorageLog::new(&author, &schema, &document_first, &LogId::new(1));
+            let log_2 = StorageLog::new(&author, &schema, &document_second, &LogId::new(2));
 
-        // Mock author
-        let author = Author::new(TEST_AUTHOR).unwrap();
+            db.store.insert_log(log_1).await.unwrap();
+            db.store.insert_log(log_2).await.unwrap();
 
-        // Mock schema
-        let schema =
-            SchemaId::new_application("venue", &Hash::new(&random_entry_hash()).unwrap().into());
+            // Find next free log id and register it
+            let log_id = db.store.next_log_id(&author).await.unwrap();
+            assert_eq!(log_id, LogId::new(3));
 
-        // Mock four different document hashes
-        let document_first = Hash::new(&random_entry_hash()).unwrap();
-        let document_second = Hash::new(&random_entry_hash()).unwrap();
-        let document_third = Hash::new(&random_entry_hash()).unwrap();
-        let document_forth = Hash::new(&random_entry_hash()).unwrap();
+            let log_3 = StorageLog::new(&author, &schema, &document_third.into(), &log_id);
 
-        let storage_provider = SqlStorage::new(pool.clone());
+            db.store.insert_log(log_3).await.unwrap();
 
-        // Register two log ids at the beginning
-        let log_1 = StorageLog::new(&author, &schema, &document_first.into(), &LogId::new(1));
-        let log_2 = StorageLog::new(&author, &schema, &document_second.into(), &LogId::new(2));
+            // Find next free log id and register it
+            let log_id = db.store.next_log_id(&author).await.unwrap();
+            assert_eq!(log_id, LogId::new(4));
 
-        storage_provider.insert_log(log_1).await.unwrap();
-        storage_provider.insert_log(log_2).await.unwrap();
+            let log_4 = StorageLog::new(&author, &schema, &document_forth.into(), &log_id);
 
-        // Find next free log id and register it
-        let log_id = storage_provider.next_log_id(&author).await.unwrap();
-        assert_eq!(log_id, LogId::new(3));
+            db.store.insert_log(log_4).await.unwrap();
 
-        let log_3 = StorageLog::new(&author, &schema, &document_third.into(), &log_id);
-
-        storage_provider.insert_log(log_3).await.unwrap();
-
-        // Find next free log id and register it
-        let log_id = storage_provider.next_log_id(&author).await.unwrap();
-        assert_eq!(log_id, LogId::new(4));
-
-        let log_4 = StorageLog::new(&author, &schema, &document_forth.into(), &log_id);
-
-        storage_provider.insert_log(log_4).await.unwrap();
-
-        // Find next free log id
-        let log_id = storage_provider.next_log_id(&author).await.unwrap();
-        assert_eq!(log_id, LogId::new(5));
-
-        // Close connection to database
-        pool.close().await;
+            // Find next free log id
+            let log_id = db.store.next_log_id(&author).await.unwrap();
+            assert_eq!(log_id, LogId::new(5));
+        });
     }
 }
