@@ -125,29 +125,104 @@ mod tests {
     use super::dependency_task;
 
     #[rstest]
-    #[case(test_db(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(),
-        vec![("profile_picture", OperationValue::Relation(Relation::new(random_document_id())))],
-        vec![]), 0)]
-    #[case(test_db(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(),
-        vec![("favorite_book_images", OperationValue::RelationList(RelationList::new([0; 6].iter().map(|_|random_document_id()).collect())))],
-        vec![]), 0)]
-    #[case(test_db(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(),
-        vec![("something_from_the_past", OperationValue::PinnedRelation(PinnedRelation::new(random_document_view_id())))],
-        vec![]), 1)]
-    #[case(test_db(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(),
-        vec![("many_previous_drafts", OperationValue::PinnedRelationList(PinnedRelationList::new([0; 2].iter().map(|_|random_document_view_id()).collect())))],
-        vec![]), 2)]
-    #[case(test_db(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(),
-        vec![("one_relation_field", OperationValue::PinnedRelationList(PinnedRelationList::new([0; 2].iter().map(|_|random_document_view_id()).collect()))),
-             ("another_relation_field", OperationValue::RelationList(RelationList::new([0; 6].iter().map(|_|random_document_id()).collect())))],
-        vec![]), 2)]
+    #[case(
+        test_db(
+            1,
+            1,
+            false,
+            TEST_SCHEMA_ID.parse().unwrap(),
+            vec![("profile_picture", OperationValue::Relation(Relation::new(random_document_id())))],
+            vec![]
+        ),
+        0
+    )]
+    #[case(
+        test_db(
+            1,
+            1,
+            false,
+            TEST_SCHEMA_ID.parse().unwrap(),
+            vec![
+                ("favorite_book_images", OperationValue::RelationList(
+                    RelationList::new(
+                        [0; 6].iter().map(|_|random_document_id()).collect())))
+            ],
+            vec![]
+        ),
+        0
+    )]
+    #[case(
+        test_db(
+            1,
+            1,
+            false,
+            TEST_SCHEMA_ID.parse().unwrap(),
+            vec![
+                ("something_from_the_past", OperationValue::PinnedRelation(
+                    PinnedRelation::new(random_document_view_id())))
+            ],
+            vec![]
+        ),
+        1
+    )]
+    #[case(
+        test_db(
+            1,
+            1,
+            false,
+            TEST_SCHEMA_ID.parse().unwrap(),
+            vec![
+                ("many_previous_drafts", OperationValue::PinnedRelationList(
+                    PinnedRelationList::new(
+                        [0; 2].iter().map(|_|random_document_view_id()).collect())))
+            ],
+            vec![]
+        ),
+        2
+    )]
+    #[case(
+        test_db(
+            1,
+            1,
+            false,
+            TEST_SCHEMA_ID.parse().unwrap(),
+            vec![
+                ("one_relation_field", OperationValue::PinnedRelationList(
+                    PinnedRelationList::new(
+                        [0; 2].iter().map(|_|random_document_view_id()).collect()))),
+                ("another_relation_field", OperationValue::RelationList(
+                    RelationList::new(
+                        [0; 6].iter().map(|_|random_document_id()).collect())))
+            ],
+            vec![]
+        ),
+        2
+    )]
     // This document has been updated
-    #[case(test_db(4, 1, false, TEST_SCHEMA_ID.parse().unwrap(),
-        vec![("one_relation_field", OperationValue::PinnedRelationList(PinnedRelationList::new([0; 2].iter().map(|_|random_document_view_id()).collect()))),
-             ("another_relation_field", OperationValue::RelationList(RelationList::new([0; 6].iter().map(|_|random_document_id()).collect())))],
-        vec![("one_relation_field", OperationValue::PinnedRelationList(PinnedRelationList::new([0; 3].iter().map(|_|random_document_view_id()).collect()))),
-             ("another_relation_field", OperationValue::RelationList(RelationList::new([0; 10].iter().map(|_|random_document_id()).collect())))],
-    ), 3)]
+    #[case(
+        test_db(
+            4,
+            1,
+            false,
+            TEST_SCHEMA_ID.parse().unwrap(),
+            vec![
+                ("one_relation_field", OperationValue::PinnedRelationList(
+                    PinnedRelationList::new(
+                        [0; 2].iter().map(|_|random_document_view_id()).collect()))),
+                ("another_relation_field", OperationValue::RelationList(
+                    RelationList::new(
+                        [0; 6].iter().map(|_|random_document_id()).collect())))
+            ],
+            vec![("one_relation_field", OperationValue::PinnedRelationList(
+                    PinnedRelationList::new(
+                        [0; 3].iter().map(|_|random_document_view_id()).collect()))),
+                ("another_relation_field", OperationValue::RelationList(
+                    RelationList::new(
+                        [0; 10].iter().map(|_|random_document_id()).collect())))
+            ],
+        ),
+        3
+    )]
     fn dispatches_reduce_tasks_for_pinned_child_dependencies(
         #[case] runner: TestDatabaseRunner,
         #[case] expected_next_tasks: usize,
@@ -258,13 +333,36 @@ mod tests {
     }
 
     #[rstest]
-    #[case(test_db(2, 1, true, TEST_SCHEMA_ID.parse().unwrap(),
-        vec![("profile_picture", OperationValue::Relation(Relation::new(random_document_id())))],
-        vec![]))]
-    #[case(test_db(2, 1, true, TEST_SCHEMA_ID.parse().unwrap(),
-        vec![("one_relation_field", OperationValue::PinnedRelationList(PinnedRelationList::new([0; 2].iter().map(|_|random_document_view_id()).collect()))),
-             ("another_relation_field", OperationValue::RelationList(RelationList::new([0; 6].iter().map(|_|random_document_id()).collect())))],
-        vec![]))]
+    #[case(
+        test_db(
+            2,
+            1,
+            true,
+            TEST_SCHEMA_ID.parse().unwrap(),
+            vec![
+                ("profile_picture", OperationValue::Relation(
+                        Relation::new(random_document_id())))
+            ],
+            vec![]
+        )
+    )]
+    #[case(
+        test_db(
+            2,
+            1,
+            true,
+            TEST_SCHEMA_ID.parse().unwrap(),
+            vec![
+                ("one_relation_field", OperationValue::PinnedRelationList(
+                     PinnedRelationList::new(
+                         [0; 2].iter().map(|_|random_document_view_id()).collect()))),
+                ("another_relation_field", OperationValue::RelationList(
+                     RelationList::new(
+                         [0; 6].iter().map(|_|random_document_id()).collect())))
+            ],
+            vec![]
+        )
+    )]
     fn fails_on_deleted_documents(#[case] runner: TestDatabaseRunner) {
         runner.with_db_teardown(|db: TestDatabase| async move {
             let context = Context::new(db.store.clone(), Configuration::default());
