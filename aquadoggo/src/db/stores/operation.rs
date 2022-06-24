@@ -344,7 +344,8 @@ mod tests {
         runner.with_db_teardown(|db: TestDatabase| async move {
             db.store
                 .insert_operation(&verified_operation, &document_id)
-                .await;
+                .await
+                .unwrap();
 
             assert!(db
                 .store

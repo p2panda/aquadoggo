@@ -10,8 +10,6 @@ use http::header::{HeaderName, HeaderValue};
 use http::{Request, StatusCode};
 use hyper::{Body, Server};
 use once_cell::sync::Lazy;
-use p2panda_rs::hash::Hash;
-use rand::Rng;
 use serde::Deserialize;
 use tower::make::Shared;
 use tower_service::Service;
