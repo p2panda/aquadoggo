@@ -3,7 +3,7 @@
 use std::borrow::Cow;
 
 use async_graphql::indexmap::IndexMap;
-use async_graphql::parser::types::{Field, Selection, SelectionSet};
+use async_graphql::parser::types::Field;
 use async_graphql::registry::{MetaType, MetaTypeId};
 use async_graphql::{
     ContainerType, ContextBase, ContextSelectionSet, Name, OutputType, Positioned, SelectionField,
@@ -11,11 +11,10 @@ use async_graphql::{
 };
 use async_recursion::async_recursion;
 use async_trait::async_trait;
-use futures::future;
-use log::info;
-use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId, DocumentViewValue};
+use log::{debug, info};
+use p2panda_rs::document::DocumentView;
 use p2panda_rs::operation::OperationValue;
-use p2panda_rs::schema::{FieldType, Schema, SchemaId};
+use p2panda_rs::schema::{Schema, SchemaId};
 
 use crate::db::traits::DocumentStore;
 use crate::graphql::{TempFile, TEMP_FILE_FNAME};
@@ -43,7 +42,7 @@ impl DynamicQuery {
         ctx: &ContextBase<'_, &Positioned<Field>>,
         sel: Vec<SelectionField<'async_recursion>>,
     ) -> ServerResult<Option<Value>> {
-        info!("Get {}", view);
+        debug!("Get {}", view);
         let store = ctx.data_unchecked::<SqlStorage>();
         let mut obj = IndexMap::new();
         for selection in sel {
@@ -121,6 +120,9 @@ impl DynamicQuery {
         schema_id: SchemaId,
         ctx: &ContextBase<'_, &Positioned<Field>>,
     ) -> ServerResult<Option<Value>> {
+        if self.schema_provider.get(&schema_id).is_none() {
+            return Ok(None);
+        }
         let mut result = Vec::new();
         let store = ctx.data_unchecked::<SqlStorage>();
         let views = store.get_documents_by_schema(&schema_id).await.unwrap();
@@ -143,8 +145,11 @@ impl ContainerType for DynamicQuery {
         &self,
         ctx: &ContextBase<&Positioned<Field>>,
     ) -> ServerResult<Option<Value>> {
-        let schema: SchemaId = ctx.field().name().parse().unwrap();
-        self.list_schema(schema, ctx).await
+        let schema_parsed = ctx.field().name().parse::<SchemaId>();
+        match schema_parsed {
+            Ok(schema) => self.list_schema(schema, ctx).await,
+            Err(_) => Ok(None),
+        }
     }
 }
 
