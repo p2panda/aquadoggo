@@ -248,7 +248,7 @@ impl TestDatabaseRunner {
             pool.close().await;
 
             // Panic here when test failed to propagate it further
-            assert!(result.is_ok());
+            result.unwrap();
         });
     }
 }
@@ -303,9 +303,6 @@ pub struct TestDatabase {
 ///
 /// Returns a `TestDatabase` containing storage provider instance, a vector of key pairs for all
 /// authors in the db, and a vector of the ids for all documents.
-///
-/// Note: This helper should not be used directly in tests as it does not assure that the database
-/// connection will be closed after the test finished or failed. Please use `test_db` instead.
 async fn create_test_db(
     no_of_entries: usize,
     no_of_authors: usize,
@@ -403,10 +400,6 @@ async fn create_test_db(
 }
 
 /// Create test database.
-///
-/// Note: Make sure to close the connection to the database when using this method in tests. Please
-/// have a look at the `TestDatabaseRunner` in case you need a tool which does that automatically
-/// for you.
 async fn initialize_db() -> Pool {
     // Reset database first
     drop_database().await;
