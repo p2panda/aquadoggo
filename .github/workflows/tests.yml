@@ -103,7 +103,7 @@ jobs:
         image: mariadb:latest
         ports:
           # Maps TCP port 3306 on service container to the host
-          - 3306
+          - 3306:3306
         env:
           MARIADB_USER: panda
           MARIADB_PASSWORD: panda
