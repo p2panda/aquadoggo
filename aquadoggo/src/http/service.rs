@@ -11,12 +11,10 @@ use tower_http::cors::{Any, CorsLayer};
 
 use crate::bus::ServiceSender;
 use crate::context::Context;
-use crate::db::traits::SchemaStore;
 use crate::graphql::GraphQLSchemaManager;
 use crate::http::api::{handle_graphql_playground, handle_graphql_query};
 use crate::http::context::HttpServiceContext;
 use crate::manager::Shutdown;
-use crate::schema::SchemaProvider;
 
 const GRAPHQL_ROUTE: &str = "/graphql";
 

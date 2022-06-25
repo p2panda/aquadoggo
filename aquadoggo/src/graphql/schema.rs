@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_graphql::{EmptySubscription, MergedObject, Request, Response, Schema};
-use log::{error, info, warn};
+use log::{error, info};
 use tokio::sync::Mutex;
 
 use crate::bus::ServiceSender;
