@@ -85,6 +85,7 @@ impl Service<Context, ServiceMessage> for ReplicationService {
                             debug!("Latest entry seq: {:?}", latest_seq);
 
                             // TODO: just for debug
+                            //let latest_seq = Some(SeqNum::new(4).unwrap());
                             let latest_seq = None;
 
                             // Make our replication request to the remote peer
@@ -97,8 +98,7 @@ impl Service<Context, ServiceMessage> for ReplicationService {
                                 )
                                 .await;
 
-                            if let Ok(entries) = entries {
-                                let mut entries = VecDeque::from(entries);
+                            if let Ok(mut entries) = entries {
                                 debug!("Received {} new entries", entries.len());
 
                                 // Get the first entry (assumes they're sorted by seq_num smallest
@@ -112,53 +112,23 @@ impl Service<Context, ServiceMessage> for ReplicationService {
                                         trace!("first entry had seq_num 1 do no need to get previous entries in db");
                                     }
                                     Some(entry) => {
-                                        match (entry.skiplink_hash(), entry.backlink_hash()) {
-                                            (Some(skiplink_hash), Some(backlink_hash)) => {
-                                                let skiplink = context
-                                                    .0
-                                                    .store
-                                                    .get_entry_by_hash(&skiplink_hash)
-                                                    .await
-                                                    .expect("expected to get skiplink from db");
-
-                                                let backlink = context
-                                                    .0
-                                                    .store
-                                                    .get_entry_by_hash(&backlink_hash)
-                                                    .await
-                                                    .expect("expected to get backlink from db");
-
-                                                if skiplink.is_none() || backlink.is_none() {
-                                                    warn!("replication error. We received entries but didn't have the required backlink / skiplinks in the db");
-                                                    continue;
-                                                }
-
-                                                entries.push_front(skiplink.unwrap());
-                                                entries.push_front(backlink.unwrap());
-                                            }
-                                            (None, Some(backlink_hash))
-                                                if !is_lipmaa_required(
-                                                    entry.seq_num().as_u64(),
-                                                ) =>
-                                            {
-                                                let backlink = context
-                                                    .0
-                                                    .store
-                                                    .get_entry_by_hash(&backlink_hash)
-                                                    .await
-                                                    .expect("expected to get backlink from db");
-
-                                                if backlink.is_none() {
-                                                    warn!("replication error. We received entries but didn't have the required backlink in the db");
-                                                    continue;
-                                                }
-
-                                                entries.push_front(backlink.unwrap());
-                                            }
-                                            (_, _) => {
-                                                warn!("entry was an invalid format, not adding to our db: {:?}", entry);
-                                            }
+                                        trace!("getting cert pool for entries");
+                                        let certpool_result = context
+                                            .0
+                                            .store
+                                            .get_certificate_pool(
+                                                &entry.author(),
+                                                &entry.log_id(),
+                                                &entry.seq_num(),
+                                            )
+                                            .await;
+                                        if certpool_result.is_err() {
+                                            warn!("replication error. We received entries but didn't have the required skiplinks in the db: {:?}", certpool_result);
+                                            continue;
                                         }
+                                        let mut certpool = certpool_result.unwrap();
+                                        trace!("got {} certpool entries", certpool.len());
+                                        entries.append(&mut certpool);
                                     }
                                     None => {
                                         continue;
