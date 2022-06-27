@@ -11,7 +11,7 @@ use crate::materializer::TaskInput;
 
 /// A reduce task is dispatched for every entry and operation pair which arrives at a node.
 ///
-/// They may also be dispatched from a dependency task when a pinned relat&ions is present on an
+/// They may also be dispatched from a dependency task when a pinned relations is present on an
 /// already materialised document view.
 ///
 /// After succesfully reducing and storing a document view an array of dependency tasks is returned.
