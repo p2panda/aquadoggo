@@ -167,6 +167,9 @@ impl DocumentStore for SqlStorage {
                 )
             VALUES
                 ($1, $2, $3, $4)
+            ON CONFLICT(document_id) DO UPDATE SET
+                document_view_id = $2,
+                is_deleted = $3
             ",
         )
         .bind(document.id().as_str())
@@ -644,6 +647,41 @@ mod tests {
 
             assert!(document_view.is_none());
         });
+    }
+
+    #[rstest]
+    fn updates_a_document(
+        #[from(test_db)]
+        #[with(10, 1)]
+        runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let document_id = db.documents[0].clone();
+
+            let document_operations = db
+                .store
+                .get_operations_by_document_id(&document_id)
+                .await
+                .unwrap();
+
+            let document = DocumentBuilder::new(document_operations).build().unwrap();
+
+            let mut current_operations = Vec::new();
+
+            for operation in document.operations() {
+                // For each operation in the db we insert a document, cumulatively adding the next operation
+                // each time. this should perform an "INSERT" first in the documents table, followed by 9 "UPDATES".
+                current_operations.push(operation.clone());
+                let document = DocumentBuilder::new(current_operations.clone())
+                    .build()
+                    .unwrap();
+                let result = db.store.insert_document(&document).await;
+                assert!(result.is_ok());
+
+                let document_view = db.store.get_document_by_id(document.id()).await.unwrap();
+                assert!(document_view.is_some());
+            }
+        })
     }
 
     #[rstest]

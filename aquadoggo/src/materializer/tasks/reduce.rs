@@ -153,16 +153,27 @@ async fn reduce_document(
 
 #[cfg(test)]
 mod tests {
+    use std::convert::TryFrom;
+
     use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
-    use p2panda_rs::operation::{AsVerifiedOperation, OperationValue};
-    use p2panda_rs::storage_provider::traits::OperationStore;
+    use p2panda_rs::entry::{sign_and_encode, Entry};
+    use p2panda_rs::identity::Author;
+    use p2panda_rs::operation::{
+        AsVerifiedOperation, OperationEncoded, OperationValue, VerifiedOperation,
+    };
+    use p2panda_rs::storage_provider::traits::{
+        AsStorageEntry, EntryStore, OperationStore, StorageProvider,
+    };
     use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
+    use p2panda_rs::test_utils::fixtures::{operation, operation_fields};
     use rstest::rstest;
 
     use crate::config::Configuration;
     use crate::context::Context;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+    use crate::db::stores::StorageEntry;
     use crate::db::traits::DocumentStore;
+    use crate::graphql::client::EntryArgsRequest;
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
 
@@ -196,6 +207,81 @@ mod tests {
                 )
             }
         });
+    }
+
+    #[rstest]
+    fn updates_a_document(
+        #[from(test_db)]
+        #[with(1, 1)]
+        runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let document_id = db.documents.first().unwrap();
+            let key_pair = db.key_pairs.first().unwrap();
+            let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+
+            let context = Context::new(db.store.clone(), Configuration::default());
+            let input = TaskInput::new(Some(document_id.clone()), None);
+
+            // There is one CREATE operation for this document in the db, it should create a document
+            // in the documents table.
+            assert!(reduce_task(context.clone(), input.clone()).await.is_ok());
+
+            // Now we create and insert an UPDATE operation for this document.
+            let entry_args = db
+                .store
+                .get_entry_args(&EntryArgsRequest {
+                    author,
+                    document: Some(document_id.clone()),
+                })
+                .await
+                .unwrap();
+
+            let operation = operation(
+                Some(operation_fields(vec![(
+                    "username",
+                    OperationValue::Text("meeeeeee".to_string()),
+                )])),
+                Some(document_id.as_str().parse().unwrap()),
+                None,
+            );
+
+            let entry = Entry::new(
+                &entry_args.log_id,
+                Some(&operation),
+                entry_args.skiplink.as_ref(),
+                entry_args.backlink.as_ref(),
+                &entry_args.seq_num,
+            )
+            .unwrap();
+
+            let entry_signed = sign_and_encode(&entry, key_pair).unwrap();
+            let operation_encoded = OperationEncoded::try_from(&operation).unwrap();
+
+            db.store
+                .insert_entry(StorageEntry::new(&entry_signed, &operation_encoded).unwrap())
+                .await
+                .unwrap();
+
+            let verified_operation =
+                VerifiedOperation::new_from_entry(&entry_signed, &operation_encoded).unwrap();
+
+            db.store
+                .insert_operation(&verified_operation, document_id)
+                .await
+                .unwrap();
+
+            // This should now find the new UPDATE operation and perform an update on the document
+            // in the documents table.
+            assert!(reduce_task(context.clone(), input).await.is_ok());
+
+            // The new view should exist and the document should refer to it.
+            let document_view = context.store.get_document_by_id(document_id).await.unwrap();
+            assert_eq!(
+                document_view.unwrap().get("username").unwrap().value(),
+                &OperationValue::Text("meeeeeee".to_string())
+            )
+        })
     }
 
     #[rstest]
