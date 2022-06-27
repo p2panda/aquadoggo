@@ -144,7 +144,7 @@ impl OperationStore<VerifiedOperation> for SqlStorage {
                             .bind(name.to_owned())
                             .bind(value.field_type().to_string())
                             .bind(db_value)
-                            .bind(index.to_string())
+                            .bind(index as i32)
                             .execute(&self.pool)
                         })
                         .collect::<Vec<_>>()
@@ -298,7 +298,7 @@ mod tests {
     };
     use rstest::rstest;
 
-    use crate::db::stores::test_utils::{test_db, TestSqlStore};
+    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
     #[rstest]
     #[case::create_operation(create_operation(&default_fields()))]
@@ -306,63 +306,57 @@ mod tests {
     #[case::update_operation_many_prev_ops(update_operation(&default_fields(), &random_previous_operations(12)))]
     #[case::delete_operation(delete_operation(&DEFAULT_HASH.parse().unwrap()))]
     #[case::delete_operation_many_prev_ops(delete_operation(&random_previous_operations(12)))]
-    #[tokio::test]
-    async fn insert_get_operations(
+    fn insert_get_operations(
         #[case] operation: Operation,
         #[from(public_key)] author: Author,
         operation_id: OperationId,
         document_id: DocumentId,
-        #[from(test_db)]
-        #[future]
-        db: TestSqlStore,
+        #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        let db = db.await;
-        // Construct the storage operation.
-        let operation = VerifiedOperation::new(&author, &operation_id, &operation).unwrap();
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            // Construct the storage operation.
+            let operation = VerifiedOperation::new(&author, &operation_id, &operation).unwrap();
 
-        // Insert the doggo operation into the db, returns Ok(true) when succesful.
-        let result = db.store.insert_operation(&operation, &document_id).await;
-        assert!(result.is_ok());
+            // Insert the doggo operation into the db, returns Ok(true) when succesful.
+            let result = db.store.insert_operation(&operation, &document_id).await;
+            assert!(result.is_ok());
 
-        // Request the previously inserted operation by it's id.
-        let returned_operation = db
-            .store
-            .get_operation_by_id(operation.operation_id())
-            .await
-            .unwrap()
-            .unwrap();
+            // Request the previously inserted operation by it's id.
+            let returned_operation = db
+                .store
+                .get_operation_by_id(operation.operation_id())
+                .await
+                .unwrap()
+                .unwrap();
 
-        assert_eq!(returned_operation.public_key(), operation.public_key());
-        assert_eq!(returned_operation.fields(), operation.fields());
-        assert_eq!(returned_operation.operation_id(), operation.operation_id());
+            assert_eq!(returned_operation.public_key(), operation.public_key());
+            assert_eq!(returned_operation.fields(), operation.fields());
+            assert_eq!(returned_operation.operation_id(), operation.operation_id());
+        });
     }
 
     #[rstest]
-    #[tokio::test]
-    async fn insert_operation_twice(
+    fn insert_operation_twice(
         #[from(verified_operation)] verified_operation: VerifiedOperation,
         document_id: DocumentId,
-        #[from(test_db)]
-        #[future]
-        db: TestSqlStore,
+        #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        let db = db.await;
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            db.store
+                .insert_operation(&verified_operation, &document_id)
+                .await
+                .unwrap();
 
-        assert!(db
-            .store
-            .insert_operation(&verified_operation, &document_id)
-            .await
-            .is_ok());
-
-        assert_eq!(
-            db.store.insert_operation(&verified_operation, &document_id).await.unwrap_err().to_string(),
-            "A fatal error occured in OperationStore: error returned from database: UNIQUE constraint failed: operations_v1.entry_hash"
-        )
+            assert!(db
+                .store
+                .insert_operation(&verified_operation, &document_id)
+                .await
+                .is_err());
+        });
     }
 
     #[rstest]
-    #[tokio::test]
-    async fn gets_document_by_operation_id(
+    fn gets_document_by_operation_id(
         #[from(verified_operation)]
         #[with(Some(operation_fields(default_fields())), None, None, None, Some(DEFAULT_HASH.parse().unwrap()))]
         create_operation: VerifiedOperation,
@@ -370,80 +364,77 @@ mod tests {
         #[with(Some(operation_fields(default_fields())), Some(DEFAULT_HASH.parse().unwrap()))]
         update_operation: VerifiedOperation,
         document_id: DocumentId,
-        #[from(test_db)]
-        #[future]
-        db: TestSqlStore,
+        #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        let db = db.await;
-
-        assert!(db
-            .store
-            .get_document_by_operation_id(create_operation.operation_id())
-            .await
-            .unwrap()
-            .is_none());
-
-        db.store
-            .insert_operation(&create_operation, &document_id)
-            .await
-            .unwrap();
-
-        assert_eq!(
-            db.store
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            assert!(db
+                .store
                 .get_document_by_operation_id(create_operation.operation_id())
                 .await
                 .unwrap()
-                .unwrap(),
-            document_id.clone()
-        );
+                .is_none());
 
-        db.store
-            .insert_operation(&update_operation, &document_id)
-            .await
-            .unwrap();
-
-        assert_eq!(
             db.store
-                .get_document_by_operation_id(create_operation.operation_id())
+                .insert_operation(&create_operation, &document_id)
                 .await
-                .unwrap()
-                .unwrap(),
-            document_id.clone()
-        );
+                .unwrap();
+
+            assert_eq!(
+                db.store
+                    .get_document_by_operation_id(create_operation.operation_id())
+                    .await
+                    .unwrap()
+                    .unwrap(),
+                document_id.clone()
+            );
+
+            db.store
+                .insert_operation(&update_operation, &document_id)
+                .await
+                .unwrap();
+
+            assert_eq!(
+                db.store
+                    .get_document_by_operation_id(create_operation.operation_id())
+                    .await
+                    .unwrap()
+                    .unwrap(),
+                document_id.clone()
+            );
+        });
     }
 
     #[rstest]
-    #[tokio::test]
-    async fn get_operations_by_document_id(
+    fn get_operations_by_document_id(
         key_pair: KeyPair,
         #[from(test_db)]
         #[with(5, 1)]
-        #[future]
-        db: TestSqlStore,
+        runner: TestDatabaseRunner,
     ) {
-        let db = db.await;
-        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
-        let latest_entry = db
-            .store
-            .get_latest_entry(&author, &LogId::default())
-            .await
-            .unwrap()
-            .unwrap();
+            let latest_entry = db
+                .store
+                .get_latest_entry(&author, &LogId::default())
+                .await
+                .unwrap()
+                .unwrap();
 
-        let document_id = db
-            .store
-            .get_document_by_entry(&latest_entry.hash())
-            .await
-            .unwrap()
-            .unwrap();
+            let document_id = db
+                .store
+                .get_document_by_entry(&latest_entry.hash())
+                .await
+                .unwrap()
+                .unwrap();
 
-        let operations_by_document_id = db
-            .store
-            .get_operations_by_document_id(&document_id)
-            .await
-            .unwrap();
+            let operations_by_document_id = db
+                .store
+                .get_operations_by_document_id(&document_id)
+                .await
+                .unwrap();
 
-        assert_eq!(operations_by_document_id.len(), 5)
+            assert_eq!(operations_by_document_id.len(), 5)
+        });
     }
 }

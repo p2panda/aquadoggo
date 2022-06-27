@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_trait::async_trait;
-use sqlx::query_scalar;
-
 use p2panda_rs::document::DocumentId;
 use p2panda_rs::hash::Hash;
+use p2panda_rs::operation::VerifiedOperation;
 use p2panda_rs::storage_provider::traits::StorageProvider;
+use sqlx::query_scalar;
 
-use crate::db::stores::StorageEntry;
-use crate::db::stores::StorageLog;
+use crate::db::stores::{StorageEntry, StorageLog};
 use crate::db::Pool;
 use crate::errors::StorageProviderResult;
 use crate::graphql::client::{
@@ -31,7 +30,7 @@ impl SqlStorage {
 /// A `StorageProvider` implementation based on `sqlx` that supports SQLite and PostgreSQL
 /// databases.
 #[async_trait]
-impl StorageProvider<StorageEntry, StorageLog> for SqlStorage {
+impl StorageProvider<StorageEntry, StorageLog, VerifiedOperation> for SqlStorage {
     type EntryArgsResponse = EntryArgsResponse;
     type EntryArgsRequest = EntryArgsRequest;
     type PublishEntryResponse = PublishEntryResponse;

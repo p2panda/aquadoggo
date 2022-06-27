@@ -2,8 +2,6 @@
 
 use async_trait::async_trait;
 use lipmaa_link::get_lipmaa_links_back_to;
-use sqlx::{query, query_as};
-
 use p2panda_rs::entry::{decode_entry, Entry, EntrySigned, LogId, SeqNum};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
@@ -13,17 +11,17 @@ use p2panda_rs::storage_provider::errors::EntryStorageError;
 use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
 use p2panda_rs::storage_provider::ValidationError;
 use p2panda_rs::Validate;
+use sqlx::{query, query_as};
 
 use crate::db::models::EntryRow;
 use crate::db::provider::SqlStorage;
 
-/// A signed entry and it's encoded operation. Entries are the lowest level data
-/// type on the p2panda network, they are signed by authors and form bamboo append
-/// only logs. The operation is an entries' payload, it contains the data mutations
-/// which authors publish.
+/// A signed entry and it's encoded operation. Entries are the lowest level data type on the
+/// p2panda network, they are signed by authors and form bamboo append only logs. The operation is
+/// an entries' payload, it contains the data mutations which authors publish.
 ///
-/// This struct implements the `AsStorageEntry` trait which is required when
-/// constructing the `EntryStore`.
+/// This struct implements the `AsStorageEntry` trait which is required when constructing the
+/// `EntryStore`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StorageEntry {
     entry_signed: EntrySigned,
@@ -58,9 +56,9 @@ impl Validate for StorageEntry {
     }
 }
 
-/// `From` implementation for converting an `EntryRow` into a `StorageEntry`. This is useful
-/// when retrieving entries from the database. The `sqlx` crate coerces returned entry rows
-/// into `EntryRow` but we normally want them as `StorageEntry`.
+/// `From` implementation for converting an `EntryRow` into a `StorageEntry`. This is useful when
+/// retrieving entries from the database. The `sqlx` crate coerces returned entry rows into
+/// `EntryRow` but we normally want them as `StorageEntry`.
 impl From<EntryRow> for StorageEntry {
     fn from(entry_row: EntryRow) -> Self {
         // Unwrapping everything here as we assume values coming from the database are valid.
@@ -122,12 +120,11 @@ impl AsStorageEntry for StorageEntry {
     }
 }
 
-/// Implementation of `EntryStore` trait which is required when constructing a
-/// `StorageProvider`.
+/// Implementation of `EntryStore` trait which is required when constructing a `StorageProvider`.
 ///
-/// Handles storage and retrieval of entries in the form of`StorageEntry` which
-/// implements the required `AsStorageEntry` trait. An intermediary struct `EntryRow`
-/// is also used when retrieving an entry from the database.
+/// Handles storage and retrieval of entries in the form of`StorageEntry` which implements the
+/// required `AsStorageEntry` trait. An intermediary struct `EntryRow` is also used when retrieving
+/// an entry from the database.
 #[async_trait]
 impl EntryStore<StorageEntry> for SqlStorage {
     /// Insert an entry into storage.
@@ -174,9 +171,9 @@ impl EntryStore<StorageEntry> for SqlStorage {
 
     /// Get an entry from storage by it's hash id.
     ///
-    /// Returns a result containing the entry wrapped in an option if it was
-    /// found successfully. Returns `None` if the entry was not found in storage.
-    /// Errors when a fatal storage error occured.
+    /// Returns a result containing the entry wrapped in an option if it was found successfully.
+    /// Returns `None` if the entry was not found in storage. Errors when a fatal storage error
+    /// occured.
     async fn get_entry_by_hash(
         &self,
         hash: &Hash,
@@ -207,9 +204,9 @@ impl EntryStore<StorageEntry> for SqlStorage {
 
     /// Get an entry at a sequence position within an author's log.
     ///
-    /// Returns a result containing the entry wrapped in an option if it was found
-    /// successfully. Returns None if the entry was not found in storage. Errors when
-    /// a fatal storage error occured.
+    /// Returns a result containing the entry wrapped in an option if it was found successfully.
+    /// Returns None if the entry was not found in storage. Errors when a fatal storage error
+    /// occured.
     async fn get_entry_at_seq_num(
         &self,
         author: &Author,
@@ -246,9 +243,9 @@ impl EntryStore<StorageEntry> for SqlStorage {
 
     /// Get the latest entry of an author's log.
     ///
-    /// Returns a result containing the latest log entry wrapped in an option if an
-    /// entry was found. Returns None if the specified author and log could not be
-    /// found in storage. Errors when a fatal storage error occured.
+    /// Returns a result containing the latest log entry wrapped in an option if an entry was
+    /// found. Returns None if the specified author and log could not be found in storage. Errors
+    /// when a fatal storage error occured.
     async fn get_latest_entry(
         &self,
         author: &Author,
@@ -286,9 +283,9 @@ impl EntryStore<StorageEntry> for SqlStorage {
 
     /// Get all entries of a given schema
     ///
-    /// Returns a result containing a vector of all entries which follow the passed
-    /// schema (identified by it's `SchemaId`). If no entries exist, or the schema
-    /// is not known by this node, then an empty vector is returned.
+    /// Returns a result containing a vector of all entries which follow the passed schema
+    /// (identified by it's `SchemaId`). If no entries exist, or the schema is not known by this
+    /// node, then an empty vector is returned.
     async fn get_entries_by_schema(
         &self,
         schema: &SchemaId,
@@ -322,9 +319,9 @@ impl EntryStore<StorageEntry> for SqlStorage {
 
     /// Get all entries of a given schema.
     ///
-    /// Returns a result containing a vector of all entries which follow the passed
-    /// schema (identified by it's `SchemaId`). If no entries exist, or the schema
-    /// is not known by this node, then an empty vector is returned.
+    /// Returns a result containing a vector of all entries which follow the passed schema
+    /// (identified by it's `SchemaId`). If no entries exist, or the schema is not known by this
+    /// node, then an empty vector is returned.
     async fn get_paginated_log_entries(
         &self,
         author: &Author,
@@ -348,7 +345,7 @@ impl EntryStore<StorageEntry> for SqlStorage {
             WHERE
                 author = $1
                 AND log_id = $2
-                AND CAST(seq_num AS NUMERIC) BETWEEN $3 and $4
+                AND CAST(seq_num AS NUMERIC) BETWEEN CAST($3 AS NUMERIC) and CAST($4 AS NUMERIC)
             ORDER BY
                 CAST(seq_num AS NUMERIC)
             ",
@@ -366,13 +363,12 @@ impl EntryStore<StorageEntry> for SqlStorage {
 
     /// Get all entries which make up the certificate pool for a specified entry.
     ///
-    /// Returns a result containing a vector of all stored entries which are part
-    /// the passed entries' certificate pool. Errors if a fatal storage error
-    /// occurs.
+    /// Returns a result containing a vector of all stored entries which are part the passed
+    /// entries' certificate pool. Errors if a fatal storage error occurs.
     ///
-    /// It is worth noting that this method doesn't check if the certificate pool
-    /// is complete, it only returns entries which are part of the pool and found
-    /// in storage. If an entry was not stored, then the pool may be incomplete.
+    /// It is worth noting that this method doesn't check if the certificate pool is complete, it
+    /// only returns entries which are part of the pool and found in storage. If an entry was not
+    /// stored, then the pool may be incomplete.
     async fn get_certificate_pool(
         &self,
         author: &Author,
@@ -435,259 +431,247 @@ mod tests {
     use rstest::rstest;
 
     use crate::db::stores::entry::StorageEntry;
-    use crate::db::stores::test_utils::{test_db, TestSqlStore};
+    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
     #[rstest]
-    #[tokio::test]
-    async fn insert_entry(
-        key_pair: KeyPair,
-        entry: Entry,
-        #[from(test_db)]
-        #[future]
-        db: TestSqlStore,
-    ) {
-        let db = db.await;
-        let entry_encoded = sign_and_encode(&entry, &key_pair).unwrap();
-        let operation_encoded = OperationEncoded::try_from(entry.operation().unwrap()).unwrap();
-        let doggo_entry = StorageEntry::new(&entry_encoded, &operation_encoded).unwrap();
-        let result = db.store.insert_entry(doggo_entry).await;
+    fn insert_entry(key_pair: KeyPair, entry: Entry, #[from(test_db)] runner: TestDatabaseRunner) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let entry_encoded = sign_and_encode(&entry, &key_pair).unwrap();
+            let operation_encoded = OperationEncoded::try_from(entry.operation().unwrap()).unwrap();
+            let doggo_entry = StorageEntry::new(&entry_encoded, &operation_encoded).unwrap();
+            let result = db.store.insert_entry(doggo_entry).await;
 
-        assert!(result.is_ok())
+            assert!(result.is_ok());
+        });
     }
 
     #[rstest]
-    #[tokio::test]
-    async fn try_insert_non_unique_entry(
+    fn try_insert_non_unique_entry(
         #[from(test_db)]
         #[with(10, 1)]
-        #[future]
-        db: TestSqlStore,
+        runner: TestDatabaseRunner,
     ) {
-        let db = db.await;
-        let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
-        let log_id = LogId::new(1);
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
+            let log_id = LogId::new(1);
 
-        let first_entry = db
-            .store
-            .get_entry_at_seq_num(&author, &log_id, &SeqNum::new(1).unwrap())
-            .await
-            .unwrap()
+            let first_entry = db
+                .store
+                .get_entry_at_seq_num(&author, &log_id, &SeqNum::new(1).unwrap())
+                .await
+                .unwrap()
+                .unwrap();
+
+            let duplicate_doggo_entry = StorageEntry::new(
+                first_entry.entry_signed(),
+                first_entry.operation_encoded().unwrap(),
+            )
             .unwrap();
 
-        let duplicate_doggo_entry = StorageEntry::new(
-            first_entry.entry_signed(),
-            first_entry.operation_encoded().unwrap(),
-        )
-        .unwrap();
-        let result = db.store.insert_entry(duplicate_doggo_entry).await;
-
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Error occured during `EntryStorage` request in storage provider: error returned from \
-            database: UNIQUE constraint failed: entries.author, entries.log_id, entries.seq_num"
-        )
+            let result = db.store.insert_entry(duplicate_doggo_entry).await;
+            assert!(result.is_err());
+        });
     }
 
     #[rstest]
-    #[tokio::test]
-    async fn latest_entry(
+    fn latest_entry(
         #[from(test_db)]
         #[with(20, 1)]
-        #[future]
-        db: TestSqlStore,
+        runner: TestDatabaseRunner,
     ) {
-        let db = db.await;
-        let author_not_in_db = Author::try_from(*KeyPair::new().public_key()).unwrap();
-        let log_id = LogId::new(1);
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let author_not_in_db = Author::try_from(*KeyPair::new().public_key()).unwrap();
+            let log_id = LogId::new(1);
 
-        let latest_entry = db
-            .store
-            .get_latest_entry(&author_not_in_db, &log_id)
-            .await
-            .unwrap();
-        assert!(latest_entry.is_none());
+            let latest_entry = db
+                .store
+                .get_latest_entry(&author_not_in_db, &log_id)
+                .await
+                .unwrap();
+            assert!(latest_entry.is_none());
 
-        let author_in_db = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
+            let author_in_db = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
 
-        let latest_entry = db
-            .store
-            .get_latest_entry(&author_in_db, &log_id)
-            .await
-            .unwrap();
-        assert_eq!(latest_entry.unwrap().seq_num(), SeqNum::new(20).unwrap());
+            let latest_entry = db
+                .store
+                .get_latest_entry(&author_in_db, &log_id)
+                .await
+                .unwrap();
+            assert_eq!(latest_entry.unwrap().seq_num(), SeqNum::new(20).unwrap());
+        });
     }
 
     #[rstest]
-    #[tokio::test]
-    async fn entries_by_schema(
+    fn entries_by_schema(
         #[from(test_db)]
         #[with(20, 2, false, TEST_SCHEMA_ID.parse().unwrap())]
-        #[future]
-        db: TestSqlStore,
+        runner: TestDatabaseRunner,
     ) {
-        let db = db.await;
-        let schema_not_in_the_db = SchemaId::new_application(
-            "venue",
-            &Hash::new_from_bytes(vec![1, 2, 3]).unwrap().into(),
-        );
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let schema_not_in_the_db = SchemaId::new_application(
+                "venue",
+                &Hash::new_from_bytes(vec![1, 2, 3]).unwrap().into(),
+            );
 
-        let entries = db
-            .store
-            .get_entries_by_schema(&schema_not_in_the_db)
-            .await
-            .unwrap();
-        assert!(entries.is_empty());
+            let entries = db
+                .store
+                .get_entries_by_schema(&schema_not_in_the_db)
+                .await
+                .unwrap();
+            assert!(entries.is_empty());
 
-        let schema_in_the_db = TEST_SCHEMA_ID.parse().unwrap();
+            let schema_in_the_db = TEST_SCHEMA_ID.parse().unwrap();
 
-        let entries = db
-            .store
-            .get_entries_by_schema(&schema_in_the_db)
-            .await
-            .unwrap();
-        assert!(entries.len() == 40);
+            let entries = db
+                .store
+                .get_entries_by_schema(&schema_in_the_db)
+                .await
+                .unwrap();
+            assert!(entries.len() == 40);
+        });
     }
 
     #[rstest]
-    #[tokio::test]
-    async fn entry_by_seq_number(
+    fn entry_by_seq_number(
         #[from(test_db)]
         #[with(10, 1)]
-        #[future]
-        db: TestSqlStore,
+        runner: TestDatabaseRunner,
     ) {
-        let db = db.await;
-        let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
 
-        for seq_num in 1..10 {
-            let seq_num = SeqNum::new(seq_num).unwrap();
+            for seq_num in 1..10 {
+                let seq_num = SeqNum::new(seq_num).unwrap();
+                let entry = db
+                    .store
+                    .get_entry_at_seq_num(&author, &LogId::new(1), &seq_num)
+                    .await
+                    .unwrap();
+                assert_eq!(entry.unwrap().seq_num(), seq_num)
+            }
+
+            let wrong_log = LogId::new(2);
             let entry = db
                 .store
-                .get_entry_at_seq_num(&author, &LogId::new(1), &seq_num)
+                .get_entry_at_seq_num(&author, &wrong_log, &SeqNum::new(1).unwrap())
                 .await
                 .unwrap();
-            assert_eq!(entry.unwrap().seq_num(), seq_num)
-        }
+            assert!(entry.is_none());
 
-        let wrong_log = LogId::new(2);
-        let entry = db
-            .store
-            .get_entry_at_seq_num(&author, &wrong_log, &SeqNum::new(1).unwrap())
-            .await
-            .unwrap();
-        assert!(entry.is_none());
+            let author_not_in_db = Author::try_from(*KeyPair::new().public_key()).unwrap();
+            let entry = db
+                .store
+                .get_entry_at_seq_num(&author_not_in_db, &LogId::new(1), &SeqNum::new(1).unwrap())
+                .await
+                .unwrap();
+            assert!(entry.is_none());
 
-        let author_not_in_db = Author::try_from(*KeyPair::new().public_key()).unwrap();
-        let entry = db
-            .store
-            .get_entry_at_seq_num(&author_not_in_db, &LogId::new(1), &SeqNum::new(1).unwrap())
-            .await
-            .unwrap();
-        assert!(entry.is_none());
-
-        let seq_num_not_in_log = SeqNum::new(1000).unwrap();
-        let entry = db
-            .store
-            .get_entry_at_seq_num(&author_not_in_db, &LogId::new(1), &seq_num_not_in_log)
-            .await
-            .unwrap();
-        assert!(entry.is_none())
+            let seq_num_not_in_log = SeqNum::new(1000).unwrap();
+            let entry = db
+                .store
+                .get_entry_at_seq_num(&author_not_in_db, &LogId::new(1), &seq_num_not_in_log)
+                .await
+                .unwrap();
+            assert!(entry.is_none());
+        });
     }
 
     #[rstest]
-    #[tokio::test]
-    async fn get_entry_by_hash(
+    fn get_entry_by_hash(
         #[from(test_db)]
         #[with(20, 1)]
-        #[future]
-        db: TestSqlStore,
+        runner: TestDatabaseRunner,
     ) {
-        let db = db.await;
-        let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
 
-        for seq_num in [1, 11, 18] {
-            let seq_num = SeqNum::new(seq_num).unwrap();
+            for seq_num in [1, 11, 18] {
+                let seq_num = SeqNum::new(seq_num).unwrap();
+                let entry = db
+                    .store
+                    .get_entry_at_seq_num(&author, &LogId::new(1), &seq_num)
+                    .await
+                    .unwrap()
+                    .unwrap();
+
+                let entry_hash = entry.hash();
+                let entry_by_hash = db
+                    .store
+                    .get_entry_by_hash(&entry_hash)
+                    .await
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(entry, entry_by_hash)
+            }
+
+            let entry_hash_not_in_db = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
             let entry = db
                 .store
-                .get_entry_at_seq_num(&author, &LogId::new(1), &seq_num)
+                .get_entry_by_hash(&entry_hash_not_in_db)
                 .await
-                .unwrap()
                 .unwrap();
-
-            let entry_hash = entry.hash();
-            let entry_by_hash = db
-                .store
-                .get_entry_by_hash(&entry_hash)
-                .await
-                .unwrap()
-                .unwrap();
-            assert_eq!(entry, entry_by_hash)
-        }
-
-        let entry_hash_not_in_db = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
-        let entry = db
-            .store
-            .get_entry_by_hash(&entry_hash_not_in_db)
-            .await
-            .unwrap();
-        assert!(entry.is_none())
+            assert!(entry.is_none());
+        });
     }
 
     #[rstest]
-    #[tokio::test]
-    async fn paginated_log_entries(
+    fn paginated_log_entries(
         #[from(test_db)]
         #[with(30, 1)]
-        #[future]
-        db: TestSqlStore,
+        runner: TestDatabaseRunner,
     ) {
-        let db = db.await;
-        let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
 
-        let entries = db
-            .store
-            .get_paginated_log_entries(&author, &LogId::default(), &SeqNum::default(), 20)
-            .await
-            .unwrap();
+            let entries = db
+                .store
+                .get_paginated_log_entries(&author, &LogId::default(), &SeqNum::default(), 20)
+                .await
+                .unwrap();
 
-        for entry in entries.clone() {
-            assert!(entry.seq_num().as_u64() >= 1 && entry.seq_num().as_u64() <= 20)
-        }
+            for entry in entries.clone() {
+                assert!(entry.seq_num().as_u64() >= 1 && entry.seq_num().as_u64() <= 20)
+            }
 
-        assert_eq!(entries.len(), 20);
+            assert_eq!(entries.len(), 20);
 
-        let entries = db
-            .store
-            .get_paginated_log_entries(&author, &LogId::default(), &SeqNum::new(21).unwrap(), 20)
-            .await
-            .unwrap();
+            let entries = db
+                .store
+                .get_paginated_log_entries(
+                    &author,
+                    &LogId::default(),
+                    &SeqNum::new(21).unwrap(),
+                    20,
+                )
+                .await
+                .unwrap();
 
-        assert_eq!(entries.len(), 10);
+            assert_eq!(entries.len(), 10);
+        });
     }
 
     #[rstest]
-    #[tokio::test]
-    async fn get_lipmaa_link_entries(
+    fn get_lipmaa_link_entries(
         #[from(test_db)]
         #[with(100, 1)]
-        #[future]
-        db: TestSqlStore,
+        runner: TestDatabaseRunner,
     ) {
-        let db = db.await;
-        let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
 
-        let entries = db
-            .store
-            .get_certificate_pool(&author, &LogId::default(), &SeqNum::new(20).unwrap())
-            .await
-            .unwrap();
+            let entries = db
+                .store
+                .get_certificate_pool(&author, &LogId::default(), &SeqNum::new(20).unwrap())
+                .await
+                .unwrap();
 
-        let cert_pool_seq_nums = entries
-            .iter()
-            .map(|entry| entry.seq_num().as_u64())
-            .collect::<Vec<u64>>();
+            let cert_pool_seq_nums = entries
+                .iter()
+                .map(|entry| entry.seq_num().as_u64())
+                .collect::<Vec<u64>>();
 
-        assert!(!entries.is_empty());
-        assert_eq!(cert_pool_seq_nums, vec![19, 18, 17, 13, 4, 1]);
+            assert!(!entries.is_empty());
+            assert_eq!(cert_pool_seq_nums, vec![19, 18, 17, 13, 4, 1]);
+        });
     }
 }
