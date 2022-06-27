@@ -115,7 +115,9 @@ mod tests {
 
     use crate::config::Configuration;
     use crate::context::Context;
-    use crate::db::stores::test_utils::{insert_entry_operation_and_view, test_db, TestSqlStore};
+    use crate::db::stores::test_utils::{
+        insert_entry_operation_and_view, test_db, TestDatabase, TestDatabaseRunner,
+    };
     use crate::db::traits::DocumentStore;
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
@@ -123,183 +125,266 @@ mod tests {
     use super::dependency_task;
 
     #[rstest]
-    #[case(test_db(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(),
-        vec![("profile_picture", OperationValue::Relation(Relation::new(random_document_id())))],
-        vec![]), 0)]
-    #[case(test_db(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(),
-        vec![("favorite_book_images", OperationValue::RelationList(RelationList::new([0; 6].iter().map(|_|random_document_id()).collect())))],
-        vec![]), 0)]
-    #[case(test_db(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(),
-        vec![("something_from_the_past", OperationValue::PinnedRelation(PinnedRelation::new(random_document_view_id())))],
-        vec![]), 1)]
-    #[case(test_db(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(),
-        vec![("many_previous_drafts", OperationValue::PinnedRelationList(PinnedRelationList::new([0; 2].iter().map(|_|random_document_view_id()).collect())))],
-        vec![]), 2)]
-    #[case(test_db(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(),
-        vec![("one_relation_field", OperationValue::PinnedRelationList(PinnedRelationList::new([0; 2].iter().map(|_|random_document_view_id()).collect()))),
-             ("another_relation_field", OperationValue::RelationList(RelationList::new([0; 6].iter().map(|_|random_document_id()).collect())))],
-        vec![]), 2)]
+    #[case(
+        test_db(
+            1,
+            1,
+            false,
+            TEST_SCHEMA_ID.parse().unwrap(),
+            vec![("profile_picture", OperationValue::Relation(Relation::new(random_document_id())))],
+            vec![]
+        ),
+        0
+    )]
+    #[case(
+        test_db(
+            1,
+            1,
+            false,
+            TEST_SCHEMA_ID.parse().unwrap(),
+            vec![
+                ("favorite_book_images", OperationValue::RelationList(
+                    RelationList::new(
+                        [0; 6].iter().map(|_|random_document_id()).collect())))
+            ],
+            vec![]
+        ),
+        0
+    )]
+    #[case(
+        test_db(
+            1,
+            1,
+            false,
+            TEST_SCHEMA_ID.parse().unwrap(),
+            vec![
+                ("something_from_the_past", OperationValue::PinnedRelation(
+                    PinnedRelation::new(random_document_view_id())))
+            ],
+            vec![]
+        ),
+        1
+    )]
+    #[case(
+        test_db(
+            1,
+            1,
+            false,
+            TEST_SCHEMA_ID.parse().unwrap(),
+            vec![
+                ("many_previous_drafts", OperationValue::PinnedRelationList(
+                    PinnedRelationList::new(
+                        [0; 2].iter().map(|_|random_document_view_id()).collect())))
+            ],
+            vec![]
+        ),
+        2
+    )]
+    #[case(
+        test_db(
+            1,
+            1,
+            false,
+            TEST_SCHEMA_ID.parse().unwrap(),
+            vec![
+                ("one_relation_field", OperationValue::PinnedRelationList(
+                    PinnedRelationList::new(
+                        [0; 2].iter().map(|_|random_document_view_id()).collect()))),
+                ("another_relation_field", OperationValue::RelationList(
+                    RelationList::new(
+                        [0; 6].iter().map(|_|random_document_id()).collect())))
+            ],
+            vec![]
+        ),
+        2
+    )]
     // This document has been updated
-    #[case(test_db(4, 1, false, TEST_SCHEMA_ID.parse().unwrap(),
-        vec![("one_relation_field", OperationValue::PinnedRelationList(PinnedRelationList::new([0; 2].iter().map(|_|random_document_view_id()).collect()))),
-             ("another_relation_field", OperationValue::RelationList(RelationList::new([0; 6].iter().map(|_|random_document_id()).collect())))],
-        vec![("one_relation_field", OperationValue::PinnedRelationList(PinnedRelationList::new([0; 3].iter().map(|_|random_document_view_id()).collect()))),
-             ("another_relation_field", OperationValue::RelationList(RelationList::new([0; 10].iter().map(|_|random_document_id()).collect())))],
-    ), 3)]
-    #[tokio::test]
-    async fn dispatches_reduce_tasks_for_pinned_child_dependencies(
-        #[case]
-        #[future]
-        db: TestSqlStore,
+    #[case(
+        test_db(
+            4,
+            1,
+            false,
+            TEST_SCHEMA_ID.parse().unwrap(),
+            vec![
+                ("one_relation_field", OperationValue::PinnedRelationList(
+                    PinnedRelationList::new(
+                        [0; 2].iter().map(|_|random_document_view_id()).collect()))),
+                ("another_relation_field", OperationValue::RelationList(
+                    RelationList::new(
+                        [0; 6].iter().map(|_|random_document_id()).collect())))
+            ],
+            vec![("one_relation_field", OperationValue::PinnedRelationList(
+                    PinnedRelationList::new(
+                        [0; 3].iter().map(|_|random_document_view_id()).collect()))),
+                ("another_relation_field", OperationValue::RelationList(
+                    RelationList::new(
+                        [0; 10].iter().map(|_|random_document_id()).collect())))
+            ],
+        ),
+        3
+    )]
+    fn dispatches_reduce_tasks_for_pinned_child_dependencies(
+        #[case] runner: TestDatabaseRunner,
         #[case] expected_next_tasks: usize,
     ) {
-        let db = db.await;
-        let context = Context::new(db.store.clone(), Configuration::default());
+        runner.with_db_teardown(move |db: TestDatabase| async move {
+            let context = Context::new(db.store.clone(), Configuration::default());
 
-        for document_id in &db.documents {
-            let input = TaskInput::new(Some(document_id.clone()), None);
-            reduce_task(context.clone(), input).await.unwrap().unwrap();
-        }
-
-        for document_id in &db.documents {
-            let document_view = db
-                .store
-                .get_document_by_id(document_id)
-                .await
-                .unwrap()
-                .unwrap();
-
-            let input = TaskInput::new(None, Some(document_view.id().clone()));
-
-            let reduce_tasks = dependency_task(context.clone(), input)
-                .await
-                .unwrap()
-                .unwrap();
-            assert_eq!(reduce_tasks.len(), expected_next_tasks);
-            for task in reduce_tasks {
-                assert_eq!(task.worker_name(), "reduce")
+            for document_id in &db.documents {
+                let input = TaskInput::new(Some(document_id.clone()), None);
+                reduce_task(context.clone(), input).await.unwrap().unwrap();
             }
-        }
+
+            for document_id in &db.documents {
+                let document_view = db
+                    .store
+                    .get_document_by_id(document_id)
+                    .await
+                    .unwrap()
+                    .unwrap();
+
+                let input = TaskInput::new(None, Some(document_view.id().clone()));
+
+                let reduce_tasks = dependency_task(context.clone(), input)
+                    .await
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(reduce_tasks.len(), expected_next_tasks);
+                for task in reduce_tasks {
+                    assert_eq!(task.worker_name(), "reduce")
+                }
+            }
+        });
     }
 
     #[rstest]
-    #[tokio::test]
-    async fn no_reduce_task_for_materialised_document_relations(
+    fn no_reduce_task_for_materialised_document_relations(
         #[from(test_db)]
         #[with(1, 1)]
-        #[future]
-        db: TestSqlStore,
+        runner: TestDatabaseRunner,
     ) {
-        let db = db.await;
-        let context = Context::new(db.store.clone(), Configuration::default());
-        let document_id = db.documents[0].clone();
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let context = Context::new(db.store.clone(), Configuration::default());
+            let document_id = db.documents[0].clone();
 
-        let input = TaskInput::new(Some(document_id.clone()), None);
-        reduce_task(context.clone(), input).await.unwrap().unwrap();
+            let input = TaskInput::new(Some(document_id.clone()), None);
+            reduce_task(context.clone(), input).await.unwrap().unwrap();
 
-        // Here we have one materialised document, (we are calling it a child as we will shortly be publishing parents)
-        // it contains relations which are not materialised yet so should dispatch a reduce task for each one.
+            // Here we have one materialised document, (we are calling it a child as we will
+            // shortly be publishing parents) it contains relations which are not materialised yet
+            // so should dispatch a reduce task for each one.
+            let document_view_of_child = db
+                .store
+                .get_document_by_id(&document_id)
+                .await
+                .unwrap()
+                .unwrap();
 
-        let document_view_of_child = db
-            .store
-            .get_document_by_id(&document_id)
-            .await
-            .unwrap()
-            .unwrap();
+            let document_view_id_of_child = document_view_of_child.id();
 
-        let document_view_id_of_child = document_view_of_child.id();
+            // Create a new document referencing the existing materialised document.
 
-        // Create a new document referencing the existing materialised document.
+            let operation = create_operation(&[
+                (
+                    "pinned_relation_to_existing_document",
+                    OperationValue::PinnedRelation(PinnedRelation::new(
+                        document_view_id_of_child.clone(),
+                    )),
+                ),
+                (
+                    "pinned_relation_to_not_existing_document",
+                    OperationValue::PinnedRelation(PinnedRelation::new(random_document_view_id())),
+                ),
+            ]);
 
-        let operation = create_operation(&[
-            (
-                "pinned_relation_to_existing_document",
-                OperationValue::PinnedRelation(PinnedRelation::new(
-                    document_view_id_of_child.clone(),
-                )),
-            ),
-            (
-                "pinned_relation_to_not_existing_document",
-                OperationValue::PinnedRelation(PinnedRelation::new(random_document_view_id())),
-            ),
-        ]);
+            let (_, document_view_id) =
+                insert_entry_operation_and_view(&db.store, &KeyPair::new(), None, &operation).await;
 
-        let (_, document_view_id) =
-            insert_entry_operation_and_view(&db.store, &KeyPair::new(), None, &operation).await;
+            // The new document should now dispatch one dependency task for the child relation which
+            // has not been materialised yet.
+            let input = TaskInput::new(None, Some(document_view_id.clone()));
+            let tasks = dependency_task(context.clone(), input)
+                .await
+                .unwrap()
+                .unwrap();
 
-        // The new document should now dispatch one dependency task for the child relation which
-        // has not been materialised yet.
-        let input = TaskInput::new(None, Some(document_view_id.clone()));
-        let tasks = dependency_task(context.clone(), input)
-            .await
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(tasks.len(), 1);
-        assert_eq!(tasks[0].worker_name(), "reduce");
+            assert_eq!(tasks.len(), 1);
+            assert_eq!(tasks[0].worker_name(), "reduce");
+        });
     }
 
     #[rstest]
-    #[should_panic(expected = "Critical")]
     #[case(None, Some(random_document_view_id()))]
-    #[should_panic(expected = "Critical")]
     #[case(None, None)]
-    #[should_panic(expected = "Critical")]
     #[case(Some(random_document_id()), None)]
-    #[should_panic(expected = "Critical")]
     #[case(Some(random_document_id()), Some(random_document_view_id()))]
-    #[tokio::test]
-    async fn fails_correctly(
+    fn fails_correctly(
         #[case] document_id: Option<DocumentId>,
         #[case] document_view_id: Option<DocumentViewId>,
-        #[from(test_db)]
-        #[future]
-        db: TestSqlStore,
+        #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        let db = db.await;
-        let context = Context::new(db.store, Configuration::default());
-        let input = TaskInput::new(document_id, document_view_id);
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let context = Context::new(db.store.clone(), Configuration::default());
+            let input = TaskInput::new(document_id, document_view_id);
 
-        let next_tasks = dependency_task(context.clone(), input).await.unwrap();
-        assert!(next_tasks.is_none())
+            let next_tasks = dependency_task(context.clone(), input).await;
+            assert!(next_tasks.is_err())
+        });
     }
 
     #[rstest]
-    #[should_panic(expected = "Critical")]
-    #[case(test_db(2, 1, true, TEST_SCHEMA_ID.parse().unwrap(),
-        vec![("profile_picture", OperationValue::Relation(Relation::new(random_document_id())))],
-        vec![]))]
-    #[should_panic(expected = "Critical")]
-    #[case(test_db(2, 1, true, TEST_SCHEMA_ID.parse().unwrap(),
-        vec![("one_relation_field", OperationValue::PinnedRelationList(PinnedRelationList::new([0; 2].iter().map(|_|random_document_view_id()).collect()))),
-             ("another_relation_field", OperationValue::RelationList(RelationList::new([0; 6].iter().map(|_|random_document_id()).collect())))],
-        vec![]))]
-    #[tokio::test]
-    async fn fails_on_deleted_documents(
-        #[case]
-        #[future]
-        db: TestSqlStore,
-    ) {
-        let db = db.await;
-        let context = Context::new(db.store.clone(), Configuration::default());
-        let document_id = db.documents[0].clone();
+    #[case(
+        test_db(
+            2,
+            1,
+            true,
+            TEST_SCHEMA_ID.parse().unwrap(),
+            vec![
+                ("profile_picture", OperationValue::Relation(
+                        Relation::new(random_document_id())))
+            ],
+            vec![]
+        )
+    )]
+    #[case(
+        test_db(
+            2,
+            1,
+            true,
+            TEST_SCHEMA_ID.parse().unwrap(),
+            vec![
+                ("one_relation_field", OperationValue::PinnedRelationList(
+                     PinnedRelationList::new(
+                         [0; 2].iter().map(|_|random_document_view_id()).collect()))),
+                ("another_relation_field", OperationValue::RelationList(
+                     RelationList::new(
+                         [0; 6].iter().map(|_|random_document_id()).collect())))
+            ],
+            vec![]
+        )
+    )]
+    fn fails_on_deleted_documents(#[case] runner: TestDatabaseRunner) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let context = Context::new(db.store.clone(), Configuration::default());
+            let document_id = db.documents[0].clone();
 
-        let input = TaskInput::new(Some(document_id.clone()), None);
-        reduce_task(context.clone(), input).await.unwrap();
+            let input = TaskInput::new(Some(document_id.clone()), None);
+            reduce_task(context.clone(), input).await.unwrap();
 
-        let document_operations = db
-            .store
-            .get_operations_by_document_id(&document_id)
-            .await
-            .unwrap();
+            let document_operations = db
+                .store
+                .get_operations_by_document_id(&document_id)
+                .await
+                .unwrap();
 
-        let document_view_id: DocumentViewId = document_operations[1].operation_id().clone().into();
+            let document_view_id: DocumentViewId =
+                document_operations[1].operation_id().clone().into();
 
-        let input = TaskInput::new(None, Some(document_view_id.clone()));
+            let input = TaskInput::new(None, Some(document_view_id.clone()));
 
-        dependency_task(context.clone(), input)
-            .await
-            .unwrap()
-            .unwrap();
+            let result = dependency_task(context.clone(), input).await;
+
+            assert!(result.is_err())
+        });
     }
 }

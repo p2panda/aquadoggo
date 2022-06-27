@@ -43,9 +43,57 @@ jobs:
         with:
           command: test
           args: --manifest-path ${{ env.cargo_manifest }}
-        # Ensure debug output is also tested
         env:
+          # Ensure debug output is also tested
           RUST_LOG: debug
+
+  rust-test-postgres:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:latest
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: aquadoggo-development
+        ports:
+          # Maps TCP port 5432 on service container to the host
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Restore from cargo cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.cache_path }}
+          key: ${{ runner.os }}-test-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run tests
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          # Make sure the tests run consecutively to avoid accessing the same
+          # database by multiple test threads
+          args: >-
+            --manifest-path ${{ env.cargo_manifest }}
+            -- --test-threads 1
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/aquadoggo-development
 
   rust-check:
     runs-on: ubuntu-latest
@@ -151,9 +199,12 @@ jobs:
         uses: actions-rs/tarpaulin@v0.1
         with:
           # Force cleaning via `--force-clean` flag to prevent buggy code coverage
-          args: --manifest-path ${{ env.cargo_manifest }} --locked --force-clean
-        # Ensure debug output is also tested
+          args: >-
+            --manifest-path ${{ env.cargo_manifest }}
+            --locked
+            --force-clean
         env:
+          # Ensure debug output is also tested
           RUST_LOG: debug
 
       - name: Upload to codecov.io

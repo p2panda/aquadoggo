@@ -23,8 +23,9 @@ pub struct OperationRow {
     /// The id of the schema this operation follows.
     pub schema_id: String,
 
-    /// The previous operations of this operation concatenated into string format with `_` seperator.
-    pub previous_operations: String,
+    /// The previous operations of this operation concatenated into string format with `_`
+    /// separator.
+    pub previous_operations: Option<String>,
 }
 
 /// A struct representing a single operation field row as it is inserted in the database.
@@ -34,13 +35,19 @@ pub struct OperationFieldRow {
     pub operation_id: String,
 
     /// The name of this field.
-    pub name: String,
+    ///
+    /// This is an Option as a DELETE operation contains no fields.
+    pub name: Option<String>,
 
     /// The type of this field.
-    pub field_type: String,
+    ///
+    /// This is an Option as a DELETE operation contains no fields.
+    pub field_type: Option<String>,
 
     /// The actual value contained in this field.
-    pub value: String,
+    ///
+    /// This is an Option as a DELETE operation contains no fields.
+    pub value: Option<String>,
 }
 
 /// A struct representing a joined OperationRow and OperationFieldRow.
@@ -64,15 +71,22 @@ pub struct OperationFieldsJoinedRow {
     /// The id of the schema this operation follows.
     pub schema_id: String,
 
-    /// The previous operations of this operation concatenated into string format with `_` seperator.
-    pub previous_operations: String,
+    /// The previous operations of this operation concatenated into string format with `_`
+    /// separator.
+    pub previous_operations: Option<String>,
 
     /// The name of this field.
-    pub name: String,
+    ///
+    /// This is an Option as a DELETE operation contains no fields.
+    pub name: Option<String>,
 
     /// The type of this field.
-    pub field_type: String,
+    ///
+    /// This is an Option as a DELETE operation contains no fields.
+    pub field_type: Option<String>,
 
     /// The actual value contained in this field.
-    pub value: String,
+    ///
+    /// This is an Option as a DELETE operation contains no fields.
+    pub value: Option<String>,
 }

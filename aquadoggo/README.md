@@ -47,7 +47,7 @@ Configurable node server implementation for the [`p2panda`] network which can be
 
 - Awaits signed operations from clients via a JSON RPC API.
 - Verifies the consistency, format and signature of operations and rejects invalid ones.
-- Stores operations of the network in a SQL database of your choice (SQLite, PostgreSQL or MySQL).
+- Stores operations of the network in a SQL database of your choice (SQLite or PostgreSQL).
 - Materializes views on top of the known data.
 - Answers filterable and paginated data queries.
 - Discovers other nodes in local network and internet.
