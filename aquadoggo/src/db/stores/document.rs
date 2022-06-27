@@ -647,6 +647,39 @@ mod tests {
     }
 
     #[rstest]
+    fn updates_a_document(
+        #[from(test_db)]
+        #[with(10, 1)]
+        runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let document_id = db.documents[0].clone();
+
+            let document_operations = db
+                .store
+                .get_operations_by_document_id(&document_id)
+                .await
+                .unwrap();
+
+            let document = DocumentBuilder::new(document_operations).build().unwrap();
+
+            let mut current_operations = Vec::new();
+
+            for operation in document.operations() {
+                current_operations.push(operation.clone());
+                let document = DocumentBuilder::new(current_operations.clone())
+                    .build()
+                    .unwrap();
+                let result = db.store.insert_document(&document).await;
+                print!("{:#?}", result);
+                assert!(result.is_ok());
+                let document_view = db.store.get_document_by_id(document.id()).await.unwrap();
+                assert!(document_view.is_some());
+            }
+        })
+    }
+
+    #[rstest]
     fn gets_documents_by_schema(
         #[from(test_db)]
         #[with(10, 2, false, TEST_SCHEMA_ID.parse().unwrap())]
