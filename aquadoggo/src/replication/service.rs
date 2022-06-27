@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Error, Result};
-use bamboo_rs_core_ed25519_yasmf::entry::is_lipmaa_required;
 use bamboo_rs_core_ed25519_yasmf::verify::verify_batch;
 use log::{debug, error, trace, warn};
 pub use p2panda_rs::entry::LogId;
@@ -83,10 +81,6 @@ impl Service<Context, ServiceMessage> for ReplicationService {
                             // Get the latest seq we have for this log + author
                             let latest_seq = get_latest_seq(&context, &log_id, &author).await;
                             debug!("Latest entry seq: {:?}", latest_seq);
-
-                            // TODO: just for debug
-                            //let latest_seq = Some(SeqNum::new(4).unwrap());
-                            let latest_seq = None;
 
                             // Make our replication request to the remote peer
                             let entries = client
