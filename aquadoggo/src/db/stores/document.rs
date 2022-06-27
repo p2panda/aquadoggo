@@ -168,8 +168,8 @@ impl DocumentStore for SqlStorage {
             VALUES
                 ($1, $2, $3, $4)
             ON CONFLICT(document_id) DO UPDATE SET
-                document_view_id=$2,
-                is_deleted=$3
+                document_view_id = $2,
+                is_deleted = $3
             ",
         )
         .bind(document.id().as_str())
