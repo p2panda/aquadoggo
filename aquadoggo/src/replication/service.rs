@@ -97,7 +97,7 @@ impl Service<Context, ServiceMessage> for ReplicationService {
 
                                 // Get the first entry (assumes they're sorted by seq_num smallest
                                 // to largest)
-                                let first_entry = entries.get(0).map(|entry| entry.clone());
+                                let first_entry = entries.get(0).cloned();
 
                                 match first_entry.as_ref() {
                                     // If the entry is the first in the log then we can don't need
@@ -129,10 +129,10 @@ impl Service<Context, ServiceMessage> for ReplicationService {
                                     }
                                 }
 
-                                let entries_to_verify = entries
+                                let entries_to_verify: Vec<(Vec<u8>, Option<Vec<u8>>)> = entries
                                     .iter()
-                                    .map(|entry| (entry.entry_bytes(), Option::<Vec<u8>>::None))
-                                    .collect::<Vec<_>>();
+                                    .map(|entry| (entry.entry_bytes(), None))
+                                    .collect();
 
                                 let verification_result = verify_batch(&entries_to_verify);
 
