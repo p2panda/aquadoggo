@@ -19,7 +19,7 @@ use crate::materializer::TaskInput;
 /// After succesfully reducing and storing a document view an array of dependency tasks is returned.
 /// If invalid inputs were passed or a fatal db error occured a critical error is returned.
 pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
-    debug!("Working on reduce task {}", input);
+    debug!("Working on reduce task {:#?}", input);
 
     // Find out which document we are handling
     let document_id = resolve_document_id(&context, &input).await?;
