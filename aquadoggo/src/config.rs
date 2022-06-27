@@ -27,7 +27,7 @@ pub struct Configuration {
     /// Path to data directory.
     pub base_path: Option<PathBuf>,
 
-    /// Database url (sqlite or postgres).
+    /// Database url (SQLite or PostgreSQL).
     pub database_url: Option<String>,
 
     /// Maximum number of database connections in pool.

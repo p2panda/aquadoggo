@@ -62,7 +62,8 @@ impl SqlStorage {
                 tasks
             WHERE
                 name = $1
-                -- Use `IS` because these columns can contain `null` values.
+                -- Use `COALESCE` to compare possible null values in a way
+                -- that is compatible between SQLite and PostgreSQL.
                 AND COALESCE(document_id, '0') = COALESCE($2, '0')
                 AND COALESCE(document_view_id, '0') = COALESCE($3, '0')
             ",

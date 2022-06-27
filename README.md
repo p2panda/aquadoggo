@@ -53,7 +53,7 @@ Configurable node server implementation for the [`p2panda`] network running as a
 
 - Awaits signed operations from clients via GraphQL.
 - Verifies the consistency, format and signature of operations and rejects invalid ones.
-- Stores operations of the network in a SQL database of your choice (SQLite, PostgreSQL).
+- Stores operations of the network in an SQL database of your choice (SQLite, PostgreSQL).
 - Materializes views on top of the known data.
 - Answers filterable and paginated data queries via GraphQL.
 - Discovers other nodes in local network and internet.
