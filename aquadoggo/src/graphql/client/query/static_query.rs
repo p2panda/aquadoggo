@@ -3,7 +3,9 @@
 use async_graphql::{Context, Error, Object, Result};
 use p2panda_rs::document::{Document, DocumentBuilder, DocumentId};
 use p2panda_rs::identity::Author;
-use p2panda_rs::operation::{Operation, OperationFields, OperationValue, VerifiedOperation};
+use p2panda_rs::operation::{
+    AsVerifiedOperation, Operation, OperationFields, OperationValue, VerifiedOperation,
+};
 use p2panda_rs::storage_provider::traits::StorageProvider;
 
 use crate::db::provider::SqlStorage;
@@ -93,14 +95,14 @@ mod tests {
     use crate::graphql::GraphQLSchemaManager;
     use crate::http::{build_server, HttpServiceContext};
     use crate::schema::SchemaProvider;
-    use crate::test_helpers::{initialize_store, TestClient};
+    use crate::test_helpers::TestClient;
 
     #[rstest]
     fn next_entry_args_valid_query(#[from(test_db)] runner: TestDatabaseRunner) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
             let (tx, _) = broadcast::channel(16);
             let schema_provider = SchemaProvider::default();
-            let manager = GraphQLSchemaManager::new(store, tx, schema_provider).await;
+            let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
             let context = HttpServiceContext::new(manager);
             let client = TestClient::new(build_server(context));
 
@@ -148,7 +150,7 @@ mod tests {
         runner.with_db_teardown(move |db: TestDatabase| async move {
             let (tx, _) = broadcast::channel(16);
             let schema_provider = SchemaProvider::default();
-            let manager = GraphQLSchemaManager::new(store, tx, schema_provider).await;
+            let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
             let context = HttpServiceContext::new(manager);
             let client = TestClient::new(build_server(context));
 

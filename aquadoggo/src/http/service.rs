@@ -80,7 +80,7 @@ mod tests {
             let (tx, _) = broadcast::channel(16);
             let schema_provider = SchemaProvider::default();
             let graphql_schema_manager =
-                GraphQLSchemaManager::new(store, tx, schema_provider).await;
+                GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
             let context = HttpServiceContext::new(graphql_schema_manager);
             let client = TestClient::new(build_server(context));
 

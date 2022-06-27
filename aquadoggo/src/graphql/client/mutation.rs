@@ -158,7 +158,7 @@ mod tests {
         runner.with_db_teardown(move |db: TestDatabase| async move {
             let (tx, _rx) = broadcast::channel(16);
             let schema_provider = SchemaProvider::default();
-            let manager = GraphQLSchemaManager::new(store, tx, schema_provider).await;
+            let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
             let context = HttpServiceContext::new(manager);
 
             let response = context.schema.execute(publish_entry_request).await;
@@ -191,7 +191,9 @@ mod tests {
     ) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
             let (tx, mut rx) = broadcast::channel(16);
-            let context = HttpServiceContext::new(db.store, tx);
+            let schema_provider = SchemaProvider::default();
+            let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
+            let context = HttpServiceContext::new(manager);
 
             context.schema.execute(publish_entry_request).await;
 
@@ -211,7 +213,9 @@ mod tests {
     fn publish_entry_error_handling(#[from(test_db)] runner: TestDatabaseRunner) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
             let (tx, _rx) = broadcast::channel(16);
-            let context = HttpServiceContext::new(db.store, tx);
+            let schema_provider = SchemaProvider::default();
+            let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
+            let context = HttpServiceContext::new(manager);
 
             let parameters = Variables::from_value(value!({
                 "entryEncoded": ENTRY_ENCODED,
@@ -235,7 +239,9 @@ mod tests {
     ) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
             let (tx, _rx) = broadcast::channel(16);
-            let context = HttpServiceContext::new(db.store, tx);
+            let schema_provider = SchemaProvider::default();
+            let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
+            let context = HttpServiceContext::new(manager);
             let client = TestClient::new(build_server(context));
 
             let response = client
@@ -489,7 +495,9 @@ mod tests {
 
         runner.with_db_teardown(move |db: TestDatabase| async move {
             let (tx, _rx) = broadcast::channel(16);
-            let context = HttpServiceContext::new(db.store, tx);
+            let schema_provider = SchemaProvider::default();
+            let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
+            let context = HttpServiceContext::new(manager);
             let client = TestClient::new(build_server(context));
 
             let publish_entry_request = publish_entry_request(&entry_encoded, &operation_encoded);
@@ -522,7 +530,7 @@ mod tests {
 
             let (tx, _rx) = broadcast::channel(16);
             let schema_provider = SchemaProvider::default();
-            let manager = GraphQLSchemaManager::new(store, tx, schema_provider).await;
+            let manager = GraphQLSchemaManager::new(db.store.clone(), tx, schema_provider).await;
             let context = HttpServiceContext::new(manager);
             let client = TestClient::new(build_server(context));
 
@@ -596,7 +604,8 @@ mod tests {
         runner.with_db_teardown(|populated_db: TestDatabase| async move {
             let (tx, _rx) = broadcast::channel(16);
             let schema_provider = SchemaProvider::default();
-            let manager = GraphQLSchemaManager::new(store, tx, schema_provider).await;
+            let manager =
+                GraphQLSchemaManager::new(populated_db.store.clone(), tx, schema_provider).await;
             let context = HttpServiceContext::new(manager);
             let client = TestClient::new(build_server(context));
 

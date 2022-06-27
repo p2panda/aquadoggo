@@ -233,7 +233,11 @@ mod tests {
             let key_pair = db.key_pairs.first().unwrap();
             let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
-            let context = Context::new(db.store.clone(), Configuration::default());
+            let context = Context::new(
+                db.store.clone(),
+                Configuration::default(),
+                SchemaProvider::default(),
+            );
             let input = TaskInput::new(Some(document_id.clone()), None);
 
             // There is one CREATE operation for this document in the db, it should create a document

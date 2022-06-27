@@ -118,11 +118,11 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::random_document_view_id;
     use rstest::rstest;
 
-    use crate::db::stores::test_utils::{test_db, TestSqlStore};
+    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
     use crate::db::traits::DocumentStore;
 
     // Get a `DocumentView` that exists in the db.
-    async fn insert_document_view(db: &TestSqlStore) -> DocumentViewId {
+    async fn insert_document_view(db: &TestDatabase) -> DocumentViewId {
         let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
         let entry = db
             .store
@@ -149,43 +149,39 @@ mod tests {
     }
 
     #[rstest]
-    #[tokio::test]
-    async fn test_get_schema_for_view(
+    fn test_get_schema_for_view(
         #[from(test_db)]
         #[with(1, 1)]
-        #[future]
-        db: TestSqlStore,
+        runner: TestDatabaseRunner,
     ) {
-        let db = db.await;
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            // Get a `DocumentView` that exists in the db.
+            let document_view_id = insert_document_view(&db).await;
+            let result = db
+                .store
+                .get_schema_by_document_view(&document_view_id)
+                .await;
 
-        // Get a `DocumentView` that exists in the db.
-        let document_view_id = insert_document_view(&db).await;
-        let result = db
-            .store
-            .get_schema_by_document_view(&document_view_id)
-            .await;
-
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().unwrap().name(), "venue");
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().unwrap().name(), "venue");
+        });
     }
 
     #[rstest]
-    #[tokio::test]
-    async fn test_get_schema_for_missing_view(
+    fn test_get_schema_for_missing_view(
         random_document_view_id: DocumentViewId,
         #[from(test_db)]
         #[with(1, 1)]
-        #[future]
-        db: TestSqlStore,
+        runner: TestDatabaseRunner,
     ) {
-        let db = db.await;
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let result = db
+                .store
+                .get_schema_by_document_view(&random_document_view_id)
+                .await;
 
-        let result = db
-            .store
-            .get_schema_by_document_view(&random_document_view_id)
-            .await;
-
-        assert!(result.is_ok());
-        assert!(result.unwrap().is_none());
+            assert!(result.is_ok());
+            assert!(result.unwrap().is_none());
+        });
     }
 }
