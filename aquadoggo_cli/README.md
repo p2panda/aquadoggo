@@ -18,7 +18,7 @@ OPTIONS:
 
 ## Environment variables
 
-* `DATABASE_URL` Database url (SQLite, MySQL, PostgreSQL) (default `sqlite:<data-dir>/aquadoggo-node.sqlite3`).
+* `DATABASE_URL` Database url (SQLite, PostgreSQL) (default `sqlite:<data-dir>/aquadoggo-node.sqlite3`).
 * `DATABASE_MAX_CONNECTIONS` Maximum number of database connections in pool (default `32`).
 * `HTTP_PORT` RPC API HTTP server port (default `2020`).
 * `HTTP_THREADS` Number of HTTP server threads to run (default `4`).

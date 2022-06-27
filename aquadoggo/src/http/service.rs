@@ -62,43 +62,47 @@ pub async fn http_service(context: Context, signal: Shutdown, tx: ServiceSender)
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
     use serde_json::json;
     use tokio::sync::broadcast;
 
+    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
     use crate::graphql::GraphQLSchemaManager;
     use crate::http::context::HttpServiceContext;
     use crate::schema::SchemaProvider;
-    use crate::test_helpers::{initialize_store, TestClient};
+    use crate::test_helpers::TestClient;
 
     use super::build_server;
 
-    #[tokio::test]
-    async fn graphql_endpoint() {
-        let (tx, _) = broadcast::channel(16);
-        let store = initialize_store().await;
-        let schema_provider = SchemaProvider::default();
-        let graphql_schema_manager = GraphQLSchemaManager::new(store, tx, schema_provider).await;
-        let context = HttpServiceContext::new(graphql_schema_manager);
-        let client = TestClient::new(build_server(context));
+    #[rstest]
+    fn graphql_endpoint(#[from(test_db)] runner: TestDatabaseRunner) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let (tx, _) = broadcast::channel(16);
+            let schema_provider = SchemaProvider::default();
+            let graphql_schema_manager =
+                GraphQLSchemaManager::new(store, tx, schema_provider).await;
+            let context = HttpServiceContext::new(graphql_schema_manager);
+            let client = TestClient::new(build_server(context));
 
-        let response = client
-            .post("/graphql")
-            .json(&json!({
-                "query": "{ __schema { __typename } }",
-            }))
-            .send()
-            .await;
+            let response = client
+                .post("/graphql")
+                .json(&json!({
+                    "query": "{ __schema { __typename } }",
+                }))
+                .send()
+                .await;
 
-        assert_eq!(
-            response.text().await,
-            json!({
-                "data": {
-                    "__schema": {
-                        "__typename": "__Schema"
+            assert_eq!(
+                response.text().await,
+                json!({
+                    "data": {
+                        "__schema": {
+                            "__typename": "__Schema"
+                        }
                     }
-                }
-            })
-            .to_string()
-        );
+                })
+                .to_string()
+            );
+        })
     }
 }

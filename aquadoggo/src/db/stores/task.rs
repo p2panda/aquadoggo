@@ -24,7 +24,7 @@ impl SqlStorage {
         // Insert task into database
         query(
             "
-            INSERT OR IGNORE INTO
+            INSERT INTO
                 tasks (
                     name,
                     document_id,
@@ -32,6 +32,7 @@ impl SqlStorage {
                 )
             VALUES
                 ($1, $2, $3)
+            ON CONFLICT DO NOTHING
             ",
         )
         .bind(task.worker_name())
@@ -61,9 +62,10 @@ impl SqlStorage {
                 tasks
             WHERE
                 name = $1
-                -- Use `IS` because these columns can contain `null` values.
-                AND document_id IS $2
-                AND document_view_id IS $3
+                -- Use `COALESCE` to compare possible null values in a way
+                -- that is compatible between SQLite and PostgreSQL.
+                AND COALESCE(document_id, '0') = COALESCE($2, '0')
+                AND COALESCE(document_view_id, '0') = COALESCE($3, '0')
             ",
         )
         .bind(task.worker_name())
@@ -126,62 +128,53 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::{document_id, document_view_id};
     use rstest::rstest;
 
-    use crate::db::stores::test_utils::{test_db, TestSqlStore};
+    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
     use crate::materializer::{Task, TaskInput};
 
     #[rstest]
-    #[tokio::test]
-    async fn insert_get_remove_tasks(
+    fn insert_get_remove_tasks(
         document_view_id: DocumentViewId,
-        #[from(test_db)]
-        #[future]
-        db: TestSqlStore,
+        #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        let db = db.await;
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            // Prepare test data
+            let task = Task::new("reduce", TaskInput::new(None, Some(document_view_id)));
 
-        // Prepare test data
-        let task = Task::new("reduce", TaskInput::new(None, Some(document_view_id)));
+            // Insert task
+            let result = db.store.insert_task(&task).await;
+            assert!(result.is_ok(), "{:?}", result);
 
-        // Insert task
-        let result = db.store.insert_task(&task).await;
-        assert!(result.is_ok(), "{:?}", result);
+            // Check if task exists in database
+            let result = db.store.get_tasks().await;
+            assert_eq!(result.unwrap(), vec![task.clone()]);
 
-        // Check if task exists in database
-        let result = db.store.get_tasks().await;
-        assert_eq!(result.unwrap(), vec![task.clone()]);
+            // Remove task
+            let result = db.store.remove_task(&task).await;
+            assert!(result.is_ok(), "{:?}", result);
 
-        // Remove task
-        let result = db.store.remove_task(&task).await;
-        assert!(result.is_ok(), "{:?}", result);
-
-        // Check if all tasks got removed
-        let result = db.store.get_tasks().await;
-        assert_eq!(result.unwrap(), vec![]);
+            // Check if all tasks got removed
+            let result = db.store.get_tasks().await;
+            assert_eq!(result.unwrap(), vec![]);
+        });
     }
 
     #[rstest]
-    #[tokio::test]
-    async fn avoid_duplicates(
-        document_id: DocumentId,
-        #[from(test_db)]
-        #[future]
-        db: TestSqlStore,
-    ) {
-        let db = db.await;
+    fn avoid_duplicates(document_id: DocumentId, #[from(test_db)] runner: TestDatabaseRunner) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            // Prepare test data
+            let task = Task::new("reduce", TaskInput::new(Some(document_id), None));
 
-        // Prepare test data
-        let task = Task::new("reduce", TaskInput::new(Some(document_id), None));
+            // Insert task
+            let result = db.store.insert_task(&task).await;
+            assert!(result.is_ok(), "{:?}", result);
 
-        // Insert task
-        let result = db.store.insert_task(&task).await;
-        assert!(result.is_ok(), "{:?}", result);
+            // Insert the same thing again, it should silently fail
+            let result = db.store.insert_task(&task).await;
+            assert!(result.is_ok(), "{:?}", result);
 
-        // Insert the same thing again, it should silently fail
-        let result = db.store.insert_task(&task).await;
-        assert!(result.is_ok(), "{:?}", result);
-
-        // Check for duplicates
-        let result = db.store.get_tasks().await;
-        assert_eq!(result.unwrap().len(), 1);
+            // Check for duplicates
+            let result = db.store.get_tasks().await;
+            assert_eq!(result.unwrap().len(), 1);
+        });
     }
 }

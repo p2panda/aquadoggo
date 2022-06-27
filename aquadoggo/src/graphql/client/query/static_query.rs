@@ -84,90 +84,93 @@ fn get_document_by_id(_document: DocumentId) -> Document {
 mod tests {
     use async_graphql::Response;
     use p2panda_rs::entry::{LogId, SeqNum};
+    use rstest::rstest;
     use serde_json::json;
     use tokio::sync::broadcast;
 
+    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
     use crate::graphql::client::EntryArgsResponse;
     use crate::graphql::GraphQLSchemaManager;
-    use crate::http::build_server;
-    use crate::http::HttpServiceContext;
+    use crate::http::{build_server, HttpServiceContext};
     use crate::schema::SchemaProvider;
     use crate::test_helpers::{initialize_store, TestClient};
 
-    #[tokio::test]
-    async fn next_entry_args_valid_query() {
-        let (tx, _) = broadcast::channel(16);
-        let store = initialize_store().await;
-        let schema_provider = SchemaProvider::default();
-        let manager = GraphQLSchemaManager::new(store, tx, schema_provider).await;
-        let context = HttpServiceContext::new(manager);
-        let client = TestClient::new(build_server(context));
+    #[rstest]
+    fn next_entry_args_valid_query(#[from(test_db)] runner: TestDatabaseRunner) {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
+            let (tx, _) = broadcast::channel(16);
+            let schema_provider = SchemaProvider::default();
+            let manager = GraphQLSchemaManager::new(store, tx, schema_provider).await;
+            let context = HttpServiceContext::new(manager);
+            let client = TestClient::new(build_server(context));
 
-        // Selected fields need to be alphabetically sorted because that's what the `json` macro
-        // that is used in the assert below produces.
-        let response = client
-            .post("/graphql")
-            .json(&json!({
-                "query": r#"{
-                    nextEntryArgs(
-                        publicKey: "8b52ae153142288402382fd6d9619e018978e015e6bc372b1b0c7bd40c6a240a"
-                    ) {
-                        logId,
-                        seqNum,
-                        backlink,
-                        skiplink
-                    }
-                }"#,
-            }))
-            .send()
-            .await
-            .json::<Response>()
-            .await;
+            // Selected fields need to be alphabetically sorted because that's what the `json`
+            // macro that is used in the assert below produces.
+            let response = client
+                .post("/graphql")
+                .json(&json!({
+                    "query": r#"{
+                        nextEntryArgs(
+                            publicKey: "8b52ae153142288402382fd6d9619e018978e015e6bc372b1b0c7bd40c6a240a"
+                        ) {
+                            logId,
+                            seqNum,
+                            backlink,
+                            skiplink
+                        }
+                    }"#,
+                }))
+                .send()
+                .await
+                .json::<Response>()
+                .await;
 
-        let expected_entry_args = EntryArgsResponse {
-            log_id: LogId::new(1),
-            seq_num: SeqNum::new(1).unwrap(),
-            backlink: None,
-            skiplink: None,
-        };
-        let received_entry_args: EntryArgsResponse = match response.data {
-            async_graphql::Value::Object(result_outer) => {
-                async_graphql::from_value(result_outer.get("nextEntryArgs").unwrap().to_owned())
-                    .unwrap()
-            }
-            _ => panic!("Expected return value to be an object"),
-        };
+            let expected_entry_args = EntryArgsResponse {
+                log_id: LogId::new(1),
+                seq_num: SeqNum::new(1).unwrap(),
+                backlink: None,
+                skiplink: None,
+            };
+            let received_entry_args: EntryArgsResponse = match response.data {
+                async_graphql::Value::Object(result_outer) => {
+                    async_graphql::from_value(result_outer.get("nextEntryArgs").unwrap().to_owned())
+                        .unwrap()
+                }
+                _ => panic!("Expected return value to be an object"),
+            };
 
-        assert_eq!(received_entry_args, expected_entry_args);
+            assert_eq!(received_entry_args, expected_entry_args);
+        })
     }
 
-    #[tokio::test]
-    async fn next_entry_args_error_response() {
-        let (tx, _) = broadcast::channel(16);
-        let store = initialize_store().await;
-        let schema_provider = SchemaProvider::default();
-        let manager = GraphQLSchemaManager::new(store, tx, schema_provider).await;
-        let context = HttpServiceContext::new(manager);
-        let client = TestClient::new(build_server(context));
+    #[rstest]
+    fn next_entry_args_error_response(#[from(test_db)] runner: TestDatabaseRunner) {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
+            let (tx, _) = broadcast::channel(16);
+            let schema_provider = SchemaProvider::default();
+            let manager = GraphQLSchemaManager::new(store, tx, schema_provider).await;
+            let context = HttpServiceContext::new(manager);
+            let client = TestClient::new(build_server(context));
 
-        // Selected fields need to be alphabetically sorted because that's what the `json` macro
-        // that is used in the assert below produces.
-        let response = client
-            .post("/graphql")
-            .json(&json!({
-                "query": r#"{
+            // Selected fields need to be alphabetically sorted because that's what the `json` macro
+            // that is used in the assert below produces.
+            let response = client
+                .post("/graphql")
+                .json(&json!({
+                    "query": r#"{
                     nextEntryArgs(publicKey: "nope") {
                         logId
                     }
                 }"#,
-            }))
-            .send()
-            .await;
+                }))
+                .send()
+                .await;
 
-        let response: Response = response.json().await;
-        assert_eq!(
-            response.errors[0].message,
-            "invalid hex encoding in author string"
-        )
+            let response: Response = response.json().await;
+            assert_eq!(
+                response.errors[0].message,
+                "invalid hex encoding in author string"
+            )
+        })
     }
 }

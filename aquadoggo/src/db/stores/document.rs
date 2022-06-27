@@ -167,6 +167,9 @@ impl DocumentStore for SqlStorage {
                 )
             VALUES
                 ($1, $2, $3, $4)
+            ON CONFLICT(document_id) DO UPDATE SET
+                document_view_id = $2,
+                is_deleted = $3
             ",
         )
         .bind(document.id().as_str())
@@ -216,7 +219,7 @@ impl DocumentStore for SqlStorage {
                 documents
             LEFT JOIN document_view_fields
                 ON
-                    documents.document_view_id = document_view_fields.document_view_id    
+                    documents.document_view_id = document_view_fields.document_view_id
             LEFT JOIN operation_fields_v1
                 ON
                     document_view_fields.operation_id = operation_fields_v1.operation_id
@@ -268,7 +271,7 @@ impl DocumentStore for SqlStorage {
                 documents
             LEFT JOIN document_view_fields
                 ON
-                    documents.document_view_id = document_view_fields.document_view_id    
+                    documents.document_view_id = document_view_fields.document_view_id
             LEFT JOIN operation_fields_v1
                 ON
                     document_view_fields.operation_id = operation_fields_v1.operation_id
@@ -334,13 +337,15 @@ mod tests {
 
     use crate::db::stores::document::{DocumentStore, DocumentView};
     use crate::db::stores::entry::StorageEntry;
-    use crate::db::stores::test_utils::{test_db, TestSqlStore};
+    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
     fn entries_to_document_views(entries: &[StorageEntry]) -> Vec<DocumentView> {
         let mut document_views = Vec::new();
         let mut current_document_view_fields = DocumentViewFields::new();
+
         for entry in entries {
             let operation_id: OperationId = entry.hash().into();
+
             for (name, value) in entry.operation().fields().unwrap().iter() {
                 if entry.operation().is_delete() {
                     continue;
@@ -349,335 +354,360 @@ mod tests {
                         .insert(name, DocumentViewValue::new(&operation_id, value));
                 }
             }
+
             let document_view_fields = DocumentViewFields::new_from_operation_fields(
                 &operation_id,
                 &entry.operation().fields().unwrap(),
             );
+
             let document_view =
                 DocumentView::new(&operation_id.clone().into(), &document_view_fields);
+
             document_views.push(document_view)
         }
+
         document_views
     }
 
     #[rstest]
-    #[tokio::test]
-    async fn inserts_gets_one_document_view(
+    fn inserts_gets_one_document_view(
         #[from(test_db)]
         #[with(1, 1)]
-        #[future]
-        db: TestSqlStore,
+        runner: TestDatabaseRunner,
     ) {
-        let db = db.await;
-        let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
 
-        // Get one entry from the pre-polulated db
-        let entry = db
-            .store
-            .get_entry_at_seq_num(&author, &LogId::new(1), &SeqNum::new(1).unwrap())
-            .await
-            .unwrap()
-            .unwrap();
-
-        // Construct a `DocumentView`
-        let operation_id: OperationId = entry.hash().into();
-        let document_view_id: DocumentViewId = operation_id.clone().into();
-        let document_view = DocumentView::new(
-            &document_view_id,
-            &DocumentViewFields::new_from_operation_fields(
-                &operation_id,
-                &entry.operation().fields().unwrap(),
-            ),
-        );
-
-        // Insert into db
-        let result = db
-            .store
-            .insert_document_view(&document_view, &SchemaId::from_str(TEST_SCHEMA_ID).unwrap())
-            .await;
-
-        assert!(result.is_ok());
-
-        let retrieved_document_view = db
-            .store
-            .get_document_view_by_id(&document_view_id)
-            .await
-            .unwrap()
-            .unwrap();
-
-        for key in [
-            "username",
-            "age",
-            "height",
-            "is_admin",
-            "profile_picture",
-            "many_profile_pictures",
-            "special_profile_picture",
-            "many_special_profile_pictures",
-            "another_relation_field",
-        ] {
-            assert!(retrieved_document_view.get(key).is_some());
-            assert_eq!(retrieved_document_view.get(key), document_view.get(key));
-        }
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn document_view_does_not_exist(
-        random_document_view_id: DocumentViewId,
-        #[from(test_db)]
-        #[with(1, 1)]
-        #[future]
-        db: TestSqlStore,
-    ) {
-        let db = db.await;
-
-        let view_does_not_exist = db
-            .store
-            .get_document_view_by_id(&random_document_view_id)
-            .await
-            .unwrap();
-
-        assert!(view_does_not_exist.is_none())
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn inserts_gets_many_document_views(
-        #[from(test_db)]
-        #[with(10, 1, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::Text("panda".into()))], vec![("username", OperationValue::Text("PANDA".into()))])]
-        #[future]
-        db: TestSqlStore,
-    ) {
-        let db = db.await;
-        let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
-        let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
-
-        let log_id = LogId::default();
-        let seq_num = SeqNum::default();
-
-        // Get 10 entries from the pre-populated test db
-        let entries = db
-            .store
-            .get_paginated_log_entries(&author, &log_id, &seq_num, 10)
-            .await
-            .unwrap();
-
-        // Parse them into document views
-        let document_views = entries_to_document_views(&entries);
-
-        // Insert each of these views into the db
-        for document_view in document_views.clone() {
-            db.store
-                .insert_document_view(&document_view, &schema_id)
+            // Get one entry from the pre-polulated db
+            let entry = db
+                .store
+                .get_entry_at_seq_num(&author, &LogId::new(1), &SeqNum::new(1).unwrap())
                 .await
+                .unwrap()
                 .unwrap();
-        }
 
-        // Retrieve them again and assert they are the same as the inserted ones
-        for (count, entry) in entries.iter().enumerate() {
-            let result = db.store.get_document_view_by_id(&entry.hash().into()).await;
+            // Construct a `DocumentView`
+            let operation_id: OperationId = entry.hash().into();
+            let document_view_id: DocumentViewId = operation_id.clone().into();
+            let document_view = DocumentView::new(
+                &document_view_id,
+                &DocumentViewFields::new_from_operation_fields(
+                    &operation_id,
+                    &entry.operation().fields().unwrap(),
+                ),
+            );
+
+            // Insert into db
+            let result = db
+                .store
+                .insert_document_view(&document_view, &SchemaId::from_str(TEST_SCHEMA_ID).unwrap())
+                .await;
 
             assert!(result.is_ok());
 
-            let document_view = result.unwrap().unwrap();
+            let retrieved_document_view = db
+                .store
+                .get_document_view_by_id(&document_view_id)
+                .await
+                .unwrap()
+                .unwrap();
 
-            // The update operation should be included in the view correctly, we check that here.
-            let expected_username = if count == 0 {
-                DocumentViewValue::new(
-                    &entry.hash().into(),
-                    &OperationValue::Text("panda".to_string()),
-                )
-            } else {
-                DocumentViewValue::new(
-                    &entry.hash().into(),
-                    &OperationValue::Text("PANDA".to_string()),
-                )
-            };
-            assert_eq!(document_view.get("username").unwrap(), &expected_username);
-        }
+            for key in [
+                "username",
+                "age",
+                "height",
+                "is_admin",
+                "profile_picture",
+                "many_profile_pictures",
+                "special_profile_picture",
+                "many_special_profile_pictures",
+                "another_relation_field",
+            ] {
+                assert!(retrieved_document_view.get(key).is_some());
+                assert_eq!(retrieved_document_view.get(key), document_view.get(key));
+            }
+        });
     }
 
     #[rstest]
-    #[tokio::test]
-    async fn insert_document_view_with_missing_operation(
+    fn document_view_does_not_exist(
+        random_document_view_id: DocumentViewId,
+        #[from(test_db)]
+        #[with(1, 1)]
+        runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let view_does_not_exist = db
+                .store
+                .get_document_view_by_id(&random_document_view_id)
+                .await
+                .unwrap();
+
+            assert!(view_does_not_exist.is_none());
+        });
+    }
+
+    #[rstest]
+    fn inserts_gets_many_document_views(
+        #[from(test_db)]
+        #[with(10, 1, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::Text("panda".into()))], vec![("username", OperationValue::Text("PANDA".into()))])]
+        runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
+            let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
+
+            let log_id = LogId::default();
+            let seq_num = SeqNum::default();
+
+            // Get 10 entries from the pre-populated test db
+            let entries = db
+                .store
+                .get_paginated_log_entries(&author, &log_id, &seq_num, 10)
+                .await
+                .unwrap();
+
+            // Parse them into document views
+            let document_views = entries_to_document_views(&entries);
+
+            // Insert each of these views into the db
+            for document_view in document_views.clone() {
+                db.store
+                    .insert_document_view(&document_view, &schema_id)
+                    .await
+                    .unwrap();
+            }
+
+            // Retrieve them again and assert they are the same as the inserted ones
+            for (count, entry) in entries.iter().enumerate() {
+                let result = db.store.get_document_view_by_id(&entry.hash().into()).await;
+
+                assert!(result.is_ok());
+
+                let document_view = result.unwrap().unwrap();
+
+                // The update operation should be included in the view correctly, we check that here.
+                let expected_username = if count == 0 {
+                    DocumentViewValue::new(
+                        &entry.hash().into(),
+                        &OperationValue::Text("panda".to_string()),
+                    )
+                } else {
+                    DocumentViewValue::new(
+                        &entry.hash().into(),
+                        &OperationValue::Text("PANDA".to_string()),
+                    )
+                };
+                assert_eq!(document_view.get("username").unwrap(), &expected_username);
+            }
+        });
+    }
+
+    #[rstest]
+    fn insert_document_view_with_missing_operation(
         #[from(random_operation_id)] operation_id: OperationId,
         #[from(random_document_view_id)] document_view_id: DocumentViewId,
-        #[from(test_db)]
-        #[future]
-        db: TestSqlStore,
-
+        #[from(test_db)] runner: TestDatabaseRunner,
         operation: Operation,
     ) {
-        let db = db.await;
-        let document_view = DocumentView::new(
-            &document_view_id,
-            &DocumentViewFields::new_from_operation_fields(
-                &operation_id,
-                &operation.fields().unwrap(),
-            ),
-        );
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let document_view = DocumentView::new(
+                &document_view_id,
+                &DocumentViewFields::new_from_operation_fields(
+                    &operation_id,
+                    &operation.fields().unwrap(),
+                ),
+            );
 
-        let result = db
-            .store
-            .insert_document_view(&document_view, &SchemaId::from_str(TEST_SCHEMA_ID).unwrap())
-            .await;
+            let result = db
+                .store
+                .insert_document_view(&document_view, &SchemaId::from_str(TEST_SCHEMA_ID).unwrap())
+                .await;
 
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "A fatal error occured in DocumentStore: error returned from database: FOREIGN KEY constraint failed".to_string()
-        );
+            assert!(result.is_err());
+        });
     }
 
     #[rstest]
-    #[tokio::test]
-    async fn inserts_gets_documents(
+    fn inserts_gets_documents(
         #[from(test_db)]
         #[with(1, 1)]
-        #[future]
-        db: TestSqlStore,
+        runner: TestDatabaseRunner,
     ) {
-        let db = db.await;
-        let document_id = db.documents[0].clone();
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let document_id = db.documents[0].clone();
 
-        let document_operations = db
-            .store
-            .get_operations_by_document_id(&document_id)
-            .await
-            .unwrap();
-
-        let document = DocumentBuilder::new(document_operations).build().unwrap();
-
-        let result = db.store.insert_document(&document).await;
-
-        assert!(result.is_ok());
-
-        let document_view = db
-            .store
-            .get_document_view_by_id(document.view_id())
-            .await
-            .unwrap()
-            .unwrap();
-
-        let expected_document_view = document.view().unwrap();
-
-        for key in [
-            "username",
-            "age",
-            "height",
-            "is_admin",
-            "profile_picture",
-            "many_profile_pictures",
-            "special_profile_picture",
-            "many_special_profile_pictures",
-            "another_relation_field",
-        ] {
-            assert!(document_view.get(key).is_some());
-            assert_eq!(document_view.get(key), expected_document_view.get(key));
-        }
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn gets_document_by_id(
-        #[from(test_db)]
-        #[with(1, 1)]
-        #[future]
-        db: TestSqlStore,
-    ) {
-        let db = db.await;
-        let document_id = db.documents[0].clone();
-
-        let document_operations = db
-            .store
-            .get_operations_by_document_id(&document_id)
-            .await
-            .unwrap();
-
-        let document = DocumentBuilder::new(document_operations).build().unwrap();
-
-        let result = db.store.insert_document(&document).await;
-
-        assert!(result.is_ok());
-
-        let document_view = db
-            .store
-            .get_document_by_id(document.id())
-            .await
-            .unwrap()
-            .unwrap();
-
-        let expected_document_view = document.view().unwrap();
-
-        for key in [
-            "username",
-            "age",
-            "height",
-            "is_admin",
-            "profile_picture",
-            "many_profile_pictures",
-            "special_profile_picture",
-            "many_special_profile_pictures",
-            "another_relation_field",
-        ] {
-            assert!(document_view.get(key).is_some());
-            assert_eq!(document_view.get(key), expected_document_view.get(key));
-        }
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn no_view_when_document_deleted(
-        #[from(test_db)]
-        #[with(10, 1, true)]
-        #[future]
-        db: TestSqlStore,
-    ) {
-        let db = db.await;
-        let document_id = db.documents[0].clone();
-
-        let document_operations = db
-            .store
-            .get_operations_by_document_id(&document_id)
-            .await
-            .unwrap();
-
-        let document = DocumentBuilder::new(document_operations).build().unwrap();
-
-        let result = db.store.insert_document(&document).await;
-
-        assert!(result.is_ok());
-
-        let document_view = db.store.get_document_by_id(document.id()).await.unwrap();
-
-        assert!(document_view.is_none());
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn gets_documents_by_schema(
-        #[from(test_db)]
-        #[with(10, 2, false, TEST_SCHEMA_ID.parse().unwrap())]
-        #[future]
-        db: TestSqlStore,
-    ) {
-        let db = db.await;
-        let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
-
-        for document_id in &db.documents {
             let document_operations = db
                 .store
-                .get_operations_by_document_id(document_id)
+                .get_operations_by_document_id(&document_id)
                 .await
                 .unwrap();
 
             let document = DocumentBuilder::new(document_operations).build().unwrap();
 
-            db.store.insert_document(&document).await.unwrap();
-        }
+            let result = db.store.insert_document(&document).await;
 
-        let schema_documents = db.store.get_documents_by_schema(&schema_id).await.unwrap();
+            assert!(result.is_ok());
 
-        assert_eq!(schema_documents.len(), 2)
+            let document_view = db
+                .store
+                .get_document_view_by_id(document.view_id())
+                .await
+                .unwrap()
+                .unwrap();
+
+            let expected_document_view = document.view().unwrap();
+
+            for key in [
+                "username",
+                "age",
+                "height",
+                "is_admin",
+                "profile_picture",
+                "many_profile_pictures",
+                "special_profile_picture",
+                "many_special_profile_pictures",
+                "another_relation_field",
+            ] {
+                assert!(document_view.get(key).is_some());
+                assert_eq!(document_view.get(key), expected_document_view.get(key));
+            }
+        });
+    }
+
+    #[rstest]
+    fn gets_document_by_id(
+        #[from(test_db)]
+        #[with(1, 1)]
+        runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let document_id = db.documents[0].clone();
+
+            let document_operations = db
+                .store
+                .get_operations_by_document_id(&document_id)
+                .await
+                .unwrap();
+
+            let document = DocumentBuilder::new(document_operations).build().unwrap();
+
+            let result = db.store.insert_document(&document).await;
+
+            assert!(result.is_ok());
+
+            let document_view = db
+                .store
+                .get_document_by_id(document.id())
+                .await
+                .unwrap()
+                .unwrap();
+
+            let expected_document_view = document.view().unwrap();
+
+            for key in [
+                "username",
+                "age",
+                "height",
+                "is_admin",
+                "profile_picture",
+                "many_profile_pictures",
+                "special_profile_picture",
+                "many_special_profile_pictures",
+                "another_relation_field",
+            ] {
+                assert!(document_view.get(key).is_some());
+                assert_eq!(document_view.get(key), expected_document_view.get(key));
+            }
+        });
+    }
+
+    #[rstest]
+    fn no_view_when_document_deleted(
+        #[from(test_db)]
+        #[with(10, 1, true)]
+        runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let document_id = db.documents[0].clone();
+
+            let document_operations = db
+                .store
+                .get_operations_by_document_id(&document_id)
+                .await
+                .unwrap();
+
+            let document = DocumentBuilder::new(document_operations).build().unwrap();
+
+            let result = db.store.insert_document(&document).await;
+
+            assert!(result.is_ok());
+
+            let document_view = db.store.get_document_by_id(document.id()).await.unwrap();
+
+            assert!(document_view.is_none());
+        });
+    }
+
+    #[rstest]
+    fn updates_a_document(
+        #[from(test_db)]
+        #[with(10, 1)]
+        runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let document_id = db.documents[0].clone();
+
+            let document_operations = db
+                .store
+                .get_operations_by_document_id(&document_id)
+                .await
+                .unwrap();
+
+            let document = DocumentBuilder::new(document_operations).build().unwrap();
+
+            let mut current_operations = Vec::new();
+
+            for operation in document.operations() {
+                // For each operation in the db we insert a document, cumulatively adding the next operation
+                // each time. this should perform an "INSERT" first in the documents table, followed by 9 "UPDATES".
+                current_operations.push(operation.clone());
+                let document = DocumentBuilder::new(current_operations.clone())
+                    .build()
+                    .unwrap();
+                let result = db.store.insert_document(&document).await;
+                assert!(result.is_ok());
+
+                let document_view = db.store.get_document_by_id(document.id()).await.unwrap();
+                assert!(document_view.is_some());
+            }
+        })
+    }
+
+    #[rstest]
+    fn gets_documents_by_schema(
+        #[from(test_db)]
+        #[with(10, 2, false, TEST_SCHEMA_ID.parse().unwrap())]
+        runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
+
+            for document_id in &db.documents {
+                let document_operations = db
+                    .store
+                    .get_operations_by_document_id(document_id)
+                    .await
+                    .unwrap();
+
+                let document = DocumentBuilder::new(document_operations).build().unwrap();
+
+                db.store.insert_document(&document).await.unwrap();
+            }
+
+            let schema_documents = db.store.get_documents_by_schema(&schema_id).await.unwrap();
+
+            assert_eq!(schema_documents.len(), 2);
+        });
     }
 }
