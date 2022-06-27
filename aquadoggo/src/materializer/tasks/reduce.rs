@@ -223,8 +223,11 @@ mod tests {
             let context = Context::new(db.store.clone(), Configuration::default());
             let input = TaskInput::new(Some(document_id.clone()), None);
 
+            // There is one CREATE operation for this document in the db, it should create a document
+            // in the documents table.
             assert!(reduce_task(context.clone(), input.clone()).await.is_ok());
 
+            // Now we create and insert an UPDATE operation for this document.
             let entry_args = db
                 .store
                 .get_entry_args(&EntryArgsRequest {
@@ -268,10 +271,12 @@ mod tests {
                 .await
                 .unwrap();
 
+            // This should now find the new UPDATE operation and perform an update on the document
+            // in the documents table.
             assert!(reduce_task(context.clone(), input).await.is_ok());
 
+            // The new view should exist and the document should refer to it.
             let document_view = context.store.get_document_by_id(document_id).await.unwrap();
-
             assert_eq!(
                 document_view.unwrap().get("username").unwrap().value(),
                 &OperationValue::Text("meeeeeee".to_string())
