@@ -123,15 +123,15 @@ mod tests {
     use p2panda_rs::entry::{sign_and_encode, Entry};
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::{
-        Operation, OperationEncoded, OperationFields, OperationValue, PinnedRelationList,
-        VerifiedOperation,
+        AsVerifiedOperation, Operation, OperationEncoded, OperationFields, OperationValue,
+        PinnedRelationList, VerifiedOperation,
     };
     use p2panda_rs::schema::{FieldType, SchemaId, SchemaVersion};
     use p2panda_rs::storage_provider::traits::{OperationStore, StorageProvider};
     use rstest::rstest;
 
     use crate::context::Context;
-    use crate::db::stores::test_utils::{test_db, TestSqlStore};
+    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
     use crate::graphql::client::{EntryArgsRequest, PublishEntryRequest};
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
@@ -247,35 +247,34 @@ mod tests {
     }
 
     #[rstest]
-    #[tokio::test]
-    async fn assembles_schema(
+    fn assembles_schema(
         #[from(test_db)]
         #[with(1, 1)]
-        #[future]
-        db: TestSqlStore,
+        runner: TestDatabaseRunner,
     ) {
-        let db = db.await;
-        let context = Context::new(
-            db.store.clone(),
-            Configuration::default(),
-            SchemaProvider::default(),
-        );
-        // Prepare schema definition and schema field definition
-        let (definition_view_id, field_view_id) =
-            insert_test_schema(&context, db.key_pairs.first().unwrap()).await;
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let context = Context::new(
+                db.store.clone(),
+                Configuration::default(),
+                SchemaProvider::default(),
+            );
+            // Prepare schema definition and schema field definition
+            let (definition_view_id, field_view_id) =
+                insert_test_schema(&context, db.key_pairs.first().unwrap()).await;
 
-        // Start a task with each as input
-        let input = TaskInput::new(None, Some(definition_view_id.clone()));
-        assert!(schema_task(context.clone(), input).await.is_ok());
+            // Start a task with each as input
+            let input = TaskInput::new(None, Some(definition_view_id.clone()));
+            assert!(schema_task(context.clone(), input).await.is_ok());
 
-        let input = TaskInput::new(None, Some(field_view_id));
-        assert!(schema_task(context.clone(), input).await.is_ok());
+            let input = TaskInput::new(None, Some(field_view_id));
+            assert!(schema_task(context.clone(), input).await.is_ok());
 
-        // The new schema should be available on storage provider.
-        assert!(context
-            .schema_provider
-            .all()
-            .iter()
-            .any(|s| s.version() == SchemaVersion::Application(definition_view_id.clone())));
+            // The new schema should be available on storage provider.
+            assert!(context
+                .schema_provider
+                .all()
+                .iter()
+                .any(|s| s.version() == SchemaVersion::Application(definition_view_id.clone())));
+        });
     }
 }
