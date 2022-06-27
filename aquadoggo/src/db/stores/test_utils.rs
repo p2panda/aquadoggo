@@ -210,6 +210,11 @@ pub struct TestDatabaseRunner {
 }
 
 impl TestDatabaseRunner {
+    /// Provides a safe way to write tests using a database which closes the pool connection
+    /// automatically when the test succeeds or fails.
+    ///
+    /// Takes an (async) test function as an argument and passes over the `TestDatabase` instance
+    /// so it can be used inside of it.
     pub fn with_db_teardown<F: AsyncTestFn + Send + Sync + 'static>(&self, test: F) {
         let runtime = Builder::new_current_thread()
             .worker_threads(1)
@@ -247,7 +252,8 @@ impl TestDatabaseRunner {
             // be reached even when the test panicked
             pool.close().await;
 
-            // Panic here when test failed to propagate it further
+            // Panic here when test failed. The test fails within its own async task and stays
+            // there, we need to propagate it further to inform the test runtime about the result
             result.unwrap();
         });
     }
