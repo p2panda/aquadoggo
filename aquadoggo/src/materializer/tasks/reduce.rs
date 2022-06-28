@@ -22,7 +22,13 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
     debug!("Working on reduce task {:#?}", input);
 
     // Find out which document we are handling
-    let document_id = resolve_document_id(&context, &input).await?;
+    let document_id = match resolve_document_id(&context, &input).await? {
+        Some(document_id) => Ok(document_id),
+        None => {
+            debug!("No document found for this view, exit without dispatching any other tasks");
+            return Ok(None);
+        }
+    }?;
 
     // Get all operations for the requested document
     let operations = context
@@ -66,17 +72,18 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
 async fn resolve_document_id(
     context: &Context,
     input: &TaskInput,
-) -> Result<DocumentId, TaskError> {
+) -> Result<Option<DocumentId>, TaskError> {
     match (&input.document_id, &input.document_view_id) {
         // The `DocumentId` is already given, we don't have to do anything
-        (Some(document_id), None) => Ok(document_id.to_owned()),
+        (Some(document_id), None) => Ok(Some(document_id.to_owned())),
 
         // A `DocumentViewId` is given, let's find out its document id
         (None, Some(document_view_id)) => {
             // @TODO: We can skip this step if we implement:
             // https://github.com/p2panda/aquadoggo/issues/148
+            debug!("Find document for view with id: {}", document_view_id);
             let operation_id = document_view_id.clone().into_iter().next().unwrap();
-            match context
+            context
                 .store
                 .get_document_by_operation_id(&operation_id)
                 .await
@@ -84,15 +91,8 @@ async fn resolve_document_id(
                     debug!("Fatal error getting document_id from storage");
                     debug!("{}", err);
                     TaskError::Critical
-                })? {
-                Some(document_id) => Ok(document_id),
-                None => {
-                    debug!("No document exists for view with id: {}", document_view_id);
-                    Err(TaskError::Critical)
-                }
-            }
+                })
         }
-
         // None or both have been provided which smells like a bug
         (_, _) => Err(TaskError::Critical),
     }
