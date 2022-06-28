@@ -36,7 +36,7 @@ struct Opt {
     #[structopt(short, long, parse(from_os_str))]
     data_dir: Option<std::path::PathBuf>,
 
-    /// Urls of remote nodes to connect to for replicate with
+    /// Urls of remote nodes to replicate with
     #[structopt(short, long)]
     remote_node_addresses: Vec<String>,
 
