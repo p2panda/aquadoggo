@@ -156,10 +156,6 @@ mod tests {
 
     use super::materializer_service;
 
-    fn init() {
-        let _ = env_logger::builder().is_test(true).try_init();
-    }
-
     #[rstest]
     fn materialize_document_from_bus(
         #[from(test_db)]
@@ -433,9 +429,7 @@ mod tests {
         #[case] operation: Operation,
         key_pair: KeyPair,
     ) {
-        init();
-
-        // Prepare database which inserts data for one document
+        // Prepare empty database
         runner.with_db_teardown(|db: TestDatabase| async move {
             // Prepare arguments for service
             let context = Context::new(db.store.clone(), Configuration::default());
