@@ -110,6 +110,7 @@ dependencies = [
  "bamboo-rs-core-ed25519-yasmf",
  "deadqueue",
  "directories",
+ "env_logger",
  "envy",
  "futures",
  "graphql_client",
