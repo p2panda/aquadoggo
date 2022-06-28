@@ -4,7 +4,7 @@ use std::convert::TryFrom;
 
 use futures::Future;
 use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
-use p2panda_rs::entry::{sign_and_encode, Entry};
+use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::{Author, KeyPair};
 use p2panda_rs::operation::{
@@ -16,7 +16,7 @@ use p2panda_rs::storage_provider::traits::{
     AsStorageEntry, AsStorageLog, EntryStore, LogStore, OperationStore, StorageProvider,
 };
 use p2panda_rs::test_utils::constants::{DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
-use p2panda_rs::test_utils::fixtures::{create_operation, delete_operation, update_operation};
+use p2panda_rs::test_utils::fixtures::{operation, operation_fields};
 use rstest::fixture;
 use sqlx::migrate::MigrateDatabase;
 use sqlx::Any;
@@ -26,7 +26,7 @@ use crate::db::provider::SqlStorage;
 use crate::db::stores::{StorageEntry, StorageLog};
 use crate::db::traits::DocumentStore;
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
-use crate::graphql::client::{EntryArgsRequest, PublishEntryRequest};
+use crate::graphql::client::{EntryArgsRequest, PublishEntryRequest, PublishEntryResponse};
 use crate::test_helpers::TEST_CONFIG;
 
 /// The fields used as defaults in the tests.
@@ -313,7 +313,7 @@ async fn create_test_db(
     no_of_entries: usize,
     no_of_authors: usize,
     with_delete: bool,
-    schema: SchemaId,
+    schema_id: SchemaId,
     create_operation_fields: Vec<(&'static str, OperationValue)>,
     update_operation_fields: Vec<(&'static str, OperationValue)>,
 ) -> TestDatabase {
@@ -333,68 +333,41 @@ async fn create_test_db(
     }
 
     for key_pair in &key_pairs {
-        let mut document: Option<DocumentId> = None;
-        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+        let mut document_id: Option<DocumentId> = None;
+        let mut previous_operation: Option<DocumentViewId> = None;
         for index in 0..no_of_entries {
-            let next_entry_args = store
-                .get_entry_args(&EntryArgsRequest {
-                    author: author.clone(),
-                    document: document.as_ref().cloned(),
-                })
-                .await
-                .unwrap();
-
-            let next_operation = if index == 0 {
-                create_operation(&create_operation_fields)
-            } else if index == (no_of_entries - 1) && with_delete {
-                delete_operation(&next_entry_args.backlink.clone().unwrap().into())
-            } else {
-                update_operation(
-                    &update_operation_fields,
-                    &next_entry_args.backlink.clone().unwrap().into(),
-                )
+            // Create an operation based on the current index and whether this document should contain
+            // a DELETE operation.
+            let next_operation_fields = match index {
+                // First operation is a CREATE.
+                0 => Some(operation_fields(create_operation_fields.clone())),
+                // Last operation is a DELETE if the with_delete flag is set.
+                seq if seq == (no_of_entries - 1) && with_delete => None,
+                // All other operations are UPDATE.
+                _ => Some(operation_fields(update_operation_fields.clone())),
             };
 
-            let next_entry = Entry::new(
-                &next_entry_args.log_id,
-                Some(&next_operation),
-                next_entry_args.skiplink.as_ref(),
-                next_entry_args.backlink.as_ref(),
-                &next_entry_args.seq_num,
+            // Publish the operation encoded on an entry to storage.
+            let (entry_encoded, publish_entry_response) = send_to_store(
+                &store,
+                &operation(
+                    next_operation_fields,
+                    previous_operation,
+                    Some(schema_id.to_owned()),
+                ),
+                document_id.as_ref(),
+                key_pair,
             )
-            .unwrap();
+            .await;
 
-            let entry_encoded = sign_and_encode(&next_entry, key_pair).unwrap();
-            let operation_encoded = OperationEncoded::try_from(&next_operation).unwrap();
+            // Set the previous_operations based on the backlink.
+            previous_operation = publish_entry_response.backlink.map(|hash| hash.into());
 
+            // If this was the first entry in the document, store the doucment id for later.
             if index == 0 {
-                document = Some(entry_encoded.hash().into());
-                documents.push(entry_encoded.hash().into());
+                document_id = Some(entry_encoded.hash().into());
+                documents.push(document_id.clone().unwrap());
             }
-
-            let storage_entry = StorageEntry::new(&entry_encoded, &operation_encoded).unwrap();
-
-            store.insert_entry(storage_entry).await.unwrap();
-
-            let storage_log = StorageLog::new(
-                &author,
-                &schema,
-                &document.clone().unwrap(),
-                &next_entry_args.log_id,
-            );
-
-            if next_entry_args.seq_num.is_first() {
-                store.insert_log(storage_log).await.unwrap();
-            }
-
-            let verified_operation =
-                VerifiedOperation::new(&author, &entry_encoded.hash().into(), &next_operation)
-                    .unwrap();
-
-            store
-                .insert_operation(&verified_operation, &document.clone().unwrap())
-                .await
-                .unwrap();
         }
     }
 
@@ -403,6 +376,63 @@ async fn create_test_db(
         key_pairs,
         documents,
     }
+}
+
+async fn send_to_store(
+    store: &SqlStorage,
+    operation: &Operation,
+    document_id: Option<&DocumentId>,
+    key_pair: &KeyPair,
+) -> (EntrySigned, PublishEntryResponse) {
+    // Get an Author from the key_pair.
+    let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+
+    // Get the next entry arguments for this author and the passed document id.
+    let next_entry_args = store
+        .get_entry_args(&EntryArgsRequest {
+            author: author.clone(),
+            document: document_id.cloned(),
+        })
+        .await
+        .unwrap();
+
+    // Construct the next entry.
+    let next_entry = Entry::new(
+        &next_entry_args.log_id,
+        Some(operation),
+        next_entry_args.skiplink.as_ref(),
+        next_entry_args.backlink.as_ref(),
+        &next_entry_args.seq_num,
+    )
+    .unwrap();
+
+    // Encode both the entry and operation.
+    let entry_encoded = sign_and_encode(&next_entry, key_pair).unwrap();
+    let operation_encoded = OperationEncoded::try_from(operation).unwrap();
+
+    // Publish the entry and get the next entry args.
+    let publish_entry_request = PublishEntryRequest {
+        entry_encoded: entry_encoded.clone(),
+        operation_encoded,
+    };
+    let publish_entry_response = store.publish_entry(&publish_entry_request).await.unwrap();
+
+    // Set or unwrap the passed document_id.
+    let document_id = if operation.is_create() {
+        entry_encoded.hash().into()
+    } else {
+        document_id.unwrap().to_owned()
+    };
+
+    // Also insert the operation into the store.
+    let verified_operation =
+        VerifiedOperation::new(&author, &entry_encoded.hash().into(), operation).unwrap();
+    store
+        .insert_operation(&verified_operation, &document_id)
+        .await
+        .unwrap();
+
+    (entry_encoded, publish_entry_response)
 }
 
 /// Create test database.
