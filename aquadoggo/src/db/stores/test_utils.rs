@@ -12,9 +12,7 @@ use p2panda_rs::operation::{
     PinnedRelation, PinnedRelationList, Relation, RelationList, VerifiedOperation,
 };
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::storage_provider::traits::{
-    OperationStore, StorageProvider,
-};
+use p2panda_rs::storage_provider::traits::{OperationStore, StorageProvider};
 use p2panda_rs::test_utils::constants::{DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
 use p2panda_rs::test_utils::fixtures::{operation, operation_fields};
 use rstest::fixture;

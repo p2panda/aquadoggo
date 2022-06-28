@@ -141,17 +141,15 @@ mod tests {
     use p2panda_rs::storage_provider::traits::OperationStore;
     use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
     use p2panda_rs::test_utils::fixtures::{
-        key_pair, operation, operation_fields, random_document_id,
-        random_document_view_id, random_operation_id,
+        key_pair, operation, operation_fields, random_document_id, random_document_view_id,
+        random_operation_id,
     };
     use rstest::rstest;
     use tokio::sync::broadcast;
     use tokio::task;
 
     use crate::context::Context;
-    use crate::db::stores::test_utils::{
-        send_to_store, test_db, TestDatabase, TestDatabaseRunner,
-    };
+    use crate::db::stores::test_utils::{send_to_store, test_db, TestDatabase, TestDatabaseRunner};
     use crate::db::traits::DocumentStore;
     use crate::materializer::{Task, TaskInput};
     use crate::Configuration;
@@ -410,7 +408,7 @@ mod tests {
             "relation_list",
             OperationValue::RelationList(RelationList::new(
                 vec![
-                    random_document_id(), 
+                    random_document_id(),
                     random_document_id(),
                     random_document_id()
                 ],
@@ -422,7 +420,7 @@ mod tests {
             "pinned_relation_list",
             OperationValue::PinnedRelationList(PinnedRelationList::new(
                 vec![
-                    DocumentViewId::new(&[random_operation_id(), random_operation_id()]).unwrap(), 
+                    DocumentViewId::new(&[random_operation_id(), random_operation_id()]).unwrap(),
                     DocumentViewId::new(&[random_operation_id(), random_operation_id(), random_operation_id()]).unwrap()
                 ],
             )),
@@ -436,7 +434,7 @@ mod tests {
         key_pair: KeyPair,
     ) {
         init();
-        
+
         // Prepare database which inserts data for one document
         runner.with_db_teardown(|db: TestDatabase| async move {
             // Prepare arguments for service
