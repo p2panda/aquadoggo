@@ -80,10 +80,16 @@ async fn resolve_document_id(
                 .store
                 .get_document_by_operation_id(&operation_id)
                 .await
-                .map_err(|_| TaskError::Critical)?
-            {
+                .map_err(|err| {
+                    debug!("Fatal error getting document_id from storage");
+                    debug!("{}", err);
+                    TaskError::Critical
+                })? {
                 Some(document_id) => Ok(document_id),
-                None => Err(TaskError::Critical),
+                None => {
+                    debug!("No document exists for view with id: {}", document_view_id);
+                    Err(TaskError::Critical)
+                }
             }
         }
 
