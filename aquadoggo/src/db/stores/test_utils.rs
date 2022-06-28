@@ -384,8 +384,10 @@ async fn send_to_store(
     document_id: Option<&DocumentId>,
     key_pair: &KeyPair,
 ) -> (EntrySigned, PublishEntryResponse) {
+    // Get an Author from the key_pair.
     let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
+    // Get the next entry arguments for this author and the passed document id.
     let next_entry_args = store
         .get_entry_args(&EntryArgsRequest {
             author: author.clone(),
@@ -394,6 +396,7 @@ async fn send_to_store(
         .await
         .unwrap();
 
+    // Construct the next entry.
     let next_entry = Entry::new(
         &next_entry_args.log_id,
         Some(operation),
@@ -403,25 +406,27 @@ async fn send_to_store(
     )
     .unwrap();
 
+    // Encode both the entry and operation.
     let entry_encoded = sign_and_encode(&next_entry, key_pair).unwrap();
     let operation_encoded = OperationEncoded::try_from(operation).unwrap();
 
+    // Publish the entry and get the next entry args.
     let publish_entry_request = PublishEntryRequest {
         entry_encoded: entry_encoded.clone(),
         operation_encoded,
     };
-
     let publish_entry_response = store.publish_entry(&publish_entry_request).await.unwrap();
 
+    // Set or unwrap the passed document_id.
     let document_id = if operation.is_create() {
         entry_encoded.hash().into()
     } else {
         document_id.unwrap().to_owned()
     };
 
+    // Also insert the operation into the store.
     let verified_operation =
         VerifiedOperation::new(&author, &entry_encoded.hash().into(), operation).unwrap();
-
     store
         .insert_operation(&verified_operation, &document_id)
         .await
