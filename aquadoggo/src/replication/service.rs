@@ -4,8 +4,9 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::{Error, Result};
+use anyhow::{anyhow, Error, Result};
 use bamboo_rs_core_ed25519_yasmf::verify::verify_batch;
+use futures::TryFutureExt;
 use log::{debug, error, trace, warn};
 pub use p2panda_rs::entry::LogId;
 use p2panda_rs::entry::SeqNum;
@@ -92,71 +93,17 @@ impl Service<Context, ServiceMessage> for ReplicationService {
                                 )
                                 .await;
 
-                            if let Ok(mut entries) = entries {
+                            if let Ok(entries) = entries {
                                 debug!("Received {} new entries", entries.len());
 
-                                // Get the first entry (assumes they're sorted by seq_num smallest
-                                // to largest)
-                                let first_entry = entries.get(0).map(|entry| entry.clone());
-
-                                match first_entry.as_ref() {
-                                    // If the entry is the first in the log then we can don't need
-                                    // to attempt to get the skiplink and previous
-                                    Some(entry) if entry.seq_num() == SeqNum::new(1).unwrap() => {
-                                        trace!("first entry had seq_num 1 do no need to get previous entries in db");
-                                    }
-                                    Some(entry) => {
-                                        trace!("getting cert pool for entries");
-                                        let certpool_result = context
-                                            .0
-                                            .store
-                                            .get_certificate_pool(
-                                                &entry.author(),
-                                                &entry.log_id(),
-                                                &entry.seq_num(),
-                                            )
-                                            .await;
-                                        if certpool_result.is_err() {
-                                            warn!("replication error. We received entries but didn't have the required skiplinks in the db: {:?}", certpool_result);
-                                            continue;
-                                        }
-                                        let mut certpool = certpool_result.unwrap();
-                                        trace!("got {} certpool entries", certpool.len());
-                                        entries.append(&mut certpool);
-                                    }
-                                    None => {
-                                        continue;
-                                    }
-                                }
-
-                                let entries_to_verify = entries
-                                    .iter()
-                                    .map(|entry| (entry.entry_bytes(), Option::<Vec<u8>>::None))
-                                    .collect::<Vec<_>>();
-
-                                let verification_result = verify_batch(&entries_to_verify);
-
-                                if verification_result.is_err() {
-                                    warn!("couldn't verify entries: {:?}", verification_result);
+                                if verify_entries(&entries, &context).await.is_err() {
+                                    warn!("couldn't verify entries");
                                     continue;
                                 }
 
-                                for entry in entries {
-                                    context
-                                        .0
-                                        .store
-                                        .insert_entry(entry.clone())
-                                        .await
-                                        .map(|_| {
-                                            send_new_entry_service_message(tx.clone(), &entry);
-                                        })
-                                        .unwrap_or_else(|err| {
-                                            error!(
-                                                "Failed to insert entry: {:?}, err: {:?}",
-                                                entry, err
-                                            );
-                                        });
-                                }
+                                insert_new_entries(&entries, &context, tx.clone())
+                                    .await
+                                    .unwrap_or_else(|e| error!("{:?}", e));
                             } else {
                                 warn!("Replication request failed");
                             }
@@ -174,6 +121,86 @@ impl Service<Context, ServiceMessage> for ReplicationService {
 
         Ok(())
     }
+}
+
+async fn verify_entries(entries: &[StorageEntry], context: &Context) -> Result<()> {
+    debug!("Received {} new entries", entries.len());
+
+    // Get the first entry (assumes they're sorted by seq_num smallest
+    // to largest)
+    let first_entry = entries.get(0).map(|entry| entry.clone());
+    let mut entries_to_verify = entries.to_vec();
+
+    match first_entry.as_ref() {
+        // If the entry is the first in the log then we can don't need
+        // to attempt to get the skiplink and previous
+        Some(entry) if entry.seq_num() == SeqNum::new(1).unwrap() => {
+            trace!("first entry had seq_num 1 do no need to get previous entries in db");
+        }
+        Some(entry) => {
+            trace!("getting cert pool for entries");
+            add_certpool_to_entries_for_verification(&mut entries_to_verify, entry, &context).await?;
+        }
+        None => (),
+    }
+
+    let entries_to_verify = entries_to_verify
+        .iter()
+        .map(|entry| (entry.entry_bytes(), Option::<Vec<u8>>::None))
+        .collect::<Vec<_>>();
+
+    verify_batch(&entries_to_verify)?;
+
+    Ok(())
+}
+
+async fn insert_new_entries(
+    new_entries: &[StorageEntry],
+    context: &Context,
+    tx: ServiceSender,
+) -> Result<()> {
+    let futures = new_entries.iter().map(|entry| {
+        context
+            .0
+            .store
+            .insert_entry(entry.clone())
+            .map_ok({
+                let entry = entry.clone();
+                let tx = tx.clone();
+                move |_| {
+                    send_new_entry_service_message(tx.clone(), &entry);
+                }
+            })
+            .map_err(|err| anyhow!(format!("error inserting new entry into db: {:?}", err)))
+    });
+
+    futures::future::join_all(futures)
+        .await
+        .into_iter()
+        .collect::<Result<_>>()?;
+
+    Ok(())
+}
+
+async fn add_certpool_to_entries_for_verification(
+    entries: &mut Vec<StorageEntry>,
+    first_entry: &StorageEntry,
+    context: &Context,
+) -> Result<()> {
+    trace!("getting cert pool for entries");
+    let mut certpool = context
+        .0
+        .store
+        .get_certificate_pool(
+            &first_entry.author(),
+            &first_entry.log_id(),
+            &first_entry.seq_num(),
+        )
+        .await?;
+
+    trace!("got {} certpool entries", certpool.len());
+    entries.append(&mut certpool);
+    Ok(())
 }
 
 fn send_new_entry_service_message(tx: ServiceSender, entry: &StorageEntry) {
