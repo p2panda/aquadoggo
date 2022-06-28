@@ -128,7 +128,7 @@ async fn verify_entries(entries: &[StorageEntry], context: &Context) -> Result<(
 
     // Get the first entry (assumes they're sorted by seq_num smallest
     // to largest)
-    let first_entry = entries.get(0).map(|entry| entry.clone());
+    let first_entry = entries.get(0).cloned();
     let mut entries_to_verify = entries.to_vec();
 
     match first_entry.as_ref() {
@@ -139,15 +139,16 @@ async fn verify_entries(entries: &[StorageEntry], context: &Context) -> Result<(
         }
         Some(entry) => {
             trace!("getting cert pool for entries");
-            add_certpool_to_entries_for_verification(&mut entries_to_verify, entry, &context).await?;
+            add_certpool_to_entries_for_verification(&mut entries_to_verify, entry, context)
+                .await?;
         }
         None => (),
     }
 
-    let entries_to_verify = entries_to_verify
+    let entries_to_verify: Vec<(Vec<u8>, Option<Vec<u8>>)> = entries_to_verify
         .iter()
-        .map(|entry| (entry.entry_bytes(), Option::<Vec<u8>>::None))
-        .collect::<Vec<_>>();
+        .map(|entry| (entry.entry_bytes(), None))
+        .collect();
 
     verify_batch(&entries_to_verify)?;
 
