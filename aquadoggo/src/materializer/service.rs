@@ -339,6 +339,9 @@ mod tests {
             ))
             .unwrap();
 
+            // Wait a little bit for work being done ..
+            tokio::time::sleep(Duration::from_millis(50)).await;
+
             // Then straight away publish an UPDATE on this document and send it over the bus too.
             let (entry_encoded, _) = send_to_store(
                 &db.store,
@@ -362,7 +365,7 @@ mod tests {
             .unwrap();
 
             // Wait a little bit for work being done ..
-            tokio::time::sleep(Duration::from_millis(200)).await;
+            tokio::time::sleep(Duration::from_millis(50)).await;
 
             // Make sure the service did not crash and is still running
             assert_eq!(handle.is_finished(), false);
@@ -452,7 +455,7 @@ mod tests {
             // Wait for service to be ready ..
             tokio::time::sleep(Duration::from_millis(50)).await;
 
-            // Then straight away publish an UPDATE on this document and send it over the bus too.
+            // Then straight away publish a CREATE operation and send it to the bus.
             let (entry_encoded, _) = send_to_store(&db.store, &operation, None, &key_pair).await;
 
             // Send a message over the bus which kicks in materialization
