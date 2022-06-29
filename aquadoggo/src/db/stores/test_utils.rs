@@ -265,10 +265,13 @@ impl TestDatabaseRunner {
         runtime.block_on(async {
             // Initialise test database
             let pool = initialize_db().await;
-            let store = SqlStorage::new(pool);
+            let mut db = TestDatabase {
+                store: SqlStorage::new(pool),
+                test_data: TestData::default(),
+            };
 
             // Populate the test db
-            let db = populate_test_db(store, &self.config).await;
+            populate_test_db(&mut db, &self.config).await;
 
             // Get a handle of the underlying database connection pool
             let pool = db.store.pool.clone();
@@ -396,16 +399,14 @@ pub struct TestData {
 ///
 /// Returns a `TestDatabase` containing storage provider instance, a vector of key pairs for all
 /// authors in the db, and a vector of the ids for all documents.
-async fn populate_test_db(store: SqlStorage, config: &PopulateDatabaseConfig) -> TestDatabase {
-    let mut test_data = TestData::default();
-    test_data.key_pairs = test_key_pairs(config.no_of_authors);
+async fn populate_test_db(db: &mut TestDatabase, config: &PopulateDatabaseConfig) {
+    let key_pairs = test_key_pairs(config.no_of_authors);
 
-    // If we don't want any entries in the db return now
-    if config.no_of_entries == 0 || config.no_of_logs == 0 {
-        return TestDatabase { store, test_data };
-    }
+    for key_pair in &key_pairs {
+        db.test_data
+            .key_pairs
+            .push(KeyPair::from_private_key(key_pair.private_key()).unwrap());
 
-    for key_pair in &test_data.key_pairs {
         for _log_id in 0..config.no_of_logs {
             let mut document_id: Option<DocumentId> = None;
             let mut previous_operation: Option<DocumentViewId> = None;
@@ -423,7 +424,7 @@ async fn populate_test_db(store: SqlStorage, config: &PopulateDatabaseConfig) ->
 
                 // Publish the operation encoded on an entry to storage.
                 let (entry_encoded, publish_entry_response) = send_to_store(
-                    &store,
+                    &db.store,
                     &operation(
                         next_operation_fields,
                         previous_operation,
@@ -440,13 +441,11 @@ async fn populate_test_db(store: SqlStorage, config: &PopulateDatabaseConfig) ->
                 // If this was the first entry in the document, store the doucment id for later.
                 if index == 0 {
                     document_id = Some(entry_encoded.hash().into());
-                    test_data.documents.push(document_id.clone().unwrap());
+                    db.test_data.documents.push(document_id.clone().unwrap());
                 }
             }
         }
     }
-
-    TestDatabase { store, test_data }
 }
 
 async fn send_to_store(
