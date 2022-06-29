@@ -346,10 +346,11 @@ mod tests {
             let author_str: String = author.as_str().into();
             let endpoint: String = "http://localhost:3022/graphql".into();
 
-            let mut replication_config = ReplicationConfig::default();
-            replication_config.authors_to_replicate =
-                vec![(author_str, log_ids).try_into().unwrap()];
-            replication_config.remote_peers = vec![endpoint];
+            let replication_config = ReplicationConfig {
+                authors_to_replicate: vec![(author_str, log_ids).try_into().unwrap()],
+                remote_peers: vec![endpoint],
+                ..ReplicationConfig::default()
+            };
 
             let ada_db = db_manager.create(&TEST_CONFIG.database_url).await;
             let context_ada = Context::new(ada_db.store.clone(), Configuration::default());
