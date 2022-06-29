@@ -375,7 +375,7 @@ async fn create_test_db(
     }
 }
 
-pub async fn send_to_store(
+async fn send_to_store(
     store: &SqlStorage,
     operation: &Operation,
     document_id: Option<&DocumentId>,
