@@ -9,7 +9,6 @@ use anyhow::Error as AnyhowError;
 use async_graphql::connection::{query, Connection, CursorType, Edge, EmptyFields};
 use async_graphql::Object;
 use async_graphql::*;
-use mockall_double::double;
 use p2panda_rs::entry::decode_entry;
 use p2panda_rs::storage_provider::traits::EntryStore as EntryStoreTrait;
 use tokio::sync::Mutex;
@@ -35,7 +34,8 @@ mod testing;
 pub use aliased_author::AliasedAuthor;
 pub use author::{Author, AuthorOrAlias};
 
-#[double]
+#[cfg(test)]
+pub use context::MockReplicationContext;
 pub use context::ReplicationContext;
 pub use entry::Entry;
 pub use entry_and_payload::EntryAndPayload;
@@ -188,7 +188,7 @@ mod tests {
     use tokio::sync::Mutex;
 
     use super::testing::MockEntryStore;
-    use super::{AuthorOrAlias, ReplicationContext, ReplicationRoot, SequenceNumber};
+    use super::{AuthorOrAlias, MockReplicationContext, ReplicationRoot, SequenceNumber};
 
     #[tokio::test]
     async fn get_entries_newer_than_seq_cursor_addition_is_ok() {
@@ -214,8 +214,8 @@ mod tests {
             log_id, author_string, sequence_number, first, after.encode_cursor()
         );
 
-        let mut replication_context: ReplicationContext<MockEntryStore> =
-            ReplicationContext::default();
+        let mut replication_context: MockReplicationContext<MockEntryStore> =
+            MockReplicationContext::default();
 
         // Prepare our main assertions.
         // - Checks that get_entries_newer_than_seq is called with the values we expect
