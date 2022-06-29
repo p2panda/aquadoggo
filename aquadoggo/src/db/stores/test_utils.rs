@@ -13,9 +13,7 @@ use p2panda_rs::operation::{
     PinnedRelation, PinnedRelationList, Relation, RelationList, VerifiedOperation,
 };
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::storage_provider::traits::{
-    AsStorageEntry, AsStorageLog, EntryStore, LogStore, OperationStore, StorageProvider,
-};
+use p2panda_rs::storage_provider::traits::{OperationStore, StorageProvider};
 use p2panda_rs::test_utils::constants::{DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
 use p2panda_rs::test_utils::fixtures::{operation, operation_fields};
 use rstest::fixture;
@@ -25,11 +23,10 @@ use tokio::runtime::Builder;
 use tokio::sync::Mutex;
 
 use crate::db::provider::SqlStorage;
-use crate::db::stores::{StorageEntry, StorageLog};
 use crate::db::traits::DocumentStore;
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
 use crate::graphql::client::{EntryArgsRequest, PublishEntryRequest, PublishEntryResponse};
-use crate::test_helpers::{TestConfiguration, TEST_CONFIG};
+use crate::test_helpers::TEST_CONFIG;
 
 /// The fields used as defaults in the tests.
 pub fn doggo_test_fields() -> Vec<(&'static str, OperationValue)> {
