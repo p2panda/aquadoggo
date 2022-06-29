@@ -319,8 +319,21 @@ pub fn test_db(
 /// pre-populated database for testing.
 pub struct TestDatabase {
     pub store: SqlStorage,
+    pub test_data: TestData,
+}
+
+pub struct TestData {
     pub key_pairs: Vec<KeyPair>,
     pub documents: Vec<DocumentId>,
+}
+
+impl Default for TestData {
+    fn default() -> Self {
+        Self {
+            key_pairs: Default::default(),
+            documents: Default::default(),
+        }
+    }
 }
 
 /// Helper method for constructing a storage provider instance backed by a pre-populated database.
@@ -332,19 +345,15 @@ pub struct TestDatabase {
 /// Returns a `TestDatabase` containing storage provider instance, a vector of key pairs for all
 /// authors in the db, and a vector of the ids for all documents.
 async fn populate_test_db(store: SqlStorage, config: &PopulateDatabaseConfig) -> TestDatabase {
-    let mut documents: Vec<DocumentId> = Vec::new();
-    let key_pairs = test_key_pairs(config.no_of_authors);
+    let mut test_data = TestData::default();
+    test_data.key_pairs = test_key_pairs(config.no_of_authors);
 
     // If we don't want any entries in the db return now
-    if config.no_of_entries == 0 {
-        return TestDatabase {
-            store,
-            key_pairs,
-            documents,
-        };
+    if config.no_of_entries == 0 || config.no_of_logs == 0 {
+        return TestDatabase { store, test_data };
     }
 
-    for key_pair in &key_pairs {
+    for key_pair in &test_data.key_pairs {
         for _log_id in 0..config.no_of_logs {
             let mut document_id: Option<DocumentId> = None;
             let mut previous_operation: Option<DocumentViewId> = None;
@@ -379,17 +388,13 @@ async fn populate_test_db(store: SqlStorage, config: &PopulateDatabaseConfig) ->
                 // If this was the first entry in the document, store the doucment id for later.
                 if index == 0 {
                     document_id = Some(entry_encoded.hash().into());
-                    documents.push(document_id.clone().unwrap());
+                    test_data.documents.push(document_id.clone().unwrap());
                 }
             }
         }
     }
 
-    TestDatabase {
-        store,
-        key_pairs,
-        documents,
-    }
+    TestDatabase { store, test_data }
 }
 
 async fn send_to_store(

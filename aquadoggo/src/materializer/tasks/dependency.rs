@@ -236,12 +236,12 @@ mod tests {
         runner.with_db_teardown(move |db: TestDatabase| async move {
             let context = Context::new(db.store.clone(), Configuration::default());
 
-            for document_id in &db.documents {
+            for document_id in &db.test_data.documents {
                 let input = TaskInput::new(Some(document_id.clone()), None);
                 reduce_task(context.clone(), input).await.unwrap().unwrap();
             }
 
-            for document_id in &db.documents {
+            for document_id in &db.test_data.documents {
                 let document_view = db
                     .store
                     .get_document_by_id(document_id)
@@ -271,7 +271,7 @@ mod tests {
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
             let context = Context::new(db.store.clone(), Configuration::default());
-            let document_id = db.documents[0].clone();
+            let document_id = db.test_data.documents[0].clone();
 
             let input = TaskInput::new(Some(document_id.clone()), None);
             reduce_task(context.clone(), input).await.unwrap().unwrap();
@@ -374,7 +374,7 @@ mod tests {
     fn fails_on_deleted_documents(#[case] runner: TestDatabaseRunner) {
         runner.with_db_teardown(|db: TestDatabase| async move {
             let context = Context::new(db.store.clone(), Configuration::default());
-            let document_id = db.documents[0].clone();
+            let document_id = db.test_data.documents[0].clone();
 
             let input = TaskInput::new(Some(document_id.clone()), None);
             reduce_task(context.clone(), input).await.unwrap();

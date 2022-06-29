@@ -452,7 +452,8 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
+            let author =
+                Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
             let log_id = LogId::new(1);
 
             let first_entry = db
@@ -490,7 +491,8 @@ mod tests {
                 .unwrap();
             assert!(latest_entry.is_none());
 
-            let author_in_db = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
+            let author_in_db =
+                Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
 
             let latest_entry = db
                 .store
@@ -538,7 +540,8 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
+            let author =
+                Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
 
             for seq_num in 1..10 {
                 let seq_num = SeqNum::new(seq_num).unwrap();
@@ -583,7 +586,8 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
+            let author =
+                Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
 
             for seq_num in [1, 11, 18] {
                 let seq_num = SeqNum::new(seq_num).unwrap();
@@ -621,7 +625,8 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
+            let author =
+                Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
 
             let entries = db
                 .store
@@ -657,7 +662,8 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
+            let author =
+                Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
 
             let entries = db
                 .store

@@ -194,12 +194,12 @@ mod tests {
         runner.with_db_teardown(|db: TestDatabase| async move {
             let context = Context::new(db.store.clone(), Configuration::default());
 
-            for document_id in &db.documents {
+            for document_id in &db.test_data.documents {
                 let input = TaskInput::new(Some(document_id.clone()), None);
                 assert!(reduce_task(context.clone(), input).await.is_ok());
             }
 
-            for document_id in &db.documents {
+            for document_id in &db.test_data.documents {
                 let document_view = context.store.get_document_by_id(document_id).await.unwrap();
 
                 assert_eq!(
@@ -217,8 +217,8 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let document_id = db.documents.first().unwrap();
-            let key_pair = db.key_pairs.first().unwrap();
+            let document_id = db.test_data.documents.first().unwrap();
+            let key_pair = db.test_data.key_pairs.first().unwrap();
             let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
             let context = Context::new(db.store.clone(), Configuration::default());
@@ -294,7 +294,7 @@ mod tests {
         runner.with_db_teardown(|db: TestDatabase| async move {
             let document_operations = db
                 .store
-                .get_operations_by_document_id(&db.documents[0])
+                .get_operations_by_document_id(&db.test_data.documents[0])
                 .await
                 .unwrap();
 
@@ -351,20 +351,20 @@ mod tests {
         runner.with_db_teardown(|db: TestDatabase| async move {
             let context = Context::new(db.store.clone(), Configuration::default());
 
-            for document_id in &db.documents {
+            for document_id in &db.test_data.documents {
                 let input = TaskInput::new(Some(document_id.clone()), None);
                 let tasks = reduce_task(context.clone(), input).await.unwrap();
                 assert!(tasks.is_none());
             }
 
-            for document_id in &db.documents {
+            for document_id in &db.test_data.documents {
                 let document_view = context.store.get_document_by_id(document_id).await.unwrap();
                 assert!(document_view.is_none())
             }
 
             let document_operations = context
                 .store
-                .get_operations_by_document_id(&db.documents[0])
+                .get_operations_by_document_id(&db.test_data.documents[0])
                 .await
                 .unwrap();
 
@@ -393,7 +393,7 @@ mod tests {
     ) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
             let context = Context::new(db.store.clone(), Configuration::default());
-            let document_id = db.documents[0].clone();
+            let document_id = db.test_data.documents[0].clone();
 
             let input = TaskInput::new(Some(document_id.clone()), None);
             let next_task_inputs = reduce_task(context.clone(), input).await.unwrap();

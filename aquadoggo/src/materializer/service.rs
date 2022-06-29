@@ -156,7 +156,7 @@ mod tests {
         // Prepare database which inserts data for one document
         runner.with_db_teardown(|db: TestDatabase| async move {
             // Identify document and operation which was inserted for testing
-            let document_id = db.documents.first().unwrap();
+            let document_id = db.test_data.documents.first().unwrap();
             let verified_operation = db
                 .store
                 .get_operations_by_document_id(document_id)
@@ -231,7 +231,7 @@ mod tests {
         // Prepare database which inserts data for one document
         runner.with_db_teardown(|db: TestDatabase| async move {
             // Identify document and operation which was inserted for testing
-            let document_id = db.documents.first().unwrap();
+            let document_id = db.test_data.documents.first().unwrap();
 
             // Store a pending "reduce" task from last runtime in the database so it gets picked up by
             // the materializer service

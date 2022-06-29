@@ -376,7 +376,8 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
+            let author =
+                Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
 
             // Get one entry from the pre-polulated db
             let entry = db
@@ -454,7 +455,8 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
+            let author =
+                Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
             let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
 
             let log_id = LogId::default();
@@ -535,7 +537,7 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let document_id = db.documents[0].clone();
+            let document_id = db.test_data.documents[0].clone();
 
             let document_operations = db
                 .store
@@ -582,7 +584,7 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let document_id = db.documents[0].clone();
+            let document_id = db.test_data.documents[0].clone();
 
             let document_operations = db
                 .store
@@ -629,7 +631,7 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let document_id = db.documents[0].clone();
+            let document_id = db.test_data.documents[0].clone();
 
             let document_operations = db
                 .store
@@ -656,7 +658,7 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let document_id = db.documents[0].clone();
+            let document_id = db.test_data.documents[0].clone();
 
             let document_operations = db
                 .store
@@ -693,7 +695,7 @@ mod tests {
         runner.with_db_teardown(|db: TestDatabase| async move {
             let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
 
-            for document_id in &db.documents {
+            for document_id in &db.test_data.documents {
                 let document_operations = db
                     .store
                     .get_operations_by_document_id(document_id)
