@@ -100,6 +100,8 @@ impl Service<Context, ServiceMessage> for ReplicationService {
                                 )
                                 .await;
 
+                            debug!("{:#?}", entries);
+
                             if let Ok(entries) = entries {
                                 debug!("Received {} new entries", entries.len());
 
@@ -264,7 +266,8 @@ mod tests {
     use std::time::Duration;
 
     use p2panda_rs::identity::Author;
-    use p2panda_rs::storage_provider::traits::EntryStore;
+    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
+    use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
     use rstest::rstest;
     use tokio::sync::broadcast;
     use tokio::task::{self, JoinHandle};
@@ -282,6 +285,10 @@ mod tests {
 
     use super::ReplicationService;
 
+    fn init() {
+        let _ = env_logger::builder().is_test(true).try_init();
+    }
+
     // Helper method to give us a shutdown future which will never resolve
     fn shutdown_handle() -> JoinHandle<()> {
         let shutdown = task::spawn(async {
@@ -297,7 +304,9 @@ mod tests {
     #[rstest]
     fn full_replication() {
         with_db_manager_teardown(|db_manager: TestDatabaseManager| async move {
-            let (tx, _) = broadcast::channel(16);
+            init();
+
+            let (tx, _tr) = broadcast::channel(16);
 
             // Launch HTTP service of Billie
             let mut config_billie = Configuration::default();
@@ -312,7 +321,7 @@ mod tests {
                 ..Default::default()
             };
             populate_test_db(&mut billie_db, &populate_db_config).await;
-            let context_billie = Context::new(billie_db.store, config_billie);
+            let context_billie = Context::new(billie_db.store.clone(), config_billie);
             let tx_billie = tx.clone();
             let shutdown_billie = shutdown_handle();
 
@@ -323,6 +332,7 @@ mod tests {
             });
 
             // Ada starts replication service to get data from Billies GraphQL API
+
             let public_key = billie_db
                 .test_data
                 .key_pairs
@@ -330,10 +340,11 @@ mod tests {
                 .unwrap()
                 .public_key()
                 .to_owned();
+
             let author = Author::try_from(public_key).unwrap();
             let log_ids: Vec<u64> = vec![1];
             let author_str: String = author.as_str().into();
-            let endpoint: String = "http://localhost:3022".into();
+            let endpoint: String = "http://localhost:3022/graphql".into();
 
             let mut replication_config = ReplicationConfig::default();
             replication_config.authors_to_replicate =
@@ -341,7 +352,7 @@ mod tests {
             replication_config.remote_peers = vec![endpoint];
 
             let ada_db = db_manager.create(&TEST_CONFIG.database_url).await;
-            let context_ada = Context::new(ada_db.store, Configuration::default());
+            let context_ada = Context::new(ada_db.store.clone(), Configuration::default());
             let tx_ada = tx.clone();
             let shutdown_ada = shutdown_handle();
 
@@ -356,8 +367,14 @@ mod tests {
             // Wait a little bit for replication to take place
             tokio::time::sleep(Duration::from_millis(500)).await;
 
-            // @TODO
-            // Now we can inspect the db.store to see what is inside
+            // Check the entry arrived into ada's database
+            let entries = ada_db
+                .store
+                .get_entries_by_schema(&TEST_SCHEMA_ID.parse().unwrap())
+                .await
+                .unwrap();
+
+            assert_eq!(entries.len(), 1);
         })
     }
 }
