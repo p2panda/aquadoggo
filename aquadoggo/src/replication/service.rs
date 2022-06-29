@@ -266,7 +266,7 @@ mod tests {
     use std::time::Duration;
 
     use p2panda_rs::identity::Author;
-    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
+    use p2panda_rs::storage_provider::traits::EntryStore;
     use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
     use rstest::rstest;
     use tokio::sync::broadcast;
@@ -274,12 +274,10 @@ mod tests {
 
     use crate::context::Context;
     use crate::db::stores::test_utils::{
-        populate_test_db, test_db, with_db_manager_teardown, PopulateDatabaseConfig, TestDatabase,
-        TestDatabaseManager, TestDatabaseRunner,
+        populate_test_db, with_db_manager_teardown, PopulateDatabaseConfig, TestDatabaseManager,
     };
     use crate::http::http_service;
     use crate::manager::Service;
-    use crate::test_helpers::TEST_CONFIG;
     use crate::Configuration;
     use crate::ReplicationConfig;
 
