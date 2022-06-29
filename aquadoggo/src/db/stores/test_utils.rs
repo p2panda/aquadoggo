@@ -212,6 +212,20 @@ pub struct TestDatabaseConfig {
     update_operation_fields: Vec<(&'static str, OperationValue)>,
 }
 
+impl Default for TestDatabaseConfig {
+    fn default() -> Self {
+        Self {
+            no_of_entries: 0,
+            no_of_logs: 0,
+            no_of_authors: 0,
+            with_delete: false,
+            schema: TEST_SCHEMA_ID.parse().unwrap(),
+            create_operation_fields: doggo_test_fields(),
+            update_operation_fields: doggo_test_fields(),
+        }
+    }
+}
+
 pub struct TestDatabaseRunner {
     config: TestDatabaseConfig,
 }
