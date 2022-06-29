@@ -285,7 +285,7 @@ mod tests {
 
     use super::ReplicationService;
 
-    fn init() {
+    fn init_env_logger() {
         let _ = env_logger::builder().is_test(true).try_init();
     }
 
@@ -304,11 +304,10 @@ mod tests {
     #[rstest]
     fn full_replication() {
         with_db_manager_teardown(|db_manager: TestDatabaseManager| async move {
-            // Init env_logger for this test.
-            init();
+            init_env_logger();
 
             // Build and populate Billie's db
-            let mut billie_db = db_manager.create(&TEST_CONFIG.database_url).await;
+            let mut billie_db = db_manager.create("sqlite::memory:").await;
             let populate_db_config = PopulateDatabaseConfig {
                 no_of_entries: 1,
                 no_of_logs: 1,
@@ -318,7 +317,7 @@ mod tests {
             populate_test_db(&mut billie_db, &populate_db_config).await;
 
             // Launch HTTP service of Billie
-            let (tx, _tr) = broadcast::channel(16);
+            let (tx, _rx) = broadcast::channel(16);
             let tx_billie = tx.clone();
             let shutdown_billie = shutdown_handle();
             let context_billie = Context::new(
@@ -329,7 +328,7 @@ mod tests {
                 },
             );
 
-            let _http_server_billie = task::spawn(async {
+            let http_server_billie = task::spawn(async {
                 http_service(context_billie, shutdown_billie, tx_billie)
                     .await
                     .unwrap();
@@ -350,7 +349,7 @@ mod tests {
             let endpoint: String = "http://localhost:3022/graphql".into();
 
             // Construct database and context for Ada
-            let ada_db = db_manager.create(&TEST_CONFIG.database_url).await;
+            let ada_db = db_manager.create("sqlite::memory:").await;
             let context_ada = Context::new(ada_db.store.clone(), Configuration::default());
             let tx_ada = tx.clone();
             let shutdown_ada = shutdown_handle();
@@ -362,7 +361,7 @@ mod tests {
                 ..ReplicationConfig::default()
             };
 
-            let _replication_service_ada = task::spawn(async {
+            let replication_service_ada = task::spawn(async {
                 let service = ReplicationService::new(replication_config);
                 service
                     .call(context_ada, shutdown_ada, tx_ada)
@@ -373,13 +372,16 @@ mod tests {
             // Wait a little bit for replication to take place
             tokio::time::sleep(Duration::from_millis(500)).await;
 
+            // Make sure the services did not stop
+            assert!(!http_server_billie.is_finished());
+            assert!(!replication_service_ada.is_finished());
+
             // Check the entry arrived into Ada's database
             let entries = ada_db
                 .store
                 .get_entries_by_schema(&TEST_SCHEMA_ID.parse().unwrap())
                 .await
                 .unwrap();
-
             assert_eq!(entries.len(), 1);
         })
     }
