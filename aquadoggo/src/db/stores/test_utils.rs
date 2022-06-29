@@ -232,16 +232,7 @@ impl TestDatabaseRunner {
 
         runtime.block_on(async {
             // Initialise test database
-            let db = create_test_db(
-                self.config.no_of_entries,
-                self.config.no_of_logs,
-                self.config.no_of_authors,
-                self.config.with_delete,
-                self.config.schema.clone(),
-                self.config.create_operation_fields.clone(),
-                self.config.update_operation_fields.clone(),
-            )
-            .await;
+            let db = create_test_db(&self.config).await;
 
             // Get a handle of the underlying database connection pool
             let pool = db.store.pool.clone();
@@ -322,23 +313,15 @@ pub struct TestDatabase {
 ///
 /// Returns a `TestDatabase` containing storage provider instance, a vector of key pairs for all
 /// authors in the db, and a vector of the ids for all documents.
-async fn create_test_db(
-    no_of_entries: usize,
-    no_of_logs: usize,
-    no_of_authors: usize,
-    with_delete: bool,
-    schema_id: SchemaId,
-    create_operation_fields: Vec<(&'static str, OperationValue)>,
-    update_operation_fields: Vec<(&'static str, OperationValue)>,
-) -> TestDatabase {
+async fn create_test_db(config: &TestDatabaseConfig) -> TestDatabase {
     let mut documents: Vec<DocumentId> = Vec::new();
-    let key_pairs = test_key_pairs(no_of_authors);
+    let key_pairs = test_key_pairs(config.no_of_authors);
 
     let pool = initialize_db().await;
     let store = SqlStorage::new(pool);
 
     // If we don't want any entries in the db return now
-    if no_of_entries == 0 {
+    if config.no_of_entries == 0 {
         return TestDatabase {
             store,
             key_pairs,
@@ -347,19 +330,19 @@ async fn create_test_db(
     }
 
     for key_pair in &key_pairs {
-        for _log_id in 0..no_of_logs {
+        for _log_id in 0..config.no_of_logs {
             let mut document_id: Option<DocumentId> = None;
             let mut previous_operation: Option<DocumentViewId> = None;
-            for index in 0..no_of_entries {
+            for index in 0..config.no_of_entries {
                 // Create an operation based on the current index and whether this document should contain
                 // a DELETE operation.
                 let next_operation_fields = match index {
                     // First operation is a CREATE.
-                    0 => Some(operation_fields(create_operation_fields.clone())),
+                    0 => Some(operation_fields(config.create_operation_fields.clone())),
                     // Last operation is a DELETE if the with_delete flag is set.
-                    seq if seq == (no_of_entries - 1) && with_delete => None,
+                    seq if seq == (config.no_of_entries - 1) && config.with_delete => None,
                     // All other operations are UPDATE.
-                    _ => Some(operation_fields(update_operation_fields.clone())),
+                    _ => Some(operation_fields(config.update_operation_fields.clone())),
                 };
 
                 // Publish the operation encoded on an entry to storage.
@@ -368,7 +351,7 @@ async fn create_test_db(
                     &operation(
                         next_operation_fields,
                         previous_operation,
-                        Some(schema_id.to_owned()),
+                        Some(config.schema.to_owned()),
                     ),
                     document_id.as_ref(),
                     key_pair,
