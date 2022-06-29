@@ -189,7 +189,7 @@ where
     }
 }
 
-pub struct TestDatabaseConfig {
+pub struct PopulateDatabaseConfig {
     /// Number of entries per log/document.
     no_of_entries: usize,
 
@@ -212,7 +212,7 @@ pub struct TestDatabaseConfig {
     update_operation_fields: Vec<(&'static str, OperationValue)>,
 }
 
-impl Default for TestDatabaseConfig {
+impl Default for PopulateDatabaseConfig {
     fn default() -> Self {
         Self {
             no_of_entries: 0,
@@ -227,7 +227,7 @@ impl Default for TestDatabaseConfig {
 }
 
 pub struct TestDatabaseRunner {
-    config: TestDatabaseConfig,
+    config: PopulateDatabaseConfig,
 }
 
 impl TestDatabaseRunner {
@@ -302,7 +302,7 @@ pub fn test_db(
     // The fields used for every UPDATE operation
     #[default(doggo_test_fields())] update_operation_fields: Vec<(&'static str, OperationValue)>,
 ) -> TestDatabaseRunner {
-    let config = TestDatabaseConfig {
+    let config = PopulateDatabaseConfig {
         no_of_entries,
         no_of_logs,
         no_of_authors,
@@ -331,7 +331,7 @@ pub struct TestDatabase {
 ///
 /// Returns a `TestDatabase` containing storage provider instance, a vector of key pairs for all
 /// authors in the db, and a vector of the ids for all documents.
-async fn populate_test_db(store: SqlStorage, config: &TestDatabaseConfig) -> TestDatabase {
+async fn populate_test_db(store: SqlStorage, config: &PopulateDatabaseConfig) -> TestDatabase {
     let mut documents: Vec<DocumentId> = Vec::new();
     let key_pairs = test_key_pairs(config.no_of_authors);
 
