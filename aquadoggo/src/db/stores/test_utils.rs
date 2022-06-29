@@ -322,18 +322,10 @@ pub struct TestDatabase {
     pub test_data: TestData,
 }
 
+#[derive(Default)]
 pub struct TestData {
     pub key_pairs: Vec<KeyPair>,
     pub documents: Vec<DocumentId>,
-}
-
-impl Default for TestData {
-    fn default() -> Self {
-        Self {
-            key_pairs: Default::default(),
-            documents: Default::default(),
-        }
-    }
 }
 
 /// Helper method for constructing a storage provider instance backed by a pre-populated database.
