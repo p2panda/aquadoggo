@@ -189,7 +189,7 @@ where
     }
 }
 
-pub struct TestDatabaseRunner {
+pub struct TestDatabaseConfig {
     /// Number of entries per log/document.
     no_of_entries: usize,
 
@@ -209,6 +209,10 @@ pub struct TestDatabaseRunner {
     update_operation_fields: Vec<(&'static str, OperationValue)>,
 }
 
+pub struct TestDatabaseRunner {
+    config: TestDatabaseConfig,
+}
+
 impl TestDatabaseRunner {
     /// Provides a safe way to write tests using a database which closes the pool connection
     /// automatically when the test succeeds or fails.
@@ -226,12 +230,12 @@ impl TestDatabaseRunner {
         runtime.block_on(async {
             // Initialise test database
             let db = create_test_db(
-                self.no_of_entries,
-                self.no_of_authors,
-                self.with_delete,
-                self.schema.clone(),
-                self.create_operation_fields.clone(),
-                self.update_operation_fields.clone(),
+                self.config.no_of_entries,
+                self.config.no_of_authors,
+                self.config.with_delete,
+                self.config.schema.clone(),
+                self.config.create_operation_fields.clone(),
+                self.config.update_operation_fields.clone(),
             )
             .await;
 
@@ -283,14 +287,16 @@ pub fn test_db(
     // The fields used for every UPDATE operation
     #[default(doggo_test_fields())] update_operation_fields: Vec<(&'static str, OperationValue)>,
 ) -> TestDatabaseRunner {
-    TestDatabaseRunner {
+    let config = TestDatabaseConfig {
         no_of_entries,
         no_of_authors,
         with_delete,
         schema,
         create_operation_fields,
         update_operation_fields,
-    }
+    };
+
+    TestDatabaseRunner { config }
 }
 
 /// Container for `SqlStore` with access to the document ids and key_pairs used in the
