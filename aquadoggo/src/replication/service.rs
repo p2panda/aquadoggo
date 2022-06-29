@@ -304,15 +304,10 @@ mod tests {
     #[rstest]
     fn full_replication() {
         with_db_manager_teardown(|db_manager: TestDatabaseManager| async move {
+            // Init env_logger for this test.
             init();
 
-            let (tx, _tr) = broadcast::channel(16);
-
-            // Launch HTTP service of Billie
-            let mut config_billie = Configuration::default();
-            config_billie.http_port = 3022;
-
-            // Build and populate billies db
+            // Build and populate Billie's db
             let mut billie_db = db_manager.create(&TEST_CONFIG.database_url).await;
             let populate_db_config = PopulateDatabaseConfig {
                 no_of_entries: 1,
@@ -321,9 +316,18 @@ mod tests {
                 ..Default::default()
             };
             populate_test_db(&mut billie_db, &populate_db_config).await;
-            let context_billie = Context::new(billie_db.store.clone(), config_billie);
+
+            // Launch HTTP service of Billie
+            let (tx, _tr) = broadcast::channel(16);
             let tx_billie = tx.clone();
             let shutdown_billie = shutdown_handle();
+            let context_billie = Context::new(
+                billie_db.store.clone(),
+                Configuration {
+                    http_port: 3022,
+                    ..Configuration::default()
+                },
+            );
 
             let _http_server_billie = task::spawn(async {
                 http_service(context_billie, shutdown_billie, tx_billie)
@@ -331,8 +335,7 @@ mod tests {
                     .unwrap();
             });
 
-            // Ada starts replication service to get data from Billies GraphQL API
-
+            // Collect args needed for starting replication service
             let public_key = billie_db
                 .test_data
                 .key_pairs
@@ -346,16 +349,18 @@ mod tests {
             let author_str: String = author.as_str().into();
             let endpoint: String = "http://localhost:3022/graphql".into();
 
+            // Construct database and context for Ada
+            let ada_db = db_manager.create(&TEST_CONFIG.database_url).await;
+            let context_ada = Context::new(ada_db.store.clone(), Configuration::default());
+            let tx_ada = tx.clone();
+            let shutdown_ada = shutdown_handle();
+
+            // Ada starts replication service to get data from Billies GraphQL API
             let replication_config = ReplicationConfig {
                 authors_to_replicate: vec![(author_str, log_ids).try_into().unwrap()],
                 remote_peers: vec![endpoint],
                 ..ReplicationConfig::default()
             };
-
-            let ada_db = db_manager.create(&TEST_CONFIG.database_url).await;
-            let context_ada = Context::new(ada_db.store.clone(), Configuration::default());
-            let tx_ada = tx.clone();
-            let shutdown_ada = shutdown_handle();
 
             let _replication_service_ada = task::spawn(async {
                 let service = ReplicationService::new(replication_config);
@@ -368,7 +373,7 @@ mod tests {
             // Wait a little bit for replication to take place
             tokio::time::sleep(Duration::from_millis(500)).await;
 
-            // Check the entry arrived into ada's database
+            // Check the entry arrived into Ada's database
             let entries = ada_db
                 .store
                 .get_entries_by_schema(&TEST_SCHEMA_ID.parse().unwrap())
