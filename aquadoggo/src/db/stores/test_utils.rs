@@ -193,7 +193,10 @@ pub struct TestDatabaseConfig {
     /// Number of entries per log/document.
     no_of_entries: usize,
 
-    /// Number of authors, each with a log populated as defined above.
+    /// Number of logs for each author.
+    no_of_logs: usize,
+
+    /// Number of authors, each with logs populated as defined above.
     no_of_authors: usize,
 
     /// A boolean flag for wether all logs should contain a delete operation.
@@ -231,6 +234,7 @@ impl TestDatabaseRunner {
             // Initialise test database
             let db = create_test_db(
                 self.config.no_of_entries,
+                self.config.no_of_logs,
                 self.config.no_of_authors,
                 self.config.with_delete,
                 self.config.schema.clone(),
@@ -276,7 +280,7 @@ impl TestDatabaseRunner {
 pub fn test_db(
     // Number of entries per log/document
     #[default(0)] no_of_entries: usize,
-    // Number of authors, each with a log populated as defined above
+    // Number of authors, each with logs populated as defined above
     #[default(0)] no_of_authors: usize,
     // A boolean flag for wether all logs should contain a delete operation
     #[default(false)] with_delete: bool,
@@ -289,6 +293,7 @@ pub fn test_db(
 ) -> TestDatabaseRunner {
     let config = TestDatabaseConfig {
         no_of_entries,
+        no_of_logs: 1,
         no_of_authors,
         with_delete,
         schema,
@@ -317,6 +322,7 @@ pub struct TestDatabase {
 /// authors in the db, and a vector of the ids for all documents.
 async fn create_test_db(
     no_of_entries: usize,
+    no_of_logs: usize,
     no_of_authors: usize,
     with_delete: bool,
     schema_id: SchemaId,
@@ -339,40 +345,42 @@ async fn create_test_db(
     }
 
     for key_pair in &key_pairs {
-        let mut document_id: Option<DocumentId> = None;
-        let mut previous_operation: Option<DocumentViewId> = None;
-        for index in 0..no_of_entries {
-            // Create an operation based on the current index and whether this document should contain
-            // a DELETE operation.
-            let next_operation_fields = match index {
-                // First operation is a CREATE.
-                0 => Some(operation_fields(create_operation_fields.clone())),
-                // Last operation is a DELETE if the with_delete flag is set.
-                seq if seq == (no_of_entries - 1) && with_delete => None,
-                // All other operations are UPDATE.
-                _ => Some(operation_fields(update_operation_fields.clone())),
-            };
+        for _log_id in 0..no_of_logs {
+            let mut document_id: Option<DocumentId> = None;
+            let mut previous_operation: Option<DocumentViewId> = None;
+            for index in 0..no_of_entries {
+                // Create an operation based on the current index and whether this document should contain
+                // a DELETE operation.
+                let next_operation_fields = match index {
+                    // First operation is a CREATE.
+                    0 => Some(operation_fields(create_operation_fields.clone())),
+                    // Last operation is a DELETE if the with_delete flag is set.
+                    seq if seq == (no_of_entries - 1) && with_delete => None,
+                    // All other operations are UPDATE.
+                    _ => Some(operation_fields(update_operation_fields.clone())),
+                };
 
-            // Publish the operation encoded on an entry to storage.
-            let (entry_encoded, publish_entry_response) = send_to_store(
-                &store,
-                &operation(
-                    next_operation_fields,
-                    previous_operation,
-                    Some(schema_id.to_owned()),
-                ),
-                document_id.as_ref(),
-                key_pair,
-            )
-            .await;
+                // Publish the operation encoded on an entry to storage.
+                let (entry_encoded, publish_entry_response) = send_to_store(
+                    &store,
+                    &operation(
+                        next_operation_fields,
+                        previous_operation,
+                        Some(schema_id.to_owned()),
+                    ),
+                    document_id.as_ref(),
+                    key_pair,
+                )
+                .await;
 
-            // Set the previous_operations based on the backlink.
-            previous_operation = publish_entry_response.backlink.map(|hash| hash.into());
+                // Set the previous_operations based on the backlink.
+                previous_operation = publish_entry_response.backlink.map(|hash| hash.into());
 
-            // If this was the first entry in the document, store the doucment id for later.
-            if index == 0 {
-                document_id = Some(entry_encoded.hash().into());
-                documents.push(document_id.clone().unwrap());
+                // If this was the first entry in the document, store the doucment id for later.
+                if index == 0 {
+                    document_id = Some(entry_encoded.hash().into());
+                    documents.push(document_id.clone().unwrap());
+                }
             }
         }
     }
