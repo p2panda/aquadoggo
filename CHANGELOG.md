@@ -48,6 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improve CI, track test coverage [#139](https://github.com/p2panda/aquadoggo/pull/139)
 - Fix compatibility with PostgreSQL, change sqlx runtime to `tokio` [#170](https://github.com/p2panda/aquadoggo/pull/170)
 - Use UPSERT for inserting or updating documents [#173](https://github.com/p2panda/aquadoggo/pull/173)
+- Don't critically fail reduce task when document missing [#177](https://github.com/p2panda/aquadoggo/pull/177)
 
 ## [0.2.0]
 

@@ -12,9 +12,7 @@ use p2panda_rs::operation::{
     PinnedRelation, PinnedRelationList, Relation, RelationList, VerifiedOperation,
 };
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::storage_provider::traits::{
-    AsStorageEntry, AsStorageLog, EntryStore, LogStore, OperationStore, StorageProvider,
-};
+use p2panda_rs::storage_provider::traits::{OperationStore, StorageProvider};
 use p2panda_rs::test_utils::constants::{DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
 use p2panda_rs::test_utils::fixtures::{operation, operation_fields};
 use rstest::fixture;
@@ -23,7 +21,6 @@ use sqlx::Any;
 use tokio::runtime::Builder;
 
 use crate::db::provider::SqlStorage;
-use crate::db::stores::{StorageEntry, StorageLog};
 use crate::db::traits::DocumentStore;
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
 use crate::graphql::client::{EntryArgsRequest, PublishEntryRequest, PublishEntryResponse};
@@ -378,7 +375,7 @@ async fn create_test_db(
     }
 }
 
-async fn send_to_store(
+pub async fn send_to_store(
     store: &SqlStorage,
     operation: &Operation,
     document_id: Option<&DocumentId>,
