@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::convert::TryFrom;
+use std::sync::Arc;
 
 use futures::Future;
 use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
@@ -21,6 +22,7 @@ use rstest::fixture;
 use sqlx::migrate::MigrateDatabase;
 use sqlx::Any;
 use tokio::runtime::Builder;
+use tokio::sync::Mutex;
 
 use crate::db::provider::SqlStorage;
 use crate::db::stores::{StorageEntry, StorageLog};
@@ -189,6 +191,22 @@ where
     }
 }
 
+#[async_trait::async_trait]
+pub trait AsyncTestFnWithManager {
+    async fn call(self, db: TestDatabaseManager);
+}
+
+#[async_trait::async_trait]
+impl<FN, F> AsyncTestFnWithManager for FN
+where
+    FN: FnOnce(TestDatabaseManager) -> F + Sync + Send,
+    F: Future<Output = ()> + Send,
+{
+    async fn call(self, db: TestDatabaseManager) {
+        self(db).await
+    }
+}
+
 pub struct PopulateDatabaseConfig {
     /// Number of entries per log/document.
     no_of_entries: usize,
@@ -246,7 +264,7 @@ impl TestDatabaseRunner {
 
         runtime.block_on(async {
             // Initialise test database
-            let pool = initialize_db_with_config(TestConfiguration::default()).await;
+            let pool = initialize_db().await;
             let store = SqlStorage::new(pool);
 
             // Populate the test db
@@ -274,6 +292,48 @@ impl TestDatabaseRunner {
             result.unwrap();
         });
     }
+}
+
+/// Provides a safe way to write tests with the ability to build many databases and have their
+/// pool connections closed automatically when the test succeeds or fails.
+///
+/// Takes an (async) test function as an argument and passes over the `TestDatabaseManager`
+/// instance which can be used to build databases from inside the tests.
+pub fn with_db_manager_teardown<F: AsyncTestFnWithManager + Send + Sync + 'static>(test: F) {
+    let runtime = Builder::new_current_thread()
+        .worker_threads(1)
+        .enable_all()
+        .thread_name("with_db_teardown")
+        .build()
+        .expect("Could not build tokio Runtime for test");
+
+    // Instantiate the database manager
+    let db_manager = TestDatabaseManager::new();
+
+    // Get a handle onto it's collection of pools
+    let pools = db_manager.pools.clone();
+
+    runtime.block_on(async {
+        // Spawn the test in a separate task to make sure we have control over the possible
+        // panics which might happen inside of it
+        let handle = tokio::task::spawn(async move {
+            // Execute the actual test
+            test.call(db_manager).await;
+        });
+
+        // Get a handle of the task so we can use it later
+        let result = handle.await;
+
+        // Unwind the test by closing down the connections to all the database pools. This
+        // will be reached even when the test panicked
+        for pool in pools.lock().await.iter() {
+            pool.close().await;
+        }
+
+        // Panic here when test failed. The test fails within its own async task and stays
+        // there, we need to propagate it further to inform the test runtime about the result
+        result.unwrap();
+    });
 }
 
 /// Fixture for constructing a storage provider instance backed by a pre-populated database.
@@ -464,13 +524,13 @@ async fn initialize_db() -> Pool {
 }
 
 /// Create test database.
-async fn initialize_db_with_config(config: TestConfiguration) -> Pool {
+async fn initialize_db_with_url(url: &str) -> Pool {
     // Reset database first
     drop_database().await;
-    create_database(&config.database_url).await.unwrap();
+    create_database(url).await.unwrap();
 
     // Create connection pool and run all migrations
-    let pool = connection_pool(&config.database_url, 25).await.unwrap();
+    let pool = connection_pool(url, 25).await.unwrap();
     if run_pending_migrations(&pool).await.is_err() {
         pool.close().await;
     }
@@ -485,5 +545,27 @@ async fn drop_database() {
         .unwrap()
     {
         Any::drop_database(&TEST_CONFIG.database_url).await.unwrap();
+    }
+}
+
+#[derive(Default)]
+pub struct TestDatabaseManager {
+    pools: Arc<Mutex<Vec<Pool>>>,
+}
+
+impl TestDatabaseManager {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub async fn create(&self, url: &str) -> TestDatabase {
+        // Initialise test database
+        let pool = initialize_db_with_url(url).await;
+        let test_db = TestDatabase {
+            store: SqlStorage::new(pool.clone()),
+            test_data: TestData::default(),
+        };
+        self.pools.lock().await.push(pool);
+        test_db
     }
 }

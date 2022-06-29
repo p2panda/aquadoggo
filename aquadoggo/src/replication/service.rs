@@ -263,14 +263,18 @@ mod tests {
     use std::convert::TryInto;
     use std::time::Duration;
 
+    use p2panda_rs::storage_provider::traits::EntryStore;
     use rstest::rstest;
     use tokio::sync::broadcast;
     use tokio::task::{self, JoinHandle};
 
     use crate::context::Context;
-    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+    use crate::db::stores::test_utils::{
+        test_db, with_db_manager_teardown, TestDatabase, TestDatabaseManager, TestDatabaseRunner,
+    };
     use crate::http::http_service;
     use crate::manager::Service;
+    use crate::test_helpers::TEST_CONFIG;
     use crate::Configuration;
     use crate::ReplicationConfig;
 
@@ -289,8 +293,8 @@ mod tests {
     }
 
     #[rstest]
-    fn full_replication(#[from(test_db)] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+    fn full_replication() {
+        with_db_manager_teardown(|db_manager: TestDatabaseManager| async move {
             let (tx, _) = broadcast::channel(16);
 
             // Launch HTTP service of Billie
@@ -298,12 +302,9 @@ mod tests {
             config_billie.http_port = 3022;
 
             // @TODO
-            // Billie needs to get its database from somewhere else .. we would either change our
-            // testing methods to provide multiple databases or do something else here :-\
-            //
-            // Also, we need to fill billies database with some entries before!
-            let store_billie = db.store.clone();
-            let context_billie = Context::new(store_billie, config_billie);
+            // Wee need to fill billies database with some entries before!
+            let billie_db = db_manager.create(&TEST_CONFIG.database_url).await;
+            let context_billie = Context::new(billie_db.store, config_billie);
             let tx_billie = tx.clone();
             let shutdown_billie = shutdown_handle();
 
@@ -325,8 +326,8 @@ mod tests {
                 vec![(author_str, log_ids).try_into().unwrap()];
             replication_config.remote_peers = vec![endpoint];
 
-            let store_ada = db.store.clone();
-            let context_ada = Context::new(store_ada, Configuration::default());
+            let ada_db = db_manager.create(&TEST_CONFIG.database_url).await;
+            let context_ada = Context::new(ada_db.store, Configuration::default());
             let tx_ada = tx.clone();
             let shutdown_ada = shutdown_handle();
 
