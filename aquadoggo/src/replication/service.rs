@@ -11,13 +11,17 @@ use log::{debug, error, trace, warn};
 pub use p2panda_rs::entry::LogId;
 use p2panda_rs::entry::SeqNum;
 pub use p2panda_rs::identity::Author;
-use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
+use p2panda_rs::operation::{AsVerifiedOperation, VerifiedOperation};
+use p2panda_rs::storage_provider::traits::{
+    AsStorageEntry, EntryStore, OperationStore, StorageProvider,
+};
 use serde::Deserialize;
 use tokio::task;
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
 use crate::db::stores::StorageEntry;
+use crate::graphql::client::PublishEntryRequest;
 use crate::graphql::replication::client::Client;
 use crate::manager::{Service, Shutdown};
 
@@ -124,8 +128,6 @@ impl Service<Context, ServiceMessage> for ReplicationService {
 }
 
 async fn verify_entries(entries: &[StorageEntry], context: &Context) -> Result<()> {
-    debug!("Received {} new entries", entries.len());
-
     // Get the first entry (assumes they're sorted by seq_num smallest
     // to largest)
     let first_entry = entries.get(0).cloned();
@@ -160,25 +162,50 @@ async fn insert_new_entries(
     context: &Context,
     tx: ServiceSender,
 ) -> Result<()> {
-    let futures = new_entries.iter().map(|entry| {
-        context
+    for entry in new_entries {
+        // Parse and validate parameters
+        let args = PublishEntryRequest {
+            entry_encoded: entry.entry_signed().clone(),
+            operation_encoded: entry.operation_encoded().unwrap().clone(),
+        };
+
+        // Validate and store entry in database
+        // @TODO: Check all validation steps here for both entries and operations. Also, there is
+        // probably overlap in what replication needs in terms of validation?
+        context.0.store.publish_entry(&args).await.unwrap();
+
+        match context
             .0
             .store
-            .insert_entry(entry.clone())
-            .map_ok({
-                let entry = entry.clone();
-                let tx = tx.clone();
-                move |_| {
-                    send_new_entry_service_message(tx.clone(), &entry);
-                }
-            })
-            .map_err(|err| anyhow!(format!("error inserting new entry into db: {:?}", err)))
-    });
+            .get_document_by_entry(&entry.hash())
+            .await
+            .unwrap()
+        {
+            Some(document_id) => {
+                let operation = VerifiedOperation::new_from_entry(
+                    entry.entry_signed(),
+                    entry.operation_encoded().unwrap(),
+                )
+                .unwrap();
 
-    futures::future::join_all(futures)
-        .await
-        .into_iter()
-        .collect::<Result<_>>()?;
+                context
+                    .0
+                    .store
+                    .insert_operation(&operation, &document_id)
+                    .map_ok({
+                        let entry = entry.clone();
+                        let tx = tx.clone();
+                        move |_| {
+                            send_new_entry_service_message(tx.clone(), &entry);
+                        }
+                    })
+                    .map_err(|err| anyhow!(format!("error inserting new entry into db: {:?}", err)))
+                    .await
+                    .unwrap();
+            }
+            None => debug!("No document_id found for this operation"),
+        }
+    }
 
     Ok(())
 }
