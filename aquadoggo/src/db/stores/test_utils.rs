@@ -27,7 +27,7 @@ use crate::db::stores::{StorageEntry, StorageLog};
 use crate::db::traits::DocumentStore;
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
 use crate::graphql::client::{EntryArgsRequest, PublishEntryRequest, PublishEntryResponse};
-use crate::test_helpers::TEST_CONFIG;
+use crate::test_helpers::{TestConfiguration, TEST_CONFIG};
 
 /// The fields used as defaults in the tests.
 pub fn doggo_test_fields() -> Vec<(&'static str, OperationValue)> {
@@ -246,7 +246,11 @@ impl TestDatabaseRunner {
 
         runtime.block_on(async {
             // Initialise test database
-            let db = create_test_db(&self.config).await;
+            let pool = initialize_db_with_config(TestConfiguration::default()).await;
+            let store = SqlStorage::new(pool);
+
+            // Populate the test db
+            let db = populate_test_db(store, &self.config).await;
 
             // Get a handle of the underlying database connection pool
             let pool = db.store.pool.clone();
@@ -327,12 +331,9 @@ pub struct TestDatabase {
 ///
 /// Returns a `TestDatabase` containing storage provider instance, a vector of key pairs for all
 /// authors in the db, and a vector of the ids for all documents.
-async fn create_test_db(config: &TestDatabaseConfig) -> TestDatabase {
+async fn populate_test_db(store: SqlStorage, config: &TestDatabaseConfig) -> TestDatabase {
     let mut documents: Vec<DocumentId> = Vec::new();
     let key_pairs = test_key_pairs(config.no_of_authors);
-
-    let pool = initialize_db().await;
-    let store = SqlStorage::new(pool);
 
     // If we don't want any entries in the db return now
     if config.no_of_entries == 0 {
@@ -458,6 +459,21 @@ async fn initialize_db() -> Pool {
     let pool = connection_pool(&TEST_CONFIG.database_url, 25)
         .await
         .unwrap();
+    if run_pending_migrations(&pool).await.is_err() {
+        pool.close().await;
+    }
+
+    pool
+}
+
+/// Create test database.
+async fn initialize_db_with_config(config: TestConfiguration) -> Pool {
+    // Reset database first
+    drop_database().await;
+    create_database(&config.database_url).await.unwrap();
+
+    // Create connection pool and run all migrations
+    let pool = connection_pool(&config.database_url, 25).await.unwrap();
     if run_pending_migrations(&pool).await.is_err() {
         pool.close().await;
     }
