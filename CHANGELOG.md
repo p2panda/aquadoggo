@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Refactor tests to use fixtures exported from `p2panda-rs` [#147](https://github.com/p2panda/aquadoggo/pull/147)
 - Use `DocumentViewId` for previous operations [#147](https://github.com/p2panda/aquadoggo/pull/147)
 - Use `VerifiedOperation` [#158](https://github.com/p2panda/aquadoggo/pull/158)
+- Refactor test_db creation [#176](https://github.com/p2panda/aquadoggo/pull/176)
 
 ### Fixed
 
