@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - e2e publish entry tests [#167](https://github.com/p2panda/aquadoggo/pull/167)
 - Reschedule pending tasks on startup [#168](https://github.com/p2panda/aquadoggo/pull/168)
 - Add schema task and schema provider that update when new schema views are materialised [#166](https://github.com/p2panda/aquadoggo/pull/166/files)
+- Debug logging in reduce task [#175](https://github.com/p2panda/aquadoggo/pull/175)
 
 ### Changed
 
@@ -40,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Refactor tests to use fixtures exported from `p2panda-rs` [#147](https://github.com/p2panda/aquadoggo/pull/147)
 - Use `DocumentViewId` for previous operations [#147](https://github.com/p2panda/aquadoggo/pull/147)
 - Use `VerifiedOperation` [#158](https://github.com/p2panda/aquadoggo/pull/158)
+- Refactor test_db creation [#176](https://github.com/p2panda/aquadoggo/pull/176)
 
 ### Fixed
 

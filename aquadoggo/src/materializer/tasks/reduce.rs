@@ -18,7 +18,7 @@ use crate::materializer::TaskInput;
 /// After succesfully reducing and storing a document view an array of dependency tasks is returned.
 /// If invalid inputs were passed or a fatal db error occured a critical error is returned.
 pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
-    debug!("Working on {}", input);
+    debug!("Working on reduce task {:#?}", input);
 
     // Find out which document we are handling
     let document_id = resolve_document_id(&context, &input).await?;
@@ -28,7 +28,10 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
         .store
         .get_operations_by_document_id(&document_id)
         .await
-        .map_err(|_| TaskError::Critical)?;
+        .map_err(|err| {
+            debug!("Failed loading operations from storage: {}", err);
+            TaskError::Critical
+        })?;
 
     let document_view_id = match &input.document_view_id {
         // If this task was passed a document_view_id as input then we want to build to document
@@ -40,11 +43,17 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
 
     // Dispatch a "dependency" task if we created a new document view
     match document_view_id {
-        Some(view_id) => Ok(Some(vec![Task::new(
-            "dependency",
-            TaskInput::new(None, Some(view_id)),
-        )])),
-        None => Ok(None),
+        Some(view_id) => {
+            debug!("Dispatch dependency task for view with id: {}", view_id);
+            Ok(Some(vec![Task::new(
+                "dependency",
+                TaskInput::new(None, Some(view_id)),
+            )]))
+        }
+        None => {
+            debug!("No dependency tasks to dispatch");
+            Ok(None)
+        }
     }
 }
 
@@ -97,14 +106,23 @@ async fn reduce_document_view(
     {
         Ok(document) => {
             // If the document was deleted, then we return nothing
+            debug!(
+                "Document materialized to view with id: {}",
+                document_view_id
+            );
             if document.is_deleted() {
                 return Ok(None);
             };
 
             document
         }
-        Err(_) => {
-            debug!("Reduce task: failed building");
+        Err(err) => {
+            debug!(
+                "Document view materialization failed view with id: {}",
+                document_view_id
+            );
+            debug!("{}", err);
+
             // There is not enough operations yet to materialise this view. Maybe next time!
             return Ok(None);
         }
@@ -115,7 +133,15 @@ async fn reduce_document_view(
         .store
         .insert_document_view(document.view().unwrap(), document.schema())
         .await
-        .map_err(|_| TaskError::Critical)?;
+        .map_err(|err| {
+            debug!(
+                "Failed to insert document view into database: {}",
+                document_view_id
+            );
+            debug!("{}", err);
+
+            TaskError::Critical
+        })?;
 
     info!("Stored {} view {}", document, document.view_id());
 
@@ -140,7 +166,11 @@ async fn reduce_document(
                 .store
                 .insert_document(&document)
                 .await
-                .map_err(|_| TaskError::Critical)?;
+                .map_err(|err| {
+                    debug!("Failed to insert document into database: {}", document.id());
+                    debug!("{}", err);
+                    TaskError::Critical
+                })?;
 
             // If the document was deleted, then we return nothing
             if document.is_deleted() {
@@ -152,8 +182,10 @@ async fn reduce_document(
             // Return the new document_view id to be used in the resulting dependency task
             Ok(Some(document.view_id().to_owned()))
         }
-        Err(_) => {
+        Err(err) => {
             // There is not enough operations yet to materialise this view. Maybe next time!
+            debug!("Document materialization error: {}", err);
+
             Ok(None)
         }
     }
