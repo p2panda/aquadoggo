@@ -129,6 +129,7 @@ mod tests {
         test_db(
             1,
             1,
+            1,
             false,
             TEST_SCHEMA_ID.parse().unwrap(),
             vec![("profile_picture", OperationValue::Relation(Relation::new(random_document_id())))],
@@ -138,6 +139,7 @@ mod tests {
     )]
     #[case(
         test_db(
+            1,
             1,
             1,
             false,
@@ -155,6 +157,7 @@ mod tests {
         test_db(
             1,
             1,
+            1,
             false,
             TEST_SCHEMA_ID.parse().unwrap(),
             vec![
@@ -167,6 +170,7 @@ mod tests {
     )]
     #[case(
         test_db(
+            1,
             1,
             1,
             false,
@@ -182,6 +186,7 @@ mod tests {
     )]
     #[case(
         test_db(
+            1,
             1,
             1,
             false,
@@ -202,6 +207,7 @@ mod tests {
     #[case(
         test_db(
             4,
+            1,
             1,
             false,
             TEST_SCHEMA_ID.parse().unwrap(),
@@ -260,7 +266,7 @@ mod tests {
     #[rstest]
     fn no_reduce_task_for_materialised_document_relations(
         #[from(test_db)]
-        #[with(1, 1)]
+        #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
@@ -337,6 +343,7 @@ mod tests {
         test_db(
             2,
             1,
+            1,
             true,
             TEST_SCHEMA_ID.parse().unwrap(),
             vec![
@@ -349,6 +356,7 @@ mod tests {
     #[case(
         test_db(
             2,
+            1,
             1,
             true,
             TEST_SCHEMA_ID.parse().unwrap(),

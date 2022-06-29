@@ -372,7 +372,7 @@ mod tests {
     #[rstest]
     fn inserts_gets_one_document_view(
         #[from(test_db)]
-        #[with(1, 1)]
+        #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
@@ -433,7 +433,7 @@ mod tests {
     fn document_view_does_not_exist(
         random_document_view_id: DocumentViewId,
         #[from(test_db)]
-        #[with(1, 1)]
+        #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
@@ -450,7 +450,7 @@ mod tests {
     #[rstest]
     fn inserts_gets_many_document_views(
         #[from(test_db)]
-        #[with(10, 1, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::Text("panda".into()))], vec![("username", OperationValue::Text("PANDA".into()))])]
+        #[with(10, 1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::Text("panda".into()))], vec![("username", OperationValue::Text("PANDA".into()))])]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
@@ -531,7 +531,7 @@ mod tests {
     #[rstest]
     fn inserts_gets_documents(
         #[from(test_db)]
-        #[with(1, 1)]
+        #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
@@ -578,7 +578,7 @@ mod tests {
     #[rstest]
     fn gets_document_by_id(
         #[from(test_db)]
-        #[with(1, 1)]
+        #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
@@ -625,7 +625,7 @@ mod tests {
     #[rstest]
     fn no_view_when_document_deleted(
         #[from(test_db)]
-        #[with(10, 1, true)]
+        #[with(10, 1, 1, true)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
@@ -652,7 +652,7 @@ mod tests {
     #[rstest]
     fn updates_a_document(
         #[from(test_db)]
-        #[with(10, 1)]
+        #[with(10, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
@@ -687,7 +687,7 @@ mod tests {
     #[rstest]
     fn gets_documents_by_schema(
         #[from(test_db)]
-        #[with(10, 2, false, TEST_SCHEMA_ID.parse().unwrap())]
+        #[with(10, 2, 1, false, TEST_SCHEMA_ID.parse().unwrap())]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {

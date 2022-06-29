@@ -182,6 +182,7 @@ mod tests {
         #[from(test_db)]
         #[with(
             2,
+            1,
             20,
             false,
             TEST_SCHEMA_ID.parse().unwrap(),
@@ -212,7 +213,7 @@ mod tests {
     #[rstest]
     fn updates_a_document(
         #[from(test_db)]
-        #[with(1, 1)]
+        #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
@@ -287,14 +288,7 @@ mod tests {
     #[rstest]
     fn reduces_document_to_specific_view_id(
         #[from(test_db)]
-        #[with(
-            2,
-            1,
-            false,
-            TEST_SCHEMA_ID.parse().unwrap(),
-            vec![("username", OperationValue::Text("panda".into()))],
-            vec![("username", OperationValue::Text("PANDA".into()))]
-        )]
+        #[with( 2, 1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::Text("panda".into()))], vec![("username", OperationValue::Text("PANDA".into()))])]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
@@ -351,7 +345,7 @@ mod tests {
     #[rstest]
     fn deleted_documents_have_no_view(
         #[from(test_db)]
-        #[with(3, 20, true)]
+        #[with(3, 1, 20, true)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
@@ -385,26 +379,12 @@ mod tests {
 
     #[rstest]
     #[case(
-        test_db(
-            3,
-            1,
-            false,
-            TEST_SCHEMA_ID.parse().unwrap(),
-            vec![("username", OperationValue::Text("panda".into()))],
-            vec![("username", OperationValue::Text("PANDA".into()))]
-        ),
+        test_db( 3, 1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::Text("panda".into()))], vec![("username", OperationValue::Text("PANDA".into()))]),
         true
     )]
     // This document is deleted, it shouldn't spawn a dependency task.
     #[case(
-        test_db(
-            3,
-            1,
-            true,
-            TEST_SCHEMA_ID.parse().unwrap(),
-            vec![("username", OperationValue::Text("panda".into()))],
-            vec![("username", OperationValue::Text("PANDA".into()))]
-        ),
+        test_db( 3, 1, 1, true, TEST_SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::Text("panda".into()))], vec![("username", OperationValue::Text("PANDA".into()))]),
         false
     )]
     fn returns_dependency_task_inputs(

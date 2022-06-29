@@ -150,7 +150,7 @@ mod tests {
     #[rstest]
     fn materialize_document_from_bus(
         #[from(test_db)]
-        #[with(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("name", OperationValue::Text("panda".into()))])]
+        #[with(1, 1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("name", OperationValue::Text("panda".into()))])]
         runner: TestDatabaseRunner,
     ) {
         // Prepare database which inserts data for one document
@@ -225,7 +225,7 @@ mod tests {
     #[rstest]
     fn materialize_document_from_last_runtime(
         #[from(test_db)]
-        #[with(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("name", OperationValue::Text("panda".into()))])]
+        #[with(1, 1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("name", OperationValue::Text("panda".into()))])]
         runner: TestDatabaseRunner,
     ) {
         // Prepare database which inserts data for one document

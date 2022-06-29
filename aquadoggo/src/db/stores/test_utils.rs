@@ -280,6 +280,8 @@ impl TestDatabaseRunner {
 pub fn test_db(
     // Number of entries per log/document
     #[default(0)] no_of_entries: usize,
+    // Number of logs for each author
+    #[default(0)] no_of_logs: usize,
     // Number of authors, each with logs populated as defined above
     #[default(0)] no_of_authors: usize,
     // A boolean flag for wether all logs should contain a delete operation
@@ -293,7 +295,7 @@ pub fn test_db(
 ) -> TestDatabaseRunner {
     let config = TestDatabaseConfig {
         no_of_entries,
-        no_of_logs: 1,
+        no_of_logs,
         no_of_authors,
         with_delete,
         schema,
