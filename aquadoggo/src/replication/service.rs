@@ -43,8 +43,10 @@ impl TryFrom<(String, Vec<u64>)> for AuthorToReplicate {
 pub struct Config {
     /// How often to connect to remote nodes for replication.
     pub connection_interval_seconds: Option<u64>,
+
     /// The addresses of remote peers to replicate from.
     pub remote_peers: Vec<String>,
+
     /// The authors to replicate and their log ids.
     pub authors_to_replicate: Vec<AuthorToReplicate>,
 }
@@ -56,6 +58,7 @@ pub struct ReplicationService {
 
 impl ReplicationService {
     pub fn new(config: Config) -> Self {
+        // @TODO: We get the config from the context as well, no need to pass it over here
         debug!("init ReplicationService with config: {:?}", config);
         Self { config }
     }
@@ -171,15 +174,16 @@ async fn insert_new_entries(
 
         // @TODO: Loads of ugly unwrapping going on here :-(
 
-        // This is the method used to publish entries arriving from clients. They all contain a payload (operation).
+        // This is the method used to publish entries arriving from clients. They all contain a
+        // payload (operation).
         //
-        // @TODO: This is not a great fit for replication, as it performs much validation, some of it we don't want here. We
-        // plan to refactor this into a more modular set of methods which can definitely be used here more cleanly.
-        // For now, we do it this way/
+        // @TODO: This is not a great fit for replication, as it performs much validation, some of
+        // it we don't want here. We plan to refactor this into a more modular set of methods which
+        // can definitely be used here more cleanly. For now, we do it this way.
         context.0.store.publish_entry(&args).await.unwrap();
 
-        // @TODO: We have to publish the operation too, once again, this will be improved with the above mentioned
-        // refactor.
+        // @TODO: We have to publish the operation too, once again, this will be improved with the
+        // above mentioned refactor.
         match context
             .0
             .store
@@ -252,4 +256,93 @@ async fn get_latest_seq(context: &Context, log_id: &LogId, author: &Author) -> O
         .ok()
         .flatten()
         .map(|entry| *entry.entry_decoded().seq_num())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::convert::TryInto;
+    use std::time::Duration;
+
+    use rstest::rstest;
+    use tokio::sync::broadcast;
+    use tokio::task::{self, JoinHandle};
+
+    use crate::context::Context;
+    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+    use crate::http::http_service;
+    use crate::manager::Service;
+    use crate::Configuration;
+    use crate::ReplicationConfig;
+
+    use super::ReplicationService;
+
+    // Helper method to give us a shutdown future which will never resolve
+    fn shutdown_handle() -> JoinHandle<()> {
+        let shutdown = task::spawn(async {
+            loop {
+                // Do this forever ..
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        });
+
+        shutdown
+    }
+
+    #[rstest]
+    fn full_replication(#[from(test_db)] runner: TestDatabaseRunner) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let (tx, _) = broadcast::channel(16);
+
+            // Launch HTTP service of Billie
+            let mut config_billie = Configuration::default();
+            config_billie.http_port = 3022;
+
+            // @TODO
+            // Billie needs to get its database from somewhere else .. we would either change our
+            // testing methods to provide multiple databases or do something else here :-\
+            //
+            // Also, we need to fill billies database with some entries before!
+            let store_billie = db.store.clone();
+            let context_billie = Context::new(store_billie, config_billie);
+            let tx_billie = tx.clone();
+            let shutdown_billie = shutdown_handle();
+
+            let _http_server_billie = task::spawn(async {
+                http_service(context_billie, shutdown_billie, tx_billie)
+                    .await
+                    .unwrap();
+            });
+
+            // Ada starts replication service to get data from Billies GraphQL API
+            // @TODO: Add correct author and log ids here ..
+            let log_ids: Vec<u64> = vec![1, 2];
+            let author_str: String =
+                "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96".into();
+            let endpoint: String = "http://localhost:3022".into();
+
+            let mut replication_config = ReplicationConfig::default();
+            replication_config.authors_to_replicate =
+                vec![(author_str, log_ids).try_into().unwrap()];
+            replication_config.remote_peers = vec![endpoint];
+
+            let store_ada = db.store.clone();
+            let context_ada = Context::new(store_ada, Configuration::default());
+            let tx_ada = tx.clone();
+            let shutdown_ada = shutdown_handle();
+
+            let _replication_service_ada = task::spawn(async {
+                let service = ReplicationService::new(replication_config);
+                service
+                    .call(context_ada, shutdown_ada, tx_ada)
+                    .await
+                    .unwrap();
+            });
+
+            // Wait a little bit for replication to take place
+            tokio::time::sleep(Duration::from_millis(500)).await;
+
+            // @TODO
+            // Now we can inspect the db.store to see what is inside
+        })
+    }
 }
