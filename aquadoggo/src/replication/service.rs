@@ -169,11 +169,17 @@ async fn insert_new_entries(
             operation_encoded: entry.operation_encoded().unwrap().clone(),
         };
 
-        // Validate and store entry in database
-        // @TODO: Check all validation steps here for both entries and operations. Also, there is
-        // probably overlap in what replication needs in terms of validation?
+        // @TODO: Loads of ugly unwrapping going on here :-(
+
+        // This is the method used to publish entries arriving from clients. They all contain a payload (operation).
+        //
+        // @TODO: This is not a great fit for replication, as it performs much validation, some of it we don't want here. We
+        // plan to refactor this into a more modular set of methods which can definitely be used here more cleanly.
+        // For now, we do it this way/
         context.0.store.publish_entry(&args).await.unwrap();
 
+        // @TODO: We have to publish the operation too, once again, this will be improved with the above mentioned
+        // refactor.
         match context
             .0
             .store
