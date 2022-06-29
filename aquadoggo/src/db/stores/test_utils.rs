@@ -209,25 +209,25 @@ where
 
 pub struct PopulateDatabaseConfig {
     /// Number of entries per log/document.
-    no_of_entries: usize,
+    pub no_of_entries: usize,
 
     /// Number of logs for each author.
-    no_of_logs: usize,
+    pub no_of_logs: usize,
 
     /// Number of authors, each with logs populated as defined above.
-    no_of_authors: usize,
+    pub no_of_authors: usize,
 
     /// A boolean flag for wether all logs should contain a delete operation.
-    with_delete: bool,
+    pub with_delete: bool,
 
     /// The schema used for all operations in the db.
-    schema: SchemaId,
+    pub schema: SchemaId,
 
     /// The fields used for every CREATE operation.
-    create_operation_fields: Vec<(&'static str, OperationValue)>,
+    pub create_operation_fields: Vec<(&'static str, OperationValue)>,
 
     /// The fields used for every UPDATE operation.
-    update_operation_fields: Vec<(&'static str, OperationValue)>,
+    pub update_operation_fields: Vec<(&'static str, OperationValue)>,
 }
 
 impl Default for PopulateDatabaseConfig {
@@ -402,7 +402,7 @@ pub struct TestData {
 /// Passed parameters define what the db should contain. The first entry in each log contains a
 /// valid CREATE operation following entries contain duplicate UPDATE operations. If the
 /// with_delete flag is set to true the last entry in all logs contain be a DELETE operation.
-async fn populate_test_db(db: &mut TestDatabase, config: &PopulateDatabaseConfig) {
+pub async fn populate_test_db(db: &mut TestDatabase, config: &PopulateDatabaseConfig) {
     let key_pairs = test_key_pairs(config.no_of_authors);
 
     for key_pair in &key_pairs {

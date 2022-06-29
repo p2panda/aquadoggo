@@ -270,7 +270,8 @@ mod tests {
 
     use crate::context::Context;
     use crate::db::stores::test_utils::{
-        test_db, with_db_manager_teardown, TestDatabase, TestDatabaseManager, TestDatabaseRunner,
+        populate_test_db, test_db, with_db_manager_teardown, PopulateDatabaseConfig, TestDatabase,
+        TestDatabaseManager, TestDatabaseRunner,
     };
     use crate::http::http_service;
     use crate::manager::Service;
@@ -301,9 +302,15 @@ mod tests {
             let mut config_billie = Configuration::default();
             config_billie.http_port = 3022;
 
-            // @TODO
-            // Wee need to fill billies database with some entries before!
-            let billie_db = db_manager.create(&TEST_CONFIG.database_url).await;
+            // Build and populate billies db
+            let mut billie_db = db_manager.create(&TEST_CONFIG.database_url).await;
+            let populate_db_config = PopulateDatabaseConfig {
+                no_of_entries: 1,
+                no_of_logs: 1,
+                no_of_authors: 1,
+                ..Default::default()
+            };
+            populate_test_db(&mut billie_db, &populate_db_config).await;
             let context_billie = Context::new(billie_db.store, config_billie);
             let tx_billie = tx.clone();
             let shutdown_billie = shutdown_handle();
