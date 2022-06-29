@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use anyhow::anyhow;
-
 use graphql_client::{reqwest::post_graphql, GraphQLQuery};
 use p2panda_rs::entry::LogId as PandaLogId;
 use p2panda_rs::entry::SeqNum as PandaSeqNum;
@@ -43,11 +42,10 @@ impl Client {
         let result =
             post_graphql::<GetEntriesNewerThanSeq, _>(&self.reqwest_client, url.clone(), variables)
                 .await?;
-
         result
             .data
             .and_then(|data| data.get_entries_newer_than_seq.edges)
-            .map(convert_edges_to_storage_entries)
+            .map(|e| convert_edges_to_storage_entries(e))
             .ok_or_else(|| anyhow!("data wasn't in the format expected"))?
     }
 }
@@ -104,7 +102,8 @@ fn create_get_entries_newer_than_seq_request_variable(
 #[derive(GraphQLQuery, Clone, Copy, Debug)]
 #[graphql(
     schema_path = "src/graphql/replication/client/schema.graphql",
-    query_path = "src/graphql/replication/client/queries/get_entry_by_hash.graphql"
+    query_path = "src/graphql/replication/client/queries/get_entry_by_hash.graphql",
+    response_derives = "Debug"
 )]
 struct GetEntryByHash;
 
@@ -113,8 +112,7 @@ struct GetEntryByHash;
 #[derive(GraphQLQuery, Debug, Copy, Clone)]
 #[graphql(
     schema_path = "src/graphql/replication/client/schema.graphql",
-    query_path = "src/graphql/replication/client/queries/get_entries_newer_than_seq.graphql"
+    query_path = "src/graphql/replication/client/queries/get_entries_newer_than_seq.graphql",
+    response_derives = "Debug"
 )]
 struct GetEntriesNewerThanSeq;
-
-// pub async fn get_entries_newer_than_seq()
