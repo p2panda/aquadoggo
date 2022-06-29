@@ -244,6 +244,10 @@ impl Default for PopulateDatabaseConfig {
     }
 }
 
+// @TODO: I'm keeping this here for now as otherwise we would need to refactor _all_ the tests using it.
+//
+// We may still want to keep this "single database" runner injected through `rstest` but in any case
+// probably best to consider that in a different PR.
 pub struct TestDatabaseRunner {
     config: PopulateDatabaseConfig,
 }
@@ -297,8 +301,8 @@ impl TestDatabaseRunner {
     }
 }
 
-/// Provides a safe way to write tests with the ability to build many databases and have their
-/// pool connections closed automatically when the test succeeds or fails.
+/// Method which provides a safe way to write tests with the ability to build many databases and
+/// have their pool connections closed automatically when the test succeeds or fails.
 ///
 /// Takes an (async) test function as an argument and passes over the `TestDatabaseManager`
 /// instance which can be used to build databases from inside the tests.
@@ -385,20 +389,19 @@ pub struct TestDatabase {
     pub test_data: TestData,
 }
 
+/// Data collected when populating a `TestData` base in order to easily check values which
+/// would be otherwise hard or impossible to get through the store methods.
 #[derive(Default)]
 pub struct TestData {
     pub key_pairs: Vec<KeyPair>,
     pub documents: Vec<DocumentId>,
 }
 
-/// Helper method for constructing a storage provider instance backed by a pre-populated database.
+/// Helper method for populating a `TestDatabase` with configurable data.
 ///
 /// Passed parameters define what the db should contain. The first entry in each log contains a
 /// valid CREATE operation following entries contain duplicate UPDATE operations. If the
 /// with_delete flag is set to true the last entry in all logs contain be a DELETE operation.
-///
-/// Returns a `TestDatabase` containing storage provider instance, a vector of key pairs for all
-/// authors in the db, and a vector of the ids for all documents.
 async fn populate_test_db(db: &mut TestDatabase, config: &PopulateDatabaseConfig) {
     let key_pairs = test_key_pairs(config.no_of_authors);
 
@@ -448,6 +451,7 @@ async fn populate_test_db(db: &mut TestDatabase, config: &PopulateDatabaseConfig
     }
 }
 
+/// Helper method for publishing an operation encoded on an entry to a store.
 async fn send_to_store(
     store: &SqlStorage,
     operation: &Operation,
@@ -547,6 +551,7 @@ async fn drop_database() {
     }
 }
 
+/// A manager which can create many databases and retain a handle on their connection pools.
 #[derive(Default)]
 pub struct TestDatabaseManager {
     pools: Arc<Mutex<Vec<Pool>>>,
