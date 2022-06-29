@@ -260,9 +260,10 @@ async fn get_latest_seq(context: &Context, log_id: &LogId, author: &Author) -> O
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryInto;
+    use std::convert::{TryFrom, TryInto};
     use std::time::Duration;
 
+    use p2panda_rs::identity::Author;
     use p2panda_rs::storage_provider::traits::EntryStore;
     use rstest::rstest;
     use tokio::sync::broadcast;
@@ -322,10 +323,16 @@ mod tests {
             });
 
             // Ada starts replication service to get data from Billies GraphQL API
-            // @TODO: Add correct author and log ids here ..
-            let log_ids: Vec<u64> = vec![1, 2];
-            let author_str: String =
-                "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96".into();
+            let public_key = billie_db
+                .test_data
+                .key_pairs
+                .first()
+                .unwrap()
+                .public_key()
+                .to_owned();
+            let author = Author::try_from(public_key).unwrap();
+            let log_ids: Vec<u64> = vec![1];
+            let author_str: String = author.as_str().into();
             let endpoint: String = "http://localhost:3022".into();
 
             let mut replication_config = ReplicationConfig::default();
