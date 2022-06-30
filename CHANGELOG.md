@@ -45,6 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Use `VerifiedOperation` [#158](https://github.com/p2panda/aquadoggo/pull/158)
 - Refactor `test_db` helper method [#176](https://github.com/p2panda/aquadoggo/pull/176)
 - Update `publishEntry` params and `nextEntryArgs` response fields [#181](https://github.com/p2panda/aquadoggo/pull/181)
+- Refactor scalars and replication API, replace `graphql-client` with `gql_client` [#184](https://github.com/p2panda/aquadoggo/pull/184)
 
 ### Fixed
 
