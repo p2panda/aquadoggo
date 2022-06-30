@@ -5,7 +5,7 @@ use p2panda_rs::entry::EntrySigned;
 use serde::{Deserialize, Serialize};
 
 /// Signed bamboo entry, encoded as a hexadecimal string.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
 pub struct EncodedEntry(EntrySigned);
 
 impl From<EntrySigned> for EncodedEntry {

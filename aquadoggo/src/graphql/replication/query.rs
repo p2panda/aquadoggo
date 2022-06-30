@@ -3,7 +3,9 @@
 use async_graphql::{Context, Object, Result};
 use p2panda_rs::storage_provider::traits::EntryStore;
 
-use crate::graphql::scalars::{EntryAndOperation, EntryHash};
+use crate::db::provider::SqlStorage;
+use crate::graphql::replication::EncodedEntryAndOperation;
+use crate::graphql::scalars::EntryHash;
 
 #[derive(Default, Debug, Copy, Clone)]
 pub struct ReplicationRoot;
@@ -15,9 +17,9 @@ impl ReplicationRoot {
         &self,
         ctx: &Context<'a>,
         hash: EntryHash,
-    ) -> Result<Option<EntryResponse>> {
+    ) -> Result<Option<EncodedEntryAndOperation>> {
         let store = ctx.data::<SqlStorage>()?;
-        let result = store.get_entry_by_hash(hash).await?;
-        Ok(result)
+        let result = store.get_entry_by_hash(&hash.into()).await?;
+        Ok(result.map(EncodedEntryAndOperation::from))
     }
 }

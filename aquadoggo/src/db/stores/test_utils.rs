@@ -25,7 +25,7 @@ use tokio::sync::Mutex;
 use crate::db::provider::SqlStorage;
 use crate::db::traits::DocumentStore;
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
-use crate::graphql::client::{EntryArgsRequest, PublishEntryRequest, PublishEntryResponse};
+use crate::graphql::client::{EntryArgsRequest, NextEntryArguments, PublishEntryRequest};
 use crate::test_helpers::TEST_CONFIG;
 
 /// The fields used as defaults in the tests.
@@ -113,11 +113,11 @@ pub async fn construct_publish_entry_request(
     let next_entry_args = provider.get_entry_args(&entry_args_request).await.unwrap();
 
     let entry = Entry::new(
-        &next_entry_args.log_id,
+        &next_entry_args.log_id.into(),
         Some(operation),
-        next_entry_args.skiplink.as_ref(),
-        next_entry_args.backlink.as_ref(),
-        &next_entry_args.seq_num,
+        next_entry_args.skiplink.map(Hash::from).as_ref(),
+        next_entry_args.backlink.map(Hash::from).as_ref(),
+        &next_entry_args.seq_num.into(),
     )
     .unwrap();
 
@@ -432,8 +432,8 @@ pub async fn populate_test_db(db: &mut TestDatabase, config: &PopulateDatabaseCo
                 )
                 .await;
 
-                // Set the previous_operations based on the backlink.
-                previous_operation = publish_entry_response.backlink.map(|hash| hash.into());
+                // Set the previous_operations based on the backlink
+                previous_operation = publish_entry_response.backlink.map(DocumentViewId::from);
 
                 // If this was the first entry in the document, store the doucment id for later.
                 if index == 0 {
@@ -451,7 +451,7 @@ pub async fn send_to_store(
     operation: &Operation,
     document_id: Option<&DocumentId>,
     key_pair: &KeyPair,
-) -> (EntrySigned, PublishEntryResponse) {
+) -> (EntrySigned, NextEntryArguments) {
     // Get an Author from the key_pair.
     let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
@@ -466,11 +466,11 @@ pub async fn send_to_store(
 
     // Construct the next entry.
     let next_entry = Entry::new(
-        &next_entry_args.log_id,
+        &next_entry_args.log_id.into(),
         Some(operation),
-        next_entry_args.skiplink.as_ref(),
-        next_entry_args.backlink.as_ref(),
-        &next_entry_args.seq_num,
+        next_entry_args.skiplink.map(Hash::from).as_ref(),
+        next_entry_args.backlink.map(Hash::from).as_ref(),
+        &next_entry_args.seq_num.into(),
     )
     .unwrap();
 

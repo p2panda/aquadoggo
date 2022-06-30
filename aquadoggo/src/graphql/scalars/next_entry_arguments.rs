@@ -13,7 +13,6 @@ use crate::graphql::scalars;
 #[serde(rename_all = "camelCase")]
 pub struct NextEntryArguments {
     /// Log id of the entry.
-    #[serde(with = "super::u64_string::log_id_string_serialisation")]
     pub log_id: scalars::LogId,
 
     /// Sequence number of the entry.

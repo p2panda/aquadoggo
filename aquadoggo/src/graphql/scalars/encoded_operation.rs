@@ -5,7 +5,13 @@ use p2panda_rs::operation::OperationEncoded;
 use serde::{Deserialize, Serialize};
 
 /// Entry payload and p2panda operation, CBOR bytes encoded as a hexadecimal string.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
 pub struct EncodedOperation(OperationEncoded);
+
+impl From<OperationEncoded> for EncodedOperation {
+    fn from(operation: OperationEncoded) -> Self {
+        Self(operation)
+    }
+}
 
 scalar!(EncodedOperation);

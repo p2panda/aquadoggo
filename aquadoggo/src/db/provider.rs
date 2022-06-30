@@ -10,9 +10,7 @@ use sqlx::query_scalar;
 use crate::db::stores::{StorageEntry, StorageLog};
 use crate::db::Pool;
 use crate::errors::StorageProviderResult;
-use crate::graphql::client::{
-    EntryArgsRequest, EntryArgsResponse, PublishEntryRequest, PublishEntryResponse,
-};
+use crate::graphql::client::{EntryArgsRequest, NextEntryArguments, PublishEntryRequest};
 
 /// Sql based storage that implements `StorageProvider`.
 #[derive(Clone, Debug)]
@@ -31,9 +29,9 @@ impl SqlStorage {
 /// databases.
 #[async_trait]
 impl StorageProvider<StorageEntry, StorageLog, VerifiedOperation> for SqlStorage {
-    type EntryArgsResponse = EntryArgsResponse;
+    type EntryArgsResponse = NextEntryArguments;
     type EntryArgsRequest = EntryArgsRequest;
-    type PublishEntryResponse = PublishEntryResponse;
+    type PublishEntryResponse = NextEntryArguments;
     type PublishEntryRequest = PublishEntryRequest;
 
     /// Returns the related document for any entry.

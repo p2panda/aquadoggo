@@ -7,7 +7,7 @@ use p2panda_rs::storage_provider::traits::{OperationStore, StorageProvider};
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::provider::SqlStorage;
-use crate::graphql::client::{PublishEntryRequest, PublishEntryResponse};
+use crate::graphql::client::{NextEntryArguments, PublishEntryRequest};
 
 /// Mutations for use by p2panda clients.
 #[derive(Default, Debug, Copy, Clone)]
@@ -28,7 +28,7 @@ impl ClientMutationRoot {
             desc = "p2panda operation representing the entry payload."
         )]
         operation_param: String,
-    ) -> Result<PublishEntryResponse> {
+    ) -> Result<NextEntryArguments> {
         let store = ctx.data::<SqlStorage>()?;
         let tx = ctx.data::<ServiceSender>()?;
 
@@ -80,9 +80,9 @@ impl ClientMutationRoot {
 mod tests {
     use std::convert::TryFrom;
 
-    use async_graphql::{from_value, value, Request, Value, Variables};
+    use async_graphql::{value, Request, Variables};
     use p2panda_rs::document::DocumentId;
-    use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned, LogId, SeqNum};
+    use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::{Operation, OperationEncoded, OperationValue};
@@ -98,7 +98,7 @@ mod tests {
 
     use crate::bus::ServiceMessage;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
-    use crate::graphql::client::{EntryArgsRequest, PublishEntryResponse};
+    use crate::graphql::client::EntryArgsRequest;
     use crate::http::{build_server, HttpServiceContext};
     use crate::test_helpers::TestClient;
 
@@ -148,29 +148,19 @@ mod tests {
     #[rstest]
     fn publish_entry(#[from(test_db)] runner: TestDatabaseRunner, publish_entry_request: Request) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
-            let (tx, _rx) = broadcast::channel(16);
+            let (tx, _) = broadcast::channel(16);
             let context = HttpServiceContext::new(db.store, tx);
-
             let response = context.schema.execute(publish_entry_request).await;
-            let received: PublishEntryResponse = match response.data {
-                Value::Object(result_outer) => {
-                    from_value(result_outer.get("publishEntry").unwrap().to_owned()).unwrap()
-                }
-                _ => panic!("Expected return value to be an object"),
-            };
 
-            // The response should contain args for the next entry in the same log
-            let expected = PublishEntryResponse {
-                log_id: LogId::new(1),
-                seq_num: SeqNum::new(2).unwrap(),
-                backlink: Some(
-                    "00201c221b573b1e0c67c5e2c624a93419774cdf46b3d62414c44a698df1237b1c16"
-                        .parse()
-                        .unwrap(),
-                ),
-                skiplink: None,
-            };
-            assert_eq!(expected, received);
+            assert_eq!(
+                response.data,
+                value!({
+                    "backlink": "00201c221b573b1e0c67c5e2c624a93419774cdf46b3d62414c44a698df1237b1c16",
+                    "skiplink": null,
+                    "seq_num": "2",
+                    "log_id": "1",
+                })
+            );
         });
     }
 
@@ -547,11 +537,11 @@ mod tests {
                     };
 
                     let entry = Entry::new(
-                        &next_entry_args.log_id,
+                        &next_entry_args.log_id.into(),
                         Some(&operation),
-                        next_entry_args.skiplink.as_ref(),
-                        next_entry_args.backlink.as_ref(),
-                        &next_entry_args.seq_num,
+                        next_entry_args.skiplink.map(Hash::from).as_ref(),
+                        next_entry_args.backlink.map(Hash::from).as_ref(),
+                        &next_entry_args.seq_num.into(),
                     )
                     .unwrap();
 

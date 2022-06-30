@@ -6,7 +6,7 @@ use p2panda_rs::identity::Author;
 use p2panda_rs::storage_provider::traits::StorageProvider;
 
 use crate::db::provider::SqlStorage;
-use crate::graphql::client::{EntryArgsRequest, EntryArgsResponse};
+use crate::graphql::client::{EntryArgsRequest, NextEntryArguments};
 
 /// The GraphQL root for the client api that p2panda clients can use to connect to a node.
 #[derive(Default, Debug, Copy, Clone)]
@@ -30,7 +30,7 @@ impl ClientRoot {
             can be left empty when it is a CREATE operation"
         )]
         document_id_param: Option<String>,
-    ) -> Result<EntryArgsResponse> {
+    ) -> Result<NextEntryArguments> {
         // Parse and validate parameters
         let document_id = match document_id_param {
             Some(val) => Some(val.parse::<DocumentId>()?),
@@ -51,12 +51,13 @@ impl ClientRoot {
 mod tests {
     use async_graphql::Response;
     use p2panda_rs::entry::{LogId, SeqNum};
+    use p2panda_rs::storage_provider::traits::AsEntryArgsResponse;
     use rstest::rstest;
     use serde_json::json;
     use tokio::sync::broadcast;
 
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
-    use crate::graphql::client::EntryArgsResponse;
+    use crate::graphql::client::NextEntryArguments;
     use crate::http::build_server;
     use crate::http::HttpServiceContext;
     use crate::test_helpers::TestClient;
@@ -68,9 +69,9 @@ mod tests {
             let context = HttpServiceContext::new(db.store, tx);
             let client = TestClient::new(build_server(context));
 
-            // Selected fields need to be alphabetically sorted because that's what the `json` macro
-            // that is used in the assert below produces.
-            let response = client
+            // Selected fields need to be alphabetically sorted because that's what the `json`
+            // macro that is used in the assert below produces.
+            let received_entry_args = client
                 .post("/graphql")
                 .json(&json!({
                     "query": r#"{
@@ -86,22 +87,15 @@ mod tests {
                 }))
                 .send()
                 .await
-                .json::<Response>()
+                .json::<NextEntryArguments>()
                 .await;
 
-            let expected_entry_args = EntryArgsResponse {
-                log_id: LogId::new(1),
-                seq_num: SeqNum::new(1).unwrap(),
-                backlink: None,
-                skiplink: None,
-            };
-            let received_entry_args: EntryArgsResponse = match response.data {
-                async_graphql::Value::Object(result_outer) => {
-                    async_graphql::from_value(result_outer.get("nextEntryArgs").unwrap().to_owned())
-                        .unwrap()
-                }
-                _ => panic!("Expected return value to be an object"),
-            };
+            let expected_entry_args = NextEntryArguments::new(
+                None,
+                None,
+                SeqNum::new(1).unwrap(),
+                LogId::new(1),
+            );
 
             assert_eq!(received_entry_args, expected_entry_args);
         })

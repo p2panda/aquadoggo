@@ -9,5 +9,5 @@ mod seq_num;
 pub use encoded_entry::EncodedEntry;
 pub use encoded_operation::EncodedOperation;
 pub use entry_hash::EntryHash;
-// pub use log_id::LogId;
-// pub use seq_num::SeqNum;
+pub use log_id::LogId;
+pub use seq_num::SeqNum;
