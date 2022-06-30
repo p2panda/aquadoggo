@@ -195,11 +195,11 @@ mod tests {
     use super::{ReplicationContext, ReplicationRoot};
 
     #[rstest]
-    #[case(100, None, None, None, true, 10)]
-    #[case(10, Some(10), Some(5), None, false, 0)]
-    #[case(14, Some(10), Some(5), None, false, 4)]
-    #[case(15, Some(10), Some(5), None, true, 5)]
-    #[case(16, Some(10), Some(5), None, true, 5)]
+    #[case::default_params(20, None, None, None, true, 10)]
+    #[case::no_edges_or_next_page(10, Some(10), Some(5), None, false, 0)]
+    #[case::some_edges_no_next_page(14, Some(10), Some(5), None, false, 4)]
+    #[case::edges_and_next_page(15, Some(10), Some(5), None, true, 5)]
+    #[case::edges_and_next_page_again(16, Some(10), Some(5), None, true, 5)]
     fn get_entries_newer_than_seq_cursor(
         #[case] entries_in_log: usize,
         #[case] sequence_number: Option<u64>,
