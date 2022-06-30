@@ -251,8 +251,8 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let document_id = db.documents.first().unwrap();
-            let key_pair = db.key_pairs.first().unwrap();
+            let document_id = db.test_data.documents.first().unwrap();
+            let key_pair = db.test_data.key_pairs.first().unwrap();
 
             let context = Context::new(db.store.clone(), Configuration::default());
             let input = TaskInput::new(Some(document_id.clone()), None);

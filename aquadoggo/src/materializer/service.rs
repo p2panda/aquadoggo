@@ -141,8 +141,7 @@ mod tests {
     use p2panda_rs::storage_provider::traits::OperationStore;
     use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
     use p2panda_rs::test_utils::fixtures::{
-        key_pair, operation, operation_fields, random_document_id, random_document_view_id,
-        random_operation_id,
+        key_pair, operation, operation_fields, random_document_id, random_operation_id,
     };
     use rstest::rstest;
     use tokio::sync::broadcast;
@@ -295,14 +294,14 @@ mod tests {
     #[rstest]
     fn materialize_update_document(
         #[from(test_db)]
-        #[with(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("name", OperationValue::Text("panda".into()))])]
+        #[with(1, 1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("name", OperationValue::Text("panda".into()))])]
         runner: TestDatabaseRunner,
     ) {
         // Prepare database which inserts data for one document
         runner.with_db_teardown(|db: TestDatabase| async move {
             // Identify key_[air, document and operation which was inserted for testing
-            let key_pair = db.key_pairs.first().unwrap();
-            let document_id = db.documents.first().unwrap();
+            let key_pair = db.test_data.key_pairs.first().unwrap();
+            let document_id = db.test_data.documents.first().unwrap();
             let verified_operation = db
                 .store
                 .get_operations_by_document_id(document_id)
@@ -427,7 +426,7 @@ mod tests {
     )]
     fn materialize_complex_documents(
         #[from(test_db)]
-        #[with(0, 0)]
+        #[with(0, 0, 0)]
         runner: TestDatabaseRunner,
         #[case] operation: Operation,
         key_pair: KeyPair,
