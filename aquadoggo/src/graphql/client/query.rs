@@ -6,8 +6,8 @@ use p2panda_rs::identity::Author;
 use p2panda_rs::storage_provider::traits::StorageProvider;
 
 use crate::db::provider::SqlStorage;
-use crate::graphql::client::EntryArgsRequest;
 use crate::graphql::client::response::NextEntryArguments;
+use crate::graphql::client::EntryArgsRequest;
 
 /// GraphQL queries for the Client API.
 #[derive(Default, Debug, Copy, Clone)]

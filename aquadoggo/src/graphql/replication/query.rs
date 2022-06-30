@@ -42,8 +42,9 @@ impl ReplicationRoot {
     async fn entry_by_log_id_and_seq_num<'a>(
         &self,
         ctx: &Context<'a>,
-        log_id: scalars::LogId,
-        seq_num: scalars::SeqNum,
+        #[graphql(name = "logId", desc = "Log id of entry")] log_id: scalars::LogId,
+        #[graphql(name = "seqNum", desc = "Sequence number of entry")] seq_num: scalars::SeqNum,
+        #[graphql(name = "publicKey", desc = "Public key of the entry author")]
         public_key: scalars::PublicKey,
     ) -> Result<Option<EncodedEntryAndOperation>> {
         let store = ctx.data::<SqlStorage>()?;
@@ -60,8 +61,13 @@ impl ReplicationRoot {
     async fn get_entries_newer_than_seq_num<'a>(
         &self,
         ctx: &Context<'a>,
-        log_id: scalars::LogId,
+        #[graphql(name = "logId", desc = "Log id of entries")] log_id: scalars::LogId,
+        #[graphql(name = "publicKey", desc = "Public key of the author")]
         public_key: scalars::PublicKey,
+        #[graphql(
+            name = "seqNum",
+            desc = "Query entries starting from this sequence number"
+        )]
         seq_num: scalars::SeqNum,
         first: Option<i32>,
         after: Option<String>,
