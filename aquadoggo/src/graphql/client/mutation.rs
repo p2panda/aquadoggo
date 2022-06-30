@@ -21,21 +21,21 @@ impl ClientMutationRoot {
     async fn publish_entry(
         &self,
         ctx: &Context<'_>,
-        #[graphql(name = "entry", desc = "Encoded entry to publish")] entry_encoded_param: String,
+        #[graphql(name = "entry", desc = "Encoded entry to publish")] entry_param: String,
         #[graphql(
             name = "operation",
             desc = "Encoded entry payload, which contains a p2panda operation matching the \
             provided encoded entry."
         )]
-        operation_encoded_param: String,
+        operation_param: String,
     ) -> Result<PublishEntryResponse> {
         let store = ctx.data::<SqlStorage>()?;
         let tx = ctx.data::<ServiceSender>()?;
 
         // Parse and validate parameters
         let args = PublishEntryRequest {
-            entry_encoded: EntrySigned::new(&entry_encoded_param)?,
-            operation_encoded: OperationEncoded::new(&operation_encoded_param)?,
+            entry: EntrySigned::new(&entry_param)?,
+            operation: OperationEncoded::new(&operation_param)?,
         };
 
         // Validate and store entry in database
@@ -45,15 +45,10 @@ impl ClientMutationRoot {
 
         // Load related document from database
         // @TODO: We probably have this instance already inside of "publish_entry"?
-        match store
-            .get_document_by_entry(&args.entry_encoded.hash())
-            .await?
-        {
+        match store.get_document_by_entry(&args.entry.hash()).await? {
             Some(document_id) => {
-                let verified_operation = VerifiedOperation::new_from_entry(
-                    &args.entry_encoded,
-                    &args.operation_encoded,
-                )?;
+                let verified_operation =
+                    VerifiedOperation::new_from_entry(&args.entry, &args.operation)?;
 
                 // Store operation in database
                 // @TODO: This is not done by "publish_entry", maybe it needs to move there as
@@ -284,7 +279,15 @@ mod tests {
     )]
     #[case::operation_does_not_match(
         ENTRY_ENCODED,
-        &{operation_encoded(Some(operation_fields(vec![("silly", OperationValue::Text("Sausage".to_string()))])), None, None).as_str().to_owned()},
+        &{operation_encoded(
+            Some(
+                operation_fields(
+                    vec![("silly", OperationValue::Text("Sausage".to_string()))]
+                )
+            ),
+            None,
+            None
+        ).as_str().to_owned()},
         "operation needs to match payload hash of encoded entry"
     )]
     #[case::valid_entry_with_extra_hex_char_at_end(
@@ -526,8 +529,8 @@ mod tests {
                     let next_entry_args = db
                         .store
                         .get_entry_args(&EntryArgsRequest {
-                            author: author.clone(),
-                            document: document.as_ref().cloned(),
+                            public_key: author.clone(),
+                            document_id: document.as_ref().cloned(),
                         })
                         .await
                         .unwrap();

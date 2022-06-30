@@ -15,19 +15,19 @@ use p2panda_rs::operation::OperationEncoded;
 #[derive(Deserialize, Debug)]
 pub struct EntryArgsRequest {
     /// The entry author.
-    pub author: Author,
+    pub public_key: Author,
 
     /// The entry document id.
-    pub document: Option<DocumentId>,
+    pub document_id: Option<DocumentId>,
 }
 
 impl AsEntryArgsRequest for EntryArgsRequest {
     fn author(&self) -> &Author {
-        &self.author
+        &self.public_key
     }
 
     fn document_id(&self) -> &Option<DocumentId> {
-        &self.document
+        &self.document_id
     }
 }
 
@@ -51,22 +51,21 @@ impl Validate for EntryArgsRequest {
 
 /// Request body of `publishEntry`.
 #[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
 pub struct PublishEntryRequest {
     /// The encoded entry
-    pub entry_encoded: EntrySigned,
+    pub entry: EntrySigned,
 
     /// The encoded operation
-    pub operation_encoded: OperationEncoded,
+    pub operation: OperationEncoded,
 }
 
 impl AsPublishEntryRequest for PublishEntryRequest {
     fn entry_signed(&self) -> &EntrySigned {
-        &self.entry_encoded
+        &self.entry
     }
 
     fn operation_encoded(&self) -> &OperationEncoded {
-        &self.operation_encoded
+        &self.operation
     }
 }
 

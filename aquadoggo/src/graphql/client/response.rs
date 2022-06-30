@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_graphql::Object;
-use serde::{Deserialize, Serialize};
-
 use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::storage_provider::traits::{AsEntryArgsResponse, AsPublishEntryResponse};
+use serde::{Deserialize, Serialize};
 
 use crate::db::models::EntryRow;
 

@@ -35,8 +35,8 @@ impl ClientRoot {
             None => None,
         };
         let args = EntryArgsRequest {
-            author: Author::new(&public_key_param)?,
-            document: document_id,
+            public_key: Author::new(&public_key_param)?,
+            document_id,
         };
 
         // Load and return next entry arguments
