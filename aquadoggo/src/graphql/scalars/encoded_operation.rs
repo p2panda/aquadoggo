@@ -14,4 +14,10 @@ impl From<OperationEncoded> for EncodedOperation {
     }
 }
 
+impl From<EncodedOperation> for OperationEncoded {
+    fn from(operation: EncodedOperation) -> OperationEncoded {
+        operation.0
+    }
+}
+
 scalar!(EncodedOperation);

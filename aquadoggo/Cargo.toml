@@ -17,57 +17,37 @@ edition = "2018"
 [dependencies]
 anyhow = "1.0.43"
 arrayvec = "0.5.2"
-async-trait = "0.1.53"
 async-graphql = "3.0.38"
 async-graphql-axum = "3.0.35"
+async-trait = "0.1.53"
 axum = "0.5.1"
 bamboo-rs-core-ed25519-yasmf = "0.1.1"
-deadqueue = { version = "0.2.2", default-features = false, features = [
-    "unlimited",
-] }
+deadqueue = { version = "0.2.2", default-features = false, features = [ "unlimited" ] }
 directories = "3.0.2"
 envy = "0.4.2"
 futures = "0.3.21"
-hex = "0.4.3"
+gql_client = "1.0.6"
 lipmaa-link = "0.2.2"
 log = "0.4.14"
 openssl-probe = "0.1.4"
 p2panda-rs = "0.4.0"
-rand = "0.8.4"
 serde = { version = "1.0.130", features = ["derive"] }
-serde_json = "1.0.67"
-sqlformat = "0.1.7"
-sqlx = { version = "0.5.7", features = [
-    "any",
-    "postgres",
-    "sqlite",
-    "runtime-tokio-rustls",
-] }
+sqlx = { version = "0.5.7", features = [ "any", "postgres", "sqlite", "runtime-tokio-rustls" ] }
 thiserror = "1.0.29"
-tokio = { version = "1.17.0", features = [
-    "macros",
-    "net",
-    "rt",
-    "rt-multi-thread",
-    "sync",
-    "time",
-] }
-tower-http = { version = "0.2.4", default-features = false, features = [
-    "cors",
-] }
+tokio = { version = "1.17.0", features = [ "macros", "net", "rt", "rt-multi-thread", "sync", "time" ] }
+tower-http = { version = "0.2.4", default-features = false, features = [ "cors" ] }
 triggered = "0.1.2"
 
 [dev-dependencies]
 env_logger = "0.9.0"
-hyper = "0.14.17"
 http = "0.2.6"
+hyper = "0.14.17"
 once_cell = "1.12.0"
-reqwest = { version = "0.11.9", default-features = false, features = [
-    "json",
-    "stream",
-] }
+p2panda-rs = { version = "0.4.0", features = ["testing"] }
+rand = "0.8.4"
+reqwest = { version = "0.11.9", default-features = false, features = [ "json", "stream" ] }
 rstest = "0.12.0"
 rstest_reuse = "0.1.3"
-tower-service = "0.3.1"
+serde_json = "1.0.67"
 tower = "0.4.12"
-p2panda-rs = { version = "0.4.0", features = ["testing"] }
+tower-service = "0.3.1"

@@ -14,6 +14,12 @@ impl From<EntrySigned> for EncodedEntry {
     }
 }
 
+impl From<EncodedEntry> for EntrySigned {
+    fn from(entry: EncodedEntry) -> EntrySigned {
+        entry.0
+    }
+}
+
 impl From<EncodedEntry> for Value {
     fn from(entry: EncodedEntry) -> Self {
         async_graphql::ScalarType::to_value(&entry)

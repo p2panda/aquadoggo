@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::convert::TryFrom;
+
+use anyhow::{anyhow, Error, Result};
 use async_graphql::SimpleObject;
+use p2panda_rs::storage_provider::traits::AsStorageEntry;
 use serde::{Deserialize, Serialize};
 
 use crate::db::stores::StorageEntry;
@@ -21,5 +25,17 @@ impl From<StorageEntry> for EncodedEntryAndOperation {
         let entry = entry_row.entry_signed().to_owned().into();
         let operation = entry_row.operation_encoded().map(|op| op.to_owned().into());
         Self { entry, operation }
+    }
+}
+
+impl TryFrom<EncodedEntryAndOperation> for StorageEntry {
+    type Error = Error;
+
+    fn try_from(encoded: EncodedEntryAndOperation) -> Result<StorageEntry> {
+        let operation = encoded
+            .operation
+            .ok_or(anyhow!("Storage entry requires operation to be given"))?;
+
+        Ok(StorageEntry::new(&encoded.entry.into(), &operation.into())?)
     }
 }

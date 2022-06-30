@@ -2,6 +2,7 @@
 
 pub mod client;
 pub mod replication;
+pub mod response;
 pub mod scalars;
 mod schema;
 
