@@ -4,6 +4,7 @@ use anyhow::Error;
 use async_graphql::connection::{query, Connection, CursorType, Edge, EmptyFields};
 use async_graphql::{Context, Object, Result};
 use p2panda_rs::entry::{decode_entry, SeqNum};
+use p2panda_rs::hash::Hash;
 use p2panda_rs::storage_provider::traits::EntryStore;
 
 use crate::db::provider::SqlStorage;
@@ -31,11 +32,17 @@ impl ReplicationRoot {
         &self,
         ctx: &Context<'a>,
         hash: scalars::EntryHash,
-    ) -> Result<Option<EncodedEntryAndOperation>> {
+    ) -> Result<EncodedEntryAndOperation> {
         let store = ctx.data::<SqlStorage>()?;
-        let result = store.get_entry_by_hash(&hash.into()).await?;
+        let result = store.get_entry_by_hash(&hash.clone().into()).await?;
 
-        Ok(result.map(EncodedEntryAndOperation::from))
+        match result {
+            Some(inner) => Ok(EncodedEntryAndOperation::from(inner)),
+            None => Err(async_graphql::Error::new(format!(
+                "Entry with hash {} could not be found",
+                Hash::from(hash)
+            ))),
+        }
     }
 
     /// Get a single entry by its log id, sequence number and public key.
@@ -56,8 +63,8 @@ impl ReplicationRoot {
         Ok(result.map(EncodedEntryAndOperation::from))
     }
 
-    /// Get any entries that are newer than the provided sequence number for a given author and log
-    /// id.
+    /// Get any entries that are newer than the provided sequence number for a given public key and
+    /// log id.
     async fn get_entries_newer_than_seq_num<'a>(
         &self,
         ctx: &Context<'a>,
@@ -151,14 +158,81 @@ mod tests {
     use std::convert::TryFrom;
 
     use async_graphql::{EmptyMutation, EmptySubscription, Request, Schema};
+    use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::Author;
+    use p2panda_rs::test_utils::fixtures::random_hash;
     use rstest::rstest;
 
     use crate::db::stores::test_utils::{
-        populate_test_db, with_db_manager_teardown, PopulateDatabaseConfig, TestDatabaseManager,
+        populate_test_db, test_db, with_db_manager_teardown, PopulateDatabaseConfig, TestDatabase,
+        TestDatabaseManager, TestDatabaseRunner,
     };
 
     use super::ReplicationRoot;
+
+    #[rstest]
+    fn entry_by_hash(
+        #[from(test_db)]
+        #[with(1, 1, 1)]
+        runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let replication_root = ReplicationRoot::default();
+            let schema = Schema::build(replication_root, EmptyMutation, EmptySubscription)
+                .data(db.store)
+                .finish();
+
+            // The test runner creates a test entry for us. The entry hash is automatically the
+            // document id as it contains the CREATE operation
+            let entry_hash_str = db.test_data.documents.first().unwrap().as_str();
+
+            // Construct the query
+            let gql_query = format!(
+                r#"
+                    query {{
+                        entryByHash(hash: "{}") {{
+                            entry
+                            operation
+                        }}
+                    }}
+                "#,
+                entry_hash_str
+            );
+
+            // Make the query
+            let result = schema.execute(Request::new(gql_query.clone())).await;
+
+            // Check that query was successful
+            assert!(
+                result.is_ok(),
+                "Query: {} \nResult: {:?}",
+                gql_query,
+                result
+            );
+        });
+    }
+
+    #[rstest]
+    fn entry_by_hash_not_found(
+        #[from(test_db)] runner: TestDatabaseRunner,
+        #[from(random_hash)] random_hash: Hash,
+    ) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let replication_root = ReplicationRoot::default();
+            let schema = Schema::build(replication_root, EmptyMutation, EmptySubscription)
+                .data(db.store)
+                .finish();
+
+            let gql_query = format!(
+                r#"query {{ entryByHash(hash: "{}") {{ entry operation }} }}"#,
+                random_hash.as_str()
+            );
+
+            // Make sure that query returns an error as entry was not found
+            let result = schema.execute(Request::new(gql_query.clone())).await;
+            assert!(result.is_err(), "{:?}", result);
+        });
+    }
 
     #[rstest]
     #[case::default_params(20, None, None, None, true, 10)]
@@ -166,7 +240,7 @@ mod tests {
     #[case::some_edges_no_next_page(14, Some(10), Some(5), None, false, 4)]
     #[case::edges_and_next_page(15, Some(10), Some(5), None, true, 5)]
     #[case::edges_and_next_page_again(16, Some(10), Some(5), None, true, 5)]
-    fn get_entries_newer_than_seq_cursor(
+    fn get_entries_newer_than_seq_num_cursor(
         #[case] entries_in_log: usize,
         #[case] sequence_number: Option<u64>,
         #[case] first: Option<u64>,
@@ -226,22 +300,24 @@ mod tests {
 
             // Construct the query
             let gql_query = format!(
-                r#"query {{
-                    getEntriesNewerThanSeqNum(
-                        logId: "{}",
-                        publicKey: "{}",
-                        seqNum: {},
-                        first: {},
-                        after: {}
-                    ) {{
-                        edges {{
-                            cursor
-                        }}
-                        pageInfo {{
-                            hasNextPage
+                r#"
+                    query {{
+                        getEntriesNewerThanSeqNum(
+                            logId: "{}",
+                            publicKey: "{}",
+                            seqNum: {},
+                            first: {},
+                            after: {}
+                        ) {{
+                            edges {{
+                                cursor
+                            }}
+                            pageInfo {{
+                                hasNextPage
+                            }}
                         }}
                     }}
-                }}"#,
+                "#,
                 log_id, public_key, seq_num, first, after
             );
 
@@ -249,12 +325,7 @@ mod tests {
             let result = schema.execute(Request::new(gql_query.clone())).await;
 
             // Check that we get the Ok returned from get_entries_newer_than_seq
-            assert!(
-                result.is_ok(),
-                "Query: {} \nResult: {:?}",
-                gql_query,
-                result
-            );
+            assert!(result.is_ok(), "{:?}", result);
 
             // Assert the returned hasNextPage and number of edges returned is what we expect
             let json_value = result.data.into_json().unwrap();
