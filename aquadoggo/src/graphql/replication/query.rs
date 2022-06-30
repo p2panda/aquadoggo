@@ -133,10 +133,10 @@ impl ReplicationRoot {
                 // @TODO: This returns true even when there is nothing on the next page, exactly
                 // when the last page has the maximum number of elements
                 let has_next_page = edges.len() == max_number_of_entries;
-                let has_previous_page = start != 0;
+                let has_previous_page = start > 0;
 
                 let mut connection = Connection::new(has_previous_page, has_next_page);
-                connection.append(edges);
+                connection.edges.extend(edges);
 
                 Result::<_, Error>::Ok(connection)
             },

@@ -15,12 +15,11 @@ readme = "README.md"
 edition = "2018"
 
 [dependencies]
-anyhow = "1.0.43"
-arrayvec = "0.5.2"
-async-graphql = "3.0.38"
-async-graphql-axum = "3.0.35"
-async-trait = "0.1.53"
-axum = "0.5.1"
+anyhow = "^1.0.58"
+async-graphql = "^4.0.4"
+async-graphql-axum = "^4.0.4"
+async-trait = "^0.1.56"
+axum = "^0.5.10"
 bamboo-rs-core-ed25519-yasmf = "0.1.1"
 deadqueue = { version = "0.2.2", default-features = false, features = [ "unlimited" ] }
 directories = "3.0.2"
