@@ -407,15 +407,16 @@ pub async fn populate_test_db(db: &mut TestDatabase, config: &PopulateDatabaseCo
         for _log_id in 0..config.no_of_logs {
             let mut document_id: Option<DocumentId> = None;
             let mut previous_operation: Option<DocumentViewId> = None;
+
             for index in 0..config.no_of_entries {
-                // Create an operation based on the current index and whether this document should contain
-                // a DELETE operation.
+                // Create an operation based on the current index and whether this document should
+                // contain a DELETE operation
                 let next_operation_fields = match index {
-                    // First operation is a CREATE.
+                    // First operation is CREATE
                     0 => Some(operation_fields(config.create_operation_fields.clone())),
-                    // Last operation is a DELETE if the with_delete flag is set.
+                    // Last operation is DELETE if the with_delete flag is set
                     seq if seq == (config.no_of_entries - 1) && config.with_delete => None,
-                    // All other operations are UPDATE.
+                    // All other operations are UPDATE
                     _ => Some(operation_fields(config.update_operation_fields.clone())),
                 };
 
