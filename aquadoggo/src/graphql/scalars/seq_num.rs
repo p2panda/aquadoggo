@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::convert::{TryFrom, TryInto};
+use std::fmt::Display;
 use std::str::FromStr;
 
 use anyhow::Result;
@@ -78,6 +79,12 @@ impl<'de> Deserialize<'de> for SeqNum {
             .map_err(|_| serde::de::Error::custom("Could not parse seq_num string as u64"))?;
 
         Ok(seq_num)
+    }
+}
+
+impl Display for SeqNum {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0.as_u64())
     }
 }
 

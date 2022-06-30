@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::fmt::Display;
+
 use async_graphql::scalar;
 use serde::{Deserialize, Serialize};
 
@@ -42,6 +44,12 @@ impl<'de> Deserialize<'de> for LogId {
             .map_err(|_| serde::de::Error::custom("Could not parse log_id string as u64"))?;
 
         Ok(LogId(log_id))
+    }
+}
+
+impl Display for LogId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0.as_u64())
     }
 }
 

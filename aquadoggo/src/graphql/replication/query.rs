@@ -4,7 +4,6 @@ use anyhow::Error;
 use async_graphql::connection::{query, Connection, CursorType, Edge, EmptyFields};
 use async_graphql::{Context, Object, Result};
 use p2panda_rs::entry::{decode_entry, SeqNum};
-use p2panda_rs::hash::Hash;
 use p2panda_rs::storage_provider::traits::EntryStore;
 
 use crate::db::provider::SqlStorage;
@@ -40,7 +39,7 @@ impl ReplicationRoot {
             Some(inner) => Ok(EncodedEntryAndOperation::from(inner)),
             None => Err(async_graphql::Error::new(format!(
                 "Entry with hash {} could not be found",
-                Hash::from(hash)
+                hash
             ))),
         }
     }
@@ -53,14 +52,24 @@ impl ReplicationRoot {
         #[graphql(name = "seqNum", desc = "Sequence number of entry")] seq_num: scalars::SeqNum,
         #[graphql(name = "publicKey", desc = "Public key of the entry author")]
         public_key: scalars::PublicKey,
-    ) -> Result<Option<EncodedEntryAndOperation>> {
+    ) -> Result<EncodedEntryAndOperation> {
         let store = ctx.data::<SqlStorage>()?;
 
         let result = store
-            .get_entry_at_seq_num(&public_key.into(), &log_id.into(), &seq_num.into())
+            .get_entry_at_seq_num(
+                &public_key.clone().into(),
+                &log_id.clone().into(),
+                &seq_num.clone().into(),
+            )
             .await?;
 
-        Ok(result.map(EncodedEntryAndOperation::from))
+        match result {
+            Some(inner) => Ok(EncodedEntryAndOperation::from(inner)),
+            None => Err(async_graphql::Error::new(format!(
+                "Entry with log id {}, sequence number {} and public key {} could not be found",
+                log_id, seq_num, public_key,
+            ))),
+        }
     }
 
     /// Get any entries that are newer than the provided sequence number for a given public key and
@@ -155,7 +164,7 @@ impl CursorType for scalars::SeqNum {
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryFrom;
+    use std::convert::{TryFrom, TryInto};
 
     use async_graphql::{EmptyMutation, EmptySubscription, Request, Schema};
     use p2panda_rs::hash::Hash;
@@ -226,6 +235,83 @@ mod tests {
             let gql_query = format!(
                 r#"query {{ entryByHash(hash: "{}") {{ entry operation }} }}"#,
                 random_hash.as_str()
+            );
+
+            // Make sure that query returns an error as entry was not found
+            let result = schema.execute(Request::new(gql_query.clone())).await;
+            assert!(result.is_err(), "{:?}", result);
+        });
+    }
+
+    #[rstest]
+    fn entry_by_log_id_and_seq_num(
+        #[from(test_db)]
+        #[with(1, 1, 1)]
+        runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let replication_root = ReplicationRoot::default();
+            let schema = Schema::build(replication_root, EmptyMutation, EmptySubscription)
+                .data(db.store)
+                .finish();
+
+            // The test runner creates a test entry for us, we can retreive the public key from the
+            // author
+            let public_key: Author = db
+                .test_data
+                .key_pairs
+                .first()
+                .unwrap()
+                .public_key()
+                .to_owned()
+                .try_into()
+                .unwrap();
+
+            // Construct the query
+            let gql_query = format!(
+                r#"
+                    query {{
+                        entryByLogIdAndSeqNum(logId: "{}", seqNum: "{}", publicKey: "{}") {{
+                            entry
+                            operation
+                        }}
+                    }}
+                "#,
+                1,
+                1,
+                public_key.as_str()
+            );
+
+            // Make the query
+            let result = schema.execute(Request::new(gql_query.clone())).await;
+
+            // Check that query was successful
+            assert!(
+                result.is_ok(),
+                "Query: {} \nResult: {:?}",
+                gql_query,
+                result
+            );
+        });
+    }
+
+    #[rstest]
+    fn entry_by_log_id_and_seq_num_not_found(#[from(test_db)] runner: TestDatabaseRunner) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let replication_root = ReplicationRoot::default();
+            let schema = Schema::build(replication_root, EmptyMutation, EmptySubscription)
+                .data(db.store)
+                .finish();
+
+            // Make a request with garbage data which will not exist in our test database
+            let gql_query = format!(
+                r#"query {{
+                    entryByLogIdAndSeqNum(logId: "{}", seqNum: "{}", publicKey: "{}") {{
+                        entry
+                        operation
+                    }}
+                }}"#,
+                2, 12, "64977654a6274f6157f2c3efe27ed89037c344f3af5c499e410946f50e25b6d7"
             );
 
             // Make sure that query returns an error as entry was not found

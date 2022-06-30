@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::fmt::Display;
+
 use async_graphql::{scalar, Value};
 use p2panda_rs::hash::Hash;
 use serde::{Deserialize, Serialize};
@@ -23,6 +25,12 @@ impl From<Hash> for EntryHash {
 impl From<EntryHash> for Value {
     fn from(entry: EntryHash) -> Self {
         async_graphql::ScalarType::to_value(&entry)
+    }
+}
+
+impl Display for EntryHash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 

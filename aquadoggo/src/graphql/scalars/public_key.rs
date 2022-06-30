@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::fmt::Display;
+
 use async_graphql::scalar;
 use p2panda_rs::identity::Author;
 use serde::{Deserialize, Serialize};
@@ -17,6 +19,12 @@ impl From<Author> for PublicKey {
 impl From<PublicKey> for Author {
     fn from(public_key: PublicKey) -> Author {
         public_key.0
+    }
+}
+
+impl Display for PublicKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
