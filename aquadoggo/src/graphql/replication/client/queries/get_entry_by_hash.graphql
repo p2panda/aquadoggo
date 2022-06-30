@@ -1,6 +1,0 @@
-query GetEntryByHash($hash: EntryHash) {
-    entryByHash(hash: $hash){
-      entry
-    }
-}
-

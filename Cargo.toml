@@ -3,5 +3,3 @@ members = [
   "aquadoggo",
   "aquadoggo_cli",
 ]
-
-default-members = ["aquadoggo_cli"]

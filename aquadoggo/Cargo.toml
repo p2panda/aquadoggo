@@ -28,16 +28,12 @@ deadqueue = { version = "0.2.2", default-features = false, features = [
 directories = "3.0.2"
 envy = "0.4.2"
 futures = "0.3.21"
-graphql_client = { version = "0.10", features = ["reqwest"] }
 hex = "0.4.3"
 lipmaa-link = "0.2.2"
 log = "0.4.14"
-lru = "0.7.5"
-mockall = "0.11.0"
 openssl-probe = "0.1.4"
 p2panda-rs = "0.4.0"
 rand = "0.8.4"
-reqwest = { version = "0.11.9", default-features = false, features = ["json"] }
 serde = { version = "1.0.130", features = ["derive"] }
 serde_json = "1.0.67"
 sqlformat = "0.1.7"

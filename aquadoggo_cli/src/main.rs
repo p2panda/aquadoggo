@@ -41,9 +41,8 @@ struct Opt {
 
     /// A collection of authors and their logs to replicate.
     ///
-    /// eg -A 123abc="1 2 345" -A 456def="6 7"
-    /// Adds the the authors:
-    ///
+    /// eg. -A 123abc="1 2 345" -A 456def="6 7"
+    /// .. adds the authors:
     /// - "123abc" with log_ids 1, 2, 345
     /// - "456def" with log_ids 6 7
     #[structopt(short = "A", parse(try_from_str = parse_key_val), number_of_values = 1)]

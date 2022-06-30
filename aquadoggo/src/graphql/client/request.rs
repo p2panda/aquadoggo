@@ -11,12 +11,13 @@ use p2panda_rs::entry::{decode_entry, EntrySigned};
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::OperationEncoded;
 
-/// Request body of `panda_getEntryArguments`.
+/// Request body of `nextEntryArgs`.
 #[derive(Deserialize, Debug)]
 pub struct EntryArgsRequest {
-    /// The entry author
+    /// The entry author.
     pub author: Author,
-    /// The entry document
+
+    /// The entry document id.
     pub document: Option<DocumentId>,
 }
 
@@ -48,12 +49,13 @@ impl Validate for EntryArgsRequest {
     }
 }
 
-/// Request body of `panda_publishEntry`.
+/// Request body of `publishEntry`.
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct PublishEntryRequest {
     /// The encoded entry
     pub entry_encoded: EntrySigned,
+
     /// The encoded operation
     pub operation_encoded: OperationEncoded,
 }

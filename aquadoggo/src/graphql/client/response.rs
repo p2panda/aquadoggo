@@ -9,24 +9,24 @@ use p2panda_rs::storage_provider::traits::{AsEntryArgsResponse, AsPublishEntryRe
 
 use crate::db::models::EntryRow;
 
-/// Response body of `panda_getEntryArguments`.
+/// Response body of `nextEntryArgs`.
 ///
 /// `seq_num` and `log_id` are returned as strings to be able to represent large integers in JSON.
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct EntryArgsResponse {
-    /// The log id of the entry
+    /// The log id of the entry.
     #[serde(with = "super::u64_string::log_id_string_serialisation")]
     pub log_id: LogId,
 
-    /// The sequence number of the entry
+    /// The sequence number of the entry.
     #[serde(with = "super::u64_string::seq_num_string_serialisation")]
     pub seq_num: SeqNum,
 
-    /// The hash of the entry backlink
+    /// The hash of the entry backlink.
     pub backlink: Option<Hash>,
 
-    /// The hash of the entry skiplink
+    /// The hash of the entry skiplink.
     pub skiplink: Option<Hash>,
 }
 
@@ -62,24 +62,24 @@ impl AsEntryArgsResponse for EntryArgsResponse {
     }
 }
 
-/// Response body of `panda_publishEntry`.
+/// Response body of `publishEntry`.
 ///
 /// `seq_num` and `log_id` are returned as strings to be able to represent large integers in JSON.
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PublishEntryResponse {
-    /// The log id of the entry
+    /// The log id of the entry.
     #[serde(with = "super::u64_string::log_id_string_serialisation")]
     pub log_id: LogId,
 
-    /// The sequence number of the entry
+    /// The sequence number of the entry.
     #[serde(with = "super::u64_string::seq_num_string_serialisation")]
     pub seq_num: SeqNum,
 
-    /// The optional hash of the backlink
+    /// The optional hash of the backlink.
     pub backlink: Option<Hash>,
 
-    /// The optional hash of the skiplink
+    /// The optional hash of the skiplink.
     pub skiplink: Option<Hash>,
 }
 
