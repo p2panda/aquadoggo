@@ -21,10 +21,9 @@ impl ClientMutationRoot {
     async fn publish_entry(
         &self,
         ctx: &Context<'_>,
-        #[graphql(name = "entryEncoded", desc = "Encoded entry to publish")]
-        entry_encoded_param: String,
+        #[graphql(name = "entry", desc = "Encoded entry to publish")] entry_encoded_param: String,
         #[graphql(
-            name = "operationEncoded",
+            name = "operation",
             desc = "Encoded entry payload, which contains a p2panda operation matching the \
             provided encoded entry."
         )]
@@ -122,8 +121,8 @@ mod tests {
                                      6d79206669727374206d65737361676521";
 
     const PUBLISH_ENTRY_QUERY: &str = r#"
-        mutation TestPublishEntry($entryEncoded: String!, $operationEncoded: String!) {
-            publishEntry(entryEncoded: $entryEncoded, operationEncoded: $operationEncoded) {
+        mutation TestPublishEntry($entry: String!, $operation: String!) {
+            publishEntry(entry: $entry, operation: $operation) {
                 logId,
                 seqNum,
                 backlink,
@@ -144,8 +143,8 @@ mod tests {
     ) -> Request {
         // Prepare GraphQL mutation publishing an entry
         let parameters = Variables::from_value(value!({
-            "entryEncoded": entry_encoded,
-            "operationEncoded": operation_encoded,
+            "entry": entry_encoded,
+            "operation": operation_encoded,
         }));
 
         Request::new(PUBLISH_ENTRY_QUERY).variables(parameters)
@@ -210,8 +209,8 @@ mod tests {
             let context = HttpServiceContext::new(db.store, tx);
 
             let parameters = Variables::from_value(value!({
-                "entryEncoded": ENTRY_ENCODED,
-                "operationEncoded": "".to_string()
+                "entry": ENTRY_ENCODED,
+                "operation": "".to_string()
             }));
             let request = Request::new(PUBLISH_ENTRY_QUERY).variables(parameters);
             let response = context.schema.execute(request).await;
