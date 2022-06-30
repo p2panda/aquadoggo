@@ -10,7 +10,6 @@ use crate::graphql::scalars;
 
 /// Arguments required to sign and encode the next entry for an author.
 #[derive(SimpleObject, Serialize, Deserialize, Debug, Eq, PartialEq)]
-#[serde(rename_all = "camelCase")]
 pub struct NextEntryArguments {
     /// Log id of the entry.
     #[graphql(name = "logId")]
