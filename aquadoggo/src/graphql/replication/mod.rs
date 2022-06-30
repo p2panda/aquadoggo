@@ -108,7 +108,7 @@ impl<EntryStore: 'static + EntryStoreTrait<StorageEntry> + Sync + Send>
                 let edges = ctx
                     .lock()
                     .await
-                    .get_entries_newer_than_seq(log_id, author, start, max_number_of_entries)
+                    .get_entries_newer_than_seq_num(log_id, author, start, max_number_of_entries)
                     .await?
                     .into_iter()
                     .map(|entry| {
@@ -142,7 +142,7 @@ impl<EntryStore: 'static + EntryStoreTrait<StorageEntry> + Sync + Send>
         let result = ctx
             .lock()
             .await
-            .entry_by_log_id_and_sequence(log_id, sequence_number, author)
+            .entry_by_log_id_and_seq_num(log_id, sequence_number, author)
             .await?;
 
         Ok(result)

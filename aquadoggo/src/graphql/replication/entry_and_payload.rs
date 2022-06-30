@@ -16,6 +16,7 @@ use super::Entry;
 pub struct EntryAndPayload {
     /// Get the entry
     pub entry: Entry,
+
     /// Get the payload
     pub payload: Option<Payload>,
 }
@@ -35,12 +36,8 @@ impl TryFrom<EntryAndPayload> for StorageEntry {
 
     fn try_from(entry_and_payload: EntryAndPayload) -> Result<Self, Self::Error> {
         let entry_signed = entry_and_payload.entry.0;
-
-        //TODO: need to find out why StorageEntry enforces having the operation
         let operation_encoded = entry_and_payload.payload.unwrap().0;
-
         let result = StorageEntry::new(&entry_signed, &operation_encoded)?;
-
         Ok(result)
     }
 }
