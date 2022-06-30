@@ -1,151 +1,125 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::convert::TryFrom;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::{anyhow, Error, Result};
+use anyhow::{anyhow, Result};
 use bamboo_rs_core_ed25519_yasmf::verify::verify_batch;
 use futures::TryFutureExt;
 use log::{debug, error, trace, warn};
-pub use p2panda_rs::entry::LogId;
+use p2panda_rs::entry::LogId;
 use p2panda_rs::entry::SeqNum;
-pub use p2panda_rs::identity::Author;
+use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{AsVerifiedOperation, VerifiedOperation};
 use p2panda_rs::storage_provider::traits::{
     AsStorageEntry, EntryStore, OperationStore, StorageProvider,
 };
-use serde::Deserialize;
 use tokio::task;
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
 use crate::db::stores::StorageEntry;
 use crate::graphql::client::PublishEntryRequest;
-use crate::graphql::replication::client::Client;
-use crate::manager::{Service, Shutdown};
+use crate::graphql::replication::client::ReplicationClient;
+use crate::manager::Shutdown;
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct AuthorToReplicate(Author, Vec<LogId>);
+/// Replication service polling other nodes frequently to ask them about new entries from a defined
+/// set of authors and log ids.
+pub async fn replication_service(
+    context: Context,
+    shutdown: Shutdown,
+    tx: ServiceSender,
+) -> Result<()> {
+    // Initialise a GraphQL client which will talk to the other node
+    let mut client = ReplicationClient::new();
 
-impl TryFrom<(String, Vec<u64>)> for AuthorToReplicate {
-    type Error = Error;
+    // Prepare replication configuration
+    let config = &context.config.replication;
+    let connection_interval = Duration::from_secs(config.connection_interval_seconds);
+    let authors_to_replicate = Arc::new(config.authors_to_replicate.clone());
+    let remote_peers = Arc::new(config.remote_peers.clone());
 
-    fn try_from(value: (String, Vec<u64>)) -> Result<Self, Self::Error> {
-        let author = Author::new(&value.0)?;
-        let log_ids = value.1.into_iter().map(LogId::new).collect();
-        Ok(Self(author, log_ids))
-    }
-}
+    // Start replication service
+    let handle = task::spawn(async move {
+        loop {
+            debug!("Starting replication with remote peers");
 
-/// Configuration for the replication service
-#[derive(Default, Debug, Clone, Deserialize)]
-pub struct Config {
-    /// How often to connect to remote nodes for replication.
-    pub connection_interval_seconds: Option<u64>,
+            // Ask every remote peer about latest entries of log ids and authors
+            for remote_peer in remote_peers.clone().iter() {
+                for author_to_replicate in authors_to_replicate.clone().iter() {
+                    let author = author_to_replicate.author().clone();
+                    let log_ids = author_to_replicate.log_ids().clone();
 
-    /// The addresses of remote peers to replicate from.
-    pub remote_peers: Vec<String>,
+                    for log_id in log_ids {
+                        // Get the latest sequence number we have for this log and author
+                        let latest_seq_num = get_latest_seq_num(&context, &log_id, &author).await;
+                        debug!(
+                            "Latest entry sequence number of {} and {}: {:?}",
+                            log_id.as_u64(),
+                            author,
+                            latest_seq_num
+                        );
 
-    /// The authors to replicate and their log ids.
-    pub authors_to_replicate: Vec<AuthorToReplicate>,
-}
+                        // Make our replication request to the remote peer
+                        let entries = client
+                            .get_entries_newer_than_seq(
+                                remote_peer,
+                                &log_id,
+                                &author,
+                                latest_seq_num.as_ref(),
+                            )
+                            .await;
 
-#[derive(Default, Debug, Clone)]
-pub struct ReplicationService {
-    config: Config,
-}
+                        if let Ok(entries) = entries {
+                            debug!(
+                                "Received {} new entries from peer {}",
+                                entries.len(),
+                                remote_peer
+                            );
 
-impl ReplicationService {
-    pub fn new(config: Config) -> Self {
-        // @TODO: We get the config from the context as well, no need to pass it over here
-        debug!("init ReplicationService with config: {:?}", config);
-        Self { config }
-    }
-}
-
-#[async_trait::async_trait]
-impl Service<Context, ServiceMessage> for ReplicationService {
-    async fn call(&self, context: Context, shutdown: Shutdown, tx: ServiceSender) -> Result<()> {
-        let connection_interval = self
-            .config
-            .connection_interval_seconds
-            .map(Duration::from_secs)
-            .unwrap_or_else(|| Duration::from_secs(30));
-
-        let mut client = Client::new();
-        let authors_to_replicate = Arc::new(self.config.authors_to_replicate.clone());
-        let remote_peers = Arc::new(self.config.remote_peers.clone());
-
-        let handle = task::spawn(async move {
-            loop {
-                debug!("Starting replication with remote peers");
-                for remote_peer in remote_peers.clone().iter() {
-                    for author_to_replicate in authors_to_replicate.clone().iter() {
-                        let author = author_to_replicate.0.clone();
-                        let log_ids = author_to_replicate.1.clone();
-
-                        for log_id in log_ids {
-                            // Get the latest seq we have for this log + author
-                            let latest_seq = get_latest_seq(&context, &log_id, &author).await;
-                            debug!("Latest entry seq: {:?}", latest_seq);
-
-                            // Make our replication request to the remote peer
-                            let entries = client
-                                .get_entries_newer_than_seq(
-                                    remote_peer,
-                                    &log_id,
-                                    &author,
-                                    latest_seq.as_ref(),
-                                )
-                                .await;
-
-                            debug!("{:#?}", entries);
-
-                            if let Ok(entries) = entries {
-                                debug!("Received {} new entries", entries.len());
-
-                                if verify_entries(&entries, &context).await.is_err() {
-                                    warn!("couldn't verify entries");
-                                    continue;
-                                }
-
-                                insert_new_entries(&entries, &context, tx.clone())
-                                    .await
-                                    .unwrap_or_else(|e| error!("{:?}", e));
-                            } else {
-                                warn!("Replication request failed");
+                            if let Err(err) = verify_entries(&entries, &context).await {
+                                warn!("Couldn't verify entries: {}", err);
+                                continue;
                             }
+
+                            insert_new_entries(&entries, &context, tx.clone())
+                                .await
+                                .unwrap_or_else(|err| error!("{:?}", err));
+                        } else {
+                            warn!("Replication request to peer {} failed", remote_peer);
                         }
                     }
                 }
-                tokio::time::sleep(connection_interval).await;
             }
-        });
 
-        tokio::select! {
-            _ = handle => (),
-            _ = shutdown => (debug!("shutdown")),
+            // Wait a couple of seconds before we attempt next replication requests
+            tokio::time::sleep(connection_interval).await;
         }
+    });
 
-        Ok(())
+    tokio::select! {
+        _ = handle => (),
+        _ = shutdown => (),
     }
+
+    Ok(())
 }
 
+/// Helper method to verify a batch of entries coming from an untrusted peer.
 async fn verify_entries(entries: &[StorageEntry], context: &Context) -> Result<()> {
-    // Get the first entry (assumes they're sorted by seq_num smallest
-    // to largest)
+    // Get the first entry (assumes they're sorted by seq_num smallest to largest)
+    // @TODO: We can not trust that the other peer sorted the entries for us?
     let first_entry = entries.get(0).cloned();
     let mut entries_to_verify = entries.to_vec();
 
     match first_entry.as_ref() {
-        // If the entry is the first in the log then we can don't need
-        // to attempt to get the skiplink and previous
+        // If the entry is the first in the log then we can don't need to attempt to get the
+        // skiplink and previous
         Some(entry) if entry.seq_num() == SeqNum::new(1).unwrap() => {
-            trace!("first entry had seq_num 1 do no need to get previous entries in db");
+            trace!("First entry had seq_num 1 do no need to get previous entries in db");
         }
         Some(entry) => {
-            trace!("getting cert pool for entries");
+            trace!("Getting certificate pool for entries");
             add_certpool_to_entries_for_verification(&mut entries_to_verify, entry, context)
                 .await?;
         }
@@ -154,7 +128,14 @@ async fn verify_entries(entries: &[StorageEntry], context: &Context) -> Result<(
 
     let entries_to_verify: Vec<(Vec<u8>, Option<Vec<u8>>)> = entries_to_verify
         .iter()
-        .map(|entry| (entry.entry_bytes(), None))
+        .map(|entry| {
+            (
+                entry.entry_bytes(),
+                entry
+                    .operation_encoded()
+                    .map(|operation| operation.to_bytes()),
+            )
+        })
         .collect();
 
     verify_batch(&entries_to_verify)?;
@@ -162,6 +143,7 @@ async fn verify_entries(entries: &[StorageEntry], context: &Context) -> Result<(
     Ok(())
 }
 
+/// Helper method to insert a batch of verified entries into the database.
 async fn insert_new_entries(
     new_entries: &[StorageEntry],
     context: &Context,
@@ -178,15 +160,16 @@ async fn insert_new_entries(
         // This is the method used to publish entries arriving from clients. They all contain a
         // payload (operation).
         //
-        // @TODO: This is not a great fit for replication, as it performs much validation, some of
-        // it we don't want here. We plan to refactor this into a more modular set of methods which
-        // can definitely be used here more cleanly. For now, we do it this way.
+        // @TODO: This is not a great fit for replication, as it performs validation we either do
+        // not need or already done in a previous step. We plan to refactor this into a more
+        // modular set of methods which can definitely be used here more cleanly. For now, we do it
+        // this way.
         context
             .0
             .store
             .publish_entry(&args)
             .await
-            .map_err(|err| anyhow!(format!("error inserting new entry into db: {:?}", err)))?;
+            .map_err(|err| anyhow!(format!("Error inserting new entry into db: {:?}", err)))?;
 
         // @TODO: We have to publish the operation too, once again, this will be improved with the
         // above mentioned refactor.
@@ -195,7 +178,7 @@ async fn insert_new_entries(
             .store
             .get_document_by_entry(&entry.hash())
             .await
-            .map_err(|err| anyhow!(format!("error retrieving document id from db: {:?}", err)))?;
+            .map_err(|err| anyhow!(format!("Error retrieving document id from db: {:?}", err)))?;
 
         match document_id {
             Some(document_id) => {
@@ -213,30 +196,34 @@ async fn insert_new_entries(
                     .map_ok({
                         let entry = entry.clone();
                         let tx = tx.clone();
+
                         move |_| {
                             send_new_entry_service_message(tx.clone(), &entry);
                         }
                     })
                     .map_err(|err| {
-                        anyhow!(format!("error inserting new operation into db: {:?}", err))
+                        anyhow!(format!("Error inserting new operation into db: {:?}", err))
                     })
                     .await
             }
             None => Err(anyhow!(
-                "no document found for published operation".to_string()
+                "No document found for published operation".to_string()
             )),
-        }?
+        }?;
     }
 
     Ok(())
 }
 
+/// Helper method to retreive all entries from certificate pool to be able to verify Bamboo log
+/// integrity.
 async fn add_certpool_to_entries_for_verification(
     entries: &mut Vec<StorageEntry>,
     first_entry: &StorageEntry,
     context: &Context,
 ) -> Result<()> {
-    trace!("getting cert pool for entries");
+    trace!("Getting certificate pool for entries");
+
     let mut certpool = context
         .0
         .store
@@ -247,20 +234,24 @@ async fn add_certpool_to_entries_for_verification(
         )
         .await?;
 
-    trace!("got {} certpool entries", certpool.len());
+    trace!("Got {} certpool entries", certpool.len());
     entries.append(&mut certpool);
+
     Ok(())
 }
 
+/// Helper method to inform other services (like materialization service) about new operations.
 fn send_new_entry_service_message(tx: ServiceSender, entry: &StorageEntry) {
     let bus_message = ServiceMessage::NewOperation(entry.entry_signed().hash().into());
-    tx.send(bus_message)
-        .expect("Expected to be able to send a ServiceMessage on ServiceSender");
+
+    if tx.send(bus_message).is_err() {
+        // Silently fail here as we don't mind if there are no subscribers
+    }
 }
 
-async fn get_latest_seq(context: &Context, log_id: &LogId, author: &Author) -> Option<SeqNum> {
+/// Helper method to get the latest sequence number of a log and author.
+async fn get_latest_seq_num(context: &Context, log_id: &LogId, author: &Author) -> Option<SeqNum> {
     context
-        .0
         .store
         .get_latest_entry(author, log_id)
         .await
@@ -286,13 +277,14 @@ mod tests {
         populate_test_db, with_db_manager_teardown, PopulateDatabaseConfig, TestDatabaseManager,
     };
     use crate::http::http_service;
-    use crate::manager::Service;
+    use crate::replication::ReplicationConfiguration;
     use crate::test_helpers::shutdown_handle;
     use crate::Configuration;
-    use crate::ReplicationConfig;
 
-    use super::ReplicationService;
+    use super::replication_service;
 
+    // @TODO: This will be replaced with using `ctor` in this PR:
+    // https://github.com/p2panda/aquadoggo/pull/166
     fn init_env_logger() {
         let _ = env_logger::builder().is_test(true).try_init();
     }
@@ -302,7 +294,7 @@ mod tests {
         with_db_manager_teardown(|db_manager: TestDatabaseManager| async move {
             init_env_logger();
 
-            // Build and populate Billie's db
+            // Build and populate Billie's database
             let mut billie_db = db_manager.create("sqlite::memory:").await;
             let populate_db_config = PopulateDatabaseConfig {
                 no_of_entries: 1,
@@ -330,7 +322,8 @@ mod tests {
                     .unwrap();
             });
 
-            // Collect args needed for starting replication service
+            // Our test database helper already populated the database for us. We retreive the
+            // public keys here of the authors who created these test data entries
             let public_key = billie_db
                 .test_data
                 .key_pairs
@@ -345,22 +338,22 @@ mod tests {
             let endpoint: String = "http://localhost:3022/graphql".into();
 
             // Construct database and context for Ada
+            let config_ada = Configuration {
+                replication: ReplicationConfiguration {
+                    authors_to_replicate: vec![(author_str, log_ids).try_into().unwrap()],
+                    remote_peers: vec![endpoint],
+                    ..ReplicationConfiguration::default()
+                },
+                ..Configuration::default()
+            };
             let ada_db = db_manager.create("sqlite::memory:").await;
-            let context_ada = Context::new(ada_db.store.clone(), Configuration::default());
+            let context_ada = Context::new(ada_db.store.clone(), config_ada);
             let tx_ada = tx.clone();
             let shutdown_ada = shutdown_handle();
 
             // Ada starts replication service to get data from Billies GraphQL API
-            let replication_config = ReplicationConfig {
-                authors_to_replicate: vec![(author_str, log_ids).try_into().unwrap()],
-                remote_peers: vec![endpoint],
-                ..ReplicationConfig::default()
-            };
-
             let replication_service_ada = task::spawn(async {
-                let service = ReplicationService::new(replication_config);
-                service
-                    .call(context_ada, shutdown_ada, tx_ada)
+                replication_service(context_ada, shutdown_ada, tx_ada)
                     .await
                     .unwrap();
             });

@@ -10,7 +10,7 @@ use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
 use crate::http::http_service;
 use crate::manager::ServiceManager;
 use crate::materializer::materializer_service;
-use crate::replication::ReplicationService;
+use crate::replication::replication_service;
 
 /// Makes sure database is created and migrated before returning connection pool.
 async fn initialize_db(config: &Configuration) -> Result<Pool> {
@@ -60,9 +60,6 @@ impl Node {
         manager.add("materializer", materializer_service);
 
         // Start replication service
-        let replication_service =
-            ReplicationService::new(config.replication_config.unwrap_or_default());
-
         manager.add("replication", replication_service);
 
         // Start HTTP server with GraphQL API

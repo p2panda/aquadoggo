@@ -12,16 +12,14 @@ use super::*;
 
 /// A graphql client for doing replication requests to another aquadoggo node.
 #[derive(Debug)]
-pub struct Client {
+pub struct ReplicationClient {
     reqwest_client: ReqwestClient,
 }
 
-impl Client {
+impl ReplicationClient {
     /// Create a new client.
     pub fn new() -> Self {
-        // TODO tls?
         let reqwest_client = ReqwestClient::new();
-
         Self { reqwest_client }
     }
 

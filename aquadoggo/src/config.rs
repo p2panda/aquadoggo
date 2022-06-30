@@ -7,7 +7,7 @@ use anyhow::Result;
 use directories::ProjectDirs;
 use serde::Deserialize;
 
-pub use crate::replication::Config as ReplicationConfig;
+use crate::replication::ReplicationConfiguration;
 
 /// Data directory name.
 const DATA_DIR_NAME: &str = "aquadoggo";
@@ -44,8 +44,8 @@ pub struct Configuration {
     /// Materializer worker pool size.
     pub worker_pool_size: u32,
 
-    /// Replication configuration
-    pub replication_config: Option<ReplicationConfig>,
+    /// Replication configuration.
+    pub replication: ReplicationConfiguration,
 }
 
 impl Default for Configuration {
@@ -57,7 +57,7 @@ impl Default for Configuration {
             http_port: 2020,
             ws_port: 2022,
             worker_pool_size: 16,
-            replication_config: Default::default(),
+            replication: ReplicationConfiguration::default(),
         }
     }
 }

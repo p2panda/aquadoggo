@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-use std::{
-    convert::{TryFrom, TryInto},
-    error::Error,
-};
+
+use std::convert::{TryFrom, TryInto};
+use std::error::Error;
 
 use anyhow::Result;
+use aquadoggo::{Configuration, Node, ReplicationConfiguration};
 use structopt::StructOpt;
 
-use aquadoggo::{Configuration, Node, ReplicationConfig};
-
-/// Parse a single key-value pair
+/// Helper method to parse a single key-value pair.
 fn parse_key_val<T, U>(s: &str) -> Result<(T, Vec<U>), Box<dyn Error>>
 where
     T: std::str::FromStr,
@@ -26,6 +24,7 @@ where
         .split(' ')
         .map(|elem| elem.parse())
         .collect::<Result<Vec<_>, _>>()?;
+
     Ok((key, values))
 }
 
@@ -36,17 +35,16 @@ struct Opt {
     #[structopt(short, long, parse(from_os_str))]
     data_dir: Option<std::path::PathBuf>,
 
-    /// Urls of remote nodes to replicate with
+    /// URLs of remote nodes to replicate with.
     #[structopt(short, long)]
     remote_node_addresses: Vec<String>,
 
-    /// A collection of authors and their logs to replicate
+    /// A collection of authors and their logs to replicate.
     ///
     /// eg -A 123abc="1 2 345" -A 456def="6 7"
     /// Adds the the authors:
     ///
     /// - "123abc" with log_ids 1, 2, 345
-    ///
     /// - "456def" with log_ids 6 7
     #[structopt(short = "A", parse(try_from_str = parse_key_val), number_of_values = 1)]
     authors_to_replicate: Vec<(String, Vec<u64>)>,
@@ -64,12 +62,11 @@ impl TryFrom<Opt> for Configuration {
             .map(|elem| elem.try_into())
             .collect::<Result<_>>()?;
 
-        let replication_config = ReplicationConfig {
+        config.replication = ReplicationConfiguration {
             remote_peers: opt.remote_node_addresses,
             authors_to_replicate,
-            ..Default::default()
+            ..ReplicationConfiguration::default()
         };
-        config.replication_config = Some(replication_config);
 
         Ok(config)
     }
