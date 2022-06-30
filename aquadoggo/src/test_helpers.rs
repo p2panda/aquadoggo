@@ -3,6 +3,7 @@
 use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::net::{SocketAddr, TcpListener};
+use std::time::Duration;
 
 use axum::body::HttpBody;
 use axum::BoxError;
@@ -11,6 +12,7 @@ use http::{Request, StatusCode};
 use hyper::{Body, Server};
 use once_cell::sync::Lazy;
 use serde::Deserialize;
+use tokio::task::{self, JoinHandle};
 use tower::make::Shared;
 use tower_service::Service;
 
@@ -147,4 +149,16 @@ impl TestResponse {
     pub(crate) fn status(&self) -> StatusCode {
         self.response.status()
     }
+}
+
+// Helper method to give us a shutdown future which will never resolve
+pub fn shutdown_handle() -> JoinHandle<()> {
+    let shutdown = task::spawn(async {
+        loop {
+            // Do this forever ..
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    });
+
+    shutdown
 }

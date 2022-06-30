@@ -270,7 +270,7 @@ mod tests {
     use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
     use rstest::rstest;
     use tokio::sync::broadcast;
-    use tokio::task::{self, JoinHandle};
+    use tokio::task;
 
     use crate::context::Context;
     use crate::db::stores::test_utils::{
@@ -278,6 +278,7 @@ mod tests {
     };
     use crate::http::http_service;
     use crate::manager::Service;
+    use crate::test_helpers::shutdown_handle;
     use crate::Configuration;
     use crate::ReplicationConfig;
 
@@ -285,18 +286,6 @@ mod tests {
 
     fn init_env_logger() {
         let _ = env_logger::builder().is_test(true).try_init();
-    }
-
-    // Helper method to give us a shutdown future which will never resolve
-    fn shutdown_handle() -> JoinHandle<()> {
-        let shutdown = task::spawn(async {
-            loop {
-                // Do this forever ..
-                tokio::time::sleep(Duration::from_millis(100)).await;
-            }
-        });
-
-        shutdown
     }
 
     #[rstest]
