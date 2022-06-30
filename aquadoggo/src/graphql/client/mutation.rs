@@ -21,11 +21,11 @@ impl ClientMutationRoot {
     async fn publish_entry(
         &self,
         ctx: &Context<'_>,
-        #[graphql(name = "entry", desc = "Encoded entry to publish")] entry_param: String,
+        #[graphql(name = "entry", desc = "Signed and encoded entry to publish")]
+        entry_param: String,
         #[graphql(
             name = "operation",
-            desc = "Encoded entry payload, which contains a p2panda operation matching the \
-            provided encoded entry."
+            desc = "p2panda operation representing the entry payload."
         )]
         operation_param: String,
     ) -> Result<PublishEntryResponse> {

@@ -20,12 +20,14 @@ impl ClientRoot {
         ctx: &Context<'_>,
         #[graphql(
             name = "publicKey",
-            desc = "Public key that will publish using the returned entry arguments"
+            desc = "Public key of author that will encode and sign the next entry \
+            using the returned arguments"
         )]
         public_key_param: String,
         #[graphql(
             name = "documentId",
-            desc = "Document id to which the entry's operation will apply"
+            desc = "Document the entry's UPDATE or DELETE operation is referring to, \
+            can be left empty when it is a CREATE operation"
         )]
         document_id_param: Option<String>,
     ) -> Result<EntryArgsResponse> {
