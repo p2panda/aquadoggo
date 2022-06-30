@@ -45,7 +45,7 @@ impl Client {
         result
             .data
             .and_then(|data| data.get_entries_newer_than_seq.edges)
-            .map(|e| convert_edges_to_storage_entries(e))
+            .map(convert_edges_to_storage_entries)
             .ok_or_else(|| anyhow!("data wasn't in the format expected"))?
     }
 }
