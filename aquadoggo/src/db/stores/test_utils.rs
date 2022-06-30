@@ -449,7 +449,7 @@ pub async fn populate_test_db(db: &mut TestDatabase, config: &PopulateDatabaseCo
 }
 
 /// Helper method for publishing an operation encoded on an entry to a store.
-async fn send_to_store(
+pub async fn send_to_store(
     store: &SqlStorage,
     operation: &Operation,
     document_id: Option<&DocumentId>,

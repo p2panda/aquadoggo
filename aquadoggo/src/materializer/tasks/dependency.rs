@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use log::debug;
 use p2panda_rs::document::DocumentViewId;
 
 use crate::context::Context;
@@ -19,25 +20,40 @@ use crate::materializer::TaskInput;
 /// Expects a _reduce_ task to have completed successfully for the given document view itself and
 /// returns a critical error otherwise.
 pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
+    debug!("Working on dependency task {:#?}", input);
+
     // Here we retrive the document view by document view id.
     let document_view = match input.document_view_id {
         Some(view_id) => context
             .store
             .get_document_view_by_id(&view_id)
             .await
-            .map_err(|_| TaskError::Critical)
-        ,
+            .map_err(|err| {
+                debug!("Fatal error getting document view from storage");
+                debug!("{}", err);
+                TaskError::Critical
+            })
+            ,
         // We expect to handle document_view_ids in a dependency task.
         None => Err(TaskError::Critical),
     }?;
 
     let document_view = match document_view {
-        Some(document_view) => Ok(document_view),
+        Some(document_view) => {
+            debug!(
+                "Document view retrieved from storage with id: {}",
+                document_view.id()
+            );
+            Ok(document_view)
+        }
         // If no document view for the id passed into this task could be retrieved then this
         // document has been deleted or the document view id was invalid. As "dependency" tasks
         // are only dispatched after a successful "reduce" task, neither `None` case should
         // happen, so this is a critical error.
-        None => Err(TaskError::Critical),
+        None => {
+            debug!("Expected document view not found in the store.");
+            Err(TaskError::Critical)
+        }
     }?;
 
     let mut next_tasks = Vec::new();
@@ -51,15 +67,21 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
                 // means we either have no entries for this document, or we are not materialising
                 // it for some reason. We don't want to kick of a "reduce" or "dependency" task in
                 // either of these cases.
+                debug!("Relation field found, no action required.");
             }
             p2panda_rs::operation::OperationValue::RelationList(_relation_list) => {
                 // same as above...
+                debug!("Relation list field found, no action required.");
             }
             p2panda_rs::operation::OperationValue::PinnedRelation(pinned_relation) => {
                 // These are pinned relations. We may have the operations for these views in the db,
                 // but this view wasn't pinned yet, so hasn't been materialised. To make sure it is
                 // materialised when possible, we dispatch a "reduce" task for any pinned relations
                 // which aren't found.
+                debug!(
+                    "Pinned relation field found refering to view id: {}",
+                    pinned_relation.view_id()
+                );
                 next_tasks.push(
                     construct_relation_task(&context, pinned_relation.view_id().clone()).await?,
                 );
@@ -67,6 +89,10 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
             p2panda_rs::operation::OperationValue::PinnedRelationList(pinned_relation_list) => {
                 // same as above...
                 for document_view_id in pinned_relation_list.iter() {
+                    debug!(
+                        "Pinned relation list field found containing view id: {}",
+                        document_view_id
+                    );
                     next_tasks
                         .push(construct_relation_task(&context, document_view_id.clone()).await?);
                 }
@@ -75,7 +101,11 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
         }
     }
 
-    Ok(Some(next_tasks.into_iter().flatten().collect()))
+    let next_tasks: Vec<Task<TaskInput>> = next_tasks.into_iter().flatten().collect();
+
+    debug!("Dispatching {} reduce task(s)", next_tasks.len());
+
+    Ok(Some(next_tasks))
 }
 
 /// Returns a _reduce_ task for a given document view only if that view does not yet exist in the
@@ -84,17 +114,27 @@ async fn construct_relation_task(
     context: &Context,
     document_view_id: DocumentViewId,
 ) -> Result<Option<Task<TaskInput>>, TaskError> {
+    debug!("Get view for pinned relation with id: {}", document_view_id);
     match context
         .store
         .get_document_view_by_id(&document_view_id)
         .await
-        .map_err(|_| TaskError::Critical)?
-    {
-        Some(_) => Ok(None),
-        None => Ok(Some(Task::new(
-            "reduce",
-            TaskInput::new(None, Some(document_view_id)),
-        ))),
+        .map_err(|err| {
+            debug!("Fatal error getting document view from storage");
+            debug!("{}", err);
+            TaskError::Critical
+        })? {
+        Some(_) => {
+            debug!("View found for pinned relation: {}", document_view_id);
+            Ok(None)
+        }
+        None => {
+            debug!("No view found for pinned relation: {}", document_view_id);
+            Ok(Some(Task::new(
+                "reduce",
+                TaskInput::new(None, Some(document_view_id)),
+            )))
+        }
     }
 }
 

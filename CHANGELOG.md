@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - e2e publish entry tests [#167](https://github.com/p2panda/aquadoggo/pull/167)
 - Reschedule pending tasks on startup [#168](https://github.com/p2panda/aquadoggo/pull/168)
 - GraphQL replication service gets and verifies new entries and inserts them into the db [#137](https://github.com/p2panda/aquadoggo/pull/137)
+- Debug logging in reduce task [#175](https://github.com/p2panda/aquadoggo/pull/175)
 
 ### Changed
 
@@ -48,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improve CI, track test coverage [#139](https://github.com/p2panda/aquadoggo/pull/139)
 - Fix compatibility with PostgreSQL, change sqlx runtime to `tokio` [#170](https://github.com/p2panda/aquadoggo/pull/170)
 - Use UPSERT for inserting or updating documents [#173](https://github.com/p2panda/aquadoggo/pull/173)
+- Don't critically fail reduce task when document missing [#177](https://github.com/p2panda/aquadoggo/pull/177)
 
 ## [0.2.0]
 
