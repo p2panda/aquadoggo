@@ -69,7 +69,7 @@ pub async fn get_entries_newer_than_seq_num(
         .get_entries_newer_than_seq_num
         .edges
         .into_iter()
-        .map(|edge| Ok(edge.node.try_into()?))
+        .map(|edge| edge.node.try_into())
         .collect::<Result<Vec<StorageEntry>>>()?;
 
     Ok(entries)

@@ -34,7 +34,7 @@ impl TryFrom<EncodedEntryAndOperation> for StorageEntry {
     fn try_from(encoded: EncodedEntryAndOperation) -> Result<StorageEntry> {
         let operation = encoded
             .operation
-            .ok_or(anyhow!("Storage entry requires operation to be given"))?;
+            .ok_or_else(|| anyhow!("Storage entry requires operation to be given"))?;
 
         Ok(StorageEntry::new(&encoded.entry.into(), &operation.into())?)
     }

@@ -20,7 +20,8 @@ impl SeqNum {
     }
 
     /// Convert sequence number to string.
-    pub fn to_string(&self) -> String {
+    #[allow(clippy::inherent_to_string_shadow_display)]
+    pub fn to_string(self) -> String {
         self.as_u64().to_string()
     }
 }

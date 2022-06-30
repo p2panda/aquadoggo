@@ -56,11 +56,7 @@ impl ReplicationRoot {
         let store = ctx.data::<SqlStorage>()?;
 
         let result = store
-            .get_entry_at_seq_num(
-                &public_key.clone().into(),
-                &log_id.clone().into(),
-                &seq_num.clone().into(),
-            )
+            .get_entry_at_seq_num(&public_key.clone().into(), &log_id.into(), &seq_num.into())
             .await?;
 
         match result {
@@ -113,7 +109,7 @@ impl ReplicationRoot {
                     .get_paginated_log_entries(
                         &public_key.into(),
                         &log_id.into(),
-                        &start_seq_num.into(),
+                        &start_seq_num,
                         max_number_of_entries,
                     )
                     .await?
