@@ -6,9 +6,10 @@ use p2panda_rs::identity::Author;
 use p2panda_rs::storage_provider::traits::StorageProvider;
 
 use crate::db::provider::SqlStorage;
-use crate::graphql::client::{EntryArgsRequest, NextEntryArguments};
+use crate::graphql::client::EntryArgsRequest;
+use crate::graphql::client::response::NextEntryArguments;
 
-/// The GraphQL root for the client api that p2panda clients can use to connect to a node.
+/// GraphQL queries for the Client API.
 #[derive(Default, Debug, Copy, Clone)]
 pub struct ClientRoot;
 

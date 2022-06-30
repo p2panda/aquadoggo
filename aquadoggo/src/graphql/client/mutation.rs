@@ -9,7 +9,7 @@ use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::provider::SqlStorage;
 use crate::graphql::client::{NextEntryArguments, PublishEntryRequest};
 
-/// Mutations for use by p2panda clients.
+/// GraphQL queries for the Client API.
 #[derive(Default, Debug, Copy, Clone)]
 pub struct ClientMutationRoot;
 

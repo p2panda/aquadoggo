@@ -1,12 +1,30 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::convert::{TryFrom, TryInto};
+use std::str::FromStr;
+
+use anyhow::Result;
 use async_graphql::scalar;
+use p2panda_rs::entry::SeqNumError;
 use serde::{Deserialize, Serialize};
 
 /// Sequence number of an entry.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SeqNum(p2panda_rs::entry::SeqNum);
 
+impl SeqNum {
+    /// Return sequence number as u64.
+    pub fn as_u64(&self) -> u64 {
+        self.0.as_u64()
+    }
+
+    /// Convert sequence number to string.
+    pub fn to_string(&self) -> String {
+        self.as_u64().to_string()
+    }
+}
+
+/// Convert from p2panda types to GraphQL scalars and back.
 impl From<p2panda_rs::entry::SeqNum> for SeqNum {
     fn from(seq_num: p2panda_rs::entry::SeqNum) -> Self {
         Self(seq_num)
@@ -19,14 +37,32 @@ impl From<SeqNum> for p2panda_rs::entry::SeqNum {
     }
 }
 
+/// Convert from strings to sequence number.
+impl FromStr for SeqNum {
+    type Err = SeqNumError;
+
+    fn from_str(str: &str) -> Result<Self, Self::Err> {
+        let num = u64::from_str(str).map_err(|_| SeqNumError::InvalidU64String)?;
+        Ok(Self(p2panda_rs::entry::SeqNum::new(num)?))
+    }
+}
+
+impl TryFrom<String> for SeqNum {
+    type Error = SeqNumError;
+
+    fn try_from(str: String) -> Result<Self, Self::Error> {
+        SeqNum::from_str(&str)
+    }
+}
+
+/// Represent u64 sequence number as string to be able to encode large numbers in GraphQL JSON
+/// response.
 impl Serialize for SeqNum {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        // Represent u64 sequence number as string to be able to encode large numbers in GraphQL
-        // JSON response.
-        serializer.serialize_str(&self.0.as_u64().to_string())
+        serializer.serialize_str(&self.to_string())
     }
 }
 
@@ -37,11 +73,11 @@ impl<'de> Deserialize<'de> for SeqNum {
     {
         let str: String = Deserialize::deserialize(deserializer)?;
 
-        let seq_num: p2panda_rs::entry::SeqNum = str
-            .parse()
+        let seq_num: SeqNum = str
+            .try_into()
             .map_err(|_| serde::de::Error::custom("Could not parse seq_num string as u64"))?;
 
-        Ok(SeqNum(seq_num))
+        Ok(seq_num)
     }
 }
 
