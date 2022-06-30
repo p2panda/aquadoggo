@@ -171,10 +171,9 @@ async fn insert_new_entries(
         // Parse and validate parameters
         let args = PublishEntryRequest {
             entry_encoded: entry.entry_signed().clone(),
+            // We know a storage entry has an operation so we safely unwrap here.
             operation_encoded: entry.operation_encoded().unwrap().clone(),
         };
-
-        // @TODO: Loads of ugly unwrapping going on here :-(
 
         // This is the method used to publish entries arriving from clients. They all contain a
         // payload (operation).
@@ -182,22 +181,29 @@ async fn insert_new_entries(
         // @TODO: This is not a great fit for replication, as it performs much validation, some of
         // it we don't want here. We plan to refactor this into a more modular set of methods which
         // can definitely be used here more cleanly. For now, we do it this way.
-        context.0.store.publish_entry(&args).await.unwrap();
+        context
+            .0
+            .store
+            .publish_entry(&args)
+            .await
+            .map_err(|err| anyhow!(format!("error inserting new entry into db: {:?}", err)))?;
 
         // @TODO: We have to publish the operation too, once again, this will be improved with the
         // above mentioned refactor.
-        match context
+        let document_id = context
             .0
             .store
             .get_document_by_entry(&entry.hash())
             .await
-            .unwrap()
-        {
+            .map_err(|err| anyhow!(format!("error retrieving document id from db: {:?}", err)))?;
+
+        match document_id {
             Some(document_id) => {
                 let operation = VerifiedOperation::new_from_entry(
                     entry.entry_signed(),
                     entry.operation_encoded().unwrap(),
                 )
+                // Safely unwrap here as the entry and operation were already validated.
                 .unwrap();
 
                 context
@@ -211,12 +217,15 @@ async fn insert_new_entries(
                             send_new_entry_service_message(tx.clone(), &entry);
                         }
                     })
-                    .map_err(|err| anyhow!(format!("error inserting new entry into db: {:?}", err)))
+                    .map_err(|err| {
+                        anyhow!(format!("error inserting new operation into db: {:?}", err))
+                    })
                     .await
-                    .unwrap();
             }
-            None => debug!("No document_id found for this operation"),
-        }
+            None => Err(anyhow!(
+                "no document found for published operation".to_string()
+            )),
+        }?
     }
 
     Ok(())
