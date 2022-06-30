@@ -13,10 +13,11 @@ use crate::graphql::scalars;
 #[serde(rename_all = "camelCase")]
 pub struct NextEntryArguments {
     /// Log id of the entry.
-    #[serde(with = "super::u64_string::log_id_string_serialisation")]
+    #[graphql(name = "logId")]
     pub log_id: scalars::LogId,
 
     /// Sequence number of the entry.
+    #[graphql(name = "seqNum")]
     pub seq_num: scalars::SeqNum,
 
     /// Hash of the entry backlink.

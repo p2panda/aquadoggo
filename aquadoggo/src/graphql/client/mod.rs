@@ -4,7 +4,6 @@ mod mutation;
 mod query;
 mod request;
 mod response;
-mod u64_string;
 
 pub use mutation::ClientMutationRoot;
 pub use query::ClientRoot;

@@ -49,15 +49,12 @@ impl ClientRoot {
 
 #[cfg(test)]
 mod tests {
-    use async_graphql::Response;
-    use p2panda_rs::entry::{LogId, SeqNum};
-    use p2panda_rs::storage_provider::traits::AsEntryArgsResponse;
+    use async_graphql::{value, Response};
     use rstest::rstest;
     use serde_json::json;
     use tokio::sync::broadcast;
 
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
-    use crate::graphql::client::NextEntryArguments;
     use crate::http::build_server;
     use crate::http::HttpServiceContext;
     use crate::test_helpers::TestClient;
@@ -87,17 +84,20 @@ mod tests {
                 }))
                 .send()
                 .await
-                .json::<NextEntryArguments>()
+                .json::<Response>()
                 .await;
 
-            let expected_entry_args = NextEntryArguments::new(
-                None,
-                None,
-                SeqNum::new(1).unwrap(),
-                LogId::new(1),
+            assert_eq!(
+                received_entry_args.data,
+                value!({
+                    "nextEntryArgs": {
+                        "logId": "1",
+                        "seqNum": "1",
+                        "backlink": null,
+                        "skiplink": null,
+                    }
+                })
             );
-
-            assert_eq!(received_entry_args, expected_entry_args);
         })
     }
 

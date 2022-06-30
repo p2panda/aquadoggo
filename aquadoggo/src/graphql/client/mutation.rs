@@ -155,10 +155,12 @@ mod tests {
             assert_eq!(
                 response.data,
                 value!({
-                    "backlink": "00201c221b573b1e0c67c5e2c624a93419774cdf46b3d62414c44a698df1237b1c16",
-                    "skiplink": null,
-                    "seq_num": "2",
-                    "log_id": "1",
+                    "publishEntry": {
+                        "logId": "1",
+                        "seqNum": "2",
+                        "backlink": "00201c221b573b1e0c67c5e2c624a93419774cdf46b3d62414c44a698df1237b1c16",
+                        "skiplink": null,
+                    }
                 })
             );
         });
@@ -233,10 +235,10 @@ mod tests {
                 json!({
                     "data": {
                         "publishEntry": {
-                            "logId":"1",
-                            "seqNum":"2",
-                            "backlink":"00201c221b573b1e0c67c5e2c624a93419774cdf46b3d62414c44a698df1237b1c16",
-                            "skiplink":null
+                            "logId": "1",
+                            "seqNum": "2",
+                            "backlink": "00201c221b573b1e0c67c5e2c624a93419774cdf46b3d62414c44a698df1237b1c16",
+                            "skiplink": null
                         }
                     }
                 })
