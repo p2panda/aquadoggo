@@ -12,15 +12,14 @@ use async_graphql::{
 use async_recursion::async_recursion;
 use async_trait::async_trait;
 use futures::future;
-use log::{debug, info};
+use log::debug;
 use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{Schema, SchemaId};
 
 use crate::db::provider::SqlStorage;
 use crate::db::traits::DocumentStore;
-use crate::graphql::{TempFile, TEMP_FILE_FNAME};
-use crate::schema::SchemaProvider;
+use crate::schema::{load_static_schemas, SchemaProvider};
 
 use super::schema::{get_schema_metafield, get_schema_metatype};
 
@@ -187,8 +186,7 @@ impl OutputType for DynamicQuery {
             let mut fields = IndexMap::new();
 
             // Load schema definitions and keep them in memory until the node shuts down.
-            info!("Loading schemas from temp file");
-            let schemas: &'static Vec<Schema> = TempFile::load_static(TEMP_FILE_FNAME);
+            let schemas: &'static Vec<Schema> = load_static_schemas();
 
             for schema in schemas.iter() {
                 // Insert GraphQL types for all registered schemas.

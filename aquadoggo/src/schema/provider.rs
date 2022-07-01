@@ -9,12 +9,13 @@ use tokio::sync::broadcast::{channel, Receiver, Sender};
 
 /// Provides fast access to system and application schemas during runtime.
 ///
-/// System schemas are built-in and can be accessed without creating a `SchemaProvider` instance.
-///
 /// Schemas can be updated and removed.
 #[derive(Clone, Debug)]
 pub struct SchemaProvider {
+    /// In-memory store of registered schemas.
     schemas: Arc<Mutex<HashMap<SchemaId, Schema>>>,
+
+    /// Sender for broadcast channel informing subscribers about updated schemas.
     tx: Sender<SchemaId>,
 }
 
@@ -60,7 +61,7 @@ impl SchemaProvider {
     ///
     /// Returns `true` if a schema was updated and `false` if it was inserted.
     pub fn update(&self, schema: Schema) -> bool {
-        info!("Updating {}", schema);
+        info!("Updating schema {}", schema);
         let mut schemas = self.schemas.lock().unwrap();
         let is_update = schemas
             .insert(schema.id().clone(), schema.clone())
@@ -78,7 +79,7 @@ impl SchemaProvider {
     ///
     /// Returns true if the schema existed.
     pub fn remove(&self, schema_id: &SchemaId) -> bool {
-        info!("Removing {}", schema_id);
+        info!("Removing schema {}", schema_id);
         self.schemas.lock().unwrap().remove(schema_id).is_some()
     }
 }

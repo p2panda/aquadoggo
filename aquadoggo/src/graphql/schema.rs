@@ -3,16 +3,14 @@
 use std::sync::Arc;
 
 use async_graphql::{EmptySubscription, MergedObject, Request, Response, Schema};
-use log::{error, info};
+use log::info;
 use tokio::sync::Mutex;
 
 use crate::bus::ServiceSender;
 use crate::db::provider::SqlStorage;
 use crate::graphql::client::{ClientMutationRoot, ClientRoot};
-use crate::graphql::error::DynamicSchemaError;
 use crate::graphql::replication::ReplicationRoot;
-use crate::graphql::TempFile;
-use crate::schema::SchemaProvider;
+use crate::schema::{save_static_schemas, SchemaProvider};
 
 /// All of the GraphQL query sub modules merged into one top level root.
 #[derive(MergedObject, Debug)]
@@ -47,37 +45,24 @@ pub fn build_root_schema(
         .finish()
 }
 
-/// Location of the temporary file containing all currently known schemas.
-pub const TEMP_FILE_FNAME: &str = ".schemas.tmp.json";
-
 /// Returns GraphQL API schema for p2panda node with a little trick to make dynamic schemas work.
 ///
 /// The `async_graphql` crate we're using in this project does only provide methods to generate
 /// GraphQL schemas statically. Ideally we would like to query our database for currently known
 /// p2panda schemas and accordingly update the GraphQL schema whenever necessary but we don't have
-/// static access to the database when building `async_graphql` types.
+/// static and sync access to the database when building `async_graphql` types.
 ///
 /// With this little workaround we are still able to make it work! We load the p2panda schemas from
-/// the database and serialise them into a JSON file. When `async_graphql` builds the GraphQL
-/// schema we can load this file statically to build the schemas dynamically based on the file's
-/// content.
-async fn build_schema_with_workaround(
-    shared: GraphQLSharedData,
-) -> Result<RootSchema, DynamicSchemaError> {
-    // Store temporary JSON file with all serialised application schemas from database.
-    //
-    // @TODO: We could try to still access the database by creating a static interface to it?
+/// the database and write them into a temporary in-memory store. When `async_graphql` builds the
+/// GraphQL schema we can load from this store statically to build the schemas on the fly.
+async fn build_schema_with_workaround(shared: GraphQLSharedData) -> RootSchema {
+    // Store all application schemas from database into static in-memory storage
     let all_schemas = shared.schema_provider.all();
-    let temp_file = TempFile::save(&all_schemas, TEMP_FILE_FNAME)?;
+    save_static_schemas(&all_schemas);
 
     // Build the actual GraphQL root schema, this will internally read the created JSON file and
     // accordingly build the schema
-    let schema = build_root_schema(shared.store, shared.tx, shared.schema_provider);
-
-    // Remove temporary file as we don't need it anymore
-    temp_file.unlink();
-
-    Ok(schema)
+    build_root_schema(shared.store, shared.tx, shared.schema_provider)
 }
 
 /// List of created GraphQL root schemas.
@@ -130,11 +115,7 @@ impl GraphQLSchemaManager {
 
         // Create manager instance and spawn internal watch task
         let manager = Self { schemas, shared };
-        manager
-            .spawn_schema_added_task()
-            .await
-            .map_err(|err| panic!("Failed building initial schema: {}", err))
-            .unwrap();
+        manager.spawn_schema_added_task().await;
 
         manager
     }
@@ -145,24 +126,20 @@ impl GraphQLSchemaManager {
     /// schema which will be added to the list.
     // @TODO: This manager does not "clean up" outdated schemas yet, they will just be appended to
     // an ever-growing list.
-    async fn spawn_schema_added_task(&self) -> Result<(), DynamicSchemaError> {
+    async fn spawn_schema_added_task(&self) {
         let shared = self.shared.clone();
         let schemas = self.schemas.clone();
 
         let mut on_schema_added = shared.schema_provider.on_schema_added();
 
         // Create the new GraphQL based on the current state of known p2panda application schemas
-        async fn rebuild(
-            shared: GraphQLSharedData,
-            schemas: GraphQLSchemas,
-        ) -> Result<(), DynamicSchemaError> {
-            let schema = build_schema_with_workaround(shared).await?;
+        async fn rebuild(shared: GraphQLSharedData, schemas: GraphQLSchemas) {
+            let schema = build_schema_with_workaround(shared).await;
             schemas.lock().await.push(schema);
-            Ok(())
         }
 
         // Always build a schema right at the beginning as we don't have one yet
-        rebuild(shared.clone(), schemas.clone()).await?;
+        rebuild(shared.clone(), schemas.clone()).await;
 
         // Spawn a task which reacts to newly registered p2panda schemas
         tokio::task::spawn(async move {
@@ -170,9 +147,7 @@ impl GraphQLSchemaManager {
                 match on_schema_added.recv().await {
                     Ok(schema_id) => {
                         info!("Changed schema {}, rebuilding GraphQL API", schema_id);
-                        if let Err(err) = rebuild(shared.clone(), schemas.clone()).await {
-                            error!("Error updating graphql schema: {}", err);
-                        }
+                        rebuild(shared.clone(), schemas.clone()).await;
                     }
                     Err(err) => {
                         panic!("Failed receiving schema updates: {}", err)
@@ -180,8 +155,6 @@ impl GraphQLSchemaManager {
                 }
             }
         });
-
-        Ok(())
     }
 
     /// Executes an incoming GraphQL query.
