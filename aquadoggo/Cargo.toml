@@ -1,11 +1,12 @@
 [package]
 name = "aquadoggo"
-version = "0.2.0"
+version = "0.3.0"
 authors = [
     "sophiiistika <sophiiistika@mailbox.org>",
     "adz <x1d@adz.garden>",
     "sandreae <contact@samandreae.com>",
     "cafca <cafca@001.land>",
+    "pietgeursen <pietgeursen@gmail.com>",
 ]
 description = "Embeddable p2p network node"
 license = "AGPL-3.0-or-later"
@@ -34,9 +35,7 @@ log = "0.4.14"
 lru = "0.7.5"
 mockall = "0.11.0"
 openssl-probe = "0.1.4"
-# We can not publish the `aquadoggo` crate yet, since `p2panda-rs` is an
-# unpublished dependency.
-p2panda-rs = { git = "https://github.com/p2panda/p2panda", branch = "main" }
+p2panda-rs = "0.4.0"
 rand = "0.8.4"
 reqwest = { version = "0.11.9", default-features = false, features = ["json"] }
 serde = { version = "1.0.130", features = ["derive"] }
@@ -75,6 +74,4 @@ rstest = "0.12.0"
 rstest_reuse = "0.1.3"
 tower-service = "0.3.1"
 tower = "0.4.12"
-p2panda-rs = { git = "https://github.com/p2panda/p2panda", branch = "main", features = [
-    "testing",
-] }
+p2panda-rs = { version = "0.4.0", features = ["testing"] }
