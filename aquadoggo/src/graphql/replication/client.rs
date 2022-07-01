@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::db::stores::StorageEntry;
 use crate::graphql::replication::response::EncodedEntryAndOperation;
-use crate::graphql::response::Paginated;
+use crate::graphql::pagination::Paginated;
 use crate::graphql::scalars;
 
 /// Response type of `get_entries_newer_than_seq_num` query.
