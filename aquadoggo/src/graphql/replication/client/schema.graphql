@@ -82,10 +82,10 @@ All of the graphql mutation sub modules merged into one top level root
 type MutationRoot {
 	"""
 	Publish an entry using parameters obtained through `nextEntryArgs` query.
-	
+
 	Returns arguments for publishing the next entry in the same log.
 	"""
-	publishEntry(entryEncoded: String!, operationEncoded: String!): PublishEntryResponse!
+	publishEntry(entry: String!, operation: String!): PublishEntryResponse!
 }
 """
 Information about pagination in a connection

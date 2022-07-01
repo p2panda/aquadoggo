@@ -105,15 +105,10 @@ impl PublishEntryResponse {
 }
 
 impl AsPublishEntryResponse for PublishEntryResponse {
-    fn new(
-        entry_hash_backlink: Option<Hash>,
-        entry_hash_skiplink: Option<Hash>,
-        seq_num: SeqNum,
-        log_id: LogId,
-    ) -> Self {
+    fn new(backlink: Option<Hash>, skiplink: Option<Hash>, seq_num: SeqNum, log_id: LogId) -> Self {
         PublishEntryResponse {
-            backlink: entry_hash_backlink,
-            skiplink: entry_hash_skiplink,
+            backlink,
+            skiplink,
             seq_num,
             log_id,
         }
