@@ -18,9 +18,9 @@ use tokio::task;
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
+use crate::db::request::PublishEntryRequest;
 use crate::db::stores::StorageEntry;
-use crate::graphql::client::PublishEntryRequest;
-use crate::graphql::replication::client::ReplicationClient;
+use crate::graphql::replication::client;
 use crate::manager::Shutdown;
 
 /// Replication service polling other nodes frequently to ask them about new entries from a defined
@@ -30,9 +30,6 @@ pub async fn replication_service(
     shutdown: Shutdown,
     tx: ServiceSender,
 ) -> Result<()> {
-    // Initialise a GraphQL client which will talk to the other node
-    let mut client = ReplicationClient::new();
-
     // Prepare replication configuration
     let config = &context.config.replication;
     let connection_interval = Duration::from_secs(config.connection_interval_seconds);
@@ -61,32 +58,37 @@ pub async fn replication_service(
                         );
 
                         // Make our replication request to the remote peer
-                        let entries = client
-                            .get_entries_newer_than_seq(
-                                remote_peer,
-                                &log_id,
-                                &author,
-                                latest_seq_num.as_ref(),
-                            )
-                            .await;
+                        let response = client::entries_newer_than_seq_num(
+                            remote_peer,
+                            &log_id,
+                            &author,
+                            latest_seq_num.as_ref(),
+                        )
+                        .await;
 
-                        if let Ok(entries) = entries {
-                            debug!(
-                                "Received {} new entries from peer {}",
-                                entries.len(),
-                                remote_peer
-                            );
+                        match response {
+                            Ok(entries) => {
+                                debug!(
+                                    "Received {} new entries from peer {}",
+                                    entries.len(),
+                                    remote_peer
+                                );
 
-                            if let Err(err) = verify_entries(&entries, &context).await {
-                                warn!("Couldn't verify entries: {}", err);
-                                continue;
+                                if let Err(err) = verify_entries(&entries, &context).await {
+                                    warn!("Couldn't verify entries: {}", err);
+                                    continue;
+                                }
+
+                                insert_new_entries(&entries, &context, tx.clone())
+                                    .await
+                                    .unwrap_or_else(|err| error!("{:?}", err));
                             }
-
-                            insert_new_entries(&entries, &context, tx.clone())
-                                .await
-                                .unwrap_or_else(|err| error!("{:?}", err));
-                        } else {
-                            warn!("Replication request to peer {} failed", remote_peer);
+                            Err(err) => {
+                                warn!(
+                                    "Replication request to peer {} failed: {}",
+                                    remote_peer, err
+                                );
+                            }
                         }
                     }
                 }
@@ -152,9 +154,9 @@ async fn insert_new_entries(
     for entry in new_entries {
         // Parse and validate parameters
         let args = PublishEntryRequest {
-            entry_encoded: entry.entry_signed().clone(),
+            entry: entry.entry_signed().clone(),
             // We know a storage entry has an operation so we safely unwrap here.
-            operation_encoded: entry.operation_encoded().unwrap().clone(),
+            operation: entry.operation_encoded().unwrap().clone(),
         };
 
         // This is the method used to publish entries arriving from clients. They all contain a
@@ -224,6 +226,8 @@ async fn add_certpool_to_entries_for_verification(
 ) -> Result<()> {
     trace!("Getting certificate pool for entries");
 
+    // @TODO: This gets the certificate pool from the database, but what if we need to get it from
+    // the other peer?
     let mut certpool = context
         .0
         .store

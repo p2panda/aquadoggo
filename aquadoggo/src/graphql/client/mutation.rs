@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_graphql::{Context, Error, Object, Result};
-use p2panda_rs::entry::EntrySigned;
-use p2panda_rs::operation::{AsVerifiedOperation, OperationEncoded, VerifiedOperation};
+use p2panda_rs::operation::{AsVerifiedOperation, VerifiedOperation};
 use p2panda_rs::storage_provider::traits::{OperationStore, StorageProvider};
+use p2panda_rs::Validate;
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::provider::SqlStorage;
-use crate::graphql::client::{PublishEntryRequest, PublishEntryResponse};
+use crate::db::request::PublishEntryRequest;
+use crate::graphql::client::NextEntryArguments;
+use crate::graphql::scalars;
 
-/// Mutations for use by p2panda clients.
+/// GraphQL queries for the Client API.
 #[derive(Default, Debug, Copy, Clone)]
 pub struct ClientMutationRoot;
 
@@ -21,22 +23,23 @@ impl ClientMutationRoot {
     async fn publish_entry(
         &self,
         ctx: &Context<'_>,
-        #[graphql(name = "entry", desc = "Encoded entry to publish")] entry_encoded_param: String,
+        #[graphql(name = "entry", desc = "Signed and encoded entry to publish")]
+        entry: scalars::EncodedEntry,
         #[graphql(
             name = "operation",
-            desc = "Encoded entry payload, which contains a p2panda operation matching the \
-            provided encoded entry."
+            desc = "p2panda operation representing the entry payload."
         )]
-        operation_encoded_param: String,
-    ) -> Result<PublishEntryResponse> {
+        operation: scalars::EncodedOperation,
+    ) -> Result<NextEntryArguments> {
         let store = ctx.data::<SqlStorage>()?;
         let tx = ctx.data::<ServiceSender>()?;
 
         // Parse and validate parameters
         let args = PublishEntryRequest {
-            entry_encoded: EntrySigned::new(&entry_encoded_param)?,
-            operation_encoded: OperationEncoded::new(&operation_encoded_param)?,
+            entry: entry.into(),
+            operation: operation.into(),
         };
+        args.validate()?;
 
         // Validate and store entry in database
         // @TODO: Check all validation steps here for both entries and operations. Also, there is
@@ -45,15 +48,10 @@ impl ClientMutationRoot {
 
         // Load related document from database
         // @TODO: We probably have this instance already inside of "publish_entry"?
-        match store
-            .get_document_by_entry(&args.entry_encoded.hash())
-            .await?
-        {
+        match store.get_document_by_entry(&args.entry.hash()).await? {
             Some(document_id) => {
-                let verified_operation = VerifiedOperation::new_from_entry(
-                    &args.entry_encoded,
-                    &args.operation_encoded,
-                )?;
+                let verified_operation =
+                    VerifiedOperation::new_from_entry(&args.entry, &args.operation)?;
 
                 // Store operation in database
                 // @TODO: This is not done by "publish_entry", maybe it needs to move there as
@@ -85,9 +83,9 @@ impl ClientMutationRoot {
 mod tests {
     use std::convert::TryFrom;
 
-    use async_graphql::{from_value, value, Request, Value, Variables};
+    use async_graphql::{value, Request, Variables};
     use p2panda_rs::document::DocumentId;
-    use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned, LogId, SeqNum};
+    use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::{Operation, OperationEncoded, OperationValue};
@@ -102,8 +100,8 @@ mod tests {
     use tokio::sync::broadcast;
 
     use crate::bus::ServiceMessage;
+    use crate::db::request::EntryArgsRequest;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
-    use crate::graphql::client::{EntryArgsRequest, PublishEntryResponse};
     use crate::http::{build_server, HttpServiceContext};
     use crate::test_helpers::TestClient;
 
@@ -153,29 +151,21 @@ mod tests {
     #[rstest]
     fn publish_entry(#[from(test_db)] runner: TestDatabaseRunner, publish_entry_request: Request) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
-            let (tx, _rx) = broadcast::channel(16);
+            let (tx, _) = broadcast::channel(16);
             let context = HttpServiceContext::new(db.store, tx);
-
             let response = context.schema.execute(publish_entry_request).await;
-            let received: PublishEntryResponse = match response.data {
-                Value::Object(result_outer) => {
-                    from_value(result_outer.get("publishEntry").unwrap().to_owned()).unwrap()
-                }
-                _ => panic!("Expected return value to be an object"),
-            };
 
-            // The response should contain args for the next entry in the same log
-            let expected = PublishEntryResponse {
-                log_id: LogId::new(1),
-                seq_num: SeqNum::new(2).unwrap(),
-                backlink: Some(
-                    "00201c221b573b1e0c67c5e2c624a93419774cdf46b3d62414c44a698df1237b1c16"
-                        .parse()
-                        .unwrap(),
-                ),
-                skiplink: None,
-            };
-            assert_eq!(expected, received);
+            assert_eq!(
+                response.data,
+                value!({
+                    "publishEntry": {
+                        "logId": "1",
+                        "seqNum": "2",
+                        "backlink": "00201c221b573b1e0c67c5e2c624a93419774cdf46b3d62414c44a698df1237b1c16",
+                        "skiplink": null,
+                    }
+                })
+            );
         });
     }
 
@@ -248,10 +238,10 @@ mod tests {
                 json!({
                     "data": {
                         "publishEntry": {
-                            "logId":"1",
-                            "seqNum":"2",
-                            "backlink":"00201c221b573b1e0c67c5e2c624a93419774cdf46b3d62414c44a698df1237b1c16",
-                            "skiplink":null
+                            "logId": "1",
+                            "seqNum": "2",
+                            "backlink": "00201c221b573b1e0c67c5e2c624a93419774cdf46b3d62414c44a698df1237b1c16",
+                            "skiplink": null
                         }
                     }
                 })
@@ -284,7 +274,15 @@ mod tests {
     )]
     #[case::operation_does_not_match(
         ENTRY_ENCODED,
-        &{operation_encoded(Some(operation_fields(vec![("silly", OperationValue::Text("Sausage".to_string()))])), None, None).as_str().to_owned()},
+        &{operation_encoded(
+            Some(
+                operation_fields(
+                    vec![("silly", OperationValue::Text("Sausage".to_string()))]
+                )
+            ),
+            None,
+            None
+        ).as_str().to_owned()},
         "operation needs to match payload hash of encoded entry"
     )]
     #[case::valid_entry_with_extra_hex_char_at_end(
@@ -526,8 +524,8 @@ mod tests {
                     let next_entry_args = db
                         .store
                         .get_entry_args(&EntryArgsRequest {
-                            author: author.clone(),
-                            document: document.as_ref().cloned(),
+                            public_key: author.clone(),
+                            document_id: document.as_ref().cloned(),
                         })
                         .await
                         .unwrap();
@@ -544,11 +542,11 @@ mod tests {
                     };
 
                     let entry = Entry::new(
-                        &next_entry_args.log_id,
+                        &next_entry_args.log_id.into(),
                         Some(&operation),
-                        next_entry_args.skiplink.as_ref(),
-                        next_entry_args.backlink.as_ref(),
-                        &next_entry_args.seq_num,
+                        next_entry_args.skiplink.map(Hash::from).as_ref(),
+                        next_entry_args.backlink.map(Hash::from).as_ref(),
+                        &next_entry_args.seq_num.into(),
                     )
                     .unwrap();
 

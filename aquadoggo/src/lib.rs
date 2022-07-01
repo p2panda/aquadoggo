@@ -18,7 +18,7 @@ mod config;
 mod context;
 mod db;
 mod errors;
-pub mod graphql;
+mod graphql;
 mod http;
 mod manager;
 mod materializer;
@@ -30,5 +30,4 @@ mod test_helpers;
 
 pub use crate::config::Configuration;
 pub use crate::replication::ReplicationConfiguration;
-pub use db::{connection_pool, provider::SqlStorage};
 pub use node::Node;

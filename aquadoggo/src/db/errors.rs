@@ -10,9 +10,6 @@ pub enum SqlStorageError {
     #[error("SQL query failed: {0}")]
     Transaction(String),
 
-    #[error("Insertion of row into table {0} did not show any effect")]
-    Insertion(String),
-
     #[error("Deletion of row from table {0} did not show any effect")]
     Deletion(String),
 }

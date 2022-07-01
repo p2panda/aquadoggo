@@ -23,9 +23,10 @@ use tokio::runtime::Builder;
 use tokio::sync::Mutex;
 
 use crate::db::provider::SqlStorage;
+use crate::db::request::{EntryArgsRequest, PublishEntryRequest};
 use crate::db::traits::DocumentStore;
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
-use crate::graphql::client::{EntryArgsRequest, PublishEntryRequest, PublishEntryResponse};
+use crate::graphql::client::NextEntryArguments;
 use crate::test_helpers::TEST_CONFIG;
 
 /// The fields used as defaults in the tests.
@@ -107,26 +108,23 @@ pub async fn construct_publish_entry_request(
 ) -> PublishEntryRequest {
     let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
     let entry_args_request = EntryArgsRequest {
-        author: author.clone(),
-        document: document_id.cloned(),
+        public_key: author.clone(),
+        document_id: document_id.cloned(),
     };
     let next_entry_args = provider.get_entry_args(&entry_args_request).await.unwrap();
 
     let entry = Entry::new(
-        &next_entry_args.log_id,
+        &next_entry_args.log_id.into(),
         Some(operation),
-        next_entry_args.skiplink.as_ref(),
-        next_entry_args.backlink.as_ref(),
-        &next_entry_args.seq_num,
+        next_entry_args.skiplink.map(Hash::from).as_ref(),
+        next_entry_args.backlink.map(Hash::from).as_ref(),
+        &next_entry_args.seq_num.into(),
     )
     .unwrap();
 
-    let entry_encoded = sign_and_encode(&entry, key_pair).unwrap();
-    let operation_encoded = OperationEncoded::try_from(operation).unwrap();
-    PublishEntryRequest {
-        entry_encoded,
-        operation_encoded,
-    }
+    let entry = sign_and_encode(&entry, key_pair).unwrap();
+    let operation = OperationEncoded::try_from(operation).unwrap();
+    PublishEntryRequest { entry, operation }
 }
 
 /// Helper for inserting an entry, operation and document_view into the database.
@@ -142,12 +140,12 @@ pub async fn insert_entry_operation_and_view(
 
     let request = construct_publish_entry_request(provider, operation, key_pair, document_id).await;
 
-    let operation_id: OperationId = request.entry_encoded.hash().into();
+    let operation_id: OperationId = request.entry.hash().into();
     let document_id = document_id
         .cloned()
-        .unwrap_or_else(|| request.entry_encoded.hash().into());
+        .unwrap_or_else(|| request.entry.hash().into());
 
-    let document_view_id: DocumentViewId = request.entry_encoded.hash().into();
+    let document_view_id: DocumentViewId = request.entry.hash().into();
 
     let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
@@ -410,15 +408,16 @@ pub async fn populate_test_db(db: &mut TestDatabase, config: &PopulateDatabaseCo
         for _log_id in 0..config.no_of_logs {
             let mut document_id: Option<DocumentId> = None;
             let mut previous_operation: Option<DocumentViewId> = None;
+
             for index in 0..config.no_of_entries {
-                // Create an operation based on the current index and whether this document should contain
-                // a DELETE operation.
+                // Create an operation based on the current index and whether this document should
+                // contain a DELETE operation
                 let next_operation_fields = match index {
-                    // First operation is a CREATE.
+                    // First operation is CREATE
                     0 => Some(operation_fields(config.create_operation_fields.clone())),
-                    // Last operation is a DELETE if the with_delete flag is set.
+                    // Last operation is DELETE if the with_delete flag is set
                     seq if seq == (config.no_of_entries - 1) && config.with_delete => None,
-                    // All other operations are UPDATE.
+                    // All other operations are UPDATE
                     _ => Some(operation_fields(config.update_operation_fields.clone())),
                 };
 
@@ -435,8 +434,8 @@ pub async fn populate_test_db(db: &mut TestDatabase, config: &PopulateDatabaseCo
                 )
                 .await;
 
-                // Set the previous_operations based on the backlink.
-                previous_operation = publish_entry_response.backlink.map(|hash| hash.into());
+                // Set the previous_operations based on the backlink
+                previous_operation = publish_entry_response.backlink.map(DocumentViewId::from);
 
                 // If this was the first entry in the document, store the doucment id for later.
                 if index == 0 {
@@ -454,26 +453,26 @@ pub async fn send_to_store(
     operation: &Operation,
     document_id: Option<&DocumentId>,
     key_pair: &KeyPair,
-) -> (EntrySigned, PublishEntryResponse) {
+) -> (EntrySigned, NextEntryArguments) {
     // Get an Author from the key_pair.
     let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
     // Get the next entry arguments for this author and the passed document id.
     let next_entry_args = store
         .get_entry_args(&EntryArgsRequest {
-            author: author.clone(),
-            document: document_id.cloned(),
+            public_key: author.clone(),
+            document_id: document_id.cloned(),
         })
         .await
         .unwrap();
 
     // Construct the next entry.
     let next_entry = Entry::new(
-        &next_entry_args.log_id,
+        &next_entry_args.log_id.into(),
         Some(operation),
-        next_entry_args.skiplink.as_ref(),
-        next_entry_args.backlink.as_ref(),
-        &next_entry_args.seq_num,
+        next_entry_args.skiplink.map(Hash::from).as_ref(),
+        next_entry_args.backlink.map(Hash::from).as_ref(),
+        &next_entry_args.seq_num.into(),
     )
     .unwrap();
 
@@ -483,8 +482,8 @@ pub async fn send_to_store(
 
     // Publish the entry and get the next entry args.
     let publish_entry_request = PublishEntryRequest {
-        entry_encoded: entry_encoded.clone(),
-        operation_encoded,
+        entry: entry_encoded.clone(),
+        operation: operation_encoded,
     };
     let publish_entry_response = store.publish_entry(&publish_entry_request).await.unwrap();
 
