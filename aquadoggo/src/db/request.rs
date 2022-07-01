@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use p2panda_rs::document::DocumentId;
-use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::{AsEntryArgsRequest, AsPublishEntryRequest};
 use p2panda_rs::storage_provider::ValidationError;
 use p2panda_rs::Validate;
@@ -11,7 +10,7 @@ use p2panda_rs::entry::{decode_entry, EntrySigned};
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::OperationEncoded;
 
-/// Request body of `nextEntryArgs`.
+/// Struct used to validate params and query database to retreive next entry arguments.
 #[derive(Deserialize, Debug)]
 pub struct EntryArgsRequest {
     /// The entry author.
@@ -49,7 +48,7 @@ impl Validate for EntryArgsRequest {
     }
 }
 
-/// Request body of `publishEntry`.
+/// Struct used to validate params and publish new entry in database.
 #[derive(Deserialize, Debug)]
 pub struct PublishEntryRequest {
     /// The encoded entry
@@ -78,10 +77,4 @@ impl Validate for PublishEntryRequest {
         decode_entry(self.entry_signed(), Some(self.operation_encoded()))?;
         Ok(())
     }
-}
-
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct QueryEntriesRequest {
-    pub schema: SchemaId,
 }

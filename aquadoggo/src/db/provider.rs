@@ -7,10 +7,11 @@ use p2panda_rs::operation::VerifiedOperation;
 use p2panda_rs::storage_provider::traits::StorageProvider;
 use sqlx::query_scalar;
 
+use crate::db::request::{EntryArgsRequest, PublishEntryRequest};
 use crate::db::stores::{StorageEntry, StorageLog};
 use crate::db::Pool;
 use crate::errors::StorageProviderResult;
-use crate::graphql::client::{EntryArgsRequest, NextEntryArguments, PublishEntryRequest};
+use crate::graphql::client::NextEntryArguments;
 
 /// Sql based storage that implements `StorageProvider`.
 #[derive(Clone, Debug)]

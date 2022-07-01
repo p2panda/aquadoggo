@@ -7,7 +7,8 @@ use p2panda_rs::storage_provider::traits::{OperationStore, StorageProvider};
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::provider::SqlStorage;
-use crate::graphql::client::{NextEntryArguments, PublishEntryRequest};
+use crate::db::request::PublishEntryRequest;
+use crate::graphql::client::NextEntryArguments;
 
 /// GraphQL queries for the Client API.
 #[derive(Default, Debug, Copy, Clone)]
@@ -97,8 +98,8 @@ mod tests {
     use tokio::sync::broadcast;
 
     use crate::bus::ServiceMessage;
+    use crate::db::request::EntryArgsRequest;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
-    use crate::graphql::client::EntryArgsRequest;
     use crate::http::{build_server, HttpServiceContext};
     use crate::test_helpers::TestClient;
 

@@ -23,9 +23,10 @@ use tokio::runtime::Builder;
 use tokio::sync::Mutex;
 
 use crate::db::provider::SqlStorage;
+use crate::db::request::{EntryArgsRequest, PublishEntryRequest};
 use crate::db::traits::DocumentStore;
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
-use crate::graphql::client::{EntryArgsRequest, NextEntryArguments, PublishEntryRequest};
+use crate::graphql::client::NextEntryArguments;
 use crate::test_helpers::TEST_CONFIG;
 
 /// The fields used as defaults in the tests.
