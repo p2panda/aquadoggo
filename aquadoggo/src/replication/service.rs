@@ -226,6 +226,8 @@ async fn add_certpool_to_entries_for_verification(
 ) -> Result<()> {
     trace!("Getting certificate pool for entries");
 
+    // @TODO: This gets the certificate pool from the database, but what if we need to get it from
+    // the other peer?
     let mut certpool = context
         .0
         .store
