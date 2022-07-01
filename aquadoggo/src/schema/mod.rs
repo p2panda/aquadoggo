@@ -4,4 +4,4 @@ mod provider;
 mod static_provider;
 
 pub use provider::SchemaProvider;
-pub use static_provider::{load_static_schemas, save_static_schemas};
+pub use static_provider::{load_static_schemas, save_static_schemas, StaticLeak};

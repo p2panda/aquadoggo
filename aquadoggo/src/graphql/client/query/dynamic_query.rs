@@ -180,13 +180,13 @@ impl OutputType for DynamicQuery {
     /// Insert all registered p2panda schemas into the graphql schema. This function doesn't have
     /// access to the pool though...
     fn create_type_info(registry: &mut async_graphql::registry::Registry) -> String {
+        // Load schema definitions
+        let schemas: &'static Vec<Schema> = load_static_schemas();
+
         // This callback is given a mutable reference to the registry!
         registry.create_output_type::<DynamicQuery, _>(MetaTypeId::Object, |reg| {
             // Insert queries for all registered schemas.
             let mut fields = IndexMap::new();
-
-            // Load schema definitions and keep them in memory until the node shuts down.
-            let schemas: &'static Vec<Schema> = load_static_schemas();
 
             for schema in schemas.iter() {
                 // Insert GraphQL types for all registered schemas.
