@@ -317,7 +317,14 @@ mod tests {
     #[rstest]
     fn materialize_update_document(
         #[from(test_db)]
-        #[with(1, 1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("name", OperationValue::Text("panda".into()))])]
+        #[with(
+            1,
+            1,
+            1,
+            false,
+            TEST_SCHEMA_ID.parse().unwrap(),
+            vec![("name", OperationValue::Text("panda".into()))]
+        )]
         runner: TestDatabaseRunner,
     ) {
         // Prepare database which inserts data for one document
@@ -357,7 +364,7 @@ mod tests {
             });
 
             // Wait for service to be ready ..
-            tokio::time::sleep(Duration::from_millis(50)).await;
+            tokio::time::sleep(Duration::from_millis(100)).await;
 
             // Send a message over the bus which kicks in materialization
             tx.send(crate::bus::ServiceMessage::NewOperation(
@@ -366,7 +373,7 @@ mod tests {
             .unwrap();
 
             // Wait a little bit for work being done ..
-            tokio::time::sleep(Duration::from_millis(50)).await;
+            tokio::time::sleep(Duration::from_millis(100)).await;
 
             // Then straight away publish an UPDATE on this document and send it over the bus too.
             let (entry_encoded, _) = send_to_store(
@@ -391,7 +398,7 @@ mod tests {
             .unwrap();
 
             // Wait a little bit for work being done ..
-            tokio::time::sleep(Duration::from_millis(50)).await;
+            tokio::time::sleep(Duration::from_millis(100)).await;
 
             // Make sure the service did not crash and is still running
             assert_eq!(handle.is_finished(), false);

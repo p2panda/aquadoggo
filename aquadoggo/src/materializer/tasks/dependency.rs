@@ -151,6 +151,7 @@ async fn construct_relation_task(
     document_view_id: DocumentViewId,
 ) -> Result<Option<Task<TaskInput>>, TaskError> {
     debug!("Get view for pinned relation with id: {}", document_view_id);
+
     match context
         .store
         .get_document_view_by_id(&document_view_id)
