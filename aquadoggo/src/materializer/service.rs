@@ -141,7 +141,7 @@ mod tests {
     use p2panda_rs::storage_provider::traits::OperationStore;
     use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
     use p2panda_rs::test_utils::fixtures::{
-        key_pair, operation, operation_fields, random_document_id, random_document_view_id,
+        key_pair, operation, operation_fields, random_document_id,
         random_operation_id,
     };
     use rstest::rstest;
