@@ -4,7 +4,7 @@ use anyhow::Error;
 use async_graphql::connection::{query, Connection, CursorType, Edge, EmptyFields};
 use async_graphql::{Context, Object, Result};
 use p2panda_rs::entry::{decode_entry, SeqNum};
-use p2panda_rs::storage_provider::traits::EntryStore;
+use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
 
 use crate::db::provider::SqlStorage;
 use crate::graphql::replication::response::EncodedEntryAndOperation;
@@ -115,16 +115,10 @@ impl ReplicationRoot {
                     .await?
                     .into_iter()
                     .map(|entry_and_operation| {
-                        // Unwrap as the entry was already validated before it entered the database
-                        //
-                        // @TODO: Is there a more efficient way than decoding the entry to access
-                        // the sequence number?
-                        let entry = decode_entry(entry_and_operation.entry_signed(), None).unwrap();
-
                         // Every pagination edge represents an entry and operation with the
                         // sequence number as the pagination cursor
                         Edge::new(
-                            entry.seq_num().to_owned().into(),
+                            entry_and_operation.seq_num().to_owned().into(),
                             entry_and_operation.into(),
                         )
                     })
