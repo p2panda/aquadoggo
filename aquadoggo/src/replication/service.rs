@@ -58,7 +58,7 @@ pub async fn replication_service(
                         );
 
                         // Make our replication request to the remote peer
-                        let response = client::get_entries_newer_than_seq_num(
+                        let response = client::entries_newer_than_seq_num(
                             remote_peer,
                             &log_id,
                             &author,

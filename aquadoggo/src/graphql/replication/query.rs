@@ -70,7 +70,7 @@ impl ReplicationRoot {
 
     /// Get any entries that are newer than the provided sequence number for a given public key and
     /// log id.
-    async fn get_entries_newer_than_seq_num<'a>(
+    async fn entries_newer_than_seq_num<'a>(
         &self,
         ctx: &Context<'a>,
         #[graphql(name = "logId", desc = "Log id of entries")] log_id: scalars::LogId,
@@ -322,7 +322,7 @@ mod tests {
     #[case::some_edges_no_next_page(14, Some(10), Some(5), None, false, 4)]
     #[case::edges_and_next_page(15, Some(10), Some(5), None, true, 5)]
     #[case::edges_and_next_page_again(16, Some(10), Some(5), None, true, 5)]
-    fn get_entries_newer_than_seq_num_cursor(
+    fn entries_newer_than_seq_num_cursor(
         #[case] entries_in_log: usize,
         #[case] sequence_number: Option<u64>,
         #[case] first: Option<u64>,
@@ -384,7 +384,7 @@ mod tests {
             let gql_query = format!(
                 r#"
                     query {{
-                        getEntriesNewerThanSeqNum(
+                        entriesNewerThanSeqNum(
                             logId: "{}",
                             publicKey: "{}",
                             seqNum: {},
@@ -406,15 +406,15 @@ mod tests {
             // Make the query
             let result = schema.execute(Request::new(gql_query.clone())).await;
 
-            // Check that we get the Ok returned from get_entries_newer_than_seq
+            // Check that we get the Ok returned from entries_newer_than_seq
             assert!(result.is_ok(), "{:?}", result);
 
             // Assert the returned hasNextPage and number of edges returned is what we expect
             let json_value = result.data.into_json().unwrap();
-            let edges = &json_value["getEntriesNewerThanSeqNum"]["edges"];
+            let edges = &json_value["entriesNewerThanSeqNum"]["edges"];
             assert_eq!(edges.as_array().unwrap().len(), expected_edges);
 
-            let has_next_page = &json_value["getEntriesNewerThanSeqNum"]["pageInfo"]["hasNextPage"];
+            let has_next_page = &json_value["entriesNewerThanSeqNum"]["pageInfo"]["hasNextPage"];
             assert_eq!(has_next_page.as_bool().unwrap(), expected_has_next_page);
         })
     }

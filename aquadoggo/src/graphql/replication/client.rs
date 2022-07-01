@@ -13,15 +13,15 @@ use crate::graphql::pagination::Paginated;
 use crate::graphql::replication::response::EncodedEntryAndOperation;
 use crate::graphql::scalars;
 
-/// Response type of `get_entries_newer_than_seq_num` query.
+/// Response type of `entries_newer_than_seq_num` query.
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Response {
-    get_entries_newer_than_seq_num: Paginated<EncodedEntryAndOperation, scalars::SeqNum>,
+    entries_newer_than_seq_num: Paginated<EncodedEntryAndOperation, scalars::SeqNum>,
 }
 
 /// Attempts to get entries newer than the given sequence number for a public key and log id.
-pub async fn get_entries_newer_than_seq_num(
+pub async fn entries_newer_than_seq_num(
     endpoint: &str,
     log_id: &LogId,
     public_key: &Author,
@@ -32,7 +32,7 @@ pub async fn get_entries_newer_than_seq_num(
     let query = format!(
         r#"
             query {{
-                getEntriesNewerThanSeqNum(
+                entriesNewerThanSeqNum(
                     logId: "{}",
                     publicKey: "{}",
                     seqNum: {}
@@ -66,7 +66,7 @@ pub async fn get_entries_newer_than_seq_num(
 
     // Convert results to correct return type
     let entries = response
-        .get_entries_newer_than_seq_num
+        .entries_newer_than_seq_num
         .edges
         .into_iter()
         .map(|edge| edge.node.try_into())
