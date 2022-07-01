@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use log::debug;
-
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::operation::{AsOperation, AsVerifiedOperation, OperationValue};
 use p2panda_rs::schema::SchemaId;
@@ -18,7 +17,8 @@ use crate::materializer::TaskInput;
 /// has all its immediate dependencies available in the store. It collects all required views for
 /// the schema, instantiates it and adds it to the schema provider.
 pub async fn schema_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
-    debug!("Working on task {}", input);
+    debug!("Working on schema task {}", input);
+
     let input_view_id = match (input.document_id, input.document_view_id) {
         (None, Some(view_id)) => Ok(view_id),
         // The task input must contain only a view id.
@@ -116,12 +116,12 @@ async fn get_related_schema_definitions(
 
 #[cfg(test)]
 mod tests {
-    use log::debug;
-    use p2panda_rs::hash::Hash;
     use std::convert::TryFrom;
 
+    use log::debug;
     use p2panda_rs::document::DocumentViewId;
     use p2panda_rs::entry::{sign_and_encode, Entry};
+    use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::{
         AsVerifiedOperation, Operation, OperationEncoded, OperationFields, OperationValue,
