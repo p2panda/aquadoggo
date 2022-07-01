@@ -9,12 +9,11 @@ use p2panda_rs::storage_provider::errors::OperationStorageError;
 use p2panda_rs::storage_provider::traits::StorageProvider;
 use sqlx::query_scalar;
 
+use crate::db::request::{EntryArgsRequest, PublishEntryRequest};
 use crate::db::stores::{StorageEntry, StorageLog};
 use crate::db::Pool;
 use crate::errors::StorageProviderResult;
-use crate::graphql::client::{
-    EntryArgsRequest, EntryArgsResponse, PublishEntryRequest, PublishEntryResponse,
-};
+use crate::graphql::client::NextEntryArguments;
 
 /// Sql based storage that implements `StorageProvider`.
 #[derive(Clone, Debug)]
@@ -33,9 +32,9 @@ impl SqlStorage {
 /// databases.
 #[async_trait]
 impl StorageProvider<StorageEntry, StorageLog, VerifiedOperation> for SqlStorage {
-    type EntryArgsResponse = EntryArgsResponse;
+    type EntryArgsResponse = NextEntryArguments;
     type EntryArgsRequest = EntryArgsRequest;
-    type PublishEntryResponse = PublishEntryResponse;
+    type PublishEntryResponse = NextEntryArguments;
     type PublishEntryRequest = PublishEntryRequest;
 
     /// Returns the related document for any entry.
@@ -123,7 +122,7 @@ mod tests {
 
     // Get a `DocumentView` that exists in the db.
     async fn insert_document_view(db: &TestDatabase) -> DocumentViewId {
-        let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
+        let author = Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
         let entry = db
             .store
             .get_entry_at_seq_num(&author, &LogId::new(1), &SeqNum::new(1).unwrap())

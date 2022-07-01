@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- GraphQL replication service gets and verifies new entries and inserts them into the db [#137](https://github.com/p2panda/aquadoggo/pull/137)
+
+### Changed
+
+- Refactor scalars and replication API, replace `graphql-client` with `gql_client` [#184](https://github.com/p2panda/aquadoggo/pull/184)
+
+## [0.3.0]
+
+Released on 2022-07-01: :package: [`crate`](https://crates.io/crates/aquadoggo/0.3.0)
+
+### Added
+
 - Introduce GraphQL endpoint [#81](https://github.com/p2panda/aquadoggo/pull/81)
 - Generic task queue with worker pool [#82](https://github.com/p2panda/aquadoggo/pull/82)
 - Service manager [#90](https://github.com/p2panda/aquadoggo/pull/90)
@@ -27,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - e2e publish entry tests [#167](https://github.com/p2panda/aquadoggo/pull/167)
 - Reschedule pending tasks on startup [#168](https://github.com/p2panda/aquadoggo/pull/168)
 - Add schema task and schema provider that update when new schema views are materialised [#166](https://github.com/p2panda/aquadoggo/pull/166/files)
+- Debug logging in reduce task [#175](https://github.com/p2panda/aquadoggo/pull/175)
 
 ### Changed
 
@@ -40,6 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Refactor tests to use fixtures exported from `p2panda-rs` [#147](https://github.com/p2panda/aquadoggo/pull/147)
 - Use `DocumentViewId` for previous operations [#147](https://github.com/p2panda/aquadoggo/pull/147)
 - Use `VerifiedOperation` [#158](https://github.com/p2panda/aquadoggo/pull/158)
+- Refactor `test_db` helper method [#176](https://github.com/p2panda/aquadoggo/pull/176)
+- Update `publishEntry` params and `nextEntryArgs` response fields [#181](https://github.com/p2panda/aquadoggo/pull/181)
 
 ### Fixed
 
@@ -47,6 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improve CI, track test coverage [#139](https://github.com/p2panda/aquadoggo/pull/139)
 - Fix compatibility with PostgreSQL, change sqlx runtime to `tokio` [#170](https://github.com/p2panda/aquadoggo/pull/170)
 - Use UPSERT for inserting or updating documents [#173](https://github.com/p2panda/aquadoggo/pull/173)
+- Don't critically fail reduce task when document missing [#177](https://github.com/p2panda/aquadoggo/pull/177)
 
 ## [0.2.0]
 
@@ -83,6 +99,7 @@ Released on 2021-10-25: :package: [`crate`](https://crates.io/crates/aquadoggo/0
 - Use p2panda-rs 0.2.1 with fixed linter setting [#41](https://github.com/p2panda/aquadoggo/41)
 - Use `tide` for HTTP server and `jsonrpc-v2` for JSON RPC [#29](https://github.com/p2panda/aquadoggo/29)
 
-[unreleased]: https://github.com/p2panda/aquadoggo/compare/v0.2.0...HEAD
+[unreleased]: https://github.com/p2panda/aquadoggo/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/p2panda/aquadoggo/releases/tag/v0.3.0
 [0.2.0]: https://github.com/p2panda/aquadoggo/releases/tag/v0.2.0
 [0.1.0]: https://github.com/p2panda/aquadoggo/releases/tag/v0.1.0

@@ -136,7 +136,7 @@ where
     ///
     /// Errors returned and panics by the service will send an exit signal which can be subscribed
     /// to via the `on_exit` method.
-    pub fn add<F: Service<D, M> + Send + Sync + Copy + 'static>(
+    pub fn add<F: Service<D, M> + Send + Sync + 'static>(
         &mut self,
         name: &'static str,
         service: F,

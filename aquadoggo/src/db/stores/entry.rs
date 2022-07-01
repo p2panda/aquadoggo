@@ -448,11 +448,12 @@ mod tests {
     #[rstest]
     fn try_insert_non_unique_entry(
         #[from(test_db)]
-        #[with(10, 1)]
+        #[with(10, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
+            let author =
+                Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
             let log_id = LogId::new(1);
 
             let first_entry = db
@@ -476,7 +477,7 @@ mod tests {
     #[rstest]
     fn latest_entry(
         #[from(test_db)]
-        #[with(20, 1)]
+        #[with(20, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
@@ -490,7 +491,8 @@ mod tests {
                 .unwrap();
             assert!(latest_entry.is_none());
 
-            let author_in_db = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
+            let author_in_db =
+                Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
 
             let latest_entry = db
                 .store
@@ -504,7 +506,7 @@ mod tests {
     #[rstest]
     fn entries_by_schema(
         #[from(test_db)]
-        #[with(20, 2, false, TEST_SCHEMA_ID.parse().unwrap())]
+        #[with(20, 1, 2, false, TEST_SCHEMA_ID.parse().unwrap())]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
@@ -534,11 +536,12 @@ mod tests {
     #[rstest]
     fn entry_by_seq_number(
         #[from(test_db)]
-        #[with(10, 1)]
+        #[with(10, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
+            let author =
+                Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
 
             for seq_num in 1..10 {
                 let seq_num = SeqNum::new(seq_num).unwrap();
@@ -579,11 +582,12 @@ mod tests {
     #[rstest]
     fn get_entry_by_hash(
         #[from(test_db)]
-        #[with(20, 1)]
+        #[with(20, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
+            let author =
+                Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
 
             for seq_num in [1, 11, 18] {
                 let seq_num = SeqNum::new(seq_num).unwrap();
@@ -617,11 +621,12 @@ mod tests {
     #[rstest]
     fn paginated_log_entries(
         #[from(test_db)]
-        #[with(30, 1)]
+        #[with(30, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
+            let author =
+                Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
 
             let entries = db
                 .store
@@ -653,11 +658,12 @@ mod tests {
     #[rstest]
     fn get_lipmaa_link_entries(
         #[from(test_db)]
-        #[with(100, 1)]
+        #[with(100, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
+            let author =
+                Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
 
             let entries = db
                 .store
