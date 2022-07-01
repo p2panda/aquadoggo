@@ -2,12 +2,13 @@
 
 use async_graphql::{Context, Error, Object, Result};
 use p2panda_rs::document::DocumentId;
-use p2panda_rs::identity::Author;
 use p2panda_rs::storage_provider::traits::StorageProvider;
+use p2panda_rs::Validate;
 
 use crate::db::provider::SqlStorage;
 use crate::db::request::EntryArgsRequest;
 use crate::graphql::client::response::NextEntryArguments;
+use crate::graphql::scalars;
 
 /// GraphQL queries for the Client API.
 #[derive(Default, Debug, Copy, Clone)]
@@ -24,23 +25,19 @@ impl ClientRoot {
             desc = "Public key of author that will encode and sign the next entry \
             using the returned arguments"
         )]
-        public_key_param: String,
+        public_key: scalars::PublicKey,
         #[graphql(
             name = "documentId",
             desc = "Document the entry's UPDATE or DELETE operation is referring to, \
             can be left empty when it is a CREATE operation"
         )]
-        document_id_param: Option<String>,
+        document_id: Option<scalars::DocumentId>,
     ) -> Result<NextEntryArguments> {
-        // Parse and validate parameters
-        let document_id = match document_id_param {
-            Some(val) => Some(val.parse::<DocumentId>()?),
-            None => None,
-        };
         let args = EntryArgsRequest {
-            public_key: Author::new(&public_key_param)?,
-            document_id,
+            public_key: public_key.into(),
+            document_id: document_id.map(DocumentId::from),
         };
+        args.validate()?;
 
         // Load and return next entry arguments
         let store = ctx.data::<SqlStorage>()?;

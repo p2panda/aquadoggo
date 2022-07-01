@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_graphql::{Context, Error, Object, Result};
-use p2panda_rs::entry::EntrySigned;
-use p2panda_rs::operation::{AsVerifiedOperation, OperationEncoded, VerifiedOperation};
+use p2panda_rs::operation::{AsVerifiedOperation, VerifiedOperation};
 use p2panda_rs::storage_provider::traits::{OperationStore, StorageProvider};
+use p2panda_rs::Validate;
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::provider::SqlStorage;
 use crate::db::request::PublishEntryRequest;
 use crate::graphql::client::NextEntryArguments;
+use crate::graphql::scalars;
 
 /// GraphQL queries for the Client API.
 #[derive(Default, Debug, Copy, Clone)]
@@ -23,21 +24,22 @@ impl ClientMutationRoot {
         &self,
         ctx: &Context<'_>,
         #[graphql(name = "entry", desc = "Signed and encoded entry to publish")]
-        entry_param: String,
+        entry: scalars::EncodedEntry,
         #[graphql(
             name = "operation",
             desc = "p2panda operation representing the entry payload."
         )]
-        operation_param: String,
+        operation: scalars::EncodedOperation,
     ) -> Result<NextEntryArguments> {
         let store = ctx.data::<SqlStorage>()?;
         let tx = ctx.data::<ServiceSender>()?;
 
         // Parse and validate parameters
         let args = PublishEntryRequest {
-            entry: EntrySigned::new(&entry_param)?,
-            operation: OperationEncoded::new(&operation_param)?,
+            entry: entry.into(),
+            operation: operation.into(),
         };
+        args.validate()?;
 
         // Validate and store entry in database
         // @TODO: Check all validation steps here for both entries and operations. Also, there is
