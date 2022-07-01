@@ -158,13 +158,13 @@ mod tests {
     #[rstest]
     fn materialize_document_from_bus(
         #[from(test_db)]
-        #[with(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("name", OperationValue::Text("panda".into()))])]
+        #[with(1, 1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("name", OperationValue::Text("panda".into()))])]
         runner: TestDatabaseRunner,
     ) {
         // Prepare database which inserts data for one document
         runner.with_db_teardown(|db: TestDatabase| async move {
             // Identify document and operation which was inserted for testing
-            let document_id = db.documents.first().unwrap();
+            let document_id = db.test_data.documents.first().unwrap();
             let verified_operation = db
                 .store
                 .get_operations_by_document_id(document_id)
@@ -233,13 +233,13 @@ mod tests {
     #[rstest]
     fn materialize_document_from_last_runtime(
         #[from(test_db)]
-        #[with(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("name", OperationValue::Text("panda".into()))])]
+        #[with(1, 1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("name", OperationValue::Text("panda".into()))])]
         runner: TestDatabaseRunner,
     ) {
         // Prepare database which inserts data for one document
         runner.with_db_teardown(|db: TestDatabase| async move {
             // Identify document and operation which was inserted for testing
-            let document_id = db.documents.first().unwrap();
+            let document_id = db.test_data.documents.first().unwrap();
 
             // Store a pending "reduce" task from last runtime in the database so it gets picked up by
             // the materializer service
@@ -294,14 +294,14 @@ mod tests {
     #[rstest]
     fn materialize_update_document(
         #[from(test_db)]
-        #[with(1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("name", OperationValue::Text("panda".into()))])]
+        #[with(1, 1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("name", OperationValue::Text("panda".into()))])]
         runner: TestDatabaseRunner,
     ) {
         // Prepare database which inserts data for one document
         runner.with_db_teardown(|db: TestDatabase| async move {
             // Identify key_[air, document and operation which was inserted for testing
-            let key_pair = db.key_pairs.first().unwrap();
-            let document_id = db.documents.first().unwrap();
+            let key_pair = db.test_data.key_pairs.first().unwrap();
+            let document_id = db.test_data.documents.first().unwrap();
             let verified_operation = db
                 .store
                 .get_operations_by_document_id(document_id)
@@ -426,7 +426,7 @@ mod tests {
     )]
     fn materialize_complex_documents(
         #[from(test_db)]
-        #[with(0, 0)]
+        #[with(0, 0, 0)]
         runner: TestDatabaseRunner,
         #[case] operation: Operation,
         key_pair: KeyPair,

@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::convert::TryFrom;
+
+use anyhow::Error;
 use async_graphql::*;
+use p2panda_rs::storage_provider::traits::AsStorageEntry;
 
 use crate::db::stores::StorageEntry;
 
@@ -12,6 +16,7 @@ use super::Entry;
 pub struct EntryAndPayload {
     /// Get the entry
     pub entry: Entry,
+
     /// Get the payload
     pub payload: Option<Payload>,
 }
@@ -23,5 +28,16 @@ impl From<StorageEntry> for EntryAndPayload {
             .operation_encoded()
             .map(|encoded| Payload(encoded.to_owned()));
         Self { entry, payload }
+    }
+}
+
+impl TryFrom<EntryAndPayload> for StorageEntry {
+    type Error = Error;
+
+    fn try_from(entry_and_payload: EntryAndPayload) -> Result<Self, Self::Error> {
+        let entry_signed = entry_and_payload.entry.0;
+        let operation_encoded = entry_and_payload.payload.unwrap().0;
+        let result = StorageEntry::new(&entry_signed, &operation_encoded)?;
+        Ok(result)
     }
 }

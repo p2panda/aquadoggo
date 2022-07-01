@@ -9,7 +9,6 @@ use anyhow::Error as AnyhowError;
 use async_graphql::connection::{query, Connection, CursorType, Edge, EmptyFields};
 use async_graphql::Object;
 use async_graphql::*;
-use mockall_double::double;
 use p2panda_rs::entry::decode_entry;
 use p2panda_rs::storage_provider::traits::EntryStore as EntryStoreTrait;
 use tokio::sync::Mutex;
@@ -35,7 +34,8 @@ mod testing;
 pub use aliased_author::AliasedAuthor;
 pub use author::{Author, AuthorOrAlias};
 
-#[double]
+#[cfg(test)]
+pub use context::MockReplicationContext;
 pub use context::ReplicationContext;
 pub use entry::Entry;
 pub use entry_and_payload::EntryAndPayload;
@@ -78,12 +78,14 @@ impl<EntryStore: 'static + EntryStoreTrait<StorageEntry> + Sync + Send>
 
     /// Get any entries that are newer than the provided sequence_number for a given author and
     /// log_id
+    ///
+    /// If you don't provide sequence_number then get all entries starting at the first
     async fn get_entries_newer_than_seq<'a>(
         &self,
         ctx: &Context<'a>,
         log_id: LogId,
         author: Author,
-        sequence_number: SequenceNumber,
+        sequence_number: Option<SequenceNumber>,
         first: Option<i32>,
         after: Option<String>,
     ) -> Result<Connection<SequenceNumber, EntryAndPayload, EmptyFields, EmptyFields>> {
@@ -95,9 +97,10 @@ impl<EntryStore: 'static + EntryStoreTrait<StorageEntry> + Sync + Send>
             first,
             None,
             |after: Option<SequenceNumber>, _, first, _| async move {
+                let sequence_number = sequence_number.map(|seq| seq.as_u64()).unwrap_or_else(|| 0);
+
                 // Add the sequence_number to the after cursor to get the starting sequence number.
-                let start: u64 = sequence_number.as_u64() + after.map(|a| a.as_u64()).unwrap_or(0);
-                let start_sequence = SequenceNumber::new(start)?;
+                let start: u64 = sequence_number + after.map(|a| a.as_u64()).unwrap_or(0);
 
                 // Limit the maximum number of entries to 10k, set a default value of 10
                 let max_number_of_entries = first.map(|n| n.clamp(0, 10000)).unwrap_or(10);
@@ -105,12 +108,7 @@ impl<EntryStore: 'static + EntryStoreTrait<StorageEntry> + Sync + Send>
                 let edges = ctx
                     .lock()
                     .await
-                    .get_entries_newer_than_seq(
-                        log_id,
-                        author,
-                        start_sequence,
-                        max_number_of_entries,
-                    )
+                    .get_entries_newer_than_seq_num(log_id, author, start, max_number_of_entries)
                     .await?
                     .into_iter()
                     .map(|entry| {
@@ -144,7 +142,7 @@ impl<EntryStore: 'static + EntryStoreTrait<StorageEntry> + Sync + Send>
         let result = ctx
             .lock()
             .await
-            .entry_by_log_id_and_sequence(log_id, sequence_number, author)
+            .entry_by_log_id_and_seq_num(log_id, sequence_number, author)
             .await?;
 
         Ok(result)
@@ -184,84 +182,106 @@ mod tests {
     use std::convert::TryFrom;
     use std::sync::Arc;
 
-    use async_graphql::{
-        connection::CursorType, EmptyMutation, EmptySubscription, Request, Schema,
-    };
+    use async_graphql::{EmptyMutation, EmptySubscription, Request, Schema};
+    use p2panda_rs::identity::Author;
+    use rstest::rstest;
     use tokio::sync::Mutex;
 
-    use super::testing::MockEntryStore;
-    use super::{AuthorOrAlias, ReplicationContext, ReplicationRoot, SequenceNumber};
+    use crate::db::stores::test_utils::{
+        populate_test_db, with_db_manager_teardown, PopulateDatabaseConfig, TestDatabaseManager,
+    };
+    use crate::SqlStorage;
 
-    #[tokio::test]
-    async fn get_entries_newer_than_seq_cursor_addition_is_ok() {
-        // Main point of this test is make sure the cursor + sequence_number logic addition is
-        // correct.
-        let log_id = 3u64;
-        let sequence_number = 123u64;
-        let author_string =
-            "7cf4f58a2d89e93313f2de99604a814ecea9800cf217b140e9c3a7ba59a5d982".to_string();
-        let after = SequenceNumber::try_from(sequence_number).unwrap();
-        let first = 5;
-        let expected_start = sequence_number + after.as_u64();
+    use super::{ReplicationContext, ReplicationRoot};
 
-        let gql_query = format!(
-            "
-        query{{
-          getEntriesNewerThanSeq(logId: {}, author: {{publicKey: \"{}\" }}, sequenceNumber:{}, first: {}, after: \"{}\" ){{
-            pageInfo {{
-              hasNextPage
-            }}
-          }}
-        }}",
-            log_id, author_string, sequence_number, first, after.encode_cursor()
-        );
+    #[rstest]
+    #[case::default_params(20, None, None, None, true, 10)]
+    #[case::no_edges_or_next_page(10, Some(10), Some(5), None, false, 0)]
+    #[case::some_edges_no_next_page(14, Some(10), Some(5), None, false, 4)]
+    #[case::edges_and_next_page(15, Some(10), Some(5), None, true, 5)]
+    #[case::edges_and_next_page_again(16, Some(10), Some(5), None, true, 5)]
+    fn get_entries_newer_than_seq_cursor(
+        #[case] entries_in_log: usize,
+        #[case] sequence_number: Option<u64>,
+        #[case] first: Option<u64>,
+        #[case] after: Option<u64>,
+        #[case] expected_has_next_page: bool,
+        #[case] expected_edges: usize,
+    ) {
+        with_db_manager_teardown(move |db_manager: TestDatabaseManager| async move {
+            // Build and populate Billie's db
+            let mut billie_db = db_manager.create("sqlite::memory:").await;
 
-        let mut replication_context: ReplicationContext<MockEntryStore> =
-            ReplicationContext::default();
+            populate_test_db(
+                &mut billie_db,
+                &PopulateDatabaseConfig {
+                    no_of_entries: entries_in_log,
+                    no_of_logs: 1,
+                    no_of_authors: 1,
+                    ..Default::default()
+                },
+            )
+            .await;
 
-        // Prepare our main assertions.
-        // - Checks that get_entries_newer_than_seq is called with the values we expect
-        // - Checks that get_entries_newer_than_seq is called once
-        // - Configures get_entries_newer_than_seq to return an empty Vec
-        replication_context
-            .expect_get_entries_newer_than_seq()
-            .withf({
-                let author_string = author_string.clone();
+            // Construct the replication context, root and graphql schema.
+            let replication_context: ReplicationContext<SqlStorage> =
+                ReplicationContext::new(1, billie_db.store.clone());
+            let replication_root = ReplicationRoot::<SqlStorage>::new();
+            let schema = Schema::build(replication_root, EmptyMutation, EmptySubscription)
+                .data(Arc::new(Mutex::new(replication_context)))
+                .finish();
 
-                move |log_id_, author_, sequence_number_, max_number_of_entries_| {
-                    let author_matches = match author_ {
-                        AuthorOrAlias::PublicKey(public_key) => {
-                            public_key.0.as_str() == author_string
-                        }
-                        _ => false,
-                    };
-                    sequence_number_.as_u64() == expected_start
-                        && log_id_.as_u64() == log_id
-                        && author_matches
-                        && *max_number_of_entries_ == first
-                }
-            })
-            .returning(|_, _, _, _| Ok(vec![]))
-            .once();
+            // Collect args needed for the query.
+            let public_key = billie_db
+                .test_data
+                .key_pairs
+                .first()
+                .unwrap()
+                .public_key()
+                .to_owned();
 
-        // Build up a schema with our mocks that can handle gql query strings
-        let replication_root = ReplicationRoot::<MockEntryStore>::new();
-        let schema = Schema::build(replication_root, EmptyMutation, EmptySubscription)
-            .data(Arc::new(Mutex::new(replication_context)))
-            .finish();
+            let author = Author::try_from(public_key).unwrap();
+            let author_str: String = author.as_str().into();
+            let log_id = 1u64;
+            // Optional values are encpoded as `null`
+            let sequence_number = sequence_number
+                .map(|seq_num| seq_num.to_string())
+                .unwrap_or_else(|| "null".to_string());
+            let first = first
+                .map(|seq_num| seq_num.to_string())
+                .unwrap_or_else(|| "null".to_string());
+            let after = after
+                .map(|seq_num| format!("\"{}\"", seq_num))
+                .unwrap_or_else(|| "null".to_string());
 
-        // Act
-        let result = schema.execute(Request::new(gql_query)).await;
+            // Construct the query.
+            let gql_query = format!(
+                "
+                query{{
+                    getEntriesNewerThanSeq(logId: {}, author: {{publicKey: \"{}\" }}, sequenceNumber: {}, first: {}, after: {} ){{
+                        edges {{
+                            cursor
+                        }}
+                        pageInfo {{
+                            hasNextPage
+                        }}
+                    }}
+                }}",
+                    log_id, author_str, sequence_number, first, after
+                );
 
-        // Assert
+            // Make the query.
+            let result = schema.execute(Request::new(gql_query)).await;
 
-        // Check that we get the Ok returned from get_entries_newer_than_seq
-        assert!(result.is_ok());
+            // Check that we get the Ok returned from get_entries_newer_than_seq
+            assert!(result.is_ok());
 
-        // There should not be a next page because we returned an empty vec from
-        // get_entries_newer_than_seq and it's length is not == `first` == 5;
-        let json_value = result.data.into_json().unwrap();
-        let has_next_page = &json_value["getEntriesNewerThanSeq"]["pageInfo"]["hasNextPage"];
-        assert!(!has_next_page.as_bool().unwrap());
+            // Assert the returned hasNextPage and number of edges returned is what we expect.
+            let json_value = result.data.into_json().unwrap();
+            let edges = &json_value["getEntriesNewerThanSeq"]["edges"];
+            assert_eq!(edges.as_array().unwrap().len(), expected_edges);
+            let has_next_page = &json_value["getEntriesNewerThanSeq"]["pageInfo"]["hasNextPage"];
+            assert_eq!(has_next_page.as_bool().unwrap(), expected_has_next_page);
+        })
     }
 }

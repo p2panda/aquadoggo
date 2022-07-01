@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Inform materialization service about new operations [#161](https://github.com/p2panda/aquadoggo/pull/161)
 - e2e publish entry tests [#167](https://github.com/p2panda/aquadoggo/pull/167)
 - Reschedule pending tasks on startup [#168](https://github.com/p2panda/aquadoggo/pull/168)
+- GraphQL replication service gets and verifies new entries and inserts them into the db [#137](https://github.com/p2panda/aquadoggo/pull/137)
 - Debug logging in reduce task [#175](https://github.com/p2panda/aquadoggo/pull/175)
 
 ### Changed

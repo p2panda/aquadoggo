@@ -583,7 +583,7 @@ mod tests {
     #[rstest]
     fn duplicate_publishing_of_entries(
         #[from(test_db)]
-        #[with(1, 1, false, TEST_SCHEMA_ID.parse().unwrap())]
+        #[with(1, 1, 1, false, TEST_SCHEMA_ID.parse().unwrap())]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|populated_db: TestDatabase| async move {

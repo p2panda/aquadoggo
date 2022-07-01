@@ -8,12 +8,21 @@ use async_graphql::*;
 use super::public_key::PublicKey;
 
 /// Either the `public_key` or the `alias` of that author.
-#[derive(Debug, InputObject)]
+#[derive(Debug, InputObject, Clone)]
 pub struct Author {
     /// The author's public key
     pub public_key: Option<PublicKey>,
     /// The author alias
     pub alias: Option<ID>,
+}
+
+impl From<p2panda_rs::identity::Author> for Author {
+    fn from(author: p2panda_rs::identity::Author) -> Self {
+        Self {
+            public_key: Some(PublicKey(author)),
+            alias: None,
+        }
+    }
 }
 
 #[derive(Debug)]

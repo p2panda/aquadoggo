@@ -5,6 +5,7 @@ use async_graphql::ID;
 use lru::LruCache;
 use mockall::automock;
 use p2panda_rs::entry::decode_entry;
+use p2panda_rs::entry::SeqNum;
 use p2panda_rs::storage_provider::traits::EntryStore as EntryStoreTrait;
 
 use crate::db::stores::StorageEntry;
@@ -64,17 +65,17 @@ impl<EntryStore: 'static + EntryStoreTrait<StorageEntry>> ReplicationContext<Ent
             .collect()
     }
 
-    pub async fn entry_by_log_id_and_sequence<'a>(
+    pub async fn entry_by_log_id_and_seq_num<'a>(
         &mut self,
         log_id: LogId,
-        sequence_number: SequenceNumber,
+        seq_num: SequenceNumber,
         author_alias: AuthorOrAlias,
     ) -> Result<Option<SingleEntryAndPayload>> {
         let author = self.get_author(author_alias)?;
 
         let result = self
             .entry_store
-            .get_entry_at_seq_num(&author.0, &log_id.0, &sequence_number.0)
+            .get_entry_at_seq_num(&author.0, &log_id.0, &seq_num.0)
             .await?
             .map(|entry| entry.into());
 
@@ -108,22 +109,21 @@ impl<EntryStore: 'static + EntryStoreTrait<StorageEntry>> ReplicationContext<Ent
         Ok(result)
     }
 
-    pub async fn get_entries_newer_than_seq(
+    pub async fn get_entries_newer_than_seq_num(
         &mut self,
         log_id: LogId,
         author: AuthorOrAlias,
-        sequence_number: SequenceNumber,
+        seq_num: u64,
         max_number_of_entries: usize,
     ) -> Result<Vec<EntryAndPayload>> {
         let author = self.get_author(author)?;
+
+        // `get_paginated_log_entries` is inclusive of seq_num. Whereas our seq_num should not be
+        // included. So we add 1 to the the seq_num we were passed.
+        let seq_num = SeqNum::new(seq_num + 1)?;
         let result = self
             .entry_store
-            .get_paginated_log_entries(
-                &author.0,
-                &log_id.0,
-                sequence_number.as_ref(),
-                max_number_of_entries,
-            )
+            .get_paginated_log_entries(&author.0, &log_id.0, &seq_num, max_number_of_entries)
             .await?
             .into_iter()
             .map(|entry| entry.into())
@@ -160,7 +160,7 @@ mod tests {
     use super::super::testing::MockEntryStore;
     use super::ReplicationContext;
 
-    // TODO: test author aliases
+    // @TODO: Test author aliases
 
     #[tokio::test]
     async fn entry_by_log_id_and_sequence() {
@@ -170,7 +170,7 @@ mod tests {
             "7cf4f58a2d89e93313f2de99604a814ecea9800cf217b140e9c3a7ba59a5d982".to_string();
 
         let log_id: GraphQLLogId = expected_log_id.into();
-        let sequence_number: SequenceNumber = expected_seq_num.try_into().unwrap();
+        let seq_num: SequenceNumber = expected_seq_num.try_into().unwrap();
         let author = Author::new(&expected_author_string).unwrap();
         let author_id = GraphQLAuthor {
             alias: None,
@@ -191,7 +191,7 @@ mod tests {
         let mut context = ReplicationContext::new(1, mock_entry_store);
 
         let result = context
-            .entry_by_log_id_and_sequence(log_id, sequence_number, author_id.try_into().unwrap())
+            .entry_by_log_id_and_seq_num(log_id, seq_num, author_id.try_into().unwrap())
             .await;
 
         assert!(result.is_ok());

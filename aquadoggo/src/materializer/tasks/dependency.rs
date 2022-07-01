@@ -169,6 +169,7 @@ mod tests {
         test_db(
             1,
             1,
+            1,
             false,
             TEST_SCHEMA_ID.parse().unwrap(),
             vec![("profile_picture", OperationValue::Relation(Relation::new(random_document_id())))],
@@ -178,6 +179,7 @@ mod tests {
     )]
     #[case(
         test_db(
+            1,
             1,
             1,
             false,
@@ -195,6 +197,7 @@ mod tests {
         test_db(
             1,
             1,
+            1,
             false,
             TEST_SCHEMA_ID.parse().unwrap(),
             vec![
@@ -207,6 +210,7 @@ mod tests {
     )]
     #[case(
         test_db(
+            1,
             1,
             1,
             false,
@@ -222,6 +226,7 @@ mod tests {
     )]
     #[case(
         test_db(
+            1,
             1,
             1,
             false,
@@ -242,6 +247,7 @@ mod tests {
     #[case(
         test_db(
             4,
+            1,
             1,
             false,
             TEST_SCHEMA_ID.parse().unwrap(),
@@ -270,12 +276,12 @@ mod tests {
         runner.with_db_teardown(move |db: TestDatabase| async move {
             let context = Context::new(db.store.clone(), Configuration::default());
 
-            for document_id in &db.documents {
+            for document_id in &db.test_data.documents {
                 let input = TaskInput::new(Some(document_id.clone()), None);
                 reduce_task(context.clone(), input).await.unwrap().unwrap();
             }
 
-            for document_id in &db.documents {
+            for document_id in &db.test_data.documents {
                 let document_view = db
                     .store
                     .get_document_by_id(document_id)
@@ -300,12 +306,12 @@ mod tests {
     #[rstest]
     fn no_reduce_task_for_materialised_document_relations(
         #[from(test_db)]
-        #[with(1, 1)]
+        #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
             let context = Context::new(db.store.clone(), Configuration::default());
-            let document_id = db.documents[0].clone();
+            let document_id = db.test_data.documents[0].clone();
 
             let input = TaskInput::new(Some(document_id.clone()), None);
             reduce_task(context.clone(), input).await.unwrap().unwrap();
@@ -377,6 +383,7 @@ mod tests {
         test_db(
             2,
             1,
+            1,
             true,
             TEST_SCHEMA_ID.parse().unwrap(),
             vec![
@@ -389,6 +396,7 @@ mod tests {
     #[case(
         test_db(
             2,
+            1,
             1,
             true,
             TEST_SCHEMA_ID.parse().unwrap(),
@@ -406,7 +414,7 @@ mod tests {
     fn fails_on_deleted_documents(#[case] runner: TestDatabaseRunner) {
         runner.with_db_teardown(|db: TestDatabase| async move {
             let context = Context::new(db.store.clone(), Configuration::default());
-            let document_id = db.documents[0].clone();
+            let document_id = db.test_data.documents[0].clone();
 
             let input = TaskInput::new(Some(document_id.clone()), None);
             reduce_task(context.clone(), input).await.unwrap();

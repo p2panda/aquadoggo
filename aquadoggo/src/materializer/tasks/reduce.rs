@@ -216,7 +216,8 @@ mod tests {
         #[from(test_db)]
         #[with(
             2,
-            5,
+            1,
+            20,
             false,
             TEST_SCHEMA_ID.parse().unwrap(),
             vec![("username", OperationValue::Text("panda".into()))],
@@ -227,12 +228,12 @@ mod tests {
         runner.with_db_teardown(|db: TestDatabase| async move {
             let context = Context::new(db.store.clone(), Configuration::default());
 
-            for document_id in &db.documents {
+            for document_id in &db.test_data.documents {
                 let input = TaskInput::new(Some(document_id.clone()), None);
                 assert!(reduce_task(context.clone(), input).await.is_ok());
             }
 
-            for document_id in &db.documents {
+            for document_id in &db.test_data.documents {
                 let document_view = context.store.get_document_by_id(document_id).await.unwrap();
 
                 assert_eq!(
@@ -246,12 +247,12 @@ mod tests {
     #[rstest]
     fn updates_a_document(
         #[from(test_db)]
-        #[with(1, 1)]
+        #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let document_id = db.documents.first().unwrap();
-            let key_pair = db.key_pairs.first().unwrap();
+            let document_id = db.test_data.documents.first().unwrap();
+            let key_pair = db.test_data.key_pairs.first().unwrap();
 
             let context = Context::new(db.store.clone(), Configuration::default());
             let input = TaskInput::new(Some(document_id.clone()), None);
@@ -292,20 +293,13 @@ mod tests {
     #[rstest]
     fn reduces_document_to_specific_view_id(
         #[from(test_db)]
-        #[with(
-            2,
-            1,
-            false,
-            TEST_SCHEMA_ID.parse().unwrap(),
-            vec![("username", OperationValue::Text("panda".into()))],
-            vec![("username", OperationValue::Text("PANDA".into()))]
-        )]
+        #[with( 2, 1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::Text("panda".into()))], vec![("username", OperationValue::Text("PANDA".into()))])]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
             let document_operations = db
                 .store
-                .get_operations_by_document_id(&db.documents[0])
+                .get_operations_by_document_id(&db.test_data.documents[0])
                 .await
                 .unwrap();
 
@@ -356,26 +350,26 @@ mod tests {
     #[rstest]
     fn deleted_documents_have_no_view(
         #[from(test_db)]
-        #[with(3, 20, true)]
+        #[with(3, 1, 20, true)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
             let context = Context::new(db.store.clone(), Configuration::default());
 
-            for document_id in &db.documents {
+            for document_id in &db.test_data.documents {
                 let input = TaskInput::new(Some(document_id.clone()), None);
                 let tasks = reduce_task(context.clone(), input).await.unwrap();
                 assert!(tasks.is_none());
             }
 
-            for document_id in &db.documents {
+            for document_id in &db.test_data.documents {
                 let document_view = context.store.get_document_by_id(document_id).await.unwrap();
                 assert!(document_view.is_none())
             }
 
             let document_operations = context
                 .store
-                .get_operations_by_document_id(&db.documents[0])
+                .get_operations_by_document_id(&db.test_data.documents[0])
                 .await
                 .unwrap();
 
@@ -390,26 +384,12 @@ mod tests {
 
     #[rstest]
     #[case(
-        test_db(
-            3,
-            1,
-            false,
-            TEST_SCHEMA_ID.parse().unwrap(),
-            vec![("username", OperationValue::Text("panda".into()))],
-            vec![("username", OperationValue::Text("PANDA".into()))]
-        ),
+        test_db( 3, 1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::Text("panda".into()))], vec![("username", OperationValue::Text("PANDA".into()))]),
         true
     )]
     // This document is deleted, it shouldn't spawn a dependency task.
     #[case(
-        test_db(
-            3,
-            1,
-            true,
-            TEST_SCHEMA_ID.parse().unwrap(),
-            vec![("username", OperationValue::Text("panda".into()))],
-            vec![("username", OperationValue::Text("PANDA".into()))]
-        ),
+        test_db( 3, 1, 1, true, TEST_SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::Text("panda".into()))], vec![("username", OperationValue::Text("PANDA".into()))]),
         false
     )]
     fn returns_dependency_task_inputs(
@@ -418,7 +398,7 @@ mod tests {
     ) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
             let context = Context::new(db.store.clone(), Configuration::default());
-            let document_id = db.documents[0].clone();
+            let document_id = db.test_data.documents[0].clone();
 
             let input = TaskInput::new(Some(document_id.clone()), None);
             let next_task_inputs = reduce_task(context.clone(), input).await.unwrap();
