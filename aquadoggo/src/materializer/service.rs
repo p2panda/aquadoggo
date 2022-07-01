@@ -202,7 +202,7 @@ mod tests {
                     tokio::time::sleep(Duration::from_millis(100)).await;
                 }
             });
-            let (tx, _) = broadcast::channel(1024);
+            let (tx, _rx) = broadcast::channel(1024);
 
             // Start materializer service
             let tx_clone = tx.clone();
@@ -282,7 +282,7 @@ mod tests {
                     tokio::time::sleep(Duration::from_millis(100)).await;
                 }
             });
-            let (tx, _) = broadcast::channel(1024);
+            let (tx, _rx) = broadcast::channel(1024);
 
             // Start materializer service
             let tx_clone = tx.clone();
@@ -353,7 +353,7 @@ mod tests {
                     tokio::time::sleep(Duration::from_millis(100)).await;
                 }
             });
-            let (tx, _) = broadcast::channel(1024);
+            let (tx, _rx) = broadcast::channel(1024);
 
             // Start materializer service
             let tx_clone = tx.clone();
@@ -479,7 +479,7 @@ mod tests {
                     tokio::time::sleep(Duration::from_millis(100)).await;
                 }
             });
-            let (tx, _) = broadcast::channel(1024);
+            let (tx, _rx) = broadcast::channel(1024);
 
             // Start materializer service
             let tx_clone = tx.clone();
