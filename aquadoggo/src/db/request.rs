@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use p2panda_rs::document::DocumentId;
-use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::{AsEntryArgsRequest, AsPublishEntryRequest};
 use p2panda_rs::storage_provider::ValidationError;
 use p2panda_rs::Validate;
@@ -11,22 +10,23 @@ use p2panda_rs::entry::{decode_entry, EntrySigned};
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::OperationEncoded;
 
-/// Request body of `panda_getEntryArguments`.
+/// Struct used to validate params and query database to retreive next entry arguments.
 #[derive(Deserialize, Debug)]
 pub struct EntryArgsRequest {
-    /// The entry author
-    pub author: Author,
-    /// The entry document
-    pub document: Option<DocumentId>,
+    /// The entry author.
+    pub public_key: Author,
+
+    /// The entry document id.
+    pub document_id: Option<DocumentId>,
 }
 
 impl AsEntryArgsRequest for EntryArgsRequest {
     fn author(&self) -> &Author {
-        &self.author
+        &self.public_key
     }
 
     fn document_id(&self) -> &Option<DocumentId> {
-        &self.document
+        &self.document_id
     }
 }
 
@@ -48,23 +48,23 @@ impl Validate for EntryArgsRequest {
     }
 }
 
-/// Request body of `panda_publishEntry`.
+/// Struct used to validate params and publish new entry in database.
 #[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
 pub struct PublishEntryRequest {
     /// The encoded entry
-    pub entry_encoded: EntrySigned,
+    pub entry: EntrySigned,
+
     /// The encoded operation
-    pub operation_encoded: OperationEncoded,
+    pub operation: OperationEncoded,
 }
 
 impl AsPublishEntryRequest for PublishEntryRequest {
     fn entry_signed(&self) -> &EntrySigned {
-        &self.entry_encoded
+        &self.entry
     }
 
     fn operation_encoded(&self) -> &OperationEncoded {
-        &self.operation_encoded
+        &self.operation
     }
 }
 
@@ -77,10 +77,4 @@ impl Validate for PublishEntryRequest {
         decode_entry(self.entry_signed(), Some(self.operation_encoded()))?;
         Ok(())
     }
-}
-
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct QueryEntriesRequest {
-    pub schema: SchemaId,
 }

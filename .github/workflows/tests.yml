@@ -8,6 +8,11 @@ env:
     target
     ~/.cargo
   cargo_manifest: aquadoggo/Cargo.toml
+  # There is an issue with `async-graphql` or Rust which randomly lets our
+  # tests fail. With this Rust version and async-graphql 3.0.38 it seems to
+  # work for now though.
+  # Related issue: https://github.com/p2panda/aquadoggo/issues/185
+  rust_version: 1.61.0
 
 jobs:
   rust-test-sqlite:
@@ -21,7 +26,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: stable
+          toolchain: ${{ env.rust_version }}
           override: true
 
       - name: Restore from cargo cache
@@ -74,7 +79,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: stable
+          toolchain: ${{ env.rust_version }}
           override: true
 
       - name: Restore from cargo cache
@@ -106,7 +111,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: stable
+          toolchain: ${{ env.rust_version }}
           override: true
 
       - name: Restore from cargo cache
@@ -132,7 +137,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: stable
+          toolchain: ${{ env.rust_version }}
           components: rustfmt
           override: true
 
@@ -159,7 +164,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: stable
+          toolchain: ${{ env.rust_version }}
           components: clippy
           override: true
 
@@ -186,7 +191,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: stable
+          toolchain: ${{ env.rust_version }}
           override: true
 
       - name: Restore from cargo cache

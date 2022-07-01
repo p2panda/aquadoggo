@@ -372,11 +372,12 @@ mod tests {
     #[rstest]
     fn inserts_gets_one_document_view(
         #[from(test_db)]
-        #[with(1, 1)]
+        #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
+            let author =
+                Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
 
             // Get one entry from the pre-polulated db
             let entry = db
@@ -433,7 +434,7 @@ mod tests {
     fn document_view_does_not_exist(
         random_document_view_id: DocumentViewId,
         #[from(test_db)]
-        #[with(1, 1)]
+        #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
@@ -450,11 +451,12 @@ mod tests {
     #[rstest]
     fn inserts_gets_many_document_views(
         #[from(test_db)]
-        #[with(10, 1, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::Text("panda".into()))], vec![("username", OperationValue::Text("PANDA".into()))])]
+        #[with(10, 1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::Text("panda".into()))], vec![("username", OperationValue::Text("PANDA".into()))])]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
+            let author =
+                Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
             let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
 
             let log_id = LogId::default();
@@ -531,11 +533,11 @@ mod tests {
     #[rstest]
     fn inserts_gets_documents(
         #[from(test_db)]
-        #[with(1, 1)]
+        #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let document_id = db.documents[0].clone();
+            let document_id = db.test_data.documents[0].clone();
 
             let document_operations = db
                 .store
@@ -578,11 +580,11 @@ mod tests {
     #[rstest]
     fn gets_document_by_id(
         #[from(test_db)]
-        #[with(1, 1)]
+        #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let document_id = db.documents[0].clone();
+            let document_id = db.test_data.documents[0].clone();
 
             let document_operations = db
                 .store
@@ -625,11 +627,11 @@ mod tests {
     #[rstest]
     fn no_view_when_document_deleted(
         #[from(test_db)]
-        #[with(10, 1, true)]
+        #[with(10, 1, 1, true)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let document_id = db.documents[0].clone();
+            let document_id = db.test_data.documents[0].clone();
 
             let document_operations = db
                 .store
@@ -652,11 +654,11 @@ mod tests {
     #[rstest]
     fn updates_a_document(
         #[from(test_db)]
-        #[with(10, 1)]
+        #[with(10, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let document_id = db.documents[0].clone();
+            let document_id = db.test_data.documents[0].clone();
 
             let document_operations = db
                 .store
@@ -687,13 +689,13 @@ mod tests {
     #[rstest]
     fn gets_documents_by_schema(
         #[from(test_db)]
-        #[with(10, 2, false, TEST_SCHEMA_ID.parse().unwrap())]
+        #[with(10, 2, 1, false, TEST_SCHEMA_ID.parse().unwrap())]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
             let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
 
-            for document_id in &db.documents {
+            for document_id in &db.test_data.documents {
                 let document_operations = db
                     .store
                     .get_operations_by_document_id(document_id)

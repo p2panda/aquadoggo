@@ -21,7 +21,7 @@ fn get_application_data_dir(fname: &str) -> PathBuf {
 }
 
 /// This helper allows circumventing visibility limitations by storing/loading data in a temp file.
-pub(crate) struct TempFile<Data>
+pub struct TempFile<Data>
 where
     Data: Serialize + DeserializeOwned,
 {

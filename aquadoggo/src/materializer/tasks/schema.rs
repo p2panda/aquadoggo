@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use log::debug;
-
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::operation::{AsOperation, AsVerifiedOperation, OperationValue};
 use p2panda_rs::schema::SchemaId;
@@ -18,7 +17,8 @@ use crate::materializer::TaskInput;
 /// has all its immediate dependencies available in the store. It collects all required views for
 /// the schema, instantiates it and adds it to the schema provider.
 pub async fn schema_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
-    debug!("Working on task {}", input);
+    debug!("Working on schema task {}", input);
+
     let input_view_id = match (input.document_id, input.document_view_id) {
         (None, Some(view_id)) => Ok(view_id),
         // The task input must contain only a view id.
@@ -121,6 +121,7 @@ mod tests {
     use log::debug;
     use p2panda_rs::document::DocumentViewId;
     use p2panda_rs::entry::{sign_and_encode, Entry};
+    use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::{
         AsVerifiedOperation, Operation, OperationEncoded, OperationFields, OperationValue,
@@ -131,8 +132,8 @@ mod tests {
     use rstest::rstest;
 
     use crate::context::Context;
+    use crate::db::request::{EntryArgsRequest, PublishEntryRequest};
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
-    use crate::graphql::client::{EntryArgsRequest, PublishEntryRequest};
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
     use crate::schema::SchemaProvider;
@@ -149,8 +150,8 @@ mod tests {
 
         // Publish schema field definition
         let args = EntryArgsRequest {
-            author: author.clone(),
-            document: None,
+            public_key: author.clone(),
+            document_id: None,
         };
         let args = context.store.get_entry_args(&args).await.unwrap();
 
@@ -162,17 +163,17 @@ mod tests {
         let create_op = Operation::new_create(SchemaId::SchemaFieldDefinition(1), fields).unwrap();
 
         let entry = Entry::new(
-            &args.log_id,
+            &args.log_id.into(),
             Some(&create_op),
-            args.skiplink.as_ref(),
-            args.backlink.as_ref(),
-            &args.seq_num,
+            args.skiplink.map(Hash::from).as_ref(),
+            args.backlink.map(Hash::from).as_ref(),
+            &args.seq_num.into(),
         )
         .unwrap();
         let entry_encoded = sign_and_encode(&entry, key_pair).unwrap();
         let args = PublishEntryRequest {
-            entry_encoded: entry_encoded.clone(),
-            operation_encoded: OperationEncoded::try_from(&create_op).unwrap(),
+            entry: entry_encoded.clone(),
+            operation: OperationEncoded::try_from(&create_op).unwrap(),
         };
         let response = context.store.publish_entry(&args).await.unwrap();
         let field_view_id: DocumentViewId = response.backlink.unwrap().into();
@@ -192,8 +193,8 @@ mod tests {
 
         // Publish schema definition
         let args = EntryArgsRequest {
-            author: author.clone(),
-            document: None,
+            public_key: author.clone(),
+            document_id: None,
         };
         let args = context.store.get_entry_args(&args).await.unwrap();
 
@@ -215,17 +216,17 @@ mod tests {
         let create_op = Operation::new_create(SchemaId::SchemaDefinition(1), fields).unwrap();
 
         let entry = Entry::new(
-            &args.log_id,
+            &args.log_id.into(),
             Some(&create_op),
-            args.skiplink.as_ref(),
-            args.backlink.as_ref(),
-            &args.seq_num,
+            args.skiplink.map(Hash::from).as_ref(),
+            args.backlink.map(Hash::from).as_ref(),
+            &args.seq_num.into(),
         )
         .unwrap();
         let entry_encoded = sign_and_encode(&entry, key_pair).unwrap();
         let args = PublishEntryRequest {
-            entry_encoded: entry_encoded.clone(),
-            operation_encoded: OperationEncoded::try_from(&create_op).unwrap(),
+            entry: entry_encoded.clone(),
+            operation: OperationEncoded::try_from(&create_op).unwrap(),
         };
         let response = context.store.publish_entry(&args).await.unwrap();
         let definition_view_id = response.backlink.unwrap().into();
@@ -260,7 +261,7 @@ mod tests {
             );
             // Prepare schema definition and schema field definition
             let (definition_view_id, field_view_id) =
-                insert_test_schema(&context, db.key_pairs.first().unwrap()).await;
+                insert_test_schema(&context, db.test_data.key_pairs.first().unwrap()).await;
 
             // Start a task with each as input
             let input = TaskInput::new(None, Some(definition_view_id.clone()));

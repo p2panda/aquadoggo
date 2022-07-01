@@ -21,7 +21,7 @@ use crate::materializer::TaskInput;
 /// Expects a _reduce_ task to have completed successfully for the given document view itself and
 /// returns a critical error otherwise.
 pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
-    debug!("Working on {}", input);
+    debug!("Working on dependency task {:#?}", input);
 
     // Here we retrive the document view by document view id.
     let document_view = match input.document_view_id {
@@ -29,19 +29,32 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
             .store
             .get_document_view_by_id(&view_id)
             .await
-            .map_err(|_| TaskError::Critical)
-        ,
+            .map_err(|err| {
+                debug!("Fatal error getting document view from storage");
+                debug!("{}", err);
+                TaskError::Critical
+            })
+            ,
         // We expect to handle document_view_ids in a dependency task.
         None => Err(TaskError::Critical),
     }?;
 
     let document_view = match document_view {
-        Some(document_view) => Ok(document_view),
+        Some(document_view) => {
+            debug!(
+                "Document view retrieved from storage with id: {}",
+                document_view.id()
+            );
+            Ok(document_view)
+        }
         // If no document view for the id passed into this task could be retrieved then this
         // document has been deleted or the document view id was invalid. As "dependency" tasks
         // are only dispatched after a successful "reduce" task, neither `None` case should
         // happen, so this is a critical error.
-        None => Err(TaskError::Critical),
+        None => {
+            debug!("Expected document view not found in the store.");
+            Err(TaskError::Critical)
+        }
     }?;
 
     let mut next_tasks = Vec::new();
@@ -55,15 +68,21 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
                 // means we either have no entries for this document, or we are not materialising
                 // it for some reason. We don't want to kick of a "reduce" or "dependency" task in
                 // either of these cases.
+                debug!("Relation field found, no action required.");
             }
             p2panda_rs::operation::OperationValue::RelationList(_relation_list) => {
                 // same as above...
+                debug!("Relation list field found, no action required.");
             }
             p2panda_rs::operation::OperationValue::PinnedRelation(pinned_relation) => {
                 // These are pinned relations. We may have the operations for these views in the db,
                 // but this view wasn't pinned yet, so hasn't been materialised. To make sure it is
                 // materialised when possible, we dispatch a "reduce" task for any pinned relations
                 // which aren't found.
+                debug!(
+                    "Pinned relation field found refering to view id: {}",
+                    pinned_relation.view_id()
+                );
                 next_tasks.push(
                     construct_relation_task(&context, pinned_relation.view_id().clone()).await?,
                 );
@@ -71,6 +90,10 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
             p2panda_rs::operation::OperationValue::PinnedRelationList(pinned_relation_list) => {
                 // same as above...
                 for document_view_id in pinned_relation_list.iter() {
+                    debug!(
+                        "Pinned relation list field found containing view id: {}",
+                        document_view_id
+                    );
                     next_tasks
                         .push(construct_relation_task(&context, document_view_id.clone()).await?);
                 }
@@ -127,17 +150,27 @@ async fn construct_relation_task(
     context: &Context,
     document_view_id: DocumentViewId,
 ) -> Result<Option<Task<TaskInput>>, TaskError> {
+    debug!("Get view for pinned relation with id: {}", document_view_id);
     match context
         .store
         .get_document_view_by_id(&document_view_id)
         .await
-        .map_err(|_| TaskError::Critical)?
-    {
-        Some(_) => Ok(None),
-        None => Ok(Some(Task::new(
-            "reduce",
-            TaskInput::new(None, Some(document_view_id)),
-        ))),
+        .map_err(|err| {
+            debug!("Fatal error getting document view from storage");
+            debug!("{}", err);
+            TaskError::Critical
+        })? {
+        Some(_) => {
+            debug!("View found for pinned relation: {}", document_view_id);
+            Ok(None)
+        }
+        None => {
+            debug!("No view found for pinned relation: {}", document_view_id);
+            Ok(Some(Task::new(
+                "reduce",
+                TaskInput::new(None, Some(document_view_id)),
+            )))
+        }
     }
 }
 
@@ -177,6 +210,7 @@ mod tests {
         test_db(
             1,
             1,
+            1,
             false,
             TEST_SCHEMA_ID.parse().unwrap(),
             vec![("profile_picture", OperationValue::Relation(Relation::new(random_document_id())))],
@@ -186,6 +220,7 @@ mod tests {
     )]
     #[case(
         test_db(
+            1,
             1,
             1,
             false,
@@ -203,6 +238,7 @@ mod tests {
         test_db(
             1,
             1,
+            1,
             false,
             TEST_SCHEMA_ID.parse().unwrap(),
             vec![
@@ -215,6 +251,7 @@ mod tests {
     )]
     #[case(
         test_db(
+            1,
             1,
             1,
             false,
@@ -230,6 +267,7 @@ mod tests {
     )]
     #[case(
         test_db(
+            1,
             1,
             1,
             false,
@@ -250,6 +288,7 @@ mod tests {
     #[case(
         test_db(
             4,
+            1,
             1,
             false,
             TEST_SCHEMA_ID.parse().unwrap(),
@@ -282,12 +321,12 @@ mod tests {
                 SchemaProvider::default(),
             );
 
-            for document_id in &db.documents {
+            for document_id in &db.test_data.documents {
                 let input = TaskInput::new(Some(document_id.clone()), None);
                 reduce_task(context.clone(), input).await.unwrap().unwrap();
             }
 
-            for document_id in &db.documents {
+            for document_id in &db.test_data.documents {
                 let document_view = db
                     .store
                     .get_document_by_id(document_id)
@@ -312,7 +351,7 @@ mod tests {
     #[rstest]
     fn no_reduce_task_for_materialised_document_relations(
         #[from(test_db)]
-        #[with(1, 1)]
+        #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
@@ -321,7 +360,7 @@ mod tests {
                 Configuration::default(),
                 SchemaProvider::default(),
             );
-            let document_id = db.documents[0].clone();
+            let document_id = db.test_data.documents[0].clone();
 
             let input = TaskInput::new(Some(document_id.clone()), None);
             reduce_task(context.clone(), input).await.unwrap().unwrap();
@@ -381,12 +420,11 @@ mod tests {
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
             let context = Context::new(
-                db.store.clone(),
+                db.store,
                 Configuration::default(),
                 SchemaProvider::default(),
             );
             let input = TaskInput::new(document_id, document_view_id);
-
             let next_tasks = dependency_task(context.clone(), input).await;
             assert!(next_tasks.is_err())
         });
@@ -396,6 +434,7 @@ mod tests {
     #[case(
         test_db(
             2,
+            1,
             1,
             true,
             TEST_SCHEMA_ID.parse().unwrap(),
@@ -409,6 +448,7 @@ mod tests {
     #[case(
         test_db(
             2,
+            1,
             1,
             true,
             TEST_SCHEMA_ID.parse().unwrap(),
@@ -430,7 +470,7 @@ mod tests {
                 Configuration::default(),
                 SchemaProvider::default(),
             );
-            let document_id = db.documents[0].clone();
+            let document_id = db.test_data.documents[0].clone();
 
             let input = TaskInput::new(Some(document_id.clone()), None);
             reduce_task(context.clone(), input).await.unwrap();
@@ -457,7 +497,7 @@ mod tests {
         db: &TestDatabase,
         context: &Context,
     ) -> OperationId {
-        let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
+        let author = Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
         let fields = operation_fields(vec![
             ("name", OperationValue::Text("field_name".to_string())),
             ("type", FieldType::String.into()),
@@ -486,7 +526,7 @@ mod tests {
         db: &TestDatabase,
         context: &Context,
     ) -> OperationId {
-        let author = Author::try_from(db.key_pairs[0].public_key().to_owned()).unwrap();
+        let author = Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
         let fields = operation_fields(vec![
             ("name", OperationValue::Text("schema_name".to_string())),
             (

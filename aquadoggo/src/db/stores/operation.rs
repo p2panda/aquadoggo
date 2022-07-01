@@ -408,7 +408,7 @@ mod tests {
     fn get_operations_by_document_id(
         key_pair: KeyPair,
         #[from(test_db)]
-        #[with(5, 1)]
+        #[with(5, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {

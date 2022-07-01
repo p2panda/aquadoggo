@@ -1,0 +1,59 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+use std::convert::TryFrom;
+
+use anyhow::{Error, Result};
+use p2panda_rs::entry::LogId;
+use p2panda_rs::identity::Author;
+use serde::Deserialize;
+
+/// Configuration for the replication service.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct ReplicationConfiguration {
+    /// How often to connect to remote nodes for replication.
+    pub connection_interval_seconds: u64,
+
+    /// The addresses of remote peers to replicate from.
+    pub remote_peers: Vec<String>,
+
+    /// The authors to replicate and their log ids.
+    pub authors_to_replicate: Vec<AuthorToReplicate>,
+}
+
+impl Default for ReplicationConfiguration {
+    fn default() -> Self {
+        Self {
+            connection_interval_seconds: 30,
+            remote_peers: Vec::new(),
+            authors_to_replicate: Vec::new(),
+        }
+    }
+}
+
+/// Intermediate data type to configure which log ids of what authors should be replicated.
+#[derive(Debug, Clone, Deserialize)]
+pub struct AuthorToReplicate(Author, Vec<LogId>);
+
+impl AuthorToReplicate {
+    /// Returns author to be replicated.
+    pub fn author(&self) -> &Author {
+        &self.0
+    }
+
+    /// Returns log ids from author.
+    pub fn log_ids(&self) -> &Vec<LogId> {
+        &self.1
+    }
+}
+
+impl TryFrom<(String, Vec<u64>)> for AuthorToReplicate {
+    type Error = Error;
+
+    fn try_from(value: (String, Vec<u64>)) -> Result<Self, Self::Error> {
+        let author = Author::new(&value.0)?;
+        let log_ids = value.1.into_iter().map(LogId::new).collect();
+
+        Ok(Self(author, log_ids))
+    }
+}

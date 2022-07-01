@@ -18,19 +18,19 @@ mod config;
 mod context;
 mod db;
 mod errors;
-/// Aquadoggo graphql types for handling client and replication requests
-pub mod graphql;
+mod graphql;
 mod http;
 mod manager;
 mod materializer;
 mod node;
+mod replication;
 mod schema;
 
 #[cfg(test)]
 mod test_helpers;
 
-pub use config::Configuration;
-pub use db::{connection_pool, provider::SqlStorage};
+pub use crate::config::Configuration;
+pub use crate::replication::ReplicationConfiguration;
 pub use node::Node;
 pub use schema::SchemaProvider;
 

@@ -10,14 +10,13 @@ use crate::bus::ServiceSender;
 use crate::db::provider::SqlStorage;
 use crate::graphql::client::{ClientMutationRoot, ClientRoot};
 use crate::graphql::error::DynamicSchemaError;
-use crate::graphql::replication::context::ReplicationContext;
 use crate::graphql::replication::ReplicationRoot;
 use crate::graphql::TempFile;
 use crate::schema::SchemaProvider;
 
 /// All of the GraphQL query sub modules merged into one top level root.
 #[derive(MergedObject, Debug)]
-pub struct QueryRoot(pub ReplicationRoot<SqlStorage>, pub ClientRoot);
+pub struct QueryRoot(pub ReplicationRoot, pub ClientRoot);
 
 /// All of the GraphQL mutation sub modules merged into one top level root.
 #[derive(MergedObject, Debug, Copy, Clone, Default)]
@@ -35,9 +34,7 @@ pub fn build_root_schema(
     tx: ServiceSender,
     schema_provider: SchemaProvider,
 ) -> RootSchema {
-    let replication_context = Arc::new(Mutex::new(ReplicationContext::new(1000, store.clone())));
-
-    let replication_root = ReplicationRoot::<SqlStorage>::new();
+    let replication_root = ReplicationRoot::default();
     let client_query_root = ClientRoot::new(schema_provider);
     let query_root = QueryRoot(replication_root, client_query_root);
 
@@ -45,7 +42,6 @@ pub fn build_root_schema(
     let mutation_root = MutationRoot(client_mutation_root);
 
     Schema::build(query_root, mutation_root, EmptySubscription)
-        .data(replication_context)
         .data(store)
         .data(tx)
         .finish()

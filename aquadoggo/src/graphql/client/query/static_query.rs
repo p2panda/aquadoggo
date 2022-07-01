@@ -7,12 +7,14 @@ use p2panda_rs::operation::{
     AsVerifiedOperation, Operation, OperationFields, OperationValue, VerifiedOperation,
 };
 use p2panda_rs::storage_provider::traits::StorageProvider;
+use p2panda_rs::Validate;
 
 use crate::db::provider::SqlStorage;
-use crate::graphql::client::response::DocumentResponse;
-use crate::graphql::client::{EntryArgsRequest, EntryArgsResponse};
+use crate::db::request::EntryArgsRequest;
+use crate::graphql::client::response::{DocumentResponse, NextEntryArguments};
+use crate::graphql::scalars;
 
-/// The GraphQL root for the client api that p2panda clients can use to connect to a node.
+/// GraphQL queries for the Client API.
 #[derive(Default, Debug, Copy, Clone)]
 pub struct StaticQuery;
 
@@ -24,24 +26,22 @@ impl StaticQuery {
         ctx: &Context<'_>,
         #[graphql(
             name = "publicKey",
-            desc = "Public key that will publish using the returned entry arguments"
+            desc = "Public key of author that will encode and sign the next entry \
+            using the returned arguments"
         )]
-        public_key_param: String,
+        public_key: scalars::PublicKey,
         #[graphql(
             name = "documentId",
-            desc = "Document id to which the entry's operation will apply"
+            desc = "Document the entry's UPDATE or DELETE operation is referring to, \
+            can be left empty when it is a CREATE operation"
         )]
-        document_id_param: Option<String>,
-    ) -> Result<EntryArgsResponse> {
-        // Parse and validate parameters
-        let document_id = match document_id_param {
-            Some(val) => Some(val.parse::<DocumentId>()?),
-            None => None,
-        };
+        document_id: Option<scalars::DocumentId>,
+    ) -> Result<NextEntryArguments> {
         let args = EntryArgsRequest {
-            author: Author::new(&public_key_param)?,
-            document: document_id,
+            public_key: public_key.into(),
+            document_id: document_id.map(DocumentId::from),
         };
+        args.validate()?;
 
         // Load and return next entry arguments
         let store = ctx.data::<SqlStorage>()?;
@@ -84,14 +84,12 @@ fn get_document_by_id(_document: DocumentId) -> Document {
 
 #[cfg(test)]
 mod tests {
-    use async_graphql::Response;
-    use p2panda_rs::entry::{LogId, SeqNum};
+    use async_graphql::{value, Response};
     use rstest::rstest;
     use serde_json::json;
     use tokio::sync::broadcast;
 
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
-    use crate::graphql::client::EntryArgsResponse;
     use crate::graphql::GraphQLSchemaManager;
     use crate::http::{build_server, HttpServiceContext};
     use crate::schema::SchemaProvider;
@@ -108,7 +106,7 @@ mod tests {
 
             // Selected fields need to be alphabetically sorted because that's what the `json`
             // macro that is used in the assert below produces.
-            let response = client
+            let received_entry_args = client
                 .post("/graphql")
                 .json(&json!({
                     "query": r#"{
@@ -127,21 +125,17 @@ mod tests {
                 .json::<Response>()
                 .await;
 
-            let expected_entry_args = EntryArgsResponse {
-                log_id: LogId::new(1),
-                seq_num: SeqNum::new(1).unwrap(),
-                backlink: None,
-                skiplink: None,
-            };
-            let received_entry_args: EntryArgsResponse = match response.data {
-                async_graphql::Value::Object(result_outer) => {
-                    async_graphql::from_value(result_outer.get("nextEntryArgs").unwrap().to_owned())
-                        .unwrap()
-                }
-                _ => panic!("Expected return value to be an object"),
-            };
-
-            assert_eq!(received_entry_args, expected_entry_args);
+            assert_eq!(
+                received_entry_args.data,
+                value!({
+                    "nextEntryArgs": {
+                        "logId": "1",
+                        "seqNum": "1",
+                        "backlink": null,
+                        "skiplink": null,
+                    }
+                })
+            );
         })
     }
 

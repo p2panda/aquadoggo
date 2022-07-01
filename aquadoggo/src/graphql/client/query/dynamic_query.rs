@@ -17,10 +17,10 @@ use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{Schema, SchemaId};
 
+use crate::db::provider::SqlStorage;
 use crate::db::traits::DocumentStore;
 use crate::graphql::{TempFile, TEMP_FILE_FNAME};
 use crate::schema::SchemaProvider;
-use crate::SqlStorage;
 
 use super::schema::{get_schema_metafield, get_schema_metatype};
 
