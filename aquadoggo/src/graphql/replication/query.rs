@@ -136,7 +136,7 @@ impl ReplicationRoot {
                 let has_previous_page = start > 0;
 
                 let mut connection = Connection::new(has_previous_page, has_next_page);
-                connection.edges.extend(edges);
+                connection.append(edges);
 
                 Result::<_, Error>::Ok(connection)
             },
