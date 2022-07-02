@@ -90,6 +90,14 @@ pub struct GraphQLSharedData {
 ///
 /// With this we can easily add "new" schemas to the list in the background while current queries
 /// still get processed using the "old" schema.
+//
+// @TODO: This manager does not "clean up" outdated schemas yet, they will just be appended to
+// an ever-growing list.
+//
+// WARNING: As soon as we start implementing GraphQL schema clean-up, we need to make sure to also
+// free the used memory for all leaked schema data we've created. Otherwise this will lead to a
+// memory leak! See `static_provider` module for more information (and useful tools) on this whole
+// topic.
 #[derive(Clone)]
 pub struct GraphQLSchemaManager {
     /// List of all built GraphQL root schemas.
@@ -124,8 +132,6 @@ impl GraphQLSchemaManager {
     ///
     /// This spawns a task which listens to new p2panda schemas to accordingly build a GraphQL
     /// schema which will be added to the list.
-    // @TODO: This manager does not "clean up" outdated schemas yet, they will just be appended to
-    // an ever-growing list.
     async fn spawn_schema_added_task(&self) {
         let shared = self.shared.clone();
         let schemas = self.schemas.clone();
