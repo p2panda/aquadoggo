@@ -2,10 +2,11 @@
 name = "aquadoggo"
 version = "0.3.0"
 authors = [
-    "sophiiistika <sophiiistika@mailbox.org>",
     "adz <x1d@adz.garden>",
-    "sandreae <contact@samandreae.com>",
     "cafca <cafca@001.land>",
+    "pietgeursen <pietgeursen@gmail.com>",
+    "sandreae <contact@samandreae.com>",
+    "sophiiistika <sophiiistika@mailbox.org>",
 ]
 description = "Embeddable p2p network node"
 license = "AGPL-3.0-or-later"
