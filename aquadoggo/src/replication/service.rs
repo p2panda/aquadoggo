@@ -312,7 +312,7 @@ mod tests {
             populate_test_db(&mut billie_db, &populate_db_config).await;
 
             // Launch HTTP service of Billie
-            let (tx, _) = broadcast::channel(16);
+            let (tx, _rx) = broadcast::channel(16);
             let tx_billie = tx.clone();
             let shutdown_billie = shutdown_handle();
             let context_billie = Context::new(
