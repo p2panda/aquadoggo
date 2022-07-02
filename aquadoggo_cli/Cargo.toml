@@ -2,10 +2,11 @@
 name = "aquadoggo_cli"
 version = "0.1.0"
 authors = [
-    "sophiiistika <sophiiistika@mailbox.org>",
     "adz <x12@adz.garden>",
+    "cafca <cafca@001.land>",
+    "pietgeursen <pietgeursen@gmail.com>",
     "sandreae <contact@samandreae.com>",
-    "cafca <cafca@001.land>"
+    "sophiiistika <sophiiistika@mailbox.org>",
 ]
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/p2panda/aquadoggo"
