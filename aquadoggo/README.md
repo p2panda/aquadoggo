@@ -60,7 +60,7 @@ Embed the node server in your Rust application or web container like [`Tauri`]:
 ```rust
 use aquadoggo::{Configuration, Node};
 
-let config = Configuration::new(None)?;
+let config = Configuration::default();
 let node = Node::start(config).await;
 ```
 
@@ -76,27 +76,13 @@ $ cargo add aquadoggo
 
 [`cargo-edit`]: https://github.com/killercup/cargo-edit
 
-## Development
-
-### Regenerate graphql schema
-
-When you update the graphql code you'll need to manually regenerate the graphql schema files.
-
-In the `aquadoggo/aquadoggo` directory:
-
-```sh
-cargo build --bin dump_gql_schema
-cargo run --bin dump_gql_schema > src/graphql/replication/client/schema.graphql
-```
-
-Note that the `cargo build` step is required first because the `>` in the run step truncates the schema file which is used for code generation.
-
 ## License
 
 GNU Affero General Public License v3.0 [`AGPL-3.0-or-later`](LICENSE)
 
 ## Supported by
 
-<img src="https://p2panda.org/images/ngi-logo.png" width="auto" height="80px"><br /><img src="https://p2panda.org/images/eu-flag-logo.png" width="auto" height="80px">
+<img src="https://p2panda.org/images/ngi-logo.png" width="auto" height="80px"><br />
+<img src="https://p2panda.org/images/eu-flag-logo.png" width="auto" height="80px">
 
 *This project has received funding from the European Union’s Horizon 2020 research and innovation programme within the framework of the NGI-POINTER Project funded under grant agreement No 871528*

@@ -66,11 +66,11 @@ Embed the node server in your Rust application or web container like [`Tauri`]:
 ```rust
 use aquadoggo::{Configuration, Node};
 
-let config = Configuration::new(None)?;
+let config = Configuration::default();
 let node = Node::start(config).await;
 ```
 
-You can also run the node server simply as a command line application:
+You can also run the node server simply as a [command line application][`command line application`]:
 
 ```
 $ aquadoggo --help
@@ -104,6 +104,7 @@ GNU Affero General Public License v3.0 [`AGPL-3.0-or-later`](LICENSE)
 
 ## Supported by
 
-<img src="https://p2panda.org/images/ngi-logo.png" width="auto" height="80px"><br /><img src="https://p2panda.org/images/eu-flag-logo.png" width="auto" height="80px">
+<img src="https://p2panda.org/images/ngi-logo.png" width="auto" height="80px"><br />
+<img src="https://p2panda.org/images/eu-flag-logo.png" width="auto" height="80px">
 
 *This project has received funding from the European Union’s Horizon 2020 research and innovation programme within the framework of the NGI-POINTER Project funded under grant agreement No 871528*

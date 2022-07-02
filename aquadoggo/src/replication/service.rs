@@ -39,7 +39,9 @@ pub async fn replication_service(
     // Start replication service
     let handle = task::spawn(async move {
         loop {
-            debug!("Starting replication with remote peers");
+            if !remote_peers.is_empty() {
+                debug!("Starting replication with remote peers");
+            }
 
             // Ask every remote peer about latest entries of log ids and authors
             for remote_peer in remote_peers.clone().iter() {

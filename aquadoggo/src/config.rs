@@ -38,9 +38,6 @@ pub struct Configuration {
     /// RPC API HTTP server port.
     pub http_port: u16,
 
-    /// RPC API WebSocket server port.
-    pub ws_port: u16,
-
     /// Materializer worker pool size.
     pub worker_pool_size: u32,
 
@@ -55,7 +52,6 @@ impl Default for Configuration {
             database_url: None,
             database_max_connections: 32,
             http_port: 2020,
-            ws_port: 2022,
             worker_pool_size: 16,
             replication: ReplicationConfiguration::default(),
         }
