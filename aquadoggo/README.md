@@ -60,7 +60,7 @@ Embed the node server in your Rust application or web container like [`Tauri`]:
 ```rust
 use aquadoggo::{Configuration, Node};
 
-let config = Configuration::new(None)?;
+let config = Configuration::default();
 let node = Node::start(config).await;
 ```
 
