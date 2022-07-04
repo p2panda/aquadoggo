@@ -39,20 +39,15 @@ impl SchemaStore for SqlStorage {
             let scheme_field_view: SchemaFieldView =
                 match self.get_document_view_by_id(&field_id).await? {
                     Some(document_view) => document_view.try_into()?,
-                    None => {
-                        return Err(SchemaStoreError::MissingSchemaFieldDefinition(
-                            field_id,
-                            id.to_owned(),
-                        ))
-                    }
+                    None => return Ok(None),
                 };
 
             schema_fields.push(scheme_field_view);
         }
 
-        let schema = Schema::from_views(schema_view, schema_fields)?;
+        let schema = Schema::from_views(schema_view, schema_fields).ok();
 
-        Ok(Some(schema))
+        Ok(schema)
     }
 
     /// Get all Schema which have been published to this node.
@@ -87,10 +82,10 @@ impl SchemaStore for SqlStorage {
                 .map(|field| field.to_owned())
                 .collect();
 
-            all_schema.push(Schema::from_views(schema_view, schema_fields)?);
+            all_schema.push(Schema::from_views(schema_view, schema_fields).ok());
         }
 
-        Ok(all_schema)
+        Ok(all_schema.into_iter().flatten().collect())
     }
 }
 
@@ -280,7 +275,8 @@ mod tests {
         operation_fields(vec![
                          ("name", OperationValue::Text("venue".to_string())),
                          ("description", OperationValue::Text("My venue".to_string()))
-        ])
+        ]),
+        1
     )]
     #[case::does_not_work(
         operation_fields(vec![
@@ -289,15 +285,17 @@ mod tests {
         operation_fields(vec![
                          ("name", OperationValue::Text("venue".to_string())),
                          ("description", OperationValue::Text("My venue".to_string()))
-        ])
+        ]),
+        0
     )]
     fn get_all_schema(
         #[case] schema_field_definition: OperationFields,
         #[case] schema_definition: OperationFields,
+        #[case] expected_schema_count: usize,
         key_pair: KeyPair,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
             let document_view_id =
                 insert_schema_field_definition(&db.store, &key_pair, schema_field_definition).await;
 
@@ -306,14 +304,7 @@ mod tests {
 
             let schemas = db.store.get_all_schema().await;
 
-            if schemas.is_err() {
-                assert_eq!(
-                    schemas.unwrap_err().to_string(),
-                    "invalid fields found for this schema".to_string()
-                )
-            } else {
-                assert_eq!(schemas.unwrap().len(), 1);
-            }
+            assert_eq!(schemas.unwrap().len(), expected_schema_count);
         });
     }
 
@@ -331,21 +322,18 @@ mod tests {
         key_pair: KeyPair,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let document_view_id =
-                insert_schema_definition(&db.store, &key_pair, &schema_fields_id, schema_definition)
-                    .await;
+            let document_view_id = insert_schema_definition(
+                &db.store,
+                &key_pair,
+                &schema_fields_id,
+                schema_definition,
+            )
+            .await;
 
             // Retrieve the schema by it's document_view_id.
-            let schema = db.store.get_schema_by_id(&document_view_id).await;
+            let schema = db.store.get_schema_by_id(&document_view_id).await.unwrap();
 
-            assert_eq!(
-                schema.unwrap_err().to_string(),
-                format!(
-                    "No document view found for schema field definition with id: {0} which is required by schema definition {1}",
-                    schema_fields_id,
-                    document_view_id
-                )
-            );
+            assert!(schema.is_none());
         });
     }
 }
