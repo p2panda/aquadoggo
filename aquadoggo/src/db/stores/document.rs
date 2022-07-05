@@ -652,6 +652,37 @@ mod tests {
     }
 
     #[rstest]
+    fn get_documents_by_schema_deleted_document(
+        #[from(test_db)]
+        #[with(10, 1, 1, true)]
+        runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let document_id = db.test_data.documents[0].clone();
+
+            let document_operations = db
+                .store
+                .get_operations_by_document_id(&document_id)
+                .await
+                .unwrap();
+
+            let document = DocumentBuilder::new(document_operations).build().unwrap();
+
+            let result = db.store.insert_document(&document).await;
+
+            assert!(result.is_ok());
+
+            let document_views = db
+                .store
+                .get_documents_by_schema(&TEST_SCHEMA_ID.parse().unwrap())
+                .await
+                .unwrap();
+
+            assert!(document_views.is_empty());
+        });
+    }
+
+    #[rstest]
     fn updates_a_document(
         #[from(test_db)]
         #[with(10, 1, 1)]
