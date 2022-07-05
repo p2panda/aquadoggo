@@ -261,7 +261,7 @@ impl DocumentStore for SqlStorage {
         let document_view_field_rows = query_as::<_, DocumentViewFieldRow>(
             "
             SELECT
-                document_view_fields.document_view_id,
+                documents.document_view_id,
                 document_view_fields.operation_id,
                 document_view_fields.name,
                 operation_fields_v1.list_index,
@@ -278,7 +278,7 @@ impl DocumentStore for SqlStorage {
                 AND
                     document_view_fields.name = operation_fields_v1.name
             WHERE
-                documents.schema_id = $1
+                documents.schema_id = $1 AND documents.is_deleted = false
             ORDER BY
                 operation_fields_v1.list_index ASC
             ",
@@ -288,19 +288,17 @@ impl DocumentStore for SqlStorage {
         .await
         .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
 
+        // We need to group all returned field rows by their document_view_id so we can then
+        // build schema from them.
         let mut grouped_document_field_rows: BTreeMap<String, Vec<DocumentViewFieldRow>> =
             BTreeMap::new();
 
-        for document_field_row in document_view_field_rows {
-            if let Some(current_operations) =
-                grouped_document_field_rows.get_mut(&document_field_row.document_view_id)
-            {
-                current_operations.push(document_field_row)
+        for row in document_view_field_rows {
+            let existing_view = grouped_document_field_rows.get_mut(&row.document_view_id);
+            if let Some(existing_view) = existing_view {
+                existing_view.push(row)
             } else {
-                grouped_document_field_rows.insert(
-                    document_field_row.clone().document_view_id,
-                    vec![document_field_row],
-                );
+                grouped_document_field_rows.insert(row.clone().document_view_id, vec![row]);
             };
         }
 
