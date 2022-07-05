@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Refactor scalars and replication API, replace `graphql-client` with `gql_client` [#184](https://github.com/p2panda/aquadoggo/pull/184)
+- Give error types of worker a string for better debugging [#194](https://github.com/p2panda/aquadoggo/pull/194)
 
 ## [0.3.0]
 
