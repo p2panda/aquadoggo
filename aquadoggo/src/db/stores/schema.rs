@@ -45,6 +45,9 @@ impl SchemaStore for SqlStorage {
             schema_fields.push(scheme_field_view);
         }
 
+        // We silently ignore errors as we are assuming views we retrieve from the database
+        // themselves are valid, meaning any error in constructing the schema must be because
+        // some of it's fields are simply missing from our database.
         let schema = Schema::from_views(schema_view, schema_fields).ok();
 
         Ok(schema)
@@ -331,6 +334,8 @@ mod tests {
             .await;
 
             // Retrieve the schema by it's document_view_id.
+
+            // We unwrap here as we expect an `Ok` result even though the schema could not be built.
             let schema = db.store.get_schema_by_id(&document_view_id).await.unwrap();
 
             assert!(schema.is_none());
