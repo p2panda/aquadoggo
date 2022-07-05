@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Refactor scalars and replication API, replace `graphql-client` with `gql_client` [#184](https://github.com/p2panda/aquadoggo/pull/184)
 
+### Fixed
+
+- Filter out deleted documents in `get_documents_by_schema` SQL query [193](https://github.com/p2panda/aquadoggo/pull/193)
+
 ## [0.3.0]
 
 Released on 2022-07-01: :package: [`crate`](https://crates.io/crates/aquadoggo/0.3.0)
