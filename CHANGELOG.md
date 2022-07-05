@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Don't return errors from `SchemaStore` when a schema could not be constructed [#192](https://github.com/p2panda/aquadoggo/pull/192)
+- Filter out deleted documents in `get_documents_by_schema` SQL query [#193](https://github.com/p2panda/aquadoggo/pull/193)
 
 ## [0.3.0]
 
