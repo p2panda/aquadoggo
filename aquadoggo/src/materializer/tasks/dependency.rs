@@ -21,7 +21,7 @@ use crate::materializer::TaskInput;
 /// Expects a _reduce_ task to have completed successfully for the given document view itself and
 /// returns a critical error otherwise.
 pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
-    debug!("Working on dependency task {:#?}", input);
+    debug!("Working on dependency task: {}", input);
 
     // Here we retrive the document view by document view id.
     let document_view = match &input.document_view_id {
@@ -61,14 +61,14 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
     // We can think of these as "child" relations.
     for (_key, document_view_value) in document_view.fields().iter() {
         match document_view_value.value() {
-            p2panda_rs::operation::OperationValue::Relation(_relation) => {
+            p2panda_rs::operation::OperationValue::Relation(_) => {
                 // This is a relation to a document, if it doesn't exist in the db yet, then that
                 // means we either have no entries for this document, or we are not materialising
                 // it for some reason. We don't want to kick of a "reduce" or "dependency" task in
                 // either of these cases.
                 debug!("Relation field found, no action required.");
             }
-            p2panda_rs::operation::OperationValue::RelationList(_relation_list) => {
+            p2panda_rs::operation::OperationValue::RelationList(_) => {
                 // same as above...
                 debug!("Relation list field found, no action required.");
             }

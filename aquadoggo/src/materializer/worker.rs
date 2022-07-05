@@ -76,7 +76,7 @@
 //! Task 1 results in "25", Task 2 in "64", Task 4 in "9".
 //! ```
 use std::collections::{HashMap, HashSet};
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::future::Future;
 use std::hash::Hash;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -143,7 +143,7 @@ pub type WorkerName = String;
 /// this registered work and an index of all current inputs in the task queue.
 struct WorkerManager<IN>
 where
-    IN: Send + Sync + Clone + Hash + Eq + 'static,
+    IN: Send + Sync + Clone + Hash + Eq + Display + 'static,
 {
     /// Index of all current inputs inside the task queue organized in a hash set.
     ///
@@ -157,7 +157,7 @@ where
 
 impl<IN> WorkerManager<IN>
 where
-    IN: Send + Sync + Clone + Hash + Eq + 'static,
+    IN: Send + Sync + Clone + Hash + Eq + Display + 'static,
 {
     /// Returns a new worker manager.
     pub fn new() -> Self {
@@ -209,7 +209,7 @@ where
 #[derive(Debug)]
 pub struct QueueItem<IN>
 where
-    IN: Send + Sync + Clone + 'static,
+    IN: Send + Sync + Clone + Display + 'static,
 {
     /// Unique task identifier.
     id: u64,
@@ -218,9 +218,18 @@ where
     input: IN,
 }
 
+impl<IN> Display for QueueItem<IN>
+where
+    IN: Send + Sync + Clone + Display + 'static,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<QueueItem {} w. {}>", self.id, self.input)
+    }
+}
+
 impl<IN> QueueItem<IN>
 where
-    IN: Send + Sync + Clone + 'static,
+    IN: Send + Sync + Clone + Display + 'static,
 {
     /// Returns a new queue item.
     pub fn new(id: u64, input: IN) -> Self {
@@ -242,7 +251,7 @@ where
 /// This factory serves as a main entry interface to dispatch, schedule and process tasks.
 pub struct Factory<IN, D>
 where
-    IN: Send + Sync + Clone + Hash + Eq + Debug + 'static,
+    IN: Send + Sync + Clone + Hash + Eq + Debug + Display + 'static,
     D: Send + Sync + Clone + 'static,
 {
     /// Shared context between all tasks.
@@ -268,7 +277,7 @@ where
 
 impl<IN, D> Factory<IN, D>
 where
-    IN: Send + Sync + Clone + Hash + Eq + Debug + 'static,
+    IN: Send + Sync + Clone + Hash + Eq + Debug + Display + 'static,
     D: Send + Sync + Clone + 'static,
 {
     /// Initialises a new factory.
@@ -505,7 +514,7 @@ where
                         Err(TaskError::Critical(err)) => {
                             // Something really horrible happened, we need to crash!
                             error!(
-                                "Critical error in worker {} with task {:?}: {}",
+                                "Critical error in worker {} with task {}: {}",
                                 name, item, err
                             );
 
@@ -513,7 +522,7 @@ where
                         }
                         Err(TaskError::Failure(err)) => {
                             debug!(
-                                "Silently failing worker {} with task {:?}: {}",
+                                "Silently failing worker {} with task {}: {}",
                                 name, item, err
                             );
                         }
