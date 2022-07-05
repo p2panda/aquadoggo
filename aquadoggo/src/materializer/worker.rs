@@ -537,6 +537,7 @@ where
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::fmt::Display;
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
 
@@ -651,6 +652,12 @@ mod tests {
         struct JigsawPiece {
             id: usize,
             relations: Vec<usize>,
+        }
+
+        impl Display for JigsawPiece {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{} {:?}", self.id, self.relations)
+            }
         }
 
         // This is a whole puzzle, which is simply a list of puzzle pieces. It has a "complete"
