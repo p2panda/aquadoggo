@@ -261,7 +261,7 @@ impl DocumentStore for SqlStorage {
         let document_view_field_rows = query_as::<_, DocumentViewFieldRow>(
             "
             SELECT
-                document_view_fields.document_view_id,
+                documents.document_view_id,
                 document_view_fields.operation_id,
                 document_view_fields.name,
                 operation_fields_v1.list_index,
@@ -278,7 +278,7 @@ impl DocumentStore for SqlStorage {
                 AND
                     document_view_fields.name = operation_fields_v1.name
             WHERE
-                documents.schema_id = $1
+                documents.schema_id = $1 AND documents.is_deleted = false
             ORDER BY
                 operation_fields_v1.list_index ASC
             ",
@@ -288,19 +288,17 @@ impl DocumentStore for SqlStorage {
         .await
         .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
 
+        // We need to group all returned field rows by their document_view_id so we can then
+        // build schema from them.
         let mut grouped_document_field_rows: BTreeMap<String, Vec<DocumentViewFieldRow>> =
             BTreeMap::new();
 
-        for document_field_row in document_view_field_rows {
-            if let Some(current_operations) =
-                grouped_document_field_rows.get_mut(&document_field_row.document_view_id)
-            {
-                current_operations.push(document_field_row)
+        for row in document_view_field_rows {
+            let existing_view = grouped_document_field_rows.get_mut(&row.document_view_id);
+            if let Some(existing_view) = existing_view {
+                existing_view.push(row)
             } else {
-                grouped_document_field_rows.insert(
-                    document_field_row.clone().document_view_id,
-                    vec![document_field_row],
-                );
+                grouped_document_field_rows.insert(row.clone().document_view_id, vec![row]);
             };
         }
 
@@ -648,6 +646,37 @@ mod tests {
             let document_view = db.store.get_document_by_id(document.id()).await.unwrap();
 
             assert!(document_view.is_none());
+        });
+    }
+
+    #[rstest]
+    fn get_documents_by_schema_deleted_document(
+        #[from(test_db)]
+        #[with(10, 1, 1, true)]
+        runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let document_id = db.test_data.documents[0].clone();
+
+            let document_operations = db
+                .store
+                .get_operations_by_document_id(&document_id)
+                .await
+                .unwrap();
+
+            let document = DocumentBuilder::new(document_operations).build().unwrap();
+
+            let result = db.store.insert_document(&document).await;
+
+            assert!(result.is_ok());
+
+            let document_views = db
+                .store
+                .get_documents_by_schema(&TEST_SCHEMA_ID.parse().unwrap())
+                .await
+                .unwrap();
+
+            assert!(document_views.is_empty());
         });
     }
 
