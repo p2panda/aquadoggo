@@ -24,19 +24,17 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
     debug!("Working on dependency task {:#?}", input);
 
     // Here we retrive the document view by document view id.
-    let document_view = match input.document_view_id {
+    let document_view = match &input.document_view_id {
         Some(view_id) => context
             .store
-            .get_document_view_by_id(&view_id)
+            .get_document_view_by_id(view_id)
             .await
             .map_err(|err| {
-                debug!("Fatal error getting document view from storage");
-                debug!("{}", err);
-                TaskError::Critical
+                TaskError::Critical(err.to_string())
             })
             ,
         // We expect to handle document_view_ids in a dependency task.
-        None => Err(TaskError::Critical),
+        None => Err(TaskError::Critical("Missing document_view_id in task input".into())),
     }?;
 
     let document_view = match document_view {
@@ -51,10 +49,10 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
         // document has been deleted or the document view id was invalid. As "dependency" tasks
         // are only dispatched after a successful "reduce" task, neither `None` case should
         // happen, so this is a critical error.
-        None => {
-            debug!("Expected document view not found in the store.");
-            Err(TaskError::Critical)
-        }
+        None => Err(TaskError::Critical(format!(
+            "Expected document view {} not found in store",
+            &input.document_view_id.unwrap()
+        ))),
     }?;
 
     let mut next_tasks = Vec::new();
@@ -104,19 +102,12 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
 
     // Construct additional tasks if the task input matches certain system schemas and all
     // dependencies have been reduced.
-    if !next_tasks.iter().any(|t| t.is_some()) {
+    if !next_tasks.iter().any(|task| task.is_some()) {
         let task_input_schema = context
             .store
             .get_schema_by_document_view(document_view.id())
             .await
-            .map_err(|e| {
-                log::error!(
-                    "Failed loading schema for task input {}: {}",
-                    document_view,
-                    e.to_string()
-                );
-                TaskError::Critical
-            })?
+            .map_err(|err| TaskError::Critical(err.to_string()))?
             // Unwrap because we expect the task input to still be in the db.
             .unwrap();
 
@@ -127,6 +118,7 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
                 TaskInput::new(None, Some(document_view.id().clone())),
             ))
         };
+
         match task_input_schema {
             // Start `schema` task when a schema (field) definition view is completed with
             // dependencies
@@ -155,11 +147,8 @@ async fn construct_relation_task(
         .store
         .get_document_view_by_id(&document_view_id)
         .await
-        .map_err(|err| {
-            debug!("Fatal error getting document view from storage");
-            debug!("{}", err);
-            TaskError::Critical
-        })? {
+        .map_err(|err| TaskError::Critical(err.to_string()))?
+    {
         Some(_) => {
             debug!("View found for pinned relation: {}", document_view_id);
             Ok(None)

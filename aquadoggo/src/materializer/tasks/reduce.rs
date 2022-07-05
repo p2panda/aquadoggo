@@ -34,10 +34,7 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
         .store
         .get_operations_by_document_id(&document_id)
         .await
-        .map_err(|err| {
-            debug!("Failed loading operations from storage: {}", err);
-            TaskError::Critical
-        })?;
+        .map_err(|err| TaskError::Critical(err.to_string()))?;
 
     let document_view_id = match &input.document_view_id {
         // If this task was passed a document_view_id as input then we want to build to document
@@ -51,6 +48,7 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
     match document_view_id {
         Some(view_id) => {
             debug!("Dispatch dependency task for view with id: {}", view_id);
+
             Ok(Some(vec![Task::new(
                 "dependency",
                 TaskInput::new(None, Some(view_id)),
@@ -81,19 +79,17 @@ async fn resolve_document_id(
             // @TODO: We can skip this step if we implement:
             // https://github.com/p2panda/aquadoggo/issues/148
             debug!("Find document for view with id: {}", document_view_id);
+
             let operation_id = document_view_id.clone().into_iter().next().unwrap();
+
             context
                 .store
                 .get_document_by_operation_id(&operation_id)
                 .await
-                .map_err(|err| {
-                    debug!("Fatal error getting document_id from storage");
-                    debug!("{}", err);
-                    TaskError::Critical
-                })
+                .map_err(|err| TaskError::Critical(err.to_string()))
         }
         // None or both have been provided which smells like a bug
-        (_, _) => Err(TaskError::Critical),
+        (_, _) => Err(TaskError::Critical("Invalid task input".into())),
     }
 }
 
@@ -116,6 +112,7 @@ async fn reduce_document_view(
                 "Document materialized to view with id: {}",
                 document_view_id
             );
+
             if document.is_deleted() {
                 return Ok(None);
             };
@@ -139,15 +136,7 @@ async fn reduce_document_view(
         .store
         .insert_document_view(document.view().unwrap(), document.schema())
         .await
-        .map_err(|err| {
-            debug!(
-                "Failed to insert document view into database: {}",
-                document_view_id
-            );
-            debug!("{}", err);
-
-            TaskError::Critical
-        })?;
+        .map_err(|err| TaskError::Critical(err.to_string()))?;
 
     info!("Stored {} view {}", document, document.view_id());
 
@@ -172,11 +161,7 @@ async fn reduce_document(
                 .store
                 .insert_document(&document)
                 .await
-                .map_err(|err| {
-                    debug!("Failed to insert document into database: {}", document.id());
-                    debug!("{}", err);
-                    TaskError::Critical
-                })?;
+                .map_err(|err| TaskError::Critical(err.to_string()))?;
 
             // If the document was deleted, then we return nothing
             if document.is_deleted() {

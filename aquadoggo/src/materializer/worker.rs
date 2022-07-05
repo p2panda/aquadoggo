@@ -120,11 +120,10 @@ pub type TaskResult<IN> = Result<Option<Vec<Task<IN>>>, TaskError>;
 #[derive(Debug)]
 pub enum TaskError {
     /// This tasks failed critically and will cause the whole program to panic.
-    Critical,
+    Critical(String),
 
     /// This task failed silently without any further effects.
-    #[allow(dead_code)]
-    Failure,
+    Failure(String),
 }
 
 /// Enum representing status of a task.
@@ -478,7 +477,11 @@ where
                             index.remove(&item.input());
                         }
                         Err(err) => {
-                            error!("Error while locking input index: {}", err);
+                            error!(
+                                "Error while locking input index in worker {} for task {:?}: {}",
+                                name, item, err
+                            );
+
                             error_signal.trigger();
                         }
                     }
@@ -499,13 +502,20 @@ where
                                 }
                             }
                         }
-                        Err(TaskError::Critical) => {
+                        Err(TaskError::Critical(err)) => {
                             // Something really horrible happened, we need to crash!
-                            error!("Critical error in task {:?}", item);
+                            error!(
+                                "Critical error in worker {} with task {:?}: {}",
+                                name, item, err
+                            );
+
                             error_signal.trigger();
                         }
-                        Err(TaskError::Failure) => {
-                            debug!("Task failed: {:?}", item);
+                        Err(TaskError::Failure(err)) => {
+                            debug!(
+                                "Silently failing worker {} with task {:?}: {}",
+                                name, item, err
+                            );
                         }
                         _ => (), // Task succeeded, but nothing to dispatch
                     }
@@ -539,14 +549,18 @@ mod tests {
 
         // Define two workers
         async fn first(database: Data, input: Input) -> TaskResult<Input> {
-            let mut db = database.lock().map_err(|_| TaskError::Critical)?;
+            let mut db = database
+                .lock()
+                .map_err(|err| TaskError::Critical(err.to_string()))?;
             db.push(format!("first-{}", input));
             Ok(None)
         }
 
         // .. the second worker dispatches a task for "first" at the end
         async fn second(database: Data, input: Input) -> TaskResult<Input> {
-            let mut db = database.lock().map_err(|_| TaskError::Critical)?;
+            let mut db = database
+                .lock()
+                .map_err(|err| TaskError::Critical(err.to_string()))?;
             db.push(format!("second-{}", input));
             Ok(Some(vec![Task::new("first", input)]))
         }
@@ -656,7 +670,9 @@ mod tests {
 
         // This tasks "picks" a single piece out of the box and sorts it into the database
         async fn pick(database: Data, input: JigsawPiece) -> TaskResult<JigsawPiece> {
-            let mut db = database.lock().map_err(|_| TaskError::Critical)?;
+            let mut db = database
+                .lock()
+                .map_err(|err| TaskError::Critical(err.to_string()))?;
 
             // 1. Take incoming puzzle piece from box and move it into the database first
             db.pieces.insert(input.id, input.clone());
@@ -677,7 +693,9 @@ mod tests {
 
         // This task finds fitting pieces and tries to combine them to a puzzle
         async fn find(database: Data, input: JigsawPiece) -> TaskResult<JigsawPiece> {
-            let mut db = database.lock().map_err(|_| TaskError::Critical)?;
+            let mut db = database
+                .lock()
+                .map_err(|err| TaskError::Critical(err.to_string()))?;
 
             // 1. Merge all known and related pieces into one large list
             let mut ids: Vec<usize> = Vec::new();
@@ -759,7 +777,9 @@ mod tests {
 
         // This task checks if a puzzle was completed
         async fn finish(database: Data, input: JigsawPiece) -> TaskResult<JigsawPiece> {
-            let mut db = database.lock().map_err(|_| TaskError::Critical)?;
+            let mut db = database
+                .lock()
+                .map_err(|err| TaskError::Critical(err.to_string()))?;
 
             // 1. Identify unfinished puzzle related to this piece
             let puzzle: Option<JigsawPuzzle> = db
@@ -770,15 +790,19 @@ mod tests {
 
             // 2. Check if all piece dependencies are met
             match puzzle {
-                None => Err(TaskError::Failure),
+                None => Err(TaskError::Failure("No puzzle given".into())),
                 Some(mut puzzle) => {
                     for piece_id in &puzzle.piece_ids {
                         match db.pieces.get(piece_id) {
-                            None => return Err(TaskError::Failure),
+                            None => {
+                                return Err(TaskError::Failure("Dependencies are not met".into()))
+                            }
                             Some(piece) => {
                                 for relation_piece_id in &piece.relations {
                                     if !puzzle.piece_ids.contains(relation_piece_id) {
-                                        return Err(TaskError::Failure);
+                                        return Err(TaskError::Failure(
+                                            "Dependencies are not met".into(),
+                                        ));
                                     }
                                 }
                             }
