@@ -17,12 +17,12 @@ use crate::materializer::TaskInput;
 /// has all its immediate dependencies available in the store. It collects all required views for
 /// the schema, instantiates it and adds it to the schema provider.
 pub async fn schema_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
-    debug!("Working on schema task {}", input);
+    debug!("Working on schema task: {}", input);
 
     let input_view_id = match (input.document_id, input.document_view_id) {
         (None, Some(view_id)) => Ok(view_id),
         // The task input must contain only a view id.
-        (_, _) => Err(TaskError::Critical),
+        (_, _) => Err(TaskError::Critical("Invalid task input".into())),
     }?;
 
     // Determine the schema of the updated view id.
@@ -37,13 +37,17 @@ pub async fn schema_task(context: Context, input: TaskInput) -> TaskResult<TaskI
         SchemaId::SchemaFieldDefinition(_) => {
             get_related_schema_definitions(&input_view_id, &context).await
         }
-        _ => Err(TaskError::Critical),
+        _ => Err(TaskError::Critical(format!(
+            "Unknown system schema id: {}",
+            schema
+        ))),
     }?;
 
-    // The affected schema definitions are not known yet to this node so we mark this task failed.
+    // The related schema definitions are not known yet to this node so we mark this task failed.
     if updated_schema_definitions.is_empty() {
-        debug!("Failed: Affected schema definition not found");
-        return Err(TaskError::Failure);
+        return Err(TaskError::Failure(
+            "Related schema definition not given (yet)".into(),
+        ));
     }
 
     for view_id in updated_schema_definitions.iter() {
@@ -51,7 +55,7 @@ pub async fn schema_task(context: Context, input: TaskInput) -> TaskResult<TaskI
             .store
             .get_schema_by_id(view_id)
             .await
-            .map_err(|_err| TaskError::Critical)?
+            .map_err(|err| TaskError::Critical(err.to_string()))?
         {
             // Updated schema was assembled successfully and is now passed to schema provider.
             Some(schema) => {
@@ -74,27 +78,32 @@ async fn get_schema_for_view(
 ) -> Result<SchemaId, TaskError> {
     let sample_operation_id = view_id.graph_tips().first().unwrap();
     let sample_operation = context.store.get_operation_by_id(sample_operation_id).await;
-    let sample_operation = sample_operation.map_err(|_| TaskError::Critical)?.unwrap();
+    let sample_operation = sample_operation
+        .map_err(|err| TaskError::Critical(err.to_string()))?
+        .unwrap();
+
     Ok(sample_operation.operation().schema())
 }
 
-/// Retrieve schema definitions that use the targetted schema field definition as one of their fields.
+/// Retrieve schema definitions that use the targeted schema field definition as one of their
+/// fields.
 async fn get_related_schema_definitions(
     target_field_definition: &DocumentViewId,
     context: &Context,
 ) -> Result<Vec<DocumentViewId>, TaskError> {
-    // Retrieve all schema definition documents from the store.
+    // Retrieve all schema definition documents from the store
     let schema_definitions = context
         .store
         .get_documents_by_schema(&SchemaId::SchemaDefinition(1))
         .await
-        .map_err(|_err| TaskError::Critical)
+        .map_err(|err| TaskError::Critical(err.to_string()))
         .unwrap();
 
-    // Collect all schema definitions that use the targetted field definition
+    // Collect all schema definitions that use the targeted field definition
     let mut related_schema_definitions = vec![];
     for schema in schema_definitions {
         let fields_value = schema.fields().get("fields").unwrap().value();
+
         if let OperationValue::PinnedRelationList(fields) = fields_value {
             if fields
                 .iter()
@@ -107,7 +116,9 @@ async fn get_related_schema_definitions(
         } else {
             // Abort if there are schema definitions in the store that don't match the schema
             // definition schema.
-            Err(TaskError::Critical)?
+            Err(TaskError::Critical(
+                "Schema definition operation does not have a 'fields' operation field".into(),
+            ))?
         }
     }
 

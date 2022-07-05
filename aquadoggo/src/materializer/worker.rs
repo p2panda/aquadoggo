@@ -76,7 +76,7 @@
 //! Task 1 results in "25", Task 2 in "64", Task 4 in "9".
 //! ```
 use std::collections::{HashMap, HashSet};
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::future::Future;
 use std::hash::Hash;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -120,11 +120,10 @@ pub type TaskResult<IN> = Result<Option<Vec<Task<IN>>>, TaskError>;
 #[derive(Debug)]
 pub enum TaskError {
     /// This tasks failed critically and will cause the whole program to panic.
-    Critical,
+    Critical(String),
 
     /// This task failed silently without any further effects.
-    #[allow(dead_code)]
-    Failure,
+    Failure(String),
 }
 
 /// Enum representing status of a task.
@@ -144,7 +143,7 @@ pub type WorkerName = String;
 /// this registered work and an index of all current inputs in the task queue.
 struct WorkerManager<IN>
 where
-    IN: Send + Sync + Clone + Hash + Eq + 'static,
+    IN: Send + Sync + Clone + Hash + Eq + Display + 'static,
 {
     /// Index of all current inputs inside the task queue organized in a hash set.
     ///
@@ -158,7 +157,7 @@ where
 
 impl<IN> WorkerManager<IN>
 where
-    IN: Send + Sync + Clone + Hash + Eq + 'static,
+    IN: Send + Sync + Clone + Hash + Eq + Display + 'static,
 {
     /// Returns a new worker manager.
     pub fn new() -> Self {
@@ -210,7 +209,7 @@ where
 #[derive(Debug)]
 pub struct QueueItem<IN>
 where
-    IN: Send + Sync + Clone + 'static,
+    IN: Send + Sync + Clone + Display + 'static,
 {
     /// Unique task identifier.
     id: u64,
@@ -219,9 +218,18 @@ where
     input: IN,
 }
 
+impl<IN> Display for QueueItem<IN>
+where
+    IN: Send + Sync + Clone + Display + 'static,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<QueueItem {} w. {}>", self.id, self.input)
+    }
+}
+
 impl<IN> QueueItem<IN>
 where
-    IN: Send + Sync + Clone + 'static,
+    IN: Send + Sync + Clone + Display + 'static,
 {
     /// Returns a new queue item.
     pub fn new(id: u64, input: IN) -> Self {
@@ -243,7 +251,7 @@ where
 /// This factory serves as a main entry interface to dispatch, schedule and process tasks.
 pub struct Factory<IN, D>
 where
-    IN: Send + Sync + Clone + Hash + Eq + Debug + 'static,
+    IN: Send + Sync + Clone + Hash + Eq + Debug + Display + 'static,
     D: Send + Sync + Clone + 'static,
 {
     /// Shared context between all tasks.
@@ -269,7 +277,7 @@ where
 
 impl<IN, D> Factory<IN, D>
 where
-    IN: Send + Sync + Clone + Hash + Eq + Debug + 'static,
+    IN: Send + Sync + Clone + Hash + Eq + Debug + Display + 'static,
     D: Send + Sync + Clone + 'static,
 {
     /// Initialises a new factory.
@@ -478,7 +486,11 @@ where
                             index.remove(&item.input());
                         }
                         Err(err) => {
-                            error!("Error while locking input index: {}", err);
+                            error!(
+                                "Error while locking input index in worker {} for task {:?}: {}",
+                                name, item, err
+                            );
+
                             error_signal.trigger();
                         }
                     }
@@ -499,13 +511,20 @@ where
                                 }
                             }
                         }
-                        Err(TaskError::Critical) => {
+                        Err(TaskError::Critical(err)) => {
                             // Something really horrible happened, we need to crash!
-                            error!("Critical error in task {:?}", item);
+                            error!(
+                                "Critical error in worker {} with task {}: {}",
+                                name, item, err
+                            );
+
                             error_signal.trigger();
                         }
-                        Err(TaskError::Failure) => {
-                            debug!("Task failed: {:?}", item);
+                        Err(TaskError::Failure(err)) => {
+                            debug!(
+                                "Silently failing worker {} with task {}: {}",
+                                name, item, err
+                            );
                         }
                         _ => (), // Task succeeded, but nothing to dispatch
                     }
@@ -518,6 +537,7 @@ where
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::fmt::Display;
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
 
@@ -539,14 +559,18 @@ mod tests {
 
         // Define two workers
         async fn first(database: Data, input: Input) -> TaskResult<Input> {
-            let mut db = database.lock().map_err(|_| TaskError::Critical)?;
+            let mut db = database
+                .lock()
+                .map_err(|err| TaskError::Critical(err.to_string()))?;
             db.push(format!("first-{}", input));
             Ok(None)
         }
 
         // .. the second worker dispatches a task for "first" at the end
         async fn second(database: Data, input: Input) -> TaskResult<Input> {
-            let mut db = database.lock().map_err(|_| TaskError::Critical)?;
+            let mut db = database
+                .lock()
+                .map_err(|err| TaskError::Critical(err.to_string()))?;
             db.push(format!("second-{}", input));
             Ok(Some(vec![Task::new("first", input)]))
         }
@@ -630,6 +654,12 @@ mod tests {
             relations: Vec<usize>,
         }
 
+        impl Display for JigsawPiece {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{} {:?}", self.id, self.relations)
+            }
+        }
+
         // This is a whole puzzle, which is simply a list of puzzle pieces. It has a "complete"
         // flag, which turns true as soon as we finished the puzzle!
         #[derive(Hash, Clone, Debug)]
@@ -656,7 +686,9 @@ mod tests {
 
         // This tasks "picks" a single piece out of the box and sorts it into the database
         async fn pick(database: Data, input: JigsawPiece) -> TaskResult<JigsawPiece> {
-            let mut db = database.lock().map_err(|_| TaskError::Critical)?;
+            let mut db = database
+                .lock()
+                .map_err(|err| TaskError::Critical(err.to_string()))?;
 
             // 1. Take incoming puzzle piece from box and move it into the database first
             db.pieces.insert(input.id, input.clone());
@@ -677,7 +709,9 @@ mod tests {
 
         // This task finds fitting pieces and tries to combine them to a puzzle
         async fn find(database: Data, input: JigsawPiece) -> TaskResult<JigsawPiece> {
-            let mut db = database.lock().map_err(|_| TaskError::Critical)?;
+            let mut db = database
+                .lock()
+                .map_err(|err| TaskError::Critical(err.to_string()))?;
 
             // 1. Merge all known and related pieces into one large list
             let mut ids: Vec<usize> = Vec::new();
@@ -759,7 +793,9 @@ mod tests {
 
         // This task checks if a puzzle was completed
         async fn finish(database: Data, input: JigsawPiece) -> TaskResult<JigsawPiece> {
-            let mut db = database.lock().map_err(|_| TaskError::Critical)?;
+            let mut db = database
+                .lock()
+                .map_err(|err| TaskError::Critical(err.to_string()))?;
 
             // 1. Identify unfinished puzzle related to this piece
             let puzzle: Option<JigsawPuzzle> = db
@@ -770,15 +806,19 @@ mod tests {
 
             // 2. Check if all piece dependencies are met
             match puzzle {
-                None => Err(TaskError::Failure),
+                None => Err(TaskError::Failure("No puzzle given".into())),
                 Some(mut puzzle) => {
                     for piece_id in &puzzle.piece_ids {
                         match db.pieces.get(piece_id) {
-                            None => return Err(TaskError::Failure),
+                            None => {
+                                return Err(TaskError::Failure("Dependencies are not met".into()))
+                            }
                             Some(piece) => {
                                 for relation_piece_id in &piece.relations {
                                     if !puzzle.piece_ids.contains(relation_piece_id) {
-                                        return Err(TaskError::Failure);
+                                        return Err(TaskError::Failure(
+                                            "Dependencies are not met".into(),
+                                        ));
                                     }
                                 }
                             }
