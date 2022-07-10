@@ -10,7 +10,7 @@ use sqlx::query_scalar;
 use crate::db::request::{EntryArgsRequest, PublishEntryRequest};
 use crate::db::stores::{StorageEntry, StorageLog};
 use crate::db::Pool;
-use crate::errors::StorageProviderResult;
+use crate::errors::Result;
 use crate::graphql::client::NextEntryArguments;
 
 /// Sql based storage that implements `StorageProvider`.
@@ -40,10 +40,7 @@ impl StorageProvider<StorageEntry, StorageLog, VerifiedOperation> for SqlStorage
     /// Every entry is part of a document and, through that, associated with a specific log id used
     /// by this document and author. This method returns that document id by looking up the log
     /// that the entry was stored in.
-    async fn get_document_by_entry(
-        &self,
-        entry_hash: &Hash,
-    ) -> StorageProviderResult<Option<DocumentId>> {
+    async fn get_document_by_entry(&self, entry_hash: &Hash) -> Result<Option<DocumentId>> {
         let result: Option<String> = query_scalar(
             "
             SELECT
