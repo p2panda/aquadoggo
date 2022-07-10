@@ -24,6 +24,7 @@ mod manager;
 mod materializer;
 mod node;
 mod replication;
+mod validation;
 
 #[cfg(test)]
 mod test_helpers;
