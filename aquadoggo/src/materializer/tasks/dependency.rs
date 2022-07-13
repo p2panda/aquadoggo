@@ -21,7 +21,7 @@ use crate::materializer::TaskInput;
 /// Expects a _reduce_ task to have completed successfully for the given document view itself and
 /// returns a critical error otherwise.
 pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
-    debug!("Working on dependency task {:#?}", input);
+    debug!("Working on {}", input);
 
     // Here we retrive the document view by document view id.
     let document_view = match input.document_view_id {
