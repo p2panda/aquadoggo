@@ -44,8 +44,8 @@ pub use node::Node;
 /// can be customised at runtime. With eg. `RUST_LOG=aquadoggo=info cargo t -- --nocapture` or
 /// `RUST_LOG=sqlx=debug cargo t -- --nocapture`.
 ///
-/// The `ctor` crate is used to define a global constructor function. This method
-/// will be run before any of the test suites.
+/// The `ctor` crate is used to define a global constructor function. This method will be run
+/// before any of the test suites.
 #[cfg(test)]
 #[ctor::ctor]
 fn init() {
