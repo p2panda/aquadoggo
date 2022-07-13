@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use log::info;
 use p2panda_rs::schema::{Schema, SchemaId, SYSTEM_SCHEMAS};
+use tokio::sync::Mutex;
 
 /// Provides fast access to system and application schemas during runtime.
 ///
@@ -32,30 +33,30 @@ impl SchemaProvider {
     }
 
     /// Retrieve a schema that may be a system or application schema by its schema id.
-    pub fn get(&self, schema_id: &SchemaId) -> Option<Schema> {
-        self.0.lock().unwrap().get(schema_id).cloned()
+    pub async fn get(&self, schema_id: &SchemaId) -> Option<Schema> {
+        self.0.lock().await.get(schema_id).cloned()
     }
 
     /// Returns all system and application schemas.
-    pub fn all(&self) -> Vec<Schema> {
-        self.0.lock().unwrap().values().cloned().collect()
+    pub async fn all(&self) -> Vec<Schema> {
+        self.0.lock().await.values().cloned().collect()
     }
 
     /// Inserts or updates the given schema in this provider.
     ///
     /// Returns `true` if a schema was updated and `false` if it was inserted.
-    pub fn update(&self, schema: Schema) -> bool {
+    pub async fn update(&self, schema: Schema) -> bool {
         info!("Updating {}", schema);
-        let mut schemas = self.0.lock().unwrap();
+        let mut schemas = self.0.lock().await;
         schemas.insert(schema.id().clone(), schema).is_some()
     }
 
     /// Remove a schema from this provider.
     ///
     /// Returns true if the schema existed.
-    pub fn remove(&self, schema_id: &SchemaId) -> bool {
+    pub async fn remove(&self, schema_id: &SchemaId) -> bool {
         info!("Removing {}", schema_id);
-        self.0.lock().unwrap().remove(schema_id).is_some()
+        self.0.lock().await.remove(schema_id).is_some()
     }
 }
 
@@ -72,7 +73,7 @@ mod test {
     #[tokio::test]
     async fn test_get_all_schemas() {
         let schemas = SchemaProvider::default();
-        let result = schemas.all();
+        let result = schemas.all().await;
         assert_eq!(result.len(), 2);
     }
 }

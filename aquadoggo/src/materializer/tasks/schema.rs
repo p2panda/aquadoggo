@@ -59,7 +59,7 @@ pub async fn schema_task(context: Context, input: TaskInput) -> TaskResult<TaskI
         {
             // Updated schema was assembled successfully and is now passed to schema provider.
             Some(schema) => {
-                context.schema_provider.update(schema.clone());
+                context.schema_provider.update(schema.clone()).await;
             }
             // This schema was not ready to be assembled after all so it is ignored.
             None => {
@@ -285,6 +285,7 @@ mod tests {
             assert!(context
                 .schema_provider
                 .all()
+                .await
                 .iter()
                 .any(|s| s.version() == SchemaVersion::Application(definition_view_id.clone())));
         });
