@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::convert::{TryFrom, TryInto};
+
 use async_graphql::{Context, Error, Object, Result};
-use p2panda_rs::operation::{AsVerifiedOperation, VerifiedOperation};
+use p2panda_rs::entry::{Entry, EntrySigned};
+use p2panda_rs::operation::{
+    AsOperation, AsVerifiedOperation, Operation, OperationEncoded, VerifiedOperation,
+};
 use p2panda_rs::storage_provider::traits::{OperationStore, StorageProvider};
 use p2panda_rs::Validate;
 
@@ -10,6 +15,7 @@ use crate::db::provider::SqlStorage;
 use crate::db::request::PublishEntryRequest;
 use crate::graphql::client::NextEntryArguments;
 use crate::graphql::scalars;
+use crate::validation::validate_operation_against_schema;
 
 /// GraphQL queries for the Client API.
 #[derive(Default, Debug, Copy, Clone)]
@@ -34,48 +40,55 @@ impl ClientMutationRoot {
         let store = ctx.data::<SqlStorage>()?;
         let tx = ctx.data::<ServiceSender>()?;
 
-        // Parse and validate parameters
-        let args = PublishEntryRequest {
-            entry: entry.into(),
-            operation: operation.into(),
-        };
-        args.validate()?;
+        let entry: EntrySigned = entry.into();
+        entry.validate()?;
 
-        // Validate and store entry in database
-        // @TODO: Check all validation steps here for both entries and operations. Also, there is
-        // probably overlap in what replication needs in terms of validation?
-        let response = store.publish_entry(&args).await.map_err(Error::from)?;
+        let operation: OperationEncoded = operation.into();
+        operation.validate()?;
 
-        // Load related document from database
-        // @TODO: We probably have this instance already inside of "publish_entry"?
-        match store.get_document_by_entry(&args.entry.hash()).await? {
-            Some(document_id) => {
-                let verified_operation =
-                    VerifiedOperation::new_from_entry(&args.entry, &args.operation)?;
+        let operation = Operation::try_from(&operation)?;
 
-                // Store operation in database
-                // @TODO: This is not done by "publish_entry", maybe it needs to move there as
-                // well?
-                store
-                    .insert_operation(&verified_operation, &document_id)
-                    .await?;
+        validate_operation_against_schema(&store, &operation).await?;
 
-                // Send new operation on service communication bus, this will arrive eventually at
-                // the materializer service
-                if tx
-                    .send(ServiceMessage::NewOperation(
-                        verified_operation.operation_id().to_owned(),
-                    ))
-                    .is_err()
-                {
-                    // Silently fail here as we don't mind if there are no subscribers. We have
-                    // tests in other places to check if messages arrive.
-                }
+        if operation.is_create() {}
 
-                Ok(response)
-            }
-            None => Err(Error::new("No related document found in database")),
-        }
+        //
+        //         // Validate and store entry in database
+        //         // @TODO: Check all validation steps here for both entries and operations. Also, there is
+        //         // probably overlap in what replication needs in terms of validation?
+        //         let response = store.publish_entry(&args).await.map_err(Error::from)?;
+        //
+        //         // Load related document from database
+        //         // @TODO: We probably have this instance already inside of "publish_entry"?
+        //         match store.get_document_by_entry(&args.entry.hash()).await? {
+        //             Some(document_id) => {
+        //                 let verified_operation =
+        //                     VerifiedOperation::new_from_entry(&args.entry, &args.operation)?;
+        //
+        //                 // Store operation in database
+        //                 // @TODO: This is not done by "publish_entry", maybe it needs to move there as
+        //                 // well?
+        //                 store
+        //                     .insert_operation(&verified_operation, &document_id)
+        //                     .await?;
+        //
+        //                 // Send new operation on service communication bus, this will arrive eventually at
+        //                 // the materializer service
+        //                 if tx
+        //                     .send(ServiceMessage::NewOperation(
+        //                         verified_operation.operation_id().to_owned(),
+        //                     ))
+        //                     .is_err()
+        //                 {
+        //                     // Silently fail here as we don't mind if there are no subscribers. We have
+        //                     // tests in other places to check if messages arrive.
+        //                 }
+        //
+        //                 Ok(response)
+        //             }
+        //             None => Err(Error::new("No related document found in database")),
+        //         }
+        todo!()
     }
 }
 

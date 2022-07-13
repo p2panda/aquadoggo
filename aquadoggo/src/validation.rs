@@ -3,11 +3,13 @@
 use std::collections::HashSet;
 
 use anyhow::{anyhow, ensure, Result};
+use p2panda_rs::cddl::validate_cbor;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
+use p2panda_rs::operation::{AsOperation, Operation};
 use p2panda_rs::storage_provider::traits::OperationStore;
 
 use crate::db::provider::SqlStorage;
-use crate::db::traits::DocumentStore;
+use crate::db::traits::{DocumentStore, SchemaStore};
 
 /// Attempt to identify the document id for view id contained in a `next_args` request. This will fail if:
 /// - any of the operations contained in the view id _don't_ exist in the store
@@ -46,4 +48,28 @@ pub async fn get_validate_document_id_for_view_id(
     ensure!(document.is_some(), anyhow!("Document is deleted"));
 
     Ok(document_id.to_owned())
+}
+
+pub async fn validate_operation_against_schema(
+    store: &SqlStorage,
+    operation: &Operation,
+) -> Result<()> {
+    // Retrieve the schema for this operation from the store.
+    //
+    // @TODO Later we will want to use the schema provider for this, now we just get all schema and find the
+    // one we are interested in.
+    let all_schema = store.get_all_schema().await?;
+    let schema = all_schema
+        .iter()
+        .find(|schema| schema.id() == &operation.schema());
+
+    // If the schema we want doesn't exist, then error now.
+    ensure!(schema.is_none(), anyhow!("Schema not found"));
+    let schema = schema.unwrap();
+
+    // Validate that the operation correctly follows the stated schema.
+    validate_cbor(&schema.as_cddl(), &operation.to_cbor())?;
+
+    // All went well, return Ok.
+    Ok(())
 }
