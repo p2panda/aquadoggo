@@ -59,6 +59,7 @@ Released on 2022-07-01: :package: [`crate`](https://crates.io/crates/aquadoggo/0
 - Use `VerifiedOperation` [#158](https://github.com/p2panda/aquadoggo/pull/158)
 - Refactor `test_db` helper method [#176](https://github.com/p2panda/aquadoggo/pull/176)
 - Update `publishEntry` params and `nextEntryArgs` response fields [#181](https://github.com/p2panda/aquadoggo/pull/181)
+- Improve test runtime by reducing selected tests' iteration count [#202](https://github.com/p2panda/aquadoggo/pull/202)
 
 ### Fixed
 

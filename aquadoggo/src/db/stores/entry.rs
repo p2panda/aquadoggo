@@ -658,7 +658,7 @@ mod tests {
     #[rstest]
     fn get_lipmaa_link_entries(
         #[from(test_db)]
-        #[with(100, 1, 1)]
+        #[with(20, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
