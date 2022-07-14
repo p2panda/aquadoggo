@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-mod provider;
-mod static_provider;
+mod schema_provider;
+mod static_schema_provider;
 
-pub use provider::SchemaProvider;
-pub use static_provider::{load_static_schemas, save_static_schemas, StaticLeak};
+pub use schema_provider::SchemaProvider;
+pub use static_schema_provider::{load_static_schemas, save_static_schemas, StaticLeak};

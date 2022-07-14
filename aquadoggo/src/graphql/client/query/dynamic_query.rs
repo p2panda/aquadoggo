@@ -135,7 +135,7 @@ impl DynamicQuery {
         schema_id: SchemaId,
         ctx: &ContextBase<'_, &Positioned<Field>>,
     ) -> ServerResult<Option<Value>> {
-        if self.schema_provider.get(&schema_id).is_none() {
+        if self.schema_provider.get(&schema_id).await.is_none() {
             // Abort resolving this as a document query if we don't know this schema.
             return Ok(None);
         }

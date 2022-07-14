@@ -57,7 +57,7 @@ pub fn build_root_schema(
 /// GraphQL schema we can load from this store statically to build the schemas on the fly.
 async fn build_schema_with_workaround(shared: GraphQLSharedData) -> RootSchema {
     // Store all application schemas from database into static in-memory storage
-    let all_schemas = shared.schema_provider.all();
+    let all_schemas = shared.schema_provider.all().await;
     save_static_schemas(&all_schemas);
 
     // Build the actual GraphQL root schema, this will internally read the created JSON file and

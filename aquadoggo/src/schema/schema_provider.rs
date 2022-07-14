@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use log::{info, warn};
 use p2panda_rs::schema::{Schema, SchemaId, SYSTEM_SCHEMAS};
 use tokio::sync::broadcast::{channel, Receiver, Sender};
+use tokio::sync::Mutex;
 
-/// Provides fast access to system and application schemas during runtime.
+/// Provides fast thread-safe access to system and application schemas.
 ///
-/// Schemas can be updated and removed.
+/// Application schemas can be added and updated.
 #[derive(Clone, Debug)]
 pub struct SchemaProvider {
     /// In-memory store of registered schemas.
@@ -48,21 +49,21 @@ impl SchemaProvider {
     }
 
     /// Retrieve a schema that may be a system or application schema by its schema id.
-    pub fn get(&self, schema_id: &SchemaId) -> Option<Schema> {
-        self.schemas.lock().unwrap().get(schema_id).cloned()
+    pub async fn get(&self, schema_id: &SchemaId) -> Option<Schema> {
+        self.schemas.lock().await.get(schema_id).cloned()
     }
 
     /// Returns all system and application schemas.
-    pub fn all(&self) -> Vec<Schema> {
-        self.schemas.lock().unwrap().values().cloned().collect()
+    pub async fn all(&self) -> Vec<Schema> {
+        self.schemas.lock().await.values().cloned().collect()
     }
 
     /// Inserts or updates the given schema in this provider.
     ///
     /// Returns `true` if a schema was updated and `false` if it was inserted.
-    pub fn update(&self, schema: Schema) -> bool {
-        info!("Updating schema {}", schema);
-        let mut schemas = self.schemas.lock().unwrap();
+    pub async fn update(&self, schema: Schema) -> bool {
+        info!("Updating {}", schema);
+        let mut schemas = self.schemas.lock().await;
         let is_update = schemas
             .insert(schema.id().clone(), schema.clone())
             .is_some();
@@ -74,14 +75,6 @@ impl SchemaProvider {
 
         is_update
     }
-
-    /// Remove a schema from this provider.
-    ///
-    /// Returns true if the schema existed.
-    pub fn remove(&self, schema_id: &SchemaId) -> bool {
-        info!("Removing schema {}", schema_id);
-        self.schemas.lock().unwrap().remove(schema_id).is_some()
-    }
 }
 
 impl Default for SchemaProvider {
@@ -92,12 +85,39 @@ impl Default for SchemaProvider {
 
 #[cfg(test)]
 mod test {
+    use p2panda_rs::schema::FieldType;
+    use p2panda_rs::test_utils::fixtures::random_document_view_id;
+
     use super::*;
 
     #[tokio::test]
-    async fn test_get_all_schemas() {
-        let schemas = SchemaProvider::default();
-        let result = schemas.all();
+    async fn get_all_schemas() {
+        let provider = SchemaProvider::default();
+        let result = provider.all().await;
         assert_eq!(result.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn get_single_schema() {
+        let provider = SchemaProvider::default();
+        let schema_definition_schema = provider.get(&SchemaId::SchemaDefinition(1)).await;
+        assert!(schema_definition_schema.is_some());
+    }
+
+    #[tokio::test]
+    async fn update_schemas() {
+        let provider = SchemaProvider::default();
+        let new_schema_id =
+            SchemaId::Application("test_schema".to_string(), random_document_view_id());
+        let new_schema = Schema::new(
+            &new_schema_id,
+            "description",
+            vec![("test_field", FieldType::String)],
+        )
+        .unwrap();
+        let is_update = provider.update(new_schema).await;
+        assert!(!is_update);
+
+        assert!(provider.get(&new_schema_id).await.is_some());
     }
 }

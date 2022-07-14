@@ -24,19 +24,17 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
     debug!("Working on {}", input);
 
     // Here we retrive the document view by document view id.
-    let document_view = match input.document_view_id {
+    let document_view = match &input.document_view_id {
         Some(view_id) => context
             .store
-            .get_document_view_by_id(&view_id)
+            .get_document_view_by_id(view_id)
             .await
             .map_err(|err| {
-                debug!("Fatal error getting document view from storage");
-                debug!("{}", err);
-                TaskError::Critical
+                TaskError::Critical(err.to_string())
             })
             ,
         // We expect to handle document_view_ids in a dependency task.
-        None => Err(TaskError::Critical),
+        None => Err(TaskError::Critical("Missing document_view_id in task input".into())),
     }?;
 
     let document_view = match document_view {
@@ -51,10 +49,10 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
         // document has been deleted or the document view id was invalid. As "dependency" tasks
         // are only dispatched after a successful "reduce" task, neither `None` case should
         // happen, so this is a critical error.
-        None => {
-            debug!("Expected document view not found in the store.");
-            Err(TaskError::Critical)
-        }
+        None => Err(TaskError::Critical(format!(
+            "Expected document view {} not found in store",
+            &input.document_view_id.unwrap()
+        ))),
     }?;
 
     let mut next_tasks = Vec::new();
@@ -63,14 +61,14 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
     // We can think of these as "child" relations.
     for (_key, document_view_value) in document_view.fields().iter() {
         match document_view_value.value() {
-            p2panda_rs::operation::OperationValue::Relation(_relation) => {
+            p2panda_rs::operation::OperationValue::Relation(_) => {
                 // This is a relation to a document, if it doesn't exist in the db yet, then that
                 // means we either have no entries for this document, or we are not materialising
                 // it for some reason. We don't want to kick of a "reduce" or "dependency" task in
                 // either of these cases.
                 debug!("Relation field found, no action required.");
             }
-            p2panda_rs::operation::OperationValue::RelationList(_relation_list) => {
+            p2panda_rs::operation::OperationValue::RelationList(_) => {
                 // same as above...
                 debug!("Relation list field found, no action required.");
             }
@@ -104,21 +102,19 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
 
     // Construct additional tasks if the task input matches certain system schemas and all
     // dependencies have been reduced.
-    if !next_tasks.iter().any(|t| t.is_some()) {
+    let all_dependencies_met = !next_tasks.iter().any(|task| task.is_some());
+    if all_dependencies_met {
         let task_input_schema = context
             .store
             .get_schema_by_document_view(document_view.id())
             .await
-            .map_err(|e| {
-                log::error!(
-                    "Failed loading schema for task input {}: {}",
-                    document_view,
-                    e.to_string()
-                );
-                TaskError::Critical
-            })?
-            // Unwrap because we expect the task input to still be in the db.
-            .unwrap();
+            .map_err(|err| TaskError::Critical(err.to_string()))?
+            .ok_or_else(|| {
+                TaskError::Failure(format!(
+                    "{} was deleted while processing task",
+                    document_view
+                ))
+            })?;
 
         // Helper that returns a schema task for the current task input.
         let schema_task = || {
@@ -127,6 +123,7 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
                 TaskInput::new(None, Some(document_view.id().clone())),
             ))
         };
+
         match task_input_schema {
             // Start `schema` task when a schema (field) definition view is completed with
             // dependencies
@@ -156,11 +153,8 @@ async fn construct_relation_task(
         .store
         .get_document_view_by_id(&document_view_id)
         .await
-        .map_err(|err| {
-            debug!("Fatal error getting document view from storage");
-            debug!("{}", err);
-            TaskError::Critical
-        })? {
+        .map_err(|err| TaskError::Critical(err.to_string()))?
+    {
         Some(_) => {
             debug!("View found for pinned relation: {}", document_view_id);
             Ok(None)
@@ -177,12 +171,11 @@ async fn construct_relation_task(
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryFrom;
 
     use p2panda_rs::document::{DocumentId, DocumentViewId};
-    use p2panda_rs::identity::{Author, KeyPair};
+    use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::{
-        AsVerifiedOperation, OperationId, OperationValue, PinnedRelation, PinnedRelationList,
+        AsVerifiedOperation, Operation, OperationValue, PinnedRelation, PinnedRelationList,
         Relation, RelationList,
     };
     use p2panda_rs::schema::{FieldType, SchemaId};
@@ -190,18 +183,17 @@ mod tests {
     use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
     use p2panda_rs::test_utils::fixtures::{
         create_operation, operation_fields, random_document_id, random_document_view_id,
-        random_operation_id, verified_operation,
     };
     use rstest::rstest;
 
     use crate::config::Configuration;
     use crate::context::Context;
     use crate::db::stores::test_utils::{
-        insert_entry_operation_and_view, test_db, TestDatabase, TestDatabaseRunner,
+        insert_entry_operation_and_view, send_to_store, test_db, TestDatabase, TestDatabaseRunner,
     };
     use crate::db::traits::DocumentStore;
     use crate::materializer::tasks::reduce_task;
-    use crate::materializer::{Task, TaskInput};
+    use crate::materializer::TaskInput;
     use crate::schema::SchemaProvider;
 
     use super::dependency_task;
@@ -493,74 +485,13 @@ mod tests {
         });
     }
 
-    // Helper that creates a schema field definition view in the store.
-    async fn insert_schema_field_definition_view(
-        db: &TestDatabase,
-        context: &Context,
-    ) -> OperationId {
-        let author = Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
-        let fields = operation_fields(vec![
-            ("name", OperationValue::Text("field_name".to_string())),
-            ("type", FieldType::String.into()),
-        ]);
-        let operation_id = random_operation_id();
-        let op = verified_operation(
-            Some(fields),
-            None,
-            Some(SchemaId::SchemaFieldDefinition(1)),
-            Some(author),
-            Some(operation_id.clone()),
-        );
-        let document_id = DocumentId::new(operation_id.clone());
-        let document_view_id = DocumentViewId::from(operation_id.clone());
-
-        db.store.insert_operation(&op, &document_id).await.unwrap();
-
-        let input = TaskInput::new(None, Some(document_view_id));
-        reduce_task(context.clone(), input.clone()).await.unwrap();
-        operation_id
-    }
-
-    // Helper that creates a schema definition view in the store.
-    async fn insert_schema_definition_view(
-        field_view_ids: Vec<DocumentViewId>,
-        db: &TestDatabase,
-        context: &Context,
-    ) -> OperationId {
-        let author = Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
-        let fields = operation_fields(vec![
-            ("name", OperationValue::Text("schema_name".to_string())),
-            (
-                "description",
-                OperationValue::Text("description".to_string()),
-            ),
-            (
-                "fields",
-                OperationValue::PinnedRelationList(PinnedRelationList::new(field_view_ids)),
-            ),
-        ]);
-        let operation_id = random_operation_id();
-        let op = verified_operation(
-            Some(fields),
-            None,
-            Some(SchemaId::SchemaDefinition(1)),
-            Some(author),
-            Some(operation_id.clone()),
-        );
-        let document_id = DocumentId::new(operation_id.clone());
-        let document_view_id = DocumentViewId::from(operation_id.clone());
-
-        db.store.insert_operation(&op, &document_id).await.unwrap();
-
-        let input = TaskInput::new(None, Some(document_view_id));
-        reduce_task(context.clone(), input.clone()).await.unwrap();
-        operation_id
-    }
-
     #[rstest]
     fn dispatches_schema_tasks_for_field_definitions(
         #[from(test_db)]
-        #[with(1, 1)]
+        #[with(1, 1, 1, false, SchemaId::SchemaFieldDefinition(1), vec![
+            ("name", OperationValue::Text("field_name".to_string())),
+            ("type", FieldType::String.into()),
+        ])]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
@@ -569,82 +500,118 @@ mod tests {
                 Configuration::default(),
                 SchemaProvider::default(),
             );
+
+            // The document id for a schema_field_definition who's operation already exists in the
+            // store.
+            let document_id = db.test_data.documents.first().unwrap();
+            // Materialise the schema field definition.
+            let input = TaskInput::new(Some(document_id.to_owned()), None);
+            reduce_task(context.clone(), input.clone()).await.unwrap();
+
+            // Parse the document_id into a document_view_id.
+            let document_view_id = document_id.as_str().parse().unwrap();
+            // Dispatch a dependency task for this document_view_id.
+            let input = TaskInput::new(None, Some(document_view_id));
+            let tasks = dependency_task(context.clone(), input)
+                .await
+                .unwrap()
+                .unwrap();
 
             // Inserting a schema field definition, we expect a schema task because schema field
             // definitions have no dependencies - every new completed field definition could be the
             // last puzzle piece for a new schema.
-            let operation_id = insert_schema_field_definition_view(&db, &context).await;
+            let schema_tasks = tasks.iter().filter(|t| t.worker_name() == "schema").count();
 
-            let document_view_id = DocumentViewId::from(operation_id);
-            let input = TaskInput::new(None, Some(document_view_id));
-            let tasks = dependency_task(context.clone(), input)
-                .await
-                .unwrap()
-                .unwrap();
-
-            let schema_tasks: Vec<&Task<TaskInput>> = tasks
-                .iter()
-                .filter(|t| t.worker_name() == "schema")
-                .collect();
-            assert_eq!(schema_tasks.len(), 1);
+            assert_eq!(schema_tasks, 1);
         });
     }
 
     #[rstest]
+    #[case::schema_definition_with_dependencies_met_dispatches_one_schema_task(
+        Operation::new_create(
+            SchemaId::SchemaDefinition(1),
+            operation_fields(vec![
+                ("name", OperationValue::Text("schema_name".to_string())),
+                (
+                    "description",
+                    OperationValue::Text("description".to_string()),
+                ),
+                (
+                    "fields",
+                    OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
+                        // The view_id for a schema field which exists in the database. Can be
+                        // recreated from variable `schema_field_document_id` in the task below.
+                        "0020a2bc0748f3b18627a6aae09ae392561c357a2995528373e730a4d90b73d8c072"
+                            .parse().unwrap(),
+                    ])),
+                ),
+            ]),
+        ).unwrap(),
+        1
+    )]
+    #[case::schema_definition_without_dependencies_met_dispatches_zero_schema_task(
+        Operation::new_create(
+            SchemaId::SchemaDefinition(1),
+            operation_fields(vec![
+                ("name", OperationValue::Text("schema_name".to_string())),
+                (
+                    "description",
+                    OperationValue::Text("description".to_string()),
+                ),
+                (
+                    "fields",
+                    OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
+                        // This schema field does not exist in the database
+                        random_document_view_id(),
+                    ])),
+                ),
+            ]),
+        ).unwrap(),
+        0
+    )]
     fn dispatches_schema_tasks_for_schema_definitions(
+        #[case] schema_create_operation: Operation,
+        #[case] expected_schema_tasks: usize,
         #[from(test_db)]
-        #[with(1, 1)]
+        #[with(1, 1, 1, false, SchemaId::SchemaFieldDefinition(1), vec![
+            ("name", OperationValue::Text("field_name".to_string())),
+            ("type", FieldType::String.into()),
+        ])]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
             let context = Context::new(
                 db.store.clone(),
                 Configuration::default(),
                 SchemaProvider::default(),
             );
 
-            // Inserting a schema definition with an unmet dependency we don't expect a schema task.
-            let operation_id = insert_schema_definition_view(
-                vec![DocumentViewId::from(random_operation_id())],
-                &db,
-                &context,
-            )
-            .await;
+            // The document id for the schema_field_definition who's operation already exists in
+            // the store.
+            let schema_field_document_id = db.test_data.documents.first().unwrap();
 
-            let document_view_id = DocumentViewId::from(operation_id);
+            // Materialise the schema field definition.
+            let input = TaskInput::new(Some(schema_field_document_id.to_owned()), None);
+            reduce_task(context.clone(), input.clone()).await.unwrap();
+
+            // Persist a schema definition entry and operation to the store.
+            let (entry_signed, _) =
+                send_to_store(&db.store, &schema_create_operation, None, &KeyPair::new()).await;
+
+            // Materialise the schema definition.
+            let document_view_id: DocumentViewId = entry_signed.hash().into();
+            let input = TaskInput::new(None, Some(document_view_id.clone()));
+            reduce_task(context.clone(), input.clone()).await.unwrap();
+
+            // Dispatch a dependency task for the schema definition.
             let input = TaskInput::new(None, Some(document_view_id));
             let tasks = dependency_task(context.clone(), input)
                 .await
                 .unwrap()
                 .unwrap();
 
-            let schema_tasks: Vec<&Task<TaskInput>> = tasks
-                .iter()
-                .filter(|t| t.worker_name() == "schema")
-                .collect();
-            assert_eq!(schema_tasks.len(), 0);
-
-            // Inserting a schema definition when all schema field definitions are materialised, we
-            // expect one schema task.
-            let field_definition_view: DocumentViewId =
-                insert_schema_field_definition_view(&db, &context)
-                    .await
-                    .into();
-            let operation_id =
-                insert_schema_definition_view(vec![field_definition_view], &db, &context).await;
-
-            let document_view_id = DocumentViewId::from(operation_id);
-            let input = TaskInput::new(None, Some(document_view_id));
-            let tasks = dependency_task(context.clone(), input)
-                .await
-                .unwrap()
-                .unwrap();
-
-            let schema_tasks: Vec<&Task<TaskInput>> = tasks
-                .iter()
-                .filter(|t| t.worker_name() == "schema")
-                .collect();
-            assert_eq!(schema_tasks.len(), 1);
+            let schema_tasks = tasks.iter().filter(|t| t.worker_name() == "schema").count();
+            assert_eq!(schema_tasks, expected_schema_tasks);
         });
     }
 }

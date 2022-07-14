@@ -120,7 +120,7 @@ mod tests {
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
     use crate::db::traits::DocumentStore;
 
-    // Get a `DocumentView` that exists in the db.
+    /// Inserts a `DocumentView` into the db and returns its view id.
     async fn insert_document_view(db: &TestDatabase) -> DocumentViewId {
         let author = Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
         let entry = db
@@ -154,7 +154,6 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            // Get a `DocumentView` that exists in the db.
             let document_view_id = insert_document_view(&db).await;
             let result = db
                 .store

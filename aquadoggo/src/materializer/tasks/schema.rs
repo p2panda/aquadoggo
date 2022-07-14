@@ -2,9 +2,8 @@
 
 use log::debug;
 use p2panda_rs::document::DocumentViewId;
-use p2panda_rs::operation::{AsOperation, AsVerifiedOperation, OperationValue};
+use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::storage_provider::traits::OperationStore;
 
 use crate::context::Context;
 use crate::db::traits::{DocumentStore, SchemaStore};
@@ -22,11 +21,16 @@ pub async fn schema_task(context: Context, input: TaskInput) -> TaskResult<TaskI
     let input_view_id = match (input.document_id, input.document_view_id) {
         (None, Some(view_id)) => Ok(view_id),
         // The task input must contain only a view id.
-        (_, _) => Err(TaskError::Critical),
+        (_, _) => Err(TaskError::Critical("Invalid task input".into())),
     }?;
 
     // Determine the schema of the updated view id.
-    let schema = get_schema_for_view(&input_view_id, &context).await?;
+    let schema = context
+        .store
+        .get_schema_by_document_view(&input_view_id)
+        .await
+        .map_err(|err| TaskError::Critical(err.to_string()))?
+        .unwrap();
 
     let updated_schema_definitions: Vec<DocumentViewId> = match schema {
         // This task is about an updated schema definition document so we only handle that.
@@ -37,13 +41,17 @@ pub async fn schema_task(context: Context, input: TaskInput) -> TaskResult<TaskI
         SchemaId::SchemaFieldDefinition(_) => {
             get_related_schema_definitions(&input_view_id, &context).await
         }
-        _ => Err(TaskError::Critical),
+        _ => Err(TaskError::Critical(format!(
+            "Unknown system schema id: {}",
+            schema
+        ))),
     }?;
 
-    // The affected schema definitions are not known yet to this node so we mark this task failed.
+    // The related schema definitions are not known yet to this node so we mark this task failed.
     if updated_schema_definitions.is_empty() {
-        debug!("Failed: Affected schema definition not found");
-        return Err(TaskError::Failure);
+        return Err(TaskError::Failure(
+            "Related schema definition not given (yet)".into(),
+        ));
     }
 
     for view_id in updated_schema_definitions.iter() {
@@ -51,11 +59,11 @@ pub async fn schema_task(context: Context, input: TaskInput) -> TaskResult<TaskI
             .store
             .get_schema_by_id(view_id)
             .await
-            .map_err(|_err| TaskError::Critical)?
+            .map_err(|err| TaskError::Critical(err.to_string()))?
         {
             // Updated schema was assembled successfully and is now passed to schema provider.
             Some(schema) => {
-                context.schema_provider.update(schema.clone());
+                context.schema_provider.update(schema.clone()).await;
             }
             // This schema was not ready to be assembled after all so it is ignored.
             None => {
@@ -67,34 +75,25 @@ pub async fn schema_task(context: Context, input: TaskInput) -> TaskResult<TaskI
     Ok(None)
 }
 
-/// Determine the schema of a view.
-async fn get_schema_for_view(
-    view_id: &DocumentViewId,
-    context: &Context,
-) -> Result<SchemaId, TaskError> {
-    let sample_operation_id = view_id.graph_tips().first().unwrap();
-    let sample_operation = context.store.get_operation_by_id(sample_operation_id).await;
-    let sample_operation = sample_operation.map_err(|_| TaskError::Critical)?.unwrap();
-    Ok(sample_operation.operation().schema())
-}
-
-/// Retrieve schema definitions that use the targetted schema field definition as one of their fields.
+/// Retrieve schema definitions that use the targeted schema field definition as one of their
+/// fields.
 async fn get_related_schema_definitions(
     target_field_definition: &DocumentViewId,
     context: &Context,
 ) -> Result<Vec<DocumentViewId>, TaskError> {
-    // Retrieve all schema definition documents from the store.
+    // Retrieve all schema definition documents from the store
     let schema_definitions = context
         .store
         .get_documents_by_schema(&SchemaId::SchemaDefinition(1))
         .await
-        .map_err(|_err| TaskError::Critical)
+        .map_err(|err| TaskError::Critical(err.to_string()))
         .unwrap();
 
-    // Collect all schema definitions that use the targetted field definition
+    // Collect all schema definitions that use the targeted field definition
     let mut related_schema_definitions = vec![];
     for schema in schema_definitions {
         let fields_value = schema.fields().get("fields").unwrap().value();
+
         if let OperationValue::PinnedRelationList(fields) = fields_value {
             if fields
                 .iter()
@@ -107,7 +106,9 @@ async fn get_related_schema_definitions(
         } else {
             // Abort if there are schema definitions in the store that don't match the schema
             // definition schema.
-            Err(TaskError::Critical)?
+            Err(TaskError::Critical(
+                "Schema definition operation does not have a 'fields' operation field".into(),
+            ))?
         }
     }
 
@@ -116,24 +117,17 @@ async fn get_related_schema_definitions(
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryFrom;
-
     use log::debug;
-    use p2panda_rs::document::DocumentViewId;
-    use p2panda_rs::entry::{sign_and_encode, Entry};
-    use p2panda_rs::hash::Hash;
-    use p2panda_rs::identity::{Author, KeyPair};
-    use p2panda_rs::operation::{
-        AsVerifiedOperation, Operation, OperationEncoded, OperationFields, OperationValue,
-        PinnedRelationList, VerifiedOperation,
-    };
-    use p2panda_rs::schema::{FieldType, SchemaId, SchemaVersion};
-    use p2panda_rs::storage_provider::traits::{OperationStore, StorageProvider};
+    use p2panda_rs::document::{DocumentId, DocumentViewId};
+    use p2panda_rs::identity::KeyPair;
+    use p2panda_rs::operation::{Operation, OperationValue, PinnedRelationList};
+    use p2panda_rs::schema::{FieldType, SchemaId};
+    use p2panda_rs::test_utils::fixtures::operation_fields;
     use rstest::rstest;
 
     use crate::context::Context;
-    use crate::db::request::{EntryArgsRequest, PublishEntryRequest};
-    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+    use crate::db::stores::test_utils::{send_to_store, test_db, TestDatabase, TestDatabaseRunner};
+    use crate::db::traits::DocumentStore;
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
     use crate::schema::SchemaProvider;
@@ -141,107 +135,70 @@ mod tests {
 
     use super::schema_task;
 
-    /// Insert a test schema definition and schema field definition and fire reduce tasks for both.
-    async fn insert_test_schema(
+    /// Insert a test schema definition and schema field definition and run reduce tasks for both.
+    async fn create_schema_documents(
         context: &Context,
-        key_pair: &KeyPair,
+        db: &TestDatabase,
     ) -> (DocumentViewId, DocumentViewId) {
-        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
-
-        // Publish schema field definition
-        let args = EntryArgsRequest {
-            public_key: author.clone(),
-            document_id: None,
-        };
-        let args = context.store.get_entry_args(&args).await.unwrap();
-
-        let mut fields = OperationFields::new();
-        fields
-            .add("name", OperationValue::Text("message".to_string()))
-            .unwrap();
-        fields.add("type", FieldType::String.into()).unwrap();
-        let create_op = Operation::new_create(SchemaId::SchemaFieldDefinition(1), fields).unwrap();
-
-        let entry = Entry::new(
-            &args.log_id.into(),
-            Some(&create_op),
-            args.skiplink.map(Hash::from).as_ref(),
-            args.backlink.map(Hash::from).as_ref(),
-            &args.seq_num.into(),
+        // Create field definition
+        let create_field_definition = Operation::new_create(
+            SchemaId::SchemaFieldDefinition(1),
+            operation_fields(vec![
+                ("name", OperationValue::Text("field_name".to_string())),
+                ("type", FieldType::String.into()),
+            ]),
         )
         .unwrap();
-        let entry_encoded = sign_and_encode(&entry, key_pair).unwrap();
-        let args = PublishEntryRequest {
-            entry: entry_encoded.clone(),
-            operation: OperationEncoded::try_from(&create_op).unwrap(),
-        };
-        let response = context.store.publish_entry(&args).await.unwrap();
-        let field_view_id: DocumentViewId = response.backlink.unwrap().into();
 
-        let verified_op =
-            VerifiedOperation::new(&author, &entry_encoded.clone().hash().into(), &create_op)
-                .unwrap();
-        context
-            .store
-            .insert_operation(&verified_op, &entry_encoded.hash().into())
-            .await
-            .unwrap();
+        let (entry_signed, _) =
+            send_to_store(&db.store, &create_field_definition, None, &KeyPair::new()).await;
+        let field_definition_id: DocumentId = entry_signed.hash().into();
 
-        let input = TaskInput::new(Some(entry_encoded.clone().hash().into()), None);
+        let input = TaskInput::new(Some(field_definition_id.clone()), None);
         reduce_task(context.clone(), input).await.unwrap();
-        debug!("Created field definition {}", field_view_id);
+        let field_view_id = db
+            .store
+            .get_document_by_id(&field_definition_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .id()
+            .to_owned();
+        debug!("Created field definition {}", &field_view_id);
 
-        // Publish schema definition
-        let args = EntryArgsRequest {
-            public_key: author.clone(),
-            document_id: None,
-        };
-        let args = context.store.get_entry_args(&args).await.unwrap();
-
-        let mut fields = OperationFields::new();
-        fields
-            .add("name", OperationValue::Text("test_schema".to_string()))
-            .unwrap();
-        fields
-            .add("description", OperationValue::Text("".to_string()))
-            .unwrap();
-        fields
-            .add(
-                "fields",
-                OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
-                    field_view_id.clone()
-                ])),
-            )
-            .unwrap();
-        let create_op = Operation::new_create(SchemaId::SchemaDefinition(1), fields).unwrap();
-
-        let entry = Entry::new(
-            &args.log_id.into(),
-            Some(&create_op),
-            args.skiplink.map(Hash::from).as_ref(),
-            args.backlink.map(Hash::from).as_ref(),
-            &args.seq_num.into(),
+        // Create schema definition
+        let create_schema_definition = Operation::new_create(
+            SchemaId::SchemaDefinition(1),
+            operation_fields(vec![
+                ("name", OperationValue::Text("schema_name".to_string())),
+                (
+                    "description",
+                    OperationValue::Text("description".to_string()),
+                ),
+                (
+                    "fields",
+                    OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
+                        field_view_id.clone(),
+                    ])),
+                ),
+            ]),
         )
         .unwrap();
-        let entry_encoded = sign_and_encode(&entry, key_pair).unwrap();
-        let args = PublishEntryRequest {
-            entry: entry_encoded.clone(),
-            operation: OperationEncoded::try_from(&create_op).unwrap(),
-        };
-        let response = context.store.publish_entry(&args).await.unwrap();
-        let definition_view_id = response.backlink.unwrap().into();
 
-        let verified_op =
-            VerifiedOperation::new(&author, &entry_encoded.clone().hash().into(), &create_op)
-                .unwrap();
-        context
-            .store
-            .insert_operation(&verified_op, &entry_encoded.hash().into())
-            .await
-            .unwrap();
+        let (entry_signed, _) =
+            send_to_store(&db.store, &create_schema_definition, None, &KeyPair::new()).await;
+        let schema_definition_id: DocumentId = entry_signed.hash().into();
 
-        let input = TaskInput::new(Some(entry_encoded.clone().hash().into()), None);
+        let input = TaskInput::new(Some(schema_definition_id.clone()), None);
         reduce_task(context.clone(), input).await.unwrap();
+        let definition_view_id = db
+            .store
+            .get_document_by_id(&schema_definition_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .id()
+            .to_owned();
         debug!("Created schema definition {}", definition_view_id);
 
         return (definition_view_id, field_view_id);
@@ -259,9 +216,9 @@ mod tests {
                 Configuration::default(),
                 SchemaProvider::default(),
             );
+
             // Prepare schema definition and schema field definition
-            let (definition_view_id, field_view_id) =
-                insert_test_schema(&context, db.test_data.key_pairs.first().unwrap()).await;
+            let (definition_view_id, field_view_id) = create_schema_documents(&context, &db).await;
 
             // Start a task with each as input
             let input = TaskInput::new(None, Some(definition_view_id.clone()));
@@ -271,11 +228,23 @@ mod tests {
             assert!(schema_task(context.clone(), input).await.is_ok());
 
             // The new schema should be available on storage provider.
-            assert!(context
+            let schema = context
                 .schema_provider
-                .all()
-                .iter()
-                .any(|s| s.version() == SchemaVersion::Application(definition_view_id.clone())));
+                .get(&SchemaId::Application(
+                    "schema_name".to_string(),
+                    definition_view_id.clone(),
+                ))
+                .await;
+            assert!(schema.is_some());
+            assert_eq!(
+                schema
+                    .unwrap()
+                    .fields()
+                    .get("field_name")
+                    .unwrap()
+                    .to_owned(),
+                FieldType::String
+            );
         });
     }
 }
