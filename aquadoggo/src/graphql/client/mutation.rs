@@ -524,7 +524,7 @@ mod tests {
     fn publish_many_entries(#[from(test_db)] runner: TestDatabaseRunner) {
         runner.with_db_teardown(|db: TestDatabase| async move {
             let key_pairs = vec![KeyPair::new(), KeyPair::new()];
-            let num_of_entries = 100;
+            let num_of_entries = 13;
 
             let (tx, _rx) = broadcast::channel(16);
             let schema_provider = SchemaProvider::default();
