@@ -102,14 +102,19 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
 
     // Construct additional tasks if the task input matches certain system schemas and all
     // dependencies have been reduced.
-    if !next_tasks.iter().any(|task| task.is_some()) {
+    let all_dependencies_met = !next_tasks.iter().any(|task| task.is_some());
+    if all_dependencies_met {
         let task_input_schema = context
             .store
             .get_schema_by_document_view(document_view.id())
             .await
             .map_err(|err| TaskError::Critical(err.to_string()))?
-            // Unwrap because we expect the task input to still be in the db.
-            .unwrap();
+            .ok_or_else(|| {
+                TaskError::Failure(format!(
+                    "{} was deleted while processing task",
+                    document_view
+                ))
+            })?;
 
         // Helper that returns a schema task for the current task input.
         let schema_task = || {
