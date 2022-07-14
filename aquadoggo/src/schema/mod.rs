@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-mod provider;
+mod schema_provider;
 
-pub use provider::SchemaProvider;
+pub use schema_provider::SchemaProvider;

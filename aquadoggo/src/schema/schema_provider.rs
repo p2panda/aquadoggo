@@ -9,8 +9,6 @@ use tokio::sync::Mutex;
 
 /// Provides fast access to system and application schemas during runtime.
 ///
-/// System schemas are built-in and can be accessed without creating a `SchemaProvider` instance.
-///
 /// Schemas can be updated and removed.
 #[derive(Clone, Debug)]
 pub struct SchemaProvider(Arc<Mutex<HashMap<SchemaId, Schema>>>);
@@ -75,5 +73,8 @@ mod test {
         let schemas = SchemaProvider::default();
         let result = schemas.all().await;
         assert_eq!(result.len(), 2);
+
+        let schema_definition_schema = schemas.get(&SchemaId::SchemaDefinition(1)).await;
+        assert!(schema_definition_schema.is_some());
     }
 }
