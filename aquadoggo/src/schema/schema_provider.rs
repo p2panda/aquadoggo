@@ -48,14 +48,6 @@ impl SchemaProvider {
         let mut schemas = self.0.lock().await;
         schemas.insert(schema.id().clone(), schema).is_some()
     }
-
-    /// Remove a schema from this provider.
-    ///
-    /// Returns true if the schema existed.
-    pub async fn remove(&self, schema_id: &SchemaId) -> bool {
-        info!("Removing {}", schema_id);
-        self.0.lock().await.remove(schema_id).is_some()
-    }
 }
 
 impl Default for SchemaProvider {
