@@ -215,7 +215,6 @@ pub async fn publish(
     })
 }
 
-///
 pub async fn determine_document_id(store: &SqlStorage, entry: &StorageEntry) -> Result<DocumentId> {
     let document_id = match entry.operation().action() {
         OperationAction::Create => {
@@ -281,6 +280,42 @@ pub async fn get_validate_document_id_for_view_id(
         anyhow!("Invalid document view id: operartions in passed document view id originate from different documents")
     );
     Ok(document_id.to_owned())
+}
+
+#[cfg(test)]
+pub async fn determine_document_id_without_strict_validation(
+    store: &SqlStorage,
+    entry: &StorageEntry,
+) -> Result<DocumentId> {
+    let document_id = match entry.operation().action() {
+        OperationAction::Create => {
+            let next_log_id = store.next_log_id(&entry.author()).await?;
+            ensure_entry_contains_expected_log_id(&entry.entry_decoded(), &next_log_id).await?;
+
+            // Derive the document id for this new document.
+            entry.hash().into()
+        }
+        _ => {
+            // We can unwrap previous operations here as we know all UPDATE and DELETE operations contain them.
+            let previous_operations = entry.operation().previous_operations().unwrap();
+
+            // Get the document_id for the document_view_id contained in previous operations.
+            // This performs several validation steps (check method doc string).
+            let document_id =
+                get_validate_document_id_for_view_id(store, &previous_operations).await?;
+
+            // DO NOT CHECK IF DOCUMENT IS DELETED
+            //
+            // This is for inserting operations in a testing environment where we can't assume
+            // all documents are materialised.
+
+            validate_stated_log_id(store, entry, &document_id).await?;
+
+            document_id
+        }
+    };
+
+    Ok(document_id)
 }
 
 #[cfg(test)]

@@ -3,19 +3,23 @@
 use std::convert::TryFrom;
 use std::sync::Arc;
 
+use async_graphql::Result;
 use futures::Future;
 use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
-use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned};
+use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned, SeqNum};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::{Author, KeyPair};
 use p2panda_rs::operation::{
-    AsOperation, AsVerifiedOperation, Operation, OperationEncoded, OperationId, OperationValue,
-    PinnedRelation, PinnedRelationList, Relation, RelationList, VerifiedOperation,
+    AsOperation, AsVerifiedOperation, Operation, OperationEncoded, OperationValue, PinnedRelation,
+    PinnedRelationList, Relation, RelationList, VerifiedOperation,
 };
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::storage_provider::traits::{OperationStore, StorageProvider};
+use p2panda_rs::storage_provider::traits::{
+    AsStorageEntry, AsStorageLog, EntryStore, LogStore, OperationStore,
+};
 use p2panda_rs::test_utils::constants::{DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
 use p2panda_rs::test_utils::fixtures::{operation, operation_fields};
+use p2panda_rs::Validate;
 use rstest::fixture;
 use sqlx::migrate::MigrateDatabase;
 use sqlx::Any;
@@ -23,12 +27,196 @@ use tokio::runtime::Builder;
 use tokio::sync::Mutex;
 
 use crate::db::provider::SqlStorage;
-use crate::db::request::{EntryArgsRequest, PublishEntryRequest};
 use crate::db::traits::DocumentStore;
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
-use crate::domain::{next_args, publish};
+use crate::domain::{
+    determine_document_id_without_strict_validation, get_validate_document_id_for_view_id,
+};
 use crate::graphql::client::NextEntryArguments;
 use crate::test_helpers::TEST_CONFIG;
+use crate::validation::validate_entry;
+
+use super::{StorageEntry, StorageLog};
+
+pub async fn next_args_without_strict_validation(
+    store: &SqlStorage,
+    public_key: &Author,
+    document_view_id: Option<&DocumentViewId>,
+) -> Result<NextEntryArguments> {
+    //////////////////////////
+    // VALIDATE PASSED ARGS //
+    //////////////////////////
+
+    // Validate the public key.
+    public_key.validate()?;
+
+    // Validate the document id if passed.
+    match document_view_id {
+        Some(id) => id.validate(),
+        None => Ok(()),
+    }?;
+
+    ////////////////////////
+    // HANDLE CREATE CASE //
+    ////////////////////////
+
+    // If no document_view_id is passed then this is a request for publishing a CREATE operation
+    // and we return the args for the next free log by this author.
+    if document_view_id.is_none() {
+        let log_id = store.next_log_id(public_key).await?;
+        return Ok(NextEntryArguments {
+            backlink: None,
+            skiplink: None,
+            seq_num: SeqNum::default().into(),
+            log_id: log_id.into(),
+        });
+    }
+
+    ///////////////////////////
+    // DETERMINE DOCUMENT ID //
+    ///////////////////////////
+
+    // We can unwrap here as we know document_view_id is some.
+    let document_view_id = document_view_id.unwrap();
+
+    // Get the document_id for this document_view_id. This performs several validation steps (check
+    // method doc string).
+    let document_id = get_validate_document_id_for_view_id(store, document_view_id).await?;
+
+    // Here we DO NOT check if the document is deleted as in a testing environment we can't assume all documents
+    // have been materialised.
+
+    ////////////////////////////////
+    // DETERMINE NEXT ARGS LOG ID //
+    ////////////////////////////////
+
+    // Retrieve the log_id for the found document_id and author.
+    //
+    // (lolz, this method is just called `get()`)
+    let log_id = match store.get(public_key, &document_id).await? {
+        // This public key already wrote to this document, so we return the found log_id
+        Some(log_id) => log_id,
+        // This public_key never wrote to this document before so we return a new log_id
+        None => store.next_log_id(public_key).await?,
+    };
+
+    //////////////////////////////////
+    // DETERMINE NEXT ARGS BACKLINK //
+    //////////////////////////////////
+
+    // Get the latest entry in this log.
+    let latest_entry = store.get_latest_entry(public_key, &log_id).await?;
+
+    //////////////////////////////////
+    // DETERMINE NEXT ARGS SKIPLINK //
+    //////////////////////////////////
+
+    // Determine skiplink ("lipmaa"-link) entry in this log.
+    //
+    // If the latest entry is None, then the skiplink will also be None.
+    let skiplink_hash = match latest_entry {
+        Some(ref latest_entry) => store.determine_next_skiplink(latest_entry).await?,
+        None => None,
+    };
+
+    //////////////////////////////////
+    // DETERMINE NEXT ARGS SEQ NUM ///
+    //////////////////////////////////
+
+    // Determine the next sequence number by incrementing one from the latest entry seq num.
+    //
+    // If the latest entry is None, then we must be at seq num 1.
+    let seq_num = match latest_entry {
+        Some(ref latest_entry) => latest_entry
+            .seq_num()
+            .next()
+            .expect("Max sequence number reached \\*o*/"),
+        None => SeqNum::default(),
+    };
+
+    Ok(NextEntryArguments {
+        backlink: latest_entry.map(|entry| entry.hash().into()),
+        skiplink: skiplink_hash.map(|hash| hash.into()),
+        seq_num: seq_num.into(),
+        log_id: log_id.into(),
+    })
+}
+
+/// A test method for publishing entries and operations without performing some validation
+/// steps. The skipped steps are:
+/// - we do not validate the operation against it's schema
+pub async fn publish_without_strict_validation(
+    store: &SqlStorage,
+    entry_signed: &EntrySigned,
+    operation_encoded: &OperationEncoded,
+) -> Result<NextEntryArguments> {
+    /////////////////////////////////////////////////////
+    // VALIDATE ENTRY AND OPERATION INTERNAL INTEGRITY //
+    /////////////////////////////////////////////////////
+
+    // Internally this constructor performs several validation steps. Including checking the operation hash
+    // matches the one encoded on the entry.
+    let entry = StorageEntry::new(entry_signed, operation_encoded)?;
+    let operation = VerifiedOperation::new_from_entry(entry_signed, operation_encoded)?;
+
+    ///////////////////////////
+    // VALIDATE ENTRY VALUES //
+    ///////////////////////////
+
+    validate_entry(store, &entry, operation_encoded).await?;
+
+    //////////////////////////
+    // DETERINE DOCUMENT ID //
+    //////////////////////////
+
+    // Here we _don't_ check if the document is deleted as we can't assume in a testing environment
+    // that all documents will be materialised.
+    let document_id = determine_document_id_without_strict_validation(store, &entry).await?;
+
+    /////////////////////////////////////
+    // DETERMINE NEXT ENTRY ARG VALUES //
+    /////////////////////////////////////
+
+    let log_id = entry.log_id();
+    let next_seq_num = match entry.seq_num().next() {
+        Some(seq_num) => Ok(seq_num),
+        None => Err("Max sequence number reached for this log"),
+    }?;
+    let backlink = Some(entry.hash());
+    let skiplink = store.determine_next_skiplink(&entry).await?;
+
+    ///////////////
+    // STORE LOG //
+    ///////////////
+
+    // If this is a CREATE operation it goes into a new log which we insert here.
+    if operation.is_create() {
+        let log = StorageLog::new(
+            &entry.author(),
+            &entry.operation().schema(),
+            &document_id,
+            &log_id,
+        );
+
+        store.insert_log(log).await?;
+    }
+
+    ///////////////////////////////
+    // STORE ENTRY AND OPERATION //
+    ///////////////////////////////
+
+    // Insert the entry into the store.
+    store.insert_entry(entry.clone()).await?;
+    // Insert the operation into the store.
+    store.insert_operation(&operation, &document_id).await?;
+
+    Ok(NextEntryArguments {
+        log_id: log_id.into(),
+        seq_num: next_seq_num.into(),
+        backlink: backlink.map(|hash| hash.into()),
+        skiplink: skiplink.map(|hash| hash.into()),
+    })
+}
 
 /// The fields used as defaults in the tests.
 pub fn doggo_test_fields() -> Vec<(&'static str, OperationValue)> {
@@ -111,9 +299,10 @@ pub async fn encode_entry_and_operation(
     let document_view_id: Option<DocumentViewId> =
         document_id.map(|id| id.as_str().parse().unwrap());
 
-    let next_entry_args = next_args(&store, &author, document_view_id.as_ref())
-        .await
-        .unwrap();
+    let next_entry_args =
+        next_args_without_strict_validation(&store, &author, document_view_id.as_ref())
+            .await
+            .unwrap();
 
     let entry = Entry::new(
         &next_entry_args.log_id.into(),
@@ -146,7 +335,9 @@ pub async fn insert_entry_operation_and_view(
     let document_id = document_id.cloned().unwrap_or_else(|| entry.hash().into());
     let document_view_id: DocumentViewId = entry.hash().into();
 
-    publish(store, &entry, &operation_encoded).await.unwrap();
+    publish_without_strict_validation(store, &entry, &operation_encoded)
+        .await
+        .unwrap();
 
     let document_operations = store
         .get_operations_by_document_id(&document_id)
@@ -449,9 +640,10 @@ pub async fn send_to_store(
     let document_view_id: Option<DocumentViewId> =
         document_id.map(|id| id.as_str().parse().unwrap());
 
-    let next_entry_args = next_args(&store, &author, document_view_id.as_ref())
-        .await
-        .unwrap();
+    let next_entry_args =
+        next_args_without_strict_validation(&store, &author, document_view_id.as_ref())
+            .await
+            .unwrap();
 
     // Construct the next entry.
     let next_entry = Entry::new(
@@ -468,9 +660,10 @@ pub async fn send_to_store(
     let operation_encoded = OperationEncoded::try_from(operation).unwrap();
 
     // Publish the entry and get the next entry args.
-    let publish_entry_response = publish(store, &entry_encoded, &operation_encoded)
-        .await
-        .unwrap();
+    let publish_entry_response =
+        publish_without_strict_validation(store, &entry_encoded, &operation_encoded)
+            .await
+            .unwrap();
 
     // Set or unwrap the passed document_id.
     let document_id = if operation.is_create() {
