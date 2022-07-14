@@ -5,10 +5,10 @@ use std::convert::{TryFrom, TryInto};
 use anyhow::{anyhow, ensure};
 use async_graphql::{Context, Error, Object, Result};
 use p2panda_rs::entry::{decode_entry, Entry, EntrySigned};
-use p2panda_rs::operation::OperationAction;
 use p2panda_rs::operation::{
     AsOperation, AsVerifiedOperation, Operation, OperationEncoded, VerifiedOperation,
 };
+use p2panda_rs::operation::{OperationAction, OperationId};
 use p2panda_rs::storage_provider::traits::{
     AsStorageEntry, AsStorageLog, EntryStore, LogStore, OperationStore, StorageProvider,
 };
@@ -18,6 +18,7 @@ use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::provider::SqlStorage;
 use crate::db::request::PublishEntryRequest;
 use crate::db::stores::{StorageEntry, StorageLog};
+use crate::domain::publish;
 use crate::graphql::client::NextEntryArguments;
 use crate::graphql::scalars;
 use crate::validation::{
@@ -48,124 +49,10 @@ impl ClientMutationRoot {
         let store = ctx.data::<SqlStorage>()?;
         let tx = ctx.data::<ServiceSender>()?;
 
-        /////////////////////////////////////////////////////
-        // VALIDATE ENTRY AND OPERATION INTERNAL INTEGRITY //
-        /////////////////////////////////////////////////////
-
-        let entry_encoded: EntrySigned = entry.into();
+        let entry_signed: EntrySigned = entry.into();
         let operation_encoded: OperationEncoded = operation.into();
-        let entry = StorageEntry::new(&entry_encoded, &operation_encoded)?;
-        let operation = VerifiedOperation::new_from_entry(&entry_encoded, &operation_encoded)?;
 
-        ///////////////////////////
-        // VALIDATE ENTRY VALUES //
-        ///////////////////////////
-
-        // Gets the expected backlink of an entry from the store and validates that
-        // it matches the claimed on.
-        let entry_backlink_bytes = store
-            .try_get_backlink(&entry)
-            .await?
-            .map(|link| link.entry_bytes());
-
-        // Gets the expected skiplink of an entry from the store and validates that
-        // it matches the claimed on.
-        let entry_skiplink_bytes = store
-            .try_get_skiplink(&entry)
-            .await?
-            .map(|link| link.entry_bytes());
-
-        // Verify bamboo entry integrity, including encoding, signature of the entry correct back-
-        // and skiplinks
-        bamboo_rs_core_ed25519_yasmf::verify(
-            &entry.entry_bytes(),
-            Some(&operation_encoded.to_bytes()),
-            entry_skiplink_bytes.as_deref(),
-            entry_backlink_bytes.as_deref(),
-        )?;
-
-        // @TODO: Missing a step here where we check if the author has published to this node before, and also
-        // if we know of any other nodes they have published to. Not sure how to do this yet.
-
-        ///////////////////////////////
-        // VALIDATE OPERATION VALUES //
-        ///////////////////////////////
-
-        validate_operation_against_schema(store, operation.operation()).await?;
-
-        let document_id = match operation.action() {
-            OperationAction::Create => {
-                let next_log_id = store.next_log_id(&entry.author()).await?;
-                ensure_entry_contains_expected_log_id(&entry.entry_decoded(), &next_log_id).await?;
-
-                // Derive the document id for this new document.
-                entry_encoded.hash().into()
-            }
-            _ => {
-                // We can unwrap previous operations here as we know all UPDATE and DELETE operations contain them.
-                let previous_operations = operation.previous_operations().unwrap();
-                // Get the document_id for the document_view_id contained in previous operations.
-                // This performs several validation steps (check method doc string).
-                let document_id =
-                    get_validate_document_id_for_view_id(&store, &previous_operations).await?;
-
-                // Check the document is not deleted.
-                ensure_document_not_deleted(&store, &document_id)
-                    .await
-                    .map_err(|_| {
-                        "You are trying to update or delete a document which has been deleted"
-                    })?;
-
-                // Check if there is a log_id registered for this document and public key already in the store.
-                match store.get(&entry_encoded.author(), &document_id).await? {
-                    Some(log_id) => {
-                        // If there is, check it matches the log id encoded in the entry.
-                        ensure_entry_contains_expected_log_id(&entry.entry_decoded(), &log_id)
-                            .await?;
-                    }
-                    None => {
-                        // If there isn't, check that the next log id for this author matches the one encoded in
-                        // the entry.
-                        let next_log_id = store.next_log_id(&entry_encoded.author()).await?;
-                        ensure_entry_contains_expected_log_id(&entry.entry_decoded(), &next_log_id)
-                            .await?;
-                    }
-                };
-                document_id
-            }
-        };
-
-        /////////////////////////////////////
-        // DETERMINE NEXT ENTRY ARG VALUES //
-        /////////////////////////////////////
-
-        let next_seq_num = match entry.seq_num().next() {
-            Some(seq_num) => Ok(seq_num),
-            None => Err("Max sequence number reached for this log"),
-        }?;
-
-        let skiplink = store.determine_next_skiplink(&entry).await?;
-
-        ///////////////////////////////////////////////////
-        // INSERT LOG, ENTRY AND OPERATION INTO DATABASE //
-        ///////////////////////////////////////////////////
-
-        // If this is a CREATE operation it goes into a new log which we insert here.
-        if operation.is_create() {
-            let log = StorageLog::new(
-                &entry.author(),
-                &entry.operation().schema(),
-                &document_id,
-                &entry.log_id(),
-            );
-
-            store.insert_log(log).await?;
-        }
-        // Insert the entry into the store.
-        store.insert_entry(entry.clone()).await?;
-        // Insert the operation into the store.
-        store.insert_operation(&operation, &document_id).await?;
-
+        let next_args = publish(store, &entry_signed, &operation_encoded).await?;
         ////////////////////////////////////////
         // SEND THE OPERATION TO MATERIALIZER //
         ////////////////////////////////////////
@@ -173,22 +60,14 @@ impl ClientMutationRoot {
         // Send new operation on service communication bus, this will arrive eventually at
         // the materializer service
 
-        if tx
-            .send(ServiceMessage::NewOperation(
-                operation.operation_id().to_owned(),
-            ))
-            .is_err()
-        {
+        let operation_id: OperationId = entry_signed.hash().into();
+
+        if tx.send(ServiceMessage::NewOperation(operation_id)).is_err() {
             // Silently fail here as we don't mind if there are no subscribers. We have
             // tests in other places to check if messages arrive.
         }
 
-        Ok(NextEntryArguments {
-            log_id: entry.log_id().into(),
-            seq_num: next_seq_num.into(),
-            backlink: Some(entry.hash().into()),
-            skiplink: skiplink.map(|hash| hash.into()),
-        })
+        Ok(next_args)
     }
 }
 
@@ -197,7 +76,7 @@ mod tests {
     use std::convert::TryFrom;
 
     use async_graphql::{value, Request, Variables};
-    use p2panda_rs::document::DocumentId;
+    use p2panda_rs::document::{DocumentId, DocumentViewId};
     use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
@@ -213,8 +92,8 @@ mod tests {
     use tokio::sync::broadcast;
 
     use crate::bus::ServiceMessage;
-    use crate::db::request::EntryArgsRequest;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+    use crate::domain::next_args;
     use crate::http::{build_server, HttpServiceContext};
     use crate::test_helpers::TestClient;
 
@@ -631,15 +510,13 @@ mod tests {
             let client = TestClient::new(build_server(context));
 
             for key_pair in &key_pairs {
-                let mut document: Option<DocumentId> = None;
+                let mut document_id: Option<DocumentId> = None;
                 let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
                 for index in 0..num_of_entries {
-                    let next_entry_args = db
-                        .store
-                        .get_entry_args(&EntryArgsRequest {
-                            public_key: author.clone(),
-                            document_id: document.as_ref().cloned(),
-                        })
+                    let document_view_id: Option<DocumentViewId> =
+                        document_id.clone().map(|id| id.as_str().parse().unwrap());
+
+                    let next_entry_args = next_args(&db.store, &author, document_view_id.as_ref())
                         .await
                         .unwrap();
 
@@ -667,7 +544,7 @@ mod tests {
                     let operation_encoded = OperationEncoded::try_from(&operation).unwrap();
 
                     if index == 0 {
-                        document = Some(entry_encoded.hash().into());
+                        document_id = Some(entry_encoded.hash().into());
                     }
 
                     // Prepare a publish entry request for each entry.

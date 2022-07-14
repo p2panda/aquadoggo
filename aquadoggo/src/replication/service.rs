@@ -20,6 +20,7 @@ use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
 use crate::db::request::PublishEntryRequest;
 use crate::db::stores::StorageEntry;
+use crate::domain::publish;
 use crate::graphql::replication::client;
 use crate::manager::Shutdown;
 
@@ -168,12 +169,13 @@ async fn insert_new_entries(
         // not need or already done in a previous step. We plan to refactor this into a more
         // modular set of methods which can definitely be used here more cleanly. For now, we do it
         // this way.
-        context
-            .0
-            .store
-            .publish_entry(&args)
-            .await
-            .map_err(|err| anyhow!(format!("Error inserting new entry into db: {:?}", err)))?;
+        publish(
+            &context.0.store,
+            entry.entry_signed(),
+            entry.operation_encoded().unwrap(),
+        )
+        .await
+        .map_err(|err| anyhow!(format!("Error inserting new entry into db: {:?}", err)))?;
 
         // @TODO: We have to publish the operation too, once again, this will be improved with the
         // above mentioned refactor.

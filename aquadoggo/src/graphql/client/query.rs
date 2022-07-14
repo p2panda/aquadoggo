@@ -8,6 +8,7 @@ use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, LogStore}
 use p2panda_rs::Validate;
 
 use crate::db::provider::SqlStorage;
+use crate::domain::next_args;
 use crate::graphql::client::response::NextEntryArguments;
 use crate::graphql::scalars;
 use crate::validation::{ensure_document_not_deleted, get_validate_document_id_for_view_id};
@@ -38,68 +39,10 @@ impl ClientRoot {
         // Access the store from context.
         let store = ctx.data::<SqlStorage>()?;
 
-        // Validate the public key.
         let public_key: Author = public_key.into();
-        public_key.validate()?;
-
         let document_view_id = document_view_id.map(DocumentViewId::from);
 
-        // If no document_view_id is passed then this is a request for publishing a CREATE operation
-        // and we return the args for the next free log by this author.
-        if document_view_id.is_none() {
-            let log_id = store.next_log_id(&public_key).await?;
-            return Ok(NextEntryArguments {
-                backlink: None,
-                skiplink: None,
-                seq_num: SeqNum::default().into(),
-                log_id: log_id.into(),
-            });
-        }
-
-        // Access and validate the document view id.
-        //
-        // We can unwrap here as we know document_view_id is some.
-        let document_view_id: DocumentViewId = document_view_id.unwrap();
-        document_view_id.validate()?;
-
-        // Get the document_id for this document_view_id. This performs several validation steps (check
-        // method doc string).
-        let document_id = get_validate_document_id_for_view_id(&store, &document_view_id).await?;
-
-        // Check the document is not deleted.
-        ensure_document_not_deleted(&store, &document_id).await?;
-
-        // Retrieve the log_id for the found document_id and author.
-        //
-        // (lolz, this method is just called `get()`)
-        let log_id = match store.get(&public_key, &document_id).await? {
-            // This public key already wrote to this document, so we return the found log_id
-            Some(log_id) => log_id,
-            // This public_key never wrote to this document before so we return a new log_id
-            None => store.next_log_id(&public_key).await?,
-        };
-
-        // Get the backlink by getting the latest entry in this log.
-        let backlink = store
-            .get_latest_entry(&public_key, &log_id)
-            .await?
-            .expect("All logs must contain at least one entry");
-
-        // Determine skiplink ("lipmaa"-link) entry in this log.
-        let skiplink_hash = store.determine_next_skiplink(&backlink).await?;
-
-        // Determine the next sequence number.
-        let seq_num = backlink
-            .seq_num()
-            .next()
-            .expect("Max sequence number reached \\*o*/");
-
-        Ok(NextEntryArguments {
-            backlink: Some(backlink.hash().to_owned().into()),
-            skiplink: skiplink_hash.map(|hash| hash.into()),
-            seq_num: seq_num.into(),
-            log_id: log_id.into(),
-        })
+        next_args(store, &public_key, document_view_id.as_ref()).await
     }
 }
 

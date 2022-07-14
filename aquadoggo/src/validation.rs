@@ -45,6 +45,11 @@ pub async fn get_validate_document_id_for_view_id(
     Ok(document_id.to_owned())
 }
 
+/// Validate an operation against it's claimed schema.
+///
+/// This performs two steps which can both return errors:
+/// - try to retrieve the claimed schema from storage
+/// - if the schema is found, validate the operatin against it
 pub async fn validate_operation_against_schema(
     store: &SqlStorage,
     operation: &Operation,
@@ -69,6 +74,7 @@ pub async fn validate_operation_against_schema(
     Ok(())
 }
 
+/// Compare the log id encoded on an entry with the expected log id.
 pub async fn ensure_entry_contains_expected_log_id(
     entry: &Entry,
     expected_log_id: &LogId,
@@ -80,6 +86,7 @@ pub async fn ensure_entry_contains_expected_log_id(
     Ok(())
 }
 
+/// Ensure that a document is not deleted.
 pub async fn ensure_document_not_deleted(
     store: &SqlStorage,
     document_id: &DocumentId,
@@ -88,4 +95,70 @@ pub async fn ensure_document_not_deleted(
     let document = store.get_document_by_id(&document_id).await?;
     ensure!(document.is_some(), anyhow!("Document is deleted"));
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use p2panda_rs::document::DocumentViewId;
+    use p2panda_rs::entry::{LogId, SeqNum};
+    use p2panda_rs::identity::{Author, KeyPair};
+    use p2panda_rs::operation::{Operation, OperationFields, OperationId};
+    use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
+    use p2panda_rs::test_utils::fixtures::{
+        operation, operation_fields, operation_id, public_key, random_document_view_id,
+    };
+    use rstest::rstest;
+
+    use crate::db::stores::test_utils::{send_to_store, test_db, TestDatabase, TestDatabaseRunner};
+    use crate::graphql::client::NextEntryArguments;
+
+    use super::get_validate_document_id_for_view_id;
+
+    #[rstest]
+    fn gets_validates_document_id_for_view_id(
+        #[from(test_db)] runner: TestDatabaseRunner,
+        #[from(random_document_view_id)] document_view_id: DocumentViewId,
+    ) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let result = get_validate_document_id_for_view_id(&db.store, &document_view_id).await;
+            assert!(result.is_err());
+        });
+    }
+
+    #[rstest]
+    fn invalid_document_view_id_missing_operations(
+        #[from(test_db)] runner: TestDatabaseRunner,
+        operation: Operation,
+        operation_fields: OperationFields,
+    ) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            // Store one entry and operation in the store.
+            let (entry, _) = send_to_store(&db.store, &operation, None, &KeyPair::new()).await;
+            let operation_one_id: OperationId = entry.hash().into();
+
+            // Store another entry and operation which perform an update on the earlier operation.
+            let update_operation = Operation::new_update(
+                TEST_SCHEMA_ID.parse().unwrap(),
+                operation_one_id.clone().into(),
+                operation_fields,
+            )
+            .unwrap();
+
+            let (entry, _) = send_to_store(
+                &db.store,
+                &update_operation,
+                Some(&entry.hash().into()),
+                &KeyPair::new(),
+            )
+            .await;
+            let operation_two_id: OperationId = entry.hash().into();
+
+            let result = get_validate_document_id_for_view_id(
+                &db.store,
+                &DocumentViewId::new(&[operation_one_id, operation_two_id]).unwrap(),
+            )
+            .await;
+            assert!(result.is_ok());
+        });
+    }
 }
