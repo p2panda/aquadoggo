@@ -1,30 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::convert::{TryFrom, TryInto};
-
-use anyhow::{anyhow, ensure};
-use async_graphql::{Context, Error, Object, Result};
-use p2panda_rs::entry::{decode_entry, Entry, EntrySigned};
-use p2panda_rs::operation::{
-    AsOperation, AsVerifiedOperation, Operation, OperationEncoded, VerifiedOperation,
-};
-use p2panda_rs::operation::{OperationAction, OperationId};
-use p2panda_rs::storage_provider::traits::{
-    AsStorageEntry, AsStorageLog, EntryStore, LogStore, OperationStore, StorageProvider,
-};
-use p2panda_rs::Validate;
+use async_graphql::{Context, Object, Result};
+use p2panda_rs::entry::EntrySigned;
+use p2panda_rs::operation::OperationEncoded;
+use p2panda_rs::operation::OperationId;
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::provider::SqlStorage;
-use crate::db::request::PublishEntryRequest;
-use crate::db::stores::{StorageEntry, StorageLog};
 use crate::domain::publish;
 use crate::graphql::client::NextEntryArguments;
 use crate::graphql::scalars;
-use crate::validation::{
-    ensure_document_not_deleted, ensure_entry_contains_expected_log_id,
-    get_validate_document_id_for_view_id, validate_operation_against_schema,
-};
 
 /// GraphQL queries for the Client API.
 #[derive(Default, Debug, Copy, Clone)]
@@ -81,7 +66,7 @@ mod tests {
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::{Operation, OperationEncoded, OperationValue};
-    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, StorageProvider};
+    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
     use p2panda_rs::test_utils::constants::{DEFAULT_HASH, DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
     use p2panda_rs::test_utils::fixtures::{
         create_operation, delete_operation, entry_signed_encoded_unvalidated, key_pair, operation,

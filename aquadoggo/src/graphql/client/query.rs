@@ -2,16 +2,12 @@
 
 use async_graphql::{Context, Object, Result};
 use p2panda_rs::document::DocumentViewId;
-use p2panda_rs::entry::SeqNum;
 use p2panda_rs::identity::Author;
-use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, LogStore};
-use p2panda_rs::Validate;
 
 use crate::db::provider::SqlStorage;
 use crate::domain::next_args;
 use crate::graphql::client::response::NextEntryArguments;
 use crate::graphql::scalars;
-use crate::validation::{ensure_document_not_deleted, get_validate_document_id_for_view_id};
 
 /// GraphQL queries for the Client API.
 #[derive(Default, Debug, Copy, Clone)]

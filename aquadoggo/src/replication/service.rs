@@ -155,13 +155,6 @@ async fn insert_new_entries(
     tx: ServiceSender,
 ) -> Result<()> {
     for entry in new_entries {
-        // Parse and validate parameters
-        let args = PublishEntryRequest {
-            entry: entry.entry_signed().clone(),
-            // We know a storage entry has an operation so we safely unwrap here.
-            operation: entry.operation_encoded().unwrap().clone(),
-        };
-
         // This is the method used to publish entries arriving from clients. They all contain a
         // payload (operation).
         //
