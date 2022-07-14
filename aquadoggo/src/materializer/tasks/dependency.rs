@@ -500,7 +500,8 @@ mod tests {
                 SchemaProvider::default(),
             );
 
-            // The document id for a schema_field_definition who's operation already exists in the store.
+            // The document id for a schema_field_definition who's operation already exists in the
+            // store.
             let document_id = db.test_data.documents.first().unwrap();
             // Materialise the schema field definition.
             let input = TaskInput::new(Some(document_id.to_owned()), None);
@@ -525,41 +526,48 @@ mod tests {
     }
 
     #[rstest]
-    #[case::schema_definition_with_dependencies_met_dispatches_one_schema_task(Operation::new_create(
-        SchemaId::SchemaDefinition(1),
-        operation_fields(vec![
-            ("name", OperationValue::Text("schema_name".to_string())),
-            (
-                "description",
-                OperationValue::Text("description".to_string()),
-            ),
-            (
-                "fields",
-                OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
-                    // The view_id for a schema field which exists in the database
-                    "0020a2bc0748f3b18627a6aae09ae392561c357a2995528373e730a4d90b73d8c072"
-                        .parse().unwrap(),
-                ])),
-            ),
-        ]),
-    ).unwrap(), 1)]
-    #[case::schema_definition_without_dependencies_met_dispatches_zero_schema_task(Operation::new_create(
-        SchemaId::SchemaDefinition(1),
-        operation_fields(vec![
-            ("name", OperationValue::Text("schema_name".to_string())),
-            (
-                "description",
-                OperationValue::Text("description".to_string()),
-            ),
-            (
-                "fields",
-                OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
-                    // This schema field does not exist in the database
-                    random_document_view_id(),
-                ])),
-            ),
-        ]),
-    ).unwrap(), 0)]
+    #[case::schema_definition_with_dependencies_met_dispatches_one_schema_task(
+        Operation::new_create(
+            SchemaId::SchemaDefinition(1),
+            operation_fields(vec![
+                ("name", OperationValue::Text("schema_name".to_string())),
+                (
+                    "description",
+                    OperationValue::Text("description".to_string()),
+                ),
+                (
+                    "fields",
+                    OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
+                        // The view_id for a schema field which exists in the database. Can be
+                        // recreated from variable `schema_field_document_id` in the task below.
+                        "0020a2bc0748f3b18627a6aae09ae392561c357a2995528373e730a4d90b73d8c072"
+                            .parse().unwrap(),
+                    ])),
+                ),
+            ]),
+        ).unwrap(),
+        1
+    )]
+    #[case::schema_definition_without_dependencies_met_dispatches_zero_schema_task(
+        Operation::new_create(
+            SchemaId::SchemaDefinition(1),
+            operation_fields(vec![
+                ("name", OperationValue::Text("schema_name".to_string())),
+                (
+                    "description",
+                    OperationValue::Text("description".to_string()),
+                ),
+                (
+                    "fields",
+                    OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
+                        // This schema field does not exist in the database
+                        random_document_view_id(),
+                    ])),
+                ),
+            ]),
+        ).unwrap(),
+        0
+    )]
     fn dispatches_schema_tasks_for_schema_definitions(
         #[case] schema_create_operation: Operation,
         #[case] expected_schema_tasks: usize,
@@ -577,7 +585,8 @@ mod tests {
                 SchemaProvider::default(),
             );
 
-            // The document id for the schema_field_definition who's operation already exists in the store.
+            // The document id for the schema_field_definition who's operation already exists in
+            // the store.
             let schema_field_document_id = db.test_data.documents.first().unwrap();
 
             // Materialise the schema field definition.
