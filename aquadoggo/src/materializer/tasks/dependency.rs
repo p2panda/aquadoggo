@@ -165,20 +165,18 @@ async fn construct_relation_task(
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryFrom;
 
     use p2panda_rs::document::{DocumentId, DocumentViewId};
-    use p2panda_rs::identity::{Author, KeyPair};
+    use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::{
-        AsVerifiedOperation, Operation, OperationId, OperationValue, PinnedRelation,
-        PinnedRelationList, Relation, RelationList,
+        AsVerifiedOperation, Operation, OperationValue, PinnedRelation, PinnedRelationList,
+        Relation, RelationList,
     };
     use p2panda_rs::schema::{FieldType, SchemaId};
     use p2panda_rs::storage_provider::traits::OperationStore;
     use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
     use p2panda_rs::test_utils::fixtures::{
         create_operation, operation_fields, random_document_id, random_document_view_id,
-        random_operation_id, verified_operation,
     };
     use rstest::rstest;
 
@@ -189,7 +187,7 @@ mod tests {
     };
     use crate::db::traits::DocumentStore;
     use crate::materializer::tasks::reduce_task;
-    use crate::materializer::{Task, TaskInput};
+    use crate::materializer::TaskInput;
     use crate::schema::SchemaProvider;
 
     use super::dependency_task;
