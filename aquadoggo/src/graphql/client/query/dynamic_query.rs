@@ -1,13 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::borrow::Cow;
-
 use async_graphql::indexmap::IndexMap;
 use async_graphql::parser::types::Field;
-use async_graphql::registry::{MetaType, MetaTypeId};
+
 use async_graphql::{
-    ContainerType, ContextBase, ContextSelectionSet, Name, OutputType, Positioned, SelectionField,
-    ServerError, ServerResult, Value,
+    ContainerType, ContextBase, Name, Positioned, SelectionField, ServerError, ServerResult, Value,
 };
 use async_recursion::async_recursion;
 use async_trait::async_trait;
@@ -15,13 +12,24 @@ use futures::future;
 use log::debug;
 use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::operation::OperationValue;
-use p2panda_rs::schema::{Schema, SchemaId};
+use p2panda_rs::schema::SchemaId;
 
 use crate::db::provider::SqlStorage;
 use crate::db::traits::DocumentStore;
-use crate::schema::{load_static_schemas, SchemaProvider};
+use crate::schema::SchemaProvider;
 
-use super::schema::{get_schema_metafield, get_schema_metatype};
+enum DocumentStatus {
+    Unavailable,
+}
+
+impl From<DocumentStatus> for Value {
+    fn from(status: DocumentStatus) -> Self {
+        let str_value = match status {
+            DocumentStatus::Unavailable => "UNAVAILABLE",
+        };
+        Value::Enum(Name::new(str_value))
+    }
+}
 
 /// Container object that injects registered p2panda schemas when it is added to a GraphQL schema.
 #[derive(Debug, Default)]
@@ -42,7 +50,7 @@ impl DynamicQuery {
         let view = store.get_document_by_id(&document_id).await.unwrap();
         match view {
             Some(view) => self.get_view(view, ctx, selected_fields).await.unwrap(),
-            None => self.get_placeholder(document_id),
+            None => self.get_document_placeholder(&document_id, ctx, selected_fields),
         }
     }
 
@@ -63,7 +71,7 @@ impl DynamicQuery {
             .unwrap();
         match view {
             Some(view) => self.get_view(view, ctx, selected_fields).await.unwrap(),
-            None => Value::String("not found".to_string()),
+            None => self.get_document_view_placeholder(&document_view_id, ctx, selected_fields),
         }
     }
 
@@ -149,16 +157,74 @@ impl DynamicQuery {
     ///
     /// - meta
     ///     - document_id
-    fn get_placeholder(&self, document_id: DocumentId) -> Value {
-        let mut meta_fields = IndexMap::new();
-        meta_fields.insert(
-            Name::new("document_id"),
-            Value::String(document_id.as_str().to_string()),
-        );
-        let meta_value = Value::Object(meta_fields);
-
+    ///     - status
+    fn get_document_placeholder(
+        &self,
+        document_id: &DocumentId,
+        ctx: &ContextBase<'_, &Positioned<Field>>,
+        selected_fields: Vec<SelectionField>,
+    ) -> Value {
         let mut document_fields = IndexMap::new();
-        document_fields.insert(Name::new("meta"), meta_value);
+
+        for root_field in selected_fields {
+            if root_field.name() == "meta" {
+                let mut meta_fields = IndexMap::new();
+
+                for meta_field in root_field.selection_set() {
+                    if meta_field.name() == "document_id" {
+                        meta_fields.insert(
+                            Name::new("document_id"),
+                            Value::String(document_id.as_str().to_string()),
+                        );
+                    }
+
+                    if meta_field.name() == "status" {
+                        meta_fields.insert(Name::new("status"), DocumentStatus::Unavailable.into());
+                    }
+                }
+
+                document_fields.insert(Name::new("meta"), Value::Object(meta_fields));
+            }
+        }
+
+        Value::Object(document_fields)
+    }
+
+    /// Returns a placeholder value for document views that this node doesn't have access to (yet).
+    ///
+    /// The placeholder contains:
+    ///
+    /// - meta
+    ///     - document_view_id
+    ///     - status
+    fn get_document_view_placeholder(
+        &self,
+        view_id: &DocumentViewId,
+        ctx: &ContextBase<'_, &Positioned<Field>>,
+        selected_fields: Vec<SelectionField>,
+    ) -> Value {
+        let mut document_fields = IndexMap::new();
+
+        for root_field in selected_fields {
+            if root_field.name() == "meta" {
+                let mut meta_fields = IndexMap::new();
+
+                for meta_field in root_field.selection_set() {
+                    if meta_field.name() == "document_view_id" {
+                        meta_fields.insert(
+                            Name::new("document_view_id"),
+                            Value::String(view_id.as_str()),
+                        );
+                    }
+
+                    if meta_field.name() == "status" {
+                        meta_fields.insert(Name::new("status"), DocumentStatus::Unavailable.into());
+                    }
+                }
+
+                document_fields.insert(Name::new("meta"), Value::Object(meta_fields));
+            }
+        }
 
         Value::Object(document_fields)
     }
@@ -210,66 +276,6 @@ impl ContainerType for DynamicQuery {
             Ok(schema) => self.list_schema(schema, ctx).await,
             Err(_) => Ok(None),
         }
-    }
-}
-
-#[async_trait::async_trait]
-impl OutputType for DynamicQuery {
-    fn type_name() -> Cow<'static, str> {
-        Cow::Owned("document_container".into())
-    }
-
-    /// Insert all registered p2panda schemas into the graphql schema. This function doesn't have
-    /// access to the pool though...
-    fn create_type_info(registry: &mut async_graphql::registry::Registry) -> String {
-        // Load schema definitions
-        let schemas: &'static Vec<Schema> = load_static_schemas();
-
-        // This callback is given a mutable reference to the registry!
-        registry.create_output_type::<DynamicQuery, _>(MetaTypeId::Object, |reg| {
-            // Insert queries for all registered schemas.
-            let mut fields = IndexMap::new();
-
-            for schema in schemas.iter() {
-                // Insert GraphQL types for all registered schemas.
-                let metatype = get_schema_metatype(schema);
-                reg.types.insert(schema.id().as_str(), metatype);
-
-                // Insert queries.
-                let metafield = get_schema_metafield(schema);
-                fields.insert(schema.id().as_str(), metafield);
-            }
-
-            MetaType::Object {
-                name: "document_container".into(),
-                description: Some("Container for dynamically generated document api"),
-                visible: Some(|_| true),
-                fields,
-                cache_control: Default::default(),
-                extends: false,
-                keys: None,
-                is_subscription: false,
-                rust_typename: "__fake2__",
-            }
-        })
-    }
-
-    async fn resolve(
-        &self,
-        _ctx: &ContextSelectionSet<'_>,
-        _field: &Positioned<Field>,
-    ) -> ServerResult<Value> {
-        // I don't know when this is called or whether we need it...
-        todo!()
-    }
-
-    fn qualified_type_name() -> String {
-        format!("{}!", <Self as OutputType>::type_name())
-    }
-
-    fn introspection_type_name(&self) -> Cow<'static, str> {
-        // I don't know when this is called or whether we need it...
-        todo!()
     }
 }
 
