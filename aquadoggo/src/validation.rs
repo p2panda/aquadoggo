@@ -5,6 +5,7 @@ use std::collections::HashSet;
 use anyhow::{anyhow, ensure, Result};
 use p2panda_rs::cddl::validate_cbor;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
+use p2panda_rs::entry::{Entry, LogId};
 use p2panda_rs::operation::{AsOperation, Operation};
 use p2panda_rs::storage_provider::traits::OperationStore;
 
@@ -14,7 +15,6 @@ use crate::db::traits::{DocumentStore, SchemaStore};
 /// Attempt to identify the document id for view id contained in a `next_args` request. This will fail if:
 /// - any of the operations contained in the view id _don't_ exist in the store
 /// - any of the operations contained in the view id return a different document id than any of the others
-/// - the document was deleted
 pub async fn get_validate_document_id_for_view_id(
     store: &SqlStorage,
     view_id: &DocumentViewId,
@@ -42,11 +42,6 @@ pub async fn get_validate_document_id_for_view_id(
         !found_document_ids.is_empty(),
         anyhow!("Invalid document view id: operartions in passed document view id originate from different documents")
     );
-
-    // Retrieve the document view for this document, if none is found, then it is deleted.
-    let document = store.get_document_by_id(&document_id).await?;
-    ensure!(document.is_some(), anyhow!("Document is deleted"));
-
     Ok(document_id.to_owned())
 }
 
@@ -64,12 +59,33 @@ pub async fn validate_operation_against_schema(
         .find(|schema| schema.id() == &operation.schema());
 
     // If the schema we want doesn't exist, then error now.
-    ensure!(schema.is_none(), anyhow!("Schema not found"));
+    ensure!(schema.is_some(), anyhow!("Schema not found"));
     let schema = schema.unwrap();
 
     // Validate that the operation correctly follows the stated schema.
     validate_cbor(&schema.as_cddl(), &operation.to_cbor())?;
 
     // All went well, return Ok.
+    Ok(())
+}
+
+pub async fn ensure_entry_contains_expected_log_id(
+    entry: &Entry,
+    expected_log_id: &LogId,
+) -> Result<()> {
+    ensure!(
+        expected_log_id == entry.log_id(),
+        anyhow!("Entries claimed log id does not match expected")
+    );
+    Ok(())
+}
+
+pub async fn ensure_document_not_deleted(
+    store: &SqlStorage,
+    document_id: &DocumentId,
+) -> Result<()> {
+    // Retrieve the document view for this document, if none is found, then it is deleted.
+    let document = store.get_document_by_id(&document_id).await?;
+    ensure!(document.is_some(), anyhow!("Document is deleted"));
     Ok(())
 }

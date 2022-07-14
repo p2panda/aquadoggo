@@ -5,18 +5,25 @@ use std::convert::{TryFrom, TryInto};
 use anyhow::{anyhow, ensure};
 use async_graphql::{Context, Error, Object, Result};
 use p2panda_rs::entry::{decode_entry, Entry, EntrySigned};
+use p2panda_rs::operation::OperationAction;
 use p2panda_rs::operation::{
     AsOperation, AsVerifiedOperation, Operation, OperationEncoded, VerifiedOperation,
 };
-use p2panda_rs::storage_provider::traits::{LogStore, OperationStore, StorageProvider};
+use p2panda_rs::storage_provider::traits::{
+    AsStorageEntry, AsStorageLog, EntryStore, LogStore, OperationStore, StorageProvider,
+};
 use p2panda_rs::Validate;
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::provider::SqlStorage;
 use crate::db::request::PublishEntryRequest;
+use crate::db::stores::{StorageEntry, StorageLog};
 use crate::graphql::client::NextEntryArguments;
 use crate::graphql::scalars;
-use crate::validation::validate_operation_against_schema;
+use crate::validation::{
+    ensure_document_not_deleted, ensure_entry_contains_expected_log_id,
+    get_validate_document_id_for_view_id, validate_operation_against_schema,
+};
 
 /// GraphQL queries for the Client API.
 #[derive(Default, Debug, Copy, Clone)]
@@ -41,59 +48,147 @@ impl ClientMutationRoot {
         let store = ctx.data::<SqlStorage>()?;
         let tx = ctx.data::<ServiceSender>()?;
 
+        /////////////////////////////////////////////////////
+        // VALIDATE ENTRY AND OPERATION INTERNAL INTEGRITY //
+        /////////////////////////////////////////////////////
+
         let entry_encoded: EntrySigned = entry.into();
         let operation_encoded: OperationEncoded = operation.into();
-        let entry = decode_entry(&entry_encoded, Some(&operation_encoded))?;
+        let entry = StorageEntry::new(&entry_encoded, &operation_encoded)?;
         let operation = VerifiedOperation::new_from_entry(&entry_encoded, &operation_encoded)?;
 
-        validate_operation_against_schema(&store, &operation.operation()).await?;
+        ///////////////////////////
+        // VALIDATE ENTRY VALUES //
+        ///////////////////////////
 
+        // Gets the expected backlink of an entry from the store and validates that
+        // it matches the claimed on.
+        let entry_backlink_bytes = store
+            .try_get_backlink(&entry)
+            .await?
+            .map(|link| link.entry_bytes());
+
+        // Gets the expected skiplink of an entry from the store and validates that
+        // it matches the claimed on.
+        let entry_skiplink_bytes = store
+            .try_get_skiplink(&entry)
+            .await?
+            .map(|link| link.entry_bytes());
+
+        // Verify bamboo entry integrity, including encoding, signature of the entry correct back-
+        // and skiplinks
+        bamboo_rs_core_ed25519_yasmf::verify(
+            &entry.entry_bytes(),
+            Some(&operation_encoded.to_bytes()),
+            entry_skiplink_bytes.as_deref(),
+            entry_backlink_bytes.as_deref(),
+        )?;
+
+        // @TODO: Missing a step here where we check if the author has published to this node before, and also
+        // if we know of any other nodes they have published to. Not sure how to do this yet.
+
+        ///////////////////////////////
+        // VALIDATE OPERATION VALUES //
+        ///////////////////////////////
+
+        validate_operation_against_schema(store, operation.operation()).await?;
+
+        let document_id = match operation.action() {
+            OperationAction::Create => {
+                let next_log_id = store.next_log_id(&entry.author()).await?;
+                ensure_entry_contains_expected_log_id(&entry.entry_decoded(), &next_log_id).await?;
+
+                // Derive the document id for this new document.
+                entry_encoded.hash().into()
+            }
+            _ => {
+                // We can unwrap previous operations here as we know all UPDATE and DELETE operations contain them.
+                let previous_operations = operation.previous_operations().unwrap();
+                // Get the document_id for the document_view_id contained in previous operations.
+                // This performs several validation steps (check method doc string).
+                let document_id =
+                    get_validate_document_id_for_view_id(&store, &previous_operations).await?;
+
+                // Check the document is not deleted.
+                ensure_document_not_deleted(&store, &document_id)
+                    .await
+                    .map_err(|_| {
+                        "You are trying to update or delete a document which has been deleted"
+                    })?;
+
+                // Check if there is a log_id registered for this document and public key already in the store.
+                match store.get(&entry_encoded.author(), &document_id).await? {
+                    Some(log_id) => {
+                        // If there is, check it matches the log id encoded in the entry.
+                        ensure_entry_contains_expected_log_id(&entry.entry_decoded(), &log_id)
+                            .await?;
+                    }
+                    None => {
+                        // If there isn't, check that the next log id for this author matches the one encoded in
+                        // the entry.
+                        let next_log_id = store.next_log_id(&entry_encoded.author()).await?;
+                        ensure_entry_contains_expected_log_id(&entry.entry_decoded(), &next_log_id)
+                            .await?;
+                    }
+                };
+                document_id
+            }
+        };
+
+        /////////////////////////////////////
+        // DETERMINE NEXT ENTRY ARG VALUES //
+        /////////////////////////////////////
+
+        let next_seq_num = match entry.seq_num().next() {
+            Some(seq_num) => Ok(seq_num),
+            None => Err("Max sequence number reached for this log"),
+        }?;
+
+        let skiplink = store.determine_next_skiplink(&entry).await?;
+
+        ///////////////////////////////////////////////////
+        // INSERT LOG, ENTRY AND OPERATION INTO DATABASE //
+        ///////////////////////////////////////////////////
+
+        // If this is a CREATE operation it goes into a new log which we insert here.
         if operation.is_create() {
-            let log_id = store.next_log_id(&entry_encoded.author()).await?;
-
-            ensure!(
-                &log_id == entry.log_id(),
-                anyhow!("Provided log id does not match expected")
+            let log = StorageLog::new(
+                &entry.author(),
+                &entry.operation().schema(),
+                &document_id,
+                &entry.log_id(),
             );
+
+            store.insert_log(log).await?;
+        }
+        // Insert the entry into the store.
+        store.insert_entry(entry.clone()).await?;
+        // Insert the operation into the store.
+        store.insert_operation(&operation, &document_id).await?;
+
+        ////////////////////////////////////////
+        // SEND THE OPERATION TO MATERIALIZER //
+        ////////////////////////////////////////
+
+        // Send new operation on service communication bus, this will arrive eventually at
+        // the materializer service
+
+        if tx
+            .send(ServiceMessage::NewOperation(
+                operation.operation_id().to_owned(),
+            ))
+            .is_err()
+        {
+            // Silently fail here as we don't mind if there are no subscribers. We have
+            // tests in other places to check if messages arrive.
         }
 
-        //
-        //         // Validate and store entry in database
-        //         // @TODO: Check all validation steps here for both entries and operations. Also, there is
-        //         // probably overlap in what replication needs in terms of validation?
-        //         let response = store.publish_entry(&args).await.map_err(Error::from)?;
-        //
-        //         // Load related document from database
-        //         // @TODO: We probably have this instance already inside of "publish_entry"?
-        //         match store.get_document_by_entry(&args.entry.hash()).await? {
-        //             Some(document_id) => {
-        //                 let verified_operation =
-        //                     VerifiedOperation::new_from_entry(&args.entry, &args.operation)?;
-        //
-        //                 // Store operation in database
-        //                 // @TODO: This is not done by "publish_entry", maybe it needs to move there as
-        //                 // well?
-        //                 store
-        //                     .insert_operation(&verified_operation, &document_id)
-        //                     .await?;
-        //
-        //                 // Send new operation on service communication bus, this will arrive eventually at
-        //                 // the materializer service
-        //                 if tx
-        //                     .send(ServiceMessage::NewOperation(
-        //                         verified_operation.operation_id().to_owned(),
-        //                     ))
-        //                     .is_err()
-        //                 {
-        //                     // Silently fail here as we don't mind if there are no subscribers. We have
-        //                     // tests in other places to check if messages arrive.
-        //                 }
-        //
-        //                 Ok(response)
-        //             }
-        //             None => Err(Error::new("No related document found in database")),
-        //         }
-        todo!()
+        Ok(NextEntryArguments {
+            log_id: entry.log_id().into(),
+            seq_num: next_seq_num.into(),
+            backlink: Some(entry.hash().into()),
+            skiplink: skiplink.map(|hash| hash.into()),
+        })
     }
 }
 

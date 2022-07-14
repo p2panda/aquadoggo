@@ -10,7 +10,7 @@ use p2panda_rs::Validate;
 use crate::db::provider::SqlStorage;
 use crate::graphql::client::response::NextEntryArguments;
 use crate::graphql::scalars;
-use crate::validation::get_validate_document_id_for_view_id;
+use crate::validation::{ensure_document_not_deleted, get_validate_document_id_for_view_id};
 
 /// GraphQL queries for the Client API.
 #[derive(Default, Debug, Copy, Clone)]
@@ -65,6 +65,9 @@ impl ClientRoot {
         // Get the document_id for this document_view_id. This performs several validation steps (check
         // method doc string).
         let document_id = get_validate_document_id_for_view_id(&store, &document_view_id).await?;
+
+        // Check the document is not deleted.
+        ensure_document_not_deleted(&store, &document_id).await?;
 
         // Retrieve the log_id for the found document_id and author.
         //
