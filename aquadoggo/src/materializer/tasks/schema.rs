@@ -228,12 +228,23 @@ mod tests {
             assert!(schema_task(context.clone(), input).await.is_ok());
 
             // The new schema should be available on storage provider.
-            assert!(context
+            let schema = context
                 .schema_provider
-                .all()
-                .await
-                .iter()
-                .any(|s| s.version() == SchemaVersion::Application(definition_view_id.clone())));
+                .get(&SchemaId::Application(
+                    "schema_name".to_string(),
+                    definition_view_id.clone(),
+                ))
+                .await;
+            assert!(schema.is_some());
+            assert_eq!(
+                schema
+                    .unwrap()
+                    .fields()
+                    .get("field_name")
+                    .unwrap()
+                    .to_owned(),
+                FieldType::String
+            );
         });
     }
 }
