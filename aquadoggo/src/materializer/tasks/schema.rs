@@ -17,7 +17,7 @@ use crate::materializer::TaskInput;
 /// has all its immediate dependencies available in the store. It collects all required views for
 /// the schema, instantiates it and adds it to the schema provider.
 pub async fn schema_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
-    debug!("Working on schema task: {}", input);
+    debug!("Working on {}", input);
 
     let input_view_id = match (input.document_id, input.document_view_id) {
         (None, Some(view_id)) => Ok(view_id),
