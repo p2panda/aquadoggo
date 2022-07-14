@@ -4,7 +4,7 @@ use std::borrow::Cow;
 
 use async_graphql::indexmap::IndexMap;
 use async_graphql::parser::types::Field;
-use async_graphql::registry::{MetaField, MetaType, MetaTypeId};
+use async_graphql::registry::{Deprecation, MetaEnumValue, MetaField, MetaType, MetaTypeId};
 use async_graphql::{ContextSelectionSet, OutputType, Positioned, ServerResult, Value};
 use p2panda_rs::schema::{FieldType, Schema};
 
@@ -28,9 +28,16 @@ impl OutputType for DynamicQuery {
             // Insert queries for all registered schemas.
             let mut fields = IndexMap::new();
 
+            reg.types.insert(
+                "DocumentMetadata".to_string(),
+                get_document_metadata_metatype(),
+            );
+
+            reg.types
+                .insert("DocumentStatus".to_string(), get_document_status_metatype());
+
             for schema in schemas.iter() {
                 // Insert GraphQL types for all registered schemas.
-
                 reg.types
                     .insert(schema.id().as_str().to_owned(), get_schema_metatype(schema));
 
@@ -93,10 +100,153 @@ fn get_schema_metafield(schema: &'static Schema) -> MetaField {
         oneof: false,
     }
 }
+/// Return metatype for generic document metadata.
+fn get_document_status_metatype() -> MetaType {
+    let mut enum_values = IndexMap::new();
 
-/// Returns the root  metatype for a schema.
+    enum_values.insert(
+        "Unavailable",
+        MetaEnumValue {
+            name: "Unavailable",
+            description: Some("We don't have any information about this document."),
+            deprecation: Deprecation::NoDeprecated,
+            visible: None,
+        },
+    );
+
+    enum_values.insert(
+        "Incomplete",
+        MetaEnumValue {
+            name: "Incomplete",
+            description: Some(
+                "We have some operations for this document but it's not materialised yet.",
+            ),
+            deprecation: Deprecation::NoDeprecated,
+            visible: None,
+        },
+    );
+
+    enum_values.insert(
+        "Ok",
+        MetaEnumValue {
+            name: "Ok",
+            description: Some("The document has some materialised view available."),
+            deprecation: Deprecation::NoDeprecated,
+            visible: None,
+        },
+    );
+
+    enum_values.insert(
+        "Deleted",
+        MetaEnumValue {
+            name: "Deleted",
+            description: Some("The document has been deleted."),
+            deprecation: Deprecation::NoDeprecated,
+            visible: None,
+        },
+    );
+
+    MetaType::Enum {
+        name: "DocumentStatus".to_string(),
+        description: None,
+        enum_values,
+        visible: None,
+        rust_typename: "__fake__",
+    }
+}
+
+/// Return metatype for generic document metadata.
+fn get_document_metadata_metatype() -> MetaType {
+    let mut fields = IndexMap::new();
+
+    fields.insert(
+        "document_id".to_string(),
+        MetaField {
+            name: "document_id".to_string(),
+            description: None,
+            args: Default::default(),
+            ty: "String".to_string(),
+            deprecation: Default::default(),
+            cache_control: Default::default(),
+            external: false,
+            requires: None,
+            provides: None,
+            visible: None,
+            compute_complexity: None,
+            oneof: false,
+        },
+    );
+
+    fields.insert(
+        "document_view_id".to_string(),
+        MetaField {
+            name: "document_view_id".to_string(),
+            description: None,
+            args: Default::default(),
+            ty: "String".to_string(),
+            deprecation: Default::default(),
+            cache_control: Default::default(),
+            external: false,
+            requires: None,
+            provides: None,
+            visible: None,
+            compute_complexity: None,
+            oneof: false,
+        },
+    );
+
+    fields.insert(
+        "status".to_string(),
+        MetaField {
+            name: "status".to_string(),
+            description: None,
+            args: Default::default(),
+            ty: "DocumentStatus".to_string(),
+            deprecation: Default::default(),
+            cache_control: Default::default(),
+            external: false,
+            requires: None,
+            provides: None,
+            visible: None,
+            compute_complexity: None,
+            oneof: false,
+        },
+    );
+
+    MetaType::Object {
+        name: "DocumentMetadata".to_string(),
+        description: Some("Metadata for documents of this schema."),
+        visible: Some(|_| true),
+        fields,
+        cache_control: Default::default(),
+        extends: false,
+        keys: None,
+        is_subscription: false,
+        rust_typename: "__fake__",
+    }
+}
+
+/// Returns the root metatype for a schema.
 fn get_schema_metatype(schema: &'static Schema) -> MetaType {
     let mut fields = IndexMap::new();
+
+    fields.insert(
+        "meta".to_string(),
+        MetaField {
+            name: "meta".to_string(),
+            description: Some("Metadata for documents of this schema."),
+            args: Default::default(),
+            ty: "DocumentMetadata".to_string(),
+            deprecation: Default::default(),
+            cache_control: Default::default(),
+            external: false,
+            requires: None,
+            provides: None,
+            visible: None,
+            compute_complexity: None,
+            oneof: false,
+        },
+    );
 
     fields.insert(
         "fields".to_string(),
@@ -130,7 +280,7 @@ fn get_schema_metatype(schema: &'static Schema) -> MetaType {
 }
 
 fn get_schema_fields_type(schema: &'static Schema) -> String {
-    format!("fields_{}", schema.id().as_str())
+    format!("FieldValues_{}", schema.id().as_str())
 }
 
 /// Returns the metatype for a schema's fields.

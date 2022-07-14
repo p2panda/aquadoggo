@@ -65,7 +65,7 @@ impl DynamicQuery {
         let view = store.get_document_by_id(&document_id).await.unwrap();
         match view {
             Some(view) => self.get_document(view, ctx, selected_fields).await.unwrap(),
-            None => self.get_document_placeholder(&document_id, ctx, selected_fields),
+            None => self.get_document_placeholder(&document_id, selected_fields),
         }
     }
 
@@ -86,7 +86,7 @@ impl DynamicQuery {
             .unwrap();
         match view {
             Some(view) => self.get_document(view, ctx, selected_fields).await.unwrap(),
-            None => self.get_document_view_placeholder(&document_view_id, ctx, selected_fields),
+            None => self.get_document_view_placeholder(&document_view_id, selected_fields),
         }
     }
 
@@ -103,6 +103,14 @@ impl DynamicQuery {
         let mut document_fields = IndexMap::new();
 
         for field in selected_fields {
+            // Assemble selected metadata values.
+            if field.name() == "meta" {
+                document_fields.insert(
+                    Name::new("meta"),
+                    get_meta(field, None, Some(view.id()), Some(&view)),
+                );
+            }
+
             // Assemble selected document field valuues.
             if field.name() == "fields" {
                 let subselection = field.selection_set().collect();
@@ -203,29 +211,16 @@ impl DynamicQuery {
     fn get_document_placeholder(
         &self,
         document_id: &DocumentId,
-        ctx: &ContextBase<'_, &Positioned<Field>>,
         selected_fields: Vec<SelectionField>,
     ) -> Value {
         let mut document_fields = IndexMap::new();
 
         for root_field in selected_fields {
             if root_field.name() == "meta" {
-                let mut meta_fields = IndexMap::new();
-
-                for meta_field in root_field.selection_set() {
-                    if meta_field.name() == "document_id" {
-                        meta_fields.insert(
-                            Name::new("document_id"),
-                            Value::String(document_id.as_str().to_string()),
-                        );
-                    }
-
-                    if meta_field.name() == "status" {
-                        meta_fields.insert(Name::new("status"), DocumentStatus::Unavailable.into());
-                    }
-                }
-
-                document_fields.insert(Name::new("meta"), Value::Object(meta_fields));
+                document_fields.insert(
+                    Name::new("meta"),
+                    get_meta(root_field, Some(document_id), None, None),
+                );
             }
         }
 
@@ -242,29 +237,16 @@ impl DynamicQuery {
     fn get_document_view_placeholder(
         &self,
         view_id: &DocumentViewId,
-        ctx: &ContextBase<'_, &Positioned<Field>>,
         selected_fields: Vec<SelectionField>,
     ) -> Value {
         let mut document_fields = IndexMap::new();
 
         for root_field in selected_fields {
             if root_field.name() == "meta" {
-                let mut meta_fields = IndexMap::new();
-
-                for meta_field in root_field.selection_set() {
-                    if meta_field.name() == "document_view_id" {
-                        meta_fields.insert(
-                            Name::new("document_view_id"),
-                            Value::String(view_id.as_str()),
-                        );
-                    }
-
-                    if meta_field.name() == "status" {
-                        meta_fields.insert(Name::new("status"), DocumentStatus::Unavailable.into());
-                    }
-                }
-
-                document_fields.insert(Name::new("meta"), Value::Object(meta_fields));
+                document_fields.insert(
+                    Name::new("meta"),
+                    get_meta(root_field, None, Some(view_id), None),
+                );
             }
         }
 
@@ -303,6 +285,42 @@ impl DynamicQuery {
             future::try_join_all(documents_graphql_values).await?,
         )))
     }
+}
+
+/// Get GraphQL response value for metadata query field.
+///
+/// All parameters that are available should be set.
+fn get_meta(
+    root_field: SelectionField,
+    document_id: Option<&DocumentId>,
+    view_id: Option<&DocumentViewId>,
+    document: Option<&DocumentView>,
+) -> Value {
+    let mut meta_fields = IndexMap::new();
+    for meta_field in root_field.selection_set() {
+        if meta_field.name() == "document_id" && document_id.is_some() {
+            meta_fields.insert(
+                Name::new("document_id"),
+                Value::String(document_id.unwrap().as_str().to_string()),
+            );
+        }
+
+        if meta_field.name() == "document_view_id" && view_id.is_some() {
+            meta_fields.insert(
+                Name::new("document_view_id"),
+                Value::String(view_id.unwrap().as_str().to_string()),
+            );
+        }
+
+        if meta_field.name() == "status" {
+            if document.is_some() {
+                meta_fields.insert(Name::new("status"), DocumentStatus::Ok.into());
+            } else {
+                meta_fields.insert(Name::new("status"), DocumentStatus::Unavailable.into());
+            }
+        }
+    }
+    Value::Object(meta_fields)
 }
 
 #[async_trait]
