@@ -32,15 +32,19 @@ pub fn build_root_schema(
     tx: ServiceSender,
     schema_provider: SchemaProvider,
 ) -> RootSchema {
+    // Configure query root
     let replication_root = ReplicationRoot::default();
-    let client_query_root = ClientRoot::new(schema_provider);
+    let client_query_root = ClientRoot::new();
     let query_root = QueryRoot(replication_root, client_query_root);
 
+    // Configure mutation root
     let client_mutation_root = ClientMutationRoot::default();
     let mutation_root = MutationRoot(client_mutation_root);
 
+    // Build GraphQL schema
     Schema::build(query_root, mutation_root, EmptySubscription)
         .data(store)
+        .data(schema_provider)
         .data(tx)
         .finish()
 }

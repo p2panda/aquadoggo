@@ -24,17 +24,10 @@ use crate::schema::{load_static_schemas, SchemaProvider};
 use super::schema::{get_schema_metafield, get_schema_metatype};
 
 /// Container object that injects registered p2panda schemas when it is added to a GraphQL schema.
-#[derive(Debug)]
-pub struct DynamicQuery {
-    schema_provider: SchemaProvider,
-}
+#[derive(Debug, Default)]
+pub struct DynamicQuery;
 
 impl DynamicQuery {
-    /// Returns a GraphQL container object given a database pool.
-    pub fn new(schema_provider: SchemaProvider) -> Self {
-        Self { schema_provider }
-    }
-
     /// Resolve a document id to a gql value.
     ///
     /// Recurses into relations when those are selected in `selected_fields`.
@@ -127,7 +120,10 @@ impl DynamicQuery {
         schema_id: SchemaId,
         ctx: &ContextBase<'_, &Positioned<Field>>,
     ) -> ServerResult<Option<Value>> {
-        if self.schema_provider.get(&schema_id).await.is_none() {
+        // We assume that the query root has been configured with a `SchemaProvider` context.
+        let schema_provider = ctx.data_unchecked::<SchemaProvider>();
+
+        if schema_provider.get(&schema_id).await.is_none() {
             // Abort resolving this as a document query if we don't know this schema.
             return Ok(None);
         }
