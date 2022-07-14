@@ -169,46 +169,6 @@ async fn insert_new_entries(
         )
         .await
         .map_err(|err| anyhow!(format!("Error inserting new entry into db: {:?}", err)))?;
-
-        // @TODO: We have to publish the operation too, once again, this will be improved with the
-        // above mentioned refactor.
-        let document_id = context
-            .0
-            .store
-            .get_document_by_entry(&entry.hash())
-            .await
-            .map_err(|err| anyhow!(format!("Error retrieving document id from db: {:?}", err)))?;
-
-        match document_id {
-            Some(document_id) => {
-                let operation = VerifiedOperation::new_from_entry(
-                    entry.entry_signed(),
-                    entry.operation_encoded().unwrap(),
-                )
-                // Safely unwrap here as the entry and operation were already validated.
-                .unwrap();
-
-                context
-                    .0
-                    .store
-                    .insert_operation(&operation, &document_id)
-                    .map_ok({
-                        let entry = entry.clone();
-                        let tx = tx.clone();
-
-                        move |_| {
-                            send_new_entry_service_message(tx.clone(), &entry);
-                        }
-                    })
-                    .map_err(|err| {
-                        anyhow!(format!("Error inserting new operation into db: {:?}", err))
-                    })
-                    .await
-            }
-            None => Err(anyhow!(
-                "No document found for published operation".to_string()
-            )),
-        }?;
     }
 
     Ok(())
