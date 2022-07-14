@@ -81,8 +81,8 @@ pub async fn validate_entry(
     bamboo_rs_core_ed25519_yasmf::verify(
         &entry.entry_bytes(),
         Some(&operation.to_bytes()),
-        backlink.map(|link| link.entry_bytes()).as_deref(),
         skiplink.map(|link| link.entry_bytes()).as_deref(),
+        backlink.map(|link| link.entry_bytes()).as_deref(),
     )?;
 
     Ok(())
