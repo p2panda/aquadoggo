@@ -18,14 +18,29 @@ use crate::db::provider::SqlStorage;
 use crate::db::traits::DocumentStore;
 use crate::schema::SchemaProvider;
 
+/// Communicates the availability of a document in the GraphQL API.
 enum DocumentStatus {
+    /// We don't have any information about this document.
     Unavailable,
+
+    /// We have some operations for this document but it's not materialised yet.
+    #[allow(dead_code)]
+    Incomplete,
+
+    /// The document has some materialised view available.
+    Ok,
+
+    /// The document has been deleted.
+    Deleted,
 }
 
 impl From<DocumentStatus> for Value {
     fn from(status: DocumentStatus) -> Self {
         let str_value = match status {
             DocumentStatus::Unavailable => "UNAVAILABLE",
+            DocumentStatus::Incomplete => "INCOMPLETE",
+            DocumentStatus::Ok => "OK",
+            DocumentStatus::Deleted => "DELETED",
         };
         Value::Enum(Name::new(str_value))
     }
@@ -49,7 +64,7 @@ impl DynamicQuery {
         let store = ctx.data_unchecked::<SqlStorage>();
         let view = store.get_document_by_id(&document_id).await.unwrap();
         match view {
-            Some(view) => self.get_view(view, ctx, selected_fields).await.unwrap(),
+            Some(view) => self.get_document(view, ctx, selected_fields).await.unwrap(),
             None => self.get_document_placeholder(&document_id, ctx, selected_fields),
         }
     }
@@ -70,16 +85,43 @@ impl DynamicQuery {
             .await
             .unwrap();
         match view {
-            Some(view) => self.get_view(view, ctx, selected_fields).await.unwrap(),
+            Some(view) => self.get_document(view, ctx, selected_fields).await.unwrap(),
             None => self.get_document_view_placeholder(&document_view_id, ctx, selected_fields),
         }
     }
 
-    /// Resolves a given view and recurses into relations to produce a gql value.
+    /// Builds a GraphQL response value for a document.
     ///
     /// This uses unstable, undocumented features of `async_graphql`.
     #[async_recursion]
-    async fn get_view(
+    async fn get_document(
+        &self,
+        view: DocumentView,
+        ctx: &ContextBase<'_, &Positioned<Field>>,
+        selected_fields: Vec<SelectionField<'async_recursion>>,
+    ) -> ServerResult<Value> {
+        let mut document_fields = IndexMap::new();
+
+        for field in selected_fields {
+            // Assemble selected document field valuues.
+            if field.name() == "fields" {
+                let subselection = field.selection_set().collect();
+                document_fields.insert(
+                    Name::new("fields"),
+                    self.get_document_fields(view.clone(), ctx, subselection)
+                        .await?,
+                );
+            }
+        }
+
+        Ok(Value::Object(document_fields))
+    }
+
+    /// Builds a GraphQL response value for a document's fields.
+    ///
+    /// This uses unstable, undocumented features of `async_graphql`.
+    #[async_recursion]
+    async fn get_document_fields(
         &self,
         view: DocumentView,
         ctx: &ContextBase<'_, &Positioned<Field>>,
@@ -255,7 +297,7 @@ impl DynamicQuery {
         // Assemble views async
         let documents_graphql_values = documents.into_iter().map(|view| async move {
             let selected_fields = ctx.field().selection_set().collect();
-            self.get_view(view, ctx, selected_fields).await
+            self.get_document(view, ctx, selected_fields).await
         });
         Ok(Some(Value::List(
             future::try_join_all(documents_graphql_values).await?,
