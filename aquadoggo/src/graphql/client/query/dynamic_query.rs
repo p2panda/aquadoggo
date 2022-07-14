@@ -7,7 +7,7 @@ use async_graphql::parser::types::Field;
 use async_graphql::registry::{MetaType, MetaTypeId};
 use async_graphql::{
     ContainerType, ContextBase, ContextSelectionSet, Name, OutputType, Positioned, SelectionField,
-    ServerResult, Value,
+    ServerError, ServerResult, Value,
 };
 use async_recursion::async_recursion;
 use async_trait::async_trait;
@@ -48,11 +48,7 @@ impl DynamicQuery {
         let store = ctx.data_unchecked::<SqlStorage>();
         let view = store.get_document_by_id(&document_id).await.unwrap();
         match view {
-            Some(view) => self
-                .get_view(view, ctx, selected_fields)
-                .await
-                .unwrap()
-                .unwrap(),
+            Some(view) => self.get_view(view, ctx, selected_fields).await.unwrap(),
             None => Value::String("not found".to_string()),
         }
     }
@@ -73,11 +69,7 @@ impl DynamicQuery {
             .await
             .unwrap();
         match view {
-            Some(view) => self
-                .get_view(view, ctx, selected_fields)
-                .await
-                .unwrap()
-                .unwrap(),
+            Some(view) => self.get_view(view, ctx, selected_fields).await.unwrap(),
             None => Value::String("not found".to_string()),
         }
     }
@@ -89,9 +81,9 @@ impl DynamicQuery {
         view: DocumentView,
         ctx: &ContextBase<'_, &Positioned<Field>>,
         selected_fields: Vec<SelectionField<'async_recursion>>,
-    ) -> ServerResult<Option<Value>> {
+    ) -> ServerResult<Value> {
         debug!("Get {}", view);
-        let mut obj = IndexMap::new();
+        let mut view_fields = IndexMap::new();
         for selected_field in selected_fields {
             let document_view_value = view.get(selected_field.name()).unwrap();
             let selected_fields: Vec<SelectionField<'async_recursion>> =
@@ -124,12 +116,12 @@ impl DynamicQuery {
                 // Convert all simple fields to scalar values.
                 _ => gql_scalar(document_view_value.value()),
             };
-            obj.insert(Name::new(selected_field.name()), value);
+            view_fields.insert(Name::new(selected_field.name()), value);
         }
-        Ok(Some(Value::Object(obj)))
+        Ok(Value::Object(view_fields))
     }
 
-    /// Returns all documents for the given schema as a gql value.
+    /// Returns all documents for the given schema as a GraphQL value.
     async fn list_schema(
         &self,
         schema_id: SchemaId,
@@ -139,19 +131,24 @@ impl DynamicQuery {
             // Abort resolving this as a document query if we don't know this schema.
             return Ok(None);
         }
-        let mut result = Vec::new();
-        let store = ctx.data_unchecked::<SqlStorage>();
-        let views = store.get_documents_by_schema(&schema_id).await.unwrap();
-        for view in views {
-            if let Some(value) = self
-                .get_view(view, ctx, ctx.field().selection_set().collect())
-                .await?
-            {
-                result.push(value);
-            }
-        }
 
-        Ok(Some(Value::List(result)))
+        // We assume that an SQL storage exists in the context at this point.
+        let store = ctx.data_unchecked::<SqlStorage>();
+
+        // Retrieve all documents for schema from storage.
+        let documents = store
+            .get_documents_by_schema(&schema_id)
+            .await
+            .map_err(|err| ServerError::new(err.to_string(), None))?;
+
+        // Assemble views async
+        let documents_graphql_values = documents.into_iter().map(|view| async move {
+            let selected_fields = ctx.field().selection_set().collect();
+            self.get_view(view, ctx, selected_fields).await
+        });
+        Ok(Some(Value::List(
+            future::try_join_all(documents_graphql_values).await?,
+        )))
     }
 }
 
