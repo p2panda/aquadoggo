@@ -58,15 +58,39 @@ impl Default for SchemaProvider {
 
 #[cfg(test)]
 mod test {
+    use p2panda_rs::schema::FieldType;
+    use p2panda_rs::test_utils::fixtures::random_document_view_id;
+
     use super::*;
 
     #[tokio::test]
-    async fn test_get_all_schemas() {
-        let schemas = SchemaProvider::default();
-        let result = schemas.all().await;
+    async fn get_all_schemas() {
+        let provider = SchemaProvider::default();
+        let result = provider.all().await;
         assert_eq!(result.len(), 2);
+    }
 
-        let schema_definition_schema = schemas.get(&SchemaId::SchemaDefinition(1)).await;
+    #[tokio::test]
+    async fn get_single_schema() {
+        let provider = SchemaProvider::default();
+        let schema_definition_schema = provider.get(&SchemaId::SchemaDefinition(1)).await;
         assert!(schema_definition_schema.is_some());
+    }
+
+    #[tokio::test]
+    async fn update_schemas() {
+        let provider = SchemaProvider::default();
+        let new_schema_id =
+            SchemaId::Application("test_schema".to_string(), random_document_view_id());
+        let new_schema = Schema::new(
+            &new_schema_id,
+            "description",
+            vec![("test_field", FieldType::String)],
+        )
+        .unwrap();
+        let is_update = provider.update(new_schema).await;
+        assert!(!is_update);
+
+        assert!(provider.get(&new_schema_id).await.is_some());
     }
 }
