@@ -26,7 +26,12 @@ pub async fn schema_task(context: Context, input: TaskInput) -> TaskResult<TaskI
     }?;
 
     // Determine the schema of the updated view id.
-    let schema = get_schema_for_view(&input_view_id, &context).await?;
+    let schema = context
+        .store
+        .get_schema_by_document_view(&input_view_id)
+        .await
+        .map_err(|err| TaskError::Critical(err.to_string()))?
+        .unwrap();
 
     let updated_schema_definitions: Vec<DocumentViewId> = match schema {
         // This task is about an updated schema definition document so we only handle that.
@@ -69,20 +74,6 @@ pub async fn schema_task(context: Context, input: TaskInput) -> TaskResult<TaskI
     }
 
     Ok(None)
-}
-
-/// Determine the schema of a view.
-async fn get_schema_for_view(
-    view_id: &DocumentViewId,
-    context: &Context,
-) -> Result<SchemaId, TaskError> {
-    let sample_operation_id = view_id.graph_tips().first().unwrap();
-    let sample_operation = context.store.get_operation_by_id(sample_operation_id).await;
-    let sample_operation = sample_operation
-        .map_err(|err| TaskError::Critical(err.to_string()))?
-        .unwrap();
-
-    Ok(sample_operation.operation().schema())
 }
 
 /// Retrieve schema definitions that use the targeted schema field definition as one of their
