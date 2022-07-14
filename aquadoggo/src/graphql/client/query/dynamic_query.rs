@@ -29,9 +29,6 @@ enum DocumentStatus {
 
     /// The document has some materialised view available.
     Ok,
-
-    /// The document has been deleted.
-    Deleted,
 }
 
 impl From<DocumentStatus> for Value {
@@ -40,7 +37,6 @@ impl From<DocumentStatus> for Value {
             DocumentStatus::Unavailable => "UNAVAILABLE",
             DocumentStatus::Incomplete => "INCOMPLETE",
             DocumentStatus::Ok => "OK",
-            DocumentStatus::Deleted => "DELETED",
         };
         Value::Enum(Name::new(str_value))
     }

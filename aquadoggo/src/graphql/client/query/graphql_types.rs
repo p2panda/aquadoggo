@@ -136,16 +136,6 @@ fn get_document_status_metatype() -> MetaType {
         },
     );
 
-    enum_values.insert(
-        "Deleted",
-        MetaEnumValue {
-            name: "Deleted",
-            description: Some("The document has been deleted."),
-            deprecation: Deprecation::NoDeprecated,
-            visible: None,
-        },
-    );
-
     MetaType::Enum {
         name: "DocumentStatus".to_string(),
         description: None,
