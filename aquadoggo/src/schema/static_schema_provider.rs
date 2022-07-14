@@ -151,6 +151,8 @@ impl<T> StaticLeak<T> {
 
 #[cfg(test)]
 mod tests {
+    use std::{thread, time};
+
     use rstest::rstest;
 
     use p2panda_rs::schema::{FieldType, Schema, SchemaId};
@@ -173,12 +175,12 @@ mod tests {
 
     #[test]
     fn drops_static_value() {
-        let managed_leak = StaticLeak::new(100);
+        let managed_leak = StaticLeak::new("Hello".to_string());
 
         // So far, everything is fine. We have a value with a static lifetime, which is exactly
         // what we wanted to have.
-        let value: &'static usize = managed_leak.unsafe_value();
-        assert_eq!(*value, 100);
+        let value: &'static String = managed_leak.unsafe_value();
+        assert_eq!(*value, "Hello".to_string());
 
         // We drop the struct before the program ended, this will free the used memory for the
         // struct and the inner value! We do not have a memory leak!
@@ -187,6 +189,6 @@ mod tests {
         // Now it gets bad .. `value` still exists in scope and the borrow checker doesn't warn us
         // that it got dropped because it still assumes it has 'static lifetime. But actually it is
         // gone and you will probably not find the value `100` here anymore ..
-        assert_ne!(*value, 100);
+        assert_ne!(*value, "Hello".to_string());
     }
 }
