@@ -2,12 +2,13 @@
 
 use std::convert::{TryFrom, TryInto};
 
+use anyhow::{anyhow, ensure};
 use async_graphql::{Context, Error, Object, Result};
-use p2panda_rs::entry::{Entry, EntrySigned};
+use p2panda_rs::entry::{decode_entry, Entry, EntrySigned};
 use p2panda_rs::operation::{
     AsOperation, AsVerifiedOperation, Operation, OperationEncoded, VerifiedOperation,
 };
-use p2panda_rs::storage_provider::traits::{OperationStore, StorageProvider};
+use p2panda_rs::storage_provider::traits::{LogStore, OperationStore, StorageProvider};
 use p2panda_rs::Validate;
 
 use crate::bus::{ServiceMessage, ServiceSender};
@@ -40,17 +41,21 @@ impl ClientMutationRoot {
         let store = ctx.data::<SqlStorage>()?;
         let tx = ctx.data::<ServiceSender>()?;
 
-        let entry: EntrySigned = entry.into();
-        entry.validate()?;
+        let entry_encoded: EntrySigned = entry.into();
+        let operation_encoded: OperationEncoded = operation.into();
+        let entry = decode_entry(&entry_encoded, Some(&operation_encoded))?;
+        let operation = VerifiedOperation::new_from_entry(&entry_encoded, &operation_encoded)?;
 
-        let operation: OperationEncoded = operation.into();
-        operation.validate()?;
+        validate_operation_against_schema(&store, &operation.operation()).await?;
 
-        let operation = Operation::try_from(&operation)?;
+        if operation.is_create() {
+            let log_id = store.next_log_id(&entry_encoded.author()).await?;
 
-        validate_operation_against_schema(&store, &operation).await?;
-
-        if operation.is_create() {}
+            ensure!(
+                &log_id == entry.log_id(),
+                anyhow!("Provided log id does not match expected")
+            );
+        }
 
         //
         //         // Validate and store entry in database
