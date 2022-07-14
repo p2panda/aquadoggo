@@ -7,9 +7,9 @@ use log::info;
 use p2panda_rs::schema::{Schema, SchemaId, SYSTEM_SCHEMAS};
 use tokio::sync::Mutex;
 
-/// Provides fast access to system and application schemas during runtime.
+/// Provides fast thread-safe access to system and application schemas.
 ///
-/// Schemas can be updated and removed.
+/// Application schemas can be added and updated.
 #[derive(Clone, Debug)]
 pub struct SchemaProvider(Arc<Mutex<HashMap<SchemaId, Schema>>>);
 
