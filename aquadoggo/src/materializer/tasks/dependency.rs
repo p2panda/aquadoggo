@@ -499,7 +499,7 @@ mod tests {
 
             // The document id for a schema_field_definition who's operation already exists in the store.
             let document_id = db.test_data.documents.first().unwrap();
-            // Reduce the operations for this document and persist it's document and view.
+            // Materialise the schema field definition.
             let input = TaskInput::new(Some(document_id.to_owned()), None);
             reduce_task(context.clone(), input.clone()).await.unwrap();
 
@@ -574,26 +574,23 @@ mod tests {
                 SchemaProvider::default(),
             );
 
-            // The document id and document_view_id for a schema_field_definition who's operation
-            // already exists in the store.
+            // The document id for the schema_field_definition who's operation already exists in the store.
             let schema_field_document_id = db.test_data.documents.first().unwrap();
-            let schema_field_document_view_id: DocumentViewId =
-                schema_field_document_id.as_str().parse().unwrap();
 
-            // Materialise the schema field definition which already exists in the store.
+            // Materialise the schema field definition.
             let input = TaskInput::new(Some(schema_field_document_id.to_owned()), None);
             reduce_task(context.clone(), input.clone()).await.unwrap();
 
-            // Persist a schema field definition entry and operation to the store.
+            // Persist a schema definition entry and operation to the store.
             let (entry_signed, _) =
                 send_to_store(&db.store, &schema_create_operation, None, &KeyPair::new()).await;
 
-            // Materialise the schema field definition.
+            // Materialise the schema definition.
             let document_view_id: DocumentViewId = entry_signed.hash().into();
             let input = TaskInput::new(None, Some(document_view_id.clone()));
             reduce_task(context.clone(), input.clone()).await.unwrap();
 
-            // Dispatch a dependency task for the schema field definition.
+            // Dispatch a dependency task for the schema definition.
             let input = TaskInput::new(None, Some(document_view_id));
             let tasks = dependency_task(context.clone(), input)
                 .await
