@@ -42,7 +42,7 @@ impl DynamicQuery {
         let view = store.get_document_by_id(&document_id).await.unwrap();
         match view {
             Some(view) => self.get_view(view, ctx, selected_fields).await.unwrap(),
-            None => Value::String("not found".to_string()),
+            None => self.get_placeholder(document_id),
         }
     }
 
@@ -68,6 +68,8 @@ impl DynamicQuery {
     }
 
     /// Resolves a given view and recurses into relations to produce a gql value.
+    ///
+    /// This uses unstable, undocumented features of `async_graphql`.
     #[async_recursion]
     async fn get_view(
         &self,
@@ -76,32 +78,59 @@ impl DynamicQuery {
         selected_fields: Vec<SelectionField<'async_recursion>>,
     ) -> ServerResult<Value> {
         debug!("Get {}", view);
+
+        // We assume that the query root has been configured with an SQL storage context.
+        let store = ctx.data_unchecked::<SqlStorage>();
+        let schema_id = store
+            .get_schema_by_document_view(view.id())
+            .await
+            .map_err(|err| ServerError::new(err.to_string(), None))?
+            .unwrap();
+
+        let schema_provider = ctx.data_unchecked::<SchemaProvider>();
+        // Unwrap because this schema id comes from the store.
+        let schema = schema_provider.get(&schema_id).await.unwrap();
+
+        // Construct GraphQL value for every field of the given view that has been selected.
         let mut view_fields = IndexMap::new();
         for selected_field in selected_fields {
-            let document_view_value = view.get(selected_field.name()).unwrap();
-            let selected_fields: Vec<SelectionField<'async_recursion>> =
+            // Retrieve the current field's value from the document view.
+            let document_view_value = view.get(selected_field.name()).ok_or_else(|| {
+                ServerError::new(
+                    format!(
+                        "Field {} does not exist for schema {}",
+                        selected_field.name(),
+                        schema
+                    ),
+                    None,
+                )
+            })?;
+
+            // Collect any further fields that have been selected on the current field.
+            let next_selection: Vec<SelectionField<'async_recursion>> =
                 selected_field.selection_set().collect();
+
             let value = match document_view_value.value() {
-                // single views
+                // Recurse into single views.
                 OperationValue::Relation(rel) => {
-                    self.get_by_document_id(rel.document_id().clone(), ctx, selected_fields)
+                    self.get_by_document_id(rel.document_id().clone(), ctx, next_selection)
                         .await
                 }
                 OperationValue::PinnedRelation(rel) => {
-                    self.get_by_document_view_id(rel.view_id().clone(), ctx, selected_fields)
+                    self.get_by_document_view_id(rel.view_id().clone(), ctx, next_selection)
                         .await
                 }
 
-                // view lists
+                // Recurse into view lists.
                 OperationValue::RelationList(rel) => {
-                    let queries = rel.iter().map(|doc_id| {
-                        self.get_by_document_id(doc_id, ctx, selected_fields.clone())
-                    });
+                    let queries = rel
+                        .iter()
+                        .map(|doc_id| self.get_by_document_id(doc_id, ctx, next_selection.clone()));
                     Value::List(future::join_all(queries).await)
                 }
                 OperationValue::PinnedRelationList(rel) => {
                     let queries = rel.iter().map(|view_id| {
-                        self.get_by_document_view_id(view_id, ctx, selected_fields.clone())
+                        self.get_by_document_view_id(view_id, ctx, next_selection.clone())
                     });
                     Value::List(future::join_all(queries).await)
                 }
@@ -112,6 +141,26 @@ impl DynamicQuery {
             view_fields.insert(Name::new(selected_field.name()), value);
         }
         Ok(Value::Object(view_fields))
+    }
+
+    /// Returns a placeholder value for documents that this node doesn't have access to (yet).
+    ///
+    /// The placeholder contains:
+    ///
+    /// - meta
+    ///     - document_id
+    fn get_placeholder(&self, document_id: DocumentId) -> Value {
+        let mut meta_fields = IndexMap::new();
+        meta_fields.insert(
+            Name::new("document_id"),
+            Value::String(document_id.as_str().to_string()),
+        );
+        let meta_value = Value::Object(meta_fields);
+
+        let mut document_fields = IndexMap::new();
+        document_fields.insert(Name::new("meta"), meta_value);
+
+        Value::Object(document_fields)
     }
 
     /// Returns all documents for the given schema as a GraphQL value.
@@ -224,6 +273,9 @@ impl OutputType for DynamicQuery {
     }
 }
 
+/// Convert non-relation operation values into GraphQL values.
+///
+/// Panics when given a relation field value.
 fn gql_scalar(operation_value: &OperationValue) -> Value {
     match operation_value {
         OperationValue::Boolean(value) => value.to_owned().into(),
