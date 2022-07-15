@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use async_graphql::{scalar, Object, SimpleObject};
-use p2panda_rs::document::DocumentView;
+use async_graphql::SimpleObject;
 use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::storage_provider::traits::{AsEntryArgsResponse, AsPublishEntryResponse};
@@ -11,7 +10,7 @@ use crate::graphql::scalars;
 
 /// Arguments required to sign and encode the next entry for an author.
 #[derive(SimpleObject, Serialize, Deserialize, Debug, Eq, PartialEq)]
-pub struct NextEntryArguments {
+pub struct NextEntryArgumentsType {
     /// Log id of the entry.
     #[graphql(name = "logId")]
     pub log_id: scalars::LogId,
@@ -27,7 +26,7 @@ pub struct NextEntryArguments {
     pub skiplink: Option<scalars::EntryHash>,
 }
 
-impl AsEntryArgsResponse for NextEntryArguments {
+impl AsEntryArgsResponse for NextEntryArgumentsType {
     fn new(backlink: Option<Hash>, skiplink: Option<Hash>, seq_num: SeqNum, log_id: LogId) -> Self {
         Self {
             log_id: log_id.into(),
@@ -38,7 +37,7 @@ impl AsEntryArgsResponse for NextEntryArguments {
     }
 }
 
-impl AsPublishEntryResponse for NextEntryArguments {
+impl AsPublishEntryResponse for NextEntryArgumentsType {
     fn new(backlink: Option<Hash>, skiplink: Option<Hash>, seq_num: SeqNum, log_id: LogId) -> Self {
         Self {
             log_id: log_id.into(),

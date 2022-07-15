@@ -1,17 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_graphql::{Context, Error, Object, Result};
-use p2panda_rs::document::{Document, DocumentBuilder, DocumentId};
-use p2panda_rs::identity::Author;
-use p2panda_rs::operation::{
-    AsVerifiedOperation, Operation, OperationFields, OperationValue, VerifiedOperation,
-};
+use p2panda_rs::document::DocumentId;
 use p2panda_rs::storage_provider::traits::StorageProvider;
 use p2panda_rs::Validate;
 
 use crate::db::provider::SqlStorage;
 use crate::db::request::EntryArgsRequest;
-use crate::graphql::client::response::{DocumentResponse, NextEntryArguments};
+use crate::graphql::client::types::NextEntryArgumentsType;
 use crate::graphql::scalars;
 
 /// GraphQL queries for the Client API.
@@ -36,7 +32,7 @@ impl StaticQuery {
             can be left empty when it is a CREATE operation"
         )]
         document_id: Option<scalars::DocumentId>,
-    ) -> Result<NextEntryArguments> {
+    ) -> Result<NextEntryArgumentsType> {
         let args = EntryArgsRequest {
             public_key: public_key.into(),
             document_id: document_id.map(DocumentId::from),

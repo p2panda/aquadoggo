@@ -2,7 +2,6 @@
 
 use async_graphql::indexmap::IndexMap;
 use async_graphql::registry::{MetaField, MetaType};
-use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::schema::FieldType;
 
 /// Get the GraphQL type name for a p2panda field type.

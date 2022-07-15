@@ -1,17 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! This module contains items for generating GraphQL type definitions used in the dynamic part
-//! of the client API.
+//! This module contains type definitions for the GraphQL client api, which are either implemented
+//! as `async_graphql` objects or as dynamic type definitions for p2panda schemas.
 //!
-//! All of these type definitions are inserted from the `OutputType` implementation in the
+//! All dynamic type definitions are inserted from the `OutputType` implementation in the
 //! [`dynamic_query_type`] module.
 
+mod document_fields_type;
 mod document_meta_type;
-mod dynamic_query_type;
-mod schema_fields_type;
-mod schema_type;
+mod document_type;
+mod dynamic_output_type;
+mod next_entry_arguments_type;
 mod utils;
 
+pub use document_fields_type::DocumentFieldsType;
 pub use document_meta_type::DocumentMetaType;
-pub use schema_fields_type::SchemaFieldsType;
-pub use schema_type::SchemaType;
+pub use document_type::DocumentType;
+pub use next_entry_arguments_type::NextEntryArgumentsType;
