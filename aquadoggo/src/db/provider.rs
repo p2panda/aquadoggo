@@ -13,7 +13,7 @@ use crate::db::request::{EntryArgsRequest, PublishEntryRequest};
 use crate::db::stores::{StorageEntry, StorageLog};
 use crate::db::Pool;
 use crate::errors::StorageProviderResult;
-use crate::graphql::client::static_types::NextEntryArgumentsType;
+use crate::graphql::client::NextEntryArgumentsType;
 
 /// Sql based storage that implements `StorageProvider`.
 #[derive(Clone, Debug)]

@@ -7,7 +7,7 @@ use p2panda_rs::Validate;
 
 use crate::db::provider::SqlStorage;
 use crate::db::request::EntryArgsRequest;
-use crate::graphql::client::static_types::NextEntryArgumentsType;
+use crate::graphql::client::NextEntryArgumentsType;
 use crate::graphql::scalars;
 
 /// GraphQL queries for the Client API.
