@@ -50,7 +50,7 @@ impl OutputType for DynamicQuery {
                     document_type.type_name(),
                     metafield(
                         &document_type.type_name(),
-                        Some(document_type.schema().description()),
+                        Some("Query documents of this schema."),
                         &document_type.type_name(),
                     ),
                 );

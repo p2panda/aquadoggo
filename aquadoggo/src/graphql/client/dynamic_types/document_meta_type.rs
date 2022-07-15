@@ -5,12 +5,14 @@ use async_graphql::{Name, OutputType, ScalarType, SelectionField, Value};
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 
 use crate::graphql::client::dynamic_types::utils::{metafield, metaobject};
-use crate::graphql::scalars::DocumentId as DocumentIdScalar;
+use crate::graphql::scalars::{
+    DocumentId as DocumentIdScalar, DocumentViewId as DocumentViewIdScalar,
+};
 
 /// The metatype for generic document metadata.
 pub struct DocumentMetaType;
 
-// Disable this rule to be able to use `&*` to access `Cow` values.
+// Allow this because we are using `&*` to access `Cow` inner values.
 #[allow(clippy::explicit_auto_deref)]
 impl DocumentMetaType {
     pub fn type_name() -> &'static str {
@@ -22,12 +24,23 @@ impl DocumentMetaType {
 
         fields.insert(
             "documentId".to_string(),
-            metafield("documentId", None, &*DocumentIdScalar::type_name()),
+            metafield(
+                "documentId",
+                Some("The document id of this response object."),
+                &*DocumentIdScalar::type_name(),
+            ),
         );
+
+        // Manually register scalar type in registry because it's not used in the static api.
+        DocumentViewIdScalar::create_type_info(registry);
 
         fields.insert(
             "documentViewId".to_string(),
-            metafield("documentViewId", None, "String"),
+            metafield(
+                "documentViewId",
+                Some("The specific document view id contained in this response object."),
+                &*DocumentViewIdScalar::type_name(),
+            ),
         );
 
         registry.types.insert(
