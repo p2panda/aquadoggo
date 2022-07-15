@@ -430,7 +430,7 @@ mod tests {
             key_pair(DEFAULT_PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
-        "Could not find expected backlink in database for entry with id: <Hash f7c017>"
+        "Could not find expected backlink in database for entry with id: <Hash 18f775>"
     )]
     #[case::backlink_not_in_db(
         &entry_signed_encoded_unvalidated(
@@ -442,7 +442,7 @@ mod tests {
             key_pair(DEFAULT_PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
-        "Could not find expected backlink in database for entry with id: <Hash d3832b>"
+        "Could not find expected backlink in database for entry with id: <Hash e7b9e6>"
     )]
     #[case::previous_operations_not_in_db(
         &entry_signed_encoded_unvalidated(
