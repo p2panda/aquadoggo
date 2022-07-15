@@ -64,13 +64,13 @@ mod tests {
     use ciborium::cbor;
     use ciborium::value::Value;
     use once_cell::sync::Lazy;
-    use p2panda_rs::document::{DocumentId, DocumentViewId};
+    use p2panda_rs::document::DocumentId;
     use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned, LogId, SeqNum};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::{Operation, OperationEncoded, OperationValue};
-    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
-    use p2panda_rs::test_utils::constants::{DEFAULT_HASH, DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
+    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, StorageProvider};
+    use p2panda_rs::test_utils::constants::{HASH, PRIVATE_KEY, SCHEMA_ID};
     use p2panda_rs::test_utils::fixtures::{
         create_operation, delete_operation, entry_signed_encoded, entry_signed_encoded_unvalidated,
         key_pair, operation, operation_encoded, operation_fields, random_hash, update_operation,
@@ -116,7 +116,7 @@ mod tests {
                 &SeqNum::default(),
             )
             .unwrap(),
-            key_pair(DEFAULT_PRIVATE_KEY),
+            key_pair(PRIVATE_KEY),
         )
         .as_str()
         .to_string()
@@ -206,9 +206,9 @@ mod tests {
                 response.data,
                 value!({
                     "publishEntry": {
-                        "logId": "1",
+                        "logId": "0",
                         "seqNum": "2",
-                        "backlink": "002065f74f6fd81eb1bae19eb0d8dce145faa6a56d7b4076d7fba4385410609b2bae",
+                        "backlink": "0020c096422b3c865e5b85ec67a82d5c1d19de43d57c4a3d902ea62b90d96ad32fda",
                         "skiplink": null,
                     }
                 })
@@ -285,9 +285,9 @@ mod tests {
                 json!({
                     "data": {
                         "publishEntry": {
-                            "logId": "1",
+                            "logId": "0",
                             "seqNum": "2",
-                            "backlink": "002065f74f6fd81eb1bae19eb0d8dce145faa6a56d7b4076d7fba4385410609b2bae",
+                            "backlink": "0020c096422b3c865e5b85ec67a82d5c1d19de43d57c4a3d902ea62b90d96ad32fda",
                             "skiplink": null
                         }
                     }
@@ -345,11 +345,11 @@ mod tests {
     #[case::should_not_have_skiplink(
         &entry_signed_encoded_unvalidated(
             1,
-            1,
+            0,
             None,
             Some(random_hash()),
             Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
         "Could not decode payload hash DecodeError"
@@ -357,11 +357,11 @@ mod tests {
     #[case::should_not_have_backlink(
         &entry_signed_encoded_unvalidated(
             1,
-            1,
+            0,
             Some(random_hash()),
             None,
             Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
         "Could not decode payload hash DecodeError"
@@ -369,11 +369,11 @@ mod tests {
     #[case::should_not_have_backlink_or_skiplink(
         &entry_signed_encoded_unvalidated(
             1,
-            1,
-            Some(DEFAULT_HASH.parse().unwrap()),
-            Some(DEFAULT_HASH.parse().unwrap()),
+            0,
+            Some(HASH.parse().unwrap()),
+            Some(HASH.parse().unwrap()),
             Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())) ,
-            key_pair(DEFAULT_PRIVATE_KEY)
+            key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
         "Could not decode payload hash DecodeError"
@@ -381,11 +381,11 @@ mod tests {
     #[case::missing_backlink(
         &entry_signed_encoded_unvalidated(
             2,
-            1,
+            0,
             None,
             None,
             Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
         "Could not decode backlink yamf hash: DecodeError"
@@ -393,11 +393,11 @@ mod tests {
     #[case::missing_skiplink(
         &entry_signed_encoded_unvalidated(
             8,
-            1,
+            0,
             Some(random_hash()),
             None,
             Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
         "Could not decode backlink yamf hash: DecodeError"
@@ -405,11 +405,11 @@ mod tests {
     #[case::should_not_include_skiplink(
         &entry_signed_encoded_unvalidated(
             14,
-            1,
-            Some(DEFAULT_HASH.parse().unwrap()),
-            Some(DEFAULT_HASH.parse().unwrap()),
+            0,
+            Some(HASH.parse().unwrap()),
+            Some(HASH.parse().unwrap()),
             Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
         "Could not decode payload hash DecodeError"
@@ -417,11 +417,11 @@ mod tests {
     #[case::payload_hash_and_size_missing(
         &entry_signed_encoded_unvalidated(
             14,
-            1,
+            0,
             Some(random_hash()),
-            Some(DEFAULT_HASH.parse().unwrap()),
+            Some(HASH.parse().unwrap()),
             None,
-            key_pair(DEFAULT_PRIVATE_KEY)
+            key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
         "Could not decode payload hash DecodeError"
@@ -429,31 +429,31 @@ mod tests {
     #[case::backlink_and_skiplink_not_in_db(
         &entry_signed_encoded_unvalidated(
             8,
-            1,
-            Some(DEFAULT_HASH.parse().unwrap()),
+            0,
+            Some(HASH.parse().unwrap()),
             Some(Hash::new_from_bytes(vec![2, 3, 4]).unwrap()),
             Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
-        "Could not find expected backlink in database for entry with id: <Hash 18f775>"
+        "Could not find expected backlink in database for entry with id: <Hash 640c8a>"
     )]
     #[case::backlink_not_in_db(
         &entry_signed_encoded_unvalidated(
             2,
-            1,
-            Some(DEFAULT_HASH.parse().unwrap()),
+            0,
+            Some(HASH.parse().unwrap()),
             None,
             Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
-        "Could not find expected backlink in database for entry with id: <Hash e7b9e6>"
+        "Could not find expected backlink in database for entry with id: <Hash b2ebed>"
     )]
     #[case::previous_operations_not_in_db(
         &entry_signed_encoded_unvalidated(
             1,
-            1,
+            0,
             None,
             None,
             Some(
@@ -463,11 +463,11 @@ mod tests {
                             vec![("silly", OperationValue::Text("Sausage".to_string()))]
                         )
                     ),
-                    Some(DEFAULT_HASH.parse().unwrap()),
+                    Some(HASH.parse().unwrap()),
                     None
                 )
             ),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            key_pair(PRIVATE_KEY)
         ),
         &{operation_encoded(
                 Some(
@@ -475,20 +475,20 @@ mod tests {
                         vec![("silly", OperationValue::Text("Sausage".to_string()))]
                     )
                 ),
-                Some(DEFAULT_HASH.parse().unwrap()),
+                Some(HASH.parse().unwrap()),
                 None
             ).as_str().to_owned()
         },
-        "<Operation 496543> not found, could not determine document id"
+        "Could not find document for entry in database with id: <Hash ec7c4f>"
     )]
     #[case::create_operation_with_previous_operations(
         &entry_signed_encoded_unvalidated(
             1,
-            1,
+            0,
             None,
             None,
             Some(Operation::from(&OperationEncoded::new(&CREATE_OPERATION_WITH_PREVIOUS_OPS).unwrap())),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            key_pair(PRIVATE_KEY)
         ),
         &CREATE_OPERATION_WITH_PREVIOUS_OPS,
         "previous_operations field should be empty"
@@ -496,11 +496,11 @@ mod tests {
     #[case::update_operation_no_previous_operations(
         &entry_signed_encoded_unvalidated(
             1,
-            1,
+            0,
             None,
             None,
             Some(Operation::from(&OperationEncoded::new(&UPDATE_OPERATION_NO_PREVIOUS_OPS).unwrap())),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            key_pair(PRIVATE_KEY)
         ),
         &UPDATE_OPERATION_NO_PREVIOUS_OPS,
         "previous_operations field can not be empty"
@@ -508,11 +508,11 @@ mod tests {
     #[case::delete_operation_no_previous_operations(
         &entry_signed_encoded_unvalidated(
             1,
-            1,
+            0,
             None,
             None,
             Some(Operation::from(&OperationEncoded::new(&DELETE_OPERATION_NO_PREVIOUS_OPS).unwrap())),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            key_pair(PRIVATE_KEY)
         ),
         &DELETE_OPERATION_NO_PREVIOUS_OPS,
         "previous_operations field can not be empty"
@@ -558,7 +558,7 @@ mod tests {
     fn publish_many_entries(#[from(test_db)] runner: TestDatabaseRunner) {
         runner.with_db_teardown(|db: TestDatabase| async move {
             let key_pairs = vec![KeyPair::new(), KeyPair::new()];
-            let num_of_entries = 100;
+            let num_of_entries = 13;
 
             let (tx, _rx) = broadcast::channel(16);
             let context = HttpServiceContext::new(db.store.clone(), tx);
@@ -630,7 +630,7 @@ mod tests {
     #[rstest]
     fn duplicate_publishing_of_entries(
         #[from(test_db)]
-        #[with(1, 1, 1, false, TEST_SCHEMA_ID.parse().unwrap())]
+        #[with(1, 1, 1, false, SCHEMA_ID.parse().unwrap())]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|populated_db: TestDatabase| async move {
@@ -641,7 +641,7 @@ mod tests {
             // Get the entries from the prepopulated store.
             let mut entries = populated_db
                 .store
-                .get_entries_by_schema(&TEST_SCHEMA_ID.parse().unwrap())
+                .get_entries_by_schema(&SCHEMA_ID.parse().unwrap())
                 .await
                 .unwrap();
 

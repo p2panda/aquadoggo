@@ -267,7 +267,7 @@ mod tests {
                         }}
                     }}
                 "#,
-                1,
+                0,
                 1,
                 public_key.as_str()
             );
@@ -360,7 +360,7 @@ mod tests {
             };
 
             // Test data has been written to first log
-            let log_id = 1u64;
+            let log_id = 0u64;
 
             // Turn parameters into strings by wrapping them around quotation marks when existing,
             // otherwise give them "null" value
