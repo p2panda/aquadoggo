@@ -220,7 +220,7 @@ pub async fn determine_document_id(store: &SqlStorage, entry: &StorageEntry) -> 
     let document_id = match entry.operation().action() {
         OperationAction::Create => {
             let next_log_id = store.next_log_id(&entry.author()).await?;
-            ensure_entry_contains_expected_log_id(&entry.entry_decoded(), &next_log_id).await?;
+            ensure_entry_contains_expected_log_id(&entry.entry_decoded(), &next_log_id)?;
 
             // Derive the document id for this new document.
             entry.hash().into()
@@ -291,7 +291,7 @@ pub async fn determine_document_id_without_strict_validation(
     let document_id = match entry.operation().action() {
         OperationAction::Create => {
             let next_log_id = store.next_log_id(&entry.author()).await?;
-            ensure_entry_contains_expected_log_id(&entry.entry_decoded(), &next_log_id).await?;
+            ensure_entry_contains_expected_log_id(&entry.entry_decoded(), &next_log_id)?;
 
             // Derive the document id for this new document.
             entry.hash().into()

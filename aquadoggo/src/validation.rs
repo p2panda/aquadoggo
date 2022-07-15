@@ -46,10 +46,7 @@ use crate::db::traits::{DocumentStore, SchemaStore};
 ///
 /// This performs one validatin step:
 /// - does the log id of the passed entry match the expected one
-pub async fn ensure_entry_contains_expected_log_id(
-    entry: &Entry,
-    expected_log_id: &LogId,
-) -> Result<()> {
+pub fn ensure_entry_contains_expected_log_id(entry: &Entry, expected_log_id: &LogId) -> Result<()> {
     ensure!(
         expected_log_id == entry.log_id(),
         anyhow!("Entries claimed log id does not match expected")
@@ -104,13 +101,13 @@ pub async fn validate_stated_log_id(
     match store.get(&entry.author(), document_id).await? {
         Some(log_id) => {
             // If there is, check it matches the log id encoded in the entry.
-            ensure_entry_contains_expected_log_id(&entry.entry_decoded(), &log_id).await?;
+            ensure_entry_contains_expected_log_id(&entry.entry_decoded(), &log_id)?;
         }
         None => {
             // If there isn't, check that the next log id for this author matches the one encoded in
             // the entry.
             let next_log_id = store.next_log_id(&entry.author()).await?;
-            ensure_entry_contains_expected_log_id(&entry.entry_decoded(), &next_log_id).await?;
+            ensure_entry_contains_expected_log_id(&entry.entry_decoded(), &next_log_id)?;
         }
     };
     Ok(())
@@ -131,4 +128,30 @@ pub async fn ensure_document_not_deleted(
     let document = store.get_document_by_id(document_id).await?;
     ensure!(document.is_some(), anyhow!("Document is deleted"));
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use p2panda_rs::document::DocumentViewId;
+    use p2panda_rs::entry::{Entry, LogId, SeqNum};
+    use p2panda_rs::identity::{Author, KeyPair};
+    use p2panda_rs::operation::{Operation, OperationFields, OperationId};
+    use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
+    use p2panda_rs::test_utils::fixtures::{
+        entry, operation, operation_fields, public_key, random_document_view_id,
+    };
+    use rstest::rstest;
+
+    use crate::db::stores::test_utils::{send_to_store, test_db, TestDatabase, TestDatabaseRunner};
+    use crate::graphql::client::NextEntryArguments;
+
+    use super::ensure_entry_contains_expected_log_id;
+
+    #[rstest]
+    #[case(LogId::new(0))]
+    #[should_panic(expected = "")]
+    #[case(LogId::new(1))]
+    fn ensures_entry_contains_expected_log_id(entry: Entry, #[case] expected_log_id: LogId) {
+        assert!(ensure_entry_contains_expected_log_id(&entry, &expected_log_id).is_ok())
+    }
 }
