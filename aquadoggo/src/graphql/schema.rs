@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use async_graphql::{EmptySubscription, MergedObject, Request, Response, Schema};
-use log::info;
+use log::{debug, info};
 use tokio::sync::Mutex;
 
 use crate::bus::ServiceSender;
@@ -150,6 +150,7 @@ impl GraphQLSchemaManager {
 
         // Always build a schema right at the beginning as we don't have one yet
         rebuild(shared.clone(), schemas.clone()).await;
+        debug!("Finished building initial GraphQL schema");
 
         // Spawn a task which reacts to newly registered p2panda schemas
         tokio::task::spawn(async move {
