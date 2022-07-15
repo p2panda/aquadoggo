@@ -90,7 +90,7 @@ mod tests {
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::{Operation, OperationEncoded, OperationValue};
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, StorageProvider};
-    use p2panda_rs::test_utils::constants::{DEFAULT_HASH, DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
+    use p2panda_rs::test_utils::constants::{HASH, PRIVATE_KEY, SCHEMA_ID};
     use p2panda_rs::test_utils::fixtures::{
         create_operation, delete_operation, entry_signed_encoded_unvalidated, key_pair, operation,
         operation_encoded, operation_fields, random_hash, update_operation,
@@ -159,7 +159,7 @@ mod tests {
                 response.data,
                 value!({
                     "publishEntry": {
-                        "logId": "1",
+                        "logId": "0",
                         "seqNum": "2",
                         "backlink": "00201c221b573b1e0c67c5e2c624a93419774cdf46b3d62414c44a698df1237b1c16",
                         "skiplink": null,
@@ -238,7 +238,7 @@ mod tests {
                 json!({
                     "data": {
                         "publishEntry": {
-                            "logId": "1",
+                            "logId": "0",
                             "seqNum": "2",
                             "backlink": "00201c221b573b1e0c67c5e2c624a93419774cdf46b3d62414c44a698df1237b1c16",
                             "skiplink": null
@@ -302,7 +302,7 @@ mod tests {
             None,
             Some(random_hash()),
             Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            key_pair(PRIVATE_KEY)
         ),
         OPERATION_ENCODED,
         "Could not decode payload hash DecodeError"
@@ -314,7 +314,7 @@ mod tests {
             Some(random_hash()),
             None,
             Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            key_pair(PRIVATE_KEY)
         ),
         OPERATION_ENCODED,
         "Could not decode payload hash DecodeError"
@@ -323,10 +323,10 @@ mod tests {
         &entry_signed_encoded_unvalidated(
             1,
             1,
-            Some(DEFAULT_HASH.parse().unwrap()),
-            Some(DEFAULT_HASH.parse().unwrap()),
+            Some(HASH.parse().unwrap()),
+            Some(HASH.parse().unwrap()),
             Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())) ,
-            key_pair(DEFAULT_PRIVATE_KEY)
+            key_pair(PRIVATE_KEY)
         ),
         OPERATION_ENCODED,
         "Could not decode payload hash DecodeError"
@@ -338,7 +338,7 @@ mod tests {
             None,
             None,
             Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            key_pair(PRIVATE_KEY)
         ),
         OPERATION_ENCODED,
         "Could not decode backlink yamf hash: DecodeError"
@@ -350,7 +350,7 @@ mod tests {
             Some(random_hash()),
             None,
             Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            key_pair(PRIVATE_KEY)
         ),
         OPERATION_ENCODED,
         "Could not decode backlink yamf hash: DecodeError"
@@ -359,10 +359,10 @@ mod tests {
         &entry_signed_encoded_unvalidated(
             14,
             1,
-            Some(DEFAULT_HASH.parse().unwrap()),
-            Some(DEFAULT_HASH.parse().unwrap()),
+            Some(HASH.parse().unwrap()),
+            Some(HASH.parse().unwrap()),
             Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            key_pair(PRIVATE_KEY)
         ),
         OPERATION_ENCODED,
         "Could not decode payload hash DecodeError"
@@ -372,9 +372,9 @@ mod tests {
             14,
             1,
             Some(random_hash()),
-            Some(DEFAULT_HASH.parse().unwrap()),
+            Some(HASH.parse().unwrap()),
             None,
-            key_pair(DEFAULT_PRIVATE_KEY)
+            key_pair(PRIVATE_KEY)
         ),
         OPERATION_ENCODED,
         "Could not decode payload hash DecodeError"
@@ -383,10 +383,10 @@ mod tests {
         &entry_signed_encoded_unvalidated(
             8,
             1,
-            Some(DEFAULT_HASH.parse().unwrap()),
+            Some(HASH.parse().unwrap()),
             Some(Hash::new_from_bytes(vec![2, 3, 4]).unwrap()),
             Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            key_pair(PRIVATE_KEY)
         ),
         OPERATION_ENCODED,
         "Could not find expected backlink in database for entry with id: <Hash f7c017>"
@@ -395,10 +395,10 @@ mod tests {
         &entry_signed_encoded_unvalidated(
             2,
             1,
-            Some(DEFAULT_HASH.parse().unwrap()),
+            Some(HASH.parse().unwrap()),
             None,
             Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            key_pair(PRIVATE_KEY)
         ),
         OPERATION_ENCODED,
         "Could not find expected backlink in database for entry with id: <Hash d3832b>"
@@ -416,11 +416,11 @@ mod tests {
                             vec![("silly", OperationValue::Text("Sausage".to_string()))]
                         )
                     ),
-                    Some(DEFAULT_HASH.parse().unwrap()),
+                    Some(HASH.parse().unwrap()),
                     None
                 )
             ),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            key_pair(PRIVATE_KEY)
         ),
         &{operation_encoded(
                 Some(
@@ -428,7 +428,7 @@ mod tests {
                         vec![("silly", OperationValue::Text("Sausage".to_string()))]
                     )
                 ),
-                Some(DEFAULT_HASH.parse().unwrap()),
+                Some(HASH.parse().unwrap()),
                 None
             ).as_str().to_owned()
         },
@@ -441,7 +441,7 @@ mod tests {
             None,
             None,
             Some(Operation::from(&OperationEncoded::new(CREATE_OPERATION_WITH_PREVIOUS_OPS).unwrap())),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            key_pair(PRIVATE_KEY)
         ),
         CREATE_OPERATION_WITH_PREVIOUS_OPS,
         "previous_operations field should be empty"
@@ -453,7 +453,7 @@ mod tests {
             None,
             None,
             Some(Operation::from(&OperationEncoded::new(UPDATE_OPERATION_NO_PREVIOUS_OPS).unwrap())),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            key_pair(PRIVATE_KEY)
         ),
         UPDATE_OPERATION_NO_PREVIOUS_OPS,
         "previous_operations field can not be empty"
@@ -465,7 +465,7 @@ mod tests {
             None,
             None,
             Some(Operation::from(&OperationEncoded::new(DELETE_OPERATION_NO_PREVIOUS_OPS).unwrap())),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            key_pair(PRIVATE_KEY)
         ),
         DELETE_OPERATION_NO_PREVIOUS_OPS,
         "previous_operations field can not be empty"
@@ -581,7 +581,7 @@ mod tests {
     #[rstest]
     fn duplicate_publishing_of_entries(
         #[from(test_db)]
-        #[with(1, 1, 1, false, TEST_SCHEMA_ID.parse().unwrap())]
+        #[with(1, 1, 1, false, SCHEMA_ID.parse().unwrap())]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|populated_db: TestDatabase| async move {
@@ -592,7 +592,7 @@ mod tests {
             // Get the entries from the prepopulated store.
             let mut entries = populated_db
                 .store
-                .get_entries_by_schema(&TEST_SCHEMA_ID.parse().unwrap())
+                .get_entries_by_schema(&SCHEMA_ID.parse().unwrap())
                 .await
                 .unwrap();
 

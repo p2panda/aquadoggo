@@ -426,7 +426,7 @@ mod tests {
     use p2panda_rs::operation::OperationEncoded;
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
-    use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
+    use p2panda_rs::test_utils::constants::SCHEMA_ID;
     use p2panda_rs::test_utils::fixtures::{entry, key_pair};
     use rstest::rstest;
 
@@ -506,7 +506,7 @@ mod tests {
     #[rstest]
     fn entries_by_schema(
         #[from(test_db)]
-        #[with(20, 1, 2, false, TEST_SCHEMA_ID.parse().unwrap())]
+        #[with(20, 1, 2, false, SCHEMA_ID.parse().unwrap())]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
@@ -522,7 +522,7 @@ mod tests {
                 .unwrap();
             assert!(entries.is_empty());
 
-            let schema_in_the_db = TEST_SCHEMA_ID.parse().unwrap();
+            let schema_in_the_db = SCHEMA_ID.parse().unwrap();
 
             let entries = db
                 .store

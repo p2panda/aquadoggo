@@ -273,7 +273,7 @@ mod tests {
 
     use p2panda_rs::identity::Author;
     use p2panda_rs::storage_provider::traits::EntryStore;
-    use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
+    use p2panda_rs::test_utils::constants::SCHEMA_ID;
     use rstest::rstest;
     use tokio::sync::broadcast;
     use tokio::task;
@@ -374,7 +374,7 @@ mod tests {
             // Check the entry arrived into Ada's database
             let entries = ada_db
                 .store
-                .get_entries_by_schema(&TEST_SCHEMA_ID.parse().unwrap())
+                .get_entries_by_schema(&SCHEMA_ID.parse().unwrap())
                 .await
                 .unwrap();
             assert_eq!(entries.len(), 1);
