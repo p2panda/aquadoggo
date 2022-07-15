@@ -51,17 +51,11 @@ impl OutputType for DynamicQuery {
                 fields.insert(schema.id().as_str(), metafield);
             }
 
-            MetaType::Object {
-                name: "document_container".into(),
-                description: Some("Container for dynamically generated document api"),
-                visible: Some(|_| true),
+            metaobject(
+                "document_container",
+                Some("Container for dynamically generated document api"),
                 fields,
-                cache_control: Default::default(),
-                extends: false,
-                keys: None,
-                is_subscription: false,
-                rust_typename: "__fake2__",
-            }
+            )
         })
     }
 
@@ -84,6 +78,43 @@ impl OutputType for DynamicQuery {
     }
 }
 
+/// Make a simple metafield with mostly default values.
+fn metafield(name: &str, description: Option<&'static str>, ty: &str) -> MetaField {
+    MetaField {
+        name: name.to_string(),
+        description,
+        ty: ty.to_string(),
+        args: Default::default(),
+        deprecation: Default::default(),
+        cache_control: Default::default(),
+        external: false,
+        requires: None,
+        provides: None,
+        visible: None,
+        compute_complexity: None,
+        oneof: false,
+    }
+}
+
+/// Make a simple object metatype with mostly default values.
+fn metaobject(
+    name: &str,
+    description: Option<&'static str>,
+    fields: IndexMap<String, MetaField>,
+) -> MetaType {
+    MetaType::Object {
+        name: name.to_string(),
+        description,
+        visible: Some(|_| true),
+        fields,
+        cache_control: Default::default(),
+        extends: false,
+        keys: None,
+        is_subscription: false,
+        rust_typename: "__fake__",
+    }
+}
+
 fn get_schema_metafield(schema: &'static Schema) -> MetaField {
     MetaField {
         name: schema.id().as_str(),
@@ -100,7 +131,7 @@ fn get_schema_metafield(schema: &'static Schema) -> MetaField {
         oneof: false,
     }
 }
-/// Return metatype for generic document metadata.
+/// Return metatype for materialisation status of document.
 fn get_document_status_metatype() -> MetaType {
     let mut enum_values = IndexMap::new();
 
@@ -151,69 +182,24 @@ fn get_document_metadata_metatype() -> MetaType {
 
     fields.insert(
         "document_id".to_string(),
-        MetaField {
-            name: "document_id".to_string(),
-            description: None,
-            args: Default::default(),
-            ty: "String".to_string(),
-            deprecation: Default::default(),
-            cache_control: Default::default(),
-            external: false,
-            requires: None,
-            provides: None,
-            visible: None,
-            compute_complexity: None,
-            oneof: false,
-        },
+        metafield("document_id", None, "String"),
     );
 
     fields.insert(
         "document_view_id".to_string(),
-        MetaField {
-            name: "document_view_id".to_string(),
-            description: None,
-            args: Default::default(),
-            ty: "String".to_string(),
-            deprecation: Default::default(),
-            cache_control: Default::default(),
-            external: false,
-            requires: None,
-            provides: None,
-            visible: None,
-            compute_complexity: None,
-            oneof: false,
-        },
+        metafield("document_view_id", None, "String"),
     );
 
     fields.insert(
         "status".to_string(),
-        MetaField {
-            name: "status".to_string(),
-            description: None,
-            args: Default::default(),
-            ty: "DocumentStatus".to_string(),
-            deprecation: Default::default(),
-            cache_control: Default::default(),
-            external: false,
-            requires: None,
-            provides: None,
-            visible: None,
-            compute_complexity: None,
-            oneof: false,
-        },
+        metafield("status", None, "DocumentStatus"),
     );
 
-    MetaType::Object {
-        name: "DocumentMetadata".to_string(),
-        description: Some("Metadata for documents of this schema."),
-        visible: Some(|_| true),
+    metaobject(
+        "DocumentMetadata",
+        Some("Metadata for documents of this schema."),
         fields,
-        cache_control: Default::default(),
-        extends: false,
-        keys: None,
-        is_subscription: false,
-        rust_typename: "__fake__",
-    }
+    )
 }
 
 /// Returns the root metatype for a schema.
@@ -222,51 +208,19 @@ fn get_schema_metatype(schema: &'static Schema) -> MetaType {
 
     fields.insert(
         "meta".to_string(),
-        MetaField {
-            name: "meta".to_string(),
-            description: Some("Metadata for documents of this schema."),
-            args: Default::default(),
-            ty: "DocumentMetadata".to_string(),
-            deprecation: Default::default(),
-            cache_control: Default::default(),
-            external: false,
-            requires: None,
-            provides: None,
-            visible: None,
-            compute_complexity: None,
-            oneof: false,
-        },
+        metafield(
+            "meta",
+            Some("Metadata for documents of this schema."),
+            "DocumentMetadata",
+        ),
     );
 
     fields.insert(
         "fields".to_string(),
-        MetaField {
-            name: "fields".to_string(),
-            description: None,
-            args: Default::default(),
-            ty: get_schema_fields_type(schema),
-            deprecation: Default::default(),
-            cache_control: Default::default(),
-            external: false,
-            requires: None,
-            provides: None,
-            visible: None,
-            compute_complexity: None,
-            oneof: false,
-        },
+        metafield("fields", None, &get_schema_fields_type(schema)),
     );
 
-    MetaType::Object {
-        name: schema.id().as_str(),
-        description: Some(schema.description()),
-        visible: Some(|_| true),
-        fields,
-        cache_control: Default::default(),
-        extends: false,
-        keys: None,
-        is_subscription: false,
-        rust_typename: "__fake__",
-    }
+    metaobject(&schema.id().as_str(), Some(schema.description()), fields)
 }
 
 fn get_schema_fields_type(schema: &'static Schema) -> String {
@@ -279,33 +233,14 @@ fn get_schema_fields_metatype(schema: &'static Schema) -> MetaType {
     schema.fields().iter().for_each(|(field_name, field_type)| {
         fields.insert(
             field_name.to_string(),
-            MetaField {
-                name: field_name.to_string(),
-                description: None,
-                args: Default::default(),
-                ty: get_graphql_type(field_type),
-                deprecation: Default::default(),
-                cache_control: Default::default(),
-                external: false,
-                requires: None,
-                provides: None,
-                visible: None,
-                compute_complexity: None,
-                oneof: false,
-            },
+            metafield(field_name, None, &get_graphql_type(field_type)),
         );
     });
-    MetaType::Object {
-        name: get_schema_fields_type(schema),
-        description: Some("Data fields available on documents of this schema."),
-        visible: Some(|_| true),
+    metaobject(
+        &get_schema_fields_type(schema),
+        Some("Data fields available on documents of this schema."),
         fields,
-        cache_control: Default::default(),
-        extends: false,
-        keys: None,
-        is_subscription: false,
-        rust_typename: "__fake__",
-    }
+    )
 }
 
 /// Return GraphQL type name for a p2panda field type.
