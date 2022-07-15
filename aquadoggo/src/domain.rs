@@ -162,7 +162,8 @@ pub async fn publish(
     // VALIDATE OPERATION VALUES //
     ///////////////////////////////
 
-    validate_operation_against_schema(store, operation.operation()).await?;
+    // @TODO: We skip this for now and will implement it in a follow-up PR
+    // validate_operation_against_schema(store, operation.operation()).await?;
 
     //////////////////////////
     // DETERINE DOCUMENT ID //
