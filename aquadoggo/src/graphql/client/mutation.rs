@@ -426,6 +426,80 @@ mod tests {
         &OPERATION_ENCODED,
         "Could not decode payload hash DecodeError"
     )]
+    #[case::create_operation_with_previous_operations(
+        &entry_signed_encoded_unvalidated(
+            1,
+            0,
+            None,
+            None,
+            Some(Operation::from(&OperationEncoded::new(&CREATE_OPERATION_WITH_PREVIOUS_OPS).unwrap())),
+            key_pair(PRIVATE_KEY)
+        ),
+        &CREATE_OPERATION_WITH_PREVIOUS_OPS,
+        "previous_operations field should be empty"
+    )]
+    #[case::update_operation_no_previous_operations(
+        &entry_signed_encoded_unvalidated(
+            1,
+            0,
+            None,
+            None,
+            Some(Operation::from(&OperationEncoded::new(&UPDATE_OPERATION_NO_PREVIOUS_OPS).unwrap())),
+            key_pair(PRIVATE_KEY)
+        ),
+        &UPDATE_OPERATION_NO_PREVIOUS_OPS,
+        "previous_operations field can not be empty"
+    )]
+    #[case::delete_operation_no_previous_operations(
+        &entry_signed_encoded_unvalidated(
+            1,
+            0,
+            None,
+            None,
+            Some(Operation::from(&OperationEncoded::new(&DELETE_OPERATION_NO_PREVIOUS_OPS).unwrap())),
+            key_pair(PRIVATE_KEY)
+        ),
+        &DELETE_OPERATION_NO_PREVIOUS_OPS,
+        "previous_operations field can not be empty"
+    )]
+    fn validates_encoded_entry_and_operation_integrity(
+        #[case] entry_encoded: &str,
+        #[case] operation_encoded: &str,
+        #[case] expected_error_message: &str,
+        #[from(test_db)] runner: TestDatabaseRunner,
+    ) {
+        let entry_encoded = entry_encoded.to_string();
+        let operation_encoded = operation_encoded.to_string();
+        let expected_error_message = expected_error_message.to_string();
+
+        runner.with_db_teardown(move |db: TestDatabase| async move {
+            let (tx, _rx) = broadcast::channel(16);
+            let context = HttpServiceContext::new(db.store, tx);
+            let client = TestClient::new(build_server(context));
+
+            let publish_entry_request = publish_entry_request(&entry_encoded, &operation_encoded);
+
+            let response = client
+                .post("/graphql")
+                .json(&json!({
+                  "query": publish_entry_request.query,
+                  "variables": publish_entry_request.variables
+                }
+                ))
+                .send()
+                .await;
+
+            let response = response.json::<serde_json::Value>().await;
+            for error in response.get("errors").unwrap().as_array().unwrap() {
+                assert_eq!(
+                    error.get("message").unwrap().as_str().unwrap(),
+                    expected_error_message
+                )
+            }
+        });
+    }
+
+    #[rstest]
     #[case::backlink_and_skiplink_not_in_db(
         &entry_signed_encoded_unvalidated(
             8,
@@ -481,42 +555,6 @@ mod tests {
         },
         "<Operation 496543> not found, could not determine document id"
     )]
-    #[case::create_operation_with_previous_operations(
-        &entry_signed_encoded_unvalidated(
-            1,
-            0,
-            None,
-            None,
-            Some(Operation::from(&OperationEncoded::new(&CREATE_OPERATION_WITH_PREVIOUS_OPS).unwrap())),
-            key_pair(PRIVATE_KEY)
-        ),
-        &CREATE_OPERATION_WITH_PREVIOUS_OPS,
-        "previous_operations field should be empty"
-    )]
-    #[case::update_operation_no_previous_operations(
-        &entry_signed_encoded_unvalidated(
-            1,
-            0,
-            None,
-            None,
-            Some(Operation::from(&OperationEncoded::new(&UPDATE_OPERATION_NO_PREVIOUS_OPS).unwrap())),
-            key_pair(PRIVATE_KEY)
-        ),
-        &UPDATE_OPERATION_NO_PREVIOUS_OPS,
-        "previous_operations field can not be empty"
-    )]
-    #[case::delete_operation_no_previous_operations(
-        &entry_signed_encoded_unvalidated(
-            1,
-            0,
-            None,
-            None,
-            Some(Operation::from(&OperationEncoded::new(&DELETE_OPERATION_NO_PREVIOUS_OPS).unwrap())),
-            key_pair(PRIVATE_KEY)
-        ),
-        &DELETE_OPERATION_NO_PREVIOUS_OPS,
-        "previous_operations field can not be empty"
-    )]
     #[case::claimed_log_id_does_not_match_expected(
         &entry_signed_encoded_unvalidated(
             1,
@@ -529,7 +567,7 @@ mod tests {
         &OPERATION_ENCODED,
         "Entries claimed log id does not match expected"
     )]
-    fn invalid_requests_fail(
+    fn validation_of_entry_and_operation_values(
         #[case] entry_encoded: &str,
         #[case] operation_encoded: &str,
         #[case] expected_error_message: &str,
