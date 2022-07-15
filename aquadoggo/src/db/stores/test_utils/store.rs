@@ -8,7 +8,7 @@ use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::{Author, KeyPair};
 use p2panda_rs::operation::{AsOperation, Operation, OperationEncoded, OperationValue};
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
+use p2panda_rs::test_utils::constants::SCHEMA_ID;
 use p2panda_rs::test_utils::fixtures::{operation, operation_fields};
 
 use crate::db::provider::SqlStorage;
@@ -64,7 +64,7 @@ impl Default for PopulateDatabaseConfig {
             no_of_logs: 0,
             no_of_authors: 0,
             with_delete: false,
-            schema: TEST_SCHEMA_ID.parse().unwrap(),
+            schema: SCHEMA_ID.parse().unwrap(),
             create_operation_fields: doggo_test_fields(),
             update_operation_fields: doggo_test_fields(),
         }

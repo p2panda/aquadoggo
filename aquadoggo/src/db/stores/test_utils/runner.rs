@@ -5,7 +5,7 @@ use std::sync::Arc;
 use futures::Future;
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
+use p2panda_rs::test_utils::constants::SCHEMA_ID;
 use rstest::fixture;
 use tokio::runtime::Builder;
 use tokio::sync::Mutex;
@@ -151,7 +151,7 @@ pub fn test_db(
     // A boolean flag for wether all logs should contain a delete operation
     #[default(false)] with_delete: bool,
     // The schema used for all operations in the db
-    #[default(TEST_SCHEMA_ID.parse().unwrap())] schema: SchemaId,
+    #[default(SCHEMA_ID.parse().unwrap())] schema: SchemaId,
     // The fields used for every CREATE operation
     #[default(doggo_test_fields())] create_operation_fields: Vec<(&'static str, OperationValue)>,
     // The fields used for every UPDATE operation

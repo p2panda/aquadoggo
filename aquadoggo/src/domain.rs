@@ -325,7 +325,7 @@ mod tests {
     use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::{Operation, OperationFields, OperationId};
-    use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
+    use p2panda_rs::test_utils::constants::SCHEMA_ID;
     use p2panda_rs::test_utils::fixtures::{
         operation, operation_fields, public_key, random_document_view_id,
     };
@@ -360,7 +360,7 @@ mod tests {
 
             // Store another entry and operation which perform an update on the earlier operation.
             let update_operation = Operation::new_update(
-                TEST_SCHEMA_ID.parse().unwrap(),
+                SCHEMA_ID.parse().unwrap(),
                 operation_one_id.clone().into(),
                 operation_fields,
             )

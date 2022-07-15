@@ -136,7 +136,7 @@ mod tests {
     use p2panda_rs::entry::{Entry, LogId, SeqNum};
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::{Operation, OperationFields, OperationId};
-    use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
+    use p2panda_rs::test_utils::constants::SCHEMA_ID;
     use p2panda_rs::test_utils::fixtures::{
         entry, operation, operation_fields, public_key, random_document_view_id,
     };
@@ -149,9 +149,9 @@ mod tests {
 
     #[rstest]
     #[case(LogId::new(0))]
-    #[should_panic(expected = "")]
+    #[should_panic(expected = "Entries claimed log id does not match expected")]
     #[case(LogId::new(1))]
     fn ensures_entry_contains_expected_log_id(entry: Entry, #[case] expected_log_id: LogId) {
-        assert!(ensure_entry_contains_expected_log_id(&entry, &expected_log_id).is_ok())
+        ensure_entry_contains_expected_log_id(&entry, &expected_log_id).unwrap();
     }
 }

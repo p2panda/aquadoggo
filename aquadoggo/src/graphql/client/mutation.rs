@@ -64,7 +64,7 @@ mod tests {
     use ciborium::cbor;
     use ciborium::value::Value;
     use once_cell::sync::Lazy;
-    use p2panda_rs::document::DocumentId;
+    use p2panda_rs::document::{DocumentId, DocumentViewId};
     use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned, LogId, SeqNum};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
@@ -479,7 +479,7 @@ mod tests {
                 None
             ).as_str().to_owned()
         },
-        "Could not find document for entry in database with id: <Hash ec7c4f>"
+        "<Operation 496543> not found, could not determine document id"
     )]
     #[case::create_operation_with_previous_operations(
         &entry_signed_encoded_unvalidated(

@@ -11,7 +11,7 @@ use p2panda_rs::operation::{
     Relation, RelationList,
 };
 use p2panda_rs::storage_provider::traits::OperationStore;
-use p2panda_rs::test_utils::constants::DEFAULT_PRIVATE_KEY;
+use p2panda_rs::test_utils::constants::PRIVATE_KEY;
 
 use crate::db::provider::SqlStorage;
 use crate::db::stores::test_utils::{
@@ -80,9 +80,9 @@ pub fn doggo_test_fields() -> Vec<(&'static str, OperationValue)> {
 
 /// Helper for creating many key_pairs.
 ///
-/// The first keypair created will allways be `DEFAULT_PRIVATE_KEY`.
+/// The first keypair created will allways be `PRIVATE_KEY`.
 pub fn test_key_pairs(no_of_authors: usize) -> Vec<KeyPair> {
-    let mut key_pairs = vec![KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap()];
+    let mut key_pairs = vec![KeyPair::from_private_key_str(PRIVATE_KEY).unwrap()];
 
     for _index in 1..no_of_authors {
         key_pairs.push(KeyPair::new())
