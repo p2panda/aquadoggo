@@ -20,7 +20,7 @@ use crate::db::stores::{StorageEntry, StorageLog};
 use crate::graphql::client::NextEntryArguments;
 use crate::validation::{
     ensure_document_not_deleted, ensure_entry_contains_expected_log_id, validate_entry,
-    validate_operation_against_schema, validate_stated_log_id,
+    validate_stated_log_id,
 };
 
 pub async fn next_args(

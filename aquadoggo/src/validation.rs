@@ -11,34 +11,36 @@ use crate::db::provider::SqlStorage;
 use crate::db::stores::StorageEntry;
 use crate::db::traits::{DocumentStore, SchemaStore};
 
-/// Validate an operation against it's claimed schema.
-///
-/// This performs two steps and will return an error if either fail:
-/// - try to retrieve the claimed schema from storage
-/// - if the schema is found, validate the operation against it
-pub async fn validate_operation_against_schema(
-    store: &SqlStorage,
-    operation: &Operation,
-) -> Result<()> {
-    // Retrieve the schema for this operation from the store.
-    //
-    // @TODO Later we will want to use the schema provider for this, now we just get all schema and find the
-    // one we are interested in.
-    let all_schema = store.get_all_schema().await?;
-    let schema = all_schema
-        .iter()
-        .find(|schema| schema.id() == &operation.schema());
-
-    // If the schema we want doesn't exist, then error now.
-    ensure!(schema.is_some(), anyhow!("Schema not found"));
-    let schema = schema.unwrap();
-
-    // Validate that the operation correctly follows the stated schema.
-    validate_cbor(&schema.as_cddl(), &operation.to_cbor())?;
-
-    // All went well, return Ok.
-    Ok(())
-}
+// @TODO: This method will be used in a follow-up PR
+//
+// /// Validate an operation against it's claimed schema.
+// ///
+// /// This performs two steps and will return an error if either fail:
+// /// - try to retrieve the claimed schema from storage
+// /// - if the schema is found, validate the operation against it
+// pub async fn validate_operation_against_schema(
+//     store: &SqlStorage,
+//     operation: &Operation,
+// ) -> Result<()> {
+//     // Retrieve the schema for this operation from the store.
+//     //
+//     // @TODO Later we will want to use the schema provider for this, now we just get all schema and find the
+//     // one we are interested in.
+//     let all_schema = store.get_all_schema().await?;
+//     let schema = all_schema
+//         .iter()
+//         .find(|schema| schema.id() == &operation.schema());
+//
+//     // If the schema we want doesn't exist, then error now.
+//     ensure!(schema.is_some(), anyhow!("Schema not found"));
+//     let schema = schema.unwrap();
+//
+//     // Validate that the operation correctly follows the stated schema.
+//     validate_cbor(&schema.as_cddl(), &operation.to_cbor())?;
+//
+//     // All went well, return Ok.
+//     Ok(())
+// }
 
 /// Compare the log id encoded on an entry with the expected log id.
 ///
