@@ -204,7 +204,7 @@ mod tests {
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
             let log_id = db.store.find_document_log_id(&author, None).await.unwrap();
-            assert_eq!(log_id, LogId::new(1));
+            assert_eq!(log_id, LogId::default());
         });
     }
 
@@ -216,10 +216,10 @@ mod tests {
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let log = StorageLog::new(&author, &schema, &document.clone(), &LogId::new(1));
+            let log = StorageLog::new(&author, &schema, &document.clone(), &LogId::default());
             assert!(db.store.insert_log(log).await.is_ok());
 
-            let log = StorageLog::new(&author, &schema, &document, &LogId::new(1));
+            let log = StorageLog::new(&author, &schema, &document, &LogId::default());
             assert!(db.store.insert_log(log).await.is_err());
         });
     }
@@ -238,7 +238,7 @@ mod tests {
                 &DocumentViewId::new(&[operation_id_1, operation_id_2]).unwrap(),
             );
 
-            let log = StorageLog::new(&author, &schema, &document, &LogId::new(1));
+            let log = StorageLog::new(&author, &schema, &document, &LogId::default());
 
             assert!(db.store.insert_log(log).await.is_ok());
         });
@@ -257,9 +257,9 @@ mod tests {
             // document by the same author
             assert_eq!(log_id, LogId::default());
 
-            // Starting with an empty db, we expect to be able to count up from 1 and expect each
-            // inserted document's log id to be euqal to the count index
-            for n in 1..12 {
+            // Starting with an empty db, we expect to be able to count up from 0 and expect each
+            // inserted document's log id to be equal to the count index
+            for n in 0..12 {
                 let doc = Hash::new_from_bytes(vec![1, 2, n]).unwrap().into();
                 let log_id = db.store.find_document_log_id(&author, None).await.unwrap();
 
@@ -298,7 +298,7 @@ mod tests {
                 &author,
                 &schema,
                 &entry_encoded.hash().into(),
-                &LogId::new(1),
+                &LogId::default(),
             );
 
             // Store log in database
@@ -337,15 +337,15 @@ mod tests {
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
             // Register two log ids at the beginning
-            let log_1 = StorageLog::new(&author, &schema, &document_first, &LogId::new(1));
-            let log_2 = StorageLog::new(&author, &schema, &document_second, &LogId::new(2));
+            let log_1 = StorageLog::new(&author, &schema, &document_first, &LogId::default());
+            let log_2 = StorageLog::new(&author, &schema, &document_second, &LogId::new(1));
 
             db.store.insert_log(log_1).await.unwrap();
             db.store.insert_log(log_2).await.unwrap();
 
             // Find next free log id and register it
             let log_id = db.store.next_log_id(&author).await.unwrap();
-            assert_eq!(log_id, LogId::new(3));
+            assert_eq!(log_id, LogId::new(2));
 
             let log_3 = StorageLog::new(&author, &schema, &document_third.into(), &log_id);
 
@@ -353,7 +353,7 @@ mod tests {
 
             // Find next free log id and register it
             let log_id = db.store.next_log_id(&author).await.unwrap();
-            assert_eq!(log_id, LogId::new(4));
+            assert_eq!(log_id, LogId::new(3));
 
             let log_4 = StorageLog::new(&author, &schema, &document_forth.into(), &log_id);
 
@@ -361,7 +361,7 @@ mod tests {
 
             // Find next free log id
             let log_id = db.store.next_log_id(&author).await.unwrap();
-            assert_eq!(log_id, LogId::new(5));
+            assert_eq!(log_id, LogId::new(4));
         });
     }
 }

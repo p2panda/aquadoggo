@@ -226,7 +226,7 @@ mod tests {
                     "publishEntry": {
                         "logId": "0",
                         "seqNum": "2",
-                        "backlink": "00201c221b573b1e0c67c5e2c624a93419774cdf46b3d62414c44a698df1237b1c16",
+                        "backlink": "0020c096422b3c865e5b85ec67a82d5c1d19de43d57c4a3d902ea62b90d96ad32fda",
                         "skiplink": null,
                     }
                 })
@@ -305,7 +305,7 @@ mod tests {
                         "publishEntry": {
                             "logId": "0",
                             "seqNum": "2",
-                            "backlink": "00201c221b573b1e0c67c5e2c624a93419774cdf46b3d62414c44a698df1237b1c16",
+                            "backlink": "0020c096422b3c865e5b85ec67a82d5c1d19de43d57c4a3d902ea62b90d96ad32fda",
                             "skiplink": null
                         }
                     }
@@ -363,7 +363,7 @@ mod tests {
     #[case::should_not_have_skiplink(
         &entry_signed_encoded_unvalidated(
             1,
-            1,
+            0,
             None,
             Some(random_hash()),
             Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
@@ -375,7 +375,7 @@ mod tests {
     #[case::should_not_have_backlink(
         &entry_signed_encoded_unvalidated(
             1,
-            1,
+            0,
             Some(random_hash()),
             None,
             Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
@@ -387,7 +387,7 @@ mod tests {
     #[case::should_not_have_backlink_or_skiplink(
         &entry_signed_encoded_unvalidated(
             1,
-            1,
+            0,
             Some(HASH.parse().unwrap()),
             Some(HASH.parse().unwrap()),
             Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())) ,
@@ -399,7 +399,7 @@ mod tests {
     #[case::missing_backlink(
         &entry_signed_encoded_unvalidated(
             2,
-            1,
+            0,
             None,
             None,
             Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
@@ -411,7 +411,7 @@ mod tests {
     #[case::missing_skiplink(
         &entry_signed_encoded_unvalidated(
             8,
-            1,
+            0,
             Some(random_hash()),
             None,
             Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
@@ -423,7 +423,7 @@ mod tests {
     #[case::should_not_include_skiplink(
         &entry_signed_encoded_unvalidated(
             14,
-            1,
+            0,
             Some(HASH.parse().unwrap()),
             Some(HASH.parse().unwrap()),
             Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
@@ -435,7 +435,7 @@ mod tests {
     #[case::payload_hash_and_size_missing(
         &entry_signed_encoded_unvalidated(
             14,
-            1,
+            0,
             Some(random_hash()),
             Some(HASH.parse().unwrap()),
             None,
@@ -447,31 +447,31 @@ mod tests {
     #[case::backlink_and_skiplink_not_in_db(
         &entry_signed_encoded_unvalidated(
             8,
-            1,
+            0,
             Some(HASH.parse().unwrap()),
             Some(Hash::new_from_bytes(vec![2, 3, 4]).unwrap()),
             Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
-        "Could not find expected backlink in database for entry with id: <Hash f7c017>"
+        "Could not find expected backlink in database for entry with id: <Hash 640c8a>"
     )]
     #[case::backlink_not_in_db(
         &entry_signed_encoded_unvalidated(
             2,
-            1,
+            0,
             Some(HASH.parse().unwrap()),
             None,
             Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
-        "Could not find expected backlink in database for entry with id: <Hash d3832b>"
+        "Could not find expected backlink in database for entry with id: <Hash b2ebed>"
     )]
     #[case::previous_operations_not_in_db(
         &entry_signed_encoded_unvalidated(
             1,
-            1,
+            0,
             None,
             None,
             Some(
@@ -497,12 +497,12 @@ mod tests {
                 None
             ).as_str().to_owned()
         },
-        "Could not find document for entry in database with id: <Hash f03236>"
+        "Could not find document for entry in database with id: <Hash ec7c4f>"
     )]
     #[case::create_operation_with_previous_operations(
         &entry_signed_encoded_unvalidated(
             1,
-            1,
+            0,
             None,
             None,
             Some(Operation::from(&OperationEncoded::new(&CREATE_OPERATION_WITH_PREVIOUS_OPS).unwrap())),
@@ -514,7 +514,7 @@ mod tests {
     #[case::update_operation_no_previous_operations(
         &entry_signed_encoded_unvalidated(
             1,
-            1,
+            0,
             None,
             None,
             Some(Operation::from(&OperationEncoded::new(&UPDATE_OPERATION_NO_PREVIOUS_OPS).unwrap())),
@@ -526,7 +526,7 @@ mod tests {
     #[case::delete_operation_no_previous_operations(
         &entry_signed_encoded_unvalidated(
             1,
-            1,
+            0,
             None,
             None,
             Some(Operation::from(&OperationEncoded::new(&DELETE_OPERATION_NO_PREVIOUS_OPS).unwrap())),

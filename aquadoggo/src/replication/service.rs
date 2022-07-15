@@ -339,7 +339,7 @@ mod tests {
                 .to_owned();
 
             let author = Author::try_from(public_key).unwrap();
-            let log_ids: Vec<u64> = vec![1];
+            let log_ids: Vec<u64> = vec![0];
             let author_str: String = author.as_str().into();
             let endpoint: String = "http://localhost:3022/graphql".into();
 

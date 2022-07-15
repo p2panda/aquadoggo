@@ -454,7 +454,7 @@ mod tests {
         runner.with_db_teardown(|db: TestDatabase| async move {
             let author =
                 Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
-            let log_id = LogId::new(1);
+            let log_id = LogId::default();
 
             let first_entry = db
                 .store
@@ -482,7 +482,7 @@ mod tests {
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
             let author_not_in_db = Author::try_from(*KeyPair::new().public_key()).unwrap();
-            let log_id = LogId::new(1);
+            let log_id = LogId::default();
 
             let latest_entry = db
                 .store
@@ -547,7 +547,7 @@ mod tests {
                 let seq_num = SeqNum::new(seq_num).unwrap();
                 let entry = db
                     .store
-                    .get_entry_at_seq_num(&author, &LogId::new(1), &seq_num)
+                    .get_entry_at_seq_num(&author, &LogId::default(), &seq_num)
                     .await
                     .unwrap();
                 assert_eq!(entry.unwrap().seq_num(), seq_num)
@@ -564,7 +564,11 @@ mod tests {
             let author_not_in_db = Author::try_from(*KeyPair::new().public_key()).unwrap();
             let entry = db
                 .store
-                .get_entry_at_seq_num(&author_not_in_db, &LogId::new(1), &SeqNum::new(1).unwrap())
+                .get_entry_at_seq_num(
+                    &author_not_in_db,
+                    &LogId::default(),
+                    &SeqNum::new(1).unwrap(),
+                )
                 .await
                 .unwrap();
             assert!(entry.is_none());
@@ -572,7 +576,7 @@ mod tests {
             let seq_num_not_in_log = SeqNum::new(1000).unwrap();
             let entry = db
                 .store
-                .get_entry_at_seq_num(&author_not_in_db, &LogId::new(1), &seq_num_not_in_log)
+                .get_entry_at_seq_num(&author_not_in_db, &LogId::default(), &seq_num_not_in_log)
                 .await
                 .unwrap();
             assert!(entry.is_none());
@@ -593,7 +597,7 @@ mod tests {
                 let seq_num = SeqNum::new(seq_num).unwrap();
                 let entry = db
                     .store
-                    .get_entry_at_seq_num(&author, &LogId::new(1), &seq_num)
+                    .get_entry_at_seq_num(&author, &LogId::default(), &seq_num)
                     .await
                     .unwrap()
                     .unwrap();
