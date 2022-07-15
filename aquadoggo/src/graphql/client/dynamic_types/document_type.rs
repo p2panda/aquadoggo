@@ -8,11 +8,11 @@ use crate::graphql::client::dynamic_types::DocumentFieldsType;
 
 use super::document_meta_type::DocumentMetaType;
 
-/// Represents a p2panda schema, which appears in GraphQL as a type that can be queried for
-/// documents.
+/// Represents documents of a p2panda schema.
 pub struct DocumentType(&'static Schema);
 
 impl DocumentType {
+    /// Ger a new instance for the given schema, which must be `static`.
     pub fn new(schema: &'static Schema) -> Self {
         Self(schema)
     }
@@ -27,6 +27,10 @@ impl DocumentType {
         self.schema().id().as_str()
     }
 
+    /// Generate an object type that represents documents of this schema in the GraphQL API.
+    ///
+    /// Be mindful when changing field names as these also have to be changed in the dynamic query
+    /// resolver to match.
     pub fn register_type(&self, registry: &mut async_graphql::registry::Registry) {
         // Register the type of this schema's `fields` type.
         let fields_type = DocumentFieldsType::new(self.schema());

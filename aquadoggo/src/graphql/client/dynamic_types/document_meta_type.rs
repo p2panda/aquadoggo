@@ -9,7 +9,7 @@ use crate::graphql::scalars::{
     DocumentId as DocumentIdScalar, DocumentViewId as DocumentViewIdScalar,
 };
 
-/// The metatype for generic document metadata.
+/// The GraphQL type for generic document metadata.
 pub struct DocumentMetaType;
 
 // Allow this because we are using `&*` to access `Cow` inner values.
@@ -19,6 +19,9 @@ impl DocumentMetaType {
         "DocumentMeta"
     }
 
+    /// Generate an object type for generic metadata and register it in a GraphQL schema registry.
+    ///
+    /// Be mindful of updating the `resolve` method when field names are changed in this method.
     pub fn register_type(&self, registry: &mut async_graphql::registry::Registry) {
         let mut fields = IndexMap::new();
 
@@ -56,6 +59,8 @@ impl DocumentMetaType {
     /// Resolve GraphQL response value for metadata query field.
     ///
     /// All parameters that are available should be set.
+    ///
+    /// Be mindful of updating the `register_type` method when field names are changed here.
     // Override rule to avoid unnecessary nesting.
     #[allow(clippy::unnecessary_unwrap)]
     pub fn resolve(
