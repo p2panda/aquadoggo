@@ -1,28 +1,34 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_graphql::indexmap::IndexMap;
-use async_graphql::registry::MetaType;
+use async_graphql::registry::{MetaField, MetaType};
 use p2panda_rs::schema::Schema;
 
+use crate::graphql::client::dynamic_object::DynamicObject;
 use crate::graphql::client::types::utils::{graphql_typename, metafield, metaobject};
 
-pub struct SchemaFieldsType(&'static Schema);
+pub struct DocumentFieldsType(&'static Schema);
 
-impl SchemaFieldsType {
-    pub fn new(schema: &'static Schema) -> Self {
+impl DynamicObject for DocumentFieldsType {
+    fn new(schema: &'static Schema) -> Self {
         Self(schema)
     }
 
-    pub fn name(&self) -> String {
+    fn name(&self) -> String {
         format!("{}Fields", self.schema().id().as_str())
     }
 
-    pub fn schema(&self) -> &'static Schema {
+    fn schema(&self) -> &'static Schema {
         self.0
     }
 
+    /// Get the metafield for querying this field type.
+    fn metafield(&self) -> MetaField {
+        metafield("fields", None, &self.name())
+    }
+
     /// Returns the metatype for a schema's fields.
-    pub fn metatype(&self) -> MetaType {
+    fn metatype(&self) -> MetaType {
         let mut fields = IndexMap::new();
         self.0.fields().iter().for_each(|(field_name, field_type)| {
             fields.insert(
