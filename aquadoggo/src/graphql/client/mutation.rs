@@ -517,6 +517,18 @@ mod tests {
         &DELETE_OPERATION_NO_PREVIOUS_OPS,
         "previous_operations field can not be empty"
     )]
+    #[case::claimed_log_id_does_not_match_expected(
+        &entry_signed_encoded_unvalidated(
+            1,
+            1,
+            None,
+            None,
+            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
+            key_pair(PRIVATE_KEY)
+        ),
+        &OPERATION_ENCODED,
+        "Entries claimed log id does not match expected"
+    )]
     fn invalid_requests_fail(
         #[case] entry_encoded: &str,
         #[case] operation_encoded: &str,
