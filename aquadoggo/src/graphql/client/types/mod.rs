@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! This module contains items for generating GraphQL type definitions used in the client API. This
-//! includes both types generated for application schemas and static types used in the GraphQL
-//! schema.
+//! This module contains items for generating GraphQL type definitions used in the dynamic part
+//! of the client API.
+//!
+//! All of these type definitions are inserted from the `OutputType` implementation in the
+//! [`dynamic_query_type`] module.
 
 mod document_meta_type;
-mod query_type;
+mod dynamic_query_type;
 mod schema_fields_type;
 mod schema_type;
 mod utils;
