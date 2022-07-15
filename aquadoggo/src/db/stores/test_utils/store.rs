@@ -139,7 +139,7 @@ pub async fn send_to_store(
         document_id.map(|id| id.as_str().parse().unwrap());
 
     let next_entry_args =
-        next_args_without_strict_validation(&store, &author, document_view_id.as_ref())
+        next_args_without_strict_validation(store, &author, document_view_id.as_ref())
             .await
             .unwrap();
 
@@ -162,13 +162,6 @@ pub async fn send_to_store(
         publish_without_strict_validation(store, &entry_encoded, &operation_encoded)
             .await
             .unwrap();
-
-    // Set or unwrap the passed document_id.
-    let document_id = if operation.is_create() {
-        entry_encoded.hash().into()
-    } else {
-        document_id.unwrap().to_owned()
-    };
 
     (entry_encoded, publish_entry_response)
 }

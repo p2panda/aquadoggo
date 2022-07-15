@@ -65,7 +65,7 @@ mod tests {
     use ciborium::value::Value;
     use once_cell::sync::Lazy;
     use p2panda_rs::document::{DocumentId, DocumentViewId};
-    use p2panda_rs::entry::{sign_and_encode, Entry, LogId, SeqNum};
+    use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned, LogId, SeqNum};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::{Operation, OperationEncoded, OperationValue};
@@ -79,9 +79,13 @@ mod tests {
     use serde_json::json;
     use tokio::sync::broadcast;
 
-    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+    use crate::bus::ServiceMessage;
+    use crate::db::stores::test_utils::{
+        next_args_without_strict_validation, test_db, TestDatabase, TestDatabaseRunner,
+    };
     use crate::domain::next_args;
     use crate::http::{build_server, HttpServiceContext};
+    use crate::materializer::TaskInput;
     use crate::test_helpers::TestClient;
 
     fn to_hex(value: Value) -> String {
@@ -196,42 +200,44 @@ mod tests {
             let context = HttpServiceContext::new(db.store, tx);
             let response = context.schema.execute(publish_entry_request).await;
 
+            println!("{:#?}", response);
+
             assert_eq!(
                 response.data,
                 value!({
                     "publishEntry": {
                         "logId": "1",
                         "seqNum": "2",
-                        "backlink": "00201c221b573b1e0c67c5e2c624a93419774cdf46b3d62414c44a698df1237b1c16",
+                        "backlink": "002065f74f6fd81eb1bae19eb0d8dce145faa6a56d7b4076d7fba4385410609b2bae",
                         "skiplink": null,
                     }
                 })
             );
         });
     }
-    //     // @TODO: This hangs forever right now...
-    //     #[rstest]
-    //     fn sends_message_on_communication_bus(
-    //         #[from(test_db)] runner: TestDatabaseRunner,
-    //         publish_entry_request: Request,
-    //     ) {
-    //         runner.with_db_teardown(move |db: TestDatabase| async move {
-    //             let (tx, mut rx) = broadcast::channel(16);
-    //             let context = HttpServiceContext::new(db.store, tx);
-    //
-    //             context.schema.execute(publish_entry_request).await;
-    //
-    //             // Find out hash of test entry to determine operation id
-    //             let entry_encoded = EntrySigned::new(ENTRY_ENCODED).unwrap();
-    //
-    //             // Expect receiver to receive sent message
-    //             let message = rx.recv().await.unwrap();
-    //             assert_eq!(
-    //                 message,
-    //                 ServiceMessage::NewOperation(entry_encoded.hash().into())
-    //             );
-    //         });
-    //     }
+
+    #[rstest]
+    fn sends_message_on_communication_bus(
+        #[from(test_db)] runner: TestDatabaseRunner,
+        publish_entry_request: Request,
+    ) {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
+            let (tx, mut rx) = broadcast::channel(16);
+            let context = HttpServiceContext::new(db.store, tx);
+
+            context.schema.execute(publish_entry_request).await;
+
+            // Find out hash of test entry to determine operation id
+            let entry_encoded = EntrySigned::new(&ENTRY_ENCODED).unwrap();
+
+            // Expect receiver to receive sent message
+            let message = rx.recv().await.unwrap();
+            assert_eq!(
+                message,
+                ServiceMessage::NewOperation(entry_encoded.hash().into())
+            );
+        });
+    }
 
     #[rstest]
     fn publish_entry_error_handling(#[from(test_db)] runner: TestDatabaseRunner) {
@@ -281,7 +287,7 @@ mod tests {
                         "publishEntry": {
                             "logId": "1",
                             "seqNum": "2",
-                            "backlink": "00201c221b573b1e0c67c5e2c624a93419774cdf46b3d62414c44a698df1237b1c16",
+                            "backlink": "002065f74f6fd81eb1bae19eb0d8dce145faa6a56d7b4076d7fba4385410609b2bae",
                             "skiplink": null
                         }
                     }
@@ -473,7 +479,7 @@ mod tests {
                 None
             ).as_str().to_owned()
         },
-        "Could not find document for entry in database with id: <Hash f03236>"
+        "<Operation 496543> not found, could not determine document id"
     )]
     #[case::create_operation_with_previous_operations(
         &entry_signed_encoded_unvalidated(
@@ -565,9 +571,13 @@ mod tests {
                     let document_view_id: Option<DocumentViewId> =
                         document_id.clone().map(|id| id.as_str().parse().unwrap());
 
-                    let next_entry_args = next_args(&db.store, &author, document_view_id.as_ref())
-                        .await
-                        .unwrap();
+                    let next_entry_args = next_args_without_strict_validation(
+                        &db.store,
+                        &author,
+                        document_view_id.as_ref(),
+                    )
+                    .await
+                    .unwrap();
 
                     let operation = if index == 0 {
                         create_operation(&[("name", OperationValue::Text("Panda".to_string()))])

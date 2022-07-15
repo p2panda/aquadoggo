@@ -266,7 +266,7 @@ pub async fn get_validate_document_id_for_view_id(
 
         ensure!(
             document_id.is_some(),
-            anyhow!("Document no found: operation in passed view id missing")
+            anyhow!("{} not found, could not determine document id", operation)
         );
 
         found_document_ids.insert(document_id.unwrap());
