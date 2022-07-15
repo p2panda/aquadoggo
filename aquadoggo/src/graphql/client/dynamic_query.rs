@@ -4,7 +4,8 @@ use async_graphql::indexmap::IndexMap;
 use async_graphql::parser::types::Field;
 
 use async_graphql::{
-    ContainerType, ContextBase, Name, Positioned, SelectionField, ServerError, ServerResult, Value,
+    ContainerType, ContextBase, Name, Positioned, ScalarType, SelectionField, ServerError,
+    ServerResult, Value,
 };
 use async_recursion::async_recursion;
 use async_trait::async_trait;
@@ -16,32 +17,8 @@ use p2panda_rs::schema::SchemaId;
 
 use crate::db::provider::SqlStorage;
 use crate::db::traits::DocumentStore;
-use crate::graphql::client::utils::DocumentSelector;
+use crate::graphql::scalars::DocumentId as DocumentIdScalar;
 use crate::schema::SchemaProvider;
-
-/// Represents the availability of a document in the GraphQL API.
-enum DocumentStatus {
-    /// We don't have any information about this document.
-    Unavailable,
-
-    /// We have some operations for this document but it's not materialised yet.
-    #[allow(dead_code)]
-    Incomplete,
-
-    /// The document has some materialised view available.
-    Ok,
-}
-
-impl From<DocumentStatus> for Value {
-    fn from(status: DocumentStatus) -> Self {
-        let str_value = match status {
-            DocumentStatus::Unavailable => "UNAVAILABLE",
-            DocumentStatus::Incomplete => "INCOMPLETE",
-            DocumentStatus::Ok => "OK",
-        };
-        Value::Enum(Name::new(str_value))
-    }
-}
 
 /// Container object that injects registered p2panda schemas when it is added to a GraphQL schema.
 #[derive(Debug, Default)]
@@ -64,7 +41,8 @@ impl ContainerType for DynamicQuery {
 }
 
 impl DynamicQuery {
-    /// Resolve a document id to a gql value.
+    /// Fetches the latest view for the given document id from the store and returns it as a
+    /// GraphQL value.
     ///
     /// Recurses into relations when those are selected in `selected_fields`.
     #[async_recursion]
@@ -77,12 +55,15 @@ impl DynamicQuery {
         let store = ctx.data_unchecked::<SqlStorage>();
         let view = store.get_document_by_id(&document_id).await.unwrap();
         match view {
-            Some(view) => self.get_document(view, ctx, selected_fields).await.unwrap(),
-            None => self.get_document_placeholder(&document_id, selected_fields),
+            Some(view) => self
+                .document_response(view, ctx, selected_fields)
+                .await
+                .unwrap(),
+            None => Value::Null,
         }
     }
 
-    /// Resolve a document view id to a gql value.
+    /// Fetches the given document view id from the store and returns it as a GraphQL value.
     ///
     /// Recurses into relations when those are selected in `selected_fields`.
     #[async_recursion]
@@ -98,8 +79,11 @@ impl DynamicQuery {
             .await
             .unwrap();
         match view {
-            Some(view) => self.get_document(view, ctx, selected_fields).await.unwrap(),
-            None => self.get_document_view_placeholder(&document_view_id, selected_fields),
+            Some(view) => self
+                .document_response(view, ctx, selected_fields)
+                .await
+                .unwrap(),
+            None => Value::Null,
         }
     }
 
@@ -107,7 +91,7 @@ impl DynamicQuery {
     ///
     /// This uses unstable, undocumented features of `async_graphql`.
     #[async_recursion]
-    async fn get_document(
+    async fn document_response(
         &self,
         view: DocumentView,
         ctx: &ContextBase<'_, &Positioned<Field>>,
@@ -129,7 +113,7 @@ impl DynamicQuery {
                 let subselection = field.selection_set().collect();
                 document_fields.insert(
                     Name::new("fields"),
-                    self.get_document_fields(view.clone(), ctx, subselection)
+                    self.document_fields_response(view.clone(), ctx, subselection)
                         .await?,
                 );
             }
@@ -142,7 +126,7 @@ impl DynamicQuery {
     ///
     /// This uses unstable, undocumented features of `async_graphql`.
     #[async_recursion]
-    async fn get_document_fields(
+    async fn document_fields_response(
         &self,
         view: DocumentView,
         ctx: &ContextBase<'_, &Positioned<Field>>,
@@ -214,42 +198,6 @@ impl DynamicQuery {
         Ok(Value::Object(view_fields))
     }
 
-    /// Returns a placeholder value for documents that this node doesn't have access to (yet).
-    ///
-    /// The placeholder contains:
-    ///
-    /// - meta
-    ///     - document_id
-    ///     - status
-    fn get_document_placeholder(
-        &self,
-        document_selector: &DocumentSelector,
-        selected_fields: Vec<SelectionField>,
-    ) -> Value {
-        let mut document_fields = IndexMap::new();
-
-        let document_id_value = match document_selector {
-            DocumentSelector::ById(document_id) => Some(document_id),
-            DocumentSelector::ByViewId(view_id) => None,
-        };
-
-        let view_id_value = match document_selector {
-            DocumentSelector::ById(document_id) => None,
-            DocumentSelector::ByViewId(view_id) => Some(view_id),
-        };
-
-        for root_field in selected_fields {
-            if root_field.name() == "meta" {
-                document_fields.insert(
-                    Name::new("meta"),
-                    get_meta(root_field, document_id_value, view_id_value, None),
-                );
-            }
-        }
-
-        Value::Object(document_fields)
-    }
-
     /// Returns all documents for the given schema as a GraphQL value.
     async fn list_schema(
         &self,
@@ -276,7 +224,7 @@ impl DynamicQuery {
         // Assemble views async
         let documents_graphql_values = documents.into_iter().map(|view| async move {
             let selected_fields = ctx.field().selection_set().collect();
-            self.get_document(view, ctx, selected_fields).await
+            self.document_response(view, ctx, selected_fields).await
         });
         Ok(Some(Value::List(
             future::try_join_all(documents_graphql_values).await?,
@@ -287,6 +235,8 @@ impl DynamicQuery {
 /// Get GraphQL response value for metadata query field.
 ///
 /// All parameters that are available should be set.
+// Following all of clippy's rules here would created unnecessary nesting.
+#[allow(clippy::unnecessary_unwrap)]
 fn get_meta(
     root_field: SelectionField,
     document_id: Option<&DocumentId>,
@@ -298,7 +248,7 @@ fn get_meta(
         if meta_field.name() == "document_id" && document_id.is_some() {
             meta_fields.insert(
                 Name::new("document_id"),
-                Value::String(document_id.unwrap().as_str().to_string()),
+                DocumentIdScalar::from(document_id.unwrap().to_owned()).to_value(),
             );
         }
 
@@ -307,14 +257,6 @@ fn get_meta(
                 Name::new("document_view_id"),
                 Value::String(view_id.unwrap().as_str().to_string()),
             );
-        }
-
-        if meta_field.name() == "status" {
-            if document.is_some() {
-                meta_fields.insert(Name::new("status"), DocumentStatus::Ok.into());
-            } else {
-                meta_fields.insert(Name::new("status"), DocumentStatus::Unavailable.into());
-            }
         }
     }
     Value::Object(meta_fields)
