@@ -17,11 +17,13 @@ use async_graphql::{
 };
 use p2panda_rs::schema::Schema;
 
-use crate::graphql::client::dynamic_object::DynamicObject;
-use crate::graphql::client::types::utils::metaobject;
-use crate::graphql::client::types::{DocumentMetaType, DocumentType};
+use crate::graphql::client::dynamic_types::utils::metaobject;
+use crate::graphql::client::dynamic_types::DocumentType;
 use crate::graphql::client::DynamicQuery;
 use crate::schema::load_static_schemas;
+
+use crate::graphql::client::dynamic_types::utils::metafield;
+use crate::graphql::client::dynamic_types::DocumentMetaType;
 
 #[async_trait::async_trait]
 impl OutputType for DynamicQuery {
@@ -36,19 +38,22 @@ impl OutputType for DynamicQuery {
             let mut fields = IndexMap::new();
 
             // Generic type of document metadata.
-            reg.types
-                .insert("DocumentMeta".to_string(), DocumentMetaType::meta_type());
+            DocumentMetaType {}.register_type(reg);
 
             // Insert GraphQL types for all registered schemas.
             for schema in schemas.iter() {
-                let schema_type = DocumentType::new(schema);
-                reg.types.insert(schema_type.name(), schema_type.metatype());
-
-                let fields_type = schema_type.get_fields_type();
-                reg.types.insert(fields_type.name(), fields_type.metatype());
+                let document_type = DocumentType::new(schema);
+                document_type.register_type(reg);
 
                 // Insert queries.
-                fields.insert(schema_type.name(), schema_type.metafield());
+                fields.insert(
+                    document_type.type_name(),
+                    metafield(
+                        &document_type.type_name(),
+                        Some(document_type.schema().description()),
+                        &document_type.type_name(),
+                    ),
+                );
             }
 
             metaobject(

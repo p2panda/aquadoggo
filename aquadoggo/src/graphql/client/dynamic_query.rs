@@ -245,16 +245,16 @@ fn get_meta(
 ) -> Value {
     let mut meta_fields = IndexMap::new();
     for meta_field in root_field.selection_set() {
-        if meta_field.name() == "document_id" && document_id.is_some() {
+        if meta_field.name() == "documentId" && document_id.is_some() {
             meta_fields.insert(
-                Name::new("document_id"),
+                Name::new("documentId"),
                 DocumentIdScalar::from(document_id.unwrap().to_owned()).to_value(),
             );
         }
 
-        if meta_field.name() == "document_view_id" && view_id.is_some() {
+        if meta_field.name() == "documentViewId" && view_id.is_some() {
             meta_fields.insert(
-                Name::new("document_view_id"),
+                Name::new("documentViewId"),
                 Value::String(view_id.unwrap().as_str().to_string()),
             );
         }

@@ -173,6 +173,7 @@ impl GraphQLSchemaManager {
     /// This method makes sure the GraphQL query will be executed by the latest given schema the
     /// manager knows about.
     pub async fn execute(&self, request: impl Into<Request>) -> Response {
+        debug!("Request");
         self.schemas
             .lock()
             .await

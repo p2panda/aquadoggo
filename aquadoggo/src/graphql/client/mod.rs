@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-mod dynamic_object;
 mod dynamic_query;
+pub mod dynamic_types;
 mod mutation;
 mod query;
 mod static_query;
-pub mod types;
+pub mod static_types;
 mod utils;
 
 pub use dynamic_query::DynamicQuery;
