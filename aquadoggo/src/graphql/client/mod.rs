@@ -6,6 +6,7 @@ mod query;
 mod response;
 mod static_query;
 mod types;
+mod utils;
 
 pub use dynamic_query::DynamicQuery;
 pub use mutation::ClientMutationRoot;

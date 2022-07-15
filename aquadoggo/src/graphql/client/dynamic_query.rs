@@ -16,6 +16,7 @@ use p2panda_rs::schema::SchemaId;
 
 use crate::db::provider::SqlStorage;
 use crate::db::traits::DocumentStore;
+use crate::graphql::client::utils::DocumentSelector;
 use crate::schema::SchemaProvider;
 
 /// Represents the availability of a document in the GraphQL API.
@@ -222,42 +223,26 @@ impl DynamicQuery {
     ///     - status
     fn get_document_placeholder(
         &self,
-        document_id: &DocumentId,
+        document_selector: &DocumentSelector,
         selected_fields: Vec<SelectionField>,
     ) -> Value {
         let mut document_fields = IndexMap::new();
+
+        let document_id_value = match document_selector {
+            DocumentSelector::ById(document_id) => Some(document_id),
+            DocumentSelector::ByViewId(view_id) => None,
+        };
+
+        let view_id_value = match document_selector {
+            DocumentSelector::ById(document_id) => None,
+            DocumentSelector::ByViewId(view_id) => Some(view_id),
+        };
 
         for root_field in selected_fields {
             if root_field.name() == "meta" {
                 document_fields.insert(
                     Name::new("meta"),
-                    get_meta(root_field, Some(document_id), None, None),
-                );
-            }
-        }
-
-        Value::Object(document_fields)
-    }
-
-    /// Returns a placeholder value for document views that this node doesn't have access to (yet).
-    ///
-    /// The placeholder contains:
-    ///
-    /// - meta
-    ///     - document_view_id
-    ///     - status
-    fn get_document_view_placeholder(
-        &self,
-        view_id: &DocumentViewId,
-        selected_fields: Vec<SelectionField>,
-    ) -> Value {
-        let mut document_fields = IndexMap::new();
-
-        for root_field in selected_fields {
-            if root_field.name() == "meta" {
-                document_fields.insert(
-                    Name::new("meta"),
-                    get_meta(root_field, None, Some(view_id), None),
+                    get_meta(root_field, document_id_value, view_id_value, None),
                 );
             }
         }
