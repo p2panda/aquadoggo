@@ -4,8 +4,7 @@ use async_graphql::indexmap::IndexMap;
 use async_graphql::parser::types::Field;
 
 use async_graphql::{
-    ContainerType, ContextBase, Name, Positioned, ScalarType, SelectionField, ServerError,
-    ServerResult, Value,
+    ContainerType, ContextBase, Name, Positioned, SelectionField, ServerError, ServerResult, Value,
 };
 use async_recursion::async_recursion;
 use async_trait::async_trait;
@@ -17,7 +16,7 @@ use p2panda_rs::schema::SchemaId;
 
 use crate::db::provider::SqlStorage;
 use crate::db::traits::DocumentStore;
-use crate::graphql::scalars::DocumentId as DocumentIdScalar;
+use crate::graphql::client::dynamic_types::DocumentMetaType;
 use crate::schema::SchemaProvider;
 
 /// Container object that injects registered p2panda schemas when it is added to a GraphQL schema.
@@ -104,7 +103,7 @@ impl DynamicQuery {
             if field.name() == "meta" {
                 document_fields.insert(
                     Name::new("meta"),
-                    get_meta(field, None, Some(view.id()), Some(&view)),
+                    DocumentMetaType::resolve(field, None, Some(view.id())),
                 );
             }
 
@@ -231,37 +230,6 @@ impl DynamicQuery {
         )))
     }
 }
-
-/// Get GraphQL response value for metadata query field.
-///
-/// All parameters that are available should be set.
-// Following all of clippy's rules here would created unnecessary nesting.
-#[allow(clippy::unnecessary_unwrap)]
-fn get_meta(
-    root_field: SelectionField,
-    document_id: Option<&DocumentId>,
-    view_id: Option<&DocumentViewId>,
-    document: Option<&DocumentView>,
-) -> Value {
-    let mut meta_fields = IndexMap::new();
-    for meta_field in root_field.selection_set() {
-        if meta_field.name() == "documentId" && document_id.is_some() {
-            meta_fields.insert(
-                Name::new("documentId"),
-                DocumentIdScalar::from(document_id.unwrap().to_owned()).to_value(),
-            );
-        }
-
-        if meta_field.name() == "documentViewId" && view_id.is_some() {
-            meta_fields.insert(
-                Name::new("documentViewId"),
-                Value::String(view_id.unwrap().as_str().to_string()),
-            );
-        }
-    }
-    Value::Object(meta_fields)
-}
-
 /// Convert non-relation operation values into GraphQL values.
 ///
 /// Panics when given a relation field value.
