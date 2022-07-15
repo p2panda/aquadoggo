@@ -22,7 +22,7 @@ use crate::db::provider::SqlStorage;
 ///
 /// This struct implements the `AsStorageEntry` trait which is required when constructing the
 /// `EntryStore`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StorageEntry {
     entry_signed: EntrySigned,
     operation_encoded: OperationEncoded,

@@ -16,7 +16,7 @@ use async_graphql::indexmap::IndexMap;
 use async_graphql::parser::types::Field;
 use async_graphql::registry::{MetaField, MetaInputValue, MetaTypeId};
 use async_graphql::{
-    ContextSelectionSet, Name, OutputType, Positioned, ServerError, ServerResult, Value,
+    ContextSelectionSet, OutputType, Positioned, ServerError, ServerResult, Value,
 };
 use p2panda_rs::schema::Schema;
 

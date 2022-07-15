@@ -9,7 +9,7 @@ use async_graphql::{
 use async_recursion::async_recursion;
 use async_trait::async_trait;
 use futures::future;
-use log::{debug, warn};
+use log::debug;
 use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
@@ -42,7 +42,7 @@ impl ContainerType for DynamicQuery {
             }
         } else {
             match field_name.parse::<SchemaId>() {
-                Ok(schema) => self.query_single(ctx).await,
+                Ok(_) => self.query_single(ctx).await,
                 Err(_) => Ok(None),
             }
         }
@@ -231,7 +231,7 @@ impl DynamicQuery {
             // Assemble selected metadata values.
             if field.name() == "meta" {
                 document_fields.insert(
-                    Name::new(field.alias().unwrap_or(field.name())),
+                    Name::new(field.alias().unwrap_or_else(|| field.name())),
                     DocumentMetaType::resolve(field, None, Some(view.id())),
                 );
             }
@@ -240,7 +240,7 @@ impl DynamicQuery {
             if field.name() == "fields" {
                 let subselection = field.selection_set().collect();
                 document_fields.insert(
-                    Name::new(field.alias().unwrap_or(field.name())),
+                    Name::new(field.alias().unwrap_or_else(|| field.name())),
                     self.document_fields_response(view.clone(), ctx, subselection)
                         .await?,
                 );
@@ -322,7 +322,11 @@ impl DynamicQuery {
                 _ => gql_scalar(document_view_value.value()),
             };
             view_fields.insert(
-                Name::new(selected_field.alias().unwrap_or(selected_field.name())),
+                Name::new(
+                    selected_field
+                        .alias()
+                        .unwrap_or_else(|| selected_field.name()),
+                ),
                 value,
             );
         }
