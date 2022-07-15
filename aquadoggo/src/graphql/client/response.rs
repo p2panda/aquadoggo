@@ -48,28 +48,3 @@ impl AsPublishEntryResponse for NextEntryArguments {
         }
     }
 }
-
-#[derive(Debug, PartialEq)]
-pub struct DocumentResponse {
-    pub view: Option<DocumentView>,
-}
-
-#[derive(Serialize, Deserialize)]
-struct DocumentField(String, String);
-scalar!(DocumentField);
-
-#[Object]
-impl DocumentResponse {
-    async fn view(&self) -> Vec<DocumentField> {
-        match self.view.clone() {
-            Some(view) => view
-                .iter()
-                .map(|(field, value)| {
-                    let value = format!("{:?}", value.value());
-                    DocumentField(field.to_owned(), value)
-                })
-                .collect(),
-            None => vec![],
-        }
-    }
-}
