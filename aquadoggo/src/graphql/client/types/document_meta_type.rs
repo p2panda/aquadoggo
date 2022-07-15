@@ -1,13 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_graphql::indexmap::IndexMap;
-use async_graphql::registry::{Deprecation, MetaEnumValue, MetaType};
+use async_graphql::registry::MetaType;
+use async_graphql::OutputType;
 
 use crate::graphql::client::types::utils::{metafield, metaobject};
+use crate::graphql::scalars::{DocumentId, DocumentViewId};
 
 /// The metatype for generic document metadata.
 pub struct DocumentMetaType;
 
+// Disable this rule to be able to use `&*` to access `Cow` values.
+#[allow(clippy::explicit_auto_deref)]
 impl DocumentMetaType {
     pub fn name() -> &'static str {
         "DocumentMeta"
@@ -18,7 +22,7 @@ impl DocumentMetaType {
 
         fields.insert(
             "document_id".to_string(),
-            metafield("document_id", None, "String"),
+            metafield("document_id", None, &*DocumentId::type_name()),
         );
 
         fields.insert(
