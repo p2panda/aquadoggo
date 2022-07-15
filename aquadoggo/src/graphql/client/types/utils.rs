@@ -2,7 +2,27 @@
 
 use async_graphql::indexmap::IndexMap;
 use async_graphql::registry::{MetaField, MetaType};
+use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::schema::FieldType;
+
+/// Get the GraphQL type name for a p2panda field type.
+///
+/// GraphQL types for relations use the p2panda schema id as their name.
+pub fn graphql_typename(operation_field_type: &FieldType) -> String {
+    match operation_field_type {
+        // Scalars
+        FieldType::Bool => "Boolean".to_string(),
+        FieldType::Int => "Int".to_string(),
+        FieldType::Float => "Float".to_string(),
+        FieldType::String => "String".to_string(),
+
+        // Relations
+        FieldType::Relation(schema_id) => schema_id.as_str(),
+        FieldType::PinnedRelation(schema_id) => schema_id.as_str(),
+        FieldType::RelationList(schema_id) => format!("[{}]", schema_id.as_str()),
+        FieldType::PinnedRelationList(schema_id) => format!("[{}]", schema_id.as_str()),
+    }
+}
 
 /// Make a simple metafield with mostly default values.
 pub fn metafield(name: &str, description: Option<&'static str>, ty: &str) -> MetaField {
@@ -38,24 +58,5 @@ pub fn metaobject(
         keys: None,
         is_subscription: false,
         rust_typename: "__fake__",
-    }
-}
-
-/// Get the GraphQL type name for a p2panda field type.
-///
-/// GraphQL types for relations use the p2panda schema id as their name.
-pub fn graphql_typename(operation_field_type: &FieldType) -> String {
-    match operation_field_type {
-        // Scalars
-        FieldType::Bool => "Boolean".to_string(),
-        FieldType::Int => "Int".to_string(),
-        FieldType::Float => "Float".to_string(),
-        FieldType::String => "String".to_string(),
-
-        // Relations
-        FieldType::Relation(schema_id) => schema_id.as_str(),
-        FieldType::PinnedRelation(schema_id) => schema_id.as_str(),
-        FieldType::RelationList(schema_id) => format!("[{}]", schema_id.as_str()),
-        FieldType::PinnedRelationList(schema_id) => format!("[{}]", schema_id.as_str()),
     }
 }
