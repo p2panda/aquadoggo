@@ -148,8 +148,6 @@ mod tests {
             let context = HttpServiceContext::new(manager);
             let client = TestClient::new(build_server(context));
 
-            // Selected fields need to be alphabetically sorted because that's what the `json` macro
-            // that is used in the assert below produces.
             let response = client
                 .post("/graphql")
                 .json(&json!({

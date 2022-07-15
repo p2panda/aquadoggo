@@ -18,7 +18,7 @@ use crate::db::provider::SqlStorage;
 use crate::db::traits::DocumentStore;
 use crate::schema::SchemaProvider;
 
-/// Communicates the availability of a document in the GraphQL API.
+/// Represents the availability of a document in the GraphQL API.
 enum DocumentStatus {
     /// We don't have any information about this document.
     Unavailable,
@@ -45,6 +45,22 @@ impl From<DocumentStatus> for Value {
 /// Container object that injects registered p2panda schemas when it is added to a GraphQL schema.
 #[derive(Debug, Default)]
 pub struct DynamicQuery;
+
+#[async_trait]
+impl ContainerType for DynamicQuery {
+    async fn resolve_field(
+        &self,
+        ctx: &ContextBase<&Positioned<Field>>,
+    ) -> ServerResult<Option<Value>> {
+        // This resolver is called for all queries but we only want to resolve if the queried field
+        // can actually be parsed as a schema id.
+        let schema_parsed = ctx.field().name().parse::<SchemaId>();
+        match schema_parsed {
+            Ok(schema) => self.list_schema(schema, ctx).await,
+            Err(_) => Ok(None),
+        }
+    }
+}
 
 impl DynamicQuery {
     /// Resolve a document id to a gql value.
@@ -317,22 +333,6 @@ fn get_meta(
         }
     }
     Value::Object(meta_fields)
-}
-
-#[async_trait]
-impl ContainerType for DynamicQuery {
-    async fn resolve_field(
-        &self,
-        ctx: &ContextBase<&Positioned<Field>>,
-    ) -> ServerResult<Option<Value>> {
-        // This resolver is called for all queries but we only want to resolve if the queried field
-        // can actually be parsed as a schema id.
-        let schema_parsed = ctx.field().name().parse::<SchemaId>();
-        match schema_parsed {
-            Ok(schema) => self.list_schema(schema, ctx).await,
-            Err(_) => Ok(None),
-        }
-    }
 }
 
 /// Convert non-relation operation values into GraphQL values.

@@ -2,7 +2,7 @@
 
 use async_graphql::MergedObject;
 
-use crate::graphql::client::query::{DynamicQuery, StaticQuery};
+use crate::graphql::client::{DynamicQuery, StaticQuery};
 
 /// Root query object for client api that contains a static and a dynamic part.
 #[derive(MergedObject, Debug)]
