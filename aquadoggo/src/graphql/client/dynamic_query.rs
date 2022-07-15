@@ -9,7 +9,7 @@ use async_graphql::{
 use async_recursion::async_recursion;
 use async_trait::async_trait;
 use futures::future;
-use log::debug;
+use log::{debug, warn};
 use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
@@ -30,16 +30,145 @@ impl ContainerType for DynamicQuery {
         ctx: &ContextBase<&Positioned<Field>>,
     ) -> ServerResult<Option<Value>> {
         // This resolver is called for all queries but we only want to resolve if the queried field
-        // can actually be parsed as a schema id.
-        let schema_parsed = ctx.field().name().parse::<SchemaId>();
-        match schema_parsed {
-            Ok(schema) => self.list_schema(schema, ctx).await,
-            Err(_) => Ok(None),
+        // can actually be parsed in of the two forms
+        // - `<SchemaId>`
+        // - `all_<SchemaId>`
+        let field_name = ctx.field().name();
+
+        if field_name.starts_with("all_") {
+            match field_name.split_at(4).1.parse::<SchemaId>() {
+                Ok(schema) => self.query_listing(schema, ctx).await,
+                Err(_) => Ok(None),
+            }
+        } else {
+            match field_name.parse::<SchemaId>() {
+                Ok(schema) => self.query_single(ctx).await,
+                Err(_) => Ok(None),
+            }
         }
     }
 }
 
 impl DynamicQuery {
+    /// Returns a single document as a GraphQL value.
+    async fn query_single(
+        &self,
+        ctx: &ContextBase<'_, &Positioned<Field>>,
+    ) -> ServerResult<Option<Value>> {
+        let document_id_arg = ctx
+            .field()
+            .arguments()
+            .unwrap()
+            .iter()
+            .enumerate()
+            .filter_map(|(arg_index, (name, value))| {
+                if name != "id" {
+                    return None;
+                }
+                let arg_pos = &ctx.item.node.arguments[arg_index];
+                match value.to_string().parse::<DocumentId>() {
+                    Ok(document_id) => Some(document_id),
+                    Err(err) => {
+                        ctx.add_error(ServerError::new(
+                            format!("Invalid argument `id`: {}", err),
+                            Some(arg_pos.1.pos),
+                        ));
+                        None
+                    }
+                }
+            })
+            .last();
+
+        let view_id_arg = ctx
+            .field()
+            .arguments()
+            .unwrap()
+            .iter()
+            .enumerate()
+            .filter_map(|(arg_index, (name, value))| {
+                if name != "viewId" {
+                    return None;
+                }
+                let arg_pos = &ctx.item.node.arguments[arg_index];
+                if let Value::String(raw_value) = value {
+                    match raw_value.parse::<DocumentViewId>() {
+                        Ok(view_id) => Some(view_id),
+                        Err(err) => {
+                            ctx.add_error(ServerError::new(
+                                format!("Invalid argument `viewId`: {}", err),
+                                Some(arg_pos.1.pos),
+                            ));
+                            None
+                        }
+                    }
+                } else {
+                    ctx.add_error(ServerError::new(
+                        "Argument `viewId` must be a String value",
+                        Some(arg_pos.1.pos),
+                    ));
+                    None
+                }
+            })
+            .last();
+
+        match view_id_arg {
+            Some(view_id) => Ok(Some(
+                self.get_by_document_view_id(view_id, ctx, ctx.field().selection_set().collect())
+                    .await,
+            )),
+            None => {
+                if let Some(document_id) = document_id_arg {
+                    Ok(Some(
+                        self.get_by_document_id(
+                            document_id,
+                            ctx,
+                            ctx.field().selection_set().collect(),
+                        )
+                        .await,
+                    ))
+                } else {
+                    Err(ServerError::new(
+                        "Must provide either `id` or `viewId` argument.".to_string(),
+                        Some(ctx.item.pos),
+                    ))
+                }
+            }
+        }
+    }
+
+    /// Returns all documents for the given schema as a GraphQL value.
+    async fn query_listing(
+        &self,
+        schema_id: SchemaId,
+        ctx: &ContextBase<'_, &Positioned<Field>>,
+    ) -> ServerResult<Option<Value>> {
+        // We assume that the query root has been configured with a `SchemaProvider` context.
+        let schema_provider = ctx.data_unchecked::<SchemaProvider>();
+
+        if schema_provider.get(&schema_id).await.is_none() {
+            // Abort resolving this as a document query if we don't know this schema.
+            return Ok(None);
+        }
+
+        // We assume that an SQL storage exists in the context at this point.
+        let store = ctx.data_unchecked::<SqlStorage>();
+
+        // Retrieve all documents for schema from storage.
+        let documents = store
+            .get_documents_by_schema(&schema_id)
+            .await
+            .map_err(|err| ServerError::new(err.to_string(), None))?;
+
+        // Assemble views async
+        let documents_graphql_values = documents.into_iter().map(|view| async move {
+            let selected_fields = ctx.field().selection_set().collect();
+            self.document_response(view, ctx, selected_fields).await
+        });
+        Ok(Some(Value::List(
+            future::try_join_all(documents_graphql_values).await?,
+        )))
+    }
+
     /// Fetches the latest view for the given document id from the store and returns it as a
     /// GraphQL value.
     ///
@@ -102,7 +231,7 @@ impl DynamicQuery {
             // Assemble selected metadata values.
             if field.name() == "meta" {
                 document_fields.insert(
-                    Name::new("meta"),
+                    Name::new(field.alias().unwrap_or(field.name())),
                     DocumentMetaType::resolve(field, None, Some(view.id())),
                 );
             }
@@ -111,7 +240,7 @@ impl DynamicQuery {
             if field.name() == "fields" {
                 let subselection = field.selection_set().collect();
                 document_fields.insert(
-                    Name::new("fields"),
+                    Name::new(field.alias().unwrap_or(field.name())),
                     self.document_fields_response(view.clone(), ctx, subselection)
                         .await?,
                 );
@@ -192,42 +321,12 @@ impl DynamicQuery {
                 // Convert all simple fields to scalar values.
                 _ => gql_scalar(document_view_value.value()),
             };
-            view_fields.insert(Name::new(selected_field.name()), value);
+            view_fields.insert(
+                Name::new(selected_field.alias().unwrap_or(selected_field.name())),
+                value,
+            );
         }
         Ok(Value::Object(view_fields))
-    }
-
-    /// Returns all documents for the given schema as a GraphQL value.
-    async fn list_schema(
-        &self,
-        schema_id: SchemaId,
-        ctx: &ContextBase<'_, &Positioned<Field>>,
-    ) -> ServerResult<Option<Value>> {
-        // We assume that the query root has been configured with a `SchemaProvider` context.
-        let schema_provider = ctx.data_unchecked::<SchemaProvider>();
-
-        if schema_provider.get(&schema_id).await.is_none() {
-            // Abort resolving this as a document query if we don't know this schema.
-            return Ok(None);
-        }
-
-        // We assume that an SQL storage exists in the context at this point.
-        let store = ctx.data_unchecked::<SqlStorage>();
-
-        // Retrieve all documents for schema from storage.
-        let documents = store
-            .get_documents_by_schema(&schema_id)
-            .await
-            .map_err(|err| ServerError::new(err.to_string(), None))?;
-
-        // Assemble views async
-        let documents_graphql_values = documents.into_iter().map(|view| async move {
-            let selected_fields = ctx.field().selection_set().collect();
-            self.document_response(view, ctx, selected_fields).await
-        });
-        Ok(Some(Value::List(
-            future::try_join_all(documents_graphql_values).await?,
-        )))
     }
 }
 /// Convert non-relation operation values into GraphQL values.

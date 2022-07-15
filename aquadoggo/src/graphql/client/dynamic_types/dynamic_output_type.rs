@@ -9,11 +9,14 @@
 
 use std::borrow::Cow;
 
+use crate::graphql::scalars::{
+    DocumentId as DocumentIdScalar, DocumentViewId as DocumentViewIdScalar,
+};
 use async_graphql::indexmap::IndexMap;
 use async_graphql::parser::types::Field;
-use async_graphql::registry::MetaTypeId;
+use async_graphql::registry::{MetaField, MetaInputValue, MetaTypeId};
 use async_graphql::{
-    ContextSelectionSet, OutputType, Positioned, ServerError, ServerResult, Value,
+    ContextSelectionSet, Name, OutputType, Positioned, ServerError, ServerResult, Value,
 };
 use p2panda_rs::schema::Schema;
 
@@ -45,13 +48,54 @@ impl OutputType for DynamicQuery {
                 let document_type = DocumentType::new(schema);
                 document_type.register_type(reg);
 
-                // Insert a query field for every schema with which documents of that schema can be
-                // queried.
+                // Insert a single and listing query field for every schema with which documents of
+                // that schema can be queried.
+                let mut single_args = IndexMap::new();
+                single_args.insert(
+                    "id".to_string(),
+                    MetaInputValue {
+                        name: "id",
+                        description: None,
+                        ty: DocumentIdScalar::type_name().to_string(),
+                        default_value: None,
+                        visible: None,
+                        is_secret: false,
+                    },
+                );
+                single_args.insert(
+                    "viewId".to_string(),
+                    MetaInputValue {
+                        name: "viewId",
+                        description: None,
+                        ty: DocumentViewIdScalar::type_name().to_string(),
+                        default_value: None,
+                        visible: None,
+                        is_secret: false,
+                    },
+                );
                 fields.insert(
                     document_type.type_name(),
+                    MetaField {
+                        name: document_type.type_name(),
+                        description: Some("Query a single document of this schema."),
+                        ty: document_type.type_name(),
+                        args: single_args,
+                        deprecation: Default::default(),
+                        cache_control: Default::default(),
+                        external: false,
+                        requires: None,
+                        provides: None,
+                        visible: None,
+                        compute_complexity: None,
+                        oneof: false,
+                    },
+                );
+
+                fields.insert(
+                    format!("all_{}", document_type.type_name()),
                     metafield(
-                        &document_type.type_name(),
-                        Some("Query documents of this schema."),
+                        &format!("all_{}", document_type.type_name()),
+                        Some("Query all documents of this schema."),
                         &document_type.type_name(),
                     ),
                 );
