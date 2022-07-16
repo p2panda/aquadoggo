@@ -19,20 +19,23 @@ use crate::db::traits::DocumentStore;
 use crate::graphql::client::dynamic_types::DocumentMetaType;
 use crate::schema::SchemaProvider;
 
+use crate::graphql::client::utils::validate_view_matches_schema;
+
 /// Container object that injects registered p2panda schemas when it is added to a GraphQL schema.
 #[derive(Debug, Default)]
 pub struct DynamicQuery;
 
 #[async_trait]
 impl ContainerType for DynamicQuery {
+    /// This resolver is called for all queries but we only want to resolve if the queried field
+    /// can actually be parsed in of the two forms:
+    ///
+    /// - `<SchemaId>` - query a single document
+    /// - `all_<SchemaId>` - query a listing of documents
     async fn resolve_field(
         &self,
         ctx: &ContextBase<&Positioned<Field>>,
     ) -> ServerResult<Option<Value>> {
-        // This resolver is called for all queries but we only want to resolve if the queried field
-        // can actually be parsed in of the two forms
-        // - `<SchemaId>`
-        // - `all_<SchemaId>`
         let field_name = ctx.field().name();
 
         if field_name.starts_with("all_") {
@@ -42,7 +45,7 @@ impl ContainerType for DynamicQuery {
             }
         } else {
             match field_name.parse::<SchemaId>() {
-                Ok(_) => self.query_single(ctx).await,
+                Ok(schema) => self.query_single(schema, ctx).await,
                 Err(_) => Ok(None),
             }
         }
@@ -53,6 +56,7 @@ impl DynamicQuery {
     /// Returns a single document as a GraphQL value.
     async fn query_single(
         &self,
+        schema: SchemaId,
         ctx: &ContextBase<'_, &Positioned<Field>>,
     ) -> ServerResult<Option<Value>> {
         let document_id_arg = ctx
@@ -113,8 +117,13 @@ impl DynamicQuery {
 
         match view_id_arg {
             Some(view_id) => Ok(Some(
-                self.get_by_document_view_id(view_id, ctx, ctx.field().selection_set().collect())
-                    .await,
+                self.get_by_document_view_id(
+                    view_id,
+                    ctx,
+                    ctx.field().selection_set().collect(),
+                    Some(schema),
+                )
+                .await?,
             )),
             None => {
                 if let Some(document_id) = document_id_arg {
@@ -123,8 +132,9 @@ impl DynamicQuery {
                             document_id,
                             ctx,
                             ctx.field().selection_set().collect(),
+                            Some(schema),
                         )
-                        .await,
+                        .await?,
                     ))
                 } else {
                     Err(ServerError::new(
@@ -173,45 +183,60 @@ impl DynamicQuery {
     /// GraphQL value.
     ///
     /// Recurses into relations when those are selected in `selected_fields`.
+    ///
+    /// If the `validate_schema` parameter has a value, returns an error if the resolved document
+    /// doesn't match this schema.
     #[async_recursion]
     async fn get_by_document_id(
         &self,
         document_id: DocumentId,
         ctx: &ContextBase<'_, &Positioned<Field>>,
         selected_fields: Vec<SelectionField<'async_recursion>>,
-    ) -> Value {
+        validate_schema: Option<SchemaId>,
+    ) -> ServerResult<Value> {
         let store = ctx.data_unchecked::<SqlStorage>();
         let view = store.get_document_by_id(&document_id).await.unwrap();
         match view {
-            Some(view) => self
-                .document_response(view, ctx, selected_fields)
-                .await
-                .unwrap(),
-            None => Value::Null,
+            Some(view) => {
+                // Validate the document's schema if the `validate_schema` argument is set.
+                if let Some(expected_schema_id) = validate_schema {
+                    validate_view_matches_schema(view.id(), expected_schema_id, ctx).await?;
+                }
+
+                self.document_response(view, ctx, selected_fields).await
+            }
+            None => Ok(Value::Null),
         }
     }
 
     /// Fetches the given document view id from the store and returns it as a GraphQL value.
     ///
     /// Recurses into relations when those are selected in `selected_fields`.
+    ///
+    /// If the `validate_schema` parameter has a value, returns an error if the resolved document
+    /// doesn't match this schema.
     #[async_recursion]
     async fn get_by_document_view_id(
         &self,
         document_view_id: DocumentViewId,
         ctx: &ContextBase<'_, &Positioned<Field>>,
         selected_fields: Vec<SelectionField<'async_recursion>>,
-    ) -> Value {
+        validate_schema: Option<SchemaId>,
+    ) -> ServerResult<Value> {
         let store = ctx.data_unchecked::<SqlStorage>();
         let view = store
             .get_document_view_by_id(&document_view_id)
             .await
             .unwrap();
         match view {
-            Some(view) => self
-                .document_response(view, ctx, selected_fields)
-                .await
-                .unwrap(),
-            None => Value::Null,
+            Some(view) => {
+                // Validate the document's schema if the `validate_schema` argument is set.
+                if let Some(expected_schema_id) = validate_schema {
+                    validate_view_matches_schema(view.id(), expected_schema_id, ctx).await?;
+                }
+                self.document_response(view, ctx, selected_fields).await
+            }
+            None => Ok(Value::Null),
         }
     }
 
@@ -296,26 +321,26 @@ impl DynamicQuery {
             let value = match document_view_value.value() {
                 // Recurse into single views.
                 OperationValue::Relation(rel) => {
-                    self.get_by_document_id(rel.document_id().clone(), ctx, next_selection)
-                        .await
+                    self.get_by_document_id(rel.document_id().clone(), ctx, next_selection, None)
+                        .await?
                 }
                 OperationValue::PinnedRelation(rel) => {
-                    self.get_by_document_view_id(rel.view_id().clone(), ctx, next_selection)
-                        .await
+                    self.get_by_document_view_id(rel.view_id().clone(), ctx, next_selection, None)
+                        .await?
                 }
 
                 // Recurse into view lists.
                 OperationValue::RelationList(rel) => {
-                    let queries = rel
-                        .iter()
-                        .map(|doc_id| self.get_by_document_id(doc_id, ctx, next_selection.clone()));
-                    Value::List(future::join_all(queries).await)
+                    let queries = rel.iter().map(|doc_id| {
+                        self.get_by_document_id(doc_id, ctx, next_selection.clone(), None)
+                    });
+                    Value::List(future::try_join_all(queries).await?)
                 }
                 OperationValue::PinnedRelationList(rel) => {
                     let queries = rel.iter().map(|view_id| {
-                        self.get_by_document_view_id(view_id, ctx, next_selection.clone())
+                        self.get_by_document_view_id(view_id, ctx, next_selection.clone(), None)
                     });
-                    Value::List(future::join_all(queries).await)
+                    Value::List(future::try_join_all(queries).await?)
                 }
 
                 // Convert all simple fields to scalar values.
