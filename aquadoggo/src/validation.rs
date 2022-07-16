@@ -275,7 +275,7 @@ mod tests {
     #[rstest]
     #[case(LogId::new(0))]
     #[should_panic(
-        expected = "Entry's claimed log id of 0 does not match expected log id of 1 for given author"
+        expected = "Entry's claimed log id of 1 does not match expected log id of 0 for given author"
     )]
     #[case(LogId::new(1))]
     fn ensures_entry_contains_expected_log_id(#[case] claimed_log_id: LogId) {

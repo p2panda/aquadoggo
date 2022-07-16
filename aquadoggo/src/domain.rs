@@ -20,7 +20,7 @@ use crate::db::stores::{StorageEntry, StorageLog};
 use crate::graphql::client::NextEntryArguments;
 use crate::validation::{
     ensure_document_not_deleted, ensure_log_ids_equal, get_expected_backlink,
-    get_expected_skiplink, verify_bamboo_entry, verify_log_id,
+    get_expected_skiplink, verify_bamboo_entry, verify_log_id, verify_seq_num,
 };
 
 pub async fn next_args(
@@ -149,6 +149,7 @@ pub async fn publish(
     // VALIDATE ENTRY VALUES //
     ///////////////////////////
 
+    verify_seq_num(store, &entry.author(), &entry.log_id(), &entry.seq_num()).await?;
     let backlink = get_expected_backlink(store, &entry).await?;
     let skiplink = get_expected_skiplink(store, &entry).await?;
 
