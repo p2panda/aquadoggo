@@ -1,23 +1,29 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::convert::TryFrom;
 use std::fmt::Display;
 
 use async_graphql::scalar;
+use p2panda_rs::document::DocumentViewIdError;
 use serde::{Deserialize, Serialize};
 
 /// Document view id as a GraphQL scalar.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct DocumentViewId(p2panda_rs::document::DocumentViewId);
+pub struct DocumentViewId(String);
 
 impl From<p2panda_rs::document::DocumentViewId> for DocumentViewId {
-    fn from(document_id: p2panda_rs::document::DocumentViewId) -> Self {
-        Self(document_id)
+    fn from(view_id: p2panda_rs::document::DocumentViewId) -> Self {
+        Self(view_id.as_str())
     }
 }
 
-impl From<DocumentViewId> for p2panda_rs::document::DocumentViewId {
-    fn from(document_id: DocumentViewId) -> p2panda_rs::document::DocumentViewId {
-        document_id.0
+impl TryFrom<DocumentViewId> for p2panda_rs::document::DocumentViewId {
+    type Error = DocumentViewIdError;
+
+    fn try_from(
+        view_id: DocumentViewId,
+    ) -> Result<p2panda_rs::document::DocumentViewId, DocumentViewIdError> {
+        view_id.0.parse()
     }
 }
 

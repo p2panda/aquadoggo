@@ -12,7 +12,7 @@ use crate::db::provider::SqlStorage;
 /// Panics if the view id does not exist in the store.
 pub async fn validate_view_matches_schema(
     document_view_id: &DocumentViewId,
-    schema_id: SchemaId,
+    schema_id: &SchemaId,
     ctx: &ContextBase<'_, &Positioned<Field>>,
 ) -> ServerResult<()> {
     let store = ctx.data_unchecked::<SqlStorage>();
@@ -23,7 +23,7 @@ pub async fn validate_view_matches_schema(
         .map_err(|err| ServerError::new(err.to_string(), None))?
         .unwrap();
 
-    match document_schema_id == schema_id {
+    match &document_schema_id == schema_id {
         true => Ok(()),
         false => Err(ServerError::new(
             format!(
