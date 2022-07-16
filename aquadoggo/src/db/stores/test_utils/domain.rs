@@ -180,7 +180,7 @@ pub async fn publish_without_strict_validation(
     // Here we _don't_ check if the document is deleted as we can't assume in a testing environment
     // that all documents will be materialised.
 
-    verify_log_id(store, &entry, &document_id).await?;
+    verify_log_id(store, &entry.author(), &entry.log_id(), &document_id).await?;
 
     /////////////////////////////////////
     // DETERMINE NEXT ENTRY ARG VALUES //

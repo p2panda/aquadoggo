@@ -4,6 +4,7 @@ use anyhow::{anyhow, ensure, Result};
 use bamboo_rs_core_ed25519_yasmf::entry::is_lipmaa_required;
 use p2panda_rs::document::DocumentId;
 use p2panda_rs::entry::{Entry, EntrySigned, LogId, SeqNum};
+use p2panda_rs::identity::Author;
 use p2panda_rs::operation::OperationEncoded;
 use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, LogStore};
 
@@ -45,13 +46,13 @@ use crate::db::traits::DocumentStore;
 /// Compare the log id encoded on an entry with the expected log id.
 ///
 /// This performs one validatin step:
-/// - does the log id of the passed entry match the expected one
-pub fn ensure_entry_contains_expected_log_id(entry: &Entry, expected_log_id: &LogId) -> Result<()> {
+/// - does the claimed log id match the expected one
+pub fn ensure_log_ids_equal(claimed_log_id: &LogId, expected_log_id: &LogId) -> Result<()> {
     ensure!(
-        expected_log_id == entry.log_id(),
+        claimed_log_id == expected_log_id,
         anyhow!(
-            "Entries claimed log id of {} does not match expected log id of {} for given author",
-            entry.log_id().as_u64(),
+            "Entry's claimed log id of {} does not match expected log id of {} for given author",
+            claimed_log_id.as_u64(),
             expected_log_id.as_u64()
         )
     );
@@ -103,20 +104,35 @@ pub async fn verify_seq_num(
 /// - The claimed log id matches the expected one
 pub async fn verify_log_id(
     store: &SqlStorage,
-    entry: &StorageEntry,
+    author: &Author,
+    claimed_log_id: &LogId,
     document_id: &DocumentId,
 ) -> Result<()> {
     // Check if there is a log_id registered for this document and public key already in the store.
-    match store.get(&entry.author(), document_id).await? {
-        Some(log_id) => {
+    match store.get(author, document_id).await? {
+        Some(expected_log_id) => {
             // If there is, check it matches the log id encoded in the entry.
-            ensure_entry_contains_expected_log_id(&entry.entry_decoded(), &log_id)?;
+            ensure!(
+                *claimed_log_id == expected_log_id,
+                anyhow!(
+                    "Entry's claimed log id of {} does not match expected log id of {} for given author and document",
+                    claimed_log_id.as_u64(),
+                    expected_log_id.as_u64()
+                )
+            );
         }
         None => {
             // If there isn't, check that the next log id for this author matches the one encoded in
             // the entry.
-            let next_log_id = store.next_log_id(&entry.author()).await?;
-            ensure_entry_contains_expected_log_id(&entry.entry_decoded(), &next_log_id)?;
+            let expected_log_id = store.next_log_id(author).await?;
+            ensure!(
+                *claimed_log_id == expected_log_id,
+                anyhow!(
+                    "Entry's claimed log id of {} does not match expected next log id of {} for given author",
+                    claimed_log_id.as_u64(),
+                    expected_log_id.as_u64()
+                )
+            );
         }
     };
     Ok(())
@@ -224,32 +240,6 @@ pub fn verify_bamboo_entry(
     Ok(())
 }
 
-/// Verify that an entry's claimed log id matches what we expect from the claimed document id.
-///
-/// This method handles both the case where the claimed log id already exists for this author
-/// and where it is a new log. In both verify that:
-/// - The claimed log id matches the expected one
-pub async fn verify_log_id(
-    store: &SqlStorage,
-    entry: &StorageEntry,
-    document_id: &DocumentId,
-) -> Result<()> {
-    // Check if there is a log_id registered for this document and public key already in the store.
-    match store.get(&entry.author(), document_id).await? {
-        Some(log_id) => {
-            // If there is, check it matches the log id encoded in the entry.
-            ensure_entry_contains_expected_log_id(&entry.entry_decoded(), &log_id)?;
-        }
-        None => {
-            // If there isn't, check that the next log id for this author matches the one encoded in
-            // the entry.
-            let next_log_id = store.next_log_id(&entry.author()).await?;
-            ensure_entry_contains_expected_log_id(&entry.entry_decoded(), &next_log_id)?;
-        }
-    };
-    Ok(())
-}
-
 /// Ensure that a document is not deleted.
 ///
 /// Verifies that:
@@ -271,24 +261,25 @@ pub async fn ensure_document_not_deleted(
 mod tests {
     use std::convert::TryFrom;
 
+    use p2panda_rs::document::DocumentId;
     use p2panda_rs::entry::{Entry, LogId, SeqNum};
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::test_utils::constants::PRIVATE_KEY;
-    use p2panda_rs::test_utils::fixtures::entry;
+    use p2panda_rs::test_utils::fixtures::random_document_id;
     use rstest::rstest;
 
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
-    use super::{ensure_entry_contains_expected_log_id, verify_seq_num};
+    use super::{ensure_log_ids_equal, verify_log_id, verify_seq_num};
 
     #[rstest]
     #[case(LogId::new(0))]
     #[should_panic(
-        expected = "Entries claimed log id of 0 does not match expected log id of 1 for given author"
+        expected = "Entry's claimed log id of 0 does not match expected log id of 1 for given author"
     )]
     #[case(LogId::new(1))]
-    fn ensures_entry_contains_expected_log_id(entry: Entry, #[case] expected_log_id: LogId) {
-        ensure_entry_contains_expected_log_id(&entry, &expected_log_id).unwrap();
+    fn ensures_entry_contains_expected_log_id(#[case] claimed_log_id: LogId) {
+        ensure_log_ids_equal(&claimed_log_id, &LogId::default()).unwrap();
     }
 
     #[rstest]
@@ -321,6 +312,51 @@ mod tests {
             let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
             verify_seq_num(&db.store, &author, &log_id, &claimed_seq_num)
+                .await
+                .unwrap();
+        })
+    }
+
+    #[rstest]
+    #[case::existing_document(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::default(), None)]
+    #[case::new_document(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(2), Some(random_document_id()))]
+    #[case::existing_document_new_author(KeyPair::new(), LogId::new(0), None)]
+    #[should_panic(
+        expected = "Entry's claimed log id of 1 does not match expected log id of 0 for given author and document"
+    )]
+    #[case::already_occupied_log_id_for_existing_document(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(1), None)]
+    #[should_panic(
+        expected = "Entry's claimed log id of 2 does not match expected log id of 0 for given author and document"
+    )]
+    #[case::new_log_id_for_existing_document(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(2), None)]
+    #[should_panic(
+        expected = "Entry's claimed log id of 1 does not match expected next log id of 0 for given author"
+    )]
+    #[case::new_author_not_next_log_id(KeyPair::new(), LogId::new(1), None)]
+    #[should_panic(
+        expected = "Entry's claimed log id of 0 does not match expected next log id of 2 for given author"
+    )]
+    #[case::new_document_occupied_log_id(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(0), Some(random_document_id()))]
+    #[should_panic(
+        expected = "Entry's claimed log id of 3 does not match expected next log id of 2 for given author"
+    )]
+    #[case::new_document_not_next_log_id(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(3), Some(random_document_id()))]
+    fn verifies_log_id(
+        #[case] key_pair: KeyPair,
+        #[case] claimed_log_id: LogId,
+        #[case] document_id: Option<DocumentId>,
+        #[from(test_db)]
+        #[with(2, 2, 1)]
+        runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
+            // Unwrap the passed document id or select the first valid one from the database.
+            let document_id =
+                document_id.unwrap_or_else(|| db.test_data.documents.first().unwrap().to_owned());
+
+            let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+
+            verify_log_id(&db.store, &author, &claimed_log_id, &document_id)
                 .await
                 .unwrap();
         })

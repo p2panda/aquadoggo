@@ -19,7 +19,7 @@ use crate::db::provider::SqlStorage;
 use crate::db::stores::{StorageEntry, StorageLog};
 use crate::graphql::client::NextEntryArguments;
 use crate::validation::{
-    ensure_document_not_deleted, ensure_entry_contains_expected_log_id, get_expected_backlink,
+    ensure_document_not_deleted, ensure_log_ids_equal, get_expected_backlink,
     get_expected_skiplink, verify_bamboo_entry, verify_log_id,
 };
 
@@ -191,7 +191,7 @@ pub async fn publish(
     }
 
     // Verify the claimed log id against the expected one for this document id and author.
-    verify_log_id(store, &entry, &document_id).await?;
+    verify_log_id(store, &entry.author(), &entry.log_id(), &document_id).await?;
 
     /////////////////////////////////////
     // DETERMINE NEXT ENTRY ARG VALUES //
@@ -242,7 +242,7 @@ pub async fn determine_document_id(store: &SqlStorage, entry: &StorageEntry) -> 
     let document_id = match entry.operation().action() {
         OperationAction::Create => {
             let next_log_id = store.next_log_id(&entry.author()).await?;
-            ensure_entry_contains_expected_log_id(&entry.entry_decoded(), &next_log_id)?;
+            ensure_log_ids_equal(&entry.log_id(), &next_log_id)?;
 
             // Derive the document id for this new document.
             entry.hash().into()
