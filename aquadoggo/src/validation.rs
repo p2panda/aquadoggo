@@ -141,12 +141,10 @@ pub async fn verify_log_id(
 // Get the _expected_ backlink for the passed entry.
 //
 // This method retrieves the expected backlink given the author, log and seq num
-// of the passed entry. It _does not_ verify that it matches the claimed backlink
+// of an entry. It _does not_ verify that it matches the claimed backlink
 // encoded on the passed entry.
 //
 // If the expected backlink could not be found in the database an error is returned.
-//
-// Return value can be none when the seq num of the passed entry is 1.
 //
 // @TODO This depricates `try_get_backlink()` on storage provider.
 pub async fn get_expected_backlink(
@@ -154,15 +152,16 @@ pub async fn get_expected_backlink(
     author: &Author,
     log_id: &LogId,
     seq_num: &SeqNum,
-) -> Result<Option<StorageEntry>> {
-    if seq_num.is_first() {
-        return Ok(None);
-    };
+) -> Result<StorageEntry> {
+    ensure!(
+        !seq_num.is_first(),
+        anyhow!("Entry with seq num 1 can not have backlink")
+    );
 
-    // Unwrap as we know this isn't the first sequence number because of the above condition
-    let backlink_seq_num = SeqNum::new(seq_num.as_u64() - 1).unwrap();
+    // Unwrap as we know this isn't the first seq number.
+    let expected_backlink_seq_num = SeqNum::new(seq_num.as_u64() - 1).unwrap();
     let expected_backlink = store
-        .get_entry_at_seq_num(author, log_id, &backlink_seq_num)
+        .get_entry_at_seq_num(author, log_id, &expected_backlink_seq_num)
         .await?;
 
     ensure!(
@@ -175,18 +174,16 @@ pub async fn get_expected_backlink(
         )
     );
 
-    Ok(expected_backlink)
+    Ok(expected_backlink.unwrap())
 }
 
 // Get the _expected_ skiplink for the passed entry.
 //
 // This method retrieves the expected skiplink given the author, log and seq num
-// of the passed entry. It _does not_ verify that it matches the claimed skiplink
+// of an entry. It _does not_ verify that it matches the claimed skiplink
 // encoded on the passed entry.
 //
 // If the expected skiplink could not be found in the database an error is returned.
-//
-// Return value can be none when skiplink for this entry is not required or claimed.
 //
 // @TODO This depricates `try_get_skiplink()` on storage provider.
 pub async fn get_expected_skiplink(
@@ -195,6 +192,10 @@ pub async fn get_expected_skiplink(
     log_id: &LogId,
     seq_num: &SeqNum,
 ) -> Result<StorageEntry> {
+    ensure!(
+        !seq_num.is_first(),
+        anyhow!("Entry with seq num 1 can not have skiplink")
+    );
     // Derive the expected skiplink seq number from this entries claimed sequence number
     let expected_skiplink = match seq_num.skiplink_seq_num() {
         // Retrieve the expected skiplink from the database
@@ -262,7 +263,7 @@ mod tests {
     use std::convert::TryFrom;
 
     use p2panda_rs::document::DocumentId;
-    use p2panda_rs::entry::{Entry, LogId, SeqNum};
+    use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::test_utils::constants::PRIVATE_KEY;
     use p2panda_rs::test_utils::fixtures::random_document_id;
@@ -270,7 +271,10 @@ mod tests {
 
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
-    use super::{ensure_log_ids_equal, get_expected_skiplink, verify_log_id, verify_seq_num};
+    use super::{
+        ensure_log_ids_equal, get_expected_backlink, get_expected_skiplink, verify_log_id,
+        verify_seq_num,
+    };
 
     #[rstest]
     #[case(LogId::new(0))]
@@ -370,11 +374,13 @@ mod tests {
     )]
     #[case::skiplink_not_in_store(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::default(), SeqNum::new(20).unwrap())]
     #[should_panic]
-    #[case::author_does_not_exist(KeyPair::new(), LogId::default(), SeqNum::new(20).unwrap())]
+    #[case::author_does_not_exist(KeyPair::new(), LogId::default(), SeqNum::new(5).unwrap())]
     #[should_panic(
         expected = "Expected skiplink for <Author 53fc96>, log id 4 and seq num 7 not found in database"
     )]
     #[case::log_id_is_wrong(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(4), SeqNum::new(7).unwrap())]
+    #[should_panic(expected = "Entry with seq num 1 can not have skiplink")]
+    #[case::seq_num_is_one(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(0), SeqNum::new(1).unwrap())]
     fn gets_expected_skiplink(
         #[case] key_pair: KeyPair,
         #[case] log_id: LogId,
@@ -387,6 +393,37 @@ mod tests {
             let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
             get_expected_skiplink(&db.store, &author, &log_id, &seq_num)
+                .await
+                .unwrap();
+        })
+    }
+
+    #[rstest]
+    #[case::expected_backlink_is_in_store(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::default(), SeqNum::new(8).unwrap())]
+    #[should_panic(
+        expected = "Expected backlink for <Author 53fc96>, log id 0 and seq num 20 not found in database"
+    )]
+    #[case::backlink_not_in_store(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::default(), SeqNum::new(20).unwrap())]
+    #[should_panic]
+    #[case::author_does_not_exist(KeyPair::new(), LogId::default(), SeqNum::new(5).unwrap())]
+    #[should_panic(
+        expected = "Expected backlink for <Author 53fc96>, log id 4 and seq num 7 not found in database"
+    )]
+    #[case::log_id_is_wrong(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(4), SeqNum::new(7).unwrap())]
+    #[should_panic(expected = "Entry with seq num 1 can not have backlink")]
+    #[case::seq_num_is_one(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(0), SeqNum::new(1).unwrap())]
+    fn gets_expected_backlink(
+        #[case] key_pair: KeyPair,
+        #[case] log_id: LogId,
+        #[case] seq_num: SeqNum,
+        #[from(test_db)]
+        #[with(7, 1, 1)]
+        runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
+            let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+
+            get_expected_backlink(&db.store, &author, &log_id, &seq_num)
                 .await
                 .unwrap();
         })
