@@ -510,7 +510,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
-        "Could not find expected backlink in database for entry with id: <Hash 640c8a>"
+        "Expected backlink for entry <Hash 640c8a> not found in database"
     )]
     #[case::backlink_not_in_db(
         &entry_signed_encoded_unvalidated(
@@ -522,7 +522,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
-        "Could not find expected backlink in database for entry with id: <Hash b2ebed>"
+        "Expected backlink for entry <Hash b2ebed> not found in database"
     )]
     #[case::previous_operations_not_in_db(
         &entry_signed_encoded_unvalidated(
@@ -565,7 +565,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
-        "Entries claimed log id does not match expected"
+        "Entries claimed log id of 1 does not match expected log id of 0 for given author"
     )]
     fn validation_of_entry_and_operation_values(
         #[case] entry_encoded: &str,

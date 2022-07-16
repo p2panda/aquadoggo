@@ -19,8 +19,8 @@ use crate::db::provider::SqlStorage;
 use crate::db::stores::{StorageEntry, StorageLog};
 use crate::graphql::client::NextEntryArguments;
 use crate::validation::{
-    ensure_document_not_deleted, ensure_entry_contains_expected_log_id, validate_entry,
-    validate_stated_log_id,
+    ensure_document_not_deleted, ensure_entry_contains_expected_log_id, get_expected_backlink,
+    get_expected_skiplink, verify_bamboo_entry, verify_log_id,
 };
 
 pub async fn next_args(
@@ -149,7 +149,19 @@ pub async fn publish(
     // VALIDATE ENTRY VALUES //
     ///////////////////////////
 
-    validate_entry(store, &entry, operation_encoded).await?;
+    let backlink = get_expected_backlink(store, &entry).await?;
+    let skiplink = get_expected_skiplink(store, &entry).await?;
+
+    verify_bamboo_entry(
+        entry_signed,
+        operation_encoded,
+        backlink
+            .map(|entry| entry.entry_signed().to_owned())
+            .as_ref(),
+        skiplink
+            .map(|entry| entry.entry_signed().to_owned())
+            .as_ref(),
+    )?;
 
     ///////////////////////////////////
     // ENSURE SINGLE NODE PER AUTHOR //
@@ -170,6 +182,16 @@ pub async fn publish(
     //////////////////////////
 
     let document_id = determine_document_id(store, &entry).await?;
+
+    if !entry.operation().is_create() {
+        // If this is an UPDATE or DELETE operation check the document is not deleted.
+        ensure_document_not_deleted(store, &document_id)
+            .await
+            .map_err(|_| "You are trying to update or delete a document which has been deleted")?;
+    }
+
+    // Verify the claimed log id against the expected one for this document id and author.
+    verify_log_id(store, &entry, &document_id).await?;
 
     /////////////////////////////////////
     // DETERMINE NEXT ENTRY ARG VALUES //
@@ -234,15 +256,6 @@ pub async fn determine_document_id(store: &SqlStorage, entry: &StorageEntry) -> 
             let document_id =
                 get_validate_document_id_for_view_id(store, &previous_operations).await?;
 
-            // Check the document is not deleted.
-            ensure_document_not_deleted(store, &document_id)
-                .await
-                .map_err(|_| {
-                    "You are trying to update or delete a document which has been deleted"
-                })?;
-
-            validate_stated_log_id(store, entry, &document_id).await?;
-
             document_id
         }
     };
@@ -281,42 +294,6 @@ pub async fn get_validate_document_id_for_view_id(
         anyhow!("Invalid document view id: operartions in passed document view id originate from different documents")
     );
     Ok(document_id.to_owned())
-}
-
-#[cfg(test)]
-pub async fn determine_document_id_without_strict_validation(
-    store: &SqlStorage,
-    entry: &StorageEntry,
-) -> Result<DocumentId> {
-    let document_id = match entry.operation().action() {
-        OperationAction::Create => {
-            let next_log_id = store.next_log_id(&entry.author()).await?;
-            ensure_entry_contains_expected_log_id(&entry.entry_decoded(), &next_log_id)?;
-
-            // Derive the document id for this new document.
-            entry.hash().into()
-        }
-        _ => {
-            // We can unwrap previous operations here as we know all UPDATE and DELETE operations contain them.
-            let previous_operations = entry.operation().previous_operations().unwrap();
-
-            // Get the document_id for the document_view_id contained in previous operations.
-            // This performs several validation steps (check method doc string).
-            let document_id =
-                get_validate_document_id_for_view_id(store, &previous_operations).await?;
-
-            // DO NOT CHECK IF DOCUMENT IS DELETED
-            //
-            // This is for inserting operations in a testing environment where we can't assume
-            // all documents are materialised.
-
-            validate_stated_log_id(store, entry, &document_id).await?;
-
-            document_id
-        }
-    };
-
-    Ok(document_id)
 }
 
 #[cfg(test)]

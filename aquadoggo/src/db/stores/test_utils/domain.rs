@@ -14,11 +14,11 @@ use p2panda_rs::Validate;
 
 use crate::db::provider::SqlStorage;
 use crate::db::stores::{StorageEntry, StorageLog};
-use crate::domain::{
-    determine_document_id_without_strict_validation, get_validate_document_id_for_view_id,
-};
+use crate::domain::{determine_document_id, get_validate_document_id_for_view_id};
 use crate::graphql::client::NextEntryArguments;
-use crate::validation::validate_entry;
+use crate::validation::{
+    get_expected_backlink, get_expected_skiplink, verify_bamboo_entry, verify_log_id,
+};
 
 // Helper method used in tests to retrieve next_args while skipping some validation steps.
 //
@@ -157,15 +157,30 @@ pub async fn publish_without_strict_validation(
     // VALIDATE ENTRY VALUES //
     ///////////////////////////
 
-    validate_entry(store, &entry, operation_encoded).await?;
+    let backlink = get_expected_backlink(store, &entry).await?;
+    let skiplink = get_expected_skiplink(store, &entry).await?;
+
+    verify_bamboo_entry(
+        entry_signed,
+        operation_encoded,
+        backlink
+            .map(|entry| entry.entry_signed().to_owned())
+            .as_ref(),
+        skiplink
+            .map(|entry| entry.entry_signed().to_owned())
+            .as_ref(),
+    )?;
 
     //////////////////////////
     // DETERINE DOCUMENT ID //
     //////////////////////////
 
+    let document_id = determine_document_id(store, &entry).await?;
+
     // Here we _don't_ check if the document is deleted as we can't assume in a testing environment
     // that all documents will be materialised.
-    let document_id = determine_document_id_without_strict_validation(store, &entry).await?;
+
+    verify_log_id(store, &entry, &document_id).await?;
 
     /////////////////////////////////////
     // DETERMINE NEXT ENTRY ARG VALUES //
