@@ -149,10 +149,24 @@ pub async fn publish(
     // VALIDATE ENTRY VALUES //
     ///////////////////////////
 
+    // Verify the claimed seq num matches the expected seq num for this author and log.
     verify_seq_num(store, &entry.author(), &entry.log_id(), &entry.seq_num()).await?;
-    let backlink = get_expected_backlink(store, &entry).await?;
-    let skiplink = get_expected_skiplink(store, &entry).await?;
 
+    // Get the expected backlink for this entry, errors if it can't be found.
+    let backlink =
+        get_expected_backlink(store, &entry.author(), &entry.log_id(), &entry.seq_num()).await?;
+
+    // If a skiplink hash was provided get the expected skiplink from the database, errors
+    // if it can't be found.
+    let skiplink = match entry.skiplink_hash() {
+        Some(_) => Some(
+            get_expected_skiplink(store, &entry.author(), &entry.log_id(), &entry.seq_num())
+                .await?,
+        ),
+        None => None,
+    };
+
+    // Verify the bamboo entry providing the encoded operation and retrieved backlink and skiplink.
     verify_bamboo_entry(
         entry_signed,
         operation_encoded,

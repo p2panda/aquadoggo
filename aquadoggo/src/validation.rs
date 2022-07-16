@@ -151,23 +151,27 @@ pub async fn verify_log_id(
 // @TODO This depricates `try_get_backlink()` on storage provider.
 pub async fn get_expected_backlink(
     store: &SqlStorage,
-    entry: &StorageEntry,
+    author: &Author,
+    log_id: &LogId,
+    seq_num: &SeqNum,
 ) -> Result<Option<StorageEntry>> {
-    if entry.seq_num().is_first() {
+    if seq_num.is_first() {
         return Ok(None);
     };
 
     // Unwrap as we know this isn't the first sequence number because of the above condition
-    let backlink_seq_num = SeqNum::new(entry.seq_num().as_u64() - 1).unwrap();
+    let backlink_seq_num = SeqNum::new(seq_num.as_u64() - 1).unwrap();
     let expected_backlink = store
-        .get_entry_at_seq_num(&entry.author(), &entry.log_id(), &backlink_seq_num)
+        .get_entry_at_seq_num(author, log_id, &backlink_seq_num)
         .await?;
 
     ensure!(
         expected_backlink.is_some(),
         anyhow!(
-            "Expected backlink for entry {} not found in database",
-            entry.hash()
+            "Expected backlink for {}, log id {} and seq num {} not found in database",
+            author,
+            log_id.as_u64(),
+            seq_num.as_u64()
         )
     );
 
@@ -187,36 +191,32 @@ pub async fn get_expected_backlink(
 // @TODO This depricates `try_get_skiplink()` on storage provider.
 pub async fn get_expected_skiplink(
     store: &SqlStorage,
-    entry: &StorageEntry,
-) -> Result<Option<StorageEntry>> {
-    // If a skiplink isn't required and it wasn't provided, return already now
-    if !is_lipmaa_required(entry.seq_num().as_u64()) && entry.skiplink_hash().is_none() {
-        return Ok(None);
-    };
-
+    author: &Author,
+    log_id: &LogId,
+    seq_num: &SeqNum,
+) -> Result<StorageEntry> {
     // Derive the expected skiplink seq number from this entries claimed sequence number
-    let expected_skiplink = match entry.seq_num().skiplink_seq_num() {
+    let expected_skiplink = match seq_num.skiplink_seq_num() {
         // Retrieve the expected skiplink from the database
         Some(seq_num) => {
-            let expected_skiplink = store
-                .get_entry_at_seq_num(&entry.author(), &entry.log_id(), &seq_num)
-                .await?;
-
-            ensure!(
-                expected_skiplink.is_some(),
-                anyhow!(
-                    "Expected skiplink for entry {} not found in database",
-                    entry.hash()
-                )
-            );
-
+            let expected_skiplink = store.get_entry_at_seq_num(author, log_id, &seq_num).await?;
             expected_skiplink
         }
         // Or if there is no skiplink for entries at this sequence number return None
         None => None,
     };
 
-    Ok(expected_skiplink)
+    ensure!(
+        expected_skiplink.is_some(),
+        anyhow!(
+            "Expected skiplink for {}, log id {} and seq num {} not found in database",
+            author,
+            log_id.as_u64(),
+            seq_num.as_u64()
+        )
+    );
+
+    Ok(expected_skiplink.unwrap())
 }
 
 /// Verifies the encoded bamboo entry bytes and payload.
@@ -270,7 +270,7 @@ mod tests {
 
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
-    use super::{ensure_log_ids_equal, verify_log_id, verify_seq_num};
+    use super::{ensure_log_ids_equal, get_expected_skiplink, verify_log_id, verify_seq_num};
 
     #[rstest]
     #[case(LogId::new(0))]
@@ -362,4 +362,33 @@ mod tests {
         })
     }
 
+    #[rstest]
+    #[case::expected_skiplink_is_in_store(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::default(), SeqNum::new(13).unwrap())]
+    #[case::expected_skiplink_is_in_store_and_is_same_as_backlink(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::default(), SeqNum::new(4).unwrap())]
+    #[should_panic(
+        expected = "Expected skiplink for <Author 53fc96>, log id 0 and seq num 20 not found in database"
+    )]
+    #[case::skiplink_not_in_store(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::default(), SeqNum::new(20).unwrap())]
+    #[should_panic]
+    #[case::author_does_not_exist(KeyPair::new(), LogId::default(), SeqNum::new(20).unwrap())]
+    #[should_panic(
+        expected = "Expected skiplink for <Author 53fc96>, log id 4 and seq num 7 not found in database"
+    )]
+    #[case::log_id_is_wrong(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(4), SeqNum::new(7).unwrap())]
+    fn gets_expected_skiplink(
+        #[case] key_pair: KeyPair,
+        #[case] log_id: LogId,
+        #[case] seq_num: SeqNum,
+        #[from(test_db)]
+        #[with(7, 1, 1)]
+        runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
+            let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+
+            get_expected_skiplink(&db.store, &author, &log_id, &seq_num)
+                .await
+                .unwrap();
+        })
+    }
 }

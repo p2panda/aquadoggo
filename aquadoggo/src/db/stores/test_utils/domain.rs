@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_graphql::Result;
+use bamboo_rs_core_ed25519_yasmf::entry::is_lipmaa_required;
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::entry::{EntrySigned, SeqNum};
 use p2panda_rs::identity::Author;
@@ -18,6 +19,7 @@ use crate::domain::{determine_document_id, get_validate_document_id_for_view_id}
 use crate::graphql::client::NextEntryArguments;
 use crate::validation::{
     get_expected_backlink, get_expected_skiplink, verify_bamboo_entry, verify_log_id,
+    verify_seq_num,
 };
 
 // Helper method used in tests to retrieve next_args while skipping some validation steps.
@@ -157,9 +159,24 @@ pub async fn publish_without_strict_validation(
     // VALIDATE ENTRY VALUES //
     ///////////////////////////
 
-    let backlink = get_expected_backlink(store, &entry).await?;
-    let skiplink = get_expected_skiplink(store, &entry).await?;
+    // Verify the claimed seq num matches the expected seq num for this author and log.
+    verify_seq_num(store, &entry.author(), &entry.log_id(), &entry.seq_num()).await?;
 
+    // Get the expected backlink for this entry, errors if it can't be found.
+    let backlink =
+        get_expected_backlink(store, &entry.author(), &entry.log_id(), &entry.seq_num()).await?;
+
+    // If a skiplink hash was provided get the expected skiplink from the database, errors
+    // if it can't be found.
+    let skiplink = match entry.skiplink_hash() {
+        Some(_) => Some(
+            get_expected_skiplink(store, &entry.author(), &entry.log_id(), &entry.seq_num())
+                .await?,
+        ),
+        None => None,
+    };
+
+    // Verify the bamboo entry providing the encoded operation and retrieved backlink and skiplink.
     verify_bamboo_entry(
         entry_signed,
         operation_encoded,
