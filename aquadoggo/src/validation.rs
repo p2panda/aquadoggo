@@ -269,20 +269,17 @@ pub async fn ensure_document_not_deleted(
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::document::DocumentViewId;
+    use std::convert::TryFrom;
+
     use p2panda_rs::entry::{Entry, LogId, SeqNum};
     use p2panda_rs::identity::{Author, KeyPair};
-    use p2panda_rs::operation::{Operation, OperationFields, OperationId};
-    use p2panda_rs::test_utils::constants::SCHEMA_ID;
-    use p2panda_rs::test_utils::fixtures::{
-        entry, operation, operation_fields, public_key, random_document_view_id,
-    };
+    use p2panda_rs::test_utils::constants::PRIVATE_KEY;
+    use p2panda_rs::test_utils::fixtures::entry;
     use rstest::rstest;
 
-    use crate::db::stores::test_utils::{send_to_store, test_db, TestDatabase, TestDatabaseRunner};
-    use crate::graphql::client::NextEntryArguments;
+    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
-    use super::ensure_entry_contains_expected_log_id;
+    use super::{ensure_entry_contains_expected_log_id, verify_seq_num};
 
     #[rstest]
     #[case(LogId::new(0))]
@@ -293,4 +290,40 @@ mod tests {
     fn ensures_entry_contains_expected_log_id(entry: Entry, #[case] expected_log_id: LogId) {
         ensure_entry_contains_expected_log_id(&entry, &expected_log_id).unwrap();
     }
+
+    #[rstest]
+    #[case::valid_seq_num(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::default(), SeqNum::new(3).unwrap())]
+    #[should_panic(
+        expected = "Entry's claimed seq num of 2 does not match expected seq num of 3 for given author and log"
+    )]
+    #[case::seq_num_already_used(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::default(),SeqNum::new(2).unwrap())]
+    #[should_panic(
+        expected = "Entry's claimed seq num of 4 does not match expected seq num of 3 for given author and log"
+    )]
+    #[case::seq_num_too_high(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::default(),SeqNum::new(4).unwrap())]
+    #[should_panic(
+        expected = "Entry's claimed seq num of 3 does not match expected seq num of 1 when creating a new log"
+    )]
+    #[case::author_wrong_so_new_log(KeyPair::new(), LogId::default(), SeqNum::new(3).unwrap())]
+    #[should_panic(
+        expected = "Entry's claimed seq num of 3 does not match expected seq num of 1 when creating a new log"
+    )]
+    #[case::log_id_wrong_so_new_log(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(1), SeqNum::new(3).unwrap())]
+    fn verifies_seq_num(
+        #[case] key_pair: KeyPair,
+        #[case] log_id: LogId,
+        #[case] claimed_seq_num: SeqNum,
+        #[from(test_db)]
+        #[with(2, 1, 1)]
+        runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
+            let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+
+            verify_seq_num(&db.store, &author, &log_id, &claimed_seq_num)
+                .await
+                .unwrap();
+        })
+    }
+
 }
