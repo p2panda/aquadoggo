@@ -58,29 +58,65 @@ pub fn ensure_entry_contains_expected_log_id(entry: &Entry, expected_log_id: &Lo
     Ok(())
 }
 
-pub async fn verify_seq_num(store: &SqlStorage, entry: &StorageEntry) -> Result<()> {
-    let latest_entry = store
-        .get_latest_entry(&entry.author(), &entry.log_id())
-        .await?;
+pub async fn verify_seq_num(
+    store: &SqlStorage,
+    author: &Author,
+    log_id: &LogId,
+    claimed_seq_num: &SeqNum,
+) -> Result<()> {
+    // Retrieve the latest entry for the claimed author and log_id.
+    let latest_entry = store.get_latest_entry(author, log_id).await?;
 
-    let expected_seq_num = latest_entry.map(|entry| entry.seq_num());
+    match latest_entry {
+        Some(latest_entry) => {
+            // If one was found, increment it's seq_num to find the next expected.
+            let expected_seq_num = latest_entry
+                .seq_num()
+                .next()
+                .expect("Max seq number reached");
 
-    match expected_seq_num {
-        Some(seq_num) => {
+            // Ensure the next expected matches the claimed seq_num.
             ensure!(
-                seq_num == entry.seq_num(),
+                expected_seq_num == *claimed_seq_num,
                 anyhow!(
-                    "Entries claimed seq num of {} does not match expected seq num of {} for given author and log",
-                    entry.seq_num().as_u64(),
-                    seq_num.as_u64()
+                    "Entry's claimed seq num of {} does not match expected seq num of {} for given author and log",
+                    claimed_seq_num.as_u64(),
+                    expected_seq_num.as_u64()
                 )
             );
         }
         None => {
-            ensure!(entry.seq_num().is_first(), anyhow!(
-                "Entries claimed seq num of {} does not match expected seq num of 1 when creating a new log",
-                entry.seq_num().as_u64()
+            // If no entry was found, then this is the first entry in a new log and seq_num should be 1.
+            ensure!(claimed_seq_num.is_first(), anyhow!(
+                "Entry's claimed seq num of {} does not match expected seq num of 1 when creating a new log",
+                claimed_seq_num.as_u64()
             ))
+        }
+    };
+    Ok(())
+}
+
+/// Verify that an entry's claimed log id matches what we expect from the claimed document id.
+///
+/// This method handles both the case where the claimed log id already exists for this author
+/// and where it is a new log. In both verify that:
+/// - The claimed log id matches the expected one
+pub async fn verify_log_id(
+    store: &SqlStorage,
+    entry: &StorageEntry,
+    document_id: &DocumentId,
+) -> Result<()> {
+    // Check if there is a log_id registered for this document and public key already in the store.
+    match store.get(&entry.author(), document_id).await? {
+        Some(log_id) => {
+            // If there is, check it matches the log id encoded in the entry.
+            ensure_entry_contains_expected_log_id(&entry.entry_decoded(), &log_id)?;
+        }
+        None => {
+            // If there isn't, check that the next log id for this author matches the one encoded in
+            // the entry.
+            let next_log_id = store.next_log_id(&entry.author()).await?;
+            ensure_entry_contains_expected_log_id(&entry.entry_decoded(), &next_log_id)?;
         }
     };
     Ok(())
