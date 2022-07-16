@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::panic;
 use std::sync::Arc;
 
 use futures::Future;
@@ -103,7 +104,10 @@ impl TestDatabaseRunner {
 
             // Panic here when test failed. The test fails within its own async task and stays
             // there, we need to propagate it further to inform the test runtime about the result
-            result.unwrap();
+            match result {
+                Ok(_) => (),
+                Err(err) => panic::resume_unwind(err.into_panic()),
+            };
         });
     }
 }
@@ -170,6 +174,35 @@ pub fn test_db(
     TestDatabaseRunner { config }
 }
 
+/// Fixture for passing in `PopulateDatabaseConfig` into tests.
+#[fixture]
+pub fn test_db_config(
+    // Number of entries per log/document
+    #[default(0)] no_of_entries: usize,
+    // Number of logs for each author
+    #[default(0)] no_of_logs: usize,
+    // Number of authors, each with logs populated as defined above
+    #[default(0)] no_of_authors: usize,
+    // A boolean flag for wether all logs should contain a delete operation
+    #[default(false)] with_delete: bool,
+    // The schema used for all operations in the db
+    #[default(SCHEMA_ID.parse().unwrap())] schema: SchemaId,
+    // The fields used for every CREATE operation
+    #[default(doggo_test_fields())] create_operation_fields: Vec<(&'static str, OperationValue)>,
+    // The fields used for every UPDATE operation
+    #[default(doggo_test_fields())] update_operation_fields: Vec<(&'static str, OperationValue)>,
+) -> PopulateDatabaseConfig {
+    PopulateDatabaseConfig {
+        no_of_entries,
+        no_of_logs,
+        no_of_authors,
+        with_delete,
+        schema,
+        create_operation_fields,
+        update_operation_fields,
+    }
+}
+
 /// Method which provides a safe way to write tests with the ability to build many databases and
 /// have their pool connections closed automatically when the test succeeds or fails.
 ///
@@ -208,6 +241,9 @@ pub fn with_db_manager_teardown<F: AsyncTestFnWithManager + Send + Sync + 'stati
 
         // Panic here when test failed. The test fails within its own async task and stays
         // there, we need to propagate it further to inform the test runtime about the result
-        result.unwrap();
+        match result {
+            Ok(_) => (),
+            Err(err) => panic::resume_unwind(err.into_panic()),
+        };
     });
 }
