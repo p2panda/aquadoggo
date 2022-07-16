@@ -273,7 +273,7 @@ mod tests {
 
     use p2panda_rs::identity::Author;
     use p2panda_rs::storage_provider::traits::EntryStore;
-    use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
+    use p2panda_rs::test_utils::constants::SCHEMA_ID;
     use rstest::rstest;
     use tokio::sync::broadcast;
     use tokio::task;
@@ -339,7 +339,7 @@ mod tests {
                 .to_owned();
 
             let author = Author::try_from(public_key).unwrap();
-            let log_ids: Vec<u64> = vec![1];
+            let log_ids: Vec<u64> = vec![0];
             let author_str: String = author.as_str().into();
             let endpoint: String = "http://localhost:3022/graphql".into();
 
@@ -374,7 +374,7 @@ mod tests {
             // Check the entry arrived into Ada's database
             let entries = ada_db
                 .store
-                .get_entries_by_schema(&TEST_SCHEMA_ID.parse().unwrap())
+                .get_entries_by_schema(&SCHEMA_ID.parse().unwrap())
                 .await
                 .unwrap();
             assert_eq!(entries.len(), 1);
