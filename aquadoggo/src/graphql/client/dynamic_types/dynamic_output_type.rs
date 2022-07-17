@@ -41,7 +41,7 @@ impl OutputType for DynamicQuery {
             let mut fields = IndexMap::new();
 
             // Generic type of document metadata.
-            DocumentMetaType {}.register_type(reg);
+            DocumentMetaType::register_type(reg);
 
             // Insert GraphQL types for all registered schemas.
             for schema in schemas.iter() {

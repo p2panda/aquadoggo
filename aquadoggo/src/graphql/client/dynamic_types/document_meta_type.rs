@@ -9,10 +9,16 @@ use crate::graphql::scalars::{
     DocumentId as DocumentIdScalar, DocumentViewId as DocumentViewIdScalar,
 };
 
+/// Name of the field for accessing the document's id.
+const DOCUMENT_ID_FIELD: &str = "documentId";
+
+/// Name of the field for accessing the document's view id.
+const DOCUMENT_VIEW_ID_FIELD: &str = "documentViewId";
+
 /// The GraphQL type for generic document metadata.
 pub struct DocumentMetaType;
 
-// Allow this because we are using `&*` to access `Cow` inner values.
+// Allow automatic dereferencing because we are using `&*` to access `Cow` inner values.
 #[allow(clippy::explicit_auto_deref)]
 impl DocumentMetaType {
     pub fn type_name() -> &'static str {
@@ -20,15 +26,13 @@ impl DocumentMetaType {
     }
 
     /// Generate an object type for generic metadata and register it in a GraphQL schema registry.
-    ///
-    /// Be mindful of updating the `resolve` method when field names are changed in this method.
-    pub fn register_type(&self, registry: &mut async_graphql::registry::Registry) {
+    pub fn register_type(registry: &mut async_graphql::registry::Registry) {
         let mut fields = IndexMap::new();
 
         fields.insert(
-            "documentId".to_string(),
+            DOCUMENT_ID_FIELD.to_string(),
             metafield(
-                "documentId",
+                DOCUMENT_ID_FIELD,
                 Some("The document id of this response object."),
                 &*DocumentIdScalar::type_name(),
             ),
@@ -38,9 +42,9 @@ impl DocumentMetaType {
         DocumentViewIdScalar::create_type_info(registry);
 
         fields.insert(
-            "documentViewId".to_string(),
+            DOCUMENT_VIEW_ID_FIELD.to_string(),
             metafield(
-                "documentViewId",
+                DOCUMENT_VIEW_ID_FIELD,
                 Some("The specific document view id contained in this response object."),
                 &*DocumentViewIdScalar::type_name(),
             ),
@@ -59,8 +63,6 @@ impl DocumentMetaType {
     /// Resolve GraphQL response value for metadata query field.
     ///
     /// All parameters that are available should be set.
-    ///
-    /// Be mindful of updating the `register_type` method when field names are changed here.
     // Override rule to avoid unnecessary nesting.
     #[allow(clippy::unnecessary_unwrap)]
     pub fn resolve(
@@ -69,17 +71,18 @@ impl DocumentMetaType {
         view_id: Option<&DocumentViewId>,
     ) -> Value {
         let mut meta_fields = IndexMap::new();
+
         for meta_field in root_field.selection_set() {
-            if meta_field.name() == "documentId" && document_id.is_some() {
+            if meta_field.name() == DOCUMENT_ID_FIELD && document_id.is_some() {
                 meta_fields.insert(
-                    Name::new("documentId"),
+                    Name::new(DOCUMENT_ID_FIELD),
                     DocumentIdScalar::from(document_id.unwrap().to_owned()).to_value(),
                 );
             }
 
-            if meta_field.name() == "documentViewId" && view_id.is_some() {
+            if meta_field.name() == DOCUMENT_VIEW_ID_FIELD && view_id.is_some() {
                 meta_fields.insert(
-                    Name::new("documentViewId"),
+                    Name::new(DOCUMENT_VIEW_ID_FIELD),
                     Value::String(view_id.unwrap().as_str().to_string()),
                 );
             }
