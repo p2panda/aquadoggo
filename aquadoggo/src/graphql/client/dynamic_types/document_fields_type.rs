@@ -14,14 +14,9 @@ impl DocumentFieldsType {
         Self(schema)
     }
 
-    /// Access the schema this is configured for.
-    pub fn schema(&self) -> &'static Schema {
-        self.0
-    }
-
     /// Returns the type name, formatted like `<SchemaId>Fields`.
     pub fn type_name(&self) -> String {
-        format!("{}Fields", self.schema().id().as_str())
+        format!("{}Fields", self.0.id().as_str())
     }
 
     /// Generate an object type and register it in a GraphQL schema registry.

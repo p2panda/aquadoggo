@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use async_graphql::parser::types::Field;
-use async_graphql::{ContextBase, Positioned, ServerError, ServerResult};
+use async_graphql::{Context, ServerError, ServerResult};
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::schema::SchemaId;
 
@@ -13,7 +12,7 @@ use crate::db::provider::SqlStorage;
 pub async fn validate_view_matches_schema(
     document_view_id: &DocumentViewId,
     schema_id: &SchemaId,
-    ctx: &ContextBase<'_, &Positioned<Field>>,
+    ctx: &Context<'_>,
 ) -> ServerResult<()> {
     let store = ctx.data_unchecked::<SqlStorage>();
 
