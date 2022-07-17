@@ -549,7 +549,7 @@ mod tests {
     #[case::previous_operations_not_in_db(
         &entry_signed_encoded_unvalidated(
             1,
-            1,
+            0,
             None,
             None,
             Some(
