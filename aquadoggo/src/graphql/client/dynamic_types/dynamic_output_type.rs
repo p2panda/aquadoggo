@@ -2,10 +2,10 @@
 
 //! Registers GraphQL types for all [schemas][`Schema`] available in the schema provider.
 //!
-//! `async_graphql` doesn't provide an API for registering custom schemas that don't correspond to
+//! `async_graphql` doesn't provide an API for registering types that don't correspond to
 //! any Rust type. This module uses undocumented, internal functionality of `async_graphql` to
 //! circumvent this restriction. By implementing `OutputType` for [`DynamicQuery`] we are given
-//! mutable access to the type registry and can insert custom schemas into it.
+//! mutable access to the type registry and can insert types into it.
 
 use std::borrow::Cow;
 
@@ -41,45 +41,49 @@ impl OutputType for DynamicQuery {
             let mut fields = IndexMap::new();
 
             // Generic type of document metadata.
-            DocumentMetaType {}.register_type(reg);
+            DocumentMetaType::register_type(reg);
 
             // Insert GraphQL types for all registered schemas.
-            for schema in schemas.iter() {
+            for schema in schemas {
+                // Register types for both this schema's `DocumentType` and its
+                // `DocumentFieldsType`.
                 let document_type = DocumentType::new(schema);
                 document_type.register_type(reg);
 
                 // Insert a single and listing query field for every schema with which documents of
                 // that schema can be queried.
-                let mut single_args = IndexMap::new();
-                single_args.insert(
-                    "id".to_string(),
-                    MetaInputValue {
-                        name: "id",
-                        description: None,
-                        ty: DocumentIdScalar::type_name().to_string(),
-                        default_value: None,
-                        visible: None,
-                        is_secret: false,
-                    },
-                );
-                single_args.insert(
-                    "viewId".to_string(),
-                    MetaInputValue {
-                        name: "viewId",
-                        description: None,
-                        ty: DocumentViewIdScalar::type_name().to_string(),
-                        default_value: None,
-                        visible: None,
-                        is_secret: false,
-                    },
-                );
                 fields.insert(
                     document_type.type_name(),
                     MetaField {
                         name: document_type.type_name(),
                         description: Some("Query a single document of this schema."),
                         ty: document_type.type_name(),
-                        args: single_args,
+                        args: {
+                            let mut single_args = IndexMap::new();
+                            single_args.insert(
+                                "id".to_string(),
+                                MetaInputValue {
+                                    name: "id",
+                                    description: None,
+                                    ty: DocumentIdScalar::type_name().to_string(),
+                                    default_value: None,
+                                    visible: None,
+                                    is_secret: false,
+                                },
+                            );
+                            single_args.insert(
+                                "viewId".to_string(),
+                                MetaInputValue {
+                                    name: "viewId",
+                                    description: None,
+                                    ty: DocumentViewIdScalar::type_name().to_string(),
+                                    default_value: None,
+                                    visible: None,
+                                    is_secret: false,
+                                },
+                            );
+                            single_args
+                        },
                         deprecation: Default::default(),
                         cache_control: Default::default(),
                         external: false,

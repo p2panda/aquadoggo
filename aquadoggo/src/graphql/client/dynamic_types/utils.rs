@@ -24,11 +24,11 @@ pub fn graphql_typename(operation_field_type: &FieldType) -> String {
 }
 
 /// Make a simple metafield with mostly default values.
-pub fn metafield(name: &str, description: Option<&'static str>, ty: &str) -> MetaField {
+pub fn metafield(name: &str, description: Option<&'static str>, type_name: &str) -> MetaField {
     MetaField {
         name: name.to_string(),
         description,
-        ty: ty.to_string(),
+        ty: type_name.to_string(),
         args: Default::default(),
         deprecation: Default::default(),
         cache_control: Default::default(),

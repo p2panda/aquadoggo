@@ -6,7 +6,7 @@ use async_graphql::indexmap::IndexMap;
 use async_graphql::parser::types::Field;
 
 use async_graphql::{
-    ContainerType, ContextBase, Name, Positioned, SelectionField, ServerError, ServerResult, Value,
+    ContainerType, Name, SelectionField, ServerError, ServerResult, Value, Context,
 };
 use async_recursion::async_recursion;
 use async_trait::async_trait;
@@ -39,7 +39,7 @@ impl ContainerType for DynamicQuery {
     /// - `all_<SchemaId>` - query a listing of documents
     async fn resolve_field(
         &self,
-        ctx: &ContextBase<&Positioned<Field>>,
+        ctx: &Context<'_>,
     ) -> ServerResult<Option<Value>> {
         let field_name = ctx.field().name();
 
@@ -56,8 +56,9 @@ impl ContainerType for DynamicQuery {
             }
         }
 
-        // Now try and parse the whole field name and return `Ok(None)` if that doesn't work to
-        // signal that other resolvers should be tried for this field.
+        // We now know that this is not a listing query. Continue by treating it as a single
+        // document query. Return `Ok(None)` if that doesn't work to signal that other resolvers
+        // should be tried for this field.
         match field_name.parse::<SchemaId>() {
             Ok(schema) => self.query_single(&schema, ctx).await,
             Err(_) => Ok(None),
@@ -70,7 +71,7 @@ impl DynamicQuery {
     async fn query_single(
         &self,
         schema: &SchemaId,
-        ctx: &ContextBase<'_, &Positioned<Field>>,
+        ctx: &Context<'_>,
     ) -> ServerResult<Option<Value>> {
         let document_id_arg = ctx.param_value::<Option<DocumentIdScalar>>("id", None)?;
         let view_id_arg = ctx.param_value::<Option<DocumentViewIdScalar>>("viewId", None)?;
@@ -119,7 +120,7 @@ impl DynamicQuery {
     async fn query_listing(
         &self,
         schema_id: &SchemaId,
-        ctx: &ContextBase<'_, &Positioned<Field>>,
+        ctx: &Context<'_>,
     ) -> ServerResult<Option<Value>> {
         let store = ctx.data_unchecked::<SqlStorage>();
 
@@ -150,7 +151,7 @@ impl DynamicQuery {
     async fn get_by_document_id(
         &self,
         document_id: DocumentId,
-        ctx: &ContextBase<'_, &Positioned<Field>>,
+        ctx: &Context<'_>,
         selected_fields: Vec<SelectionField<'async_recursion>>,
         validate_schema: Option<&'async_recursion SchemaId>,
     ) -> ServerResult<Value> {
@@ -179,7 +180,7 @@ impl DynamicQuery {
     async fn get_by_document_view_id(
         &self,
         document_view_id: DocumentViewId,
-        ctx: &ContextBase<'_, &Positioned<Field>>,
+        ctx: &Context<'_>,
         selected_fields: Vec<SelectionField<'async_recursion>>,
         validate_schema: Option<&'async_recursion SchemaId>,
     ) -> ServerResult<Value> {
@@ -207,7 +208,7 @@ impl DynamicQuery {
     async fn document_response(
         &self,
         view: DocumentView,
-        ctx: &ContextBase<'_, &Positioned<Field>>,
+        ctx: &Context<'_>,
         selected_fields: Vec<SelectionField<'async_recursion>>,
     ) -> ServerResult<Value> {
         let mut document_fields = IndexMap::new();
@@ -242,7 +243,7 @@ impl DynamicQuery {
     async fn document_fields_response(
         &self,
         view: DocumentView,
-        ctx: &ContextBase<'_, &Positioned<Field>>,
+        ctx: &Context<'_>,
         selected_fields: Vec<SelectionField<'async_recursion>>,
     ) -> ServerResult<Value> {
         debug!("Get {}", view);
