@@ -9,7 +9,7 @@ use crate::graphql::client::dynamic_types::utils::{graphql_typename, metafield, 
 pub struct DocumentFieldsType(&'static Schema);
 
 impl DocumentFieldsType {
-    /// Ger a new instance for the given schema, which must be `static`.
+    /// Get a new instance for the given schema, which must be `static`.
     pub fn new(schema: &'static Schema) -> Self {
         Self(schema)
     }
