@@ -503,7 +503,7 @@ mod tests {
     #[case::backlink_and_skiplink_not_in_db(
         &entry_signed_encoded_unvalidated(
             8,
-            0,
+            1,
             Some(HASH.parse().unwrap()),
             Some(Hash::new_from_bytes(vec![2, 3, 4]).unwrap()),
             Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
@@ -514,20 +514,44 @@ mod tests {
     )]
     #[case::backlink_not_in_db(
         &entry_signed_encoded_unvalidated(
-            2,
+            11,
             0,
-            Some(HASH.parse().unwrap()),
+            Some(random_hash()),
             None,
             Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
-        "Entry's claimed seq num of 2 does not match expected seq num of 1 when creating a new log"
+        "The backlink hash encoded in the entry does not match the lipmaa entry provided" //Think this error message is wrong
+    )]
+    #[case::not_the_next_seq_num(
+        &entry_signed_encoded_unvalidated(
+            14,
+            0,
+            Some(random_hash()),
+            None,
+            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
+            key_pair(PRIVATE_KEY)
+        ),
+        &OPERATION_ENCODED,
+        "Entry's claimed seq num of 14 does not match expected seq num of 11 for given author and log"
+    )]
+    #[case::occupied_seq_num(
+        &entry_signed_encoded_unvalidated(
+            6,
+            0,
+            Some(random_hash()),
+            None,
+            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
+            key_pair(PRIVATE_KEY)
+        ),
+        &OPERATION_ENCODED,
+        "Entry's claimed seq num of 6 does not match expected seq num of 11 for given author and log"
     )]
     #[case::previous_operations_not_in_db(
         &entry_signed_encoded_unvalidated(
             1,
-            0,
+            1,
             None,
             None,
             Some(
@@ -558,20 +582,22 @@ mod tests {
     #[case::claimed_log_id_does_not_match_expected(
         &entry_signed_encoded_unvalidated(
             1,
-            1,
+            2,
             None,
             None,
             Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
-        "Entry's claimed log id of 1 does not match expected log id of 0 for given author"
+        "Entry's claimed log id of 2 does not match expected log id of 1 for given author"
     )]
     fn validation_of_entry_and_operation_values(
         #[case] entry_encoded: &str,
         #[case] operation_encoded: &str,
         #[case] expected_error_message: &str,
-        #[from(test_db)] runner: TestDatabaseRunner,
+        #[from(test_db)]
+        #[with(10, 1, 1)]
+        runner: TestDatabaseRunner,
     ) {
         let entry_encoded = entry_encoded.to_string();
         let operation_encoded = operation_encoded.to_string();
