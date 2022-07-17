@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_trait::async_trait;
-use p2panda_rs::document::{DocumentId, DocumentViewId};
+use p2panda_rs::document::DocumentId;
 use p2panda_rs::hash::Hash;
 use p2panda_rs::operation::VerifiedOperation;
 use p2panda_rs::storage_provider::traits::StorageProvider;

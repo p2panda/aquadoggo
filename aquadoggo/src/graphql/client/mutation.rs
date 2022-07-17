@@ -69,7 +69,7 @@ mod tests {
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::{Operation, OperationEncoded, OperationValue};
-    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, StorageProvider};
+    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
     use p2panda_rs::test_utils::constants::{HASH, PRIVATE_KEY, SCHEMA_ID};
     use p2panda_rs::test_utils::fixtures::{
         create_operation, delete_operation, entry_signed_encoded, entry_signed_encoded_unvalidated,
@@ -83,9 +83,7 @@ mod tests {
     use crate::db::stores::test_utils::{
         next_args_without_strict_validation, test_db, TestDatabase, TestDatabaseRunner,
     };
-    use crate::domain::next_args;
     use crate::http::{build_server, HttpServiceContext};
-    use crate::materializer::TaskInput;
     use crate::test_helpers::TestClient;
 
     fn to_hex(value: Value) -> String {

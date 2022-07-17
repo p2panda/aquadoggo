@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use anyhow::{anyhow, ensure, Result};
-use bamboo_rs_core_ed25519_yasmf::entry::is_lipmaa_required;
 use p2panda_rs::document::DocumentId;
-use p2panda_rs::entry::{Entry, EntrySigned, LogId, SeqNum};
+use p2panda_rs::entry::{EntrySigned, LogId, SeqNum};
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::OperationEncoded;
 use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, LogStore};

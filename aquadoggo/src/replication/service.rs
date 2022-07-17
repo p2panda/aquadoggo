@@ -5,20 +5,15 @@ use std::time::Duration;
 
 use anyhow::{anyhow, Result};
 use bamboo_rs_core_ed25519_yasmf::verify::verify_batch;
-use futures::TryFutureExt;
 use log::{debug, error, trace, warn};
 use p2panda_rs::entry::LogId;
 use p2panda_rs::entry::SeqNum;
 use p2panda_rs::identity::Author;
-use p2panda_rs::operation::{AsVerifiedOperation, VerifiedOperation};
-use p2panda_rs::storage_provider::traits::{
-    AsStorageEntry, EntryStore, OperationStore, StorageProvider,
-};
+use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
 use tokio::task;
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
-use crate::db::request::PublishEntryRequest;
 use crate::db::stores::StorageEntry;
 use crate::domain::publish;
 use crate::graphql::replication::client;
@@ -152,7 +147,7 @@ async fn verify_entries(entries: &[StorageEntry], context: &Context) -> Result<(
 async fn insert_new_entries(
     new_entries: &[StorageEntry],
     context: &Context,
-    tx: ServiceSender,
+    _tx: ServiceSender,
 ) -> Result<()> {
     for entry in new_entries {
         // This is the method used to publish entries arriving from clients. They all contain a
