@@ -3,6 +3,7 @@
 use async_graphql::{Context, Object, Result};
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::identity::Author;
+use p2panda_rs::Validate;
 
 use crate::db::provider::SqlStorage;
 use crate::domain::next_args;
@@ -35,9 +36,16 @@ impl ClientRoot {
         // Access the store from context.
         let store = ctx.data::<SqlStorage>()?;
 
+        // Convert and validate passed parameters.
         let public_key: Author = public_key.into();
         let document_view_id = document_view_id.map(DocumentViewId::from);
 
+        public_key.validate()?;
+        if let Some(ref document_view_id) = document_view_id {
+            document_view_id.validate()?;
+        }
+
+        // Calculate next entry args.
         next_args(store, &public_key, document_view_id.as_ref()).await
     }
 }
