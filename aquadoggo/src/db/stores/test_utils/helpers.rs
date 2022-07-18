@@ -144,8 +144,7 @@ pub async fn insert_entry_operation_and_view(
     let document_id = document_id.cloned().unwrap_or_else(|| entry.hash().into());
     let document_view_id: DocumentViewId = entry.hash().into();
 
-    // Publish the entry, this doesn't perform the normal verification steps as a test store
-    // may not contain materialised documents.
+    // Publish the entry.
     publish(store, &entry, &operation_encoded).await.unwrap();
 
     // Materialise the effected document.
