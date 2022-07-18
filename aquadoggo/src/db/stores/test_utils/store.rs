@@ -6,7 +6,7 @@ use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::{Author, KeyPair};
-use p2panda_rs::operation::{AsOperation, Operation, OperationEncoded, OperationValue};
+use p2panda_rs::operation::{Operation, OperationEncoded, OperationValue};
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::test_utils::constants::SCHEMA_ID;
 use p2panda_rs::test_utils::fixtures::{operation, operation_fields};
