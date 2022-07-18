@@ -9,7 +9,6 @@ use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, LogStore,
 
 use crate::db::provider::SqlStorage;
 use crate::db::stores::StorageEntry;
-use crate::db::traits::DocumentStore;
 
 // @TODO: This method will be used in a follow-up PR
 //
