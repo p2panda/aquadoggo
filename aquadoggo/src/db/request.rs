@@ -10,6 +10,9 @@ use p2panda_rs::entry::{decode_entry, EntrySigned};
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::OperationEncoded;
 
+// @TODO: We will deprecate `publish_entry` and `next_entry_args` from p2panda-rs storage provider
+// after this PR which means we no longer need these request and response structs.
+
 /// Struct used to validate params and query database to retreive next entry arguments.
 #[derive(Deserialize, Debug)]
 pub struct EntryArgsRequest {

@@ -30,6 +30,8 @@ impl SqlStorage {
 /// databases.
 #[async_trait]
 impl StorageProvider<StorageEntry, StorageLog, VerifiedOperation> for SqlStorage {
+    // @TODO: We will deprecate `publish_entry` and `next_entry_args` from p2panda-rs storage provider
+    // after this PR which means we no longer need these request and response structs.
     type EntryArgsResponse = NextEntryArguments;
     type EntryArgsRequest = EntryArgsRequest;
     type PublishEntryResponse = NextEntryArguments;
