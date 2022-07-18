@@ -28,18 +28,7 @@ pub async fn next_args(
     public_key: &Author,
     document_view_id: Option<&DocumentViewId>,
 ) -> Result<NextEntryArguments> {
-    //////////////////////////
-    // VALIDATE PASSED ARGS //
-    //////////////////////////
-
-    // Validate the public key.
-    public_key.validate()?;
-
-    // Validate the document id if passed.
-    match document_view_id {
-        Some(id) => id.validate(),
-        None => Ok(()),
-    }?;
+    // @TODO: We assume the passed Author and DocumentView are internally valid.
 
     ////////////////////////
     // HANDLE CREATE CASE //
