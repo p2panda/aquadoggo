@@ -277,8 +277,8 @@ mod tests {
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
     use super::{
-        ensure_log_ids_equal, get_expected_backlink, get_expected_skiplink, verify_log_id,
-        verify_seq_num,
+        ensure_document_not_deleted, ensure_log_ids_equal, get_expected_backlink,
+        get_expected_skiplink, verify_log_id, verify_seq_num,
     };
 
     #[rstest]
@@ -429,6 +429,35 @@ mod tests {
             let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
             get_expected_backlink(&db.store, &author, &log_id, &seq_num)
+                .await
+                .unwrap();
+        })
+    }
+
+    #[rstest]
+    #[should_panic(expected = "Document is deleted")]
+    fn identifies_deleted_document(
+        #[from(test_db)]
+        #[with(3, 1, 1, true)]
+        runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
+            let document_id = db.test_data.documents.first().unwrap();
+            ensure_document_not_deleted(&db.store, document_id)
+                .await
+                .unwrap();
+        })
+    }
+
+    #[rstest]
+    fn identifies_not_deleted_document(
+        #[from(test_db)]
+        #[with(3, 1, 1, false)]
+        runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
+            let document_id = db.test_data.documents.first().unwrap();
+            ensure_document_not_deleted(&db.store, document_id)
                 .await
                 .unwrap();
         })
