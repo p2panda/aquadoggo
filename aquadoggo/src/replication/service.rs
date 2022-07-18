@@ -9,6 +9,8 @@ use log::{debug, error, trace, warn};
 use p2panda_rs::entry::LogId;
 use p2panda_rs::entry::SeqNum;
 use p2panda_rs::identity::Author;
+use p2panda_rs::operation::AsVerifiedOperation;
+use p2panda_rs::operation::VerifiedOperation;
 use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
 use tokio::task;
 
@@ -150,20 +152,25 @@ async fn insert_new_entries(
     tx: ServiceSender,
 ) -> Result<()> {
     for entry in new_entries {
-        // This is the method used to publish entries arriving from clients. They all contain a
+        // Here we the method used to publish entries arriving from clients. They all contain a
         // payload (operation).
         //
         // @TODO: This is not a great fit for replication, as it performs validation we either do
         // not need or already done in a previous step. We plan to refactor this into a more
         // modular set of methods which can definitely be used here more cleanly. For now, we do it
         // this way.
-        publish(
-            &context.0.store,
+        //
+        // @TODO: Additionally, when we implement payload deletion and partial replication we will
+        // be expecting entries to arrive here possibly without payloads.
+
+        let operation = VerifiedOperation::new_from_entry(
             entry.entry_signed(),
             entry.operation_encoded().unwrap(),
-        )
-        .await
-        .map_err(|err| anyhow!(format!("Error inserting new entry into db: {:?}", err)))?;
+        )?;
+
+        publish(&context.0.store, entry, &operation)
+            .await
+            .map_err(|err| anyhow!(format!("Error inserting new entry into db: {:?}", err)))?;
 
         // Send new entry & operation to other services.
         send_new_entry_service_message(tx.clone(), entry);

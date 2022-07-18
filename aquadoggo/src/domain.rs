@@ -5,11 +5,9 @@ use std::collections::HashSet;
 use anyhow::{anyhow, ensure, Result as AnyhowResult};
 use async_graphql::Result;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
-use p2panda_rs::entry::{EntrySigned, SeqNum};
+use p2panda_rs::entry::SeqNum;
 use p2panda_rs::identity::Author;
-use p2panda_rs::operation::{
-    AsOperation, AsVerifiedOperation, OperationAction, OperationEncoded, VerifiedOperation,
-};
+use p2panda_rs::operation::{AsOperation, OperationAction, VerifiedOperation};
 use p2panda_rs::storage_provider::traits::{
     AsStorageEntry, AsStorageLog, EntryStore, LogStore, OperationStore,
 };
@@ -118,22 +116,9 @@ pub async fn next_args(
 
 pub async fn publish(
     store: &SqlStorage,
-    entry_signed: &EntrySigned,
-    operation_encoded: &OperationEncoded,
+    entry: &StorageEntry,
+    operation: &VerifiedOperation,
 ) -> Result<NextEntryArguments> {
-    /////////////////////////////////////////////////////
-    // VALIDATE ENTRY AND OPERATION INTERNAL INTEGRITY //
-    /////////////////////////////////////////////////////
-
-    // Internally this constructor performs several validation steps. Including checking the operation hash
-    // matches the one encoded on the entry.
-    //
-    // @TODO: We still need a review of this section of the validation logic (internal data integrity) to
-    // make sure we are doing everything we need and that there is not too much duplication (definitely doing
-    // some ATM).
-    let entry = StorageEntry::new(entry_signed, operation_encoded)?;
-    let operation = VerifiedOperation::new_from_entry(entry_signed, operation_encoded)?;
-
     ///////////////////////////
     // VALIDATE ENTRY VALUES //
     ///////////////////////////
@@ -162,8 +147,12 @@ pub async fn publish(
 
     // Verify the bamboo entry providing the encoded operation and retrieved backlink and skiplink.
     verify_bamboo_entry(
-        entry_signed,
-        operation_encoded,
+        entry.entry_signed(),
+        // @TODO: Currently all StorageEntry's contain an operation, this behaviour will need revisiting when we
+        // start to handle payload deletion. In this `publish` method we will always require an operation.
+        entry
+            .operation_encoded()
+            .expect("All StorageEntry's contain an operation"),
         backlink
             .map(|entry| entry.entry_signed().to_owned())
             .as_ref(),
@@ -192,7 +181,7 @@ pub async fn publish(
 
     let document_id = determine_document_id(store, &entry).await?;
 
-    if !entry.operation().is_create() {
+    if !operation.is_create() {
         // If this is an UPDATE or DELETE operation check the document is not deleted.
         ensure_document_not_deleted(store, &document_id)
             .await
@@ -218,12 +207,7 @@ pub async fn publish(
 
     // If this is a CREATE operation it goes into a new log which we insert here.
     if operation.is_create() {
-        let log = StorageLog::new(
-            &entry.author(),
-            &entry.operation().schema(),
-            &document_id,
-            &log_id,
-        );
+        let log = StorageLog::new(&entry.author(), &operation.schema(), &document_id, &log_id);
 
         store.insert_log(log).await?;
     }

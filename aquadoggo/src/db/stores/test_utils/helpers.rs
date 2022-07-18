@@ -7,13 +7,14 @@ use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::{Author, KeyPair};
 use p2panda_rs::operation::{
-    AsOperation, Operation, OperationEncoded, OperationValue, PinnedRelation, PinnedRelationList,
-    Relation, RelationList,
+    AsOperation, AsVerifiedOperation, Operation, OperationEncoded, OperationValue, PinnedRelation,
+    PinnedRelationList, Relation, RelationList, VerifiedOperation,
 };
-use p2panda_rs::storage_provider::traits::OperationStore;
+use p2panda_rs::storage_provider::traits::{AsStorageEntry, OperationStore};
 use p2panda_rs::test_utils::constants::PRIVATE_KEY;
 
 use crate::db::provider::SqlStorage;
+use crate::db::stores::StorageEntry;
 use crate::db::traits::DocumentStore;
 use crate::domain::{next_args, publish};
 
@@ -137,15 +138,21 @@ pub async fn insert_entry_operation_and_view(
     }
 
     // Encode entry and operation.
-    let (entry, operation_encoded) =
+    let (entry_signed, operation_encoded) =
         encode_entry_and_operation(store, operation, key_pair, document_id).await;
 
     // Unwrap document_id or construct it from the entry hash.
-    let document_id = document_id.cloned().unwrap_or_else(|| entry.hash().into());
-    let document_view_id: DocumentViewId = entry.hash().into();
+    let document_id = document_id
+        .cloned()
+        .unwrap_or_else(|| entry_signed.hash().into());
+    let document_view_id: DocumentViewId = entry_signed.hash().into();
+
+    // Construct a the required types for publishing an entry and operation.
+    let entry = StorageEntry::new(&entry_signed, &operation_encoded).unwrap();
+    let operation = VerifiedOperation::new_from_entry(&entry_signed, &operation_encoded).unwrap();
 
     // Publish the entry.
-    publish(store, &entry, &operation_encoded).await.unwrap();
+    publish(store, &entry, &operation).await.unwrap();
 
     // Materialise the effected document.
     let document_operations = store

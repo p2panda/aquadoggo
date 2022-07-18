@@ -6,13 +6,17 @@ use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::{Author, KeyPair};
-use p2panda_rs::operation::{Operation, OperationEncoded, OperationValue};
+use p2panda_rs::operation::{
+    AsVerifiedOperation, Operation, OperationEncoded, OperationValue, VerifiedOperation,
+};
 use p2panda_rs::schema::SchemaId;
+use p2panda_rs::storage_provider::traits::AsStorageEntry;
 use p2panda_rs::test_utils::constants::SCHEMA_ID;
 use p2panda_rs::test_utils::fixtures::{operation, operation_fields};
 
 use crate::db::provider::SqlStorage;
 use crate::db::stores::test_utils::{doggo_test_fields, test_key_pairs};
+use crate::db::stores::StorageEntry;
 use crate::domain::{next_args, publish};
 use crate::graphql::client::NextEntryArguments;
 
@@ -154,10 +158,12 @@ pub async fn send_to_store(
     let entry_encoded = sign_and_encode(&next_entry, key_pair).unwrap();
     let operation_encoded = OperationEncoded::try_from(operation).unwrap();
 
+    // Construct a the required types for publishing an entry and operation.
+    let entry = StorageEntry::new(&entry_encoded, &operation_encoded).unwrap();
+    let operation = VerifiedOperation::new_from_entry(&entry_encoded, &operation_encoded).unwrap();
+
     // Publish the entry and get the next entry args.
-    let publish_entry_response = publish(store, &entry_encoded, &operation_encoded)
-        .await
-        .unwrap();
+    let publish_entry_response = publish(store, &entry, &operation).await.unwrap();
 
     (entry_encoded, publish_entry_response)
 }

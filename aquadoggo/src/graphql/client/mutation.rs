@@ -2,11 +2,15 @@
 
 use async_graphql::{Context, Object, Result};
 use p2panda_rs::entry::EntrySigned;
+use p2panda_rs::operation::AsVerifiedOperation;
 use p2panda_rs::operation::OperationEncoded;
 use p2panda_rs::operation::OperationId;
+use p2panda_rs::operation::VerifiedOperation;
+use p2panda_rs::storage_provider::traits::AsStorageEntry;
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::provider::SqlStorage;
+use crate::db::stores::StorageEntry;
 use crate::domain::publish;
 use crate::graphql::client::NextEntryArguments;
 use crate::graphql::scalars;
@@ -37,7 +41,26 @@ impl ClientMutationRoot {
         let entry_signed: EntrySigned = entry.into();
         let operation_encoded: OperationEncoded = operation.into();
 
-        let next_args = publish(store, &entry_signed, &operation_encoded).await?;
+        /////////////////////////////////////////////////////
+        // VALIDATE ENTRY AND OPERATION INTERNAL INTEGRITY //
+        /////////////////////////////////////////////////////
+        //
+        // Internally this constructor performs several validation steps. Including checking the operation hash
+        // matches the one encoded on the entry.
+        //
+        // @TODO: We still need a review of this section of the validation logic (internal data integrity) to
+        // make sure we are doing everything we need and that there is not too much duplication (definitely doing
+        // some ATM).
+        //
+        // @TODO: I'm not massively happy about handling both of these datatypes, it feels a little like there could be
+        // redundant (a VerifiedOperation can be constructed from a StorageEntry easily) and maybe there is a better
+        // pattern, possibly they are both doing too much... Later we need to handle storing entries without their payloads
+        // (which arrive via replication) but here we will allways expect an entry to have an operation.
+        let entry = StorageEntry::new(&entry_signed, &operation_encoded)?;
+        let operation = VerifiedOperation::new_from_entry(&entry_signed, &operation_encoded)?;
+
+        let next_args = publish(store, &entry, &operation).await?;
+
         ////////////////////////////////////////
         // SEND THE OPERATION TO MATERIALIZER //
         ////////////////////////////////////////
