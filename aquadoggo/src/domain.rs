@@ -21,6 +21,33 @@ use crate::validation::{
     verify_seq_num,
 };
 
+/// Retrieve arguments required for constructing the next entry in a bamboo log for a specific
+/// author and document.
+///
+/// We accept a `DocumentViewId` rather than a `DocumentId` as an argument and then identify
+/// the document id based on operations already existing in the store. Doing this means a document
+/// can be updated without knowing the document id itself.
+///
+/// This method is intended to be used behind a public API and so we assume all passed values
+/// are in themselves valid.
+///
+/// The steps and validation checks this method performs are:
+///
+/// Check if a document view id was passed
+/// - if it wasn't we are creating a new document, safely increment the latest log id for the passed author
+///   and return args immediately
+/// - if it was continue knowing we are updating an existing document
+/// Determine the document id we are concerned with
+/// - verify that all operations in the passed document view id exist in the database
+/// - verify that all operations in the passed document id are from the same document
+/// - ensure the document is not deleted
+/// Determine next arguments
+/// - get the log id for this author and document id, or if none is found safely increment this authors
+///   latest log id
+/// - get the backlink entry (latest entry for this author and log)
+/// - get the skiplink for this author, log and next seq num
+/// - get the latest seq num for this author and log and safely increment
+/// Return next arguments
 pub async fn next_args(
     store: &SqlStorage,
     public_key: &Author,
@@ -58,9 +85,9 @@ pub async fn next_args(
     // Check the document is not deleted.
     ensure_document_not_deleted(store, &document_id).await?;
 
-    ////////////////////////////////
-    // DETERMINE NEXT ARGS LOG ID //
-    ////////////////////////////////
+    /////////////////////////
+    // DETERMINE NEXT ARGS //
+    /////////////////////////
 
     // Retrieve the log_id for the found document_id and author.
     //
@@ -72,28 +99,17 @@ pub async fn next_args(
         None => next_log_id(store, public_key).await?,
     };
 
-    //////////////////////////////////
-    // DETERMINE NEXT ARGS BACKLINK //
-    //////////////////////////////////
-
     // Get the latest entry in this log.
     let latest_entry = store.get_latest_entry(public_key, &log_id).await?;
-
-    //////////////////////////////////
-    // DETERMINE NEXT ARGS SKIPLINK //
-    //////////////////////////////////
 
     // Determine skiplink ("lipmaa"-link) entry in this log.
     //
     // If the latest entry is None, then the skiplink will also be None.
     let skiplink_hash = match latest_entry {
+        // @TODO: May need to refactor this as we are likely unsafely incrementing the seq num in this method.
         Some(ref latest_entry) => store.determine_next_skiplink(latest_entry).await?,
         None => None,
     };
-
-    //////////////////////////////////
-    // DETERMINE NEXT ARGS SEQ NUM ///
-    //////////////////////////////////
 
     // Determine the next sequence number by incrementing one from the latest entry seq num.
     //
@@ -219,7 +235,7 @@ pub async fn publish(
     // Insert the entry into the store.
     store.insert_entry(entry.clone()).await?;
     // Insert the operation into the store.
-    store.insert_operation(&operation, &document_id).await?;
+    store.insert_operation(operation, &document_id).await?;
 
     Ok(NextEntryArguments {
         log_id: log_id.into(),
