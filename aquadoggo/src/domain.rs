@@ -195,14 +195,30 @@ pub async fn publish(
     // DETERINE DOCUMENT ID //
     //////////////////////////
 
-    let document_id = determine_document_id(store, &entry).await?;
+    let document_id = match entry.operation().action() {
+        OperationAction::Create => {
+            // Derive the document id for this new document.
+            entry.hash().into()
+        }
+        _ => {
+            // We can unwrap previous operations here as we know all UPDATE and DELETE operations contain them.
+            let previous_operations = entry.operation().previous_operations().unwrap();
 
-    if !operation.is_create() {
-        // If this is an UPDATE or DELETE operation check the document is not deleted.
-        ensure_document_not_deleted(store, &document_id)
-            .await
-            .map_err(|_| "You are trying to update or delete a document which has been deleted")?;
-    }
+            // Get the document_id for the document_view_id contained in previous operations.
+            // This performs several validation steps (check method doc string).
+            let document_id =
+                get_validate_document_id_for_view_id(store, &previous_operations).await?;
+
+            // Ensure the document isn't deleted.
+            ensure_document_not_deleted(store, &document_id)
+                .await
+                .map_err(|_| {
+                    "You are trying to update or delete a document which has been deleted"
+                })?;
+
+            document_id
+        }
+    };
 
     // Verify the claimed log id against the expected one for this document id and author.
     verify_log_id(store, &entry.author(), &entry.log_id(), &document_id).await?;
@@ -243,31 +259,6 @@ pub async fn publish(
         backlink: backlink.map(|hash| hash.into()),
         skiplink: skiplink.map(|hash| hash.into()),
     })
-}
-
-pub async fn determine_document_id(store: &SqlStorage, entry: &StorageEntry) -> Result<DocumentId> {
-    let document_id = match entry.operation().action() {
-        OperationAction::Create => {
-            let next_log_id = next_log_id(store, &entry.author()).await?;
-            ensure_log_ids_equal(&entry.log_id(), &next_log_id)?;
-
-            // Derive the document id for this new document.
-            entry.hash().into()
-        }
-        _ => {
-            // We can unwrap previous operations here as we know all UPDATE and DELETE operations contain them.
-            let previous_operations = entry.operation().previous_operations().unwrap();
-
-            // Get the document_id for the document_view_id contained in previous operations.
-            // This performs several validation steps (check method doc string).
-            let document_id =
-                get_validate_document_id_for_view_id(store, &previous_operations).await?;
-
-            document_id
-        }
-    };
-
-    Ok(document_id)
 }
 
 /// Attempt to identify the document id for view id contained in a `next_args` request. This will fail if:
