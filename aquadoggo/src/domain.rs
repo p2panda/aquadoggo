@@ -39,7 +39,7 @@ use crate::validation::{
 /// - if it was continue knowing we are updating an existing document
 /// Determine the document id we are concerned with
 /// - verify that all operations in the passed document view id exist in the database
-/// - verify that all operations in the passed document id are from the same document
+/// - verify that all operations in the passed document view id are from the same document
 /// - ensure the document is not deleted
 /// Determine next arguments
 /// - get the log id for this author and document id, or if none is found safely increment this authors
@@ -130,6 +130,41 @@ pub async fn next_args(
     })
 }
 
+/// Persist an entry and operation to storage after performing validation of claimed values against
+/// expected values retrieved from storage.
+///
+/// Returns the arguments required for constructing the next entry in a bamboo log for the specified
+/// author and document.
+///
+/// This method is intended to be used behind a public API and so we assume all passed values
+/// are in themselves valid.
+///
+/// The steps and validation checks this method performs are:
+///
+/// Validate the values encoded on entry against what we expect based on our existing stored entries:
+/// - verify the claimed sequence number against the expected next sequence number for the author and log
+/// - get the expected backlink from storage
+/// - get the expected skiplink from storage
+/// - verify the bamboo entry (requires the expected backlink and skiplink to do this)
+/// Ensure single node per author
+/// - @TODO
+/// Validate operation against it's claimed schema
+/// - @TODO
+/// Determine document id
+/// - if this is a create operation
+///   - derive the document id from the entry hash
+/// - in all other cases
+///   - verify that all operations in previous_operations exist in the database
+///   - verify that all operations in previous_operations are from the same document
+///   - ensure the document is not deleted
+/// - verify the claimed log id matches the expected log id for this author and log
+/// Determine the next arguments
+/// Persist data
+/// - if this is a new document
+///   - store the new log
+/// - store the entry
+/// - store the opertion
+/// Return next entry arguments
 pub async fn publish(
     store: &SqlStorage,
     entry: &StorageEntry,
