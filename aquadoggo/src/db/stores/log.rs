@@ -169,10 +169,62 @@ impl LogStore<StorageLog> for SqlStorage {
             }
 
             // Otherwise, try next possible log id
-            next_log_id = next_log_id.next().unwrap();
+            next_log_id = match next_log_id.next() {
+                Some(log_id) => Ok(log_id),
+                None => Err(LogStorageError::Custom("Max log id reached".to_string())),
+            }?;
         }
 
         Ok(next_log_id)
+    }
+}
+
+impl SqlStorage {
+    /// Determines the latest log_id of an author.
+    ///
+    /// Returns either the hightes found log_id for an author or None if no logs have
+    /// been published by the passed author.
+    pub async fn latest_log_id(&self, author: &Author) -> Result<Option<LogId>, LogStorageError> {
+        // Get all log ids from this author
+        let mut result: Vec<String> = query_scalar(
+            "
+            SELECT
+                log_id
+            FROM
+                logs
+            WHERE
+                author = $1
+            ",
+        )
+        .bind(author.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| LogStorageError::Custom(e.to_string()))?;
+
+        if result.is_empty() {
+            return Ok(None);
+        }
+
+        // Convert all strings representing u64 integers to `LogId` instances
+        let mut log_ids: Vec<LogId> = result
+            .iter_mut()
+            .map(|str| {
+                str.parse().unwrap_or_else(|_| {
+                    panic!("Corrupt u64 integer found in database: '{0}'", &str)
+                })
+            })
+            .collect();
+
+        // The log id selection below expects log ids in sorted order. We can't easily use SQL
+        // for this because log IDs are stored as `VARCHAR`, which doesn't sort numbers correctly.
+        // A good solution would not require reading all existing log ids to find the next
+        // available one. See this issue: https://github.com/p2panda/aquadoggo/issues/67
+        log_ids.sort();
+
+        // Unwrap as we checked above for empty an empty vector case.
+        let latest_log_id = log_ids.last().unwrap();
+
+        Ok(Some(latest_log_id.to_owned()))
     }
 }
 

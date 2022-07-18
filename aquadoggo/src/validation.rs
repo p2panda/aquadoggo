@@ -122,7 +122,8 @@ pub async fn verify_log_id(
         None => {
             // If there isn't, check that the next log id for this author matches the one encoded in
             // the entry.
-            let expected_log_id = store.next_log_id(author).await?;
+            let expected_log_id = next_log_id(store, author).await?;
+
             ensure!(
                 *claimed_log_id == expected_log_id,
                 anyhow!(
@@ -260,6 +261,20 @@ pub async fn ensure_document_not_deleted(
         anyhow!("Document is deleted")
     );
     Ok(())
+}
+
+pub async fn next_log_id(store: &SqlStorage, author: &Author) -> Result<LogId> {
+    let latest_log_id = store.latest_log_id(author).await?;
+
+    let next_log_id = match latest_log_id {
+        Some(mut log_id) => log_id.next(),
+        None => Some(LogId::default()),
+    };
+
+    match next_log_id {
+        Some(log_id) => Ok(log_id),
+        None => Err(anyhow!("Max log id reached")),
+    }
 }
 
 #[cfg(test)]

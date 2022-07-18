@@ -13,14 +13,13 @@ use p2panda_rs::operation::{
 use p2panda_rs::storage_provider::traits::{
     AsStorageEntry, AsStorageLog, EntryStore, LogStore, OperationStore,
 };
-use p2panda_rs::Validate;
 
 use crate::db::provider::SqlStorage;
 use crate::db::stores::{StorageEntry, StorageLog};
 use crate::graphql::client::NextEntryArguments;
 use crate::validation::{
     ensure_document_not_deleted, ensure_log_ids_equal, get_expected_backlink,
-    get_expected_skiplink, verify_bamboo_entry, verify_log_id, verify_seq_num,
+    get_expected_skiplink, next_log_id, verify_bamboo_entry, verify_log_id, verify_seq_num,
 };
 
 pub async fn next_args(
@@ -37,7 +36,7 @@ pub async fn next_args(
     // If no document_view_id is passed then this is a request for publishing a CREATE operation
     // and we return the args for the next free log by this author.
     if document_view_id.is_none() {
-        let log_id = store.next_log_id(public_key).await?;
+        let log_id = next_log_id(store, public_key).await?;
         return Ok(NextEntryArguments {
             backlink: None,
             skiplink: None,
@@ -71,7 +70,7 @@ pub async fn next_args(
         // This public key already wrote to this document, so we return the found log_id
         Some(log_id) => log_id,
         // This public_key never wrote to this document before so we return a new log_id
-        None => store.next_log_id(public_key).await?,
+        None => next_log_id(store, public_key).await?,
     };
 
     //////////////////////////////////
@@ -250,7 +249,7 @@ pub async fn publish(
 pub async fn determine_document_id(store: &SqlStorage, entry: &StorageEntry) -> Result<DocumentId> {
     let document_id = match entry.operation().action() {
         OperationAction::Create => {
-            let next_log_id = store.next_log_id(&entry.author()).await?;
+            let next_log_id = next_log_id(store, &entry.author()).await?;
             ensure_log_ids_equal(&entry.log_id(), &next_log_id)?;
 
             // Derive the document id for this new document.
