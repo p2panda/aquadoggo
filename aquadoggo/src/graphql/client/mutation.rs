@@ -609,7 +609,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
-        "Entry's claimed log id of 2 does not match expected log id of 1 for given author"
+        "Entry's claimed log id of 2 does not match expected next log id of 1 for given author"
     )]
     fn validation_of_entry_and_operation_values(
         #[case] entry_encoded: &str,
