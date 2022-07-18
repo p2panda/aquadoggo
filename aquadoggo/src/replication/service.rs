@@ -147,7 +147,7 @@ async fn verify_entries(entries: &[StorageEntry], context: &Context) -> Result<(
 async fn insert_new_entries(
     new_entries: &[StorageEntry],
     context: &Context,
-    _tx: ServiceSender,
+    tx: ServiceSender,
 ) -> Result<()> {
     for entry in new_entries {
         // This is the method used to publish entries arriving from clients. They all contain a
@@ -164,6 +164,9 @@ async fn insert_new_entries(
         )
         .await
         .map_err(|err| anyhow!(format!("Error inserting new entry into db: {:?}", err)))?;
+
+        // Send new entry & operation to other services.
+        send_new_entry_service_message(tx.clone(), entry);
     }
 
     Ok(())
