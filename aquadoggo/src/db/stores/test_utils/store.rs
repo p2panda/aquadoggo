@@ -12,9 +12,8 @@ use p2panda_rs::test_utils::constants::SCHEMA_ID;
 use p2panda_rs::test_utils::fixtures::{operation, operation_fields};
 
 use crate::db::provider::SqlStorage;
-use crate::db::stores::test_utils::{
-    doggo_test_fields, next_args_unverified, publish_unverified, test_key_pairs,
-};
+use crate::db::stores::test_utils::{doggo_test_fields, test_key_pairs};
+use crate::domain::{next_args, publish};
 use crate::graphql::client::NextEntryArguments;
 
 /// Container for `SqlStore` with access to the document ids and key_pairs used in the
@@ -137,7 +136,7 @@ pub async fn send_to_store(
     let document_view_id: Option<DocumentViewId> =
         document_id.map(|id| id.as_str().parse().unwrap());
 
-    let next_entry_args = next_args_unverified(store, &author, document_view_id.as_ref())
+    let next_entry_args = next_args(store, &author, document_view_id.as_ref())
         .await
         .unwrap();
 
@@ -156,7 +155,7 @@ pub async fn send_to_store(
     let operation_encoded = OperationEncoded::try_from(operation).unwrap();
 
     // Publish the entry and get the next entry args.
-    let publish_entry_response = publish_unverified(store, &entry_encoded, &operation_encoded)
+    let publish_entry_response = publish(store, &entry_encoded, &operation_encoded)
         .await
         .unwrap();
 

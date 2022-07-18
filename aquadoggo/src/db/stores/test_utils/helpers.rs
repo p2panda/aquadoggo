@@ -14,8 +14,8 @@ use p2panda_rs::storage_provider::traits::OperationStore;
 use p2panda_rs::test_utils::constants::PRIVATE_KEY;
 
 use crate::db::provider::SqlStorage;
-use crate::db::stores::test_utils::{next_args_unverified, publish_unverified};
 use crate::db::traits::DocumentStore;
+use crate::domain::{next_args, publish};
 
 /// A complex set of fields which can be used in aquadoggo tests.
 pub fn doggo_test_fields() -> Vec<(&'static str, OperationValue)> {
@@ -102,7 +102,7 @@ pub async fn encode_entry_and_operation(
         document_id.map(|id| id.as_str().parse().unwrap());
 
     // Get next args
-    let next_args = next_args_unverified(&store, &author, document_view_id.as_ref())
+    let next_args = next_args(&store, &author, document_view_id.as_ref())
         .await
         .unwrap();
 
@@ -146,9 +146,7 @@ pub async fn insert_entry_operation_and_view(
 
     // Publish the entry, this doesn't perform the normal verification steps as a test store
     // may not contain materialised documents.
-    publish_unverified(store, &entry, &operation_encoded)
-        .await
-        .unwrap();
+    publish(store, &entry, &operation_encoded).await.unwrap();
 
     // Materialise the effected document.
     let document_operations = store
