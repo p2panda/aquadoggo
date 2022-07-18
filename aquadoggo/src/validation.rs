@@ -69,10 +69,8 @@ pub async fn verify_seq_num(
     match latest_entry {
         Some(latest_entry) => {
             // If one was found, increment it's seq_num to find the next expected.
-            let expected_seq_num = latest_entry
-                .seq_num()
-                .next()
-                .expect("Max seq number reached");
+            let mut latest_seq_num = latest_entry.seq_num();
+            let expected_seq_num = increment_seq_num(&mut latest_seq_num)?;
 
             // Ensure the next expected matches the claimed seq_num.
             ensure!(
@@ -274,6 +272,25 @@ pub async fn next_log_id(store: &SqlStorage, author: &Author) -> Result<LogId> {
     match next_log_id {
         Some(log_id) => Ok(log_id),
         None => Err(anyhow!("Max log id reached")),
+    }
+}
+
+pub async fn next_seq_num(store: &SqlStorage, author: &Author, log_id: &LogId) -> Result<SeqNum> {
+    let latest_entry = store.get_latest_entry(author, log_id).await?;
+
+    match latest_entry {
+        Some(entry) => {
+            let mut seq_num = entry.seq_num();
+            increment_seq_num(&mut seq_num)
+        }
+        None => Ok(SeqNum::default()),
+    }
+}
+
+pub fn increment_seq_num(seq_num: &mut SeqNum) -> Result<SeqNum> {
+    match seq_num.next() {
+        Some(next_seq_num) => Ok(next_seq_num),
+        None => Err(anyhow!("Max sequnec number reached")),
     }
 }
 

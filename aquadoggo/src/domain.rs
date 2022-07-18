@@ -19,7 +19,8 @@ use crate::db::stores::{StorageEntry, StorageLog};
 use crate::graphql::client::NextEntryArguments;
 use crate::validation::{
     ensure_document_not_deleted, ensure_log_ids_equal, get_expected_backlink,
-    get_expected_skiplink, next_log_id, verify_bamboo_entry, verify_log_id, verify_seq_num,
+    get_expected_skiplink, increment_seq_num, next_log_id, verify_bamboo_entry, verify_log_id,
+    verify_seq_num,
 };
 
 pub async fn next_args(
@@ -100,12 +101,12 @@ pub async fn next_args(
     //
     // If the latest entry is None, then we must be at seq num 1.
     let seq_num = match latest_entry {
-        Some(ref latest_entry) => latest_entry
-            .seq_num()
-            .next()
-            .expect("Max sequence number reached \\*o*/"),
-        None => SeqNum::default(),
-    };
+        Some(ref latest_entry) => {
+            let mut latest_seq_num = latest_entry.seq_num();
+            increment_seq_num(&mut latest_seq_num)
+        }
+        None => Ok(SeqNum::default()),
+    }?;
 
     Ok(NextEntryArguments {
         backlink: latest_entry.map(|entry| entry.hash().into()),
@@ -206,10 +207,8 @@ pub async fn publish(
     /////////////////////////////////////
 
     let log_id = entry.log_id();
-    let next_seq_num = match entry.seq_num().next() {
-        Some(seq_num) => Ok(seq_num),
-        None => Err("Max sequence number reached for this log"),
-    }?;
+    let mut latest_seq_num = entry.seq_num();
+    let next_seq_num = increment_seq_num(&mut latest_seq_num)?;
     let backlink = Some(entry.hash());
     let skiplink = store.determine_next_skiplink(&entry).await?;
 
