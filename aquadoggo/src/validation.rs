@@ -64,32 +64,16 @@ pub async fn verify_seq_num(
     claimed_seq_num: &SeqNum,
 ) -> Result<()> {
     // Retrieve the latest entry for the claimed author and log_id.
-    let latest_entry = store.get_latest_entry(author, log_id).await?;
+    let expected_seq_num = next_seq_num(store, author, log_id).await?;
 
-    match latest_entry {
-        Some(latest_entry) => {
-            // If one was found, increment it's seq_num to find the next expected.
-            let mut latest_seq_num = latest_entry.seq_num();
-            let expected_seq_num = increment_seq_num(&mut latest_seq_num)?;
-
-            // Ensure the next expected matches the claimed seq_num.
-            ensure!(
-                expected_seq_num == *claimed_seq_num,
-                anyhow!(
-                    "Entry's claimed seq num of {} does not match expected seq num of {} for given author and log",
-                    claimed_seq_num.as_u64(),
-                    expected_seq_num.as_u64()
-                )
-            );
-        }
-        None => {
-            // If no entry was found, then this is the first entry in a new log and seq_num should be 1.
-            ensure!(claimed_seq_num.is_first(), anyhow!(
-                "Entry's claimed seq num of {} does not match expected seq num of 1 when creating a new log",
-                claimed_seq_num.as_u64()
-            ))
-        }
-    };
+    ensure!(
+        expected_seq_num == *claimed_seq_num,
+        anyhow!(
+            "Entry's claimed seq num of {} does not match expected seq num of {} for given author and log",
+            claimed_seq_num.as_u64(),
+            expected_seq_num.as_u64()
+        )
+    );
     Ok(())
 }
 
@@ -333,11 +317,11 @@ mod tests {
     )]
     #[case::seq_num_too_high(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::default(),SeqNum::new(4).unwrap())]
     #[should_panic(
-        expected = "Entry's claimed seq num of 3 does not match expected seq num of 1 when creating a new log"
+        expected = "Entry's claimed seq num of 3 does not match expected seq num of 1 for given author and log"
     )]
     #[case::author_wrong_so_new_log(KeyPair::new(), LogId::default(), SeqNum::new(3).unwrap())]
     #[should_panic(
-        expected = "Entry's claimed seq num of 3 does not match expected seq num of 1 when creating a new log"
+        expected = "Entry's claimed seq num of 3 does not match expected seq num of 1 for given author and log"
     )]
     #[case::log_id_wrong_so_new_log(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(1), SeqNum::new(3).unwrap())]
     fn verifies_seq_num(

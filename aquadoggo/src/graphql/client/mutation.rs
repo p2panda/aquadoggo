@@ -507,7 +507,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
-        "Entry's claimed seq num of 8 does not match expected seq num of 1 when creating a new log"
+        "Entry's claimed seq num of 8 does not match expected seq num of 1 for given author and log"
     )]
     #[case::backlink_not_in_db(
         &entry_signed_encoded_unvalidated(
