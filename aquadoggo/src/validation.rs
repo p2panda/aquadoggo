@@ -4,8 +4,8 @@ use anyhow::{anyhow, ensure, Result};
 use p2panda_rs::document::DocumentId;
 use p2panda_rs::entry::{EntrySigned, LogId, SeqNum};
 use p2panda_rs::identity::Author;
-use p2panda_rs::operation::OperationEncoded;
-use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, LogStore};
+use p2panda_rs::operation::{AsOperation, OperationEncoded};
+use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, LogStore, OperationStore};
 
 use crate::db::provider::SqlStorage;
 use crate::db::stores::StorageEntry;
@@ -243,17 +243,23 @@ pub fn verify_bamboo_entry(
 /// Ensure that a document is not deleted.
 ///
 /// Verifies that:
-/// - the document id we will be performing an UPDATE or DELETE on exists in the database
+/// - the document id we will be performing an UPDATE or DELETE on is not deleted.
 pub async fn ensure_document_not_deleted(
     store: &SqlStorage,
     document_id: &DocumentId,
 ) -> Result<()> {
-    // @TODO: We can do this more clearly by checking for a deleted flag when we have handled
-    // how to access that.
+    // @TODO: Here we retrieve all operations for the given document and then check if any of them
+    // are delete operations. This is rather inneficient and could be handled by simply querying the
+    // document table. However it removes a dependency on having all documents materialsed before
+    // being able to publish more entrieswhich at the moment seems like a sensible condition to
+    // remove.
 
     // Retrieve the document view for this document, if none is found, then it is deleted.
-    let document = store.get_document_by_id(document_id).await?;
-    ensure!(document.is_some(), anyhow!("Document is deleted"));
+    let operations = store.get_operations_by_document_id(document_id).await?;
+    ensure!(
+        !operations.iter().any(|operation| operation.is_delete()),
+        anyhow!("Document is deleted")
+    );
     Ok(())
 }
 
