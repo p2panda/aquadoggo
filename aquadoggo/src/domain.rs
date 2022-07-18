@@ -4,13 +4,18 @@ use std::collections::HashSet;
 
 use anyhow::{anyhow, ensure, Result as AnyhowResult};
 use async_graphql::Result;
+use bamboo_rs_core_ed25519_yasmf::entry::is_lipmaa_required;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
-use p2panda_rs::entry::SeqNum;
+use p2panda_rs::entry::{decode_entry, EntrySigned, SeqNum};
 use p2panda_rs::identity::Author;
-use p2panda_rs::operation::{AsOperation, OperationAction, VerifiedOperation};
+use p2panda_rs::operation::{
+    AsOperation, AsVerifiedOperation, Operation, OperationAction, OperationEncoded,
+    VerifiedOperation,
+};
 use p2panda_rs::storage_provider::traits::{
     AsStorageEntry, AsStorageLog, EntryStore, LogStore, OperationStore,
 };
+use p2panda_rs::Validate;
 
 use crate::db::provider::SqlStorage;
 use crate::db::stores::{StorageEntry, StorageLog};
@@ -167,43 +172,43 @@ pub async fn next_args(
 /// Return next entry arguments
 pub async fn publish(
     store: &SqlStorage,
-    entry: &StorageEntry,
-    operation: &VerifiedOperation,
+    entry_encoded: &EntrySigned,
+    operation_encoded: &OperationEncoded,
 ) -> Result<NextEntryArguments> {
+    ////////////////////////////////
+    // DECODE ENTRY AND OPERATION //
+    ////////////////////////////////
+
+    let entry = decode_entry(entry_encoded, Some(operation_encoded))?;
+    let operation = Operation::from(operation_encoded);
+    let author = entry_encoded.author();
+    let log_id = entry.log_id();
+    let seq_num = entry.seq_num();
+
     ///////////////////////////
     // VALIDATE ENTRY VALUES //
     ///////////////////////////
 
     // Verify the claimed seq num matches the expected seq num for this author and log.
-    verify_seq_num(store, &entry.author(), &entry.log_id(), &entry.seq_num()).await?;
+    verify_seq_num(store, &author, log_id, seq_num).await?;
 
     // If a backlink is claimed, get the expected backlink from the database, errors if it can't be found.
     let backlink = match entry.backlink_hash() {
-        Some(_) => Some(
-            get_expected_backlink(store, &entry.author(), &entry.log_id(), &entry.seq_num())
-                .await?,
-        ),
+        Some(_) => Some(get_expected_backlink(store, &author, log_id, seq_num).await?),
         None => None,
     };
 
     // If a skiplink is claimed, get the expected skiplink from the database, errors
     // if it can't be found.
     let skiplink = match entry.skiplink_hash() {
-        Some(_) => Some(
-            get_expected_skiplink(store, &entry.author(), &entry.log_id(), &entry.seq_num())
-                .await?,
-        ),
+        Some(_) => Some(get_expected_skiplink(store, &author, log_id, seq_num).await?),
         None => None,
     };
 
     // Verify the bamboo entry providing the encoded operation and retrieved backlink and skiplink.
     verify_bamboo_entry(
-        entry.entry_signed(),
-        // @TODO: Currently all StorageEntry's contain an operation, this behaviour will need revisiting when we
-        // start to handle payload deletion. In this `publish` method we will always require an operation.
-        entry
-            .operation_encoded()
-            .expect("All StorageEntry's contain an operation"),
+        entry_encoded,
+        operation_encoded,
         backlink
             .map(|entry| entry.entry_signed().to_owned())
             .as_ref(),
@@ -230,14 +235,14 @@ pub async fn publish(
     // DETERINE DOCUMENT ID //
     //////////////////////////
 
-    let document_id = match entry.operation().action() {
+    let document_id = match operation.action() {
         OperationAction::Create => {
             // Derive the document id for this new document.
-            entry.hash().into()
+            entry_encoded.hash().into()
         }
         _ => {
             // We can unwrap previous operations here as we know all UPDATE and DELETE operations contain them.
-            let previous_operations = entry.operation().previous_operations().unwrap();
+            let previous_operations = operation.previous_operations().unwrap();
 
             // Get the document_id for the document_view_id contained in previous operations.
             // This performs several validation steps (check method doc string).
@@ -256,17 +261,31 @@ pub async fn publish(
     };
 
     // Verify the claimed log id against the expected one for this document id and author.
-    verify_log_id(store, &entry.author(), &entry.log_id(), &document_id).await?;
+    verify_log_id(store, &author, log_id, &document_id).await?;
 
     /////////////////////////////////////
     // DETERMINE NEXT ENTRY ARG VALUES //
     /////////////////////////////////////
 
-    let log_id = entry.log_id();
-    let mut latest_seq_num = entry.seq_num();
-    let next_seq_num = increment_seq_num(&mut latest_seq_num)?;
-    let backlink = Some(entry.hash());
-    let skiplink = store.determine_next_skiplink(&entry).await?;
+    let next_seq_num = increment_seq_num(&mut seq_num.clone())?;
+    let backlink = Some(entry_encoded.hash());
+
+    // Unwrap as we know that an skiplink exists as soon as previous entry is given.
+    let skiplink_seq_num = next_seq_num.skiplink_seq_num().unwrap();
+
+    // Check if skiplink is required and return hash if so
+    let skiplink = if is_lipmaa_required(next_seq_num.as_u64()) {
+        match store
+            .get_entry_at_seq_num(&author, log_id, &skiplink_seq_num)
+            .await?
+        {
+            Some(entry) => Ok(Some(entry)),
+            None => Err(anyhow!("Expected next skiplink missing")),
+        }
+    } else {
+        Ok(None)
+    }?
+    .map(|entry| entry.hash());
 
     ///////////////
     // STORE LOG //
@@ -274,7 +293,7 @@ pub async fn publish(
 
     // If this is a CREATE operation it goes into a new log which we insert here.
     if operation.is_create() {
-        let log = StorageLog::new(&entry.author(), &operation.schema(), &document_id, &log_id);
+        let log = StorageLog::new(&author, &operation.schema(), &document_id, log_id);
 
         store.insert_log(log).await?;
     }
@@ -284,12 +303,19 @@ pub async fn publish(
     ///////////////////////////////
 
     // Insert the entry into the store.
-    store.insert_entry(entry.clone()).await?;
+    store
+        .insert_entry(StorageEntry::new(entry_encoded, operation_encoded)?)
+        .await?;
     // Insert the operation into the store.
-    store.insert_operation(operation, &document_id).await?;
+    store
+        .insert_operation(
+            &VerifiedOperation::new(&author, &entry_encoded.hash().into(), &operation).unwrap(),
+            &document_id,
+        )
+        .await?;
 
     Ok(NextEntryArguments {
-        log_id: log_id.into(),
+        log_id: log_id.clone().into(),
         seq_num: next_seq_num.into(),
         backlink: backlink.map(|hash| hash.into()),
         skiplink: skiplink.map(|hash| hash.into()),

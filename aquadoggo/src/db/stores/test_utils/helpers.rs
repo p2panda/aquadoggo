@@ -147,12 +147,10 @@ pub async fn insert_entry_operation_and_view(
         .unwrap_or_else(|| entry_signed.hash().into());
     let document_view_id: DocumentViewId = entry_signed.hash().into();
 
-    // Construct a the required types for publishing an entry and operation.
-    let entry = StorageEntry::new(&entry_signed, &operation_encoded).unwrap();
-    let operation = VerifiedOperation::new_from_entry(&entry_signed, &operation_encoded).unwrap();
-
     // Publish the entry.
-    publish(store, &entry, &operation).await.unwrap();
+    publish(store, &entry_signed, &operation_encoded)
+        .await
+        .unwrap();
 
     // Materialise the effected document.
     let document_operations = store

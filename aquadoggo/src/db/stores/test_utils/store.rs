@@ -158,12 +158,10 @@ pub async fn send_to_store(
     let entry_encoded = sign_and_encode(&next_entry, key_pair).unwrap();
     let operation_encoded = OperationEncoded::try_from(operation).unwrap();
 
-    // Construct a the required types for publishing an entry and operation.
-    let entry = StorageEntry::new(&entry_encoded, &operation_encoded).unwrap();
-    let operation = VerifiedOperation::new_from_entry(&entry_encoded, &operation_encoded).unwrap();
-
     // Publish the entry and get the next entry args.
-    let publish_entry_response = publish(store, &entry, &operation).await.unwrap();
+    let publish_entry_response = publish(store, &entry_encoded, &operation_encoded)
+        .await
+        .unwrap();
 
     (entry_encoded, publish_entry_response)
 }

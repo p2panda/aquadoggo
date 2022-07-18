@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_graphql::{Context, Object, Result};
+use p2panda_rs::entry::decode_entry;
 use p2panda_rs::entry::EntrySigned;
 use p2panda_rs::operation::AsVerifiedOperation;
+use p2panda_rs::operation::Operation;
 use p2panda_rs::operation::OperationEncoded;
 use p2panda_rs::operation::OperationId;
 use p2panda_rs::operation::VerifiedOperation;
 use p2panda_rs::storage_provider::traits::AsStorageEntry;
+use p2panda_rs::Validate;
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::provider::SqlStorage;
@@ -44,22 +47,35 @@ impl ClientMutationRoot {
         /////////////////////////////////////////////////////
         // VALIDATE ENTRY AND OPERATION INTERNAL INTEGRITY //
         /////////////////////////////////////////////////////
-        //
-        // Internally this constructor performs several validation steps. Including checking the operation hash
-        // matches the one encoded on the entry.
-        //
-        // @TODO: We still need a review of this section of the validation logic (internal data integrity) to
-        // make sure we are doing everything we need and that there is not too much duplication (definitely doing
-        // some ATM).
-        //
-        // @TODO: I'm not massively happy about handling both of these datatypes, it feels a little like there could be
-        // redundant (a VerifiedOperation can be constructed from a StorageEntry easily) and maybe there is a better
-        // pattern, possibly they are both doing too much... Later we need to handle storing entries without their payloads
-        // (which arrive via replication) but here we will allways expect an entry to have an operation.
-        let entry = StorageEntry::new(&entry_signed, &operation_encoded)?;
-        let operation = VerifiedOperation::new_from_entry(&entry_signed, &operation_encoded)?;
 
-        let next_args = publish(store, &entry, &operation).await?;
+        //@TODO: This pre-publishing validation needs to be reviewed in detail. Some problems come up here
+        // because we are not verifying the encoded operations against cddl yet. We should consider the
+        // role and expectations of `VerifiedOperation` and `StorageEntry` as well (they perform validation
+        // themselves bt are only constructed _after_ all other validation has taken place). Lot's to be
+        // improved here in general I think. Nice to see it as a very seperate step before `publish` i think.
+
+        // Validate the encoded entry
+        entry_signed.validate()?;
+
+        // Validate the encoded operation
+        operation_encoded.validate()?;
+
+        // Decode the entry with it's operation.
+        //
+        // @TODO: Without this `publish` fails
+        decode_entry(&entry_signed, Some(&operation_encoded))?;
+
+        // Also need to validate the decoded operation to catch internally invalid operations
+        //
+        // @TODO: Without this `publish` fails
+        let operation = Operation::from(&operation_encoded);
+        operation.validate()?;
+
+        /////////////////////////////////////
+        // PUBLISH THE ENTRY AND OPERATION //
+        /////////////////////////////////////
+
+        let next_args = publish(store, &entry_signed, &operation_encoded).await?;
 
         ////////////////////////////////////////
         // SEND THE OPERATION TO MATERIALIZER //
