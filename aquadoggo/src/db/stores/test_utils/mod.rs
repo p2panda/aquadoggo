@@ -3,7 +3,7 @@ mod helpers;
 mod runner;
 mod store;
 
-pub use domain::{next_args_without_strict_validation, publish_without_strict_validation};
+pub use domain::{next_args_unverified, publish_unverified};
 pub use helpers::{
     doggo_test_fields, encode_entry_and_operation, insert_entry_operation_and_view, test_key_pairs,
 };

@@ -81,7 +81,7 @@ mod tests {
 
     use crate::bus::ServiceMessage;
     use crate::db::stores::test_utils::{
-        next_args_without_strict_validation, test_db, TestDatabase, TestDatabaseRunner,
+        next_args_unverified, test_db, TestDatabase, TestDatabaseRunner,
     };
     use crate::http::{build_server, HttpServiceContext};
     use crate::test_helpers::TestClient;
@@ -645,13 +645,10 @@ mod tests {
                     let document_view_id: Option<DocumentViewId> =
                         document_id.clone().map(|id| id.as_str().parse().unwrap());
 
-                    let next_entry_args = next_args_without_strict_validation(
-                        &db.store,
-                        &author,
-                        document_view_id.as_ref(),
-                    )
-                    .await
-                    .unwrap();
+                    let next_entry_args =
+                        next_args_unverified(&db.store, &author, document_view_id.as_ref())
+                            .await
+                            .unwrap();
 
                     let operation = if index == 0 {
                         create_operation(&[("name", OperationValue::Text("Panda".to_string()))])

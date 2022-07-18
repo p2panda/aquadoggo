@@ -13,8 +13,7 @@ use p2panda_rs::test_utils::fixtures::{operation, operation_fields};
 
 use crate::db::provider::SqlStorage;
 use crate::db::stores::test_utils::{
-    doggo_test_fields, next_args_without_strict_validation, publish_without_strict_validation,
-    test_key_pairs,
+    doggo_test_fields, next_args_unverified, publish_unverified, test_key_pairs,
 };
 use crate::graphql::client::NextEntryArguments;
 
@@ -138,10 +137,9 @@ pub async fn send_to_store(
     let document_view_id: Option<DocumentViewId> =
         document_id.map(|id| id.as_str().parse().unwrap());
 
-    let next_entry_args =
-        next_args_without_strict_validation(store, &author, document_view_id.as_ref())
-            .await
-            .unwrap();
+    let next_entry_args = next_args_unverified(store, &author, document_view_id.as_ref())
+        .await
+        .unwrap();
 
     // Construct the next entry.
     let next_entry = Entry::new(
@@ -158,10 +156,9 @@ pub async fn send_to_store(
     let operation_encoded = OperationEncoded::try_from(operation).unwrap();
 
     // Publish the entry and get the next entry args.
-    let publish_entry_response =
-        publish_without_strict_validation(store, &entry_encoded, &operation_encoded)
-            .await
-            .unwrap();
+    let publish_entry_response = publish_unverified(store, &entry_encoded, &operation_encoded)
+        .await
+        .unwrap();
 
     (entry_encoded, publish_entry_response)
 }

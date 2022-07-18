@@ -14,9 +14,7 @@ use p2panda_rs::storage_provider::traits::OperationStore;
 use p2panda_rs::test_utils::constants::PRIVATE_KEY;
 
 use crate::db::provider::SqlStorage;
-use crate::db::stores::test_utils::{
-    next_args_without_strict_validation, publish_without_strict_validation,
-};
+use crate::db::stores::test_utils::{next_args_unverified, publish_unverified};
 use crate::db::traits::DocumentStore;
 
 /// A complex set of fields which can be used in aquadoggo tests.
@@ -103,22 +101,27 @@ pub async fn encode_entry_and_operation(
     let document_view_id: Option<DocumentViewId> =
         document_id.map(|id| id.as_str().parse().unwrap());
 
-    let next_entry_args =
-        next_args_without_strict_validation(&store, &author, document_view_id.as_ref())
-            .await
-            .unwrap();
+    // Get next args
+    let next_args = next_args_unverified(&store, &author, document_view_id.as_ref())
+        .await
+        .unwrap();
 
+    // Construct the entry with passed operation.
     let entry = Entry::new(
-        &next_entry_args.log_id.into(),
+        &next_args.log_id.into(),
         Some(operation),
-        next_entry_args.skiplink.map(Hash::from).as_ref(),
-        next_entry_args.backlink.map(Hash::from).as_ref(),
-        &next_entry_args.seq_num.into(),
+        next_args.skiplink.map(Hash::from).as_ref(),
+        next_args.backlink.map(Hash::from).as_ref(),
+        &next_args.seq_num.into(),
     )
     .unwrap();
 
+    // Sign and encode the entry.
     let entry = sign_and_encode(&entry, key_pair).unwrap();
+    // Encode the operation.
     let operation = OperationEncoded::try_from(operation).unwrap();
+
+    // Return encoded entry and operation.
     (entry, operation)
 }
 
@@ -133,24 +136,28 @@ pub async fn insert_entry_operation_and_view(
         panic!("UPDATE and DELETE operations require a DocumentId to be passed")
     }
 
+    // Encode entry and operation.
     let (entry, operation_encoded) =
         encode_entry_and_operation(store, operation, key_pair, document_id).await;
 
+    // Unwrap document_id or construct it from the entry hash.
     let document_id = document_id.cloned().unwrap_or_else(|| entry.hash().into());
     let document_view_id: DocumentViewId = entry.hash().into();
 
-    publish_without_strict_validation(store, &entry, &operation_encoded)
+    // Publish the entry, this doesn't perform the normal verification steps as a test store
+    // may not contain materialised documents.
+    publish_unverified(store, &entry, &operation_encoded)
         .await
         .unwrap();
 
+    // Materialise the effected document.
     let document_operations = store
         .get_operations_by_document_id(&document_id)
         .await
         .unwrap();
-
     let document = DocumentBuilder::new(document_operations).build().unwrap();
-
     store.insert_document(&document).await.unwrap();
 
+    // Return the document_id and document_view_id.
     (document_id, document_view_id)
 }
