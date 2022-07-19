@@ -3,17 +3,13 @@
 use async_graphql::{Context, Object, Result};
 use p2panda_rs::entry::decode_entry;
 use p2panda_rs::entry::EntrySigned;
-use p2panda_rs::operation::AsVerifiedOperation;
 use p2panda_rs::operation::Operation;
 use p2panda_rs::operation::OperationEncoded;
 use p2panda_rs::operation::OperationId;
-use p2panda_rs::operation::VerifiedOperation;
-use p2panda_rs::storage_provider::traits::AsStorageEntry;
 use p2panda_rs::Validate;
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::provider::SqlStorage;
-use crate::db::stores::StorageEntry;
 use crate::domain::publish;
 use crate::graphql::client::NextEntryArguments;
 use crate::graphql::scalars;

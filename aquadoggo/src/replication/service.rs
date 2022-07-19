@@ -9,8 +9,6 @@ use log::{debug, error, trace, warn};
 use p2panda_rs::entry::LogId;
 use p2panda_rs::entry::SeqNum;
 use p2panda_rs::identity::Author;
-use p2panda_rs::operation::AsVerifiedOperation;
-use p2panda_rs::operation::VerifiedOperation;
 use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
 use tokio::task;
 

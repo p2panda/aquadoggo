@@ -7,16 +7,14 @@ use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::{Author, KeyPair};
 use p2panda_rs::operation::{
-    AsVerifiedOperation, Operation, OperationEncoded, OperationValue, VerifiedOperation,
+     Operation, OperationEncoded, OperationValue,
 };
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::storage_provider::traits::AsStorageEntry;
 use p2panda_rs::test_utils::constants::SCHEMA_ID;
 use p2panda_rs::test_utils::fixtures::{operation, operation_fields};
 
 use crate::db::provider::SqlStorage;
 use crate::db::stores::test_utils::{doggo_test_fields, test_key_pairs};
-use crate::db::stores::StorageEntry;
 use crate::domain::{next_args, publish};
 use crate::graphql::client::NextEntryArguments;
 

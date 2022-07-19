@@ -15,13 +15,12 @@ use p2panda_rs::operation::{
 use p2panda_rs::storage_provider::traits::{
     AsStorageEntry, AsStorageLog, EntryStore, LogStore, OperationStore,
 };
-use p2panda_rs::Validate;
 
 use crate::db::provider::SqlStorage;
 use crate::db::stores::{StorageEntry, StorageLog};
 use crate::graphql::client::NextEntryArguments;
 use crate::validation::{
-    ensure_document_not_deleted, ensure_log_ids_equal, get_expected_backlink,
+    ensure_document_not_deleted, get_expected_backlink,
     get_expected_skiplink, increment_seq_num, next_log_id, verify_bamboo_entry, verify_log_id,
     verify_seq_num,
 };

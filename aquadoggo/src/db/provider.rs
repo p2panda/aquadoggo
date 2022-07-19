@@ -7,11 +7,9 @@ use p2panda_rs::operation::VerifiedOperation;
 use p2panda_rs::storage_provider::traits::StorageProvider;
 use sqlx::query_scalar;
 
-use crate::db::request::{EntryArgsRequest, PublishEntryRequest};
 use crate::db::stores::{StorageEntry, StorageLog};
 use crate::db::Pool;
 use crate::errors::Result;
-use crate::graphql::client::NextEntryArguments;
 
 /// Sql based storage that implements `StorageProvider`.
 #[derive(Clone, Debug)]
@@ -29,14 +27,11 @@ impl SqlStorage {
 /// A `StorageProvider` implementation based on `sqlx` that supports SQLite and PostgreSQL
 /// databases.
 #[async_trait]
-impl StorageProvider<StorageEntry, StorageLog, VerifiedOperation> for SqlStorage {
-    // @TODO: We will deprecate `publish_entry` and `next_entry_args` from p2panda-rs storage provider
-    // after this PR which means we no longer need these request and response structs.
-    type EntryArgsResponse = NextEntryArguments;
-    type EntryArgsRequest = EntryArgsRequest;
-    type PublishEntryResponse = NextEntryArguments;
-    type PublishEntryRequest = PublishEntryRequest;
-
+impl StorageProvider for SqlStorage {
+    type StorageLog = StorageLog;
+    type StorageEntry = StorageEntry;
+    type StorageOperation = VerifiedOperation;
+    
     /// Returns the related document for any entry.
     ///
     /// Every entry is part of a document and, through that, associated with a specific log id used

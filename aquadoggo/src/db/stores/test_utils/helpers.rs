@@ -7,14 +7,13 @@ use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::{Author, KeyPair};
 use p2panda_rs::operation::{
-    AsOperation, AsVerifiedOperation, Operation, OperationEncoded, OperationValue, PinnedRelation,
-    PinnedRelationList, Relation, RelationList, VerifiedOperation,
+    AsOperation, Operation, OperationEncoded, OperationValue, PinnedRelation,
+    PinnedRelationList, Relation, RelationList,
 };
-use p2panda_rs::storage_provider::traits::{AsStorageEntry, OperationStore};
+use p2panda_rs::storage_provider::traits::OperationStore;
 use p2panda_rs::test_utils::constants::PRIVATE_KEY;
 
 use crate::db::provider::SqlStorage;
-use crate::db::stores::StorageEntry;
 use crate::db::traits::DocumentStore;
 use crate::domain::{next_args, publish};
 
