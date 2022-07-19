@@ -388,7 +388,7 @@ mod tests {
     use super::{get_validate_document_id_for_view_id, next_args};
 
     #[rstest]
-    fn gets_validates_document_id_for_view_id(
+    fn errors_when_passed_non_existent_view_id(
         #[from(test_db)] runner: TestDatabaseRunner,
         #[from(random_document_view_id)] document_view_id: DocumentViewId,
     ) {
@@ -399,7 +399,7 @@ mod tests {
     }
 
     #[rstest]
-    fn invalid_document_view_id_missing_operations(
+    fn gets_document_id_for_view(
         #[from(test_db)] runner: TestDatabaseRunner,
         operation: Operation,
         operation_fields: OperationFields,
