@@ -283,7 +283,11 @@ mod tests {
             assert!(reduce_task(context.clone(), input).await.is_ok());
 
             // The new view should exist and the document should refer to it.
-            let document_view = context.store.get_document_by_id(&document_id).await.unwrap();
+            let document_view = context
+                .store
+                .get_document_by_id(&document_id)
+                .await
+                .unwrap();
             assert_eq!(
                 document_view.unwrap().get("username").unwrap().value(),
                 &OperationValue::Text("meeeeeee".to_string())

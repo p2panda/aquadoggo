@@ -31,7 +31,7 @@ impl StorageProvider for SqlStorage {
     type StorageLog = StorageLog;
     type StorageEntry = StorageEntry;
     type StorageOperation = VerifiedOperation;
-    
+
     /// Returns the related document for any entry.
     ///
     /// Every entry is part of a document and, through that, associated with a specific log id used

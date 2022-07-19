@@ -6,15 +6,12 @@ use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::{Author, KeyPair};
-use p2panda_rs::operation::{
-     Operation, OperationEncoded, OperationValue,
-};
+use p2panda_rs::operation::{Operation, OperationEncoded, OperationValue};
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::StorageProvider;
 use p2panda_rs::test_utils::constants::SCHEMA_ID;
 use p2panda_rs::test_utils::fixtures::{operation, operation_fields};
 
-use crate::db::provider::SqlStorage;
 use crate::db::stores::test_utils::{doggo_test_fields, test_key_pairs};
 use crate::domain::{next_args, publish};
 use crate::graphql::client::NextEntryArguments;
@@ -77,7 +74,10 @@ impl Default for PopulateDatabaseConfig {
 /// Passed parameters define what the db should contain. The first entry in each log contains a
 /// valid CREATE operation following entries contain duplicate UPDATE operations. If the
 /// with_delete flag is set to true the last entry in all logs contain be a DELETE operation.
-pub async fn populate_test_db<S: StorageProvider>(db: &mut TestDatabase<S>, config: &PopulateDatabaseConfig) {
+pub async fn populate_test_db<S: StorageProvider>(
+    db: &mut TestDatabase<S>,
+    config: &PopulateDatabaseConfig,
+) {
     let key_pairs = test_key_pairs(config.no_of_authors);
 
     for key_pair in &key_pairs {

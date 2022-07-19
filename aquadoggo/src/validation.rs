@@ -5,10 +5,7 @@ use p2panda_rs::document::DocumentId;
 use p2panda_rs::entry::{EntrySigned, LogId, SeqNum};
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{AsOperation, OperationEncoded};
-use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, LogStore, OperationStore, StorageProvider};
-
-use crate::db::provider::SqlStorage;
-use crate::db::stores::StorageEntry;
+use p2panda_rs::storage_provider::traits::{AsStorageEntry, StorageProvider};
 
 // @TODO: This method will be used in a follow-up PR
 //
@@ -40,22 +37,6 @@ use crate::db::stores::StorageEntry;
 //     // All went well, return Ok.
 //     Ok(())
 // }
-
-/// Compare the log id encoded on an entry with the expected log id.
-///
-/// This performs one validatin step:
-/// - does the claimed log id match the expected one
-pub fn ensure_log_ids_equal(claimed_log_id: &LogId, expected_log_id: &LogId) -> Result<()> {
-    ensure!(
-        claimed_log_id == expected_log_id,
-        anyhow!(
-            "Entry's claimed log id of {} does not match expected log id of {} for given author",
-            claimed_log_id.as_u64(),
-            expected_log_id.as_u64()
-        )
-    );
-    Ok(())
-}
 
 pub async fn verify_seq_num<S: StorageProvider>(
     store: &S,
@@ -259,7 +240,11 @@ pub async fn next_log_id<S: StorageProvider>(store: &S, author: &Author) -> Resu
     }
 }
 
-pub async fn next_seq_num<S: StorageProvider>(store: &S, author: &Author, log_id: &LogId) -> Result<SeqNum> {
+pub async fn next_seq_num<S: StorageProvider>(
+    store: &S,
+    author: &Author,
+    log_id: &LogId,
+) -> Result<SeqNum> {
     let latest_entry = store.get_latest_entry(author, log_id).await?;
 
     match latest_entry {
@@ -293,19 +278,9 @@ mod tests {
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
     use super::{
-        ensure_document_not_deleted, ensure_log_ids_equal, get_expected_backlink,
-        get_expected_skiplink, verify_log_id, verify_seq_num,
+        ensure_document_not_deleted, get_expected_backlink, get_expected_skiplink, verify_log_id,
+        verify_seq_num,
     };
-
-    #[rstest]
-    #[case(LogId::new(0))]
-    #[should_panic(
-        expected = "Entry's claimed log id of 1 does not match expected log id of 0 for given author"
-    )]
-    #[case(LogId::new(1))]
-    fn ensures_entry_contains_expected_log_id(#[case] claimed_log_id: LogId) {
-        ensure_log_ids_equal(&claimed_log_id, &LogId::default()).unwrap();
-    }
 
     #[rstest]
     #[case::valid_seq_num(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::default(), SeqNum::new(3).unwrap())]

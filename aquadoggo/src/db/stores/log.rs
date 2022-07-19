@@ -177,8 +177,8 @@ impl LogStore<StorageLog> for SqlStorage {
 
         Ok(next_log_id)
     }
-    
-        /// Determines the latest log_id of an author.
+
+    /// Determines the latest log_id of an author.
     ///
     /// Returns either the hightes found log_id for an author or None if no logs have
     /// been published by the passed author.

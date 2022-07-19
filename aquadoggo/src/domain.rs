@@ -11,19 +11,13 @@ use p2panda_rs::entry::{decode_entry, EntrySigned, LogId, SeqNum};
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{
     AsOperation, AsVerifiedOperation, Operation, OperationAction, OperationEncoded,
-    VerifiedOperation,
 };
-use p2panda_rs::storage_provider::traits::{
-    AsStorageEntry, AsStorageLog, EntryStore, LogStore, OperationStore, StorageProvider,
-};
+use p2panda_rs::storage_provider::traits::{AsStorageEntry, AsStorageLog, StorageProvider};
 
-use crate::db::provider::SqlStorage;
-use crate::db::stores::{StorageEntry, StorageLog};
 use crate::graphql::client::NextEntryArguments;
 use crate::validation::{
-    ensure_document_not_deleted, get_expected_backlink,
-    get_expected_skiplink, increment_seq_num, next_log_id, verify_bamboo_entry, verify_log_id,
-    verify_seq_num,
+    ensure_document_not_deleted, get_expected_backlink, get_expected_skiplink, increment_seq_num,
+    next_log_id, verify_bamboo_entry, verify_log_id, verify_seq_num,
 };
 
 /// Retrieve arguments required for constructing the next entry in a bamboo log for a specific
@@ -221,7 +215,7 @@ pub async fn publish<S: StorageProvider>(
         Some(_) => Some(get_expected_skiplink(store, &author, log_id, seq_num).await?),
         None => None,
     };
-    
+
     let backlink = backlink.map(|entry| entry.entry_bytes()[..].try_into().unwrap());
     let skiplink = skiplink.map(|entry| entry.entry_bytes()[..].try_into().unwrap());
 
@@ -230,7 +224,7 @@ pub async fn publish<S: StorageProvider>(
         entry_encoded,
         operation_encoded,
         backlink.as_ref(),
-        skiplink.as_ref()
+        skiplink.as_ref(),
     )?;
 
     ///////////////////////////////////
@@ -305,18 +299,18 @@ pub async fn publish<S: StorageProvider>(
             &document_id,
         )
         .await?;
-    
+
     /////////////////////////////////////
     // DETERMINE NEXT ENTRY ARG VALUES //
     /////////////////////////////////////
 
     let next_seq_num = increment_seq_num(&mut seq_num.clone())?;
     let backlink = Some(entry_encoded.hash());
-    
+
     // Check if skiplink is required and return hash if so
     let skiplink = if is_lipmaa_required(next_seq_num.as_u64()) {
-            let skiplink_seq_num = next_seq_num.skiplink_seq_num().unwrap();
-            match store
+        let skiplink_seq_num = next_seq_num.skiplink_seq_num().unwrap();
+        match store
             .get_entry_at_seq_num(&author, log_id, &skiplink_seq_num)
             .await?
         {
@@ -327,7 +321,7 @@ pub async fn publish<S: StorageProvider>(
         Ok(None)
     }?
     .map(|entry| entry.hash());
-    
+
     Ok(NextEntryArguments {
         log_id: log_id.clone().into(),
         seq_num: next_seq_num.into(),
@@ -376,7 +370,7 @@ mod tests {
     use p2panda_rs::document::DocumentViewId;
     use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::identity::{Author, KeyPair};
-    use p2panda_rs::operation::{Operation, OperationFields, OperationId, AsVerifiedOperation};
+    use p2panda_rs::operation::{AsVerifiedOperation, Operation, OperationFields, OperationId};
     use p2panda_rs::storage_provider::traits::AsStorageEntry;
     use p2panda_rs::test_utils::constants::SCHEMA_ID;
     use p2panda_rs::test_utils::db::MemoryStore;
@@ -386,7 +380,10 @@ mod tests {
     use rstest::rstest;
 
     use crate::db::provider::SqlStorage;
-    use crate::db::stores::test_utils::{send_to_store, test_db, TestDatabase, TestDatabaseRunner, test_db_config, PopulateDatabaseConfig, TestData, populate_test_db};
+    use crate::db::stores::test_utils::{
+        populate_test_db, send_to_store, test_db, test_db_config, PopulateDatabaseConfig, TestData,
+        TestDatabase, TestDatabaseRunner,
+    };
     use crate::domain::publish;
     use crate::graphql::client::NextEntryArguments;
 
@@ -456,42 +453,69 @@ mod tests {
             assert_eq!(expected_next_args, result.unwrap())
         });
     }
-    
+
     #[rstest]
     #[tokio::test]
-    async fn publishes_memory_store_tests(#[from(test_db_config)] #[with(7,1,1)] db_one_config: PopulateDatabaseConfig, #[from(test_db_config)] #[with(8,1,1)] db_two_config: PopulateDatabaseConfig) {
-        
+    async fn publishes_memory_store_tests(
+        #[from(test_db_config)]
+        #[with(7, 1, 1)]
+        db_one_config: PopulateDatabaseConfig,
+        #[from(test_db_config)]
+        #[with(8, 1, 1)]
+        db_two_config: PopulateDatabaseConfig,
+    ) {
         // Populate db one with 7 entries.
         let mut db_one = TestDatabase {
             store: MemoryStore::default(),
             test_data: TestData::default(),
         };
         populate_test_db(&mut db_one, &db_one_config).await;
-        
+
         // Populate db 2 with 8 entries.
         let mut db_two = TestDatabase {
             store: MemoryStore::default(),
             test_data: TestData::default(),
         };
         populate_test_db(&mut db_two, &db_two_config).await;
-        
+
         // Remove entry and it's operation from db one at seq number 4.
         let mut removed_entry = None;
         db_one.store.entries.lock().unwrap().retain(|_key, entry| {
-            removed_entry = Some(entry.hash()); 
-            entry.seq_num().as_u64() != 4}
-        );
+            removed_entry = Some(entry.hash());
+            entry.seq_num().as_u64() != 4
+        });
         let operation_to_remove: OperationId = removed_entry.unwrap().into();
-        db_one.store.operations.lock().unwrap().retain(|_key, (_document_id, operation)|operation.operation_id() != &operation_to_remove);
-        
-        // Get entry and operation from db two at seq number 8. 
+        db_one
+            .store
+            .operations
+            .lock()
+            .unwrap()
+            .retain(|_key, (_document_id, operation)| {
+                operation.operation_id() != &operation_to_remove
+            });
+
+        // Get entry and operation from db two at seq number 8.
         let db_two_entries = db_two.store.entries.lock().unwrap();
         let db_two_operations = db_two.store.operations.lock().unwrap();
-        let (next_entry_hash, next_entry) = db_two_entries.iter().find(|(_, entry)| entry.seq_num().as_u64() == 8).unwrap();
-        let (_, next_operation) = db_two_operations.get(&next_entry_hash.to_owned().into()).unwrap();
-        
+        let (next_entry_hash, next_entry) = db_two_entries
+            .iter()
+            .find(|(_, entry)| entry.seq_num().as_u64() == 8)
+            .unwrap();
+        let (_, next_operation) = db_two_operations
+            .get(&next_entry_hash.to_owned().into())
+            .unwrap();
+
         // Publish entry 8 to db one, it should be missing it's skiplink entry.
-        let result = publish(&db_one.store, &next_entry.entry_bytes()[..].try_into().unwrap(), &next_operation.operation().try_into().unwrap()).await;
-        assert_eq!(result.err().unwrap().message.to_string(), "Expected skiplink for <Author 53fc96>, log id 0 and seq num 8 not found in database".to_string())
+        let result = publish(
+            &db_one.store,
+            &next_entry.entry_bytes()[..].try_into().unwrap(),
+            &next_operation.operation().try_into().unwrap(),
+        )
+        .await;
+        assert_eq!(
+            result.err().unwrap().message.to_string(),
+            "Expected skiplink for <Author 53fc96>, log id 0 and seq num 8 not found in database"
+                .to_string()
+        )
     }
 }

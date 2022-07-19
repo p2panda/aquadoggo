@@ -7,8 +7,8 @@ use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::{Author, KeyPair};
 use p2panda_rs::operation::{
-    AsOperation, Operation, OperationEncoded, OperationValue, PinnedRelation,
-    PinnedRelationList, Relation, RelationList,
+    AsOperation, Operation, OperationEncoded, OperationValue, PinnedRelation, PinnedRelationList,
+    Relation, RelationList,
 };
 use p2panda_rs::storage_provider::traits::OperationStore;
 use p2panda_rs::test_utils::constants::PRIVATE_KEY;
