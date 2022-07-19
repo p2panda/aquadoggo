@@ -177,14 +177,12 @@ impl LogStore<StorageLog> for SqlStorage {
 
         Ok(next_log_id)
     }
-}
-
-impl SqlStorage {
-    /// Determines the latest log_id of an author.
+    
+        /// Determines the latest log_id of an author.
     ///
     /// Returns either the hightes found log_id for an author or None if no logs have
     /// been published by the passed author.
-    pub async fn latest_log_id(&self, author: &Author) -> Result<Option<LogId>, LogStorageError> {
+    async fn latest_log_id(&self, author: &Author) -> Result<Option<LogId>, LogStorageError> {
         // Get all log ids from this author
         let mut result: Vec<String> = query_scalar(
             "
@@ -245,6 +243,7 @@ mod tests {
     };
     use rstest::rstest;
 
+    use crate::db::provider::SqlStorage;
     use crate::db::stores::entry::StorageEntry;
     use crate::db::stores::log::StorageLog;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
@@ -254,7 +253,7 @@ mod tests {
         #[from(public_key)] author: Author,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             let log_id = db.store.find_document_log_id(&author, None).await.unwrap();
             assert_eq!(log_id, LogId::default());
         });
@@ -267,7 +266,7 @@ mod tests {
         #[from(random_document_id)] document: DocumentId,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             let log = StorageLog::new(&author, &schema, &document.clone(), &LogId::default());
             assert!(db.store.insert_log(log).await.is_ok());
 
@@ -284,7 +283,7 @@ mod tests {
         #[from(random_document_id)] document: DocumentId,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             let schema = SchemaId::new_application(
                 "venue",
                 &DocumentViewId::new(&[operation_id_1, operation_id_2]).unwrap(),
@@ -302,7 +301,7 @@ mod tests {
         #[from(schema)] schema: SchemaId,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             let log_id = db.store.find_document_log_id(&author, None).await.unwrap();
 
             // We expect to be given the next log id when asking for a possible log id for a new
@@ -330,7 +329,7 @@ mod tests {
         #[from(operation_encoded)] operation_encoded: OperationEncoded,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             // Expect database to return nothing yet
             assert_eq!(
                 db.store
@@ -387,7 +386,7 @@ mod tests {
         #[from(random_document_id)] document_third: DocumentId,
         #[from(random_document_id)] document_forth: DocumentId,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             // Register two log ids at the beginning
             let log_1 = StorageLog::new(&author, &schema, &document_first, &LogId::default());
             let log_2 = StorageLog::new(&author, &schema, &document_second, &LogId::new(1));

@@ -10,6 +10,7 @@ use p2panda_rs::operation::{
      Operation, OperationEncoded, OperationValue,
 };
 use p2panda_rs::schema::SchemaId;
+use p2panda_rs::storage_provider::traits::StorageProvider;
 use p2panda_rs::test_utils::constants::SCHEMA_ID;
 use p2panda_rs::test_utils::fixtures::{operation, operation_fields};
 
@@ -20,8 +21,8 @@ use crate::graphql::client::NextEntryArguments;
 
 /// Container for `SqlStore` with access to the document ids and key_pairs used in the
 /// pre-populated database for testing.
-pub struct TestDatabase {
-    pub store: SqlStorage,
+pub struct TestDatabase<S: StorageProvider> {
+    pub store: S,
     pub test_data: TestData,
 }
 
@@ -76,7 +77,7 @@ impl Default for PopulateDatabaseConfig {
 /// Passed parameters define what the db should contain. The first entry in each log contains a
 /// valid CREATE operation following entries contain duplicate UPDATE operations. If the
 /// with_delete flag is set to true the last entry in all logs contain be a DELETE operation.
-pub async fn populate_test_db(db: &mut TestDatabase, config: &PopulateDatabaseConfig) {
+pub async fn populate_test_db<S: StorageProvider>(db: &mut TestDatabase<S>, config: &PopulateDatabaseConfig) {
     let key_pairs = test_key_pairs(config.no_of_authors);
 
     for key_pair in &key_pairs {
@@ -101,7 +102,7 @@ pub async fn populate_test_db(db: &mut TestDatabase, config: &PopulateDatabaseCo
                 };
 
                 // Publish the operation encoded on an entry to storage.
-                let (entry_encoded, publish_entry_response) = send_to_store(
+                let (entry_encoded, publish_entry_response) = send_to_store::<S>(
                     &db.store,
                     &operation(
                         next_operation_fields,
@@ -127,8 +128,8 @@ pub async fn populate_test_db(db: &mut TestDatabase, config: &PopulateDatabaseCo
 }
 
 /// Helper method for publishing an operation encoded on an entry to a store.
-pub async fn send_to_store(
-    store: &SqlStorage,
+pub async fn send_to_store<S: StorageProvider>(
+    store: &S,
     operation: &Operation,
     document_id: Option<&DocumentId>,
     key_pair: &KeyPair,

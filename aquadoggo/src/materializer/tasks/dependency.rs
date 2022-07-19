@@ -155,6 +155,7 @@ mod tests {
 
     use crate::config::Configuration;
     use crate::context::Context;
+    use crate::db::provider::SqlStorage;
     use crate::db::stores::test_utils::{
         insert_entry_operation_and_view, test_db, TestDatabase, TestDatabaseRunner,
     };
@@ -273,7 +274,7 @@ mod tests {
         #[case] runner: TestDatabaseRunner,
         #[case] expected_next_tasks: usize,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
+        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
             let context = Context::new(db.store.clone(), Configuration::default());
 
             for document_id in &db.test_data.documents {
@@ -309,7 +310,7 @@ mod tests {
         #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             let context = Context::new(db.store.clone(), Configuration::default());
             let document_id = db.test_data.documents[0].clone();
 
@@ -369,7 +370,7 @@ mod tests {
         #[case] document_view_id: Option<DocumentViewId>,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             let context = Context::new(db.store.clone(), Configuration::default());
             let input = TaskInput::new(document_id, document_view_id);
 
@@ -412,7 +413,7 @@ mod tests {
         )
     )]
     fn fails_on_deleted_documents(#[case] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             let context = Context::new(db.store.clone(), Configuration::default());
             let document_id = db.test_data.documents[0].clone();
 

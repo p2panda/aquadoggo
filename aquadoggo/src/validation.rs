@@ -5,7 +5,7 @@ use p2panda_rs::document::DocumentId;
 use p2panda_rs::entry::{EntrySigned, LogId, SeqNum};
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{AsOperation, OperationEncoded};
-use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, LogStore, OperationStore};
+use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, LogStore, OperationStore, StorageProvider};
 
 use crate::db::provider::SqlStorage;
 use crate::db::stores::StorageEntry;
@@ -17,8 +17,8 @@ use crate::db::stores::StorageEntry;
 // /// This performs two steps and will return an error if either fail:
 // /// - try to retrieve the claimed schema from storage
 // /// - if the schema is found, validate the operation against it
-// pub async fn validate_operation_against_schema(
-//     store: &SqlStorage,
+// pub async fn validate_operation_against_schema<S: StorageProvider>(
+//     store: &S,
 //     operation: &Operation,
 // ) -> Result<()> {
 //     // Retrieve the schema for this operation from the store.
@@ -57,8 +57,8 @@ pub fn ensure_log_ids_equal(claimed_log_id: &LogId, expected_log_id: &LogId) -> 
     Ok(())
 }
 
-pub async fn verify_seq_num(
-    store: &SqlStorage,
+pub async fn verify_seq_num<S: StorageProvider>(
+    store: &S,
     author: &Author,
     log_id: &LogId,
     claimed_seq_num: &SeqNum,
@@ -82,8 +82,8 @@ pub async fn verify_seq_num(
 /// This method handles both the case where the claimed log id already exists for this author
 /// and where it is a new log. In both verify that:
 /// - The claimed log id matches the expected one
-pub async fn verify_log_id(
-    store: &SqlStorage,
+pub async fn verify_log_id<S: StorageProvider>(
+    store: &S,
     author: &Author,
     claimed_log_id: &LogId,
     document_id: &DocumentId,
@@ -128,12 +128,12 @@ pub async fn verify_log_id(
 // If the expected backlink could not be found in the database an error is returned.
 //
 // @TODO This depricates `try_get_backlink()` on storage provider.
-pub async fn get_expected_backlink(
-    store: &SqlStorage,
+pub async fn get_expected_backlink<S: StorageProvider>(
+    store: &S,
     author: &Author,
     log_id: &LogId,
     seq_num: &SeqNum,
-) -> Result<StorageEntry> {
+) -> Result<S::StorageEntry> {
     ensure!(
         !seq_num.is_first(),
         anyhow!("Entry with seq num 1 can not have backlink")
@@ -167,12 +167,12 @@ pub async fn get_expected_backlink(
 // If the expected skiplink could not be found in the database an error is returned.
 //
 // @TODO This depricates `try_get_skiplink()` on storage provider.
-pub async fn get_expected_skiplink(
-    store: &SqlStorage,
+pub async fn get_expected_skiplink<S: StorageProvider>(
+    store: &S,
     author: &Author,
     log_id: &LogId,
     seq_num: &SeqNum,
-) -> Result<StorageEntry> {
+) -> Result<S::StorageEntry> {
     ensure!(
         !seq_num.is_first(),
         anyhow!("Entry with seq num 1 can not have skiplink")
@@ -226,8 +226,8 @@ pub fn verify_bamboo_entry(
 ///
 /// Verifies that:
 /// - the document id we will be performing an UPDATE or DELETE on is not deleted.
-pub async fn ensure_document_not_deleted(
-    store: &SqlStorage,
+pub async fn ensure_document_not_deleted<S: StorageProvider>(
+    store: &S,
     document_id: &DocumentId,
 ) -> Result<()> {
     // @TODO: Here we retrieve all operations for the given document and then check if any of them
@@ -245,7 +245,7 @@ pub async fn ensure_document_not_deleted(
     Ok(())
 }
 
-pub async fn next_log_id(store: &SqlStorage, author: &Author) -> Result<LogId> {
+pub async fn next_log_id<S: StorageProvider>(store: &S, author: &Author) -> Result<LogId> {
     let latest_log_id = store.latest_log_id(author).await?;
 
     let next_log_id = match latest_log_id {
@@ -259,7 +259,7 @@ pub async fn next_log_id(store: &SqlStorage, author: &Author) -> Result<LogId> {
     }
 }
 
-pub async fn next_seq_num(store: &SqlStorage, author: &Author, log_id: &LogId) -> Result<SeqNum> {
+pub async fn next_seq_num<S: StorageProvider>(store: &S, author: &Author, log_id: &LogId) -> Result<SeqNum> {
     let latest_entry = store.get_latest_entry(author, log_id).await?;
 
     match latest_entry {
@@ -289,6 +289,7 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::random_document_id;
     use rstest::rstest;
 
+    use crate::db::provider::SqlStorage;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
     use super::{
@@ -332,7 +333,7 @@ mod tests {
         #[with(2, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
+        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
             let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
             verify_seq_num(&db.store, &author, &log_id, &claimed_seq_num)
@@ -373,7 +374,7 @@ mod tests {
         #[with(2, 2, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
+        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
             // Unwrap the passed document id or select the first valid one from the database.
             let document_id =
                 document_id.unwrap_or_else(|| db.test_data.documents.first().unwrap().to_owned());
@@ -409,7 +410,7 @@ mod tests {
         #[with(7, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
+        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
             let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
             get_expected_skiplink(&db.store, &author, &log_id, &seq_num)
@@ -440,7 +441,7 @@ mod tests {
         #[with(7, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
+        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
             let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
             get_expected_backlink(&db.store, &author, &log_id, &seq_num)
@@ -456,7 +457,7 @@ mod tests {
         #[with(3, 1, 1, true)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
+        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
             let document_id = db.test_data.documents.first().unwrap();
             ensure_document_not_deleted(&db.store, document_id)
                 .await
@@ -470,7 +471,7 @@ mod tests {
         #[with(3, 1, 1, false)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
+        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
             let document_id = db.test_data.documents.first().unwrap();
             ensure_document_not_deleted(&db.store, document_id)
                 .await

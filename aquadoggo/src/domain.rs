@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::collections::HashSet;
+use std::convert::TryInto;
 
 use anyhow::{anyhow, ensure, Result as AnyhowResult};
 use async_graphql::Result;
@@ -13,7 +14,7 @@ use p2panda_rs::operation::{
     VerifiedOperation,
 };
 use p2panda_rs::storage_provider::traits::{
-    AsStorageEntry, AsStorageLog, EntryStore, LogStore, OperationStore,
+    AsStorageEntry, AsStorageLog, EntryStore, LogStore, OperationStore, StorageProvider,
 };
 
 use crate::db::provider::SqlStorage;
@@ -52,8 +53,8 @@ use crate::validation::{
 /// - get the skiplink for this author, log and next seq num
 /// - get the latest seq num for this author and log and safely increment
 /// Return next arguments
-pub async fn next_args(
-    store: &SqlStorage,
+pub async fn next_args<S: StorageProvider>(
+    store: &S,
     public_key: &Author,
     document_view_id: Option<&DocumentViewId>,
 ) -> Result<NextEntryArguments> {
@@ -186,8 +187,8 @@ pub async fn next_args(
 /// - store the entry
 /// - store the opertion
 /// Return next entry arguments
-pub async fn publish(
-    store: &SqlStorage,
+pub async fn publish<S: StorageProvider>(
+    store: &S,
     entry_encoded: &EntrySigned,
     operation_encoded: &OperationEncoded,
 ) -> Result<NextEntryArguments> {
@@ -220,17 +221,16 @@ pub async fn publish(
         Some(_) => Some(get_expected_skiplink(store, &author, log_id, seq_num).await?),
         None => None,
     };
+    
+    let backlink = backlink.map(|entry| entry.entry_bytes()[..].try_into().unwrap());
+    let skiplink = skiplink.map(|entry| entry.entry_bytes()[..].try_into().unwrap());
 
     // Verify the bamboo entry providing the encoded operation and retrieved backlink and skiplink.
     verify_bamboo_entry(
         entry_encoded,
         operation_encoded,
-        backlink
-            .map(|entry| entry.entry_signed().to_owned())
-            .as_ref(),
-        skiplink
-            .map(|entry| entry.entry_signed().to_owned())
-            .as_ref(),
+        backlink.as_ref(),
+        skiplink.as_ref()
     )?;
 
     ///////////////////////////////////
@@ -285,7 +285,7 @@ pub async fn publish(
 
     // If this is a CREATE operation it goes into a new log which we insert here.
     if operation.is_create() {
-        let log = StorageLog::new(&author, &operation.schema(), &document_id, log_id);
+        let log = S::StorageLog::new(&author, &operation.schema(), &document_id, log_id);
 
         store.insert_log(log).await?;
     }
@@ -296,12 +296,12 @@ pub async fn publish(
 
     // Insert the entry into the store.
     store
-        .insert_entry(StorageEntry::new(entry_encoded, operation_encoded)?)
+        .insert_entry(S::StorageEntry::new(entry_encoded, operation_encoded)?)
         .await?;
     // Insert the operation into the store.
     store
         .insert_operation(
-            &VerifiedOperation::new(&author, &entry_encoded.hash().into(), &operation).unwrap(),
+            &S::StorageOperation::new(&author, &entry_encoded.hash().into(), &operation).unwrap(),
             &document_id,
         )
         .await?;
@@ -339,8 +339,8 @@ pub async fn publish(
 /// Attempt to identify the document id for view id contained in a `next_args` request. This will fail if:
 /// - any of the operations contained in the view id _don't_ exist in the store
 /// - any of the operations contained in the view id return a different document id than any of the others
-pub async fn get_validate_document_id_for_view_id(
-    store: &SqlStorage,
+pub async fn get_validate_document_id_for_view_id<S: StorageProvider>(
+    store: &S,
     view_id: &DocumentViewId,
 ) -> AnyhowResult<DocumentId> {
     // If  a view id was passed, we want to check the following:
@@ -381,6 +381,7 @@ mod tests {
     };
     use rstest::rstest;
 
+    use crate::db::provider::SqlStorage;
     use crate::db::stores::test_utils::{send_to_store, test_db, TestDatabase, TestDatabaseRunner};
     use crate::graphql::client::NextEntryArguments;
 
@@ -391,7 +392,7 @@ mod tests {
         #[from(test_db)] runner: TestDatabaseRunner,
         #[from(random_document_view_id)] document_view_id: DocumentViewId,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             let result = get_validate_document_id_for_view_id(&db.store, &document_view_id).await;
             assert!(result.is_err());
         });
@@ -403,7 +404,7 @@ mod tests {
         operation: Operation,
         operation_fields: OperationFields,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             // Store one entry and operation in the store.
             let (entry, _) = send_to_store(&db.store, &operation, None, &KeyPair::new()).await;
             let operation_one_id: OperationId = entry.hash().into();
@@ -436,7 +437,7 @@ mod tests {
 
     #[rstest]
     fn gets_next_args(#[from(test_db)] runner: TestDatabaseRunner, public_key: Author) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             let result = next_args(&db.store, &public_key, None).await;
             assert!(result.is_ok());
 

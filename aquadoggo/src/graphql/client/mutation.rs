@@ -115,6 +115,7 @@ mod tests {
     use tokio::sync::broadcast;
 
     use crate::bus::ServiceMessage;
+    use crate::db::provider::SqlStorage;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
     use crate::domain::next_args;
     use crate::http::{build_server, HttpServiceContext};
@@ -227,7 +228,7 @@ mod tests {
 
     #[rstest]
     fn publish_entry(#[from(test_db)] runner: TestDatabaseRunner, publish_entry_request: Request) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
+        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
             let (tx, _) = broadcast::channel(16);
             let context = HttpServiceContext::new(db.store, tx);
             let response = context.schema.execute(publish_entry_request).await;
@@ -253,7 +254,7 @@ mod tests {
         #[from(test_db)] runner: TestDatabaseRunner,
         publish_entry_request: Request,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
+        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
             let (tx, mut rx) = broadcast::channel(16);
             let context = HttpServiceContext::new(db.store, tx);
 
@@ -273,7 +274,7 @@ mod tests {
 
     #[rstest]
     fn publish_entry_error_handling(#[from(test_db)] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
+        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
             let (tx, _rx) = broadcast::channel(16);
             let context = HttpServiceContext::new(db.store, tx);
 
@@ -297,7 +298,7 @@ mod tests {
         #[from(test_db)] runner: TestDatabaseRunner,
         publish_entry_request: Request,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
+        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
             let (tx, _rx) = broadcast::channel(16);
             let context = HttpServiceContext::new(db.store, tx);
             let client = TestClient::new(build_server(context));
@@ -504,7 +505,7 @@ mod tests {
         let operation_encoded = operation_encoded.to_string();
         let expected_error_message = expected_error_message.to_string();
 
-        runner.with_db_teardown(move |db: TestDatabase| async move {
+        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
             let (tx, _rx) = broadcast::channel(16);
             let context = HttpServiceContext::new(db.store, tx);
             let client = TestClient::new(build_server(context));
@@ -635,7 +636,7 @@ mod tests {
         let operation_encoded = operation_encoded.to_string();
         let expected_error_message = expected_error_message.to_string();
 
-        runner.with_db_teardown(move |db: TestDatabase| async move {
+        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
             let (tx, _rx) = broadcast::channel(16);
             let context = HttpServiceContext::new(db.store, tx);
             let client = TestClient::new(build_server(context));
@@ -664,7 +665,7 @@ mod tests {
 
     #[rstest]
     fn publish_many_entries(#[from(test_db)] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             let key_pairs = vec![KeyPair::new(), KeyPair::new()];
             let num_of_entries = 13;
 
@@ -737,7 +738,7 @@ mod tests {
         #[with(1, 1, 1, false, SCHEMA_ID.parse().unwrap())]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|populated_db: TestDatabase| async move {
+        runner.with_db_teardown(|populated_db: TestDatabase<SqlStorage>| async move {
             let (tx, _rx) = broadcast::channel(16);
             let context = HttpServiceContext::new(populated_db.store.clone(), tx);
             let client = TestClient::new(build_server(context));

@@ -57,6 +57,7 @@ mod tests {
     use serde_json::json;
     use tokio::sync::broadcast;
 
+    use crate::db::provider::SqlStorage;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
     use crate::http::build_server;
     use crate::http::HttpServiceContext;
@@ -64,7 +65,7 @@ mod tests {
 
     #[rstest]
     fn next_entry_args_valid_query(#[from(test_db)] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
+        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
             let (tx, _) = broadcast::channel(16);
             let context = HttpServiceContext::new(db.store, tx);
             let client = TestClient::new(build_server(context));
@@ -106,7 +107,7 @@ mod tests {
 
     #[rstest]
     fn next_entry_args_error_response(#[from(test_db)] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
+        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
             let (tx, _) = broadcast::channel(16);
             let context = HttpServiceContext::new(db.store, tx);
             let client = TestClient::new(build_server(context));

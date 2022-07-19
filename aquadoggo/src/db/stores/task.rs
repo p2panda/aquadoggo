@@ -128,6 +128,7 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::{document_id, document_view_id};
     use rstest::rstest;
 
+    use crate::db::provider::SqlStorage;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
     use crate::materializer::{Task, TaskInput};
 
@@ -136,7 +137,7 @@ mod tests {
         document_view_id: DocumentViewId,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             // Prepare test data
             let task = Task::new("reduce", TaskInput::new(None, Some(document_view_id)));
 
@@ -160,7 +161,7 @@ mod tests {
 
     #[rstest]
     fn avoid_duplicates(document_id: DocumentId, #[from(test_db)] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             // Prepare test data
             let task = Task::new("reduce", TaskInput::new(Some(document_id), None));
 

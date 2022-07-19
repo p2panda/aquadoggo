@@ -22,16 +22,16 @@ use super::doggo_test_fields;
 
 #[async_trait::async_trait]
 pub trait AsyncTestFn {
-    async fn call(self, db: TestDatabase);
+    async fn call(self, db: TestDatabase<SqlStorage>);
 }
 
 #[async_trait::async_trait]
 impl<FN, F> AsyncTestFn for FN
 where
-    FN: FnOnce(TestDatabase) -> F + Sync + Send,
+    FN: FnOnce(TestDatabase<SqlStorage>) -> F + Sync + Send,
     F: Future<Output = ()> + Send,
 {
-    async fn call(self, db: TestDatabase) {
+    async fn call(self, db: TestDatabase<SqlStorage>) {
         self(db).await
     }
 }
@@ -123,7 +123,7 @@ impl TestDatabaseManager {
         Self::default()
     }
 
-    pub async fn create(&self, url: &str) -> TestDatabase {
+    pub async fn create(&self, url: &str) -> TestDatabase<SqlStorage> {
         // Initialise test database
         let pool = initialize_db_with_url(url).await;
         let test_db = TestDatabase {

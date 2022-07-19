@@ -102,7 +102,7 @@ pub async fn encode_entry_and_operation(
         document_id.map(|id| id.as_str().parse().unwrap());
 
     // Get next args
-    let next_args = next_args(&store, &author, document_view_id.as_ref())
+    let next_args = next_args::<SqlStorage>(&store, &author, document_view_id.as_ref())
         .await
         .unwrap();
 
