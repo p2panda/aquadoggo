@@ -323,7 +323,7 @@ pub async fn publish<S: StorageProvider>(
     .map(|entry| entry.hash());
 
     Ok(NextEntryArguments {
-        log_id: log_id.clone().into(),
+        log_id: (*log_id).into(),
         seq_num: next_seq_num.into(),
         backlink: backlink.map(|hash| hash.into()),
         skiplink: skiplink.map(|hash| hash.into()),
