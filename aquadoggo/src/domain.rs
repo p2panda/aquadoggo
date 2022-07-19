@@ -6,7 +6,7 @@ use anyhow::{anyhow, ensure, Result as AnyhowResult};
 use async_graphql::Result;
 use bamboo_rs_core_ed25519_yasmf::entry::is_lipmaa_required;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
-use p2panda_rs::entry::{decode_entry, EntrySigned, SeqNum};
+use p2panda_rs::entry::{decode_entry, EntrySigned, LogId, SeqNum};
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{
     AsOperation, AsVerifiedOperation, Operation, OperationAction, OperationEncoded,
@@ -60,6 +60,14 @@ pub async fn next_args(
 ) -> Result<NextEntryArguments> {
     // @TODO: We assume the passed Author and DocumentView are internally valid.
 
+    // Init the next args with base default values.
+    let mut next_args = NextEntryArguments {
+        backlink: None,
+        skiplink: None,
+        seq_num: SeqNum::default().into(),
+        log_id: LogId::default().into(),
+    };
+
     ////////////////////////
     // HANDLE CREATE CASE //
     ////////////////////////
@@ -68,12 +76,8 @@ pub async fn next_args(
     // and we return the args for the next free log by this author.
     if document_view_id.is_none() {
         let log_id = next_log_id(store, public_key).await?;
-        return Ok(NextEntryArguments {
-            backlink: None,
-            skiplink: None,
-            seq_num: SeqNum::default().into(),
-            log_id: log_id.into(),
-        });
+        next_args.log_id = log_id.into();
+        return Ok(next_args);
     }
 
     ///////////////////////////
@@ -97,42 +101,55 @@ pub async fn next_args(
     // Retrieve the log_id for the found document_id and author.
     //
     // (lolz, this method is just called `get()`)
-    let log_id = match store.get(public_key, &document_id).await? {
-        // This public key already wrote to this document, so we return the found log_id
-        Some(log_id) => log_id,
-        // This public_key never wrote to this document before so we return a new log_id
-        None => next_log_id(store, public_key).await?,
-    };
+    let log_id = store.get(public_key, &document_id).await?;
 
-    // Get the latest entry in this log.
-    let latest_entry = store.get_latest_entry(public_key, &log_id).await?;
-
-    // Determine skiplink ("lipmaa"-link) entry in this log.
-    //
-    // If the latest entry is None, then the skiplink will also be None.
-    let skiplink_hash = match latest_entry {
-        // @TODO: May need to refactor this as we are likely unsafely incrementing the seq num in this method.
-        Some(ref latest_entry) => store.determine_next_skiplink(latest_entry).await?,
-        None => None,
-    };
-
-    // Determine the next sequence number by incrementing one from the latest entry seq num.
-    //
-    // If the latest entry is None, then we must be at seq num 1.
-    let seq_num = match latest_entry {
-        Some(ref latest_entry) => {
-            let mut latest_seq_num = latest_entry.seq_num();
-            increment_seq_num(&mut latest_seq_num)
+    // Check if an existing log id was found for this author and document.
+    match log_id {
+        // If it wasn't found, we just calculate the next log id safely and return the next args.
+        None => {
+            let next_log_id = next_log_id(store, public_key).await?;
+            next_args.log_id = next_log_id.into()
         }
-        None => Ok(SeqNum::default()),
-    }?;
+        // If one was found, we need to get the backlink and skiplink, and safely increment the seq num.
+        Some(log_id) => {
+            // Get the latest entry in this log.
+            let latest_entry = store.get_latest_entry(public_key, &log_id).await?;
 
-    Ok(NextEntryArguments {
-        backlink: latest_entry.map(|entry| entry.hash().into()),
-        skiplink: skiplink_hash.map(|hash| hash.into()),
-        seq_num: seq_num.into(),
-        log_id: log_id.into(),
-    })
+            // Determine the next sequence number by incrementing one from the latest entry seq num.
+            //
+            // If the latest entry is None, then we must be at seq num 1.
+            let seq_num = match latest_entry {
+                Some(ref latest_entry) => {
+                    let mut latest_seq_num = latest_entry.seq_num();
+                    increment_seq_num(&mut latest_seq_num)
+                }
+                None => Ok(SeqNum::default()),
+            }?;
+
+            // Check if skiplink is required and if it is get the entry and return it's hash
+            let skiplink = if is_lipmaa_required(seq_num.as_u64()) {
+                // Determine skiplink ("lipmaa"-link) entry in this log.
+                let skiplink_seq_num = seq_num.skiplink_seq_num().unwrap();
+                match store
+                    .get_entry_at_seq_num(public_key, &log_id, &skiplink_seq_num)
+                    .await?
+                {
+                    Some(entry) => Ok(Some(entry)),
+                    None => Err(anyhow!("Expected next skiplink missing")),
+                }
+            } else {
+                Ok(None)
+            }?
+            .map(|entry| entry.hash());
+
+            next_args.backlink = latest_entry.map(|entry| entry.hash().into());
+            next_args.skiplink = skiplink.map(|hash| hash.into());
+            next_args.seq_num = seq_num.into();
+            next_args.log_id = log_id.into();
+        }
+    };
+
+    Ok(next_args)
 }
 
 /// Persist an entry and operation to storage after performing validation of claimed values against
