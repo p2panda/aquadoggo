@@ -280,30 +280,6 @@ pub async fn publish(
     // Verify the claimed log id against the expected one for this document id and author.
     verify_log_id(store, &author, log_id, &document_id).await?;
 
-    /////////////////////////////////////
-    // DETERMINE NEXT ENTRY ARG VALUES //
-    /////////////////////////////////////
-
-    let next_seq_num = increment_seq_num(&mut seq_num.clone())?;
-    let backlink = Some(entry_encoded.hash());
-
-    // Unwrap as we know that an skiplink exists as soon as previous entry is given.
-    let skiplink_seq_num = next_seq_num.skiplink_seq_num().unwrap();
-
-    // Check if skiplink is required and return hash if so
-    let skiplink = if is_lipmaa_required(next_seq_num.as_u64()) {
-        match store
-            .get_entry_at_seq_num(&author, log_id, &skiplink_seq_num)
-            .await?
-        {
-            Some(entry) => Ok(Some(entry)),
-            None => Err(anyhow!("Expected next skiplink missing")),
-        }
-    } else {
-        Ok(None)
-    }?
-    .map(|entry| entry.hash());
-
     ///////////////
     // STORE LOG //
     ///////////////
@@ -330,7 +306,29 @@ pub async fn publish(
             &document_id,
         )
         .await?;
+    
+    /////////////////////////////////////
+    // DETERMINE NEXT ENTRY ARG VALUES //
+    /////////////////////////////////////
 
+    let next_seq_num = increment_seq_num(&mut seq_num.clone())?;
+    let backlink = Some(entry_encoded.hash());
+    
+    // Check if skiplink is required and return hash if so
+    let skiplink = if is_lipmaa_required(next_seq_num.as_u64()) {
+            let skiplink_seq_num = next_seq_num.skiplink_seq_num().unwrap();
+            match store
+            .get_entry_at_seq_num(&author, log_id, &skiplink_seq_num)
+            .await?
+        {
+            Some(entry) => Ok(Some(entry)),
+            None => Err(anyhow!("Expected next skiplink missing")),
+        }
+    } else {
+        Ok(None)
+    }?
+    .map(|entry| entry.hash());
+    
     Ok(NextEntryArguments {
         log_id: log_id.clone().into(),
         seq_num: next_seq_num.into(),
