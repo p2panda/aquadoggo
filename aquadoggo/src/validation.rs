@@ -5,7 +5,7 @@ use p2panda_rs::document::DocumentId;
 use p2panda_rs::entry::{EntrySigned, LogId, SeqNum};
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{AsOperation, OperationEncoded};
-use p2panda_rs::storage_provider::traits::{AsStorageEntry, StorageProvider};
+use p2panda_rs::storage_provider::traits::StorageProvider;
 
 // @TODO: This method will be used in a follow-up PR
 //
@@ -38,14 +38,15 @@ use p2panda_rs::storage_provider::traits::{AsStorageEntry, StorageProvider};
 //     Ok(())
 // }
 
-pub async fn verify_seq_num<S: StorageProvider>(
-    store: &S,
-    author: &Author,
-    log_id: &LogId,
-    claimed_seq_num: &SeqNum,
-) -> Result<()> {
+pub fn verify_seq_num(latest_seq_num: Option<&SeqNum>, claimed_seq_num: &SeqNum) -> Result<()> {
     // Retrieve the latest entry for the claimed author and log_id.
-    let expected_seq_num = next_seq_num(store, author, log_id).await?;
+    let expected_seq_num = match latest_seq_num {
+        Some(seq_num) => {
+            let mut seq_num = seq_num.to_owned();
+            increment_seq_num(&mut seq_num)
+        }
+        None => Ok(SeqNum::default()),
+    }?;
 
     ensure!(
         expected_seq_num == *claimed_seq_num,
@@ -98,45 +99,6 @@ pub async fn verify_log_id<S: StorageProvider>(
         }
     };
     Ok(())
-}
-
-// Get the _expected_ backlink for the passed entry.
-//
-// This method retrieves the expected backlink given the author, log and seq num
-// of an entry. It _does not_ verify that it matches the claimed backlink
-// encoded on the passed entry.
-//
-// If the expected backlink could not be found in the database an error is returned.
-//
-// @TODO This depricates `try_get_backlink()` on storage provider.
-pub async fn get_expected_backlink<S: StorageProvider>(
-    store: &S,
-    author: &Author,
-    log_id: &LogId,
-    seq_num: &SeqNum,
-) -> Result<S::StorageEntry> {
-    ensure!(
-        !seq_num.is_first(),
-        anyhow!("Entry with seq num 1 can not have backlink")
-    );
-
-    // Unwrap as we know this isn't the first seq number.
-    let expected_backlink_seq_num = SeqNum::new(seq_num.as_u64() - 1).unwrap();
-    let expected_backlink = store
-        .get_entry_at_seq_num(author, log_id, &expected_backlink_seq_num)
-        .await?;
-
-    ensure!(
-        expected_backlink.is_some(),
-        anyhow!(
-            "Expected backlink for {}, log id {} and seq num {} not found in database",
-            author,
-            log_id.as_u64(),
-            seq_num.as_u64()
-        )
-    );
-
-    Ok(expected_backlink.unwrap())
 }
 
 // Get the _expected_ skiplink for the passed entry.
@@ -240,22 +202,6 @@ pub async fn next_log_id<S: StorageProvider>(store: &S, author: &Author) -> Resu
     }
 }
 
-pub async fn next_seq_num<S: StorageProvider>(
-    store: &S,
-    author: &Author,
-    log_id: &LogId,
-) -> Result<SeqNum> {
-    let latest_entry = store.get_latest_entry(author, log_id).await?;
-
-    match latest_entry {
-        Some(entry) => {
-            let mut seq_num = entry.seq_num();
-            increment_seq_num(&mut seq_num)
-        }
-        None => Ok(SeqNum::default()),
-    }
-}
-
 pub fn increment_seq_num(seq_num: &mut SeqNum) -> Result<SeqNum> {
     match seq_num.next() {
         Some(next_seq_num) => Ok(next_seq_num),
@@ -278,43 +224,25 @@ mod tests {
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
     use super::{
-        ensure_document_not_deleted, get_expected_backlink, get_expected_skiplink, verify_log_id,
-        verify_seq_num,
+        ensure_document_not_deleted, get_expected_skiplink, verify_log_id, verify_seq_num,
     };
 
     #[rstest]
-    #[case::valid_seq_num(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::default(), SeqNum::new(3).unwrap())]
+    #[case::valid_seq_num(Some(SeqNum::new(2).unwrap()), SeqNum::new(3).unwrap())]
     #[should_panic(
         expected = "Entry's claimed seq num of 2 does not match expected seq num of 3 for given author and log"
     )]
-    #[case::seq_num_already_used(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::default(),SeqNum::new(2).unwrap())]
+    #[case::seq_num_already_used(Some(SeqNum::new(2).unwrap()),SeqNum::new(2).unwrap())]
     #[should_panic(
         expected = "Entry's claimed seq num of 4 does not match expected seq num of 3 for given author and log"
     )]
-    #[case::seq_num_too_high(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::default(),SeqNum::new(4).unwrap())]
+    #[case::seq_num_too_high(Some(SeqNum::new(2).unwrap()),SeqNum::new(4).unwrap())]
     #[should_panic(
         expected = "Entry's claimed seq num of 3 does not match expected seq num of 1 for given author and log"
     )]
-    #[case::author_wrong_so_new_log(KeyPair::new(), LogId::default(), SeqNum::new(3).unwrap())]
-    #[should_panic(
-        expected = "Entry's claimed seq num of 3 does not match expected seq num of 1 for given author and log"
-    )]
-    #[case::log_id_wrong_so_new_log(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(1), SeqNum::new(3).unwrap())]
-    fn verifies_seq_num(
-        #[case] key_pair: KeyPair,
-        #[case] log_id: LogId,
-        #[case] claimed_seq_num: SeqNum,
-        #[from(test_db)]
-        #[with(2, 1, 1)]
-        runner: TestDatabaseRunner,
-    ) {
-        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
-            let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
-
-            verify_seq_num(&db.store, &author, &log_id, &claimed_seq_num)
-                .await
-                .unwrap();
-        })
+    #[case::no_seq_num(None, SeqNum::new(3).unwrap())]
+    fn verifies_seq_num(#[case] latest_seq_num: Option<SeqNum>, #[case] claimed_seq_num: SeqNum) {
+        verify_seq_num(latest_seq_num.as_ref(), &claimed_seq_num).unwrap();
     }
 
     #[rstest]
@@ -389,37 +317,6 @@ mod tests {
             let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
             get_expected_skiplink(&db.store, &author, &log_id, &seq_num)
-                .await
-                .unwrap();
-        })
-    }
-
-    #[rstest]
-    #[case::expected_backlink_is_in_store(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::default(), SeqNum::new(8).unwrap())]
-    #[should_panic(
-        expected = "Expected backlink for <Author 53fc96>, log id 0 and seq num 20 not found in database"
-    )]
-    #[case::backlink_not_in_store(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::default(), SeqNum::new(20).unwrap())]
-    #[should_panic]
-    #[case::author_does_not_exist(KeyPair::new(), LogId::default(), SeqNum::new(5).unwrap())]
-    #[should_panic(
-        expected = "Expected backlink for <Author 53fc96>, log id 4 and seq num 7 not found in database"
-    )]
-    #[case::log_id_is_wrong(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(4), SeqNum::new(7).unwrap())]
-    #[should_panic(expected = "Entry with seq num 1 can not have backlink")]
-    #[case::seq_num_is_one(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(0), SeqNum::new(1).unwrap())]
-    fn gets_expected_backlink(
-        #[case] key_pair: KeyPair,
-        #[case] log_id: LogId,
-        #[case] seq_num: SeqNum,
-        #[from(test_db)]
-        #[with(7, 1, 1)]
-        runner: TestDatabaseRunner,
-    ) {
-        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
-            let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
-
-            get_expected_backlink(&db.store, &author, &log_id, &seq_num)
                 .await
                 .unwrap();
         })

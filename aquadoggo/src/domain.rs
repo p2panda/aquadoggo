@@ -16,8 +16,8 @@ use p2panda_rs::storage_provider::traits::{AsStorageEntry, AsStorageLog, Storage
 
 use crate::graphql::client::NextEntryArguments;
 use crate::validation::{
-    ensure_document_not_deleted, get_expected_backlink, get_expected_skiplink, increment_seq_num,
-    next_log_id, verify_bamboo_entry, verify_log_id, verify_seq_num,
+    ensure_document_not_deleted, get_expected_skiplink, increment_seq_num, next_log_id,
+    verify_bamboo_entry, verify_log_id, verify_seq_num,
 };
 
 /// Retrieve arguments required for constructing the next entry in a bamboo log for a specific
@@ -201,13 +201,12 @@ pub async fn publish<S: StorageProvider>(
     ///////////////////////////
 
     // Verify the claimed seq num matches the expected seq num for this author and log.
-    verify_seq_num(store, &author, log_id, seq_num).await?;
+    let latest_entry = store.get_latest_entry(&author, log_id).await?;
+    let latest_seq_num = latest_entry.as_ref().map(|entry| entry.seq_num());
+    verify_seq_num(latest_seq_num.as_ref(), seq_num)?;
 
-    // If a backlink is claimed, get the expected backlink from the database, errors if it can't be found.
-    let backlink = match entry.backlink_hash() {
-        Some(_) => Some(get_expected_backlink(store, &author, log_id, seq_num).await?),
-        None => None,
-    };
+    // The backlink for this entry.
+    let backlink = latest_entry;
 
     // If a skiplink is claimed, get the expected skiplink from the database, errors
     // if it can't be found.
