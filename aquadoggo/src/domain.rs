@@ -533,6 +533,7 @@ mod tests {
             .unwrap()
             .unwrap();
 
+        remove_operations(&db.store, &author, entries_to_remove);
         remove_entries(&db.store, &author, entries_to_remove);
 
         let result = publish(
@@ -541,7 +542,7 @@ mod tests {
             &next_entry.operation_encoded().unwrap(),
         )
         .await;
-
+        print!("{:#?}", result);
         result.unwrap();
     }
 
