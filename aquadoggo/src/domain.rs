@@ -455,8 +455,18 @@ mod tests {
     }
 
     #[rstest]
+    #[should_panic(
+        expected = "Expected skiplink for <Author 53fc96>, log id 0 and seq num 8 not found in database"
+    )]
+    #[case(&[4, 8], 8)]
+    #[should_panic(
+        expected = "Entry's claimed seq num of 8 does not match expected seq num of 7 for given author and log"
+    )]
+    #[case(&[7, 8], 8)]
     #[tokio::test]
     async fn publishes_memory_store_tests(
+        #[case] entries_to_remove: &[u64],
+        #[case] entry_to_publish: u64,
         #[from(test_db_config)]
         #[with(8, 1, 1)]
         config: PopulateDatabaseConfig,
@@ -470,46 +480,37 @@ mod tests {
 
         let author = Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
         let log_id = LogId::default();
-        let entry_four = db
-            .store
-            .get_entry_at_seq_num(&author, &log_id, &SeqNum::new(4).unwrap())
-            .await
-            .unwrap()
-            .unwrap();
 
         // Get entry and operation from db at seq number 8.
-        let entry_eight = db
+        let next_entry = db
             .store
-            .get_entry_at_seq_num(&author, &log_id, &SeqNum::new(8).unwrap())
+            .get_entry_at_seq_num(&author, &log_id, &SeqNum::new(entry_to_publish).unwrap())
             .await
             .unwrap()
             .unwrap();
 
-        // Remove entry four and eight.
+        // Remove some entries.
         db.store
             .entries
             .lock()
             .unwrap()
-            .retain(|k, v| *k != entry_four.hash() && *k != entry_eight.hash());
+            .retain(|_, entry| !entries_to_remove.contains(&entry.seq_num().as_u64()));
 
-        // Remove operation four and eight.
+        // Remove some operations.
         db.store
             .operations
             .lock()
             .unwrap()
-            .retain(|k, v| *k != entry_four.hash().into() && *k != entry_eight.hash().into());
+            .retain(|id, _| !db.store.entries.lock().unwrap().contains_key(id.as_hash()));
 
-        // Publish entry eight to db, it should be missing it's skiplink entry.
+        // Publish the specifiec entry to the db.
         let result = publish(
             &db.store,
-            &entry_eight.entry_signed(),
-            &entry_eight.operation_encoded().unwrap(),
+            &next_entry.entry_signed(),
+            &next_entry.operation_encoded().unwrap(),
         )
         .await;
-        assert_eq!(
-            result.err().unwrap().message,
-            "Expected skiplink for <Author 53fc96>, log id 0 and seq num 8 not found in database"
-                .to_string()
-        )
+
+        result.unwrap();
     }
 }
