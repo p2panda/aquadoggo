@@ -457,13 +457,29 @@ mod tests {
     #[should_panic(
         expected = "Expected skiplink for <Author 53fc96>, log id 0 and seq num 8 not found in database"
     )]
-    #[case(&[4, 8], 8)]
+    #[case::skiplink_missing(&[4, 8], 8)]
     #[should_panic(
         expected = "Entry's claimed seq num of 8 does not match expected seq num of 7 for given author and log"
     )]
-    #[case(&[7, 8], 8)]
+    #[case::backlink_missing(&[7, 8], 8)]
+    #[should_panic(
+        expected = "Entry's claimed seq num of 8 does not match expected seq num of 7 for given author and log"
+    )]
+    #[case::backlink_and_skiplink_missing(&[4, 7, 8], 8)]
+    #[should_panic(
+        expected = "Entry's claimed seq num of 8 does not match expected seq num of 9 for given author and log"
+    )]
+    #[case::seq_num_occupied_again(&[], 8)]
+    #[should_panic(
+        expected = "Entry's claimed seq num of 7 does not match expected seq num of 9 for given author and log"
+    )]
+    #[case::seq_num_occupied_(&[], 7)]
+    #[should_panic(
+        expected = "Entry's claimed seq num of 8 does not match expected seq num of 1 for given author and log"
+    )]
+    #[case::no_entries_yet(&[1, 2, 3, 4, 5, 6, 7, 8], 8)]
     #[tokio::test]
-    async fn publishes_memory_store_tests(
+    async fn errors_when_expected_entries_missing(
         #[case] entries_to_remove: &[u64],
         #[case] entry_to_publish: u64,
         #[from(test_db_config)]
@@ -495,14 +511,7 @@ mod tests {
             .unwrap()
             .retain(|_, entry| !entries_to_remove.contains(&entry.seq_num().as_u64()));
 
-        // Remove some operations.
-        db.store
-            .operations
-            .lock()
-            .unwrap()
-            .retain(|id, _| !db.store.entries.lock().unwrap().contains_key(id.as_hash()));
-
-        // Publish the specifiec entry to the db.
+        // Publish the specified entry to the db.
         let result = publish(
             &db.store,
             &next_entry.entry_signed(),
