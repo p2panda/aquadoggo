@@ -743,22 +743,17 @@ mod tests {
             let context = HttpServiceContext::new(populated_db.store.clone(), tx);
             let client = TestClient::new(build_server(context));
 
-            // Get the entries from the prepopulated store.
-            let mut entries = populated_db
+            // Get the one entry from the store.
+            let mut entry = populated_db
                 .store
                 .get_entries_by_schema(&SCHEMA_ID.parse().unwrap())
                 .await
-                .unwrap();
+                .unwrap().first().unwrap();
 
-            // Sort them by seq_num.
-            entries.sort_by_key(|entry| entry.seq_num().as_u64());
-
-            let duplicate_entry = entries.first().unwrap();
-
-            // Prepare a publish entry request for each entry.
+            // Prepare a publish entry request for the entry.
             let publish_entry_request = publish_entry_request(
-                duplicate_entry.entry_signed().as_str(),
-                duplicate_entry.operation_encoded().unwrap().as_str(),
+                entry.entry_signed().as_str(),
+                entry.operation_encoded().unwrap().as_str(),
             );
 
             // Publish the entry and parse response.
@@ -774,11 +769,8 @@ mod tests {
 
             let response = response.json::<serde_json::Value>().await;
 
-            // @TODO: This currently throws an internal SQL error to the API user, I think we'd
-            // like a nicer error message here:
-            // https://github.com/p2panda/aquadoggo/issues/159
             for error in response.get("errors").unwrap().as_array().unwrap() {
-                assert!(error.get("message").is_some())
+                assert_eq!(error.get("message").unwrap(), "Entry's claimed seq num of 1 does not match expected seq num of 2 for given author and log")
             }
         });
     }
