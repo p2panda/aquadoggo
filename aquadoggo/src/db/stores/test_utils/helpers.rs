@@ -10,7 +10,7 @@ use p2panda_rs::operation::{
     AsOperation, Operation, OperationEncoded, OperationValue, PinnedRelation, PinnedRelationList,
     Relation, RelationList,
 };
-use p2panda_rs::storage_provider::traits::OperationStore;
+use p2panda_rs::storage_provider::traits::{OperationStore, StorageProvider};
 use p2panda_rs::test_utils::constants::PRIVATE_KEY;
 
 use crate::db::provider::SqlStorage;
@@ -91,8 +91,8 @@ pub fn test_key_pairs(no_of_authors: usize) -> Vec<KeyPair> {
 
 /// Helper for constructing a valid encoded entry and operation using valid next_args retrieved
 /// from the passed store.
-pub async fn encode_entry_and_operation(
-    store: &SqlStorage,
+pub async fn encode_entry_and_operation<S: StorageProvider>(
+    store: &S,
     operation: &Operation,
     key_pair: &KeyPair,
     document_id: Option<&DocumentId>,
@@ -102,7 +102,7 @@ pub async fn encode_entry_and_operation(
         document_id.map(|id| id.as_str().parse().unwrap());
 
     // Get next args
-    let next_args = next_args::<SqlStorage>(&store, &author, document_view_id.as_ref())
+    let next_args = next_args::<S>(&store, &author, document_view_id.as_ref())
         .await
         .unwrap();
 

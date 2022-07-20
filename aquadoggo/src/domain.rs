@@ -353,11 +353,12 @@ pub async fn get_validate_document_id_for_view_id<S: StorageProvider>(
 
     // We can unwrap here as there must be at least one document view else the error above would
     // have been triggered.
-    let document_id = found_document_ids.iter().next().unwrap();
+    let mut found_document_ids_iter = found_document_ids.iter();
+    let document_id = found_document_ids_iter.next().unwrap();
 
     ensure!(
-        !found_document_ids.is_empty(),
-        anyhow!("Invalid document view id: operartions in passed document view id originate from different documents")
+        found_document_ids_iter.next().is_none(),
+        anyhow!("Invalid document view id: operations in passed document view id originate from different documents")
     );
     Ok(document_id.to_owned())
 }
@@ -368,10 +369,11 @@ mod tests {
 
     use p2panda_rs::document::DocumentViewId;
     use p2panda_rs::entry::{LogId, SeqNum};
+    use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::{Operation, OperationFields, OperationId};
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
-    use p2panda_rs::test_utils::constants::SCHEMA_ID;
+    use p2panda_rs::test_utils::constants::{PRIVATE_KEY, SCHEMA_ID};
     use p2panda_rs::test_utils::db::MemoryStore;
     use p2panda_rs::test_utils::fixtures::{
         operation, operation_fields, public_key, random_document_view_id,
@@ -380,8 +382,8 @@ mod tests {
 
     use crate::db::provider::SqlStorage;
     use crate::db::stores::test_utils::{
-        populate_test_db, send_to_store, test_db, test_db_config, PopulateDatabaseConfig, TestData,
-        TestDatabase, TestDatabaseRunner,
+        doggo_test_fields, encode_entry_and_operation, populate_test_db, send_to_store, test_db,
+        test_db_config, PopulateDatabaseConfig, TestData, TestDatabase, TestDatabaseRunner,
     };
     use crate::domain::publish;
     use crate::graphql::client::NextEntryArguments;
@@ -518,6 +520,80 @@ mod tests {
             &next_entry.operation_encoded().unwrap(),
         )
         .await;
+
+        result.unwrap();
+    }
+
+    #[rstest]
+    #[case(&[], &[(0, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[case(&[], &[(0, 8), (0, 7), (0, 6)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[case(&[], &[(0, 8)], KeyPair::new())]
+    #[should_panic(expected = "<Operation 76e89a> not found, could not determine document id")]
+    #[case(&[8], &[(0, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[should_panic(expected = "<Operation 51fbba> not found, could not determine document id")]
+    #[case(&[7], &[(0, 7), (0, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[should_panic(expected = "<Operation 76e89a> not found, could not determine document id")]
+    #[case(&[8], &[(0, 8)], KeyPair::new())]
+    #[should_panic(
+        expected = "Invalid document view id: operations in passed document view id originate from different documents"
+    )]
+    #[case(&[], &[(0, 8), (1, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[tokio::test]
+    async fn errors_when_expected_operations_missing(
+        #[case] operations_to_remove: &[u64],
+        #[case] previous_operations: &[(u64, u64)],
+        #[case] key_pair: KeyPair,
+        #[from(test_db_config)]
+        #[with(8, 2, 1)]
+        config: PopulateDatabaseConfig,
+    ) {
+        // Populate the db with 8 entries.
+        let mut db = TestDatabase {
+            store: MemoryStore::default(),
+            test_data: TestData::default(),
+        };
+        populate_test_db(&mut db, &config).await;
+
+        let document_id = db.test_data.documents.first().unwrap();
+
+        let previous_operations: Vec<OperationId> = previous_operations
+            .iter()
+            .filter_map(|(log_id, seq_num)| {
+                db.store
+                    .entries
+                    .lock()
+                    .unwrap()
+                    .values()
+                    .find(|entry| {
+                        entry.seq_num().as_u64() == *seq_num && entry.log_id.as_u64() == *log_id
+                    })
+                    .map(|entry| entry.hash().into())
+            })
+            .collect();
+
+        let document_view_id = DocumentViewId::new(&previous_operations).unwrap();
+        let next_operation = Operation::new_update(
+            SCHEMA_ID.parse().unwrap(),
+            document_view_id,
+            operation_fields(doggo_test_fields()),
+        )
+        .unwrap();
+        let (entry, operation) =
+            encode_entry_and_operation(&db.store, &next_operation, &key_pair, Some(document_id))
+                .await;
+
+        for (hash, entry) in db.store.entries.lock().unwrap().iter() {
+            if operations_to_remove.contains(&entry.seq_num().as_u64()) {
+                db.store
+                    .operations
+                    .lock()
+                    .unwrap()
+                    .remove(&hash.clone().into());
+            }
+        }
+
+        // Publish the specified entry to the db.
+        let result = publish(&db.store, &entry, &operation).await;
 
         result.unwrap();
     }
