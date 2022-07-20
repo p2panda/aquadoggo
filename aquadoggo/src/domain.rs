@@ -336,8 +336,6 @@ pub async fn get_validate_document_id_for_view_id<S: StorageProvider>(
     store: &S,
     view_id: &DocumentViewId,
 ) -> AnyhowResult<DocumentId> {
-    // If  a view id was passed, we want to check the following:
-    // - Are all operations identified by this part of the same document?
     let mut found_document_ids: HashSet<DocumentId> = HashSet::new();
     for operation in view_id.clone().into_iter() {
         // If any operation can't be found return an error at this point already.
@@ -369,7 +367,6 @@ mod tests {
 
     use p2panda_rs::document::DocumentViewId;
     use p2panda_rs::entry::{LogId, SeqNum};
-    use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::{Operation, OperationFields, OperationId};
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
@@ -389,6 +386,35 @@ mod tests {
     use crate::graphql::client::NextEntryArguments;
 
     use super::{get_validate_document_id_for_view_id, next_args};
+
+    type LogIdAndSeqNum = (u64, u64);
+
+    /// Helper method for removing entries from a MemoryStore by Author & LogIdAndSeqNum.
+    fn remove_entries(store: &MemoryStore, author: &Author, entries_to_remove: &[LogIdAndSeqNum]) {
+        store.entries.lock().unwrap().retain(|_, entry| {
+            !entries_to_remove.contains(&(entry.log_id().as_u64(), entry.seq_num().as_u64()))
+                && &entry.author() == author
+        });
+    }
+
+    /// Helper method for removing operations from a MemoryStore by Author & LogIdAndSeqNum.
+    fn remove_operations(
+        store: &MemoryStore,
+        author: &Author,
+        operations_to_remove: &[LogIdAndSeqNum],
+    ) {
+        for (hash, entry) in store.entries.lock().unwrap().iter() {
+            if operations_to_remove.contains(&(entry.log_id().as_u64(), entry.seq_num().as_u64()))
+                && &entry.author() == author
+            {
+                store
+                    .operations
+                    .lock()
+                    .unwrap()
+                    .remove(&hash.clone().into());
+            }
+        }
+    }
 
     #[rstest]
     fn errors_when_passed_non_existent_view_id(
@@ -456,34 +482,35 @@ mod tests {
     }
 
     #[rstest]
+    #[case::ok(&[(0, 8)], (0, 8))]
     #[should_panic(
         expected = "Expected skiplink for <Author 53fc96>, log id 0 and seq num 8 not found in database"
     )]
-    #[case::skiplink_missing(&[4, 8], 8)]
+    #[case::skiplink_missing(&[(0, 4), (0, 8)], (0, 8))]
     #[should_panic(
         expected = "Entry's claimed seq num of 8 does not match expected seq num of 7 for given author and log"
     )]
-    #[case::backlink_missing(&[7, 8], 8)]
+    #[case::backlink_missing(&[(0, 7), (0, 8)], (0, 8))]
     #[should_panic(
         expected = "Entry's claimed seq num of 8 does not match expected seq num of 7 for given author and log"
     )]
-    #[case::backlink_and_skiplink_missing(&[4, 7, 8], 8)]
+    #[case::backlink_and_skiplink_missing(&[(0, 4), (0, 7), (0, 8)], (0, 8))]
     #[should_panic(
         expected = "Entry's claimed seq num of 8 does not match expected seq num of 9 for given author and log"
     )]
-    #[case::seq_num_occupied_again(&[], 8)]
+    #[case::seq_num_occupied_again(&[], (0, 8))]
     #[should_panic(
         expected = "Entry's claimed seq num of 7 does not match expected seq num of 9 for given author and log"
     )]
-    #[case::seq_num_occupied_(&[], 7)]
+    #[case::seq_num_occupied_(&[], (0, 7))]
     #[should_panic(
         expected = "Entry's claimed seq num of 8 does not match expected seq num of 1 for given author and log"
     )]
-    #[case::no_entries_yet(&[1, 2, 3, 4, 5, 6, 7, 8], 8)]
+    #[case::no_entries_yet(&[(0, 1), (0, 2), (0, 3), (0, 4), (0, 5), (0, 6), (0, 7), (0, 8)], (0, 8))]
     #[tokio::test]
     async fn errors_when_expected_entries_missing(
-        #[case] entries_to_remove: &[u64],
-        #[case] entry_to_publish: u64,
+        #[case] entries_to_remove: &[LogIdAndSeqNum],
+        #[case] entry_to_publish: LogIdAndSeqNum,
         #[from(test_db_config)]
         #[with(8, 1, 1)]
         config: PopulateDatabaseConfig,
@@ -496,24 +523,20 @@ mod tests {
         populate_test_db(&mut db, &config).await;
 
         let author = Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
-        let log_id = LogId::default();
 
-        // Get entry and operation from db at seq number 8.
         let next_entry = db
             .store
-            .get_entry_at_seq_num(&author, &log_id, &SeqNum::new(entry_to_publish).unwrap())
+            .get_entry_at_seq_num(
+                &author,
+                &LogId::new(entry_to_publish.0),
+                &SeqNum::new(entry_to_publish.1).unwrap(),
+            )
             .await
             .unwrap()
             .unwrap();
 
-        // Remove some entries.
-        db.store
-            .entries
-            .lock()
-            .unwrap()
-            .retain(|_, entry| !entries_to_remove.contains(&entry.seq_num().as_u64()));
+        remove_entries(&db.store, &author, entries_to_remove);
 
-        // Publish the specified entry to the db.
         let result = publish(
             &db.store,
             &next_entry.entry_signed(),
@@ -525,23 +548,28 @@ mod tests {
     }
 
     #[rstest]
-    #[case(&[], &[(0, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
-    #[case(&[], &[(0, 8), (0, 7), (0, 6)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
-    #[case(&[], &[(0, 8)], KeyPair::new())]
+    #[case::ok_single_writer(&[], &[(0, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    // Weird case where all previous operations are on the same branch, but still valid.
+    #[case::ok_many_previous_operations(&[], &[(0, 8), (0, 7), (0, 6)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[case::ok_multi_writer(&[], &[(0, 8)], KeyPair::new())]
     #[should_panic(expected = "<Operation 76e89a> not found, could not determine document id")]
-    #[case(&[8], &[(0, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[case::previous_operation_missing(&[(0, 8)], &[(0, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
     #[should_panic(expected = "<Operation 51fbba> not found, could not determine document id")]
-    #[case(&[7], &[(0, 7), (0, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[case::one_of_some_previous_operations_missing(&[(0, 7)], &[(0, 7), (0, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
     #[should_panic(expected = "<Operation 76e89a> not found, could not determine document id")]
-    #[case(&[8], &[(0, 8)], KeyPair::new())]
+    #[case::one_of_some_previous_operations_missing(&[(0, 8)], &[(0, 7), (0, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[should_panic(expected = "<Operation 76e89a> not found, could not determine document id")]
+    #[case::missing_previous_operation_multi_writer(&[(0, 8)], &[(0, 8)], KeyPair::new())]
     #[should_panic(
         expected = "Invalid document view id: operations in passed document view id originate from different documents"
     )]
-    #[case(&[], &[(0, 8), (1, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[case::previous_operations_invalid_multiple_document_id(&[], &[(0, 8), (1, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
     #[tokio::test]
     async fn errors_when_expected_operations_missing(
-        #[case] operations_to_remove: &[u64],
-        #[case] previous_operations: &[(u64, u64)],
+        // The operations to be removed from the
+        #[case] operations_to_remove: &[LogIdAndSeqNum],
+        // The previous operations described by their log id and seq number (log_id, seq_num)
+        #[case] previous_operations: &[LogIdAndSeqNum],
         #[case] key_pair: KeyPair,
         #[from(test_db_config)]
         #[with(8, 2, 1)]
@@ -553,9 +581,12 @@ mod tests {
             test_data: TestData::default(),
         };
         populate_test_db(&mut db, &config).await;
+        let author = Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
 
+        // Get the document id.
         let document_id = db.test_data.documents.first().unwrap();
 
+        // Map the passed &[LogIdAndSeqNum] into a DocumentViewId containing the claimed operations.
         let previous_operations: Vec<OperationId> = previous_operations
             .iter()
             .filter_map(|(log_id, seq_num)| {
@@ -570,29 +601,25 @@ mod tests {
                     .map(|entry| entry.hash().into())
             })
             .collect();
-
+        // Construct document view id for previous operations.
         let document_view_id = DocumentViewId::new(&previous_operations).unwrap();
+
+        // Compose the next operation.
         let next_operation = Operation::new_update(
             SCHEMA_ID.parse().unwrap(),
             document_view_id,
             operation_fields(doggo_test_fields()),
         )
         .unwrap();
+
+        // Encode an entry and the operation.
         let (entry, operation) =
             encode_entry_and_operation(&db.store, &next_operation, &key_pair, Some(document_id))
                 .await;
 
-        for (hash, entry) in db.store.entries.lock().unwrap().iter() {
-            if operations_to_remove.contains(&entry.seq_num().as_u64()) {
-                db.store
-                    .operations
-                    .lock()
-                    .unwrap()
-                    .remove(&hash.clone().into());
-            }
-        }
+        remove_operations(&db.store, &author, operations_to_remove);
 
-        // Publish the specified entry to the db.
+        // Publish the entry and operation.
         let result = publish(&db.store, &entry, &operation).await;
 
         result.unwrap();
