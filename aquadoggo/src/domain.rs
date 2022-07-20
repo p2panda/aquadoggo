@@ -52,8 +52,6 @@ pub async fn next_args<S: StorageProvider>(
     public_key: &Author,
     document_view_id: Option<&DocumentViewId>,
 ) -> Result<NextEntryArguments> {
-    // @TODO: We assume the passed Author and DocumentView are internally valid.
-
     // Init the next args with base default values.
     let mut next_args = NextEntryArguments {
         backlink: None,

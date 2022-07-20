@@ -7,37 +7,6 @@ use p2panda_rs::identity::Author;
 use p2panda_rs::operation::{AsOperation, OperationEncoded};
 use p2panda_rs::storage_provider::traits::StorageProvider;
 
-// @TODO: This method will be used in a follow-up PR
-//
-// /// Validate an operation against it's claimed schema.
-// ///
-// /// This performs two steps and will return an error if either fail:
-// /// - try to retrieve the claimed schema from storage
-// /// - if the schema is found, validate the operation against it
-// pub async fn validate_operation_against_schema<S: StorageProvider>(
-//     store: &S,
-//     operation: &Operation,
-// ) -> Result<()> {
-//     // Retrieve the schema for this operation from the store.
-//     //
-//     // @TODO Later we will want to use the schema provider for this, now we just get all schema and find the
-//     // one we are interested in.
-//     let all_schema = store.get_all_schema().await?;
-//     let schema = all_schema
-//         .iter()
-//         .find(|schema| schema.id() == &operation.schema());
-//
-//     // If the schema we want doesn't exist, then error now.
-//     ensure!(schema.is_some(), anyhow!("Schema not found"));
-//     let schema = schema.unwrap();
-//
-//     // Validate that the operation correctly follows the stated schema.
-//     validate_cbor(&schema.as_cddl(), &operation.to_cbor())?;
-//
-//     // All went well, return Ok.
-//     Ok(())
-// }
-
 pub fn verify_seq_num(latest_seq_num: Option<&SeqNum>, claimed_seq_num: &SeqNum) -> Result<()> {
     // Retrieve the latest entry for the claimed author and log_id.
     let expected_seq_num = match latest_seq_num {
@@ -173,12 +142,6 @@ pub async fn ensure_document_not_deleted<S: StorageProvider>(
     store: &S,
     document_id: &DocumentId,
 ) -> Result<()> {
-    // @TODO: Here we retrieve all operations for the given document and then check if any of them
-    // are delete operations. This is rather inneficient and could be handled by simply querying the
-    // document table. However it removes a dependency on having all documents materialsed before
-    // being able to publish more entrieswhich at the moment seems like a sensible condition to
-    // remove.
-
     // Retrieve the document view for this document, if none is found, then it is deleted.
     let operations = store.get_operations_by_document_id(document_id).await?;
     ensure!(
