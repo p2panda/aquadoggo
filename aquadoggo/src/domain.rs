@@ -542,7 +542,7 @@ mod tests {
             &next_entry.operation_encoded().unwrap(),
         )
         .await;
-        print!("{:#?}", result);
+
         result.unwrap();
     }
 
