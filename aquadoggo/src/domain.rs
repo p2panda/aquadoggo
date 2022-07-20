@@ -365,13 +365,13 @@ pub async fn get_validate_document_id_for_view_id<S: StorageProvider>(
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryInto;
+    use std::convert::TryFrom;
 
     use p2panda_rs::document::DocumentViewId;
     use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::identity::{Author, KeyPair};
-    use p2panda_rs::operation::{AsVerifiedOperation, Operation, OperationFields, OperationId};
-    use p2panda_rs::storage_provider::traits::AsStorageEntry;
+    use p2panda_rs::operation::{Operation, OperationFields, OperationId};
+    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
     use p2panda_rs::test_utils::constants::SCHEMA_ID;
     use p2panda_rs::test_utils::db::MemoryStore;
     use p2panda_rs::test_utils::fixtures::{
@@ -458,62 +458,56 @@ mod tests {
     #[tokio::test]
     async fn publishes_memory_store_tests(
         #[from(test_db_config)]
-        #[with(7, 1, 1)]
-        db_one_config: PopulateDatabaseConfig,
-        #[from(test_db_config)]
         #[with(8, 1, 1)]
-        db_two_config: PopulateDatabaseConfig,
+        config: PopulateDatabaseConfig,
     ) {
-        // Populate db one with 7 entries.
-        let mut db_one = TestDatabase {
+        // Populate the db with 8 entries.
+        let mut db = TestDatabase {
             store: MemoryStore::default(),
             test_data: TestData::default(),
         };
-        populate_test_db(&mut db_one, &db_one_config).await;
+        populate_test_db(&mut db, &config).await;
 
-        // Populate db 2 with 8 entries.
-        let mut db_two = TestDatabase {
-            store: MemoryStore::default(),
-            test_data: TestData::default(),
-        };
-        populate_test_db(&mut db_two, &db_two_config).await;
-
-        // Remove entry and it's operation from db one at seq number 4.
-        let mut removed_entry = None;
-        db_one.store.entries.lock().unwrap().retain(|_key, entry| {
-            removed_entry = Some(entry.hash());
-            entry.seq_num().as_u64() != 4
-        });
-        let operation_to_remove: OperationId = removed_entry.unwrap().into();
-        db_one
+        let author = Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
+        let log_id = LogId::default();
+        let entry_four = db
             .store
+            .get_entry_at_seq_num(&author, &log_id, &SeqNum::new(4).unwrap())
+            .await
+            .unwrap()
+            .unwrap();
+
+        // Get entry and operation from db at seq number 8.
+        let entry_eight = db
+            .store
+            .get_entry_at_seq_num(&author, &log_id, &SeqNum::new(8).unwrap())
+            .await
+            .unwrap()
+            .unwrap();
+
+        // Remove entry four and eight.
+        db.store
+            .entries
+            .lock()
+            .unwrap()
+            .retain(|k, v| *k != entry_four.hash() && *k != entry_eight.hash());
+
+        // Remove operation four and eight.
+        db.store
             .operations
             .lock()
             .unwrap()
-            .retain(|_key, (_document_id, operation)| {
-                operation.operation_id() != &operation_to_remove
-            });
+            .retain(|k, v| *k != entry_four.hash().into() && *k != entry_eight.hash().into());
 
-        // Get entry and operation from db two at seq number 8.
-        let db_two_entries = db_two.store.entries.lock().unwrap();
-        let db_two_operations = db_two.store.operations.lock().unwrap();
-        let (next_entry_hash, next_entry) = db_two_entries
-            .iter()
-            .find(|(_, entry)| entry.seq_num().as_u64() == 8)
-            .unwrap();
-        let (_, next_operation) = db_two_operations
-            .get(&next_entry_hash.to_owned().into())
-            .unwrap();
-
-        // Publish entry 8 to db one, it should be missing it's skiplink entry.
+        // Publish entry eight to db, it should be missing it's skiplink entry.
         let result = publish(
-            &db_one.store,
-            &next_entry.entry_bytes()[..].try_into().unwrap(),
-            &next_operation.operation().try_into().unwrap(),
+            &db.store,
+            &entry_eight.entry_signed(),
+            &entry_eight.operation_encoded().unwrap(),
         )
         .await;
         assert_eq!(
-            result.err().unwrap().message.to_string(),
+            result.err().unwrap().message,
             "Expected skiplink for <Author 53fc96>, log id 0 and seq num 8 not found in database"
                 .to_string()
         )
