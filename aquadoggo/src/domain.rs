@@ -624,4 +624,72 @@ mod tests {
 
         result.unwrap();
     }
+
+    #[rstest]
+    #[case::ok_single_writer(&[], &[(0, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    // Weird case where all previous operations are on the same branch, but still valid.
+    #[case::ok_many_previous_operations(&[], &[(0, 8), (0, 7), (0, 6)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[case::ok_multi_writer(&[], &[(0, 8)], KeyPair::new())]
+    #[should_panic(expected = "<Operation 76e89a> not found, could not determine document id")]
+    #[case::previous_operation_missing(&[(0, 8)], &[(0, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[should_panic(expected = "<Operation 51fbba> not found, could not determine document id")]
+    #[case::one_of_some_previous_operations_missing(&[(0, 7)], &[(0, 7), (0, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[should_panic(expected = "<Operation 76e89a> not found, could not determine document id")]
+    #[case::one_of_some_previous_operations_missing(&[(0, 8)], &[(0, 7), (0, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[should_panic(expected = "<Operation 76e89a> not found, could not determine document id")]
+    #[case::missing_previous_operation_multi_writer(&[(0, 8)], &[(0, 8)], KeyPair::new())]
+    #[should_panic(
+        expected = "Invalid document view id: operations in passed document view id originate from different documents"
+    )]
+    #[case::previous_operations_invalid_multiple_document_id(&[], &[(0, 8), (1, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[tokio::test]
+    async fn gets_next_args_and_errors(
+        // The operations to be removed from the
+        #[case] operations_to_remove: &[LogIdAndSeqNum],
+        // The previous operations described by their log id and seq number (log_id, seq_num)
+        #[case] document_view_id: &[LogIdAndSeqNum],
+        #[case] key_pair: KeyPair,
+        #[from(test_db_config)]
+        #[with(8, 2, 1)]
+        config: PopulateDatabaseConfig,
+    ) {
+        // Populate the db with 8 entries.
+        let mut db = TestDatabase {
+            store: MemoryStore::default(),
+            test_data: TestData::default(),
+        };
+        populate_test_db(&mut db, &config).await;
+        let author_with_removed_operations =
+            Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
+        let author_making_request = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+
+        // Map the passed &[LogIdAndSeqNum] into a DocumentViewId containing the claimed operations.
+        let document_view_id: Vec<OperationId> = document_view_id
+            .iter()
+            .filter_map(|(log_id, seq_num)| {
+                db.store
+                    .entries
+                    .lock()
+                    .unwrap()
+                    .values()
+                    .find(|entry| {
+                        entry.seq_num().as_u64() == *seq_num && entry.log_id.as_u64() == *log_id
+                    })
+                    .map(|entry| entry.hash().into())
+            })
+            .collect();
+        // Construct document view id for previous operations.
+        let document_view_id = DocumentViewId::new(&document_view_id).unwrap();
+
+        remove_operations(
+            &db.store,
+            &author_with_removed_operations,
+            operations_to_remove,
+        );
+
+        // Publish the entry and operation.
+        let result = next_args(&db.store, &author_making_request, Some(&document_view_id)).await;
+
+        result.unwrap();
+    }
 }

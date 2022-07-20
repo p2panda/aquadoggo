@@ -104,7 +104,7 @@ mod tests {
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::{Operation, OperationEncoded, OperationValue};
-    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
+    use p2panda_rs::storage_provider::traits::EntryStore;
     use p2panda_rs::test_utils::constants::{HASH, PRIVATE_KEY, SCHEMA_ID};
     use p2panda_rs::test_utils::fixtures::{
         create_operation, delete_operation, entry_signed_encoded, entry_signed_encoded_unvalidated,
@@ -744,11 +744,12 @@ mod tests {
             let client = TestClient::new(build_server(context));
 
             // Get the one entry from the store.
-            let mut entry = populated_db
+            let entries = populated_db
                 .store
                 .get_entries_by_schema(&SCHEMA_ID.parse().unwrap())
                 .await
-                .unwrap().first().unwrap();
+                .unwrap();
+            let entry = entries.first().unwrap();
 
             // Prepare a publish entry request for the entry.
             let publish_entry_request = publish_entry_request(
