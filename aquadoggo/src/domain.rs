@@ -484,6 +484,8 @@ mod tests {
         expected = "Entry's claimed seq num of 7 does not match expected seq num of 9 for given author and log"
     )]
     #[case::seq_num_occupied_(&[], (0, 7))]
+    #[should_panic(expected = "Expected next skiplink missing")]
+    #[case::next_args_skiplink_missing(&[(0, 4), (0, 7), (0, 8)], (0, 7))]
     #[should_panic(
         expected = "Entry's claimed seq num of 8 does not match expected seq num of 1 for given author and log"
     )]
