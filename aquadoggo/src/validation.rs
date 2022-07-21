@@ -217,11 +217,11 @@ mod tests {
         expected = "Entry's claimed seq num of 4 does not match expected seq num of 3 for given author and log"
     )]
     #[case::seq_num_too_high(Some(SeqNum::new(2).unwrap()),SeqNum::new(4).unwrap())]
+    #[should_panic(expected = "Max sequence number reached")]
+    #[case::seq_num_too_high(Some(SeqNum::new(u64::MAX).unwrap()),SeqNum::new(4).unwrap())]
     #[should_panic(
         expected = "Entry's claimed seq num of 3 does not match expected seq num of 1 for given author and log"
     )]
-    #[case::seq_num_too_high(Some(SeqNum::new(u64::MAX).unwrap()),SeqNum::new(4).unwrap())]
-    #[should_panic(expected = "Max sequence number reached")]
     #[case::no_seq_num(None, SeqNum::new(3).unwrap())]
     fn verifies_seq_num(#[case] latest_seq_num: Option<SeqNum>, #[case] claimed_seq_num: SeqNum) {
         is_next_seq_num(latest_seq_num.as_ref(), &claimed_seq_num).unwrap();
