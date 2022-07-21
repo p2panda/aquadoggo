@@ -113,27 +113,6 @@ pub async fn get_expected_skiplink<S: StorageProvider>(
     Ok(expected_skiplink.unwrap())
 }
 
-/// Verifies the encoded bamboo entry bytes and payload.
-///
-/// Internally this calls `bamboo_rs_core_ed25519_yasmf::verify` on the passed values.
-pub fn verify_bamboo_entry(
-    entry: &EntrySigned,
-    operation: &OperationEncoded,
-    backlink: Option<&EntrySigned>,
-    skiplink: Option<&EntrySigned>,
-) -> Result<()> {
-    // Verify bamboo entry integrity, including encoding, signature of the entry correct back-
-    // and skiplinks
-    bamboo_rs_core_ed25519_yasmf::verify(
-        &entry.to_bytes(),
-        Some(&operation.to_bytes()),
-        skiplink.map(|link| link.to_bytes()).as_deref(),
-        backlink.map(|link| link.to_bytes()).as_deref(),
-    )?;
-
-    Ok(())
-}
-
 /// Ensure that a document is not deleted.
 ///
 /// Verifies that:
