@@ -7,8 +7,13 @@ use p2panda_rs::identity::Author;
 use p2panda_rs::operation::AsOperation;
 use p2panda_rs::storage_provider::traits::StorageProvider;
 
-pub fn verify_seq_num(latest_seq_num: Option<&SeqNum>, claimed_seq_num: &SeqNum) -> Result<()> {
-    // Retrieve the latest entry for the claimed author and log_id.
+/// Verify that a claimed seq num is the next sequence number following the latest.
+///
+/// Performs two steps:
+/// - Established the expected sequence number either by incrementing the latest (when passed), or instantiating
+///   it to sequence nomber 1 when None
+/// - ensures the claimed sequence number is equal to expected one  
+pub fn is_next_seq_num(latest_seq_num: Option<&SeqNum>, claimed_seq_num: &SeqNum) -> Result<()> {
     let expected_seq_num = match latest_seq_num {
         Some(seq_num) => {
             let mut seq_num = seq_num.to_owned();
@@ -31,8 +36,12 @@ pub fn verify_seq_num(latest_seq_num: Option<&SeqNum>, claimed_seq_num: &SeqNum)
 /// Verify that an entry's claimed log id matches what we expect from the claimed document id.
 ///
 /// This method handles both the case where the claimed log id already exists for this author
-/// and where it is a new log. In both verify that:
-/// - The claimed log id matches the expected one
+/// and where it is a new log.
+///
+/// The following steps are taken:
+/// - Retrieve the stored log id for the claimed document id
+///   - If found, ensure it matches the claimed log ig
+///   - If not found retrieve the next available log id for this author and ensure that matches
 pub async fn verify_log_id<S: StorageProvider>(
     store: &S,
     author: &Author,
@@ -77,8 +86,6 @@ pub async fn verify_log_id<S: StorageProvider>(
 // encoded on the passed entry.
 //
 // If the expected skiplink could not be found in the database an error is returned.
-//
-// @TODO This depricates `try_get_skiplink()` on storage provider.
 pub async fn get_expected_skiplink<S: StorageProvider>(
     store: &S,
     author: &Author,
@@ -115,8 +122,9 @@ pub async fn get_expected_skiplink<S: StorageProvider>(
 
 /// Ensure that a document is not deleted.
 ///
-/// Verifies that:
-/// - the document id we will be performing an UPDATE or DELETE on is not deleted.
+/// Takes the following steps:
+/// - Retrieve all operations for the given document id
+/// - Ensure none of them contain a DELETE action
 pub async fn ensure_document_not_deleted<S: StorageProvider>(
     store: &S,
     document_id: &DocumentId,
@@ -130,6 +138,11 @@ pub async fn ensure_document_not_deleted<S: StorageProvider>(
     Ok(())
 }
 
+/// Retrieve the next log id for a given author.
+///
+/// Takes the following steps:
+/// - Retrieve the latest log id for the given author
+/// - Safely increment it by 1
 pub async fn next_log_id<S: StorageProvider>(store: &S, author: &Author) -> Result<LogId> {
     let latest_log_id = store.latest_log_id(author).await?;
 
@@ -144,10 +157,11 @@ pub async fn next_log_id<S: StorageProvider>(store: &S, author: &Author) -> Resu
     }
 }
 
+/// Safely increment a sequence number by one.
 pub fn increment_seq_num(seq_num: &mut SeqNum) -> Result<SeqNum> {
     match seq_num.next() {
         Some(next_seq_num) => Ok(next_seq_num),
-        None => Err(anyhow!("Max sequnec number reached")),
+        None => Err(anyhow!("Max sequence number reached")),
     }
 }
 
@@ -166,7 +180,7 @@ mod tests {
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
     use super::{
-        ensure_document_not_deleted, get_expected_skiplink, verify_log_id, verify_seq_num,
+        ensure_document_not_deleted, get_expected_skiplink, is_next_seq_num, verify_log_id,
     };
 
     #[rstest]
@@ -184,7 +198,7 @@ mod tests {
     )]
     #[case::no_seq_num(None, SeqNum::new(3).unwrap())]
     fn verifies_seq_num(#[case] latest_seq_num: Option<SeqNum>, #[case] claimed_seq_num: SeqNum) {
-        verify_seq_num(latest_seq_num.as_ref(), &claimed_seq_num).unwrap();
+        is_next_seq_num(latest_seq_num.as_ref(), &claimed_seq_num).unwrap();
     }
 
     #[rstest]
