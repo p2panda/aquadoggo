@@ -27,8 +27,8 @@ impl ClientRoot {
         )]
         public_key: scalars::PublicKey,
         #[graphql(
-            name = "documentId",
-            desc = "Document the entry's UPDATE or DELETE operation is referring to, \
+            name = "documentViewId",
+            desc = "Document view id the entry's UPDATE or DELETE operation is referring to, \
             can be left empty when it is a CREATE operation"
         )]
         document_view_id: Option<scalars::DocumentViewId>,
@@ -53,6 +53,7 @@ impl ClientRoot {
 #[cfg(test)]
 mod tests {
     use async_graphql::{value, Response};
+    use p2panda_rs::document::DocumentViewId;
     use rstest::rstest;
     use serde_json::json;
     use tokio::sync::broadcast;
@@ -91,6 +92,58 @@ mod tests {
                 .json::<Response>()
                 .await;
 
+            assert_eq!(
+                received_entry_args.data,
+                value!({
+                    "nextEntryArgs": {
+                        "logId": "0",
+                        "seqNum": "1",
+                        "backlink": null,
+                        "skiplink": null,
+                    }
+                })
+            );
+        })
+    }
+
+    #[rstest]
+    fn next_entry_args_valid_query_with_docuent_view_id(
+        #[with(1, 1, 1)]
+        #[from(test_db)]
+        runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
+            let (tx, _) = broadcast::channel(16);
+            let context = HttpServiceContext::new(db.store, tx);
+            let client = TestClient::new(build_server(context));
+
+            let document_id = db.test_data.documents.get(0).unwrap();
+            let document_view_id: DocumentViewId = document_id.as_str().parse().unwrap();
+
+            // Selected fields need to be alphabetically sorted because that's what the `json`
+            // macro that is used in the assert below produces.
+            let received_entry_args = client
+                .post("/graphql")
+                .json(&json!({
+                    "query": format!("{{
+                        nextEntryArgs(
+                            publicKey: \"8b52ae153142288402382fd6d9619e018978e015e6bc372b1b0c7bd40c6a240a\",
+                            documentViewId: \"{}\"
+                        ) {{
+                            logId,
+                            seqNum,
+                            backlink,
+                            skiplink
+                        }}
+                    }}", document_view_id.as_str())
+                }))
+                .send()
+                .await
+                .json::<Response>()
+                .await;
+
+            println!("{:#?}", received_entry_args);
+            assert!(received_entry_args.is_ok());
             assert_eq!(
                 received_entry_args.data,
                 value!({

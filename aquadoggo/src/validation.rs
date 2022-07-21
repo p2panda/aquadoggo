@@ -2,9 +2,9 @@
 
 use anyhow::{anyhow, ensure, Result};
 use p2panda_rs::document::DocumentId;
-use p2panda_rs::entry::{EntrySigned, LogId, SeqNum};
+use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::identity::Author;
-use p2panda_rs::operation::{AsOperation, OperationEncoded};
+use p2panda_rs::operation::AsOperation;
 use p2panda_rs::storage_provider::traits::StorageProvider;
 
 pub fn verify_seq_num(latest_seq_num: Option<&SeqNum>, claimed_seq_num: &SeqNum) -> Result<()> {

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::collections::HashSet;
-use std::convert::TryInto;
 
 use anyhow::{anyhow, ensure, Result as AnyhowResult};
 use async_graphql::Result;
@@ -353,7 +352,6 @@ pub async fn get_validate_document_id_for_view_id<S: StorageProvider>(
 mod tests {
     use std::convert::TryFrom;
 
-    use futures::stream::Skip;
     use p2panda_rs::document::DocumentViewId;
     use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::identity::{Author, KeyPair};
