@@ -17,7 +17,7 @@ use p2panda_rs::storage_provider::traits::{AsStorageEntry, AsStorageLog, Storage
 use crate::graphql::client::NextEntryArguments;
 use crate::validation::{
     ensure_document_not_deleted, get_expected_skiplink, increment_seq_num, next_log_id,
-    verify_bamboo_entry, verify_log_id, verify_seq_num,
+    verify_log_id, verify_seq_num,
 };
 
 /// Retrieve arguments required for constructing the next entry in a bamboo log for a specific
@@ -206,15 +206,12 @@ pub async fn publish<S: StorageProvider>(
         None => None,
     };
 
-    let backlink = backlink.map(|entry| entry.entry_bytes()[..].try_into().unwrap());
-    let skiplink = skiplink.map(|entry| entry.entry_bytes()[..].try_into().unwrap());
-
     // Verify the bamboo entry providing the encoded operation and retrieved backlink and skiplink.
-    verify_bamboo_entry(
-        entry_encoded,
-        operation_encoded,
-        backlink.as_ref(),
-        skiplink.as_ref(),
+    bamboo_rs_core_ed25519_yasmf::verify(
+        &entry_encoded.to_bytes(),
+        Some(&operation_encoded.to_bytes()),
+        skiplink.map(|entry| entry.entry_bytes()).as_deref(),
+        backlink.map(|entry| entry.entry_bytes()).as_deref(),
     )?;
 
     ///////////////////////////////////
@@ -454,57 +451,6 @@ mod tests {
             .await;
             assert!(result.is_ok());
         });
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn gets_next_args(
-        public_key: Author,
-        #[from(test_db_config)]
-        #[with(7, 1, 1)]
-        config: PopulateDatabaseConfig,
-    ) {
-        // Populate the db with 8 entries.
-        let mut db = TestDatabase {
-            store: MemoryStore::default(),
-            test_data: TestData::default(),
-        };
-        populate_test_db(&mut db, &config).await;
-
-        let expected_next_args = NextEntryArguments {
-            backlink: None,
-            skiplink: None,
-            log_id: LogId::new(1).into(),
-            seq_num: SeqNum::default().into(),
-        };
-
-        // Get with no DocumentViewId given.
-        let result = next_args(&db.store, &public_key, None).await;
-        assert!(result.is_ok());
-        assert_eq!(expected_next_args, result.unwrap());
-
-        // Get with non-existent DocumentViewId given.
-        let result = next_args(&db.store, &public_key, Some(&random_document_view_id())).await;
-        assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .message
-                .as_str()
-                .contains("could not determine document id") // This is a partial string match, preceded by "<Operation xxxxx> not found,"
-        );
-
-        // Here we are missing the skiplink.
-        remove_entries(&db.store, &public_key, &[(0, 4)]);
-        let document_id = db.test_data.documents.get(0).unwrap();
-        let document_view_id =
-            DocumentViewId::new(&[document_id.as_str().parse().unwrap()]).unwrap();
-
-        let result = next_args(&db.store, &public_key, Some(&document_view_id)).await;
-        assert_eq!(
-            result.unwrap_err().message.as_str(),
-            "Expected skiplink for <Author 53fc96>, log id 0 and seq num 8 not found in database"
-        );
     }
 
     #[rstest]
@@ -801,5 +747,56 @@ mod tests {
 
         let result = next_args(&db.store, &author, document_view_id.as_ref()).await;
         assert_eq!(result.unwrap(), expected_next_args);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn gets_next_args_other_cases(
+        public_key: Author,
+        #[from(test_db_config)]
+        #[with(7, 1, 1)]
+        config: PopulateDatabaseConfig,
+    ) {
+        let mut db = TestDatabase {
+            store: MemoryStore::default(),
+            test_data: TestData::default(),
+        };
+        populate_test_db(&mut db, &config).await;
+
+        // Get with no DocumentViewId given.
+        let result = next_args(&db.store, &public_key, None).await;
+        assert!(result.is_ok());
+        assert_eq!(
+            NextEntryArguments {
+                backlink: None,
+                skiplink: None,
+                log_id: LogId::new(1).into(),
+                seq_num: SeqNum::default().into(),
+            },
+            result.unwrap()
+        );
+
+        // Get with non-existent DocumentViewId given.
+        let result = next_args(&db.store, &public_key, Some(&random_document_view_id())).await;
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .message
+                .as_str()
+                .contains("could not determine document id") // This is a partial string match, preceded by "<Operation xxxxx> not found,"
+        );
+
+        // Here we are missing the skiplink.
+        remove_entries(&db.store, &public_key, &[(0, 4)]);
+        let document_id = db.test_data.documents.get(0).unwrap();
+        let document_view_id =
+            DocumentViewId::new(&[document_id.as_str().parse().unwrap()]).unwrap();
+
+        let result = next_args(&db.store, &public_key, Some(&document_view_id)).await;
+        assert_eq!(
+            result.unwrap_err().message.as_str(),
+            "Expected skiplink for <Author 53fc96>, log id 0 and seq num 8 not found in database"
+        );
     }
 }
