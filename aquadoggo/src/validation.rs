@@ -146,14 +146,9 @@ pub async fn ensure_document_not_deleted<S: StorageProvider>(
 pub async fn next_log_id<S: StorageProvider>(store: &S, author: &Author) -> Result<LogId> {
     let latest_log_id = store.latest_log_id(author).await?;
 
-    let next_log_id = match latest_log_id {
-        Some(mut log_id) => log_id.next(),
-        None => Some(LogId::default()),
-    };
-
-    match next_log_id {
-        Some(log_id) => Ok(log_id),
-        None => Err(anyhow!("Max log id reached")),
+    match latest_log_id {
+        Some(mut log_id) => increment_log_id(&mut log_id),
+        None => Ok(LogId::default()),
     }
 }
 
@@ -162,6 +157,14 @@ pub fn increment_seq_num(seq_num: &mut SeqNum) -> Result<SeqNum> {
     match seq_num.next() {
         Some(next_seq_num) => Ok(next_seq_num),
         None => Err(anyhow!("Max sequence number reached")),
+    }
+}
+
+/// Safely increment a log id by one.
+pub fn increment_log_id(log_id: &mut LogId) -> Result<LogId> {
+    match log_id.next() {
+        Some(next_log_id) => Ok(next_log_id),
+        None => Err(anyhow!("Max log id reached")),
     }
 }
 
@@ -180,8 +183,29 @@ mod tests {
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
     use super::{
-        ensure_document_not_deleted, get_expected_skiplink, is_next_seq_num, verify_log_id,
+        ensure_document_not_deleted, get_expected_skiplink, increment_log_id, increment_seq_num,
+        is_next_seq_num, verify_log_id,
     };
+
+    #[rstest]
+    #[case(LogId::new(0), LogId::new(1))]
+    #[should_panic(expected = "Max log id reached")]
+    #[case(LogId::new(u64::MAX), LogId::new(1))]
+    fn increments_log_id(#[case] log_id: LogId, #[case] expected_next_log_id: LogId) {
+        let mut log_id = log_id;
+        let next_log_id = increment_log_id(&mut log_id).unwrap();
+        assert_eq!(next_log_id, expected_next_log_id)
+    }
+
+    #[rstest]
+    #[case( SeqNum::new(1).unwrap(), SeqNum::new(2).unwrap())]
+    #[should_panic(expected = "Max sequence number reached")]
+    #[case(SeqNum::new(u64::MAX).unwrap(), SeqNum::new(1).unwrap())]
+    fn increments_seq_num(#[case] seq_num: SeqNum, #[case] expected_next_seq_num: SeqNum) {
+        let mut seq_num = seq_num;
+        let next_seq_num = increment_seq_num(&mut seq_num).unwrap();
+        assert_eq!(next_seq_num, expected_next_seq_num)
+    }
 
     #[rstest]
     #[case::valid_seq_num(Some(SeqNum::new(2).unwrap()), SeqNum::new(3).unwrap())]
@@ -196,6 +220,8 @@ mod tests {
     #[should_panic(
         expected = "Entry's claimed seq num of 3 does not match expected seq num of 1 for given author and log"
     )]
+    #[case::seq_num_too_high(Some(SeqNum::new(u64::MAX).unwrap()),SeqNum::new(4).unwrap())]
+    #[should_panic(expected = "Max sequence number reached")]
     #[case::no_seq_num(None, SeqNum::new(3).unwrap())]
     fn verifies_seq_num(#[case] latest_seq_num: Option<SeqNum>, #[case] claimed_seq_num: SeqNum) {
         is_next_seq_num(latest_seq_num.as_ref(), &claimed_seq_num).unwrap();
