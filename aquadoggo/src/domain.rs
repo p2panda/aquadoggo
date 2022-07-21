@@ -121,17 +121,10 @@ pub async fn next_args<S: StorageProvider>(
             // Check if skiplink is required and if it is get the entry and return it's hash
             let skiplink = if is_lipmaa_required(seq_num.as_u64()) {
                 // Determine skiplink ("lipmaa"-link) entry in this log.
-                let skiplink_seq_num = seq_num.skiplink_seq_num().unwrap();
-                match store
-                    .get_entry_at_seq_num(public_key, &log_id, &skiplink_seq_num)
-                    .await?
-                {
-                    Some(entry) => Ok(Some(entry)),
-                    None => Err(anyhow!("Expected next skiplink missing")),
-                }
+                Some(get_expected_skiplink(store, public_key, &log_id, &seq_num).await?)
             } else {
-                Ok(None)
-            }?
+                None
+            }
             .map(|entry| entry.hash());
 
             next_args.backlink = latest_entry.map(|entry| entry.hash().into());
@@ -363,6 +356,7 @@ pub async fn get_validate_document_id_for_view_id<S: StorageProvider>(
 mod tests {
     use std::convert::TryFrom;
 
+    use futures::stream::Skip;
     use p2panda_rs::document::DocumentViewId;
     use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::identity::{Author, KeyPair};
@@ -463,20 +457,54 @@ mod tests {
     }
 
     #[rstest]
-    fn gets_next_args(#[from(test_db)] runner: TestDatabaseRunner, public_key: Author) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
-            let result = next_args(&db.store, &public_key, None).await;
-            assert!(result.is_ok());
+    #[tokio::test]
+    async fn gets_next_args(
+        public_key: Author,
+        #[from(test_db_config)]
+        #[with(7, 1, 1)]
+        config: PopulateDatabaseConfig,
+    ) {
+        // Populate the db with 8 entries.
+        let mut db = TestDatabase {
+            store: MemoryStore::default(),
+            test_data: TestData::default(),
+        };
+        populate_test_db(&mut db, &config).await;
 
-            let expected_next_args = NextEntryArguments {
-                backlink: None,
-                skiplink: None,
-                log_id: LogId::default().into(),
-                seq_num: SeqNum::default().into(),
-            };
+        let expected_next_args = NextEntryArguments {
+            backlink: None,
+            skiplink: None,
+            log_id: LogId::new(1).into(),
+            seq_num: SeqNum::default().into(),
+        };
 
-            assert_eq!(expected_next_args, result.unwrap())
-        });
+        // Get with no DocumentViewId given.
+        let result = next_args(&db.store, &public_key, None).await;
+        assert!(result.is_ok());
+        assert_eq!(expected_next_args, result.unwrap());
+
+        // Get with non-existent DocumentViewId given.
+        let result = next_args(&db.store, &public_key, Some(&random_document_view_id())).await;
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .message
+                .as_str()
+                .contains("could not determine document id") // This is a partial string match, preceded by "<Operation xxxxx> not found,"
+        );
+
+        // Here we are missing the skiplink.
+        remove_entries(&db.store, &public_key, &[(0, 4)]);
+        let document_id = db.test_data.documents.get(0).unwrap();
+        let document_view_id =
+            DocumentViewId::new(&[document_id.as_str().parse().unwrap()]).unwrap();
+
+        let result = next_args(&db.store, &public_key, Some(&document_view_id)).await;
+        assert_eq!(
+            result.unwrap_err().message.as_str(),
+            "Expected skiplink for <Author 53fc96>, log id 0 and seq num 8 not found in database"
+        );
     }
 
     #[rstest]
@@ -506,7 +534,7 @@ mod tests {
     )]
     #[case::no_entries_yet(&[(0, 1), (0, 2), (0, 3), (0, 4), (0, 5), (0, 6), (0, 7), (0, 8)], (0, 8))]
     #[tokio::test]
-    async fn errors_when_expected_entries_missing(
+    async fn publish_with_missing_entries(
         #[case] entries_to_remove: &[LogIdAndSeqNum],
         #[case] entry_to_publish: LogIdAndSeqNum,
         #[from(test_db_config)]
@@ -564,8 +592,8 @@ mod tests {
     )]
     #[case::previous_operations_invalid_multiple_document_id(&[], &[(0, 8), (1, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
     #[tokio::test]
-    async fn errors_when_expected_operations_missing(
-        // The operations to be removed from the
+    async fn publish_with_missing_operations(
+        // The operations to be removed from the        assert_eq!(result.map_err(|err|))
         #[case] operations_to_remove: &[LogIdAndSeqNum],
         // The previous operations described by their log id and seq number (log_id, seq_num)
         #[case] previous_operations: &[LogIdAndSeqNum],
@@ -628,6 +656,7 @@ mod tests {
     #[case::ok_single_writer(&[], &[(0, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
     // Weird case where all previous operations are on the same branch, but still valid.
     #[case::ok_many_previous_operations(&[], &[(0, 8), (0, 7), (0, 6)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[case::ok_not_the_most_recent_document_view_id(&[], &[(0, 1)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
     #[case::ok_multi_writer(&[], &[(0, 8)], KeyPair::new())]
     #[should_panic(expected = "<Operation 76e89a> not found, could not determine document id")]
     #[case::previous_operation_missing(&[(0, 8)], &[(0, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
@@ -642,7 +671,7 @@ mod tests {
     )]
     #[case::previous_operations_invalid_multiple_document_id(&[], &[(0, 8), (1, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
     #[tokio::test]
-    async fn gets_next_args_and_errors(
+    async fn next_args_with_missing_operations(
         // The operations to be removed from the
         #[case] operations_to_remove: &[LogIdAndSeqNum],
         // The previous operations described by their log id and seq number (log_id, seq_num)
@@ -677,6 +706,7 @@ mod tests {
                     .map(|entry| entry.hash().into())
             })
             .collect();
+
         // Construct document view id for previous operations.
         let document_view_id = DocumentViewId::new(&document_view_id).unwrap();
 
@@ -686,9 +716,90 @@ mod tests {
             operations_to_remove,
         );
 
-        // Publish the entry and operation.
         let result = next_args(&db.store, &author_making_request, Some(&document_view_id)).await;
 
         result.unwrap();
+    }
+
+    type SeqNumU64 = u64;
+    type Backlink = Option<u64>;
+    type Skiplink = Option<u64>;
+
+    #[rstest]
+    #[case(0, None, (1, None, None))]
+    #[case(1, Some(1), (2, Some(1), None))]
+    #[case(2, Some(2), (3, Some(2), None))]
+    #[case(3, Some(3), (4, Some(3), Some(1)))]
+    #[case(4, Some(4), (5, Some(4), None))]
+    #[case(5, Some(5), (6, Some(5), None))]
+    #[case(6, Some(6), (7, Some(6), None))]
+    #[case(7, Some(7), (8, Some(7), Some(4)))]
+    #[case(2, Some(1), (3, Some(2), None))]
+    #[case(3, Some(1), (4, Some(3), Some(1)))]
+    #[case(4, Some(1), (5, Some(4), None))]
+    #[case(5, Some(1), (6, Some(5), None))]
+    #[case(6, Some(1), (7, Some(6), None))]
+    #[case(7, Some(1), (8, Some(7), Some(4)))]
+    #[tokio::test]
+    async fn next_args_with_expected_results(
+        #[case] no_of_entries: usize,
+        #[case] document_view_id: Option<SeqNumU64>,
+        #[case] expected_next_args: (SeqNumU64, Backlink, Skiplink),
+    ) {
+        let config = PopulateDatabaseConfig {
+            no_of_entries,
+            no_of_logs: 1,
+            no_of_authors: 1,
+            ..PopulateDatabaseConfig::default()
+        };
+
+        let mut db = TestDatabase {
+            store: MemoryStore::default(),
+            test_data: TestData::default(),
+        };
+        populate_test_db(&mut db, &config).await;
+        let author = Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
+
+        let document_view_id: Option<DocumentViewId> = document_view_id.map(|seq_num| {
+            db.store
+                .entries
+                .lock()
+                .unwrap()
+                .values()
+                .find(|entry| entry.seq_num().as_u64() == seq_num)
+                .map(|entry| DocumentViewId::new(&[entry.hash().into()]).unwrap())
+                .unwrap()
+        });
+
+        let expected_seq_num = SeqNum::new(expected_next_args.0).unwrap();
+        let expected_log_id = LogId::default();
+        let expected_backlink = match expected_next_args.1 {
+            Some(backlink) => db
+                .store
+                .get_entry_at_seq_num(&author, &expected_log_id, &SeqNum::new(backlink).unwrap())
+                .await
+                .unwrap()
+                .map(|entry| entry.hash()),
+            None => None,
+        };
+        let expected_skiplink = match expected_next_args.2 {
+            Some(skiplink) => db
+                .store
+                .get_entry_at_seq_num(&author, &expected_log_id, &SeqNum::new(skiplink).unwrap())
+                .await
+                .unwrap()
+                .map(|entry| entry.hash()),
+            None => None,
+        };
+
+        let expected_next_args = NextEntryArguments {
+            log_id: expected_log_id.into(),
+            seq_num: expected_seq_num.into(),
+            backlink: expected_backlink.map(|hash| hash.into()),
+            skiplink: expected_skiplink.map(|hash| hash.into()),
+        };
+
+        let result = next_args(&db.store, &author, document_view_id.as_ref()).await;
+        assert_eq!(result.unwrap(), expected_next_args);
     }
 }
