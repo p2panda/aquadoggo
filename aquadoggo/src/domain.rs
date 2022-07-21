@@ -353,9 +353,9 @@ mod tests {
     use std::convert::TryFrom;
 
     use p2panda_rs::document::DocumentViewId;
-    use p2panda_rs::entry::{LogId, SeqNum};
+    use p2panda_rs::entry::{sign_and_encode, Entry, LogId, SeqNum};
     use p2panda_rs::identity::{Author, KeyPair};
-    use p2panda_rs::operation::{Operation, OperationFields, OperationId};
+    use p2panda_rs::operation::{Operation, OperationEncoded, OperationFields, OperationId};
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
     use p2panda_rs::test_utils::constants::{PRIVATE_KEY, SCHEMA_ID};
     use p2panda_rs::test_utils::db::MemoryStore;
@@ -537,7 +537,7 @@ mod tests {
     #[case::previous_operations_invalid_multiple_document_id(&[], &[(0, 8), (1, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
     #[tokio::test]
     async fn publish_with_missing_operations(
-        // The operations to be removed from the        assert_eq!(result.map_err(|err|))
+        // The operations to be removed from the db
         #[case] operations_to_remove: &[LogIdAndSeqNum],
         // The previous operations described by their log id and seq number (log_id, seq_num)
         #[case] previous_operations: &[LogIdAndSeqNum],
@@ -567,7 +567,9 @@ mod tests {
                     .unwrap()
                     .values()
                     .find(|entry| {
-                        entry.seq_num().as_u64() == *seq_num && entry.log_id.as_u64() == *log_id
+                        entry.seq_num().as_u64() == *seq_num
+                            && entry.log_id.as_u64() == *log_id
+                            && entry.author() == author
                     })
                     .map(|entry| entry.hash().into())
             })
@@ -616,7 +618,7 @@ mod tests {
     #[case::previous_operations_invalid_multiple_document_id(&[], &[(0, 8), (1, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
     #[tokio::test]
     async fn next_args_with_missing_operations(
-        // The operations to be removed from the
+        // The operations to be removed from the db
         #[case] operations_to_remove: &[LogIdAndSeqNum],
         // The previous operations described by their log id and seq number (log_id, seq_num)
         #[case] document_view_id: &[LogIdAndSeqNum],
@@ -645,7 +647,9 @@ mod tests {
                     .unwrap()
                     .values()
                     .find(|entry| {
-                        entry.seq_num().as_u64() == *seq_num && entry.log_id.as_u64() == *log_id
+                        entry.seq_num().as_u64() == *seq_num
+                            && entry.log_id.as_u64() == *log_id
+                            && entry.author() == author_with_removed_operations
                     })
                     .map(|entry| entry.hash().into())
             })
@@ -796,5 +800,112 @@ mod tests {
             result.unwrap_err().message.as_str(),
             "Expected skiplink for <Author 53fc96>, log id 0 and seq num 8 not found in database"
         );
+    }
+
+    #[rstest]
+    #[case::owner_publishes_update_to_correct_log(LogId::new(0), KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[case::new_author_updates_to_new_log(LogId::new(0), KeyPair::new())]
+    #[should_panic(
+        expected = "Entry's claimed log id of 1 does not match expected log id of 0 for given author and document"
+    )]
+    #[case::owner_updates_to_wrong_and_taken_log(LogId::new(1), KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[should_panic(
+        expected = "Entry's claimed log id of 2 does not match expected log id of 0 for given author and document"
+    )]
+    #[case::owner_updates_to_wrong_but_free_log(LogId::new(2), KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[should_panic(
+        expected = "Entry's claimed log id of 1 does not match expected next log id of 0 for given author"
+    )]
+    #[case::new_author_updates_to_wrong_new_log(LogId::new(1), KeyPair::new())]
+    #[tokio::test]
+    async fn publish_update_log_tests(
+        #[case] log_id: LogId,
+        #[case] key_pair: KeyPair,
+        // The previous operations described by their log id and seq number (log_id, seq_num)
+        #[from(test_db_config)]
+        #[with(2, 1, 1)]
+        config: PopulateDatabaseConfig,
+    ) {
+        // Populate the db with 8 entries.
+        let mut db = TestDatabase {
+            store: MemoryStore::default(),
+            test_data: TestData::default(),
+        };
+        populate_test_db(&mut db, &config).await;
+        let document_id = db.test_data.documents.first().unwrap();
+        let document_view_id: DocumentViewId = document_id.as_str().parse().unwrap();
+        let author_performing_update = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+
+        // Compose the next operation.
+        let update_operation = Operation::new_update(
+            SCHEMA_ID.parse().unwrap(),
+            document_view_id.clone(),
+            operation_fields(doggo_test_fields()),
+        )
+        .unwrap();
+
+        let latest_entry = db
+            .store
+            .get_latest_entry(&author_performing_update, &log_id)
+            .await
+            .unwrap();
+
+        let entry = Entry::new(
+            &log_id,
+            Some(&update_operation),
+            None,
+            latest_entry.as_ref().map(|entry| entry.hash()).as_ref(),
+            &latest_entry
+                .map(|entry| entry.seq_num().next().unwrap())
+                .unwrap_or_default(),
+        )
+        .unwrap();
+
+        let entry_encoded = sign_and_encode(&entry, &key_pair).unwrap();
+        let operation_encoded = OperationEncoded::try_from(&update_operation).unwrap();
+
+        let result = publish(&db.store, &entry_encoded, &operation_encoded).await;
+
+        result.unwrap();
+    }
+
+    #[rstest]
+    #[case::owner_publishes_to_correct_log(LogId::new(2), KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[case::new_author_publishes_to_new_log(LogId::new(0), KeyPair::new())]
+    #[should_panic(
+        expected = "Entry's claimed seq num of 1 does not match expected seq num of 2 for given author and log"
+    )]
+    #[case::owner_publishes_to_wrong_and_taken_log(LogId::new(1), KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[should_panic(
+        expected = "Entry's claimed log id of 3 does not match expected next log id of 2 for given author"
+    )]
+    #[case::owner_publishes_to_wrong_but_free_log(LogId::new(3), KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[should_panic(
+        expected = "Entry's claimed log id of 1 does not match expected next log id of 0 for given author"
+    )]
+    #[case::new_author_publishes_to_wrong_new_log(LogId::new(1), KeyPair::new())]
+    #[tokio::test]
+    async fn publish_create_log_tests(
+        #[case] log_id: LogId,
+        #[case] key_pair: KeyPair,
+        operation: Operation,
+        #[from(test_db_config)]
+        #[with(1, 2, 1)]
+        config: PopulateDatabaseConfig,
+    ) {
+        let mut db = TestDatabase {
+            store: MemoryStore::default(),
+            test_data: TestData::default(),
+        };
+        populate_test_db(&mut db, &config).await;
+
+        let entry = Entry::new(&log_id, Some(&operation), None, None, &SeqNum::default()).unwrap();
+
+        let entry_encoded = sign_and_encode(&entry, &key_pair).unwrap();
+        let operation_encoded = OperationEncoded::try_from(&operation).unwrap();
+
+        let result = publish(&db.store, &entry_encoded, &operation_encoded).await;
+
+        result.unwrap();
     }
 }
