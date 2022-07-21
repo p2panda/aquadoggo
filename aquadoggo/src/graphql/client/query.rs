@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_graphql::{Context, Object, Result};
-use p2panda_rs::document::DocumentViewId;
+use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::identity::Author;
 use p2panda_rs::Validate;
 
@@ -27,18 +27,20 @@ impl ClientRoot {
         )]
         public_key: scalars::PublicKey,
         #[graphql(
-            name = "documentViewId",
-            desc = "Document view id the entry's UPDATE or DELETE operation is referring to, \
+            name = "documentId",
+            desc = "Document the entry's UPDATE or DELETE operation is referring to, \
             can be left empty when it is a CREATE operation"
         )]
-        document_view_id: Option<scalars::DocumentViewId>,
+        document_id: Option<scalars::DocumentId>,
     ) -> Result<NextEntryArguments> {
         // Access the store from context.
         let store = ctx.data::<SqlStorage>()?;
 
         // Convert and validate passed parameters.
         let public_key: Author = public_key.into();
-        let document_view_id = document_view_id.map(DocumentViewId::from);
+        let document_view_id: Option<DocumentViewId> = document_id
+            .map(DocumentId::from)
+            .map(|id| id.as_str().parse().unwrap());
 
         public_key.validate()?;
         if let Some(ref document_view_id) = document_view_id {
@@ -52,8 +54,10 @@ impl ClientRoot {
 
 #[cfg(test)]
 mod tests {
+    use std::convert::TryFrom;
+
     use async_graphql::{value, Response};
-    use p2panda_rs::document::DocumentViewId;
+    use p2panda_rs::identity::Author;
     use rstest::rstest;
     use serde_json::json;
     use tokio::sync::broadcast;
@@ -107,7 +111,7 @@ mod tests {
     }
 
     #[rstest]
-    fn next_entry_args_valid_query_with_docuent_view_id(
+    fn next_entry_args_valid_query_with_document_id(
         #[with(1, 1, 1)]
         #[from(test_db)]
         runner: TestDatabaseRunner,
@@ -118,39 +122,44 @@ mod tests {
             let client = TestClient::new(build_server(context));
 
             let document_id = db.test_data.documents.get(0).unwrap();
-            let document_view_id: DocumentViewId = document_id.as_str().parse().unwrap();
+            let author =
+                Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
 
             // Selected fields need to be alphabetically sorted because that's what the `json`
             // macro that is used in the assert below produces.
             let received_entry_args = client
                 .post("/graphql")
                 .json(&json!({
-                    "query": format!("{{
+                    "query":
+                        format!(
+                            "{{
                         nextEntryArgs(
-                            publicKey: \"8b52ae153142288402382fd6d9619e018978e015e6bc372b1b0c7bd40c6a240a\",
-                            documentViewId: \"{}\"
+                            publicKey: \"{}\",
+                            documentId: \"{}\"
                         ) {{
                             logId,
                             seqNum,
                             backlink,
                             skiplink
                         }}
-                    }}", document_view_id.as_str())
+                    }}",
+                            author.as_str(),
+                            document_id.as_str()
+                        )
                 }))
                 .send()
                 .await
                 .json::<Response>()
                 .await;
 
-            println!("{:#?}", received_entry_args);
             assert!(received_entry_args.is_ok());
             assert_eq!(
                 received_entry_args.data,
                 value!({
                     "nextEntryArgs": {
                         "logId": "0",
-                        "seqNum": "1",
-                        "backlink": null,
+                        "seqNum": "2",
+                        "backlink": "0020c8e09edd863b308f9c60b8ba506f29da512d0c9b5a131287f402c57777af5678",
                         "skiplink": null,
                     }
                 })

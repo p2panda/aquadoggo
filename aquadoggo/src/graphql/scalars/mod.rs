@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 mod document_id;
-mod document_view_id;
 mod encoded_entry;
 mod encoded_operation;
 mod entry_hash;
@@ -10,7 +9,6 @@ mod public_key;
 mod seq_num;
 
 pub use document_id::DocumentId;
-pub use document_view_id::DocumentViewId;
 pub use encoded_entry::EncodedEntry;
 pub use encoded_operation::EncodedOperation;
 pub use entry_hash::EntryHash;
