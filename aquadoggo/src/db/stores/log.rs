@@ -323,6 +323,28 @@ mod tests {
     }
 
     #[rstest]
+    fn latest_log_id(
+        #[from(public_key)] author: Author,
+        #[from(schema)] schema: SchemaId,
+        #[from(test_db)] runner: TestDatabaseRunner,
+        #[from(random_document_id)] document_id: DocumentId,
+    ) {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+            let log_id = db.store.latest_log_id(&author).await.unwrap();
+
+            assert_eq!(log_id, None);
+
+            for n in 0..12 {
+                let log = StorageLog::new(&author, &schema, &document_id, &LogId::new(n));
+                db.store.insert_log(log).await.unwrap();
+
+                let log_id = db.store.latest_log_id(&author).await.unwrap();
+                assert_eq!(Some(LogId::new(n)), log_id);
+            }
+        });
+    }
+
+    #[rstest]
     fn document_log_id(
         #[from(schema)] schema: SchemaId,
         #[from(entry_signed_encoded)] entry_encoded: EntrySigned,
