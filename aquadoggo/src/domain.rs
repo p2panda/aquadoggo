@@ -32,20 +32,26 @@ use crate::validation::{
 /// The steps and validation checks this method performs are:
 ///
 /// Check if a document view id was passed
-/// - if it wasn't we are creating a new document, safely increment the latest log id for the passed author
-///   and return args immediately
+///
+/// - if it wasn't we are creating a new document, safely increment the latest log id for the
+///     passed author and return args immediately
 /// - if it was continue knowing we are updating an existing document
+///
 /// Determine the document id we are concerned with
+///
 /// - verify that all operations in the passed document view id exist in the database
 /// - verify that all operations in the passed document view id are from the same document
 /// - ensure the document is not deleted
+///
 /// Determine next arguments
-/// - get the log id for this author and document id, or if none is found safely increment this authors
-///   latest log id
+///
+/// - get the log id for this author and document id, or if none is found safely increment this
+///     authors latest log id
 /// - get the backlink entry (latest entry for this author and log)
 /// - get the skiplink for this author, log and next seq num
 /// - get the latest seq num for this author and log and safely increment
-/// Return next arguments
+///
+/// Finally, return next arguments
 pub async fn next_args<S: StorageProvider>(
     store: &S,
     public_key: &Author,
@@ -117,7 +123,7 @@ pub async fn next_args<S: StorageProvider>(
                 None => Ok(SeqNum::default()),
             }?;
 
-            // Check if skiplink is required and if it is get the entry and return it's hash
+            // Check if skiplink is required and if it is get the entry and return its hash.
             let skiplink = if is_lipmaa_required(seq_num.as_u64()) {
                 // Determine skiplink ("lipmaa"-link) entry in this log.
                 Some(get_expected_skiplink(store, public_key, &log_id, &seq_num).await?)
@@ -139,38 +145,53 @@ pub async fn next_args<S: StorageProvider>(
 /// Persist an entry and operation to storage after performing validation of claimed values against
 /// expected values retrieved from storage.
 ///
-/// Returns the arguments required for constructing the next entry in a bamboo log for the specified
-/// author and document.
+/// Returns the arguments required for constructing the next entry in a bamboo log for the
+/// specified author and document.
 ///
 /// This method is intended to be used behind a public API and so we assume all passed values
 /// are in themselves valid.
 ///
-/// The steps and validation checks this method performs are:
+/// # Steps and Validation Performed
 ///
-/// Validate the values encoded on entry against what we expect based on our existing stored entries:
-/// - verify the claimed sequence number against the expected next sequence number for the author and log
-/// - get the expected backlink from storage
-/// - get the expected skiplink from storage
-/// - verify the bamboo entry (requires the expected backlink and skiplink to do this)
-/// Ensure single node per author
+/// Following is a list of the steps and validation checks that this method performs.
+///
+/// ## Validate Entry
+///
+/// Validate the values encoded on entry against what we expect based on our existing stored
+/// entries:
+///
+/// - Verify the claimed sequence number against the expected next sequence number for the author
+///     and log.
+/// - Get the expected backlink from storage.
+/// - Get the expected skiplink from storage.
+/// - Verify the bamboo entry (requires the expected backlink and skiplink to do this).
+///
+/// ## Ensure single node per author
+///
 /// - @TODO
-/// Validate operation against it's claimed schema
+///
+/// ## Validate operation against it's claimed schema:
+///
 /// - @TODO
-/// Determine document id
-/// - if this is a create operation
-///   - derive the document id from the entry hash
-/// - in all other cases
-///   - verify that all operations in previous_operations exist in the database
-///   - verify that all operations in previous_operations are from the same document
-///   - ensure the document is not deleted
-/// - verify the claimed log id matches the expected log id for this author and log
-/// Determine the next arguments
-/// Persist data
-/// - if this is a new document
-///   - store the new log
-/// - store the entry
-/// - store the opertion
-/// Return next entry arguments
+///
+/// ## Determine document id
+///
+/// - If this is a create operation:
+///   - derive the document id from the entry hash.
+/// - In all other cases:
+///   - verify that all operations in previous_operations exist in the database,
+///   - verify that all operations in previous_operations are from the same document,
+///   - ensure that the document is not deleted.
+/// - Verify that the claimed log id matches the expected log id for this author and log.
+///
+/// ## Persist data
+///
+/// - If this is a new document:
+///   - Store the new log.
+/// - Store the entry.
+/// - Store the operation.
+///
+/// ## Compute and return next entry arguments
 pub async fn publish<S: StorageProvider>(
     store: &S,
     entry_encoded: &EntrySigned,
@@ -190,12 +211,12 @@ pub async fn publish<S: StorageProvider>(
     // VALIDATE ENTRY VALUES //
     ///////////////////////////
 
-    // Verify the claimed seq num matches the expected seq num for this author and log.
+    // Verify that the claimed seq num matches the expected seq num for this author and log.
     let latest_entry = store.get_latest_entry(&author, log_id).await?;
     let latest_seq_num = latest_entry.as_ref().map(|entry| entry.seq_num());
     is_next_seq_num(latest_seq_num.as_ref(), seq_num)?;
 
-    // The backlink for this entry.
+    // The backlink for this entry is the latest entry from this public key's log.
     let backlink = latest_entry;
 
     // If a skiplink is claimed, get the expected skiplink from the database, errors
@@ -316,7 +337,10 @@ pub async fn publish<S: StorageProvider>(
     })
 }
 
-/// Attempt to identify the document id for view id contained in a `next_args` request. This will fail if:
+/// Attempt to identify the document id for view id contained in a `next_args` request.
+///
+/// This will fail if:
+///
 /// - any of the operations contained in the view id _don't_ exist in the store
 /// - any of the operations contained in the view id return a different document id than any of the others
 pub async fn get_validate_document_id_for_view_id<S: StorageProvider>(

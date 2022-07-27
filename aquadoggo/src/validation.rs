@@ -10,9 +10,10 @@ use p2panda_rs::storage_provider::traits::StorageProvider;
 /// Verify that a claimed seq num is the next sequence number following the latest.
 ///
 /// Performs two steps:
-/// - Established the expected sequence number either by incrementing the latest (when passed), or instantiating
-///   it to sequence nomber 1 when None
-/// - ensures the claimed sequence number is equal to expected one  
+/// - determines the expected sequence number
+///     - if `latest_seq_num` is `Some` by incrementing that
+///     - if `latest_seq_num` is `None` by setting it to 1
+/// - ensures the claimed sequence number is equal to the expected one.
 pub fn is_next_seq_num(latest_seq_num: Option<&SeqNum>, claimed_seq_num: &SeqNum) -> Result<()> {
     let expected_seq_num = match latest_seq_num {
         Some(seq_num) => {
@@ -33,14 +34,14 @@ pub fn is_next_seq_num(latest_seq_num: Option<&SeqNum>, claimed_seq_num: &SeqNum
     Ok(())
 }
 
-/// Verify that an entry's claimed log id matches what we expect from the claimed document id.
+/// Verify that a log id is correctly chosen for a pair of author and document id.
 ///
 /// This method handles both the case where the claimed log id already exists for this author
 /// and where it is a new log.
 ///
 /// The following steps are taken:
-/// - Retrieve the stored log id for the claimed document id
-///   - If found, ensure it matches the claimed log ig
+/// - Retrieve the stored log id for the document id
+///   - If found, ensure it matches the claimed log id
 ///   - If not found retrieve the next available log id for this author and ensure that matches
 pub async fn verify_log_id<S: StorageProvider>(
     store: &S,
@@ -48,7 +49,7 @@ pub async fn verify_log_id<S: StorageProvider>(
     claimed_log_id: &LogId,
     document_id: &DocumentId,
 ) -> Result<()> {
-    // Check if there is a log_id registered for this document and public key already in the store.
+    // Check if there is a log id registered for this document and public key already in the store.
     match store.get(author, document_id).await? {
         Some(expected_log_id) => {
             // If there is, check it matches the log id encoded in the entry.
@@ -79,13 +80,12 @@ pub async fn verify_log_id<S: StorageProvider>(
     Ok(())
 }
 
-// Get the _expected_ skiplink for the passed entry.
-//
-// This method retrieves the expected skiplink given the author, log and seq num
-// of an entry. It _does not_ verify that it matches the claimed skiplink
-// encoded on the passed entry.
-//
-// If the expected skiplink could not be found in the database an error is returned.
+/// Get the entry that _should_ be the skiplink target for the given author, log id and seq num.
+///
+/// This method determines the expected skiplink given an author, log id and sequence number. It
+/// _does not_ verify that this matches the skiplink encoded on any entry.
+///
+/// If the expected skiplink target could not be found in the database an error is returned.
 pub async fn get_expected_skiplink<S: StorageProvider>(
     store: &S,
     author: &Author,
@@ -96,21 +96,22 @@ pub async fn get_expected_skiplink<S: StorageProvider>(
         !seq_num.is_first(),
         anyhow!("Entry with seq num 1 can not have skiplink")
     );
-    // Derive the expected skiplink seq number from this entries claimed sequence number
+    // Derive the expected skiplink sequence number from the given sequence number.
     let expected_skiplink = match seq_num.skiplink_seq_num() {
         // Retrieve the expected skiplink from the database
         Some(seq_num) => {
             let expected_skiplink = store.get_entry_at_seq_num(author, log_id, &seq_num).await?;
             expected_skiplink
         }
-        // Or if there is no skiplink for entries at this sequence number return None
+
+        // Or if there is no skiplink for entries at this sequence number return `None`
         None => None,
     };
 
     ensure!(
         expected_skiplink.is_some(),
         anyhow!(
-            "Expected skiplink for {}, log id {} and seq num {} not found in database",
+            "Expected skiplink target for {}, log id {} and seq num {} not found in database",
             author,
             log_id.as_u64(),
             seq_num.as_u64()
@@ -123,8 +124,8 @@ pub async fn get_expected_skiplink<S: StorageProvider>(
 /// Ensure that a document is not deleted.
 ///
 /// Takes the following steps:
-/// - Retrieve all operations for the given document id
-/// - Ensure none of them contain a DELETE action
+/// - retrieve all operations for the given document id
+/// - ensure none of them contain a DELETE action
 pub async fn ensure_document_not_deleted<S: StorageProvider>(
     store: &S,
     document_id: &DocumentId,
@@ -141,8 +142,8 @@ pub async fn ensure_document_not_deleted<S: StorageProvider>(
 /// Retrieve the next log id for a given author.
 ///
 /// Takes the following steps:
-/// - Retrieve the latest log id for the given author
-/// - Safely increment it by 1
+/// - retrieve the latest log id for the given author
+/// - safely increment it by 1
 pub async fn next_log_id<S: StorageProvider>(store: &S, author: &Author) -> Result<LogId> {
     let latest_log_id = store.latest_log_id(author).await?;
 

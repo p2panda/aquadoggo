@@ -154,7 +154,7 @@ async fn insert_new_entries(
         // payload (operation).
         //
         // @TODO: This is not a great fit for replication, as it performs validation we either do
-        // not need or already done in a previous step. We plan to refactor this into a more
+        // not need or have already done in a previous step. We plan to refactor this into a more
         // modular set of methods which can definitely be used here more cleanly. For now, we do it
         // this way.
         //
@@ -205,7 +205,7 @@ async fn add_certpool_to_entries_for_verification(
     Ok(())
 }
 
-/// Helper method to inform other services (like materialization service) about new operations.
+/// Helper method to inform other services (like materialisation service) about new operations.
 fn send_new_entry_service_message(tx: ServiceSender, entry: &StorageEntry) {
     let bus_message = ServiceMessage::NewOperation(entry.entry_signed().hash().into());
 

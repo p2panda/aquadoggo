@@ -178,10 +178,10 @@ impl LogStore<StorageLog> for SqlStorage {
         Ok(next_log_id)
     }
 
-    /// Determines the latest log_id of an author.
+    /// Determines the latest `LogId` of an author.
     ///
-    /// Returns either the hightes found log_id for an author or None if no logs have
-    /// been published by the passed author.
+    /// Returns either the highest known `LogId` for an author or `None` if no logs are known from
+    /// the passed author.
     async fn latest_log_id(&self, author: &Author) -> Result<Option<LogId>, LogStorageError> {
         // Get all log ids from this author
         let mut result: Vec<String> = query_scalar(
