@@ -56,7 +56,7 @@ pub async fn verify_log_id<S: StorageProvider>(
             ensure!(
                 *claimed_log_id == expected_log_id,
                 anyhow!(
-                    "Entry's claimed log id of {} does not match expected log id of {} for given author and document",
+                    "Entry's claimed log id of {} does not match existing log id of {} for given author and document",
                     claimed_log_id.as_u64(),
                     expected_log_id.as_u64()
                 )
@@ -99,9 +99,10 @@ pub async fn get_expected_skiplink<S: StorageProvider>(
     // Derive the expected skiplink sequence number from the given sequence number.
     let expected_skiplink = match seq_num.skiplink_seq_num() {
         // Retrieve the expected skiplink from the database
-        Some(seq_num) => {
-            let expected_skiplink = store.get_entry_at_seq_num(author, log_id, &seq_num).await?;
-            expected_skiplink
+        Some(skiplink_seq_num) => {
+            store
+                .get_entry_at_seq_num(author, log_id, &skiplink_seq_num)
+                .await?
         }
 
         // Or if there is no skiplink for entries at this sequence number return `None`
@@ -233,11 +234,11 @@ mod tests {
     #[case::new_document(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(2), Some(random_document_id()))]
     #[case::existing_document_new_author(KeyPair::new(), LogId::new(0), None)]
     #[should_panic(
-        expected = "Entry's claimed log id of 1 does not match expected log id of 0 for given author and document"
+        expected = "Entry's claimed log id of 1 does not match existing log id of 0 for given author and document"
     )]
     #[case::already_occupied_log_id_for_existing_document(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(1), None)]
     #[should_panic(
-        expected = "Entry's claimed log id of 2 does not match expected log id of 0 for given author and document"
+        expected = "Entry's claimed log id of 2 does not match existing log id of 0 for given author and document"
     )]
     #[case::new_log_id_for_existing_document(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(2), None)]
     #[should_panic(
@@ -277,13 +278,13 @@ mod tests {
     #[case::expected_skiplink_is_in_store(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::default(), SeqNum::new(13).unwrap())]
     #[case::expected_skiplink_is_in_store_and_is_same_as_backlink(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::default(), SeqNum::new(4).unwrap())]
     #[should_panic(
-        expected = "Expected skiplink for <Author 53fc96>, log id 0 and seq num 20 not found in database"
+        expected = "Expected skiplink target for <Author 53fc96>, log id 0 and seq num 20 not found in database"
     )]
     #[case::skiplink_not_in_store(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::default(), SeqNum::new(20).unwrap())]
     #[should_panic]
     #[case::author_does_not_exist(KeyPair::new(), LogId::default(), SeqNum::new(5).unwrap())]
     #[should_panic(
-        expected = "Expected skiplink for <Author 53fc96>, log id 4 and seq num 7 not found in database"
+        expected = "Expected skiplink target for <Author 53fc96>, log id 4 and seq num 7 not found in database"
     )]
     #[case::log_id_is_wrong(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(4), SeqNum::new(7).unwrap())]
     #[should_panic(expected = "Entry with seq num 1 can not have skiplink")]

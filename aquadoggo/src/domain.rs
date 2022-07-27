@@ -489,7 +489,7 @@ mod tests {
     #[rstest]
     #[case::ok(&[(0, 8)], (0, 8))]
     #[should_panic(
-        expected = "Expected skiplink for <Author 53fc96>, log id 0 and seq num 8 not found in database"
+        expected = "Expected skiplink target for <Author 53fc96>, log id 0 and seq num 8 not found in database"
     )]
     #[case::skiplink_missing(&[(0, 4), (0, 8)], (0, 8))]
     #[should_panic(
@@ -846,7 +846,7 @@ mod tests {
         let result = next_args(&db.store, &public_key, Some(&document_view_id)).await;
         assert_eq!(
             result.unwrap_err().message.as_str(),
-            "Expected skiplink for <Author 53fc96>, log id 0 and seq num 8 not found in database"
+            "Expected skiplink target for <Author 53fc96>, log id 0 and seq num 8 not found in database"
         );
     }
 
@@ -854,11 +854,11 @@ mod tests {
     #[case::owner_publishes_update_to_correct_log(LogId::new(0), KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
     #[case::new_author_updates_to_new_log(LogId::new(0), KeyPair::new())]
     #[should_panic(
-        expected = "Entry's claimed log id of 1 does not match expected log id of 0 for given author and document"
+        expected = "Entry's claimed log id of 1 does not match existing log id of 0 for given author and document"
     )]
     #[case::owner_updates_to_wrong_and_taken_log(LogId::new(1), KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
     #[should_panic(
-        expected = "Entry's claimed log id of 2 does not match expected log id of 0 for given author and document"
+        expected = "Entry's claimed log id of 2 does not match existing log id of 0 for given author and document"
     )]
     #[case::owner_updates_to_wrong_but_free_log(LogId::new(2), KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
     #[should_panic(
