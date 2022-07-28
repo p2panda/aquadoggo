@@ -233,8 +233,6 @@ mod tests {
             let context = HttpServiceContext::new(db.store, tx);
             let response = context.schema.execute(publish_entry_request).await;
 
-            println!("{:#?}", response);
-
             assert_eq!(
                 response.data,
                 value!({
