@@ -159,7 +159,7 @@ mod tests {
     use p2panda_rs::schema::{FieldType, Schema, SchemaId};
     use p2panda_rs::test_utils::fixtures::schema;
 
-    use super::{load_static_schemas, save_static_schemas, StaticLeak};
+    use super::{load_static_schemas, save_static_schemas};
 
     #[rstest]
     fn save_and_load_schemas(#[from(schema)] schema_id: SchemaId) {

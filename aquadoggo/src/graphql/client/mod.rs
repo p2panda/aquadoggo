@@ -6,6 +6,8 @@ mod mutation;
 mod query;
 mod static_query;
 mod static_types;
+#[cfg(test)]
+mod tests;
 mod utils;
 
 pub use dynamic_query::DynamicQuery;
