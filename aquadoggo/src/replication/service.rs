@@ -150,7 +150,7 @@ async fn insert_new_entries(
     tx: ServiceSender,
 ) -> Result<()> {
     for entry in new_entries {
-        // Here we the method used to publish entries arriving from clients. They all contain a
+        // This is the method used to publish entries arriving from clients. They all contain a
         // payload (operation).
         //
         // @TODO: This is not a great fit for replication, as it performs validation we either do
