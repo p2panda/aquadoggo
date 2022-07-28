@@ -125,6 +125,9 @@ impl LogStore<StorageLog> for SqlStorage {
     }
 
     /// Determines the next unused log_id of an author.
+    ///
+    /// @TODO: This will be deprecated as functionality is replaced by
+    /// `latest_log_id + validated next log id methods.
     async fn next_log_id(&self, author: &Author) -> Result<LogId, LogStorageError> {
         // Get all log ids from this author
         let mut result: Vec<String> = query_scalar(
@@ -184,7 +187,7 @@ impl LogStore<StorageLog> for SqlStorage {
     /// the passed author.
     async fn latest_log_id(&self, author: &Author) -> Result<Option<LogId>, LogStorageError> {
         // Get all log ids from this author
-        let mut result: Vec<String> = query_scalar(
+        let result: Option<String> = query_scalar(
             "
             SELECT
                 log_id
@@ -192,37 +195,22 @@ impl LogStore<StorageLog> for SqlStorage {
                 logs
             WHERE
                 author = $1
+            ORDER BY
+                CAST(log_id AS NUMERIC) DESC LIMIT 1
             ",
         )
         .bind(author.as_str())
-        .fetch_all(&self.pool)
+        .fetch_optional(&self.pool)
         .await
         .map_err(|e| LogStorageError::Custom(e.to_string()))?;
 
-        if result.is_empty() {
-            return Ok(None);
-        }
+        // Convert strings representing u64 integers to `LogId` instances
+        let log_id: Option<LogId> = result.map(|str| {
+            str.parse()
+                .unwrap_or_else(|_| panic!("Corrupt u64 integer found in database: '{0}'", &str))
+        });
 
-        // Convert all strings representing u64 integers to `LogId` instances
-        let mut log_ids: Vec<LogId> = result
-            .iter_mut()
-            .map(|str| {
-                str.parse().unwrap_or_else(|_| {
-                    panic!("Corrupt u64 integer found in database: '{0}'", &str)
-                })
-            })
-            .collect();
-
-        // The log id selection below expects log ids in sorted order. We can't easily use SQL
-        // for this because log IDs are stored as `VARCHAR`, which doesn't sort numbers correctly.
-        // A good solution would not require reading all existing log ids to find the next
-        // available one. See this issue: https://github.com/p2panda/aquadoggo/issues/67
-        log_ids.sort();
-
-        // Unwrap as we checked above for empty an empty vector case.
-        let latest_log_id = log_ids.last().unwrap();
-
-        Ok(Some(latest_log_id.to_owned()))
+        Ok(log_id)
     }
 }
 
