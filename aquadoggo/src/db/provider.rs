@@ -113,7 +113,7 @@ mod tests {
     use p2panda_rs::operation::{AsOperation, OperationId};
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
-    use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
+    use p2panda_rs::test_utils::constants::SCHEMA_ID;
     use p2panda_rs::test_utils::fixtures::random_document_view_id;
     use rstest::rstest;
 
@@ -125,7 +125,7 @@ mod tests {
         let author = Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
         let entry = db
             .store
-            .get_entry_at_seq_num(&author, &LogId::new(1), &SeqNum::new(1).unwrap())
+            .get_entry_at_seq_num(&author, &LogId::new(0), &SeqNum::new(1).unwrap())
             .await
             .unwrap()
             .unwrap();
@@ -140,7 +140,7 @@ mod tests {
         );
         let result = db
             .store
-            .insert_document_view(&document_view, &SchemaId::from_str(TEST_SCHEMA_ID).unwrap())
+            .insert_document_view(&document_view, &SchemaId::from_str(SCHEMA_ID).unwrap())
             .await;
 
         assert!(result.is_ok());
@@ -150,7 +150,7 @@ mod tests {
     #[rstest]
     fn test_get_schema_for_view(
         #[from(test_db)]
-        #[with(1, 1)]
+        #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
@@ -169,7 +169,7 @@ mod tests {
     fn test_get_schema_for_missing_view(
         random_document_view_id: DocumentViewId,
         #[from(test_db)]
-        #[with(1, 1)]
+        #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {

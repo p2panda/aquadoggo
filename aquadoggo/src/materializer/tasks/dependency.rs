@@ -540,7 +540,7 @@ mod tests {
                     OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
                         // The view_id for a schema field which exists in the database. Can be
                         // recreated from variable `schema_field_document_id` in the task below.
-                        "0020a2bc0748f3b18627a6aae09ae392561c357a2995528373e730a4d90b73d8c072"
+                        "0020d9cae33aed5742e06a24801195999e105e73081c474d8b25e988787c2ada025f"
                             .parse().unwrap(),
                     ])),
                 ),
@@ -588,6 +588,8 @@ mod tests {
             // The document id for the schema_field_definition who's operation already exists in
             // the store.
             let schema_field_document_id = db.test_data.documents.first().unwrap();
+
+            println!("THIS {}", schema_field_document_id.as_str());
 
             // Materialise the schema field definition.
             let input = TaskInput::new(Some(schema_field_document_id.to_owned()), None);

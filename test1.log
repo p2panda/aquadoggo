@@ -1,0 +1,37 @@
+   Compiling aquadoggo v0.3.0 (/Users/work/code/zoo/aquadoggo/aquadoggo)
+   Compiling aquadoggo_cli v0.1.0 (/Users/work/code/zoo/aquadoggo/aquadoggo_cli)
+    Finished test [unoptimized + debuginfo] target(s) in 9.61s
+     Running unittests src/lib.rs (target/debug/deps/aquadoggo-0d91807bd1dfbe74)
+
+running 1 test
+-------------- TEST START --------------
+THIS 0020d9cae33aed5742e06a24801195999e105e73081c474d8b25e988787c2ada025f
+[2022-07-28T09:12:43Z DEBUG aquadoggo::materializer::tasks::reduce] Working on <TaskInput da025f/->
+[2022-07-28T09:12:43Z INFO  aquadoggo::materializer::tasks::reduce] Stored <Document da025f> view da025f
+[2022-07-28T09:12:43Z DEBUG aquadoggo::materializer::tasks::reduce] Dispatch dependency task for view with id: da025f
+[2022-07-28T09:12:43Z DEBUG aquadoggo::materializer::tasks::reduce] Working on <TaskInput -/7d7e52>
+[2022-07-28T09:12:43Z DEBUG aquadoggo::materializer::tasks::reduce] Find document for view with id: 7d7e52
+[2022-07-28T09:12:43Z DEBUG aquadoggo::materializer::tasks::reduce] Document materialized to view with id: 7d7e52
+[2022-07-28T09:12:43Z INFO  aquadoggo::materializer::tasks::reduce] Stored <Document 7d7e52> view 7d7e52
+[2022-07-28T09:12:43Z DEBUG aquadoggo::materializer::tasks::reduce] Dispatch dependency task for view with id: 7d7e52
+[2022-07-28T09:12:43Z DEBUG aquadoggo::materializer::tasks::dependency] Working on <TaskInput -/7d7e52>
+[2022-07-28T09:12:43Z DEBUG aquadoggo::materializer::tasks::dependency] Document view retrieved from storage with id: 7d7e52
+[2022-07-28T09:12:43Z DEBUG aquadoggo::materializer::tasks::dependency] Pinned relation list field found containing view id: d8c072
+[2022-07-28T09:12:43Z DEBUG aquadoggo::materializer::tasks::dependency] Get view for pinned relation with id: d8c072
+[2022-07-28T09:12:43Z DEBUG aquadoggo::materializer::tasks::dependency] No view found for pinned relation: d8c072
+[2022-07-28T09:12:43Z DEBUG aquadoggo::materializer::tasks::dependency] Scheduling 1 reduce tasks
+thread 'materializer::tasks::dependency::tests::dispatches_schema_tasks_for_schema_definitions::case_1_schema_definition_with_dependencies_met_dispatches_one_schema_task' panicked at 'assertion failed: `(left == right)`
+  left: `0`,
+ right: `1`', aquadoggo/src/materializer/tasks/dependency.rs:615:13
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+thread 'materializer::tasks::dependency::tests::dispatches_schema_tasks_for_schema_definitions::case_1_schema_definition_with_dependencies_met_dispatches_one_schema_task' panicked at 'called `Result::unwrap()` on an `Err` value: JoinError::Panic(Id(14), ...)', aquadoggo/src/db/stores/test_utils.rs:294:20
+test materializer::tasks::dependency::tests::dispatches_schema_tasks_for_schema_definitions::case_1_schema_definition_with_dependencies_met_dispatches_one_schema_task ... FAILED
+
+failures:
+
+failures:
+    materializer::tasks::dependency::tests::dispatches_schema_tasks_for_schema_definitions::case_1_schema_definition_with_dependencies_met_dispatches_one_schema_task
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 131 filtered out; finished in 0.05s
+
+error: test failed, to rerun pass '-p aquadoggo --lib'
