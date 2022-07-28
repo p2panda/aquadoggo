@@ -13,7 +13,7 @@ use crate::graphql::scalars::{
 const DOCUMENT_ID_FIELD: &str = "documentId";
 
 /// Name of the field for accessing the document's view id.
-const DOCUMENT_VIEW_ID_FIELD: &str = "documentViewId";
+const VIEW_ID_FIELD: &str = "viewId";
 
 /// The GraphQL type for generic document metadata.
 pub struct DocumentMetaType;
@@ -42,9 +42,9 @@ impl DocumentMetaType {
         DocumentViewIdScalar::create_type_info(registry);
 
         fields.insert(
-            DOCUMENT_VIEW_ID_FIELD.to_string(),
+            VIEW_ID_FIELD.to_string(),
             metafield(
-                DOCUMENT_VIEW_ID_FIELD,
+                VIEW_ID_FIELD,
                 Some("The specific document view id contained in this response object."),
                 &*DocumentViewIdScalar::type_name(),
             ),
@@ -80,9 +80,9 @@ impl DocumentMetaType {
                 );
             }
 
-            if meta_field.name() == DOCUMENT_VIEW_ID_FIELD && view_id.is_some() {
+            if meta_field.name() == VIEW_ID_FIELD && view_id.is_some() {
                 meta_fields.insert(
-                    Name::new(DOCUMENT_VIEW_ID_FIELD),
+                    Name::new(VIEW_ID_FIELD),
                     Value::String(view_id.unwrap().as_str().to_string()),
                 );
             }
