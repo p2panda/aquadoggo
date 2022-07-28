@@ -6,7 +6,7 @@ use async_graphql::indexmap::IndexMap;
 use async_graphql::parser::types::Field;
 
 use async_graphql::{
-    ContainerType, Name, SelectionField, ServerError, ServerResult, Value, Context,
+    ContainerType, Context, Name, SelectionField, ServerError, ServerResult, Value,
 };
 use async_recursion::async_recursion;
 use async_trait::async_trait;
@@ -26,7 +26,13 @@ use crate::schema::SchemaProvider;
 
 use crate::graphql::client::utils::validate_view_matches_schema;
 
-/// Container object that injects registered p2panda schemas when it is added to a GraphQL schema.
+/// Resolves queries for documents based on p2panda schemas.
+///
+/// Implements [`ContainerType`] to be able to resolve arbitrary fields selected by a query on the
+/// root GraphQL schema.
+///
+/// This implementation always has to match what is defined by the
+/// [`dynamic_output_type`][`crate::graphql::client::dynamic_types::dynamic_output_type`] module.
 #[derive(Debug, Default)]
 pub struct DynamicQuery;
 
@@ -37,10 +43,7 @@ impl ContainerType for DynamicQuery {
     ///
     /// - `<SchemaId>` - query a single document
     /// - `all_<SchemaId>` - query a listing of documents
-    async fn resolve_field(
-        &self,
-        ctx: &Context<'_>,
-    ) -> ServerResult<Option<Value>> {
+    async fn resolve_field(&self, ctx: &Context<'_>) -> ServerResult<Option<Value>> {
         let field_name = ctx.field().name();
 
         // Optimistically parse as listing query if field name begins with `all_` (it might still
