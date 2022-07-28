@@ -340,9 +340,9 @@ pub fn with_db_manager_teardown<F: AsyncTestFnWithManager + Send + Sync + 'stati
 
 /// Fixture for constructing a storage provider instance backed by a pre-populated database.
 ///
-/// Returns a `TestDatabaseRunner` which allows to bootstrap a safe async test environment
-/// connecting to a database. It makes sure the runner disconnects properly from the connection
-/// pool after the test succeeded or even failed.
+/// Returns a `TestDatabaseRunner` that bootstraps a safe async test environment connecting to a
+/// database. It makes sure the runner disconnects properly from the connection pool after the test
+/// succeeded or even failed.
 ///
 /// Passed parameters define what the database should contain. The first entry in each log contains
 /// a valid CREATE operation following entries contain duplicate UPDATE operations. If the

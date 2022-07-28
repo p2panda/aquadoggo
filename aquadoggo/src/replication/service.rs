@@ -284,6 +284,7 @@ mod tests {
     };
     use crate::http::http_service;
     use crate::replication::ReplicationConfiguration;
+    use crate::schema::SchemaProvider;
     use crate::test_helpers::shutdown_handle;
     use crate::Configuration;
 
@@ -320,6 +321,7 @@ mod tests {
                     http_port: 3022,
                     ..Configuration::default()
                 },
+                SchemaProvider::default(),
             );
 
             let http_server_billie = task::spawn(async {
@@ -353,7 +355,8 @@ mod tests {
                 ..Configuration::default()
             };
             let ada_db = db_manager.create("sqlite::memory:").await;
-            let context_ada = Context::new(ada_db.store.clone(), config_ada);
+            let context_ada =
+                Context::new(ada_db.store.clone(), config_ada, SchemaProvider::default());
             let tx_ada = tx.clone();
             let shutdown_ada = shutdown_handle();
 
