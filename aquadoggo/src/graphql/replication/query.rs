@@ -162,12 +162,10 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::random_hash;
     use rstest::rstest;
 
-    use crate::db::{
-        provider::SqlStorage,
-        stores::test_utils::{
-            populate_test_db, test_db, with_db_manager_teardown, PopulateDatabaseConfig,
-            TestDatabase, TestDatabaseManager, TestDatabaseRunner,
-        },
+    use crate::db::provider::SqlStorage;
+    use crate::db::stores::test_utils::{
+        populate_test_db, test_db, with_db_manager_teardown, PopulateDatabaseConfig, TestDatabase,
+        TestDatabaseManager, TestDatabaseRunner,
     };
 
     use super::ReplicationRoot;
