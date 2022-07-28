@@ -144,7 +144,8 @@ impl<T> StaticLeak<T> {
     ///
     /// 2. Make sure you do not refer to it anymore _after_ you've dropped the `StaticLeak`
     ///    instance.
-    pub fn unsafe_value(&self) -> &'static T {
+    #[allow(unsafe_code)]
+    pub unsafe fn unsafe_value(&self) -> &'static T {
         self.inner
     }
 }
