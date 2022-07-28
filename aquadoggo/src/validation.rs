@@ -92,10 +92,6 @@ pub async fn get_expected_skiplink<S: StorageProvider>(
     log_id: &LogId,
     seq_num: &SeqNum,
 ) -> Result<S::StorageEntry> {
-    ensure!(
-        !seq_num.is_first(),
-        anyhow!("Entry with seq num 1 can not have skiplink")
-    );
     // Derive the expected skiplink sequence number from the given sequence number.
     let expected_skiplink = match seq_num.skiplink_seq_num() {
         // Retrieve the expected skiplink from the database
@@ -105,8 +101,8 @@ pub async fn get_expected_skiplink<S: StorageProvider>(
                 .await?
         }
 
-        // Or if there is no skiplink for entries at this sequence number return `None`
-        None => None,
+        // Only entries at seq num 1 have now lipmaa link, so we error here.
+        None => return Err(anyhow!("Entry with seq num 1 can not have skiplink")),
     };
 
     ensure!(
