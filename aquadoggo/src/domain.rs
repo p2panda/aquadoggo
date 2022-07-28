@@ -249,7 +249,7 @@ pub async fn publish<S: StorageProvider>(
     // validate_operation_against_schema(store, operation.operation()).await?;
 
     //////////////////////////
-    // DETERINE DOCUMENT ID //
+    // DETERMINE DOCUMENT ID //
     //////////////////////////
 
     let document_id = match operation.action() {
