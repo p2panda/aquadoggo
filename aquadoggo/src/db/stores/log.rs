@@ -204,7 +204,7 @@ impl LogStore<StorageLog> for SqlStorage {
         .await
         .map_err(|e| LogStorageError::Custom(e.to_string()))?;
 
-        // Convert strings representing u64 integers to `LogId` instances
+        // Convert string representing u64 integers to `LogId` instance
         let log_id: Option<LogId> = result.map(|str| {
             str.parse()
                 .unwrap_or_else(|_| panic!("Corrupt u64 integer found in database: '{0}'", &str))
