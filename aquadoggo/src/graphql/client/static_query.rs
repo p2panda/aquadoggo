@@ -92,7 +92,7 @@ mod tests {
                 received_entry_args.data,
                 value!({
                     "nextEntryArgs": {
-                        "logId": "1",
+                        "logId": "0",
                         "seqNum": "1",
                         "backlink": null,
                         "skiplink": null,
