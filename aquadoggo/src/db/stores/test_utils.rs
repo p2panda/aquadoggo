@@ -14,7 +14,7 @@ use p2panda_rs::operation::{
 };
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::{OperationStore, StorageProvider};
-use p2panda_rs::test_utils::constants::{DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
+use p2panda_rs::test_utils::constants::{PRIVATE_KEY, SCHEMA_ID};
 use p2panda_rs::test_utils::fixtures::{operation, operation_fields};
 use rstest::fixture;
 use sqlx::migrate::MigrateDatabase;
@@ -90,7 +90,7 @@ pub fn doggo_test_fields() -> Vec<(&'static str, OperationValue)> {
 
 /// Helper for creating many key_pairs.
 pub fn test_key_pairs(no_of_authors: usize) -> Vec<KeyPair> {
-    let mut key_pairs = vec![KeyPair::from_private_key_str(DEFAULT_PRIVATE_KEY).unwrap()];
+    let mut key_pairs = vec![KeyPair::from_private_key_str(PRIVATE_KEY).unwrap()];
 
     for _index in 1..no_of_authors {
         key_pairs.push(KeyPair::new())
@@ -232,7 +232,7 @@ impl Default for PopulateDatabaseConfig {
             no_of_logs: 0,
             no_of_authors: 0,
             with_delete: false,
-            schema: TEST_SCHEMA_ID.parse().unwrap(),
+            schema: SCHEMA_ID.parse().unwrap(),
             create_operation_fields: doggo_test_fields(),
             update_operation_fields: doggo_test_fields(),
         }
@@ -358,7 +358,7 @@ pub fn test_db(
     // A boolean flag for wether all logs should contain a delete operation
     #[default(false)] with_delete: bool,
     // The schema used for all operations in the db
-    #[default(TEST_SCHEMA_ID.parse().unwrap())] schema: SchemaId,
+    #[default(SCHEMA_ID.parse().unwrap())] schema: SchemaId,
     // The fields used for every CREATE operation
     #[default(doggo_test_fields())] create_operation_fields: Vec<(&'static str, OperationValue)>,
     // The fields used for every UPDATE operation

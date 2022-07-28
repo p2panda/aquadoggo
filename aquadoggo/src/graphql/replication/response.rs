@@ -109,7 +109,7 @@ mod tests {
 
             let latest_entry_hash = db
                 .store
-                .get_latest_entry(&author, &LogId::new(1))
+                .get_latest_entry(&author, &LogId::default())
                 .await
                 .unwrap()
                 .unwrap()

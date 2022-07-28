@@ -327,7 +327,7 @@ mod tests {
     use p2panda_rs::operation::{AsOperation, Operation, OperationId, OperationValue};
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, OperationStore};
-    use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
+    use p2panda_rs::test_utils::constants::SCHEMA_ID;
     use p2panda_rs::test_utils::fixtures::{
         operation, random_document_view_id, random_operation_id,
     };
@@ -380,7 +380,7 @@ mod tests {
             // Get one entry from the pre-polulated db
             let entry = db
                 .store
-                .get_entry_at_seq_num(&author, &LogId::new(1), &SeqNum::new(1).unwrap())
+                .get_entry_at_seq_num(&author, &LogId::default(), &SeqNum::new(1).unwrap())
                 .await
                 .unwrap()
                 .unwrap();
@@ -399,7 +399,7 @@ mod tests {
             // Insert into db
             let result = db
                 .store
-                .insert_document_view(&document_view, &SchemaId::from_str(TEST_SCHEMA_ID).unwrap())
+                .insert_document_view(&document_view, &SchemaId::from_str(SCHEMA_ID).unwrap())
                 .await;
 
             assert!(result.is_ok());
@@ -449,13 +449,13 @@ mod tests {
     #[rstest]
     fn inserts_gets_many_document_views(
         #[from(test_db)]
-        #[with(10, 1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::Text("panda".into()))], vec![("username", OperationValue::Text("PANDA".into()))])]
+        #[with(10, 1, 1, false, SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::Text("panda".into()))], vec![("username", OperationValue::Text("PANDA".into()))])]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
             let author =
                 Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
-            let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
+            let schema_id = SchemaId::from_str(SCHEMA_ID).unwrap();
 
             let log_id = LogId::default();
             let seq_num = SeqNum::default();
@@ -521,7 +521,7 @@ mod tests {
 
             let result = db
                 .store
-                .insert_document_view(&document_view, &SchemaId::from_str(TEST_SCHEMA_ID).unwrap())
+                .insert_document_view(&document_view, &SchemaId::from_str(SCHEMA_ID).unwrap())
                 .await;
 
             assert!(result.is_err());
@@ -672,7 +672,7 @@ mod tests {
 
             let document_views = db
                 .store
-                .get_documents_by_schema(&TEST_SCHEMA_ID.parse().unwrap())
+                .get_documents_by_schema(&SCHEMA_ID.parse().unwrap())
                 .await
                 .unwrap();
 
@@ -718,11 +718,11 @@ mod tests {
     #[rstest]
     fn gets_documents_by_schema(
         #[from(test_db)]
-        #[with(10, 2, 1, false, TEST_SCHEMA_ID.parse().unwrap())]
+        #[with(10, 2, 1, false, SCHEMA_ID.parse().unwrap())]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let schema_id = SchemaId::from_str(TEST_SCHEMA_ID).unwrap();
+            let schema_id = SchemaId::from_str(SCHEMA_ID).unwrap();
 
             for document_id in &db.test_data.documents {
                 let document_operations = db

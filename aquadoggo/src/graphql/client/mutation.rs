@@ -84,16 +84,19 @@ mod tests {
     use std::convert::TryFrom;
 
     use async_graphql::{value, Request, Variables};
+    use ciborium::cbor;
+    use ciborium::value::Value;
+    use once_cell::sync::Lazy;
     use p2panda_rs::document::DocumentId;
-    use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned};
+    use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned, LogId, SeqNum};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::{Operation, OperationEncoded, OperationValue};
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, StorageProvider};
-    use p2panda_rs::test_utils::constants::{DEFAULT_HASH, DEFAULT_PRIVATE_KEY, TEST_SCHEMA_ID};
+    use p2panda_rs::test_utils::constants::{HASH, PRIVATE_KEY, SCHEMA_ID};
     use p2panda_rs::test_utils::fixtures::{
-        create_operation, delete_operation, entry_signed_encoded_unvalidated, key_pair, operation,
-        operation_encoded, operation_fields, random_hash, update_operation,
+        create_operation, delete_operation, entry_signed_encoded, entry_signed_encoded_unvalidated,
+        key_pair, operation, operation_encoded, operation_fields, random_hash, update_operation,
     };
     use rstest::{fixture, rstest};
     use serde_json::json;
@@ -107,18 +110,11 @@ mod tests {
     use crate::schema::SchemaProvider;
     use crate::test_helpers::TestClient;
 
-    const ENTRY_ENCODED: &str = "00bedabb435758855968b3e2de2aa1f653adfbb392fcf9cb2295a68b2eca3c\
-                                 fb030101a200204b771d59d76e820cbae493682003e99b795e4e7c86a8d6b4\
-                                 c9ad836dc4c9bf1d3970fb39f21542099ba2fbfd6ec5076152f26c02445c62\
-                                 1b43a7e2898d203048ec9f35d8c2a1547f2b83da8e06cadd8a60bb45d3b500\
-                                 451e63f7cccbcbd64d09";
-
-    const OPERATION_ENCODED: &str = "a466616374696f6e6663726561746566736368656d61784a76656e7565\
-                                     5f30303230633635353637616533376566656132393365333461396337\
-                                     6431336638663262663233646264633362356337623961623436323933\
-                                     31313163343866633738626776657273696f6e01666669656c6473a167\
-                                     6d657373616765a26474797065637374726576616c7565764f68682c20\
-                                     6d79206669727374206d65737361676521";
+    fn to_hex(value: Value) -> String {
+        let mut cbor_bytes = Vec::new();
+        ciborium::ser::into_writer(&value, &mut cbor_bytes).unwrap();
+        hex::encode(cbor_bytes)
+    }
 
     const PUBLISH_ENTRY_QUERY: &str = r#"
         mutation TestPublishEntry($entry: String!, $operation: String!) {
@@ -130,16 +126,85 @@ mod tests {
             }
         }"#;
 
-    const UPDATE_OPERATION_NO_PREVIOUS_OPS: &str = "A466616374696F6E6675706461746566736368656D617849636861745F30303230633635353637616533376566656132393365333461396337643133663866326266323364626463336235633762396162343632393331313163343866633738626776657273696F6E01666669656C6473A1676D657373616765A26474797065637374726576616C7565764F68682C206D79206669727374206D65737361676521";
+    pub static ENTRY_ENCODED: Lazy<String> = Lazy::new(|| {
+        entry_signed_encoded(
+            Entry::new(
+                &LogId::default(),
+                Some(&Operation::from(
+                    &OperationEncoded::new(&OPERATION_ENCODED).unwrap(),
+                )),
+                None,
+                None,
+                &SeqNum::default(),
+            )
+            .unwrap(),
+            key_pair(PRIVATE_KEY),
+        )
+        .as_str()
+        .to_string()
+    });
 
-    const CREATE_OPERATION_WITH_PREVIOUS_OPS: &str = "A566616374696F6E6663726561746566736368656D617849636861745F30303230633635353637616533376566656132393365333461396337643133663866326266323364626463336235633762396162343632393331313163343866633738626776657273696F6E017370726576696F75735F6F7065726174696F6E738178443030323036356637346636666438316562316261653139656230643864636531343566616136613536643762343037366437666261343338353431303630396232626165666669656C6473A1676D657373616765A26474797065637374726576616C75657357686963682049206E6F77207570646174652E";
+    pub static OPERATION_ENCODED: Lazy<String> = Lazy::new(|| {
+        to_hex(cbor!({
+        "action" => "create",
+        "schema" => "chat_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b",
+        "version" => 1,
+        "fields" => {
+          "message" => {
+            "type" => "str",
+            "value" => "Ohh, my first message!"
+          }
+        }
+      }).unwrap())
+    });
 
-    const DELETE_OPERATION_NO_PREVIOUS_OPS: &str = "A366616374696F6E6664656C65746566736368656D617849636861745F30303230633635353637616533376566656132393365333461396337643133663866326266323364626463336235633762396162343632393331313163343866633738626776657273696F6E01";
+    pub static CREATE_OPERATION_WITH_PREVIOUS_OPS: Lazy<String> = Lazy::new(|| {
+        to_hex(cbor!({
+            "action" => "create",
+            "schema" => "chat_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b",
+            "version" => 1,
+            "previous_operations" => [
+              "002065f74f6fd81eb1bae19eb0d8dce145faa6a56d7b4076d7fba4385410609b2bae"
+            ],
+            "fields" => {
+              "message" => {
+                "type" => "str",
+                "value" => "Which I now update."
+              }
+            }
+        })
+        .unwrap())
+    });
+
+    pub static UPDATE_OPERATION_NO_PREVIOUS_OPS: Lazy<String> = Lazy::new(|| {
+        to_hex(cbor!({
+            "action" => "update",
+            "schema" => "chat_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b",
+            "version" => 1,
+            "fields" => {
+              "message" => {
+                "type" => "str",
+                "value" => "Ohh, my first message!"
+              }
+            }
+        }).unwrap())
+    });
+
+    pub static DELETE_OPERATION_NO_PREVIOUS_OPS: Lazy<String> = Lazy::new(|| {
+        to_hex(
+        cbor!({
+          "action" => "delete",
+          "schema" => "chat_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b",
+          "version" => 1
+        })
+        .unwrap(),
+    )
+    });
 
     #[fixture]
     fn publish_entry_request(
-        #[default(ENTRY_ENCODED)] entry_encoded: &str,
-        #[default(OPERATION_ENCODED)] operation_encoded: &str,
+        #[default(&ENTRY_ENCODED)] entry_encoded: &str,
+        #[default(&OPERATION_ENCODED)] operation_encoded: &str,
     ) -> Request {
         // Prepare GraphQL mutation publishing an entry
         let parameters = Variables::from_value(value!({
@@ -164,9 +229,9 @@ mod tests {
                 response.data,
                 value!({
                     "publishEntry": {
-                        "logId": "1",
+                        "logId": "0",
                         "seqNum": "2",
-                        "backlink": "00201c221b573b1e0c67c5e2c624a93419774cdf46b3d62414c44a698df1237b1c16",
+                        "backlink": "0020c096422b3c865e5b85ec67a82d5c1d19de43d57c4a3d902ea62b90d96ad32fda",
                         "skiplink": null,
                     }
                 })
@@ -188,7 +253,7 @@ mod tests {
             context.schema.execute(publish_entry_request).await;
 
             // Find out hash of test entry to determine operation id
-            let entry_encoded = EntrySigned::new(ENTRY_ENCODED).unwrap();
+            let entry_encoded = EntrySigned::new(&ENTRY_ENCODED).unwrap();
 
             // Expect receiver to receive sent message
             let message = rx.recv().await.unwrap();
@@ -208,7 +273,7 @@ mod tests {
             let context = HttpServiceContext::new(manager);
 
             let parameters = Variables::from_value(value!({
-                "entry": ENTRY_ENCODED,
+                "entry": ENTRY_ENCODED.to_string(),
                 "operation": "".to_string()
             }));
             let request = Request::new(PUBLISH_ENTRY_QUERY).variables(parameters);
@@ -249,9 +314,9 @@ mod tests {
                 json!({
                     "data": {
                         "publishEntry": {
-                            "logId": "1",
+                            "logId": "0",
                             "seqNum": "2",
-                            "backlink": "00201c221b573b1e0c67c5e2c624a93419774cdf46b3d62414c44a698df1237b1c16",
+                            "backlink": "0020c096422b3c865e5b85ec67a82d5c1d19de43d57c4a3d902ea62b90d96ad32fda",
                             "skiplink": null
                         }
                     }
@@ -265,26 +330,26 @@ mod tests {
     #[case::invalid_entry_bytes("AB01", "", "Could not decode author public key from bytes")]
     #[case::invalid_entry_hex_encoding(
         "-/74='4,.=4-=235m-0   34.6-3",
-        OPERATION_ENCODED,
+        &OPERATION_ENCODED,
         "invalid hex encoding in entry"
     )]
     #[case::no_operation(
-        ENTRY_ENCODED,
+        &ENTRY_ENCODED,
         "",
         "operation needs to match payload hash of encoded entry"
     )]
     #[case::invalid_operation_bytes(
-        ENTRY_ENCODED,
+        &ENTRY_ENCODED,
         "AB01",
         "operation needs to match payload hash of encoded entry"
     )]
     #[case::invalid_operation_hex_encoding(
-        ENTRY_ENCODED,
+        &ENTRY_ENCODED,
         "0-25.-%5930n3544[{{{   @@@",
         "invalid hex encoding in operation"
     )]
     #[case::operation_does_not_match(
-        ENTRY_ENCODED,
+        &ENTRY_ENCODED,
         &{operation_encoded(
             Some(
                 operation_fields(
@@ -298,126 +363,126 @@ mod tests {
     )]
     #[case::valid_entry_with_extra_hex_char_at_end(
         &{ENTRY_ENCODED.to_string() + "A"},
-        OPERATION_ENCODED,
+        &OPERATION_ENCODED,
         "invalid hex encoding in entry"
     )]
     #[case::valid_entry_with_extra_hex_char_at_start(
-        &{"A".to_string() + ENTRY_ENCODED},
-        OPERATION_ENCODED,
+        &{"A".to_string() + &ENTRY_ENCODED},
+        &OPERATION_ENCODED,
         "invalid hex encoding in entry"
     )]
     #[case::should_not_have_skiplink(
         &entry_signed_encoded_unvalidated(
             1,
-            1,
+            0,
             None,
             Some(random_hash()),
-            Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
+            key_pair(PRIVATE_KEY)
         ),
-        OPERATION_ENCODED,
+        &OPERATION_ENCODED,
         "Could not decode payload hash DecodeError"
     )]
     #[case::should_not_have_backlink(
         &entry_signed_encoded_unvalidated(
             1,
-            1,
+            0,
             Some(random_hash()),
             None,
-            Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
+            key_pair(PRIVATE_KEY)
         ),
-        OPERATION_ENCODED,
+        &OPERATION_ENCODED,
         "Could not decode payload hash DecodeError"
     )]
     #[case::should_not_have_backlink_or_skiplink(
         &entry_signed_encoded_unvalidated(
             1,
-            1,
-            Some(DEFAULT_HASH.parse().unwrap()),
-            Some(DEFAULT_HASH.parse().unwrap()),
-            Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())) ,
-            key_pair(DEFAULT_PRIVATE_KEY)
+            0,
+            Some(HASH.parse().unwrap()),
+            Some(HASH.parse().unwrap()),
+            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())) ,
+            key_pair(PRIVATE_KEY)
         ),
-        OPERATION_ENCODED,
+        &OPERATION_ENCODED,
         "Could not decode payload hash DecodeError"
     )]
     #[case::missing_backlink(
         &entry_signed_encoded_unvalidated(
             2,
-            1,
+            0,
             None,
             None,
-            Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
+            key_pair(PRIVATE_KEY)
         ),
-        OPERATION_ENCODED,
+        &OPERATION_ENCODED,
         "Could not decode backlink yamf hash: DecodeError"
     )]
     #[case::missing_skiplink(
         &entry_signed_encoded_unvalidated(
             8,
-            1,
+            0,
             Some(random_hash()),
             None,
-            Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
+            key_pair(PRIVATE_KEY)
         ),
-        OPERATION_ENCODED,
+        &OPERATION_ENCODED,
         "Could not decode backlink yamf hash: DecodeError"
     )]
     #[case::should_not_include_skiplink(
         &entry_signed_encoded_unvalidated(
             14,
-            1,
-            Some(DEFAULT_HASH.parse().unwrap()),
-            Some(DEFAULT_HASH.parse().unwrap()),
-            Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            0,
+            Some(HASH.parse().unwrap()),
+            Some(HASH.parse().unwrap()),
+            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
+            key_pair(PRIVATE_KEY)
         ),
-        OPERATION_ENCODED,
+        &OPERATION_ENCODED,
         "Could not decode payload hash DecodeError"
     )]
     #[case::payload_hash_and_size_missing(
         &entry_signed_encoded_unvalidated(
             14,
-            1,
+            0,
             Some(random_hash()),
-            Some(DEFAULT_HASH.parse().unwrap()),
+            Some(HASH.parse().unwrap()),
             None,
-            key_pair(DEFAULT_PRIVATE_KEY)
+            key_pair(PRIVATE_KEY)
         ),
-        OPERATION_ENCODED,
+        &OPERATION_ENCODED,
         "Could not decode payload hash DecodeError"
     )]
     #[case::backlink_and_skiplink_not_in_db(
         &entry_signed_encoded_unvalidated(
             8,
-            1,
-            Some(DEFAULT_HASH.parse().unwrap()),
+            0,
+            Some(HASH.parse().unwrap()),
             Some(Hash::new_from_bytes(vec![2, 3, 4]).unwrap()),
-            Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
+            key_pair(PRIVATE_KEY)
         ),
-        OPERATION_ENCODED,
-        "Could not find expected backlink in database for entry with id: <Hash f7c017>"
+        &OPERATION_ENCODED,
+        "Could not find expected backlink in database for entry with id: <Hash 640c8a>"
     )]
     #[case::backlink_not_in_db(
         &entry_signed_encoded_unvalidated(
             2,
-            1,
-            Some(DEFAULT_HASH.parse().unwrap()),
+            0,
+            Some(HASH.parse().unwrap()),
             None,
-            Some(Operation::from(&OperationEncoded::new(OPERATION_ENCODED).unwrap())),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
+            key_pair(PRIVATE_KEY)
         ),
-        OPERATION_ENCODED,
-        "Could not find expected backlink in database for entry with id: <Hash d3832b>"
+        &OPERATION_ENCODED,
+        "Could not find expected backlink in database for entry with id: <Hash b2ebed>"
     )]
     #[case::previous_operations_not_in_db(
         &entry_signed_encoded_unvalidated(
             1,
-            1,
+            0,
             None,
             None,
             Some(
@@ -427,11 +492,11 @@ mod tests {
                             vec![("silly", OperationValue::Text("Sausage".to_string()))]
                         )
                     ),
-                    Some(DEFAULT_HASH.parse().unwrap()),
+                    Some(HASH.parse().unwrap()),
                     None
                 )
             ),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            key_pair(PRIVATE_KEY)
         ),
         &{operation_encoded(
                 Some(
@@ -439,46 +504,46 @@ mod tests {
                         vec![("silly", OperationValue::Text("Sausage".to_string()))]
                     )
                 ),
-                Some(DEFAULT_HASH.parse().unwrap()),
+                Some(HASH.parse().unwrap()),
                 None
             ).as_str().to_owned()
         },
-        "Could not find document for entry in database with id: <Hash f03236>"
+        "Could not find document for entry in database with id: <Hash ec7c4f>"
     )]
     #[case::create_operation_with_previous_operations(
         &entry_signed_encoded_unvalidated(
             1,
-            1,
+            0,
             None,
             None,
-            Some(Operation::from(&OperationEncoded::new(CREATE_OPERATION_WITH_PREVIOUS_OPS).unwrap())),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            Some(Operation::from(&OperationEncoded::new(&CREATE_OPERATION_WITH_PREVIOUS_OPS).unwrap())),
+            key_pair(PRIVATE_KEY)
         ),
-        CREATE_OPERATION_WITH_PREVIOUS_OPS,
+        &CREATE_OPERATION_WITH_PREVIOUS_OPS,
         "previous_operations field should be empty"
     )]
     #[case::update_operation_no_previous_operations(
         &entry_signed_encoded_unvalidated(
             1,
-            1,
+            0,
             None,
             None,
-            Some(Operation::from(&OperationEncoded::new(UPDATE_OPERATION_NO_PREVIOUS_OPS).unwrap())),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            Some(Operation::from(&OperationEncoded::new(&UPDATE_OPERATION_NO_PREVIOUS_OPS).unwrap())),
+            key_pair(PRIVATE_KEY)
         ),
-        UPDATE_OPERATION_NO_PREVIOUS_OPS,
+        &UPDATE_OPERATION_NO_PREVIOUS_OPS,
         "previous_operations field can not be empty"
     )]
     #[case::delete_operation_no_previous_operations(
         &entry_signed_encoded_unvalidated(
             1,
-            1,
+            0,
             None,
             None,
-            Some(Operation::from(&OperationEncoded::new(DELETE_OPERATION_NO_PREVIOUS_OPS).unwrap())),
-            key_pair(DEFAULT_PRIVATE_KEY)
+            Some(Operation::from(&OperationEncoded::new(&DELETE_OPERATION_NO_PREVIOUS_OPS).unwrap())),
+            key_pair(PRIVATE_KEY)
         ),
-        DELETE_OPERATION_NO_PREVIOUS_OPS,
+        &DELETE_OPERATION_NO_PREVIOUS_OPS,
         "previous_operations field can not be empty"
     )]
     fn invalid_requests_fail(
@@ -596,7 +661,7 @@ mod tests {
     #[rstest]
     fn duplicate_publishing_of_entries(
         #[from(test_db)]
-        #[with(1, 1, 1, false, TEST_SCHEMA_ID.parse().unwrap())]
+        #[with(1, 1, 1, false, SCHEMA_ID.parse().unwrap())]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|populated_db: TestDatabase| async move {
@@ -610,7 +675,7 @@ mod tests {
             // Get the entries from the prepopulated store.
             let mut entries = populated_db
                 .store
-                .get_entries_by_schema(&TEST_SCHEMA_ID.parse().unwrap())
+                .get_entries_by_schema(&SCHEMA_ID.parse().unwrap())
                 .await
                 .unwrap();
 

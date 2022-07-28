@@ -291,7 +291,7 @@ mod tests {
     };
     use p2panda_rs::storage_provider::traits::OperationStore;
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, StorageProvider};
-    use p2panda_rs::test_utils::constants::{default_fields, DEFAULT_HASH};
+    use p2panda_rs::test_utils::constants::{test_fields, HASH};
     use p2panda_rs::test_utils::fixtures::{
         create_operation, delete_operation, document_id, key_pair, operation_fields, operation_id,
         public_key, random_previous_operations, update_operation, verified_operation,
@@ -301,10 +301,10 @@ mod tests {
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
     #[rstest]
-    #[case::create_operation(create_operation(&default_fields()))]
-    #[case::update_operation(update_operation(&default_fields(), &DEFAULT_HASH.parse().unwrap()))]
-    #[case::update_operation_many_prev_ops(update_operation(&default_fields(), &random_previous_operations(12)))]
-    #[case::delete_operation(delete_operation(&DEFAULT_HASH.parse().unwrap()))]
+    #[case::create_operation(create_operation(&test_fields()))]
+    #[case::update_operation(update_operation(&test_fields(), &HASH.parse().unwrap()))]
+    #[case::update_operation_many_prev_ops(update_operation(&test_fields(), &random_previous_operations(12)))]
+    #[case::delete_operation(delete_operation(&HASH.parse().unwrap()))]
     #[case::delete_operation_many_prev_ops(delete_operation(&random_previous_operations(12)))]
     fn insert_get_operations(
         #[case] operation: Operation,
@@ -358,10 +358,10 @@ mod tests {
     #[rstest]
     fn gets_document_by_operation_id(
         #[from(verified_operation)]
-        #[with(Some(operation_fields(default_fields())), None, None, None, Some(DEFAULT_HASH.parse().unwrap()))]
+        #[with(Some(operation_fields(test_fields())), None, None, None, Some(HASH.parse().unwrap()))]
         create_operation: VerifiedOperation,
         #[from(verified_operation)]
-        #[with(Some(operation_fields(default_fields())), Some(DEFAULT_HASH.parse().unwrap()))]
+        #[with(Some(operation_fields(test_fields())), Some(HASH.parse().unwrap()))]
         update_operation: VerifiedOperation,
         document_id: DocumentId,
         #[from(test_db)] runner: TestDatabaseRunner,

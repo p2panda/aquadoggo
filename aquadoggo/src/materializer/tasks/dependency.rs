@@ -180,7 +180,7 @@ mod tests {
     };
     use p2panda_rs::schema::{FieldType, SchemaId};
     use p2panda_rs::storage_provider::traits::OperationStore;
-    use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
+    use p2panda_rs::test_utils::constants::SCHEMA_ID;
     use p2panda_rs::test_utils::fixtures::{
         create_operation, operation_fields, random_document_id, random_document_view_id,
     };
@@ -205,7 +205,7 @@ mod tests {
             1,
             1,
             false,
-            TEST_SCHEMA_ID.parse().unwrap(),
+            SCHEMA_ID.parse().unwrap(),
             vec![("profile_picture", OperationValue::Relation(Relation::new(random_document_id())))],
             vec![]
         ),
@@ -217,7 +217,7 @@ mod tests {
             1,
             1,
             false,
-            TEST_SCHEMA_ID.parse().unwrap(),
+            SCHEMA_ID.parse().unwrap(),
             vec![
                 ("favorite_book_images", OperationValue::RelationList(
                     RelationList::new(
@@ -233,7 +233,7 @@ mod tests {
             1,
             1,
             false,
-            TEST_SCHEMA_ID.parse().unwrap(),
+            SCHEMA_ID.parse().unwrap(),
             vec![
                 ("something_from_the_past", OperationValue::PinnedRelation(
                     PinnedRelation::new(random_document_view_id())))
@@ -248,7 +248,7 @@ mod tests {
             1,
             1,
             false,
-            TEST_SCHEMA_ID.parse().unwrap(),
+            SCHEMA_ID.parse().unwrap(),
             vec![
                 ("many_previous_drafts", OperationValue::PinnedRelationList(
                     PinnedRelationList::new(
@@ -264,7 +264,7 @@ mod tests {
             1,
             1,
             false,
-            TEST_SCHEMA_ID.parse().unwrap(),
+            SCHEMA_ID.parse().unwrap(),
             vec![
                 ("one_relation_field", OperationValue::PinnedRelationList(
                     PinnedRelationList::new(
@@ -284,7 +284,7 @@ mod tests {
             1,
             1,
             false,
-            TEST_SCHEMA_ID.parse().unwrap(),
+            SCHEMA_ID.parse().unwrap(),
             vec![
                 ("one_relation_field", OperationValue::PinnedRelationList(
                     PinnedRelationList::new(
@@ -430,7 +430,7 @@ mod tests {
             1,
             1,
             true,
-            TEST_SCHEMA_ID.parse().unwrap(),
+            SCHEMA_ID.parse().unwrap(),
             vec![
                 ("profile_picture", OperationValue::Relation(
                         Relation::new(random_document_id())))
@@ -444,7 +444,7 @@ mod tests {
             1,
             1,
             true,
-            TEST_SCHEMA_ID.parse().unwrap(),
+            SCHEMA_ID.parse().unwrap(),
             vec![
                 ("one_relation_field", OperationValue::PinnedRelationList(
                      PinnedRelationList::new(
@@ -541,7 +541,7 @@ mod tests {
                     OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
                         // The view_id for a schema field which exists in the database. Can be
                         // recreated from variable `schema_field_document_id` in the task below.
-                        "0020a2bc0748f3b18627a6aae09ae392561c357a2995528373e730a4d90b73d8c072"
+                        "0020d9cae33aed5742e06a24801195999e105e73081c474d8b25e988787c2ada025f"
                             .parse().unwrap(),
                     ])),
                 ),

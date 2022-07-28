@@ -108,6 +108,7 @@ dependencies = [
  "async-trait",
  "axum",
  "bamboo-rs-core-ed25519-yasmf",
+ "ciborium",
  "ctor",
  "deadqueue",
  "directories",
@@ -115,6 +116,7 @@ dependencies = [
  "envy",
  "futures",
  "gql_client",
+ "hex",
  "http",
  "hyper",
  "lipmaa-link 0.2.2",
@@ -2049,8 +2051,7 @@ dependencies = [
 [[package]]
 name = "p2panda-rs"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "10c037a99f38662073ac86f44a13f8be1def058cb10624d094205649fe6f3b43"
+source = "git+https://github.com/p2panda/p2panda?rev=e06fd08c45253d60fcd42778f59e946a9ed73f71#e06fd08c45253d60fcd42778f59e946a9ed73f71"
 dependencies = [
  "arrayvec 0.5.2",
  "async-trait",
@@ -2078,6 +2079,7 @@ dependencies = [
  "serde_repr",
  "thiserror",
  "tls_codec",
+ "tokio",
  "varu64 0.7.0",
  "wasm-bindgen",
  "yasmf-hash",
