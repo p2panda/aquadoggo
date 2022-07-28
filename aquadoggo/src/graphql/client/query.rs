@@ -33,6 +33,8 @@ impl ClientRoot {
         )]
         document_id: Option<scalars::DocumentId>,
     ) -> Result<NextEntryArguments> {
+        // @TODO: The api for `next_entry_args` needs to be updated to accept a `DocumentViewId`
+
         // Access the store from context.
         let store = ctx.data::<SqlStorage>()?;
 
