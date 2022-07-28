@@ -139,7 +139,7 @@ mod tests {
         Relation, RelationList,
     };
     use p2panda_rs::storage_provider::traits::OperationStore;
-    use p2panda_rs::test_utils::constants::TEST_SCHEMA_ID;
+    use p2panda_rs::test_utils::constants::SCHEMA_ID;
     use p2panda_rs::test_utils::fixtures::{
         key_pair, operation, operation_fields, random_document_id, random_operation_id,
     };
@@ -159,7 +159,7 @@ mod tests {
     #[rstest]
     fn materialize_document_from_bus(
         #[from(test_db)]
-        #[with(1, 1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("name", OperationValue::Text("panda".into()))])]
+        #[with(1, 1, 1, false, SCHEMA_ID.parse().unwrap(), vec![("name", OperationValue::Text("panda".into()))])]
         runner: TestDatabaseRunner,
     ) {
         // Prepare database which inserts data for one document
@@ -238,7 +238,7 @@ mod tests {
     #[rstest]
     fn materialize_document_from_last_runtime(
         #[from(test_db)]
-        #[with(1, 1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("name", OperationValue::Text("panda".into()))])]
+        #[with(1, 1, 1, false, SCHEMA_ID.parse().unwrap(), vec![("name", OperationValue::Text("panda".into()))])]
         runner: TestDatabaseRunner,
     ) {
         // Prepare database which inserts data for one document
@@ -303,7 +303,7 @@ mod tests {
     #[rstest]
     fn materialize_update_document(
         #[from(test_db)]
-        #[with(1, 1, 1, false, TEST_SCHEMA_ID.parse().unwrap(), vec![("name", OperationValue::Text("panda".into()))])]
+        #[with(1, 1, 1, false, SCHEMA_ID.parse().unwrap(), vec![("name", OperationValue::Text("panda".into()))])]
         runner: TestDatabaseRunner,
     ) {
         // Prepare database which inserts data for one document
@@ -363,7 +363,7 @@ mod tests {
                         OperationValue::Text("panda123".into()),
                     )])),
                     Some(verified_operation.operation_id().to_owned().into()),
-                    Some(TEST_SCHEMA_ID.parse().unwrap()),
+                    Some(SCHEMA_ID.parse().unwrap()),
                 ),
                 Some(document_id),
                 key_pair,

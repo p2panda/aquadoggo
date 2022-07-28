@@ -839,7 +839,7 @@ mod tests {
         factory.register("finish", 3, finish);
 
         // Generate a number of puzzles to solve
-        let puzzles_count = 10;
+        let puzzles_count = 3;
         let min_size = 3;
         let max_size = 10;
 

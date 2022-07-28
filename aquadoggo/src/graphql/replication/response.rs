@@ -87,7 +87,7 @@ mod tests {
     #[rstest]
     fn validate_with_certificate_pool(
         #[from(test_db)]
-        #[with(100, 1, 1)]
+        #[with(13, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
@@ -109,7 +109,7 @@ mod tests {
 
             let latest_entry_hash = db
                 .store
-                .get_latest_entry(&author, &LogId::new(1))
+                .get_latest_entry(&author, &LogId::default())
                 .await
                 .unwrap()
                 .unwrap()

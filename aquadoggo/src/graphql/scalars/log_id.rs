@@ -69,11 +69,11 @@ mod tests {
         }
 
         let val = Value {
-            log_id: p2panda_rs::entry::LogId::new(1).into(),
+            log_id: p2panda_rs::entry::LogId::default().into(),
         };
 
         let serialised = serde_json::to_string(&val).unwrap();
-        assert_eq!(serialised, "{\"log_id\":\"1\"}".to_string());
+        assert_eq!(serialised, "{\"log_id\":\"0\"}".to_string());
         assert_eq!(val, serde_json::from_str(&serialised).unwrap());
     }
 }
