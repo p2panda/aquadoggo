@@ -10,7 +10,7 @@ use async_graphql::{
 use async_recursion::async_recursion;
 use async_trait::async_trait;
 use futures::future;
-use log::debug;
+use log::{debug, error, info};
 use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId, DocumentViewIdError};
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
@@ -72,9 +72,11 @@ impl DynamicQuery {
     /// Returns a single document as a GraphQL value.
     async fn query_single(
         &self,
-        schema: &SchemaId,
+        schema_id: &SchemaId,
         ctx: &Context<'_>,
     ) -> ServerResult<Option<Value>> {
+        info!("Handling single query for {}", schema_id);
+
         let document_id_arg = ctx.param_value::<Option<DocumentIdScalar>>("id", None)?;
         let view_id_arg = ctx.param_value::<Option<DocumentViewIdScalar>>("viewId", None)?;
 
@@ -95,7 +97,7 @@ impl DynamicQuery {
                     view_id,
                     ctx,
                     ctx.field().selection_set().collect(),
-                    Some(schema),
+                    Some(schema_id),
                 )
                 .await?,
             ));
@@ -107,7 +109,7 @@ impl DynamicQuery {
                     document_id_scalar.into(),
                     ctx,
                     ctx.field().selection_set().collect(),
-                    Some(schema),
+                    Some(schema_id),
                 )
                 .await?,
             )),
@@ -124,6 +126,8 @@ impl DynamicQuery {
         schema_id: &SchemaId,
         ctx: &Context<'_>,
     ) -> ServerResult<Option<Value>> {
+        info!("Handling listing query for {}", schema_id);
+
         let store = ctx.data_unchecked::<SqlStorage>();
 
         // Retrieve all documents for schema from storage.
@@ -157,6 +161,8 @@ impl DynamicQuery {
         selected_fields: Vec<SelectionField<'async_recursion>>,
         validate_schema: Option<&'async_recursion SchemaId>,
     ) -> ServerResult<Value> {
+        debug!("Fetching <Document {}> from store", document_id);
+
         let store = ctx.data_unchecked::<SqlStorage>();
         let view = store.get_document_by_id(&document_id).await.unwrap();
         match view {
@@ -168,7 +174,10 @@ impl DynamicQuery {
 
                 self.document_response(view, ctx, selected_fields).await
             }
-            None => Ok(Value::Null),
+            None => {
+                error!("No view found for document {}", document_id.as_str());
+                Ok(Value::Null)
+            }
         }
     }
 
@@ -186,6 +195,8 @@ impl DynamicQuery {
         selected_fields: Vec<SelectionField<'async_recursion>>,
         validate_schema: Option<&'async_recursion SchemaId>,
     ) -> ServerResult<Value> {
+        debug!("Fetching <DocumentView {}> from store", document_view_id);
+
         let store = ctx.data_unchecked::<SqlStorage>();
         let view = store
             .get_document_view_by_id(&document_view_id)
@@ -224,7 +235,7 @@ impl DynamicQuery {
                 );
             }
 
-            // Assemble selected document field valuues.
+            // Assemble selected document field values.
             if field.name() == "fields" {
                 let subselection = field.selection_set().collect();
                 document_fields.insert(
@@ -248,9 +259,6 @@ impl DynamicQuery {
         ctx: &Context<'_>,
         selected_fields: Vec<SelectionField<'async_recursion>>,
     ) -> ServerResult<Value> {
-        debug!("Get {}", view);
-
-        // We assume that the query root has been configured with an SQL storage context.
         let store = ctx.data_unchecked::<SqlStorage>();
         let schema_id = store
             .get_schema_by_document_view(view.id())
@@ -265,17 +273,19 @@ impl DynamicQuery {
         // Construct GraphQL value for every field of the given view that has been selected.
         let mut view_fields = IndexMap::new();
         for selected_field in selected_fields {
-            // Retrieve the current field's value from the document view.
-            let document_view_value = view.get(selected_field.name()).ok_or_else(|| {
-                ServerError::new(
+            if !schema.fields().contains_key(selected_field.name()) {
+                return Err(ServerError::new(
                     format!(
                         "Field {} does not exist for schema {}",
                         selected_field.name(),
                         schema
                     ),
                     None,
-                )
-            })?;
+                ));
+            }
+            // Retrieve the current field's value from the document view. Unwrap because we have
+            // checked that this field exists on the schema.
+            let document_view_value = view.get(selected_field.name()).unwrap();
 
             // Collect any further fields that have been selected on the current field.
             let next_selection: Vec<SelectionField<'async_recursion>> =

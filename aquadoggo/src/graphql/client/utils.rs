@@ -26,7 +26,7 @@ pub async fn validate_view_matches_schema(
         true => Ok(()),
         false => Err(ServerError::new(
             format!(
-                "The document of view id {} does not belong to the schema {}",
+                "Found <DocumentView {}> but it does not belong to expected <Schema {}>",
                 document_view_id, schema_id
             ),
             Some(ctx.item.pos),

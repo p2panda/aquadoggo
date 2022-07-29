@@ -4,7 +4,7 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 
 use futures::Future;
-use log::{debug, error};
+use log::{debug, error, info};
 use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
 use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned};
 use p2panda_rs::hash::Hash;
@@ -407,6 +407,8 @@ impl TestDatabase {
         fields: OperationFields,
         key_pair: &KeyPair,
     ) -> DocumentViewId {
+        info!("Creating document for {}", schema_id);
+
         // Get requested schema from store.
         let schema = self
             .context
@@ -441,6 +443,7 @@ impl TestDatabase {
         fields: Vec<(&str, FieldType)>,
         key_pair: &KeyPair,
     ) -> Schema {
+        info!("Creating schema {}", name);
         let mut field_ids = Vec::new();
 
         // Build and reduce schema field definitions
@@ -471,7 +474,7 @@ impl TestDatabase {
         let view_id = DocumentViewId::from(entry_signed.hash());
         let schema_id = SchemaId::Application(name.to_string(), view_id);
 
-        debug!("Added {}", schema_id);
+        debug!("Done building {}", schema_id);
         self.context
             .schema_provider
             .get(&schema_id)
