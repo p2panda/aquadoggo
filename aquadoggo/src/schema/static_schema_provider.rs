@@ -152,8 +152,6 @@ impl<T> StaticLeak<T> {
 
 #[cfg(test)]
 mod tests {
-    use std::{thread, time};
-
     use rstest::rstest;
 
     use p2panda_rs::schema::{FieldType, Schema, SchemaId};

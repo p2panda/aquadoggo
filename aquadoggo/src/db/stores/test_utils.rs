@@ -4,15 +4,16 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 
 use futures::Future;
+use log::{debug, error};
 use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
 use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::{Author, KeyPair};
 use p2panda_rs::operation::{
-    AsOperation, AsVerifiedOperation, Operation, OperationEncoded, OperationId, OperationValue,
-    PinnedRelation, PinnedRelationList, Relation, RelationList, VerifiedOperation,
+    AsOperation, AsVerifiedOperation, Operation, OperationEncoded, OperationFields, OperationId,
+    OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList, VerifiedOperation,
 };
-use p2panda_rs::schema::SchemaId;
+use p2panda_rs::schema::{FieldType, Schema, SchemaId};
 use p2panda_rs::storage_provider::traits::{OperationStore, StorageProvider};
 use p2panda_rs::test_utils::constants::{PRIVATE_KEY, SCHEMA_ID};
 use p2panda_rs::test_utils::fixtures::{operation, operation_fields};
@@ -22,12 +23,16 @@ use sqlx::Any;
 use tokio::runtime::Builder;
 use tokio::sync::Mutex;
 
+use crate::context::Context;
 use crate::db::provider::SqlStorage;
 use crate::db::request::{EntryArgsRequest, PublishEntryRequest};
 use crate::db::traits::DocumentStore;
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
 use crate::graphql::client::NextEntryArgumentsType;
+use crate::materializer::tasks::{dependency_task, reduce_task, schema_task};
+use crate::materializer::TaskInput;
 use crate::test_helpers::TEST_CONFIG;
+use crate::{Configuration, SchemaProvider};
 
 /// The fields used as defaults in the tests.
 pub fn doggo_test_fields() -> Vec<(&'static str, OperationValue)> {
@@ -264,8 +269,15 @@ impl TestDatabaseRunner {
         runtime.block_on(async {
             // Initialise test database
             let pool = initialize_db().await;
+            let store = SqlStorage::new(pool);
+            let context = Context::new(
+                store.clone(),
+                Configuration::default(),
+                SchemaProvider::default(),
+            );
             let mut db = TestDatabase {
-                store: SqlStorage::new(pool),
+                context,
+                store,
                 test_data: TestData::default(),
             };
 
@@ -380,8 +392,92 @@ pub fn test_db(
 /// Container for `SqlStore` with access to the document ids and key_pairs used in the
 /// pre-populated database for testing.
 pub struct TestDatabase {
+    pub context: Context,
     pub store: SqlStorage,
     pub test_data: TestData,
+}
+
+impl TestDatabase {
+    /// Publish a document and materialise it in the store.
+    ///
+    /// Also runs dependency task for document.
+    pub async fn add_document(
+        &mut self,
+        schema_id: &SchemaId,
+        fields: OperationFields,
+        key_pair: &KeyPair,
+    ) -> DocumentViewId {
+        // Get requested schema from store.
+        let schema = self
+            .context
+            .schema_provider
+            .get(schema_id)
+            .await
+            .expect("Schema not found");
+
+        // Build, publish and reduce create operation for document.
+        let create_op = Operation::new_create(schema.id().to_owned(), fields).unwrap();
+        let (entry_signed, _) = send_to_store(&self.store, &create_op, None, key_pair).await;
+        let document_view_id = DocumentViewId::from(entry_signed.hash());
+        let input = TaskInput::new(None, Some(document_view_id.clone()));
+        let dependency_tasks = reduce_task(self.context.clone(), input.clone())
+            .await
+            .unwrap();
+
+        // Run dependency tasks
+        if let Some(tasks) = dependency_tasks {
+            for task in tasks {
+                dependency_task(self.context.clone(), task.input().to_owned())
+                    .await
+                    .unwrap();
+            }
+        }
+        document_view_id
+    }
+
+    /// Publish a schema and materialise it in the store.
+    pub async fn add_schema(
+        &mut self,
+        name: &str,
+        fields: Vec<(&str, FieldType)>,
+        key_pair: &KeyPair,
+    ) -> Schema {
+        let mut field_ids = Vec::new();
+
+        // Build and reduce schema field definitions
+        for field in fields {
+            let create_field_op = Schema::create_field(field.0, field.1.into()).unwrap();
+            let (entry_signed, _) =
+                send_to_store(&self.store, &create_field_op, None, key_pair).await;
+
+            let input = TaskInput::new(Some(DocumentId::from(entry_signed.hash())), None);
+            reduce_task(self.context.clone(), input).await.unwrap();
+
+            field_ids.push(DocumentViewId::from(entry_signed.hash()));
+        }
+
+        // Build and reduce schema definition
+        let create_schema_op =
+            Schema::create(name, "test schema description", field_ids.into()).unwrap();
+        let (entry_signed, _) = send_to_store(&self.store, &create_schema_op, None, key_pair).await;
+        let input = TaskInput::new(None, Some(DocumentViewId::from(entry_signed.hash())));
+        reduce_task(self.context.clone(), input.clone())
+            .await
+            .unwrap();
+
+        // Run schema task for this spec
+        schema_task(self.context.clone(), input).await.unwrap();
+
+        let view_id = DocumentViewId::from(entry_signed.hash());
+        let schema_id = SchemaId::Application(name.to_string(), view_id);
+
+        debug!("Added {}", schema_id);
+        self.context
+            .schema_provider
+            .get(&schema_id)
+            .await
+            .expect("Failed adding schema to provider.")
+    }
 }
 
 /// Data collected when populating a `TestData` base in order to easily check values which
@@ -497,10 +593,13 @@ pub async fn send_to_store(
     // Also insert the operation into the store.
     let verified_operation =
         VerifiedOperation::new(&author, &entry_encoded.hash().into(), operation).unwrap();
-    store
+    match store
         .insert_operation(&verified_operation, &document_id)
         .await
-        .unwrap();
+    {
+        Ok(_) => {}
+        Err(err) => error!("Failed inserting operation: {}", err),
+    }
 
     (entry_encoded, publish_entry_response)
 }
@@ -559,10 +658,22 @@ impl TestDatabaseManager {
     }
 
     pub async fn create(&self, url: &str) -> TestDatabase {
-        // Initialise test database
         let pool = initialize_db_with_url(url).await;
+
+        // Initialise test store using pool.
+        let store = SqlStorage::new(pool.clone());
+
+        // Initialise context for store.
+        let context = Context::new(
+            store.clone(),
+            Configuration::default(),
+            SchemaProvider::default(),
+        );
+
+        // Initialise finished test database.
         let test_db = TestDatabase {
-            store: SqlStorage::new(pool.clone()),
+            context,
+            store,
             test_data: TestData::default(),
         };
         self.pools.lock().await.push(pool);

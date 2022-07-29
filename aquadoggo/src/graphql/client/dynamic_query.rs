@@ -3,7 +3,6 @@
 use std::convert::TryInto;
 
 use async_graphql::indexmap::IndexMap;
-use async_graphql::parser::types::Field;
 
 use async_graphql::{
     ContainerType, Context, Name, SelectionField, ServerError, ServerResult, Value,

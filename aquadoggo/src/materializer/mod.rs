@@ -2,7 +2,7 @@
 
 mod input;
 mod service;
-mod tasks;
+pub(crate) mod tasks;
 mod worker;
 
 pub use input::TaskInput;
