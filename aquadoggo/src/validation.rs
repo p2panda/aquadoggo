@@ -180,8 +180,9 @@ mod tests {
     use p2panda_rs::document::DocumentId;
     use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::identity::{Author, KeyPair};
+    use p2panda_rs::storage_provider::traits::AsStorageEntry;
     use p2panda_rs::test_utils::constants::PRIVATE_KEY;
-    use p2panda_rs::test_utils::fixtures::random_document_id;
+    use p2panda_rs::test_utils::fixtures::{key_pair, random_document_id};
     use rstest::rstest;
 
     use crate::db::provider::SqlStorage;
@@ -278,7 +279,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case::expected_skiplink_is_in_store(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::default(), SeqNum::new(13).unwrap())]
     #[case::expected_skiplink_is_in_store_and_is_same_as_backlink(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::default(), SeqNum::new(4).unwrap())]
     #[should_panic(
         expected = "Expected skiplink target for <Author 53fc96> at log id 0 and seq num 19 not found in database"
@@ -292,7 +292,7 @@ mod tests {
     #[case::log_id_is_wrong(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(4), SeqNum::new(7).unwrap())]
     #[should_panic(expected = "Entry with seq num 1 can not have skiplink")]
     #[case::seq_num_is_one(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(0), SeqNum::new(1).unwrap())]
-    fn gets_expected_skiplink(
+    fn get_expected_skiplink_errors(
         #[case] key_pair: KeyPair,
         #[case] log_id: LogId,
         #[case] seq_num: SeqNum,
@@ -306,6 +306,38 @@ mod tests {
             get_expected_skiplink(&db.store, &author, &log_id, &seq_num)
                 .await
                 .unwrap();
+        })
+    }
+
+    #[rstest]
+    #[should_panic(expected = "Entry with seq num 1 can not have skiplink")]
+    #[case(SeqNum::new(1).unwrap(), SeqNum::new(1).unwrap())]
+    #[case(SeqNum::new(2).unwrap(), SeqNum::new(1).unwrap())]
+    #[case(SeqNum::new(3).unwrap(), SeqNum::new(2).unwrap())]
+    #[case(SeqNum::new(4).unwrap(), SeqNum::new(1).unwrap())]
+    #[case(SeqNum::new(5).unwrap(), SeqNum::new(4).unwrap())]
+    #[case(SeqNum::new(6).unwrap(), SeqNum::new(5).unwrap())]
+    #[case(SeqNum::new(7).unwrap(), SeqNum::new(6).unwrap())]
+    #[case(SeqNum::new(8).unwrap(), SeqNum::new(4).unwrap())]
+    #[case(SeqNum::new(9).unwrap(), SeqNum::new(8).unwrap())]
+    #[case(SeqNum::new(10).unwrap(), SeqNum::new(9).unwrap())]
+    fn gets_expected_skiplink(
+        key_pair: KeyPair,
+        #[case] seq_num: SeqNum,
+        #[case] expected_seq_num: SeqNum,
+        #[from(test_db)]
+        #[with(10, 1, 1)]
+        runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
+            let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+
+            let skiplink_entry =
+                get_expected_skiplink(&db.store, &author, &LogId::default(), &seq_num)
+                    .await
+                    .unwrap();
+
+            assert_eq!(skiplink_entry.seq_num(), expected_seq_num)
         })
     }
 
