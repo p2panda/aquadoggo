@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use async_graphql::{Context, ServerError, ServerResult};
+use async_graphql::{Pos, ServerError, ServerResult};
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::schema::SchemaId;
 
@@ -12,10 +12,9 @@ use crate::db::provider::SqlStorage;
 pub async fn validate_view_matches_schema(
     document_view_id: &DocumentViewId,
     schema_id: &SchemaId,
-    ctx: &Context<'_>,
+    store: &SqlStorage,
+    pos: Option<Pos>,
 ) -> ServerResult<()> {
-    let store = ctx.data_unchecked::<SqlStorage>();
-
     let document_schema_id = store
         .get_schema_by_document_view(document_view_id)
         .await
@@ -29,7 +28,57 @@ pub async fn validate_view_matches_schema(
                 "Found <DocumentView {}> but it does not belong to expected <Schema {}>",
                 document_view_id, schema_id
             ),
-            Some(ctx.item.pos),
+            pos,
         )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::convert::TryInto;
+
+    use p2panda_rs::schema::{FieldType, SchemaId};
+    use p2panda_rs::test_utils::fixtures::random_key_pair;
+    use rstest::rstest;
+
+    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+    use crate::graphql::client::utils::validate_view_matches_schema;
+
+    #[rstest]
+    fn test_validate_view_matches_schema(#[from(test_db)] runner: TestDatabaseRunner) {
+        runner.with_db_teardown(&|mut db: TestDatabase| async move {
+            let key_pair = random_key_pair();
+
+            let view_id = db
+                .add_document(
+                    &SchemaId::SchemaFieldDefinition(1),
+                    vec![
+                        ("name", "test_field".into()),
+                        ("type", FieldType::String.into()),
+                    ]
+                    .try_into()
+                    .unwrap(),
+                    &key_pair,
+                )
+                .await;
+
+            assert!(validate_view_matches_schema(
+                &view_id,
+                &SchemaId::SchemaFieldDefinition(1),
+                &db.store,
+                None
+            )
+            .await
+            .is_ok());
+
+            assert!(validate_view_matches_schema(
+                &view_id,
+                &SchemaId::SchemaDefinition(1),
+                &db.store,
+                None
+            )
+            .await
+            .is_err());
+        });
     }
 }

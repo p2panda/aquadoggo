@@ -3,10 +3,8 @@
 //! Integration tests for dynamic graphql schema generation and query resolution.
 
 use std::convert::TryInto;
-use std::time::Duration;
 
 use async_graphql::{value, Response};
-use log::error;
 use p2panda_rs::document::DocumentId;
 use p2panda_rs::operation::OperationFields;
 use p2panda_rs::schema::FieldType;
@@ -73,10 +71,6 @@ fn scalar_fields(#[from(test_db)] runner: TestDatabaseRunner) {
             .await;
 
         let response: Response = response.json().await;
-
-        if response.errors.len() > 0 {
-            error!("Error: {:#?}", response.errors)
-        }
 
         let expected_data = value!({
             schema.id().as_str(): {
@@ -179,10 +173,6 @@ fn relation_fields(#[from(test_db)] runner: TestDatabaseRunner) {
             .await;
 
         let response: Response = response.json().await;
-
-        if response.errors.len() > 0 {
-            error!("Error: {:#?}", response.errors)
-        }
 
         let expected_data = value!({
             "result": {

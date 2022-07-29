@@ -169,7 +169,13 @@ impl DynamicQuery {
             Some(view) => {
                 // Validate the document's schema if the `validate_schema` argument is set.
                 if let Some(expected_schema_id) = validate_schema {
-                    validate_view_matches_schema(view.id(), expected_schema_id, ctx).await?;
+                    validate_view_matches_schema(
+                        view.id(),
+                        expected_schema_id,
+                        store,
+                        Some(ctx.item.pos),
+                    )
+                    .await?;
                 }
 
                 self.document_response(view, ctx, selected_fields).await
@@ -206,7 +212,13 @@ impl DynamicQuery {
             Some(view) => {
                 // Validate the document's schema if the `validate_schema` argument is set.
                 if let Some(expected_schema_id) = validate_schema {
-                    validate_view_matches_schema(view.id(), expected_schema_id, ctx).await?;
+                    validate_view_matches_schema(
+                        view.id(),
+                        expected_schema_id,
+                        store,
+                        Some(ctx.item.pos),
+                    )
+                    .await?;
                 }
                 self.document_response(view, ctx, selected_fields).await
             }
