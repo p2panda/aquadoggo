@@ -418,8 +418,7 @@ impl TestDatabase {
         // Build, publish and reduce create operation for document.
         let create_op = Operation::new_create(schema.id().to_owned(), fields).unwrap();
         let (entry_signed, _) = send_to_store(&self.store, &create_op, None, key_pair).await;
-        let document_view_id = DocumentViewId::from(entry_signed.hash());
-        let input = TaskInput::new(None, Some(document_view_id.clone()));
+        let input = TaskInput::new(Some(DocumentId::from(entry_signed.hash())), None);
         let dependency_tasks = reduce_task(self.context.clone(), input.clone())
             .await
             .unwrap();
@@ -432,7 +431,7 @@ impl TestDatabase {
                     .unwrap();
             }
         }
-        document_view_id
+        DocumentViewId::from(entry_signed.hash())
     }
 
     /// Publish a schema and materialise it in the store.
@@ -446,13 +445,14 @@ impl TestDatabase {
 
         // Build and reduce schema field definitions
         for field in fields {
-            let create_field_op = Schema::create_field(field.0, field.1.into()).unwrap();
+            let create_field_op = Schema::create_field(field.0, field.1.clone().into()).unwrap();
             let (entry_signed, _) =
                 send_to_store(&self.store, &create_field_op, None, key_pair).await;
 
             let input = TaskInput::new(Some(DocumentId::from(entry_signed.hash())), None);
             reduce_task(self.context.clone(), input).await.unwrap();
 
+            info!("Added field '{}' ({})", field.0, field.1.serialise());
             field_ids.push(DocumentViewId::from(entry_signed.hash()));
         }
 

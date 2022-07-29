@@ -11,6 +11,8 @@ use crate::materializer::TaskInput;
 
 /// A dependency task prepares _reduce_ tasks for all pinned relations of a given document view.
 ///
+/// The `input` argument must contain only a view id.
+///
 /// This task is dispatched after a reduce task completes. It identifies any pinned relations
 /// present in a given document view as we need to guarantee the required document views are
 /// materialised and stored in the database. We may have the required operations on the node

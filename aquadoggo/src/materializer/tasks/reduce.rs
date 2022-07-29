@@ -10,6 +10,18 @@ use crate::db::traits::DocumentStore;
 use crate::materializer::worker::{Task, TaskError, TaskResult};
 use crate::materializer::TaskInput;
 
+/// Build a materialised view for a document by reducing the document's operation graph and storing to disk.
+///
+/// ## Task input
+///
+/// If the task input contains a document view id, only this view is stored and any document id
+/// also existing on the task input is ignored.
+///
+/// If the task input contains a document id, the latest view for that document is built and stored
+/// and also, the document itself is updated in the store.
+///
+/// ## Integration with other tasks
+///
 /// A reduce task is dispatched for every entry and operation pair which arrives at a node.
 ///
 /// They may also be dispatched from a dependency task when a pinned relations is present on an
@@ -168,7 +180,7 @@ async fn reduce_document(
                 return Ok(None);
             }
 
-            info!("Stored {} view {}", document, document.view_id());
+            info!("Stored {} latest view {}", document, document.view_id());
 
             // Return the new document_view id to be used in the resulting dependency task
             Ok(Some(document.view_id().to_owned()))
