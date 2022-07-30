@@ -50,14 +50,12 @@ fn scalar_fields(#[from(test_db)] runner: TestDatabaseRunner) {
         .try_into()
         .unwrap();
         let view_id = db.add_document(&schema.id(), doc_fields, &key_pair).await;
-        let document_id =
-            DocumentId::from(view_id.graph_tips().first().unwrap().as_hash().to_owned());
 
         // Configure and send test query.
         let client = graphql_test_client(&db).await;
         let query = format!(
             r#"{{
-                byViewId: {type_name}(viewId: "{view_id}") {{
+                scalarDoc: {type_name}(viewId: "{view_id}") {{
                     fields {{
                         bool,
                         float,
@@ -65,19 +63,9 @@ fn scalar_fields(#[from(test_db)] runner: TestDatabaseRunner) {
                         text
                     }}
                 }},
-                byDocumentId: {type_name}(id: "{document_id}") {{
-                    fields {{
-                        bool,
-                        float,
-                        int,
-                        text
-                    }}
-                }}
             }}"#,
-            // Throw in some scalar type conversions to also test those.
             type_name = schema.id().as_str(),
-            view_id = DocumentViewIdScalar::from(view_id),
-            document_id = DocumentIdScalar::from(document_id)
+            view_id = view_id.as_str()
         );
 
         let response = client
@@ -90,17 +78,15 @@ fn scalar_fields(#[from(test_db)] runner: TestDatabaseRunner) {
 
         let response: Response = response.json().await;
 
-        let inner_data = value!({
-            "fields": {
-                "bool": true,
-                "float": 1.0,
-                "int": 1,
-                "text": "yes",
-            }
-        });
         let expected_data = value!({
-            "byViewId": inner_data.clone(),
-            "byDocumentId": inner_data,
+            "scalarDoc": {
+                "fields": {
+                    "bool": true,
+                    "float": 1.0,
+                    "int": 1,
+                    "text": "yes",
+                }
+            },
         });
         assert_eq!(response.data, expected_data);
     });

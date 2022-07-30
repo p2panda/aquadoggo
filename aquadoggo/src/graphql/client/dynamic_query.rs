@@ -356,3 +356,127 @@ fn gql_scalar(operation_value: &OperationValue) -> Value {
         _ => panic!("can only return scalar values"),
     }
 }
+
+#[cfg(test)]
+mod test {
+    use std::convert::TryInto;
+
+    use crate::graphql::scalars::{
+        DocumentId as DocumentIdScalar, DocumentViewId as DocumentViewIdScalar,
+    };
+    use async_graphql::{value, Response};
+    use p2panda_rs::document::DocumentId;
+    use p2panda_rs::schema::FieldType;
+    use p2panda_rs::test_utils::fixtures::random_key_pair;
+    use rstest::rstest;
+    use serde_json::json;
+
+    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+    use crate::test_helpers::graphql_test_client;
+
+    #[rstest]
+    fn single_query(#[from(test_db)] runner: TestDatabaseRunner) {
+        // Test single query parameter variations.
+
+        runner.with_db_teardown(&|mut db: TestDatabase| async move {
+            let key_pair = random_key_pair();
+
+            // Add schema to node.
+            let schema = db
+                .add_schema("schema_name", vec![("bool", FieldType::Bool)], &key_pair)
+                .await;
+
+            // Publish document on node.
+            let view_id = db
+                .add_document(
+                    &schema.id(),
+                    vec![("bool", true.into())].try_into().unwrap(),
+                    &key_pair,
+                )
+                .await;
+            let document_id =
+                DocumentId::from(view_id.graph_tips().first().unwrap().as_hash().to_owned());
+
+            // Configure and send test query.
+            let client = graphql_test_client(&db).await;
+            let query = format!(
+                r#"{{
+                byViewId: {type_name}(viewId: "{view_id}") {{
+                    fields {{ bool }}
+                }},
+                byDocumentId: {type_name}(id: "{document_id}") {{
+                    fields {{ bool }}
+                }}
+            }}"#,
+                type_name = schema.id().as_str(),
+                // Throw in some scalar type conversions to also test those.
+                view_id = DocumentViewIdScalar::from(view_id),
+                document_id = DocumentIdScalar::from(document_id)
+            );
+
+            let response = client
+                .post("/graphql")
+                .json(&json!({
+                    "query": query,
+                }))
+                .send()
+                .await;
+
+            let response: Response = response.json().await;
+
+            let expected_data = value!({
+                "byViewId": value!({ "fields": { "bool": true, } }),
+                "byDocumentId": value!({ "fields": { "bool": true, } }),
+            });
+            assert_eq!(response.data, expected_data);
+        });
+    }
+
+    #[rstest]
+    fn listing_query(#[from(test_db)] runner: TestDatabaseRunner) {
+        // Test listing query parameter variations.
+
+        runner.with_db_teardown(&|mut db: TestDatabase| async move {
+            let key_pair = random_key_pair();
+
+            // Add schema to node.
+            let schema = db
+                .add_schema("schema_name", vec![("bool", FieldType::Bool)], &key_pair)
+                .await;
+
+            // Publish document on node.
+            db.add_document(
+                &schema.id(),
+                vec![("bool", true.into())].try_into().unwrap(),
+                &key_pair,
+            )
+            .await;
+
+            // Configure and send test query.
+            let client = graphql_test_client(&db).await;
+            let query = format!(
+                r#"{{
+                listing: all_{type_name} {{
+                    fields {{ bool }}
+                }},
+            }}"#,
+                type_name = schema.id().as_str(),
+            );
+
+            let response = client
+                .post("/graphql")
+                .json(&json!({
+                    "query": query,
+                }))
+                .send()
+                .await;
+
+            let response: Response = response.json().await;
+
+            let expected_data = value!({
+                "listing": value!([{ "fields": { "bool": true, } }]),
+            });
+            assert_eq!(response.data, expected_data);
+        });
+    }
+}
