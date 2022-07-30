@@ -42,8 +42,6 @@ impl SchemaProvider {
     }
 
     /// Returns receiver for broadcast channel.
-    ///
-    ///
     pub fn on_schema_added(&self) -> Receiver<SchemaId> {
         self.tx.subscribe()
     }
