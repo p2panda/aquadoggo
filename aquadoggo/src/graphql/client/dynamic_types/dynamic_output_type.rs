@@ -15,9 +15,7 @@ use crate::graphql::scalars::{
 use async_graphql::indexmap::IndexMap;
 use async_graphql::parser::types::Field;
 use async_graphql::registry::{MetaField, MetaInputValue, MetaTypeId};
-use async_graphql::{
-    ContextSelectionSet, OutputType, Positioned, ServerError, ServerResult, Value,
-};
+use async_graphql::{ContextSelectionSet, OutputType, Positioned, ServerResult, Value};
 use p2panda_rs::schema::Schema;
 
 use crate::graphql::client::dynamic_types::utils::metaobject;
@@ -113,17 +111,14 @@ impl OutputType for DynamicQuery {
         })
     }
 
-    /// We don't expect this resolver to ever be called because the `dynamic_query_api` type is
-    /// hidden.
+    /// We don't expect this resolver to ever be called because dynamic schemas are not resolved
+    /// by `async_graphql` but by our own resolver implementation.
     async fn resolve(
         &self,
         _ctx: &ContextSelectionSet<'_>,
         _field: &Positioned<Field>,
     ) -> ServerResult<Value> {
-        Err(ServerError::new(
-            "Unexpected call to dynamic query root resolver. This is a bug, please report it!",
-            None,
-        ))
+        unreachable!("This resolver should have never been called. Please file a bug report!")
     }
 
     fn type_name() -> Cow<'static, str> {

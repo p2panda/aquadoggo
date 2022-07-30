@@ -9,6 +9,8 @@ mod document_fields_type;
 mod document_meta_type;
 mod document_type;
 mod dynamic_output_type;
+#[cfg(test)]
+mod tests;
 mod utils;
 
 pub use document_fields_type::DocumentFieldsType;
