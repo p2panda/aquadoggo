@@ -5,6 +5,7 @@
 use std::convert::TryInto;
 
 use async_graphql::{value, Response};
+use log::info;
 use p2panda_rs::document::DocumentId;
 use p2panda_rs::operation::OperationFields;
 use p2panda_rs::schema::FieldType;
@@ -13,10 +14,16 @@ use rstest::rstest;
 use serde_json::json;
 
 use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+use crate::graphql::scalars::{
+    DocumentId as DocumentIdScalar, DocumentViewId as DocumentViewIdScalar,
+};
 use crate::test_helpers::graphql_test_client;
 
 #[rstest]
 fn scalar_fields(#[from(test_db)] runner: TestDatabaseRunner) {
+    // Test querying application documents with scalar fields (no relations) by document id and by
+    // view id.
+
     runner.with_db_teardown(&|mut db: TestDatabase| async move {
         let key_pair = random_key_pair();
 
@@ -44,12 +51,22 @@ fn scalar_fields(#[from(test_db)] runner: TestDatabaseRunner) {
         .try_into()
         .unwrap();
         let view_id = db.add_document(&schema.id(), doc_fields, &key_pair).await;
+        let document_id =
+            DocumentId::from(view_id.graph_tips().first().unwrap().as_hash().to_owned());
 
         // Configure and send test query.
         let client = graphql_test_client(&db).await;
         let query = format!(
             r#"{{
-                {}(viewId: "{}") {{
+                byViewId: {type_name}(viewId: "{view_id}") {{
+                    fields {{
+                        bool,
+                        float,
+                        int,
+                        text
+                    }}
+                }},
+                byDocumentId: {type_name}(id: "{document_id}") {{
                     fields {{
                         bool,
                         float,
@@ -58,8 +75,10 @@ fn scalar_fields(#[from(test_db)] runner: TestDatabaseRunner) {
                     }}
                 }}
             }}"#,
-            schema.id().as_str(),
-            view_id.as_str()
+            // Throw in some scalar type conversions to also test those.
+            type_name = schema.id().as_str(),
+            view_id = DocumentViewIdScalar::from(view_id),
+            document_id = DocumentIdScalar::from(document_id)
         );
 
         let response = client
@@ -72,23 +91,27 @@ fn scalar_fields(#[from(test_db)] runner: TestDatabaseRunner) {
 
         let response: Response = response.json().await;
 
-        let expected_data = value!({
-            schema.id().as_str(): {
-                "fields": {
-                    "bool": true,
-                    "float": 1.0,
-                    "int": 1,
-                    "text": "yes",
-                }
+        let inner_data = value!({
+            "fields": {
+                "bool": true,
+                "float": 1.0,
+                "int": 1,
+                "text": "yes",
             }
         });
-
+        let expected_data = value!({
+            "byViewId": inner_data.clone(),
+            "byDocumentId": inner_data,
+        });
         assert_eq!(response.data, expected_data);
     });
 }
 
 #[rstest]
 fn relation_fields(#[from(test_db)] runner: TestDatabaseRunner) {
+    // Test querying application documents across a parent-child relation using different kinds of
+    // relation fields.
+
     runner.with_db_teardown(&|mut db: TestDatabase| async move {
         let key_pair = random_key_pair();
 
