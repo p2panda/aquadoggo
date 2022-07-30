@@ -18,8 +18,6 @@ const VIEW_ID_FIELD: &str = "viewId";
 /// The GraphQL type for generic document metadata.
 pub struct DocumentMetaType;
 
-// Allow automatic dereferencing because we are using `&*` to access `Cow` inner values.
-#[allow(clippy::explicit_auto_deref)]
 impl DocumentMetaType {
     pub fn type_name() -> &'static str {
         "DocumentMeta"
