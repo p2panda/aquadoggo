@@ -3,8 +3,7 @@
 use std::convert::TryFrom;
 use std::fmt::Display;
 
-use async_graphql::scalar;
-use p2panda_rs::document::DocumentViewIdError;
+use async_graphql::{scalar, Error};
 use serde::{Deserialize, Serialize};
 
 /// Document view id as a GraphQL scalar.
@@ -18,12 +17,12 @@ impl From<p2panda_rs::document::DocumentViewId> for DocumentViewId {
 }
 
 impl TryFrom<DocumentViewId> for p2panda_rs::document::DocumentViewId {
-    type Error = DocumentViewIdError;
+    type Error = Error;
 
     fn try_from(
         view_id: DocumentViewId,
-    ) -> Result<p2panda_rs::document::DocumentViewId, DocumentViewIdError> {
-        view_id.0.parse()
+    ) -> Result<p2panda_rs::document::DocumentViewId, Self::Error> {
+        view_id.0.parse().map_err(|err| Into::<Error>::into(err))
     }
 }
 

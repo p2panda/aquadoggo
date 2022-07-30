@@ -5,13 +5,13 @@ use std::convert::TryInto;
 use async_graphql::indexmap::IndexMap;
 
 use async_graphql::{
-    ContainerType, Context, Name, SelectionField, ServerError, ServerResult, Value,
+    ContainerType, Context, Error, Name, SelectionField, ServerError, ServerResult, Value,
 };
 use async_recursion::async_recursion;
 use async_trait::async_trait;
 use futures::future;
 use log::{debug, error, info};
-use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId, DocumentViewIdError};
+use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
 
@@ -81,14 +81,12 @@ impl DynamicQuery {
         let view_id_arg = ctx.param_value::<Option<DocumentViewIdScalar>>("viewId", None)?;
 
         if let Some(view_id_scalar) = view_id_arg.clone().1 {
-            let view_id = view_id_scalar
-                .try_into()
-                .map_err(|err: DocumentViewIdError| {
-                    ServerError::new(
-                        format!("Could not parse `viewId` argument: {}", err),
-                        Some(view_id_arg.0),
-                    )
-                })?;
+            let view_id = view_id_scalar.try_into().map_err(|err: Error| {
+                ServerError::new(
+                    format!("Could not parse `viewId` argument: {}", err.message),
+                    Some(view_id_arg.0),
+                )
+            })?;
 
             // If the `viewId` argument is set we ignore the `id` argument because it doesn't
             // provide any additional information that we don't get from the view id.
@@ -103,18 +101,23 @@ impl DynamicQuery {
             ));
         }
 
-        match document_id_arg.1 {
-            Some(document_id_scalar) => Ok(Some(
+        match document_id_arg {
+            (pos, Some(document_id_scalar)) => Ok(Some(
                 self.get_by_document_id(
-                    document_id_scalar.into(),
+                    document_id_scalar.try_into().map_err(|err: Error| {
+                        ServerError::new(
+                            format!("Could not parse `id` argument: {}", err.message),
+                            Some(pos),
+                        )
+                    })?,
                     ctx,
                     ctx.field().selection_set().collect(),
                     Some(schema_id),
                 )
                 .await?,
             )),
-            None => Err(ServerError::new(
-                "Must provide either `id` or `viewId` argument.".to_string(),
+            (_, None) => Err(ServerError::new(
+                "Must provide either `id` or `viewId` argument".to_string(),
                 Some(ctx.item.pos),
             )),
         }
@@ -364,7 +367,7 @@ mod test {
     use crate::graphql::scalars::{
         DocumentId as DocumentIdScalar, DocumentViewId as DocumentViewIdScalar,
     };
-    use async_graphql::{value, Response};
+    use async_graphql::{value, Response, Value};
     use p2panda_rs::document::DocumentId;
     use p2panda_rs::schema::FieldType;
     use p2panda_rs::test_utils::fixtures::random_key_pair;
@@ -407,6 +410,9 @@ mod test {
                 byDocumentId: {type_name}(id: "{document_id}") {{
                     fields {{ bool }}
                 }}
+                notFound: {type_name}(id: "00208f7492d6eb01360a886dac93da88982029484d8c04a0bd2ac0607101b80a6634") {{
+                    fields {{ bool }}
+                }}
             }}"#,
                 type_name = schema.id().as_str(),
                 // Throw in some scalar type conversions to also test those.
@@ -429,6 +435,79 @@ mod test {
                 "byDocumentId": value!({ "fields": { "bool": true, } }),
             });
             assert_eq!(response.data, expected_data);
+        });
+    }
+
+    #[rstest]
+    #[case::unknown_document_id(
+        "id: \"00208f7492d6eb01360a886dac93da88982029484d8c04a0bd2ac0607101b80a6634\"",
+        value!({
+            "view": Value::Null
+        }),
+        vec![]
+    )]
+    #[case::unknown_view_id(
+        "viewId: \"00208f7492d6eb01360a886dac93da88982029484d8c04a0bd2ac0607101b80a6634\"",
+        value!({
+            "view": Value::Null
+        }),
+        vec![]
+    )]
+    #[case::malformed_document_id(
+        "id: \"verboten\"",
+        Value::Null,
+        vec!["Could not parse `id` argument: invalid hex encoding in hash string".to_string()]
+    )]
+    #[case::malformed_view_id(
+        "viewId: \"verboten\"",
+        Value::Null,
+        vec!["Could not parse `viewId` argument: invalid hex encoding in hash string".to_string()]
+    )]
+    #[case::missing_parameters(
+        "id: null",
+        Value::Null,
+        vec!["Must provide either `id` or `viewId` argument".to_string()]
+    )]
+    fn single_query_error_handling(
+        #[from(test_db)] runner: TestDatabaseRunner,
+        #[case] params: String,
+        #[case] expected_value: Value,
+        #[case] expected_errors: Vec<String>,
+    ) {
+        // Test single query parameter variations.
+
+        runner.with_db_teardown(move |db: TestDatabase| async move {
+            // Configure and send test query.
+            let client = graphql_test_client(&db).await;
+            let query = format!(
+                r#"{{
+                view: schema_definition_v1({params}) {{
+                    fields {{ name }}
+                }}
+            }}"#,
+                params = params
+            );
+
+            let response = client
+                .post("/graphql")
+                .json(&json!({
+                    "query": query,
+                }))
+                .send()
+                .await;
+
+            let response: Response = response.json().await;
+
+            // Assert response data.
+            assert_eq!(response.data, expected_value, "{:#?}", response);
+
+            // Assert error messages.
+            let err_msgs: Vec<String> = response
+                .errors
+                .iter()
+                .map(|err| err.message.to_string())
+                .collect();
+            assert_eq!(err_msgs, expected_errors);
         });
     }
 

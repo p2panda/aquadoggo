@@ -13,9 +13,6 @@ use rstest::rstest;
 use serde_json::json;
 
 use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
-use crate::graphql::scalars::{
-    DocumentId as DocumentIdScalar, DocumentViewId as DocumentViewIdScalar,
-};
 use crate::test_helpers::graphql_test_client;
 
 #[rstest]

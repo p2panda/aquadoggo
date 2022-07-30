@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::convert::TryFrom;
+
 use async_graphql::{Context, Error, Object, Result};
 use p2panda_rs::document::DocumentId;
 use p2panda_rs::storage_provider::traits::StorageProvider;
@@ -33,9 +35,15 @@ impl StaticQuery {
         )]
         document_id: Option<scalars::DocumentId>,
     ) -> Result<NextEntryArgumentsType> {
+        let document_id = match document_id {
+            Some(value) => Some(
+                DocumentId::try_from(value).map_err(|err| err.into_server_error(ctx.item.pos))?,
+            ),
+            None => None,
+        };
         let args = EntryArgsRequest {
             public_key: public_key.into(),
-            document_id: document_id.map(DocumentId::from),
+            document_id,
         };
         args.validate()?;
 
