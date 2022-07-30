@@ -23,7 +23,7 @@ impl From<DocumentId> for p2panda_rs::document::DocumentId {
 
 impl Display for DocumentId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "{}", self.0.as_str())
     }
 }
 
