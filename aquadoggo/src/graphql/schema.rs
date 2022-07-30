@@ -140,6 +140,7 @@ impl GraphQLSchemaManager {
         let shared = self.shared.clone();
         let schemas = self.schemas.clone();
 
+        info!("Subscribing Graphql manager to schema provider");
         let mut on_schema_added = shared.schema_provider.on_schema_added();
 
         // Create the new GraphQL based on the current state of known p2panda application schemas
@@ -189,5 +190,102 @@ impl std::fmt::Debug for GraphQLSchemaManager {
         f.debug_struct("GraphQLSchemaManager")
             .field("shared", &self.shared)
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use async_graphql::{value, Response};
+    use p2panda_rs::schema::FieldType;
+    use p2panda_rs::test_utils::constants::PRIVATE_KEY;
+    use p2panda_rs::test_utils::fixtures::key_pair;
+    use rstest::rstest;
+    use serde_json::{json, Value};
+
+    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+    use crate::test_helpers::graphql_test_client;
+
+    #[rstest]
+    fn schema_updates(#[from(test_db)] runner: TestDatabaseRunner) {
+        runner.with_db_teardown(move |mut db: TestDatabase| async move {
+            // Create test client in the beginning so it is initialised with just the system
+            // schemas. Then we create a new application schema to test that the graphql schema
+            // is updated and we can query the changed schema.
+            let client = graphql_test_client(&db).await;
+
+            // This test uses a fixed private key to allow us to anticipate the schema typename.
+            let key_pair = key_pair(PRIVATE_KEY);
+            let type_name =
+                "schema_name_002050d1a071ef2061eb3ddb1f1420b22a52687ed134a9ba9f094b237104b4e7058c";
+
+            // Check that the schema does not exist yet.
+            let response = client
+                .post("/graphql")
+                .json(&json!({
+                    "query": format!(
+                        r#"{{
+                        schema: __type(name: "{}") {{
+                            name,
+                        }},
+                    }}"#,
+                        type_name,
+                    ),
+                }))
+                .send()
+                .await;
+            let response: Response = response.json().await;
+
+            assert_eq!(
+                response.data,
+                value!({
+                    "schema": Value::Null,
+                }),
+                "\n{:#?}\n",
+                response.errors
+            );
+
+            // Add schema to node.
+            let schema = db
+                .add_schema(
+                    "schema_name",
+                    vec![("bool_field", FieldType::Bool)],
+                    &key_pair,
+                )
+                .await;
+
+            assert_eq!(
+                schema.id().as_str(),
+                type_name,
+                "Please update `type_name` const above to fix this test."
+            );
+
+            // Query gql schema.
+            let response = client
+                .post("/graphql")
+                .json(&json!({
+                    "query": format!(
+                        r#"{{
+                        schema: __type(name: "{}") {{
+                            name,
+                        }},
+                    }}"#,
+                        type_name,
+                    ),
+                }))
+                .send()
+                .await;
+            let response: Response = response.json().await;
+
+            assert_eq!(
+                response.data,
+                value!({
+                    "schema": {
+                        "name": type_name
+                    },
+                }),
+                "\n{:#?}\n",
+                response.errors
+            );
+        });
     }
 }
