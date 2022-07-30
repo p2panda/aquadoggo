@@ -5,7 +5,6 @@
 use std::convert::TryInto;
 
 use async_graphql::{value, Response};
-use log::info;
 use p2panda_rs::document::DocumentId;
 use p2panda_rs::operation::OperationFields;
 use p2panda_rs::schema::FieldType;
