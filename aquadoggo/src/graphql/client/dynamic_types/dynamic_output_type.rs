@@ -18,13 +18,10 @@ use async_graphql::registry::{MetaField, MetaInputValue, MetaTypeId};
 use async_graphql::{ContextSelectionSet, OutputType, Positioned, ServerResult, Value};
 use p2panda_rs::schema::Schema;
 
-use crate::graphql::client::dynamic_types::utils::metaobject;
-use crate::graphql::client::dynamic_types::DocumentType;
+use crate::graphql::client::dynamic_types::utils::{metafield, metaobject};
+use crate::graphql::client::dynamic_types::{DocumentMetaType, DocumentType};
 use crate::graphql::client::DynamicQuery;
 use crate::schema::load_static_schemas;
-
-use crate::graphql::client::dynamic_types::utils::metafield;
-use crate::graphql::client::dynamic_types::DocumentMetaType;
 
 #[async_trait::async_trait]
 impl OutputType for DynamicQuery {

@@ -3,7 +3,6 @@
 use std::convert::TryInto;
 
 use async_graphql::indexmap::IndexMap;
-
 use async_graphql::{
     ContainerType, Context, Error, Name, SelectionField, ServerError, ServerResult, Value,
 };
@@ -18,12 +17,11 @@ use p2panda_rs::schema::SchemaId;
 use crate::db::provider::SqlStorage;
 use crate::db::traits::DocumentStore;
 use crate::graphql::client::dynamic_types::DocumentMetaType;
+use crate::graphql::client::utils::validate_view_matches_schema;
 use crate::graphql::scalars::{
     DocumentId as DocumentIdScalar, DocumentViewId as DocumentViewIdScalar,
 };
 use crate::schema::SchemaProvider;
-
-use crate::graphql::client::utils::validate_view_matches_schema;
 
 /// Resolves queries for documents based on p2panda schemas.
 ///

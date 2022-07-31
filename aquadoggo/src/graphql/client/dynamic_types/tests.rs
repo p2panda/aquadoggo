@@ -114,7 +114,6 @@ fn application_schema_container_type(#[from(test_db)] runner: TestDatabaseRunner
 
         let expected_data = value!({
             "schema": {
-                // Currently, all system schemas are object types.
                 "kind": "OBJECT",
                 "name": type_name,
                 "description": schema.description(),

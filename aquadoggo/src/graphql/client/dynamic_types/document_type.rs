@@ -4,9 +4,7 @@ use async_graphql::indexmap::IndexMap;
 use p2panda_rs::schema::Schema;
 
 use crate::graphql::client::dynamic_types::utils::{metafield, metaobject};
-use crate::graphql::client::dynamic_types::DocumentFieldsType;
-
-use super::document_meta_type::DocumentMetaType;
+use crate::graphql::client::dynamic_types::{DocumentFieldsType, DocumentMetaType};
 
 /// Represents documents of a p2panda schema.
 pub struct DocumentType(&'static Schema);
