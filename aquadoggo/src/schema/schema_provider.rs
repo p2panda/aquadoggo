@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use log::{info, warn};
+use log::{debug, info, warn};
 use p2panda_rs::schema::{Schema, SchemaId, SYSTEM_SCHEMAS};
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 use tokio::sync::Mutex;
@@ -34,6 +34,15 @@ impl SchemaProvider {
         }
 
         let (tx, _) = channel(64);
+
+        debug!(
+            "Initialised schema provider:\n- {}",
+            index
+                .values()
+                .map(|schema| schema.to_string())
+                .collect::<Vec<String>>()
+                .join("\n- ")
+        );
 
         Self {
             schemas: Arc::new(Mutex::new(index)),
