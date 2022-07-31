@@ -301,16 +301,9 @@ impl TestDatabaseRunner {
             // be reached even when the test panicked
             pool.close().await;
 
-            match result {
-                Ok(_) => {}
-                Err(err) => {
-                    error!("Test failed: {}", err);
-                }
-            }
-
             // Panic here when test failed. The test fails within its own async task and stays
             // there, we need to propagate it further to inform the test runtime about the result
-            // result.expect("The test failed");
+            result.expect("The test failed");
         });
     }
 }

@@ -22,7 +22,7 @@ impl TryFrom<DocumentViewId> for p2panda_rs::document::DocumentViewId {
     fn try_from(
         view_id: DocumentViewId,
     ) -> Result<p2panda_rs::document::DocumentViewId, Self::Error> {
-        view_id.0.parse().map_err(|err| Into::<Error>::into(err))
+        view_id.0.parse().map_err(Into::<Error>::into)
     }
 }
 

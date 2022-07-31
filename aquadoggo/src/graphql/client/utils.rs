@@ -19,7 +19,7 @@ pub async fn validate_view_matches_schema(
         .get_schema_by_document_view(document_view_id)
         .await
         .map_err(|err| ServerError::new(err.to_string(), None))?
-        .unwrap();
+        .ok_or_else(|| ServerError::new("View not found".to_string(), None))?;
 
     match &document_schema_id == schema_id {
         true => Ok(()),

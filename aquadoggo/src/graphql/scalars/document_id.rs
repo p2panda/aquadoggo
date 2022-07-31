@@ -21,10 +21,7 @@ impl TryFrom<DocumentId> for p2panda_rs::document::DocumentId {
     type Error = Error;
 
     fn try_from(document_id: DocumentId) -> Result<p2panda_rs::document::DocumentId, Self::Error> {
-        let hash = document_id
-            .0
-            .parse::<Hash>()
-            .map_err(|err| Into::<Error>::into(err))?;
+        let hash = document_id.0.parse::<Hash>().map_err(Into::<Error>::into)?;
         Ok(p2panda_rs::document::DocumentId::from(hash))
     }
 }
