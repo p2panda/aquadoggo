@@ -410,9 +410,6 @@ mod test {
                 byDocumentId: {type_name}(id: "{document_id}") {{
                     fields {{ bool }}
                 }}
-                notFound: {type_name}(id: "00208f7492d6eb01360a886dac93da88982029484d8c04a0bd2ac0607101b80a6634") {{
-                    fields {{ bool }}
-                }}
             }}"#,
                 type_name = schema.id().as_str(),
                 // Throw in some scalar type conversions to also test those.
@@ -434,7 +431,7 @@ mod test {
                 "byViewId": value!({ "fields": { "bool": true, } }),
                 "byDocumentId": value!({ "fields": { "bool": true, } }),
             });
-            assert_eq!(response.data, expected_data);
+            assert_eq!(response.data, expected_data, "{:#?}", response.errors);
         });
     }
 
@@ -555,7 +552,7 @@ mod test {
             let expected_data = value!({
                 "listing": value!([{ "fields": { "bool": true, } }]),
             });
-            assert_eq!(response.data, expected_data);
+            assert_eq!(response.data, expected_data, "{:#?}", response.errors);
         });
     }
 }
