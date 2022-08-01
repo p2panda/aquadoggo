@@ -122,7 +122,14 @@ pub async fn next_args<S: StorageProvider>(
                     increment_seq_num(&mut latest_seq_num)
                 }
                 None => Ok(SeqNum::default()),
-            }?;
+            }
+            .map_err(|_| {
+                anyhow!(
+                    "Max sequence number reached for {} log {}",
+                    public_key.display(),
+                    log_id.as_u64()
+                )
+            })?;
 
             // Check if skiplink is required and if it is get the entry and return its hash.
             let skiplink = if is_lipmaa_required(seq_num.as_u64()) {
@@ -292,6 +299,36 @@ pub async fn publish<S: StorageProvider>(
         store.insert_log(log).await?;
     }
 
+    /////////////////////////////////////
+    // DETERMINE NEXT ENTRY ARG VALUES //
+    /////////////////////////////////////
+
+    // If we have reached MAX_SEQ_NUM here for the next args then we will error and _not_ store the
+    // entry which is being processed in this request.
+    let next_seq_num = increment_seq_num(&mut seq_num.clone()).map_err(|_| {
+        anyhow!(
+            "Max sequence number reached for {} log {}",
+            author.display(),
+            log_id.as_u64()
+        )
+    })?;
+    let backlink = Some(entry_encoded.hash());
+
+    // Check if skiplink is required and return hash if so
+    let skiplink = if is_lipmaa_required(next_seq_num.as_u64()) {
+        Some(get_expected_skiplink(store, &author, log_id, &next_seq_num).await?)
+    } else {
+        None
+    }
+    .map(|entry| entry.hash());
+
+    let next_args = NextEntryArguments {
+        log_id: (*log_id).into(),
+        seq_num: next_seq_num.into(),
+        backlink: backlink.map(|hash| hash.into()),
+        skiplink: skiplink.map(|hash| hash.into()),
+    };
+
     ///////////////////////////////
     // STORE ENTRY AND OPERATION //
     ///////////////////////////////
@@ -308,34 +345,7 @@ pub async fn publish<S: StorageProvider>(
         )
         .await?;
 
-    /////////////////////////////////////
-    // DETERMINE NEXT ENTRY ARG VALUES //
-    /////////////////////////////////////
-
-    let next_seq_num = increment_seq_num(&mut seq_num.clone())?;
-    let backlink = Some(entry_encoded.hash());
-
-    // Check if skiplink is required and return hash if so
-    let skiplink = if is_lipmaa_required(next_seq_num.as_u64()) {
-        let skiplink_seq_num = next_seq_num.skiplink_seq_num().unwrap();
-        match store
-            .get_entry_at_seq_num(&author, log_id, &skiplink_seq_num)
-            .await?
-        {
-            Some(entry) => Ok(Some(entry)),
-            None => Err(anyhow!("Expected next skiplink missing")),
-        }
-    } else {
-        Ok(None)
-    }?
-    .map(|entry| entry.hash());
-
-    Ok(NextEntryArguments {
-        log_id: (*log_id).into(),
-        seq_num: next_seq_num.into(),
-        backlink: backlink.map(|hash| hash.into()),
-        skiplink: skiplink.map(|hash| hash.into()),
-    })
+    Ok(next_args)
 }
 
 /// Attempt to identify the document id for view id contained in a `next_args` request.
@@ -389,10 +399,10 @@ mod tests {
     };
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
     use p2panda_rs::test_utils::constants::{PRIVATE_KEY, SCHEMA_ID};
-    use p2panda_rs::test_utils::db::MemoryStore;
+    use p2panda_rs::test_utils::db::{MemoryStore, StorageEntry};
     use p2panda_rs::test_utils::fixtures::{
         create_operation, delete_operation, key_pair, operation, operation_fields, public_key,
-        random_document_view_id, update_operation,
+        random_document_view_id, random_hash, update_operation,
     };
     use rstest::rstest;
 
@@ -512,7 +522,9 @@ mod tests {
         expected = "Entry's claimed seq num of 7 does not match expected seq num of 9 for given author and log"
     )]
     #[case::seq_num_occupied_(&[], (0, 7))]
-    #[should_panic(expected = "Expected next skiplink missing")]
+    #[should_panic(
+        expected = "Expected skiplink target for <Author 53fc96> at log id 0 and seq num 4 not found in database"
+    )]
     #[case::next_args_skiplink_missing(&[(0, 4), (0, 7), (0, 8)], (0, 7))]
     #[should_panic(
         expected = "Entry's claimed seq num of 8 does not match expected seq num of 1 for given author and log"
@@ -1084,5 +1096,141 @@ mod tests {
                 assert!(result.is_ok());
             }
         });
+    }
+
+    #[rstest]
+    #[should_panic(expected = "Max sequence number reached for <Author 53fc96> log 0")]
+    #[tokio::test]
+    async fn next_args_max_seq_num_reached(
+        key_pair: KeyPair,
+        #[from(test_db_config)]
+        #[with(2, 1, 1, false)]
+        config: PopulateDatabaseConfig,
+    ) {
+        let mut db = TestDatabase {
+            store: MemoryStore::default(),
+            test_data: TestData::default(),
+        };
+
+        populate_test_db(&mut db, &config).await;
+
+        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+
+        let entry_two = db
+            .store
+            .get_entry_at_seq_num(&author, &LogId::default(), &SeqNum::new(2).unwrap())
+            .await
+            .unwrap()
+            .unwrap();
+
+        let entry = Entry::new(
+            &LogId::default(),
+            Some(&entry_two.operation()),
+            Some(&random_hash()),
+            Some(&random_hash()),
+            &SeqNum::new(u64::MAX).unwrap(),
+        )
+        .unwrap();
+
+        let entry_encoded = sign_and_encode(&entry, &key_pair).unwrap();
+
+        let entry =
+            StorageEntry::new(&entry_encoded, &entry_two.operation_encoded().unwrap()).unwrap();
+
+        db.store
+            .entries
+            .lock()
+            .unwrap()
+            .insert(entry.hash(), entry.clone());
+
+        let result = next_args(&db.store, &author, Some(&entry_two.hash().into())).await;
+
+        result.unwrap();
+    }
+
+    #[rstest]
+    #[should_panic(expected = "Max sequence number reached for <Author 53fc96> log 0")]
+    #[tokio::test]
+    async fn publish_max_seq_num_reached(
+        key_pair: KeyPair,
+        #[from(test_db_config)]
+        #[with(2, 1, 1, false)]
+        config: PopulateDatabaseConfig,
+    ) {
+        let mut db = TestDatabase {
+            store: MemoryStore::default(),
+            test_data: TestData::default(),
+        };
+
+        populate_test_db(&mut db, &config).await;
+
+        let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+
+        let entry_two = db
+            .store
+            .get_entry_at_seq_num(&author, &LogId::default(), &SeqNum::new(2).unwrap())
+            .await
+            .unwrap()
+            .unwrap();
+
+        let skiplink = Entry::new(
+            &LogId::default(),
+            Some(&entry_two.operation()),
+            Some(&random_hash()),
+            Some(&random_hash()),
+            &SeqNum::new(18446744073709551611).unwrap(),
+        )
+        .unwrap();
+
+        let entry_encoded = sign_and_encode(&skiplink, &key_pair).unwrap();
+
+        let skiplink =
+            StorageEntry::new(&entry_encoded, &entry_two.operation_encoded().unwrap()).unwrap();
+
+        db.store
+            .entries
+            .lock()
+            .unwrap()
+            .insert(skiplink.hash(), skiplink.clone());
+
+        let backlink = Entry::new(
+            &LogId::default(),
+            Some(&entry_two.operation()),
+            Some(&random_hash()),
+            Some(&random_hash()),
+            &SeqNum::new(u64::MAX - 1).unwrap(),
+        )
+        .unwrap();
+
+        let entry_encoded = sign_and_encode(&backlink, &key_pair).unwrap();
+
+        let backlink =
+            StorageEntry::new(&entry_encoded, &entry_two.operation_encoded().unwrap()).unwrap();
+
+        db.store
+            .entries
+            .lock()
+            .unwrap()
+            .insert(backlink.hash(), backlink.clone());
+
+        let entry_with_max_seq_num = Entry::new(
+            &LogId::default(),
+            Some(&entry_two.operation()),
+            Some(&skiplink.hash()),
+            Some(&backlink.hash()),
+            &SeqNum::new(u64::MAX).unwrap(),
+        )
+        .unwrap();
+
+        let entry_encoded = sign_and_encode(&entry_with_max_seq_num, &key_pair).unwrap();
+
+        let result = publish(
+            &db.store,
+            &entry_encoded,
+            &entry_two.operation_encoded().unwrap(),
+        )
+        .await;
+
+        result.unwrap();
     }
 }
