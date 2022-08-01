@@ -1166,6 +1166,8 @@ mod tests {
 
         let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
+        // Get the latest entry, we will use it's operation in all other entries (doesn't matter if it's a duplicate, just need the previous
+        // operations to exist).
         let entry_two = db
             .store
             .get_entry_at_seq_num(&author, &LogId::default(), &SeqNum::new(2).unwrap())
@@ -1173,6 +1175,7 @@ mod tests {
             .unwrap()
             .unwrap();
 
+        // Create and insert the skiplink for MAX_SEQ_NUM entry
         let skiplink = Entry::new(
             &LogId::default(),
             Some(&entry_two.operation()),
@@ -1193,6 +1196,7 @@ mod tests {
             .unwrap()
             .insert(skiplink.hash(), skiplink.clone());
 
+        // Create and insert the backlink for MAX_SEQ_NUM entry
         let backlink = Entry::new(
             &LogId::default(),
             Some(&entry_two.operation()),
@@ -1213,6 +1217,7 @@ mod tests {
             .unwrap()
             .insert(backlink.hash(), backlink.clone());
 
+        // Create the MAX_SEQ_NUM entry using the above skiplink and backlink
         let entry_with_max_seq_num = Entry::new(
             &LogId::default(),
             Some(&entry_two.operation()),
@@ -1224,6 +1229,7 @@ mod tests {
 
         let entry_encoded = sign_and_encode(&entry_with_max_seq_num, &key_pair).unwrap();
 
+        // Publish the MAX_SEQ_NUM entry
         let result = publish(
             &db.store,
             &entry_encoded,
@@ -1231,6 +1237,15 @@ mod tests {
         )
         .await;
 
+        // try and get the MAX_SEQ_NUM entry again (it shouldn't be there)
+        let entry_at_max_seq_num = db
+            .store
+            .get_entry_by_hash(&entry_encoded.hash())
+            .await
+            .unwrap();
+
+        // We expect the entry we published not to have been stored in the db
+        assert!(entry_at_max_seq_num.is_none());
         result.unwrap();
     }
 }
