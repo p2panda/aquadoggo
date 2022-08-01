@@ -11,10 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - GraphQL replication service gets and verifies new entries and inserts them into the db [#137](https://github.com/p2panda/aquadoggo/pull/137)
 - `validation` and `domain` modules used for publish and next args API [#204](https://github.com/p2panda/aquadoggo/pull/204)
+- Add schema task and schema provider that update when new schema views are materialised [#166](https://github.com/p2panda/aquadoggo/pull/166)
 
 ### Changed
 
 - Refactor scalars and replication API, replace `graphql-client` with `gql_client` [#184](https://github.com/p2panda/aquadoggo/pull/184)
+- Give error types of worker a string for better debugging [#194](https://github.com/p2panda/aquadoggo/pull/194)
 - Bump `p2panda-rs` which now supports log id's starting from `0` [#207](https://github.com/p2panda/aquadoggo/pull/207)
 
 ### Fixed

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use log::debug;
+use log::{debug, info};
 use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
 use p2panda_rs::operation::VerifiedOperation;
 use p2panda_rs::storage_provider::traits::OperationStore;
@@ -18,7 +18,7 @@ use crate::materializer::TaskInput;
 /// After succesfully reducing and storing a document view an array of dependency tasks is returned.
 /// If invalid inputs were passed or a fatal db error occured a critical error is returned.
 pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
-    debug!("Working on reduce task {:#?}", input);
+    debug!("Working on {}", input);
 
     // Find out which document we are handling
     let document_id = match resolve_document_id(&context, &input).await? {
@@ -34,10 +34,7 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
         .store
         .get_operations_by_document_id(&document_id)
         .await
-        .map_err(|err| {
-            debug!("Failed loading operations from storage: {}", err);
-            TaskError::Critical
-        })?;
+        .map_err(|err| TaskError::Critical(err.to_string()))?;
 
     let document_view_id = match &input.document_view_id {
         // If this task was passed a document_view_id as input then we want to build to document
@@ -51,6 +48,7 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
     match document_view_id {
         Some(view_id) => {
             debug!("Dispatch dependency task for view with id: {}", view_id);
+
             Ok(Some(vec![Task::new(
                 "dependency",
                 TaskInput::new(None, Some(view_id)),
@@ -81,19 +79,17 @@ async fn resolve_document_id(
             // @TODO: We can skip this step if we implement:
             // https://github.com/p2panda/aquadoggo/issues/148
             debug!("Find document for view with id: {}", document_view_id);
+
             let operation_id = document_view_id.clone().into_iter().next().unwrap();
+
             context
                 .store
                 .get_document_by_operation_id(&operation_id)
                 .await
-                .map_err(|err| {
-                    debug!("Fatal error getting document_id from storage");
-                    debug!("{}", err);
-                    TaskError::Critical
-                })
+                .map_err(|err| TaskError::Critical(err.to_string()))
         }
         // None or both have been provided which smells like a bug
-        (_, _) => Err(TaskError::Critical),
+        (_, _) => Err(TaskError::Critical("Invalid task input".into())),
     }
 }
 
@@ -116,6 +112,7 @@ async fn reduce_document_view(
                 "Document materialized to view with id: {}",
                 document_view_id
             );
+
             if document.is_deleted() {
                 return Ok(None);
             };
@@ -139,15 +136,9 @@ async fn reduce_document_view(
         .store
         .insert_document_view(document.view().unwrap(), document.schema())
         .await
-        .map_err(|err| {
-            debug!(
-                "Failed to insert document view into database: {}",
-                document_view_id
-            );
-            debug!("{}", err);
+        .map_err(|err| TaskError::Critical(err.to_string()))?;
 
-            TaskError::Critical
-        })?;
+    info!("Stored {} view {}", document, document.view_id());
 
     // Return the new view id to be used in the resulting dependency task
     Ok(Some(document.view_id().to_owned()))
@@ -170,16 +161,14 @@ async fn reduce_document(
                 .store
                 .insert_document(&document)
                 .await
-                .map_err(|err| {
-                    debug!("Failed to insert document into database: {}", document.id());
-                    debug!("{}", err);
-                    TaskError::Critical
-                })?;
+                .map_err(|err| TaskError::Critical(err.to_string()))?;
 
             // If the document was deleted, then we return nothing
             if document.is_deleted() {
                 return Ok(None);
             }
+
+            info!("Stored {} view {}", document, document.view_id());
 
             // Return the new document_view id to be used in the resulting dependency task
             Ok(Some(document.view_id().to_owned()))
@@ -211,6 +200,7 @@ mod tests {
     use crate::db::traits::DocumentStore;
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
+    use crate::schema::SchemaProvider;
 
     #[rstest]
     fn reduces_documents(
@@ -227,7 +217,11 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
-            let context = Context::new(db.store.clone(), Configuration::default());
+            let context = Context::new(
+                db.store,
+                Configuration::default(),
+                SchemaProvider::default(),
+            );
 
             for document_id in &db.test_data.documents {
                 let input = TaskInput::new(Some(document_id.clone()), None);
@@ -255,7 +249,11 @@ mod tests {
             let document_id = db.test_data.documents.first().unwrap();
             let key_pair = db.test_data.key_pairs.first().unwrap();
 
-            let context = Context::new(db.store.clone(), Configuration::default());
+            let context = Context::new(
+                db.store.clone(),
+                Configuration::default(),
+                SchemaProvider::default(),
+            );
             let input = TaskInput::new(Some(document_id.clone()), None);
 
             // There is one CREATE operation for this document in the db, it should create a document
@@ -318,7 +316,11 @@ mod tests {
                 .clone()
                 .into();
 
-            let context = Context::new(db.store.clone(), Configuration::default());
+            let context = Context::new(
+                db.store.clone(),
+                Configuration::default(),
+                SchemaProvider::default(),
+            );
             let input = TaskInput::new(None, Some(document_view_id.clone()));
 
             assert!(reduce_task(context.clone(), input).await.is_ok());
@@ -359,7 +361,11 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
-            let context = Context::new(db.store.clone(), Configuration::default());
+            let context = Context::new(
+                db.store.clone(),
+                Configuration::default(),
+                SchemaProvider::default(),
+            );
 
             for document_id in &db.test_data.documents {
                 let input = TaskInput::new(Some(document_id.clone()), None);
@@ -402,7 +408,11 @@ mod tests {
         #[case] is_next_task: bool,
     ) {
         runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
-            let context = Context::new(db.store.clone(), Configuration::default());
+            let context = Context::new(
+                db.store.clone(),
+                Configuration::default(),
+                SchemaProvider::default(),
+            );
             let document_id = db.test_data.documents[0].clone();
 
             let input = TaskInput::new(Some(document_id.clone()), None);
@@ -420,7 +430,11 @@ mod tests {
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
-            let context = Context::new(db.store.clone(), Configuration::default());
+            let context = Context::new(
+                db.store,
+                Configuration::default(),
+                SchemaProvider::default(),
+            );
             let input = TaskInput::new(document_id, document_view_id);
 
             assert!(reduce_task(context.clone(), input).await.is_err());
@@ -437,7 +451,11 @@ mod tests {
     ) {
         // Prepare empty database.
         runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
-            let context = Context::new(db.store.clone(), Configuration::default());
+            let context = Context::new(
+                db.store.clone(),
+                Configuration::default(),
+                SchemaProvider::default(),
+            );
 
             // Dispatch a reduce task for a document which doesn't exist by it's document id.
             let input = TaskInput::new(Some(document_id), None);

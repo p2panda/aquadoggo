@@ -152,6 +152,7 @@ mod tests {
     use crate::db::stores::test_utils::{send_to_store, test_db, TestDatabase, TestDatabaseRunner};
     use crate::db::traits::DocumentStore;
     use crate::materializer::{Task, TaskInput};
+    use crate::schema::SchemaProvider;
     use crate::Configuration;
 
     use super::materializer_service;
@@ -184,7 +185,11 @@ mod tests {
                 .is_none());
 
             // Prepare arguments for service
-            let context = Context::new(db.store.clone(), Configuration::default());
+            let context = Context::new(
+                db.store.clone(),
+                Configuration::default(),
+                SchemaProvider::default(),
+            );
             let shutdown = task::spawn(async {
                 loop {
                     // Do this forever .. this means that the shutdown handler will never resolve
@@ -253,7 +258,11 @@ mod tests {
                 .unwrap();
 
             // Prepare arguments for service
-            let context = Context::new(db.store.clone(), Configuration::default());
+            let context = Context::new(
+                db.store.clone(),
+                Configuration::default(),
+                SchemaProvider::default(),
+            );
             let shutdown = task::spawn(async {
                 loop {
                     // Do this forever .. this means that the shutdown handler will never resolve
@@ -313,7 +322,11 @@ mod tests {
                 .to_owned();
 
             // Prepare arguments for service
-            let context = Context::new(db.store.clone(), Configuration::default());
+            let context = Context::new(
+                db.store.clone(),
+                Configuration::default(),
+                SchemaProvider::default(),
+            );
             let shutdown = task::spawn(async {
                 loop {
                     // Do this forever .. this means that the shutdown handler will never resolve
@@ -435,7 +448,11 @@ mod tests {
         // Prepare empty database
         runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             // Prepare arguments for service
-            let context = Context::new(db.store.clone(), Configuration::default());
+            let context = Context::new(
+                db.store.clone(),
+                Configuration::default(),
+                SchemaProvider::default(),
+            );
             let shutdown = task::spawn(async {
                 loop {
                     // Do this forever .. this means that the shutdown handler will never resolve
