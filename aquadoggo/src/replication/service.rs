@@ -14,6 +14,7 @@ use p2panda_rs::operation::{AsVerifiedOperation, VerifiedOperation};
 use p2panda_rs::storage_provider::traits::{
     AsStorageEntry, EntryStore, OperationStore, StorageProvider,
 };
+use tokio::sync::oneshot;
 use tokio::task;
 
 use crate::bus::{ServiceMessage, ServiceSender};
@@ -29,6 +30,7 @@ pub async fn replication_service(
     context: Context,
     shutdown: Shutdown,
     tx: ServiceSender,
+    tx_ready: oneshot::Sender<()>,
 ) -> Result<()> {
     // Prepare replication configuration
     let config = &context.config.replication;
@@ -100,6 +102,11 @@ pub async fn replication_service(
             tokio::time::sleep(connection_interval).await;
         }
     });
+
+    debug!("Replication service is ready");
+    if tx_ready.send(()).is_err() {
+        warn!("No subscriber informed about replication service being ready");
+    };
 
     tokio::select! {
         _ = handle => (),
@@ -275,7 +282,7 @@ mod tests {
     use p2panda_rs::storage_provider::traits::EntryStore;
     use p2panda_rs::test_utils::constants::SCHEMA_ID;
     use rstest::rstest;
-    use tokio::sync::broadcast;
+    use tokio::sync::{broadcast, oneshot};
     use tokio::task;
 
     use crate::context::Context;
@@ -323,12 +330,17 @@ mod tests {
                 },
                 SchemaProvider::default(),
             );
+            let (tx_ready, rx_ready) = oneshot::channel::<()>();
 
             let http_server_billie = task::spawn(async {
-                http_service(context_billie, shutdown_billie, tx_billie)
+                http_service(context_billie, shutdown_billie, tx_billie, tx_ready)
                     .await
                     .unwrap();
             });
+
+            if rx_ready.await.is_err() {
+                panic!("Service dropped");
+            }
 
             // Our test database helper already populated the database for us. We retreive the
             // public keys here of the authors who created these test data entries
@@ -359,13 +371,18 @@ mod tests {
                 Context::new(ada_db.store.clone(), config_ada, SchemaProvider::default());
             let tx_ada = tx.clone();
             let shutdown_ada = shutdown_handle();
+            let (tx_ready, rx_ready) = oneshot::channel::<()>();
 
             // Ada starts replication service to get data from Billies GraphQL API
             let replication_service_ada = task::spawn(async {
-                replication_service(context_ada, shutdown_ada, tx_ada)
+                replication_service(context_ada, shutdown_ada, tx_ada, tx_ready)
                     .await
                     .unwrap();
             });
+
+            if rx_ready.await.is_err() {
+                panic!("Service dropped");
+            }
 
             // Wait a little bit for replication to take place
             tokio::time::sleep(Duration::from_millis(500)).await;

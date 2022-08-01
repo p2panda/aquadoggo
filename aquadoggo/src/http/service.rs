@@ -7,6 +7,8 @@ use axum::extract::Extension;
 use axum::http::Method;
 use axum::routing::get;
 use axum::Router;
+use log::{debug, warn};
+use tokio::sync::oneshot;
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::bus::ServiceSender;
@@ -38,7 +40,7 @@ pub fn build_server(http_context: HttpServiceContext) -> Router {
 }
 
 /// Start HTTP server.
-pub async fn http_service(context: Context, signal: Shutdown, tx: ServiceSender) -> Result<()> {
+pub async fn http_service(context: Context, signal: Shutdown, tx: ServiceSender, tx_ready: oneshot::Sender<()>) -> Result<()> {
     let http_port = context.config.http_port;
     let http_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), http_port);
 
@@ -48,6 +50,11 @@ pub async fn http_service(context: Context, signal: Shutdown, tx: ServiceSender)
     axum::Server::try_bind(&http_address)?
         .serve(build_server(http_context).into_make_service())
         .with_graceful_shutdown(async {
+            debug!("HTTP service is ready");
+            if tx_ready.send(()).is_err() {
+                warn!("No subscriber informed about HTTP service being ready");
+            };
+
             signal.await.ok();
         })
         .await?;

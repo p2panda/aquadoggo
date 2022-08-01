@@ -4,7 +4,7 @@ use std::future::Future;
 
 use anyhow::Result;
 use log::{error, info};
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, oneshot};
 use tokio::sync::broadcast::error::RecvError;
 use tokio::task;
 use tokio::task::JoinHandle;
@@ -12,6 +12,9 @@ use triggered::{Listener, Trigger};
 
 /// Sends messages through the communication bus between services.
 pub type Sender<T> = broadcast::Sender<T>;
+
+// Receives ready signal from services once they are ready to handle messages on the communication bus.
+pub type ServiceReady = oneshot::Receiver<()>;
 
 /// Receives shutdown signal for services so they can react accordingly.
 pub type Shutdown = JoinHandle<()>;
@@ -27,7 +30,7 @@ where
     D: Clone + Send + Sync + 'static,
     M: Clone + Send + Sync + 'static,
 {
-    async fn call(&self, context: D, shutdown: Shutdown, tx: Sender<M>) -> Result<()>;
+    async fn call(&self, context: D, shutdown: Shutdown, tx: Sender<M>, tx_ready: oneshot::Sender<()>) -> Result<()>;
 }
 
 /// Implements our `Service` trait for a generic async function.
@@ -35,7 +38,7 @@ where
 impl<FN, F, D, M> Service<D, M> for FN
 where
     // Function accepting a context and our communication channels, returning a future.
-    FN: Fn(D, Shutdown, Sender<M>) -> F + Sync,
+    FN: Fn(D, Shutdown, Sender<M>, oneshot::Sender<()>) -> F + Sync,
     // A future
     F: Future<Output = Result<()>> + Send + 'static,
     // Generic context type.
@@ -48,8 +51,8 @@ where
     ///
     /// This gets automatically wrapped in a static, boxed and pinned function signature by the
     /// `async_trait` macro so we don't need to do it ourselves.
-    async fn call(&self, context: D, shutdown: Shutdown, tx: Sender<M>) -> Result<()> {
-        (self)(context, shutdown, tx).await
+    async fn call(&self, context: D, shutdown: Shutdown, tx: Sender<M>, tx_ready: oneshot::Sender<()>) -> Result<()> {
+        (self)(context, shutdown, tx, tx_ready).await
     }
 }
 
@@ -140,7 +143,7 @@ where
         &mut self,
         name: &'static str,
         service: F,
-    ) {
+    ) -> ServiceReady  {
         // Sender for communication bus
         let tx = self.tx.clone();
 
@@ -156,6 +159,10 @@ where
         // Sender for exit signal
         let exit_signal = self.exit_signal.clone();
 
+        // Oneshot channel on which services send a message once they are listening on the
+        // communication bus.
+        let (tx_ready, rx_ready) = oneshot::channel::<()>();
+
         // Reference to shared context
         let context = self.context.clone();
 
@@ -163,7 +170,7 @@ where
             info!("Start {} service", name);
 
             // Run the service!
-            let handle = service.call(context, signal, tx).await;
+            let handle = service.call(context, signal, tx, tx_ready).await;
 
             // Drop the shutdown sender of this service when we're done, this signals the shutdown
             // process that this service has finally stopped
@@ -179,6 +186,9 @@ where
             // `Drop` trait on `Signal` we will be able to fire a signal also when this task panics
             // or stops.
         });
+
+        // Return ready signal receiver so this method can be awaited.
+        rx_ready
     }
 
     /// Future which resolves as soon as a service returned an error, panicked or stopped.
@@ -223,7 +233,7 @@ mod tests {
     async fn service_manager() {
         let mut manager = ServiceManager::<usize, usize>::new(16, 0);
 
-        manager.add("test", |_, signal: Shutdown, _| async {
+        manager.add("test", |_, signal: Shutdown, _, _| async {
             let work = tokio::task::spawn(async {
                 loop {
                     // Doing some very important work here ..
@@ -258,7 +268,7 @@ mod tests {
 
         // Create five services waiting for message
         for _ in 0..5 {
-            manager.add("rx", |data: Counter, _, tx: Sender<Message>| async move {
+            manager.add("rx", |data: Counter, _, tx: Sender<Message>, _| async move {
                 let mut rx = tx.subscribe();
                 let message = rx.recv().await.unwrap();
 
@@ -272,7 +282,7 @@ mod tests {
         }
 
         // Create another service sending message over communication bus
-        manager.add("tx", |_, _, tx: Sender<Message>| async move {
+        manager.add("tx", |_, _, tx: Sender<Message>, _| async move {
             tx.send(Message::Hello).unwrap();
             Ok(())
         });
@@ -288,7 +298,7 @@ mod tests {
         let counter: Counter = Arc::new(AtomicUsize::new(0));
         let mut manager = ServiceManager::<Counter, usize>::new(32, counter.clone());
 
-        manager.add("one", |counter: Counter, signal: Shutdown, _| async move {
+        manager.add("one", |counter: Counter, signal: Shutdown, _, _| async move {
             let counter_clone = counter.clone();
 
             let work = tokio::task::spawn(async move {
@@ -310,7 +320,7 @@ mod tests {
             Ok(())
         });
 
-        manager.add("two", |_, _, _| async move {
+        manager.add("two", |_, _, _, _| async move {
             // Wait a little bit for the first task to do its work
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
             panic!("This went wrong");
