@@ -152,7 +152,7 @@ impl GraphQLSchemaManager {
 
         // Always build a schema right at the beginning as we don't have one yet
         rebuild(shared.clone(), schemas.clone()).await;
-        debug!("Finished building initial GraphQL schema",);
+        debug!("Finished building initial GraphQL schema");
 
         // Spawn a task which reacts to newly registered p2panda schemas
         tokio::task::spawn(async move {
