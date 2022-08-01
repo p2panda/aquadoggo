@@ -87,7 +87,7 @@ pub async fn next_args<S: StorageProvider>(
 
     // Get the document_id for this document_view_id. This performs several validation steps (check
     // method doc string).
-    let document_id = get_validate_document_id_for_view_id(store, document_view_id).await?;
+    let document_id = get_checked_document_id_for_view_id(store, document_view_id).await?;
 
     // Check the document is not deleted.
     ensure_document_not_deleted(store, &document_id).await?;
@@ -272,7 +272,7 @@ pub async fn publish<S: StorageProvider>(
             // Get the document_id for the document_view_id contained in previous operations.
             // This performs several validation steps (check method doc string).
             let document_id =
-                get_validate_document_id_for_view_id(store, &previous_operations).await?;
+                get_checked_document_id_for_view_id(store, &previous_operations).await?;
 
             // Ensure the document isn't deleted.
             ensure_document_not_deleted(store, &document_id)
@@ -354,7 +354,7 @@ pub async fn publish<S: StorageProvider>(
 ///
 /// - any of the operations contained in the view id _don't_ exist in the store
 /// - any of the operations contained in the view id return a different document id than any of the others
-pub async fn get_validate_document_id_for_view_id<S: StorageProvider>(
+pub async fn get_checked_document_id_for_view_id<S: StorageProvider>(
     store: &S,
     view_id: &DocumentViewId,
 ) -> AnyhowResult<DocumentId> {
@@ -414,7 +414,7 @@ mod tests {
     use crate::domain::publish;
     use crate::graphql::client::NextEntryArguments;
 
-    use super::{get_validate_document_id_for_view_id, next_args};
+    use super::{get_checked_document_id_for_view_id, next_args};
 
     type LogIdAndSeqNum = (u64, u64);
 
@@ -451,7 +451,7 @@ mod tests {
         #[from(random_document_view_id)] document_view_id: DocumentViewId,
     ) {
         runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
-            let result = get_validate_document_id_for_view_id(&db.store, &document_view_id).await;
+            let result = get_checked_document_id_for_view_id(&db.store, &document_view_id).await;
             assert!(result.is_err());
         });
     }
@@ -485,7 +485,7 @@ mod tests {
             let operation_two_id: OperationId = entry.hash().into();
 
             // Get the document id for the passed view id.
-            let result = get_validate_document_id_for_view_id(
+            let result = get_checked_document_id_for_view_id(
                 &db.store,
                 &DocumentViewId::new(&[operation_one_id.clone(), operation_two_id]).unwrap(),
             )
