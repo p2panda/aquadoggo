@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-
 //! Test correct generation of output schema.
 
 use async_graphql::{value, Response, Value};
