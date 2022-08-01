@@ -60,11 +60,19 @@ impl Node {
         let mut manager = ServiceManager::<Context, ServiceMessage>::new(1024, context);
 
         // Start materializer service.
-        if manager.add("materializer", materializer_service).await.is_err() {
+        if manager
+            .add("materializer", materializer_service)
+            .await
+            .is_err()
+        {
             panic!("Failed starting materialiser service");
         }
         // Start replication service
-        if manager.add("replication", replication_service).await.is_err() {
+        if manager
+            .add("replication", replication_service)
+            .await
+            .is_err()
+        {
             panic!("Failed starting replication service");
         }
 

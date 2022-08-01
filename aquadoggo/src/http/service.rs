@@ -41,7 +41,12 @@ pub fn build_server(http_context: HttpServiceContext) -> Router {
 }
 
 /// Start HTTP server.
-pub async fn http_service(context: Context, signal: Shutdown, tx: ServiceSender, tx_ready: oneshot::Sender<()>) -> Result<()> {
+pub async fn http_service(
+    context: Context,
+    signal: Shutdown,
+    tx: ServiceSender,
+    tx_ready: oneshot::Sender<()>,
+) -> Result<()> {
     let http_port = context.config.http_port;
     let http_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), http_port);
 

@@ -284,8 +284,8 @@ mod tests {
             let tx_clone = tx.clone();
             let handle = tokio::spawn(async move {
                 materializer_service(context, shutdown, tx_clone, tx_ready)
-                .await
-                .unwrap();
+                    .await
+                    .unwrap();
             });
 
             if rx_ready.await.is_err() {
@@ -353,8 +353,8 @@ mod tests {
             let tx_clone = tx.clone();
             let handle = tokio::spawn(async move {
                 materializer_service(context, shutdown, tx_clone, tx_ready)
-                .await
-                .unwrap();
+                    .await
+                    .unwrap();
             });
 
             if rx_ready.await.is_err() {
@@ -482,8 +482,8 @@ mod tests {
 
             let handle = tokio::spawn(async move {
                 materializer_service(context, shutdown, tx_clone, tx_ready)
-                .await
-                .unwrap();
+                    .await
+                    .unwrap();
             });
 
             if rx_ready.await.is_err() {
