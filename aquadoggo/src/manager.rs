@@ -151,6 +151,8 @@ where
     ///
     /// Errors returned and panics by the service will send an exit signal which can be subscribed
     /// to via the `on_exit` method.
+    ///
+    ///
     pub fn add<F: Service<D, M> + Send + Sync + 'static>(
         &mut self,
         name: &'static str,
@@ -236,6 +238,8 @@ where
 mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+
+    use tokio::sync::oneshot;
 
     use super::{Sender, ServiceManager, Shutdown};
 
@@ -352,5 +356,38 @@ mod tests {
 
         // Check if we could do our work and shutdown procedure
         assert_eq!(counter.load(Ordering::Relaxed), 2);
+    }
+
+    #[tokio::test]
+    async fn ready_signal() {
+        let mut manager = ServiceManager::<usize, usize>::new(16, 0);
+
+        let service_ready = manager.add(
+            "ready_signal",
+            |_, _, _, tx_ready: oneshot::Sender<()>| async {
+                // Send a message to indicate that this service is ready for some WORK!
+                tx_ready.send(()).unwrap();
+                Ok(())
+            },
+        );
+
+        // Blocking here until service has signalled that it's ready.
+        assert!(service_ready.await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn ready_signal_error() {
+        let mut manager = ServiceManager::<usize, usize>::new(16, 0);
+
+        let service_ready = manager.add(
+            "ready_signal",
+            |_, _, _, _tx_ready: oneshot::Sender<()>| async {
+                // This service doesn't indicate that it's ready!
+                Ok(())
+            },
+        );
+
+        // We panic when trying to wait for the service to become ready.
+        assert!(service_ready.await.is_err());
     }
 }
