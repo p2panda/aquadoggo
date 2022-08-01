@@ -83,7 +83,7 @@ impl LogStore<StorageLog> for SqlStorage {
         .bind(log.author().as_str())
         .bind(log.id().as_u64().to_string())
         .bind(log.document_id().as_str())
-        .bind(log.schema_id().as_str())
+        .bind(log.schema_id().to_string())
         .execute(&self.pool)
         .await
         .map_err(|e| LogStorageError::Custom(e.to_string()))?

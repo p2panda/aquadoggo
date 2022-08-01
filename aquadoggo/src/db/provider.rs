@@ -5,6 +5,9 @@ use p2panda_rs::document::DocumentId;
 use p2panda_rs::hash::Hash;
 use p2panda_rs::operation::VerifiedOperation;
 use p2panda_rs::storage_provider::traits::StorageProvider;
+use p2panda_rs::test_utils::db::{
+    EntryArgsRequest, EntryArgsResponse, PublishEntryRequest, PublishEntryResponse,
+};
 use sqlx::query_scalar;
 
 use crate::db::stores::{StorageEntry, StorageLog};
@@ -28,6 +31,10 @@ impl SqlStorage {
 /// databases.
 #[async_trait]
 impl StorageProvider for SqlStorage {
+    type EntryArgsRequest = EntryArgsRequest;
+    type EntryArgsResponse = EntryArgsResponse;
+    type PublishEntryRequest = PublishEntryRequest;
+    type PublishEntryResponse = PublishEntryResponse;
     type StorageLog = StorageLog;
     type StorageEntry = StorageEntry;
     type StorageOperation = VerifiedOperation;

@@ -6,6 +6,7 @@ use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::AsOperation;
 use p2panda_rs::storage_provider::traits::StorageProvider;
+use p2panda_rs::Human;
 
 /// Verify that a claimed seq num is the next sequence number following the latest.
 ///
@@ -116,7 +117,7 @@ pub async fn get_expected_skiplink<S: StorageProvider>(
         expected_skiplink.is_some(),
         anyhow!(
             "Expected skiplink target for {} at log id {} and seq num {} not found in database",
-            author,
+            author.display(),
             log_id.as_u64(),
             expected_skiplink_seq_num.unwrap().as_u64()
         )

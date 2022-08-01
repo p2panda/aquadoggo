@@ -100,11 +100,11 @@ impl OperationStore<VerifiedOperation> for SqlStorage {
         .bind(operation.operation_id().as_str())
         .bind(operation.operation_id().as_hash().as_str())
         .bind(operation.action().as_str())
-        .bind(operation.schema().as_str())
+        .bind(operation.schema().to_string())
         .bind(
             operation
                 .previous_operations()
-                .map(|document_view_id| document_view_id.as_str()),
+                .map(|document_view_id| document_view_id.to_string()),
         )
         .execute(&self.pool)
         .await

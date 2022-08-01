@@ -51,7 +51,7 @@ impl DocumentStore for SqlStorage {
                             ($1, $2, $3)
                         ",
                 )
-                .bind(document_view.id().as_str())
+                .bind(document_view.id().to_string())
                 .bind(value.id().as_str().to_owned())
                 .bind(name)
                 .execute(&self.pool)
@@ -71,8 +71,8 @@ impl DocumentStore for SqlStorage {
                 ($1, $2)
             ",
         )
-        .bind(document_view.id().as_str())
-        .bind(schema_id.as_str())
+        .bind(document_view.id().to_string())
+        .bind(schema_id.to_string())
         .execute(&self.pool)
         .await
         .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
@@ -129,7 +129,7 @@ impl DocumentStore for SqlStorage {
                 operation_fields_v1.list_index ASC
             ",
         )
-        .bind(id.as_str())
+        .bind(id.to_string())
         .fetch_all(&self.pool)
         .await
         .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
@@ -173,9 +173,9 @@ impl DocumentStore for SqlStorage {
             ",
         )
         .bind(document.id().as_str())
-        .bind(document.view_id().as_str())
+        .bind(document.view_id().to_string())
         .bind(document.is_deleted())
-        .bind(document.schema().as_str())
+        .bind(document.schema().to_string())
         .execute(&self.pool)
         .await
         .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
@@ -283,7 +283,7 @@ impl DocumentStore for SqlStorage {
                 operation_fields_v1.list_index ASC
             ",
         )
-        .bind(schema_id.as_str())
+        .bind(schema_id.to_string())
         .fetch_all(&self.pool)
         .await
         .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;

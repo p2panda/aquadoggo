@@ -223,7 +223,7 @@ mod tests {
                 .await
                 .unwrap()
                 .expect("We expect that the document is `Some`");
-            assert_eq!(document.id().as_str(), document_id.as_str());
+            assert_eq!(document.id().to_string(), document_id.to_string());
             assert_eq!(
                 document.fields().get("name").unwrap().value().to_owned(),
                 OperationValue::Text("panda".into())
@@ -284,7 +284,7 @@ mod tests {
                 .await
                 .unwrap()
                 .expect("We expect that the document is `Some`");
-            assert_eq!(document.id().as_str(), document_id.as_str());
+            assert_eq!(document.id().to_string(), document_id.to_string());
             assert_eq!(
                 document.fields().get("name").unwrap().value().to_owned(),
                 OperationValue::Text("panda".into())

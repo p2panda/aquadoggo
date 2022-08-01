@@ -309,7 +309,7 @@ impl EntryStore<StorageEntry> for SqlStorage {
                 logs.schema = $1
             ",
         )
-        .bind(schema.as_str())
+        .bind(schema.to_string())
         .fetch_all(&self.pool)
         .await
         .map_err(|e| EntryStorageError::Custom(e.to_string()))?;

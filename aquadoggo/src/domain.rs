@@ -12,6 +12,7 @@ use p2panda_rs::operation::{
     AsOperation, AsVerifiedOperation, Operation, OperationAction, OperationEncoded,
 };
 use p2panda_rs::storage_provider::traits::{AsStorageEntry, AsStorageLog, StorageProvider};
+use p2panda_rs::Human;
 
 use crate::graphql::client::NextEntryArguments;
 use crate::validation::{
@@ -354,7 +355,10 @@ pub async fn get_validate_document_id_for_view_id<S: StorageProvider>(
 
         ensure!(
             document_id.is_some(),
-            anyhow!("{} not found, could not determine document id", operation)
+            anyhow!(
+                "{} not found, could not determine document id",
+                operation.display()
+            )
         );
 
         found_document_ids.insert(document_id.unwrap());

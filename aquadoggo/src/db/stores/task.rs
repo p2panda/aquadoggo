@@ -19,7 +19,7 @@ impl SqlStorage {
         let document_view_id = task_input
             .document_view_id
             .as_ref()
-            .map(|view_id| view_id.as_str());
+            .map(|view_id| view_id.to_string());
 
         // Insert task into database
         query(
@@ -53,7 +53,7 @@ impl SqlStorage {
         let document_view_id = task_input
             .document_view_id
             .as_ref()
-            .map(|view_id| view_id.as_str());
+            .map(|view_id| view_id.to_string());
 
         // Remove task from database
         let result = query(
