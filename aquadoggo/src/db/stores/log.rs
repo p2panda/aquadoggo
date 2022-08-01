@@ -408,7 +408,7 @@ mod tests {
             let log_id = db.store.next_log_id(&author).await.unwrap();
             assert_eq!(log_id, LogId::new(2));
 
-            let log_3 = StorageLog::new(&author, &schema, &document_third.into(), &log_id);
+            let log_3 = StorageLog::new(&author, &schema, &document_third, &log_id);
 
             db.store.insert_log(log_3).await.unwrap();
 
@@ -416,7 +416,7 @@ mod tests {
             let log_id = db.store.next_log_id(&author).await.unwrap();
             assert_eq!(log_id, LogId::new(3));
 
-            let log_4 = StorageLog::new(&author, &schema, &document_forth.into(), &log_id);
+            let log_4 = StorageLog::new(&author, &schema, &document_forth, &log_id);
 
             db.store.insert_log(log_4).await.unwrap();
 

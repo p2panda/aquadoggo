@@ -102,7 +102,7 @@ pub async fn encode_entry_and_operation<S: StorageProvider>(
         document_id.map(|id| id.as_str().parse().unwrap());
 
     // Get next args
-    let next_args = next_args::<S>(&store, &author, document_view_id.as_ref())
+    let next_args = next_args::<S>(store, &author, document_view_id.as_ref())
         .await
         .unwrap();
 
