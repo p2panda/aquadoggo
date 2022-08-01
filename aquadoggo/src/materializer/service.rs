@@ -469,7 +469,7 @@ mod tests {
             });
 
             // Wait for service to be ready ..
-            tokio::time::sleep(Duration::from_millis(50)).await;
+            tokio::time::sleep(Duration::from_millis(200)).await;
 
             // Then straight away publish a CREATE operation and send it to the bus.
             let (entry_encoded, _) = send_to_store(&db.store, &operation, None, &key_pair).await;
@@ -481,7 +481,7 @@ mod tests {
             .unwrap();
 
             // Wait a little bit for work being done ..
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            tokio::time::sleep(Duration::from_millis(200)).await;
 
             // Make sure the service did not crash and is still running
             assert_eq!(handle.is_finished(), false);
