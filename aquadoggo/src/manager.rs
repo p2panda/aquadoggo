@@ -4,8 +4,8 @@ use std::future::Future;
 
 use anyhow::Result;
 use log::{error, info};
-use tokio::sync::{broadcast, oneshot};
 use tokio::sync::broadcast::error::RecvError;
+use tokio::sync::{broadcast, oneshot};
 use tokio::task;
 use tokio::task::JoinHandle;
 use triggered::{Listener, Trigger};
@@ -30,7 +30,13 @@ where
     D: Clone + Send + Sync + 'static,
     M: Clone + Send + Sync + 'static,
 {
-    async fn call(&self, context: D, shutdown: Shutdown, tx: Sender<M>, tx_ready: oneshot::Sender<()>) -> Result<()>;
+    async fn call(
+        &self,
+        context: D,
+        shutdown: Shutdown,
+        tx: Sender<M>,
+        tx_ready: oneshot::Sender<()>,
+    ) -> Result<()>;
 }
 
 /// Implements our `Service` trait for a generic async function.
@@ -51,7 +57,13 @@ where
     ///
     /// This gets automatically wrapped in a static, boxed and pinned function signature by the
     /// `async_trait` macro so we don't need to do it ourselves.
-    async fn call(&self, context: D, shutdown: Shutdown, tx: Sender<M>, tx_ready: oneshot::Sender<()>) -> Result<()> {
+    async fn call(
+        &self,
+        context: D,
+        shutdown: Shutdown,
+        tx: Sender<M>,
+        tx_ready: oneshot::Sender<()>,
+    ) -> Result<()> {
         (self)(context, shutdown, tx, tx_ready).await
     }
 }
@@ -143,7 +155,7 @@ where
         &mut self,
         name: &'static str,
         service: F,
-    ) -> ServiceReady  {
+    ) -> ServiceReady {
         // Sender for communication bus
         let tx = self.tx.clone();
 
@@ -268,17 +280,20 @@ mod tests {
 
         // Create five services waiting for message
         for _ in 0..5 {
-            manager.add("rx", |data: Counter, _, tx: Sender<Message>, _| async move {
-                let mut rx = tx.subscribe();
-                let message = rx.recv().await.unwrap();
+            manager.add(
+                "rx",
+                |data: Counter, _, tx: Sender<Message>, _| async move {
+                    let mut rx = tx.subscribe();
+                    let message = rx.recv().await.unwrap();
 
-                // Increment counter as soon as we received the right message
-                if matches!(message, Message::Hello) {
-                    data.fetch_add(1, Ordering::Relaxed);
-                }
+                    // Increment counter as soon as we received the right message
+                    if matches!(message, Message::Hello) {
+                        data.fetch_add(1, Ordering::Relaxed);
+                    }
 
-                Ok(())
-            });
+                    Ok(())
+                },
+            );
         }
 
         // Create another service sending message over communication bus
@@ -298,27 +313,30 @@ mod tests {
         let counter: Counter = Arc::new(AtomicUsize::new(0));
         let mut manager = ServiceManager::<Counter, usize>::new(32, counter.clone());
 
-        manager.add("one", |counter: Counter, signal: Shutdown, _, _| async move {
-            let counter_clone = counter.clone();
+        manager.add(
+            "one",
+            |counter: Counter, signal: Shutdown, _, _| async move {
+                let counter_clone = counter.clone();
 
-            let work = tokio::task::spawn(async move {
-                // Increment counter once within the work task
-                counter_clone.fetch_add(1, Ordering::Relaxed);
+                let work = tokio::task::spawn(async move {
+                    // Increment counter once within the work task
+                    counter_clone.fetch_add(1, Ordering::Relaxed);
 
-                loop {
-                    // We stay here forever now and make sure this task will not stop until we
-                    // receive the shutdown signal
-                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                }
-            });
+                    loop {
+                        // We stay here forever now and make sure this task will not stop until we
+                        // receive the shutdown signal
+                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    }
+                });
 
-            tokio::select! { _ = work => (), _ = signal => () };
+                tokio::select! { _ = work => (), _ = signal => () };
 
-            // Increment counter another time during shutdown
-            counter.fetch_add(1, Ordering::Relaxed);
+                // Increment counter another time during shutdown
+                counter.fetch_add(1, Ordering::Relaxed);
 
-            Ok(())
-        });
+                Ok(())
+            },
+        );
 
         manager.add("two", |_, _, _, _| async move {
             // Wait a little bit for the first task to do its work
