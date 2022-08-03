@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use anyhow::Result;
-use log::debug;
+use log::{debug, warn};
 use p2panda_rs::storage_provider::traits::OperationStore;
 use tokio::task;
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
-use crate::manager::Shutdown;
+use crate::manager::{ServiceReadySender, Shutdown};
 use crate::materializer::tasks::{dependency_task, reduce_task, schema_task};
 use crate::materializer::worker::{Factory, Task, TaskStatus};
 use crate::materializer::TaskInput;
@@ -28,6 +28,7 @@ pub async fn materializer_service(
     context: Context,
     shutdown: Shutdown,
     tx: ServiceSender,
+    tx_ready: ServiceReadySender,
 ) -> Result<()> {
     // Create worker factory with task queue
     let pool_size = context.config.worker_pool_size as usize;
@@ -114,6 +115,11 @@ pub async fn materializer_service(
         }
     });
 
+    debug!("Materialiser service is ready");
+    if tx_ready.send(()).is_err() {
+        warn!("No subscriber informed about materialiser service being ready");
+    };
+
     // Wait until we received the application shutdown signal or handle closed
     tokio::select! {
         _ = handle => (),
@@ -144,7 +150,7 @@ mod tests {
         key_pair, operation, operation_fields, random_document_id, random_operation_id,
     };
     use rstest::rstest;
-    use tokio::sync::broadcast;
+    use tokio::sync::{broadcast, oneshot};
     use tokio::task;
 
     use crate::context::Context;
@@ -196,17 +202,19 @@ mod tests {
                 }
             });
             let (tx, _) = broadcast::channel(1024);
+            let (tx_ready, rx_ready) = oneshot::channel::<()>();
 
             // Start materializer service
             let tx_clone = tx.clone();
             let handle = tokio::spawn(async move {
-                materializer_service(context, shutdown, tx_clone)
+                materializer_service(context, shutdown, tx_clone, tx_ready)
                     .await
                     .unwrap();
             });
 
-            // Wait for service to be ready ..
-            tokio::time::sleep(Duration::from_millis(50)).await;
+            if rx_ready.await.is_err() {
+                panic!("Service dropped");
+            }
 
             // Send a message over the bus which kicks in materialization
             tx.send(crate::bus::ServiceMessage::NewOperation(
@@ -269,18 +277,23 @@ mod tests {
                 }
             });
             let (tx, _) = broadcast::channel(1024);
+            let (tx_ready, rx_ready) = oneshot::channel::<()>();
 
             // Start materializer service
             let tx_clone = tx.clone();
             let handle = tokio::spawn(async move {
-                materializer_service(context, shutdown, tx_clone)
+                materializer_service(context, shutdown, tx_clone, tx_ready)
                     .await
                     .unwrap();
             });
 
+            if rx_ready.await.is_err() {
+                panic!("Service dropped");
+            }
+
             // Wait for service to be done .. it should materialize the document since it was waiting
             // as a "pending" task in the database
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            tokio::time::sleep(Duration::from_millis(200)).await;
 
             // Make sure the service did not crash and is still running
             assert_eq!(handle.is_finished(), false);
@@ -333,17 +346,19 @@ mod tests {
                 }
             });
             let (tx, _) = broadcast::channel(1024);
+            let (tx_ready, rx_ready) = oneshot::channel::<()>();
 
             // Start materializer service
             let tx_clone = tx.clone();
             let handle = tokio::spawn(async move {
-                materializer_service(context, shutdown, tx_clone)
+                materializer_service(context, shutdown, tx_clone, tx_ready)
                     .await
                     .unwrap();
             });
 
-            // Wait for service to be ready ..
-            tokio::time::sleep(Duration::from_millis(50)).await;
+            if rx_ready.await.is_err() {
+                panic!("Service dropped");
+            }
 
             // Send a message over the bus which kicks in materialization
             tx.send(crate::bus::ServiceMessage::NewOperation(
@@ -462,14 +477,17 @@ mod tests {
 
             // Start materializer service
             let tx_clone = tx.clone();
+            let (tx_ready, rx_ready) = oneshot::channel::<()>();
+
             let handle = tokio::spawn(async move {
-                materializer_service(context, shutdown, tx_clone)
+                materializer_service(context, shutdown, tx_clone, tx_ready)
                     .await
                     .unwrap();
             });
 
-            // Wait for service to be ready ..
-            tokio::time::sleep(Duration::from_millis(50)).await;
+            if rx_ready.await.is_err() {
+                panic!("Service dropped");
+            }
 
             // Then straight away publish a CREATE operation and send it to the bus.
             let (entry_encoded, _) = send_to_store(&db.store, &operation, None, &key_pair).await;
@@ -481,7 +499,7 @@ mod tests {
             .unwrap();
 
             // Wait a little bit for work being done ..
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            tokio::time::sleep(Duration::from_millis(200)).await;
 
             // Make sure the service did not crash and is still running
             assert_eq!(handle.is_finished(), false);
