@@ -6,7 +6,7 @@ use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::AsOperation;
 use p2panda_rs::storage_provider::traits::StorageProvider;
-use p2panda_rs::{Human, Validate};
+use p2panda_rs::Human;
 
 /// Verify that a claimed seq num is the next sequence number following the latest.
 ///
