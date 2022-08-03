@@ -503,7 +503,7 @@ mod tests {
     #[rstest]
     #[case::ok(&[(0, 8)], (0, 8))]
     #[should_panic(
-        expected = "Expected skiplink target for <Author 53fc96> at log id 0 and seq num 4 not found in database"
+        expected = "Expected skiplink target not found in store: <Author 53fc96>, log id 0, seq num 4"
     )]
     #[case::skiplink_missing(&[(0, 4), (0, 8)], (0, 8))]
     #[should_panic(
@@ -523,7 +523,7 @@ mod tests {
     )]
     #[case::seq_num_occupied_(&[], (0, 7))]
     #[should_panic(
-        expected = "Expected skiplink target for <Author 53fc96> at log id 0 and seq num 4 not found in database"
+        expected = "Expected skiplink target not found in store: <Author 53fc96>, log id 0, seq num 4"
     )]
     #[case::next_args_skiplink_missing(&[(0, 4), (0, 7), (0, 8)], (0, 7))]
     #[should_panic(
@@ -862,7 +862,7 @@ mod tests {
         let result = next_args(&db.store, &public_key, Some(&document_view_id)).await;
         assert_eq!(
             result.unwrap_err().message.as_str(),
-            "Expected skiplink target for <Author 53fc96> at log id 0 and seq num 4 not found in database"
+            "Expected skiplink target not found in store: <Author 53fc96>, log id 0, seq num 4"
         );
     }
 

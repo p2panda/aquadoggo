@@ -110,7 +110,7 @@ pub async fn get_expected_skiplink<S: StorageProvider>(
     match skiplink_entry {
         Some(entry) => Ok(entry),
         None => Err(anyhow!(
-            "Skiplink target not found in store: {} log id {} seq num {}",
+            "Expected skiplink target not found in store: {}, log id {}, seq num {}",
             author.display(),
             log_id.as_u64(),
             skiplink_seq_num.as_u64()
@@ -274,14 +274,12 @@ mod tests {
     #[rstest]
     #[case::expected_skiplink_is_in_store_and_is_same_as_backlink(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::default(), SeqNum::new(4).unwrap())]
     #[should_panic(
-        expected = "Expected skiplink target for <Author 53fc96> at log id 0 and seq num 19 not found in database"
+        expected = "Expected skiplink target not found in store: <Author 53fc96>, log id 0, seq num 19"
     )]
     #[case::skiplink_not_in_store(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::default(), SeqNum::new(20).unwrap())]
-    #[should_panic(expected = "at log id 0 and seq num 4 not found in database")]
+    #[should_panic(expected = "Expected skiplink target not found in store")]
     #[case::author_does_not_exist(KeyPair::new(), LogId::default(), SeqNum::new(5).unwrap())]
-    #[should_panic(
-        expected = "Expected skiplink target for <Author 53fc96> at log id 4 and seq num 6 not found in database"
-    )]
+    #[should_panic(expected = "<Author 53fc96>, log id 4, seq num 6")]
     #[case::log_id_is_wrong(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(4), SeqNum::new(7).unwrap())]
     #[should_panic(expected = "Entry with seq num 1 can not have skiplink")]
     #[case::seq_num_is_one(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(0), SeqNum::new(1).unwrap())]
