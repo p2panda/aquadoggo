@@ -86,19 +86,17 @@ impl OperationStore<VerifiedOperation> for SqlStorage {
                     author,
                     document_id,
                     operation_id,
-                    entry_hash,
                     action,
                     schema_id,
                     previous_operations
                 )
             VALUES
-                ($1, $2, $3, $4, $5, $6, $7)
+                ($1, $2, $3, $4, $5, $6)
             ",
         )
         .bind(operation.public_key().as_str())
         .bind(document_id.as_str())
         .bind(operation.operation_id().as_str())
-        .bind(operation.operation_id().as_hash().as_str())
         .bind(operation.action().as_str())
         .bind(operation.schema().as_str())
         .bind(
@@ -193,7 +191,6 @@ impl OperationStore<VerifiedOperation> for SqlStorage {
                 operations_v1.author,
                 operations_v1.document_id,
                 operations_v1.operation_id,
-                operations_v1.entry_hash,
                 operations_v1.action,
                 operations_v1.schema_id,
                 operations_v1.previous_operations,
@@ -232,7 +229,6 @@ impl OperationStore<VerifiedOperation> for SqlStorage {
                 operations_v1.author,
                 operations_v1.document_id,
                 operations_v1.operation_id,
-                operations_v1.entry_hash,
                 operations_v1.action,
                 operations_v1.schema_id,
                 operations_v1.previous_operations,
