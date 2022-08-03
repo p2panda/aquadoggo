@@ -13,8 +13,13 @@ use triggered::{Listener, Trigger};
 /// Sends messages through the communication bus between services.
 pub type Sender<T> = broadcast::Sender<T>;
 
+// pub type ServiceReady = oneshot::channel<()>;
+
 // Receives ready signal from services once they are ready to handle messages on the communication bus.
-pub type ServiceReady = oneshot::Receiver<()>;
+pub type ServiceReadyReceiver = oneshot::Receiver<()>;
+
+/// Transmits ready signal from services once they are ready to handle messages on the communication bus.
+pub type ServiceReadySender = oneshot::Sender<()>;
 
 /// Receives shutdown signal for services so they can react accordingly.
 pub type Shutdown = JoinHandle<()>;
@@ -35,7 +40,7 @@ where
         context: D,
         shutdown: Shutdown,
         tx: Sender<M>,
-        tx_ready: oneshot::Sender<()>,
+        tx_ready: ServiceReadySender,
     ) -> Result<()>;
 }
 
@@ -44,7 +49,7 @@ where
 impl<FN, F, D, M> Service<D, M> for FN
 where
     // Function accepting a context and our communication channels, returning a future.
-    FN: Fn(D, Shutdown, Sender<M>, oneshot::Sender<()>) -> F + Sync,
+    FN: Fn(D, Shutdown, Sender<M>, ServiceReadySender) -> F + Sync,
     // A future
     F: Future<Output = Result<()>> + Send + 'static,
     // Generic context type.
@@ -62,7 +67,7 @@ where
         context: D,
         shutdown: Shutdown,
         tx: Sender<M>,
-        tx_ready: oneshot::Sender<()>,
+        tx_ready: ServiceReadySender,
     ) -> Result<()> {
         (self)(context, shutdown, tx, tx_ready).await
     }
@@ -151,13 +156,11 @@ where
     ///
     /// Errors returned and panics by the service will send an exit signal which can be subscribed
     /// to via the `on_exit` method.
-    ///
-    ///
     pub fn add<F: Service<D, M> + Send + Sync + 'static>(
         &mut self,
         name: &'static str,
         service: F,
-    ) -> ServiceReady {
+    ) -> ServiceReadyReceiver {
         // Sender for communication bus
         let tx = self.tx.clone();
 
@@ -239,9 +242,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
 
-    use tokio::sync::oneshot;
-
-    use super::{Sender, ServiceManager, Shutdown};
+    use super::{Sender, ServiceManager, ServiceReadySender, Shutdown};
 
     type Counter = Arc<AtomicUsize>;
 
@@ -364,7 +365,7 @@ mod tests {
 
         let service_ready = manager.add(
             "ready_signal",
-            |_, _, _, tx_ready: oneshot::Sender<()>| async {
+            |_, _, _, tx_ready: ServiceReadySender| async {
                 // Send a message to indicate that this service is ready for some WORK!
                 tx_ready.send(()).unwrap();
                 Ok(())
@@ -381,7 +382,7 @@ mod tests {
 
         let service_ready = manager.add(
             "ready_signal",
-            |_, _, _, _tx_ready: oneshot::Sender<()>| async {
+            |_, _, _, _tx_ready: ServiceReadySender| async {
                 // This service doesn't indicate that it's ready!
                 Ok(())
             },

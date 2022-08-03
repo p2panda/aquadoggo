@@ -3,12 +3,11 @@
 use anyhow::Result;
 use log::{debug, warn};
 use p2panda_rs::storage_provider::traits::OperationStore;
-use tokio::sync::oneshot;
 use tokio::task;
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
-use crate::manager::Shutdown;
+use crate::manager::{ServiceReadySender, Shutdown};
 use crate::materializer::tasks::{dependency_task, reduce_task, schema_task};
 use crate::materializer::worker::{Factory, Task, TaskStatus};
 use crate::materializer::TaskInput;
@@ -29,7 +28,7 @@ pub async fn materializer_service(
     context: Context,
     shutdown: Shutdown,
     tx: ServiceSender,
-    tx_ready: oneshot::Sender<()>,
+    tx_ready: ServiceReadySender,
 ) -> Result<()> {
     // Create worker factory with task queue
     let pool_size = context.config.worker_pool_size as usize;

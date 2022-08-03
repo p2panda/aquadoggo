@@ -8,14 +8,13 @@ use axum::http::Method;
 use axum::routing::get;
 use axum::Router;
 use log::{debug, warn};
-use tokio::sync::oneshot;
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::bus::ServiceSender;
 use crate::context::Context;
 use crate::http::api::{handle_graphql_playground, handle_graphql_query};
 use crate::http::context::HttpServiceContext;
-use crate::manager::Shutdown;
+use crate::manager::{ServiceReadySender, Shutdown};
 
 const GRAPHQL_ROUTE: &str = "/graphql";
 
@@ -44,7 +43,7 @@ pub async fn http_service(
     context: Context,
     signal: Shutdown,
     tx: ServiceSender,
-    tx_ready: oneshot::Sender<()>,
+    tx_ready: ServiceReadySender,
 ) -> Result<()> {
     let http_port = context.config.http_port;
     let http_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), http_port);

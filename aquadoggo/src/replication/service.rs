@@ -14,7 +14,6 @@ use p2panda_rs::operation::{AsVerifiedOperation, VerifiedOperation};
 use p2panda_rs::storage_provider::traits::{
     AsStorageEntry, EntryStore, OperationStore, StorageProvider,
 };
-use tokio::sync::oneshot;
 use tokio::task;
 
 use crate::bus::{ServiceMessage, ServiceSender};
@@ -22,7 +21,7 @@ use crate::context::Context;
 use crate::db::request::PublishEntryRequest;
 use crate::db::stores::StorageEntry;
 use crate::graphql::replication::client;
-use crate::manager::Shutdown;
+use crate::manager::{ServiceReadySender, Shutdown};
 
 /// Replication service polling other nodes frequently to ask them about new entries from a defined
 /// set of authors and log ids.
@@ -30,7 +29,7 @@ pub async fn replication_service(
     context: Context,
     shutdown: Shutdown,
     tx: ServiceSender,
-    tx_ready: oneshot::Sender<()>,
+    tx_ready: ServiceReadySender,
 ) -> Result<()> {
     // Prepare replication configuration
     let config = &context.config.replication;
