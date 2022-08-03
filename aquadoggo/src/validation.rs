@@ -6,7 +6,7 @@ use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::AsOperation;
 use p2panda_rs::storage_provider::traits::StorageProvider;
-use p2panda_rs::Human;
+use p2panda_rs::{Human, Validate};
 
 /// Verify that a claimed seq num is the next sequence number following the latest.
 ///
@@ -86,44 +86,37 @@ pub async fn verify_log_id<S: StorageProvider>(
 /// This method determines the expected skiplink given an author, log id and sequence number. It
 /// _does not_ verify that this matches the skiplink encoded on any entry.
 ///
-/// If the expected skiplink target could not be found in the database an error is returned.
+/// An error is returned if:
+/// - seq num 1 was passed in, which can not have a skiplink
+/// - the expected skiplink target could not be found in the database.
 pub async fn get_expected_skiplink<S: StorageProvider>(
     store: &S,
     author: &Author,
     log_id: &LogId,
     seq_num: &SeqNum,
 ) -> Result<S::StorageEntry> {
-    // Derive the expected skiplink sequence number from the given sequence number.
+    // Ensure
     ensure!(
         !seq_num.is_first(),
         anyhow!("Entry with seq num 1 can not have skiplink")
     );
 
-    let expected_skiplink_seq_num = seq_num.skiplink_seq_num();
-    let expected_skiplink = match expected_skiplink_seq_num {
-        // Retrieve the expected skiplink from the database
-        Some(skiplink_seq_num) => {
-            store
-                .get_entry_at_seq_num(author, log_id, &skiplink_seq_num)
-                .await?
-        }
+    // Unwrap because method always returns `Some` for seq num > 1
+    let skiplink_seq_num = seq_num.skiplink_seq_num().unwrap();
 
-        // @TODO: This is fairly redundant for now as `skiplink_seq_num` never returns `None` which needs
-        // looking at: https://github.com/p2panda/p2panda/issues/417.
-        None => None,
-    };
+    let skiplink_entry = store
+        .get_entry_at_seq_num(author, log_id, &skiplink_seq_num)
+        .await?;
 
-    ensure!(
-        expected_skiplink.is_some(),
-        anyhow!(
-            "Expected skiplink target for {} at log id {} and seq num {} not found in database",
+    match skiplink_entry {
+        Some(entry) => Ok(entry),
+        None => Err(anyhow!(
+            "Skiplink target not found in store: {} log id {} seq num {}",
             author.display(),
             log_id.as_u64(),
-            expected_skiplink_seq_num.unwrap().as_u64()
-        )
-    );
-
-    Ok(expected_skiplink.unwrap())
+            skiplink_seq_num.as_u64()
+        )),
+    }
 }
 
 /// Ensure that a document is not deleted.
