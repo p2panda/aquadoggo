@@ -95,7 +95,6 @@ pub async fn get_expected_skiplink<S: StorageProvider>(
     log_id: &LogId,
     seq_num: &SeqNum,
 ) -> Result<S::StorageEntry> {
-    // Ensure
     ensure!(
         !seq_num.is_first(),
         anyhow!("Entry with seq num 1 can not have skiplink")
