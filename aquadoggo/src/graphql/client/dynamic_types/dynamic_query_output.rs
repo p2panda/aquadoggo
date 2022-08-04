@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! Registers GraphQL types for all [schemas][`Schema`] available in the schema provider.
+//! GraphQL types for all [schemas][`Schema`] available in the schema provider.
 //!
 //! `async_graphql` doesn't provide an API for registering types that don't correspond to
 //! any Rust type. This module uses undocumented, internal functionality of `async_graphql` to

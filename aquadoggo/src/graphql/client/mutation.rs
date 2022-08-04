@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+//! Mutation root.
 use async_graphql::{Context, Error, Object, Result};
 use p2panda_rs::operation::{AsVerifiedOperation, VerifiedOperation};
 use p2panda_rs::storage_provider::traits::{OperationStore, StorageProvider};

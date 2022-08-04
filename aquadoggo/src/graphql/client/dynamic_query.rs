@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+//! Resolver for dynamic fields of the client API.
 use async_graphql::indexmap::IndexMap;
 use async_graphql::{
     ContainerType, Context, Name, SelectionField, ServerError, ServerResult, Value,
@@ -24,8 +25,7 @@ use crate::schema::SchemaProvider;
 /// Implements [`ContainerType`] to be able to resolve arbitrary fields selected by a query on the
 /// root GraphQL schema.
 ///
-/// This implementation always has to match what is defined by the
-/// [`dynamic_output_type`][`crate::graphql::client::dynamic_types::dynamic_output_type`] module.
+/// This implementation always has to match what is defined by the corresponding `OutputType` implementation for `DynamicQuery`.
 #[derive(Debug, Default)]
 pub struct DynamicQuery;
 

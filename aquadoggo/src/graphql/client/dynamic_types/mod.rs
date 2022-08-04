@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! This module contains dynamic type definitions for the GraphQL client api.
+//! Dynamic type definitions for the client api.
 //!
 //! All dynamic type definitions are inserted from the `OutputType` implementation in the
 //! [`dynamic_query_output`] module.

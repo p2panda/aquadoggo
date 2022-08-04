@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! This module contains GraphQL scalar types wrapping p2panda core types.
+//! GraphQL scalar types wrapping core p2panda types.
 //!
 //! All scalar types are safely converted into the corresponding p2panda type when provided as
 //! arguments or response values in `async_graphql`.

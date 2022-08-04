@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+//! Client API root.
 use async_graphql::MergedObject;
 
 use crate::graphql::client::{DynamicQuery, StaticQuery};

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+//! Generic types for pagination through the GraphQL API.
 use serde::{Deserialize, Serialize};
 
 /// Generic pagination response of GraphQL connection API.

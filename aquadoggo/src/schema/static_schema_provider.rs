@@ -9,7 +9,7 @@
 //!
 //! Note that the `async-graphql` crate does officially not have support for dynamic schemas,
 //! meaning it is designed to build one static GraphQL schema once in the beginning and then keep
-//! it until the end of the program. See: https://github.com/async-graphql/async-graphql/issues/495
+//! it until the end of the program. See: <https://github.com/async-graphql/async-graphql/issues/495>
 //!
 //! Together with the `GraphQLSchemaManager` and these methods here we can still introduce new
 //! GraphQL schemas during the programs runtime, this is why we call them "dynamic schemas".

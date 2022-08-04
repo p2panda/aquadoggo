@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+//! API for p2panda clients to publish and query data on this node.
 mod dynamic_query;
 pub mod dynamic_types;
 mod mutation;
