@@ -47,18 +47,22 @@ impl ContainerType for DynamicQuery {
                 // look like one.
                 let schema_provider = ctx.data_unchecked::<SchemaProvider>();
                 if schema_provider.get(&schema_id).await.is_some() {
-                    return self.query_listing(&schema_id, ctx).await;
+                    return self.query_collection(&schema_id, ctx).await;
                 }
             }
         }
-
-        // We now know that this is not a listing query. Continue by treating it as a single
-        // document query. Return `Ok(None)` if that doesn't work to signal that other resolvers
-        // should be tried for this field.
-        match field_name.parse::<SchemaId>() {
-            Ok(schema) => self.query_single(&schema, ctx).await,
-            Err(_) => Ok(None),
+        // Continue by trying to parse it as a schema and, if that's successful, checking whether
+        // this schema is available in the schema provider. If both are successfull, continue by
+        // resolving this query as a query for a single document.
+        if let Ok(schema_id) = field_name.parse::<SchemaId>() {
+            let schema_provider = ctx.data_unchecked::<SchemaProvider>();
+            if schema_provider.get(&schema_id).await.is_some() {
+                return self.query_single(&schema_id, ctx).await;
+            }
         }
+
+        // Return `None` to signal that other resolvers should be tried for this query.
+        Ok(None)
     }
 }
 
@@ -108,7 +112,7 @@ impl DynamicQuery {
     }
 
     /// Returns all documents for the given schema as a GraphQL value.
-    async fn query_listing(
+    async fn query_collection(
         &self,
         schema_id: &SchemaId,
         ctx: &Context<'_>,
@@ -330,6 +334,7 @@ impl DynamicQuery {
         Ok(Value::Object(view_fields))
     }
 }
+
 /// Convert non-relation operation values into GraphQL values.
 ///
 /// Panics when given a relation field value.
