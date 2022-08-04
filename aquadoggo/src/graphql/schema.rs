@@ -147,7 +147,6 @@ impl GraphQLSchemaManager {
         // Create the new GraphQL based on the current state of known p2panda application schemas
         async fn rebuild(shared: GraphQLSharedData, schemas: GraphQLSchemas) {
             let schema = build_schema_with_workaround(shared).await;
-            debug!("GraphQL schema rebuilt:\n{}", schema.sdl());
             schemas.lock().await.push(schema);
         }
 

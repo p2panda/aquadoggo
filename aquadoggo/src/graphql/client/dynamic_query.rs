@@ -357,7 +357,6 @@ mod test {
     use std::convert::TryInto;
 
     use async_graphql::{value, Response, Value};
-    use log::warn;
     use p2panda_rs::document::DocumentId;
     use p2panda_rs::schema::FieldType;
     use p2panda_rs::test_utils::fixtures::random_key_pair;
@@ -378,8 +377,6 @@ mod test {
             let schema = db
                 .add_schema("schema_name", vec![("bool", FieldType::Bool)], &key_pair)
                 .await;
-
-            warn!("Schema created: {}", schema);
 
             // Publish document on node.
             let view_id = db
@@ -407,8 +404,6 @@ mod test {
                 view_id = view_id.as_str(),
                 document_id = document_id.as_str()
             );
-
-            warn!("Query: {}", query);
 
             let response = client
                 .post("/graphql")
