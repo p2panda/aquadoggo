@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-
 //! Registers GraphQL types for all [schemas][`Schema`] available in the schema provider.
 //!
 //! `async_graphql` doesn't provide an API for registering types that don't correspond to
@@ -9,18 +8,19 @@
 
 use std::borrow::Cow;
 
-use crate::graphql::scalars::{
-    DocumentId as DocumentIdScalar, DocumentViewId as DocumentViewIdScalar,
-};
 use async_graphql::indexmap::IndexMap;
 use async_graphql::parser::types::Field;
 use async_graphql::registry::{MetaField, MetaInputValue, MetaTypeId};
 use async_graphql::{ContextSelectionSet, OutputType, Positioned, ServerResult, Value};
 use p2panda_rs::schema::Schema;
 
+
 use crate::graphql::client::dynamic_types::utils::{metafield, metaobject};
 use crate::graphql::client::dynamic_types::{DocumentMetaType, DocumentType};
 use crate::graphql::client::DynamicQuery;
+use crate::graphql::scalars::{
+    DocumentId as DocumentIdScalar, DocumentViewId as DocumentViewIdScalar,
+    };
 use crate::schema::load_static_schemas;
 
 #[async_trait::async_trait]
