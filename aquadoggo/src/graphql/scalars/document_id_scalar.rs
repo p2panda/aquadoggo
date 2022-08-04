@@ -3,19 +3,19 @@
 use std::fmt::Display;
 
 use async_graphql::{InputValueError, InputValueResult, Scalar, ScalarType, Value};
-use p2panda_rs::document::DocumentId as PandaDocumentId;
+use p2panda_rs::document::DocumentId;
 use serde::{Deserialize, Serialize};
 
 /// Id of a p2panda document.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct DocumentIdScalar(PandaDocumentId);
+pub struct DocumentIdScalar(DocumentId);
 
 #[Scalar]
 impl ScalarType for DocumentIdScalar {
     fn parse(value: Value) -> InputValueResult<Self> {
         match &value {
             Value::String(str_value) => {
-                let document_id = str_value.as_str().parse::<PandaDocumentId>()?;
+                let document_id = str_value.as_str().parse::<DocumentId>()?;
                 Ok(DocumentIdScalar(document_id))
             }
             _ => Err(InputValueError::expected_type(value)),
@@ -27,14 +27,14 @@ impl ScalarType for DocumentIdScalar {
     }
 }
 
-impl From<&PandaDocumentId> for DocumentIdScalar {
-    fn from(document_id: &PandaDocumentId) -> Self {
+impl From<&DocumentId> for DocumentIdScalar {
+    fn from(document_id: &DocumentId) -> Self {
         Self(document_id.clone())
     }
 }
 
-impl From<&DocumentIdScalar> for PandaDocumentId {
-    fn from(document_id: &DocumentIdScalar) -> PandaDocumentId {
+impl From<&DocumentIdScalar> for DocumentId {
+    fn from(document_id: &DocumentIdScalar) -> DocumentId {
         document_id.0.clone()
     }
 }

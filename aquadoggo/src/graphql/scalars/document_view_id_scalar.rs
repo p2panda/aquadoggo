@@ -3,19 +3,19 @@
 use std::fmt::Display;
 
 use async_graphql::{InputValueError, InputValueResult, Scalar, ScalarType, Value};
-use p2panda_rs::document::DocumentViewId as PandaViewId;
+use p2panda_rs::document::DocumentViewId;
 use serde::{Deserialize, Serialize};
 
 /// Document view id as a GraphQL scalar.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct DocumentViewIdScalar(PandaViewId);
+pub struct DocumentViewIdScalar(DocumentViewId);
 
 #[Scalar]
 impl ScalarType for DocumentViewIdScalar {
     fn parse(value: Value) -> InputValueResult<Self> {
         match &value {
             Value::String(str_value) => {
-                let view_id = str_value.parse::<PandaViewId>()?;
+                let view_id = str_value.parse::<DocumentViewId>()?;
                 Ok(DocumentViewIdScalar(view_id))
             }
             _ => Err(InputValueError::expected_type(value)),
@@ -27,16 +27,16 @@ impl ScalarType for DocumentViewIdScalar {
     }
 }
 
-impl From<&PandaViewId> for DocumentViewIdScalar {
-    fn from(value: &PandaViewId) -> Self {
+impl From<&DocumentViewId> for DocumentViewIdScalar {
+    fn from(value: &DocumentViewId) -> Self {
         DocumentViewIdScalar(value.clone())
     }
 }
 
-impl From<&DocumentViewIdScalar> for PandaViewId {
+impl From<&DocumentViewIdScalar> for DocumentViewId {
     fn from(value: &DocumentViewIdScalar) -> Self {
         // Unwrap because `DocumentViewIdScalar` is always safely intialised.
-        PandaViewId::new(value.0.graph_tips()).unwrap()
+        DocumentViewId::new(value.0.graph_tips()).unwrap()
     }
 }
 
