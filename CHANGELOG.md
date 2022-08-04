@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Refactor scalars and replication API, replace `graphql-client` with `gql_client` [#184](https://github.com/p2panda/aquadoggo/pull/184)
 - Give error types of worker a string for better debugging [#194](https://github.com/p2panda/aquadoggo/pull/194)
 - Bump `p2panda-rs` which now supports log id's starting from `0` [#207](https://github.com/p2panda/aquadoggo/pull/207)
+- Removed unused field `entry_hash` from operation data model [#221](https://github.com/p2panda/aquadoggo/pull/221)
 
 ### Fixed
 

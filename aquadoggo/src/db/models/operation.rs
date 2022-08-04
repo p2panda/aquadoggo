@@ -12,13 +12,12 @@ pub struct OperationRow {
     pub document_id: String,
 
     /// The id of this operation.
+    ///
+    /// Also, the hash of the entry this operation is associated with.
     pub operation_id: String,
 
     /// The action type this operation is performing.
     pub action: String,
-
-    /// The hash of the entry this operation is associated with.
-    pub entry_hash: String,
 
     /// The id of the schema this operation follows.
     pub schema_id: String,
@@ -64,9 +63,6 @@ pub struct OperationFieldsJoinedRow {
 
     /// The action type this operation is performing.
     pub action: String,
-
-    /// The hash of the entry this operation is associated with.
-    pub entry_hash: String,
 
     /// The id of the schema this operation follows.
     pub schema_id: String,
