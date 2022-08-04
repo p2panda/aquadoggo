@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! Global provider for schemas which serves as a workaround to get "dynamic" schemas into the
-//! `async-graphql` crate.
+//! Global provider for schemas which serves as a workaround to get dynamic schemas into the
+//! `async-graphql` crate. Dynamic meaning that the GraphQL schema changes during runtime.
 //!
 //! The methods and structs provided here help us to fullfil the API of `async-graphql` which gives
 //! us somewhat a path to introduce new GraphQL queries during runtime but only with some
 //! limitations we need to work around with.
 //!
-//! Note that the `async-graphql` crate does officially not have support for "dynamic schemas",
+//! Note that the `async-graphql` crate does officially not have support for dynamic schemas,
 //! meaning it is designed to build one static GraphQL schema once in the beginning and then keep
 //! it until the end of the program. See: https://github.com/async-graphql/async-graphql/issues/495
 //!
