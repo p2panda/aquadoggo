@@ -78,11 +78,12 @@ impl DynamicQuery {
         let document_id_arg = ctx.param_value::<Option<DocumentIdScalar>>("id", None)?;
         let view_id_arg = ctx.param_value::<Option<DocumentViewIdScalar>>("viewId", None)?;
 
+        // Answer queries where the `viewId` argument is given.
         if let Some(view_id_scalar) = view_id_arg.clone().1 {
             let view_id = DocumentViewId::from(&view_id_scalar);
 
-            // If the `viewId` argument is set we ignore the `id` argument because it doesn't
-            // provide any additional information that we don't get from the view id.
+            // Return early and ignore the `id` argument because it doesn't provide any additional
+            // information that we don't get from the view id.
             return Ok(Some(
                 self.get_by_document_view_id(
                     view_id,
@@ -94,8 +95,9 @@ impl DynamicQuery {
             ));
         }
 
-        match document_id_arg.1 {
-            Some(document_id_scalar) => Ok(Some(
+        // Answer queries where the `id` argument is given.
+        if let Some(document_id_scalar) = document_id_arg.1 {
+            return Ok(Some(
                 self.get_by_document_id(
                     DocumentId::from(&document_id_scalar),
                     ctx,
@@ -103,12 +105,13 @@ impl DynamicQuery {
                     Some(schema_id),
                 )
                 .await?,
-            )),
-            None => Err(ServerError::new(
-                "Must provide either `id` or `viewId` argument".to_string(),
-                Some(ctx.item.pos),
-            )),
+            ));
         }
+
+        Err(ServerError::new(
+            "Must provide either `id` or `viewId` argument".to_string(),
+            Some(ctx.item.pos),
+        ))
     }
 
     /// Returns all documents for the given schema as a GraphQL value.
