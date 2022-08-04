@@ -13,11 +13,11 @@ use crate::graphql::scalars;
 pub struct NextEntryArguments {
     /// Log id of the entry.
     #[graphql(name = "logId")]
-    pub log_id: scalars::LogId,
+    pub log_id: scalars::LogIdScalar,
 
     /// Sequence number of the entry.
     #[graphql(name = "seqNum")]
-    pub seq_num: scalars::SeqNum,
+    pub seq_num: scalars::SeqNumScalar,
 
     /// Hash of the entry backlink.
     pub backlink: Option<scalars::EntryHash>,

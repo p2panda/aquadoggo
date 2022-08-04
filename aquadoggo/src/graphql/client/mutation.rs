@@ -24,12 +24,12 @@ impl ClientMutationRoot {
         &self,
         ctx: &Context<'_>,
         #[graphql(name = "entry", desc = "Signed and encoded entry to publish")]
-        entry: scalars::EncodedEntry,
+        entry: scalars::EntrySignedScalar,
         #[graphql(
             name = "operation",
             desc = "p2panda operation representing the entry payload."
         )]
-        operation: scalars::EncodedOperation,
+        operation: scalars::EncodedOperationScalar,
     ) -> Result<NextEntryArguments> {
         let store = ctx.data::<SqlStorage>()?;
         let tx = ctx.data::<ServiceSender>()?;
@@ -326,12 +326,20 @@ mod tests {
     }
 
     #[rstest]
-    #[case::no_entry("", "", "Bytes to decode had length of 0")]
-    #[case::invalid_entry_bytes("AB01", "", "Could not decode author public key from bytes")]
+    #[case::no_entry(
+        "",
+        "",
+        "Failed to parse \"EntrySignedScalar\": Bytes to decode had length of 0"
+    )]
+    #[case::invalid_entry_bytes(
+        "AB01",
+        "",
+        "Failed to parse \"EntrySignedScalar\": Could not decode author public key from bytes"
+    )]
     #[case::invalid_entry_hex_encoding(
         "-/74='4,.=4-=235m-0   34.6-3",
         &OPERATION_ENCODED,
-        "invalid hex encoding in entry"
+        "Failed to parse \"EntrySignedScalar\": invalid hex encoding in entry"
     )]
     #[case::no_operation(
         &ENTRY_ENCODED,
@@ -346,7 +354,7 @@ mod tests {
     #[case::invalid_operation_hex_encoding(
         &ENTRY_ENCODED,
         "0-25.-%5930n3544[{{{   @@@",
-        "invalid hex encoding in operation"
+        "Failed to parse \"EncodedOperationScalar\": invalid hex encoding in operation"
     )]
     #[case::operation_does_not_match(
         &ENTRY_ENCODED,
@@ -364,12 +372,12 @@ mod tests {
     #[case::valid_entry_with_extra_hex_char_at_end(
         &{ENTRY_ENCODED.to_string() + "A"},
         &OPERATION_ENCODED,
-        "invalid hex encoding in entry"
+        "Failed to parse \"EntrySignedScalar\": invalid hex encoding in entry"
     )]
     #[case::valid_entry_with_extra_hex_char_at_start(
         &{"A".to_string() + &ENTRY_ENCODED},
         &OPERATION_ENCODED,
-        "invalid hex encoding in entry"
+        "Failed to parse \"EntrySignedScalar\": invalid hex encoding in entry"
     )]
     #[case::should_not_have_skiplink(
         &entry_signed_encoded_unvalidated(
@@ -381,7 +389,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
-        "Could not decode payload hash DecodeError"
+        "Failed to parse \"EntrySignedScalar\": Could not decode payload hash DecodeError"
     )]
     #[case::should_not_have_backlink(
         &entry_signed_encoded_unvalidated(
@@ -393,7 +401,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
-        "Could not decode payload hash DecodeError"
+        "Failed to parse \"EntrySignedScalar\": Could not decode payload hash DecodeError"
     )]
     #[case::should_not_have_backlink_or_skiplink(
         &entry_signed_encoded_unvalidated(
@@ -405,7 +413,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
-        "Could not decode payload hash DecodeError"
+        "Failed to parse \"EntrySignedScalar\": Could not decode payload hash DecodeError"
     )]
     #[case::missing_backlink(
         &entry_signed_encoded_unvalidated(
@@ -417,7 +425,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
-        "Could not decode backlink yamf hash: DecodeError"
+        "Failed to parse \"EntrySignedScalar\": Could not decode backlink yamf hash: DecodeError"
     )]
     #[case::missing_skiplink(
         &entry_signed_encoded_unvalidated(
@@ -429,7 +437,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
-        "Could not decode backlink yamf hash: DecodeError"
+        "Failed to parse \"EntrySignedScalar\": Could not decode backlink yamf hash: DecodeError"
     )]
     #[case::should_not_include_skiplink(
         &entry_signed_encoded_unvalidated(
@@ -441,7 +449,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
-        "Could not decode payload hash DecodeError"
+        "Failed to parse \"EntrySignedScalar\": Could not decode payload hash DecodeError"
     )]
     #[case::payload_hash_and_size_missing(
         &entry_signed_encoded_unvalidated(
@@ -453,7 +461,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
-        "Could not decode payload hash DecodeError"
+        "Failed to parse \"EntrySignedScalar\": Could not decode payload hash DecodeError"
     )]
     #[case::backlink_and_skiplink_not_in_db(
         &entry_signed_encoded_unvalidated(

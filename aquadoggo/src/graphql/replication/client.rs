@@ -17,7 +17,7 @@ use crate::graphql::scalars;
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Response {
-    entries_newer_than_seq_num: Paginated<EncodedEntryAndOperation, scalars::SeqNum>,
+    entries_newer_than_seq_num: Paginated<EncodedEntryAndOperation, scalars::SeqNumScalar>,
 }
 
 /// Attempts to get entries newer than the given sequence number for a public key and log id.

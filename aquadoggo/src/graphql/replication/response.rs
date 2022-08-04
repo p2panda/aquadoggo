@@ -17,10 +17,10 @@ use crate::graphql::scalars;
 #[graphql(complex)]
 pub struct EncodedEntryAndOperation {
     /// Signed and encoded bamboo entry.
-    pub entry: scalars::EncodedEntry,
+    pub entry: scalars::EntrySignedScalar,
 
     /// p2panda operation, CBOR bytes encoded as hexadecimal string.
-    pub operation: Option<scalars::EncodedOperation>,
+    pub operation: Option<scalars::EncodedOperationScalar>,
 }
 
 #[ComplexObject]
@@ -29,7 +29,7 @@ impl EncodedEntryAndOperation {
     async fn certificate_pool<'a>(
         &self,
         ctx: &Context<'a>,
-    ) -> async_graphql::Result<Vec<scalars::EncodedEntry>> {
+    ) -> async_graphql::Result<Vec<scalars::EntrySignedScalar>> {
         let store = ctx.data::<SqlStorage>()?;
 
         // Decode entry

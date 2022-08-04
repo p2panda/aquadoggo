@@ -25,7 +25,7 @@ impl StaticQuery {
             desc = "Public key of author that will encode and sign the next entry \
             using the returned arguments"
         )]
-        public_key: scalars::PublicKey,
+        public_key: scalars::PublicKeyScalar,
         #[graphql(
             name = "documentId",
             desc = "Document the entry's UPDATE or DELETE operation is referring to, \
@@ -127,7 +127,7 @@ mod tests {
             let response: Response = response.json().await;
             assert_eq!(
                 response.errors[0].message,
-                "invalid hex encoding in author string"
+                "Failed to parse \"PublicKeyScalar\": invalid hex encoding in author string"
             )
         })
     }
