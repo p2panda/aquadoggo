@@ -5,9 +5,7 @@ use async_graphql::{Name, OutputType, ScalarType, SelectionField, Value};
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 
 use crate::graphql::client::dynamic_types::utils::{metafield, metaobject};
-use crate::graphql::scalars::{
-    DocumentId as DocumentIdScalar, DocumentViewId as DocumentViewIdScalar,
-};
+use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
 
 /// Name of the field for accessing the document's id.
 const DOCUMENT_ID_FIELD: &str = "documentId";
@@ -74,7 +72,7 @@ impl DocumentMeta {
             if meta_field.name() == DOCUMENT_ID_FIELD && document_id.is_some() {
                 meta_fields.insert(
                     Name::new(DOCUMENT_ID_FIELD),
-                    DocumentIdScalar::from(document_id.unwrap().to_owned()).to_value(),
+                    DocumentIdScalar::from(document_id.unwrap()).to_value(),
                 );
             }
 

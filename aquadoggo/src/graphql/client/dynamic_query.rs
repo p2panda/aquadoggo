@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::convert::TryInto;
-
 use async_graphql::indexmap::IndexMap;
 use async_graphql::{
-    ContainerType, Context, Error, Name, SelectionField, ServerError, ServerResult, Value,
+    ContainerType, Context, Name, SelectionField, ServerError, ServerResult, Value,
 };
 use async_recursion::async_recursion;
 use async_trait::async_trait;
@@ -18,9 +16,7 @@ use crate::db::provider::SqlStorage;
 use crate::db::traits::DocumentStore;
 use crate::graphql::client::dynamic_types::DocumentMeta;
 use crate::graphql::client::utils::validate_view_matches_schema;
-use crate::graphql::scalars::{
-    DocumentId as DocumentIdScalar, DocumentViewId as DocumentViewIdScalar,
-};
+use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
 use crate::schema::SchemaProvider;
 
 /// Resolves queries for documents based on p2panda schemas.
@@ -79,12 +75,7 @@ impl DynamicQuery {
         let view_id_arg = ctx.param_value::<Option<DocumentViewIdScalar>>("viewId", None)?;
 
         if let Some(view_id_scalar) = view_id_arg.clone().1 {
-            let view_id = view_id_scalar.try_into().map_err(|err: Error| {
-                ServerError::new(
-                    format!("Could not parse `viewId` argument: {}", err.message),
-                    Some(view_id_arg.0),
-                )
-            })?;
+            let view_id = DocumentViewId::from(&view_id_scalar);
 
             // If the `viewId` argument is set we ignore the `id` argument because it doesn't
             // provide any additional information that we don't get from the view id.
@@ -99,22 +90,17 @@ impl DynamicQuery {
             ));
         }
 
-        match document_id_arg {
-            (pos, Some(document_id_scalar)) => Ok(Some(
+        match document_id_arg.1 {
+            Some(document_id_scalar) => Ok(Some(
                 self.get_by_document_id(
-                    document_id_scalar.try_into().map_err(|err: Error| {
-                        ServerError::new(
-                            format!("Could not parse `id` argument: {}", err.message),
-                            Some(pos),
-                        )
-                    })?,
+                    DocumentId::from(&document_id_scalar),
                     ctx,
                     ctx.field().selection_set().collect(),
                     Some(schema_id),
                 )
                 .await?,
             )),
-            (_, None) => Err(ServerError::new(
+            None => Err(ServerError::new(
                 "Must provide either `id` or `viewId` argument".to_string(),
                 Some(ctx.item.pos),
             )),
@@ -362,9 +348,6 @@ fn gql_scalar(operation_value: &OperationValue) -> Value {
 mod test {
     use std::convert::TryInto;
 
-    use crate::graphql::scalars::{
-        DocumentId as DocumentIdScalar, DocumentViewId as DocumentViewIdScalar,
-    };
     use async_graphql::{value, Response, Value};
     use p2panda_rs::document::DocumentId;
     use p2panda_rs::schema::FieldType;
@@ -410,9 +393,8 @@ mod test {
                 }}
             }}"#,
                 type_name = schema.id().as_str(),
-                // Throw in some scalar type conversions to also test those.
-                view_id = DocumentViewIdScalar::from(view_id),
-                document_id = DocumentIdScalar::from(document_id)
+                view_id = view_id.as_str(),
+                document_id = document_id.as_str()
             );
 
             let response = client
@@ -451,12 +433,12 @@ mod test {
     #[case::malformed_document_id(
         "id: \"verboten\"",
         Value::Null,
-        vec!["Could not parse `id` argument: invalid hex encoding in hash string".to_string()]
+        vec!["Failed to parse \"DocumentIdScalar\": invalid hex encoding in hash string".to_string()]
     )]
     #[case::malformed_view_id(
         "viewId: \"verboten\"",
         Value::Null,
-        vec!["Could not parse `viewId` argument: invalid hex encoding in hash string".to_string()]
+        vec!["Failed to parse \"DocumentViewIdScalar\": invalid hex encoding in hash string".to_string()]
     )]
     #[case::missing_parameters(
         "id: null",

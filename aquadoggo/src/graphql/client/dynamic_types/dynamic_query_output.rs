@@ -17,9 +17,7 @@ use p2panda_rs::schema::Schema;
 use crate::graphql::client::dynamic_types::utils::{metafield, metaobject};
 use crate::graphql::client::dynamic_types::{Document, DocumentMeta};
 use crate::graphql::client::DynamicQuery;
-use crate::graphql::scalars::{
-    DocumentId as DocumentIdScalar, DocumentViewId as DocumentViewIdScalar,
-};
+use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
 use crate::schema::load_static_schemas;
 
 #[async_trait::async_trait]

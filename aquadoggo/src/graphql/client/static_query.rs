@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::convert::TryFrom;
-
 use async_graphql::{Context, Error, Object, Result};
 use p2panda_rs::document::DocumentId;
 use p2panda_rs::storage_provider::traits::StorageProvider;
@@ -33,14 +31,9 @@ impl StaticQuery {
             desc = "Document the entry's UPDATE or DELETE operation is referring to, \
             can be left empty when it is a CREATE operation"
         )]
-        document_id: Option<scalars::DocumentId>,
+        document_id: Option<scalars::DocumentIdScalar>,
     ) -> Result<NextEntryArguments> {
-        let document_id = match document_id {
-            Some(value) => Some(
-                DocumentId::try_from(value).map_err(|err| err.into_server_error(ctx.item.pos))?,
-            ),
-            None => None,
-        };
+        let document_id = document_id.map(|val| DocumentId::from(&val));
         let args = EntryArgsRequest {
             public_key: public_key.into(),
             document_id,

@@ -252,13 +252,13 @@ fn metadata_type(#[from(test_db)] runner: TestDatabaseRunner) {
                 "fields": [{
                     "name": "documentId",
                     "type": {
-                        "name": "DocumentId"
+                        "name": "DocumentIdScalar"
                     }
                 },
                 {
                     "name": "viewId",
                     "type": {
-                        "name": "DocumentViewId"
+                        "name": "DocumentViewIdScalar"
                     }
                 }]
             }
