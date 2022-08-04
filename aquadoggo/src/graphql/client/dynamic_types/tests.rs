@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Test correct generation of output schema.
 
+//! Test correct generation of output schema.
 use async_graphql::{value, Response, Value};
 use p2panda_rs::schema::{FieldType, SchemaId, SYSTEM_SCHEMAS};
 use p2panda_rs::test_utils::fixtures::random_key_pair;

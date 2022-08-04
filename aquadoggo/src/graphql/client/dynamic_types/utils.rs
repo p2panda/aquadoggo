@@ -23,7 +23,7 @@ pub fn graphql_typename(operation_field_type: &FieldType) -> String {
     }
 }
 
-/// Make a simple metafield with mostly default values.
+/// Make a simple [`MetaField`] with mostly default values.
 pub fn metafield(name: &str, description: Option<&'static str>, type_name: &str) -> MetaField {
     MetaField {
         name: name.to_string(),
@@ -41,7 +41,7 @@ pub fn metafield(name: &str, description: Option<&'static str>, type_name: &str)
     }
 }
 
-/// Make a simple object metatype with mostly default values.
+/// Make a simple object [`MetaType`] with mostly default values.
 pub fn metaobject(
     name: &str,
     description: Option<&'static str>,
@@ -56,6 +56,7 @@ pub fn metaobject(
         extends: false,
         keys: None,
         is_subscription: false,
+        // Dynamic query objects don't have an association to a Rust type.
         rust_typename: "__fake__",
     }
 }

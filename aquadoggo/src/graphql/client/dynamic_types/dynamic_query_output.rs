@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Registers GraphQL types for all [schemas][`Schema`] available in the schema provider.
 //!
 //! `async_graphql` doesn't provide an API for registering types that don't correspond to
 //! any Rust type. This module uses undocumented, internal functionality of `async_graphql` to
 //! circumvent this restriction. By implementing `OutputType` for [`DynamicQuery`] we are given
 //! mutable access to the type registry and can insert types into it.
-
 use std::borrow::Cow;
 
 use async_graphql::indexmap::IndexMap;
@@ -14,13 +14,12 @@ use async_graphql::registry::{MetaField, MetaInputValue, MetaTypeId};
 use async_graphql::{ContextSelectionSet, OutputType, Positioned, ServerResult, Value};
 use p2panda_rs::schema::Schema;
 
-
 use crate::graphql::client::dynamic_types::utils::{metafield, metaobject};
-use crate::graphql::client::dynamic_types::{DocumentMetaType, DocumentType};
+use crate::graphql::client::dynamic_types::{Document, DocumentMeta};
 use crate::graphql::client::DynamicQuery;
 use crate::graphql::scalars::{
     DocumentId as DocumentIdScalar, DocumentViewId as DocumentViewIdScalar,
-    };
+};
 use crate::schema::load_static_schemas;
 
 #[async_trait::async_trait]
@@ -36,13 +35,13 @@ impl OutputType for DynamicQuery {
             let mut fields = IndexMap::new();
 
             // Generic type of document metadata.
-            DocumentMetaType::register_type(reg);
+            DocumentMeta::register_type(reg);
 
             // Insert GraphQL types for all registered schemas.
             for schema in schemas {
                 // Register types for both this schema's `DocumentType` and its
                 // `DocumentFieldsType`.
-                let document_type = DocumentType::new(schema);
+                let document_type = Document::new(schema);
                 document_type.register_type(reg);
 
                 // Insert a single and listing query field for every schema with which documents of

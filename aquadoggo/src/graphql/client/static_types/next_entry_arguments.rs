@@ -10,7 +10,7 @@ use crate::graphql::scalars;
 
 /// Arguments required to sign and encode the next entry for an author.
 #[derive(SimpleObject, Serialize, Deserialize, Debug, Eq, PartialEq)]
-pub struct NextEntryArgumentsType {
+pub struct NextEntryArguments {
     /// Log id of the entry.
     #[graphql(name = "logId")]
     pub log_id: scalars::LogId,
@@ -26,7 +26,7 @@ pub struct NextEntryArgumentsType {
     pub skiplink: Option<scalars::EntryHash>,
 }
 
-impl AsEntryArgsResponse for NextEntryArgumentsType {
+impl AsEntryArgsResponse for NextEntryArguments {
     fn new(backlink: Option<Hash>, skiplink: Option<Hash>, seq_num: SeqNum, log_id: LogId) -> Self {
         Self {
             log_id: log_id.into(),
@@ -37,7 +37,7 @@ impl AsEntryArgsResponse for NextEntryArgumentsType {
     }
 }
 
-impl AsPublishEntryResponse for NextEntryArgumentsType {
+impl AsPublishEntryResponse for NextEntryArguments {
     fn new(backlink: Option<Hash>, skiplink: Option<Hash>, seq_num: SeqNum, log_id: LogId) -> Self {
         Self {
             log_id: log_id.into(),

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Integration tests for dynamic graphql schema generation and query resolution.
 
+//! Integration tests for dynamic graphql schema generation and query resolution.
 use std::convert::TryInto;
 
 use async_graphql::{value, Response};

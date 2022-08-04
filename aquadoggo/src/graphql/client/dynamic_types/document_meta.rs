@@ -16,9 +16,9 @@ const DOCUMENT_ID_FIELD: &str = "documentId";
 const VIEW_ID_FIELD: &str = "viewId";
 
 /// The GraphQL type for generic document metadata.
-pub struct DocumentMetaType;
+pub struct DocumentMeta;
 
-impl DocumentMetaType {
+impl DocumentMeta {
     pub fn type_name() -> &'static str {
         "DocumentMeta"
     }

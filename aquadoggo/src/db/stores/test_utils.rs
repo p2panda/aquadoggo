@@ -28,7 +28,7 @@ use crate::db::provider::SqlStorage;
 use crate::db::request::{EntryArgsRequest, PublishEntryRequest};
 use crate::db::traits::DocumentStore;
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
-use crate::graphql::client::NextEntryArgumentsType;
+use crate::graphql::client::NextEntryArguments;
 use crate::materializer::tasks::{dependency_task, reduce_task, schema_task};
 use crate::materializer::TaskInput;
 use crate::test_helpers::TEST_CONFIG;
@@ -552,7 +552,7 @@ pub async fn send_to_store(
     operation: &Operation,
     document_id: Option<&DocumentId>,
     key_pair: &KeyPair,
-) -> (EntrySigned, NextEntryArgumentsType) {
+) -> (EntrySigned, NextEntryArguments) {
     // Get an Author from the key_pair.
     let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 

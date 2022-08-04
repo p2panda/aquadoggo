@@ -8,7 +8,7 @@ use p2panda_rs::Validate;
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::provider::SqlStorage;
 use crate::db::request::PublishEntryRequest;
-use crate::graphql::client::NextEntryArgumentsType;
+use crate::graphql::client::NextEntryArguments;
 use crate::graphql::scalars;
 
 /// GraphQL queries for the Client API.
@@ -30,7 +30,7 @@ impl ClientMutationRoot {
             desc = "p2panda operation representing the entry payload."
         )]
         operation: scalars::EncodedOperation,
-    ) -> Result<NextEntryArgumentsType> {
+    ) -> Result<NextEntryArguments> {
         let store = ctx.data::<SqlStorage>()?;
         let tx = ctx.data::<ServiceSender>()?;
 

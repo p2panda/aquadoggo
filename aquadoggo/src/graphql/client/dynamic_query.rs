@@ -16,7 +16,7 @@ use p2panda_rs::schema::SchemaId;
 
 use crate::db::provider::SqlStorage;
 use crate::db::traits::DocumentStore;
-use crate::graphql::client::dynamic_types::DocumentMetaType;
+use crate::graphql::client::dynamic_types::DocumentMeta;
 use crate::graphql::client::utils::validate_view_matches_schema;
 use crate::graphql::scalars::{
     DocumentId as DocumentIdScalar, DocumentViewId as DocumentViewIdScalar,
@@ -244,7 +244,7 @@ impl DynamicQuery {
             if field.name() == "meta" {
                 document_fields.insert(
                     Name::new(field.alias().unwrap_or_else(|| field.name())),
-                    DocumentMetaType::resolve(field, None, Some(view.id())),
+                    DocumentMeta::resolve(field, None, Some(view.id())),
                 );
             }
 

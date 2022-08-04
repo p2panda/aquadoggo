@@ -9,7 +9,7 @@ use p2panda_rs::Validate;
 
 use crate::db::provider::SqlStorage;
 use crate::db::request::EntryArgsRequest;
-use crate::graphql::client::NextEntryArgumentsType;
+use crate::graphql::client::NextEntryArguments;
 use crate::graphql::scalars;
 
 /// GraphQL queries for the Client API.
@@ -34,7 +34,7 @@ impl StaticQuery {
             can be left empty when it is a CREATE operation"
         )]
         document_id: Option<scalars::DocumentId>,
-    ) -> Result<NextEntryArgumentsType> {
+    ) -> Result<NextEntryArguments> {
         let document_id = match document_id {
             Some(value) => Some(
                 DocumentId::try_from(value).map_err(|err| err.into_server_error(ctx.item.pos))?,

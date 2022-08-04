@@ -6,9 +6,9 @@ use p2panda_rs::schema::Schema;
 use crate::graphql::client::dynamic_types::utils::{graphql_typename, metafield, metaobject};
 
 /// Represents fields for documents of a specific schema in the GraphQL client API.
-pub struct DocumentFieldsType(&'static Schema);
+pub struct DocumentFields(&'static Schema);
 
-impl DocumentFieldsType {
+impl DocumentFields {
     /// Get a new instance for the given schema, which must be `static`.
     pub fn new(schema: &'static Schema) -> Self {
         Self(schema)

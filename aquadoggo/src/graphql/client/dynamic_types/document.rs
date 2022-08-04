@@ -4,12 +4,12 @@ use async_graphql::indexmap::IndexMap;
 use p2panda_rs::schema::Schema;
 
 use crate::graphql::client::dynamic_types::utils::{metafield, metaobject};
-use crate::graphql::client::dynamic_types::{DocumentFieldsType, DocumentMetaType};
+use crate::graphql::client::dynamic_types::{DocumentFields, DocumentMeta};
 
 /// Represents documents of a p2panda schema.
-pub struct DocumentType(&'static Schema);
+pub struct Document(&'static Schema);
 
-impl DocumentType {
+impl Document {
     /// Ger a new instance for the given schema, which must be `static`.
     pub fn new(schema: &'static Schema) -> Self {
         Self(schema)
@@ -31,7 +31,7 @@ impl DocumentType {
     /// resolver to match.
     pub fn register_type(&self, registry: &mut async_graphql::registry::Registry) {
         // Register the type of this schema's `fields` type.
-        let fields_type = DocumentFieldsType::new(self.schema());
+        let fields_type = DocumentFields::new(self.schema());
         fields_type.register_type(registry);
 
         // Assemble field definitions for this schema itself.
@@ -40,7 +40,7 @@ impl DocumentType {
         // Insert field `meta`.
         fields.insert(
             "meta".to_string(),
-            metafield("meta", None, DocumentMetaType::type_name()),
+            metafield("meta", None, DocumentMeta::type_name()),
         );
 
         // Insert field `fields`.
