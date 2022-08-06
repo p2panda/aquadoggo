@@ -8,7 +8,6 @@ use sqlx::migrate::MigrateDatabase;
 pub mod errors;
 pub mod models;
 pub mod provider;
-pub mod request;
 pub mod stores;
 pub mod traits;
 pub mod utils;

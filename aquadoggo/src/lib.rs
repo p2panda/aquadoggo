@@ -17,6 +17,7 @@ mod bus;
 mod config;
 mod context;
 mod db;
+mod domain;
 mod errors;
 mod graphql;
 mod http;
@@ -25,6 +26,7 @@ mod materializer;
 mod node;
 mod replication;
 mod schema;
+mod validation;
 
 #[cfg(test)]
 mod test_helpers;

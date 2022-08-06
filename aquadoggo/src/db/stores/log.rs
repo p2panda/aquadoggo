@@ -83,7 +83,7 @@ impl LogStore<StorageLog> for SqlStorage {
         .bind(log.author().as_str())
         .bind(log.id().as_u64().to_string())
         .bind(log.document_id().as_str())
-        .bind(log.schema_id().as_str())
+        .bind(log.schema_id().to_string())
         .execute(&self.pool)
         .await
         .map_err(|e| LogStorageError::Custom(e.to_string()))?
@@ -125,6 +125,9 @@ impl LogStore<StorageLog> for SqlStorage {
     }
 
     /// Determines the next unused log_id of an author.
+    ///
+    /// @TODO: This will be deprecated as functionality is replaced by
+    /// `latest_log_id + validated next log id methods.
     async fn next_log_id(&self, author: &Author) -> Result<LogId, LogStorageError> {
         // Get all log ids from this author
         let mut result: Vec<String> = query_scalar(
@@ -169,10 +172,45 @@ impl LogStore<StorageLog> for SqlStorage {
             }
 
             // Otherwise, try next possible log id
-            next_log_id = next_log_id.next().unwrap();
+            next_log_id = match next_log_id.next() {
+                Some(log_id) => Ok(log_id),
+                None => Err(LogStorageError::Custom("Max log id reached".to_string())),
+            }?;
         }
 
         Ok(next_log_id)
+    }
+
+    /// Determines the latest `LogId` of an author.
+    ///
+    /// Returns either the highest known `LogId` for an author or `None` if no logs are known from
+    /// the passed author.
+    async fn latest_log_id(&self, author: &Author) -> Result<Option<LogId>, LogStorageError> {
+        // Get all log ids from this author
+        let result: Option<String> = query_scalar(
+            "
+            SELECT
+                log_id
+            FROM
+                logs
+            WHERE
+                author = $1
+            ORDER BY
+                CAST(log_id AS NUMERIC) DESC LIMIT 1
+            ",
+        )
+        .bind(author.as_str())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| LogStorageError::Custom(e.to_string()))?;
+
+        // Convert string representing u64 integers to `LogId` instance
+        let log_id: Option<LogId> = result.map(|str| {
+            str.parse()
+                .unwrap_or_else(|_| panic!("Corrupt u64 integer found in database: '{0}'", &str))
+        });
+
+        Ok(log_id)
     }
 }
 
@@ -193,6 +231,7 @@ mod tests {
     };
     use rstest::rstest;
 
+    use crate::db::provider::SqlStorage;
     use crate::db::stores::entry::StorageEntry;
     use crate::db::stores::log::StorageLog;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
@@ -202,7 +241,7 @@ mod tests {
         #[from(public_key)] author: Author,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             let log_id = db.store.find_document_log_id(&author, None).await.unwrap();
             assert_eq!(log_id, LogId::default());
         });
@@ -215,7 +254,7 @@ mod tests {
         #[from(random_document_id)] document: DocumentId,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             let log = StorageLog::new(&author, &schema, &document.clone(), &LogId::default());
             assert!(db.store.insert_log(log).await.is_ok());
 
@@ -232,7 +271,7 @@ mod tests {
         #[from(random_document_id)] document: DocumentId,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             let schema = SchemaId::new_application(
                 "venue",
                 &DocumentViewId::new(&[operation_id_1, operation_id_2]).unwrap(),
@@ -250,7 +289,7 @@ mod tests {
         #[from(schema)] schema: SchemaId,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             let log_id = db.store.find_document_log_id(&author, None).await.unwrap();
 
             // We expect to be given the next log id when asking for a possible log id for a new
@@ -272,13 +311,35 @@ mod tests {
     }
 
     #[rstest]
+    fn latest_log_id(
+        #[from(public_key)] author: Author,
+        #[from(schema)] schema: SchemaId,
+        #[from(test_db)] runner: TestDatabaseRunner,
+        #[from(random_document_id)] document_id: DocumentId,
+    ) {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+            let log_id = db.store.latest_log_id(&author).await.unwrap();
+
+            assert_eq!(log_id, None);
+
+            for n in 0..12 {
+                let log = StorageLog::new(&author, &schema, &document_id, &LogId::new(n));
+                db.store.insert_log(log).await.unwrap();
+
+                let log_id = db.store.latest_log_id(&author).await.unwrap();
+                assert_eq!(Some(LogId::new(n)), log_id);
+            }
+        });
+    }
+
+    #[rstest]
     fn document_log_id(
         #[from(schema)] schema: SchemaId,
         #[from(entry_signed_encoded)] entry_encoded: EntrySigned,
         #[from(operation_encoded)] operation_encoded: OperationEncoded,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             // Expect database to return nothing yet
             assert_eq!(
                 db.store
@@ -335,7 +396,7 @@ mod tests {
         #[from(random_document_id)] document_third: DocumentId,
         #[from(random_document_id)] document_forth: DocumentId,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             // Register two log ids at the beginning
             let log_1 = StorageLog::new(&author, &schema, &document_first, &LogId::default());
             let log_2 = StorageLog::new(&author, &schema, &document_second, &LogId::new(1));
@@ -347,7 +408,7 @@ mod tests {
             let log_id = db.store.next_log_id(&author).await.unwrap();
             assert_eq!(log_id, LogId::new(2));
 
-            let log_3 = StorageLog::new(&author, &schema, &document_third.into(), &log_id);
+            let log_3 = StorageLog::new(&author, &schema, &document_third, &log_id);
 
             db.store.insert_log(log_3).await.unwrap();
 
@@ -355,7 +416,7 @@ mod tests {
             let log_id = db.store.next_log_id(&author).await.unwrap();
             assert_eq!(log_id, LogId::new(3));
 
-            let log_4 = StorageLog::new(&author, &schema, &document_forth.into(), &log_id);
+            let log_4 = StorageLog::new(&author, &schema, &document_forth, &log_id);
 
             db.store.insert_log(log_4).await.unwrap();
 

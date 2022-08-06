@@ -186,7 +186,7 @@ mod tests {
     ) {
         let cddl_str = cddl_str.to_string();
 
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             let document_view_id =
                 insert_schema_field_definition(&db.store, &key_pair, schema_field_definition).await;
 
@@ -253,7 +253,7 @@ mod tests {
     ) {
         let err_str = err_str.to_string();
 
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             let document_view_id =
                 insert_schema_field_definition(&db.store, &key_pair, schema_field_definition).await;
 
@@ -300,7 +300,7 @@ mod tests {
         key_pair: KeyPair,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
+        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
             let document_view_id =
                 insert_schema_field_definition(&db.store, &key_pair, schema_field_definition).await;
 
@@ -326,7 +326,7 @@ mod tests {
         #[from(test_db)] runner: TestDatabaseRunner,
         key_pair: KeyPair,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             let document_view_id = insert_schema_definition(
                 &db.store,
                 &key_pair,

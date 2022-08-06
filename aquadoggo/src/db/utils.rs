@@ -198,11 +198,11 @@ pub fn parse_value_to_string_vec(value: &OperationValue) -> Vec<String> {
             db_values
         }
         OperationValue::PinnedRelation(pinned_relation) => {
-            vec![pinned_relation.view_id().as_str()]
+            vec![pinned_relation.view_id().to_string()]
         }
         OperationValue::PinnedRelationList(pinned_relation_list) => pinned_relation_list
             .iter()
-            .map(|document_view_id| document_view_id.as_str())
+            .map(|document_view_id| document_view_id.to_string())
             .collect(),
     }
 }
@@ -371,8 +371,6 @@ mod tests {
                     "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
                         .to_string(),
                 action: "create".to_string(),
-                entry_hash: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
-                    .to_string(),
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
@@ -390,8 +388,6 @@ mod tests {
                     "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
                         .to_string(),
                 action: "create".to_string(),
-                entry_hash: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
-                    .to_string(),
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
@@ -409,8 +405,6 @@ mod tests {
                     "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
                         .to_string(),
                 action: "create".to_string(),
-                entry_hash: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
-                    .to_string(),
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
@@ -428,8 +422,6 @@ mod tests {
                     "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
                         .to_string(),
                 action: "create".to_string(),
-                entry_hash: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
-                    .to_string(),
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
@@ -450,8 +442,6 @@ mod tests {
                     "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
                         .to_string(),
                 action: "create".to_string(),
-                entry_hash: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
-                    .to_string(),
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
@@ -472,8 +462,6 @@ mod tests {
                     "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
                         .to_string(),
                 action: "create".to_string(),
-                entry_hash: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
-                    .to_string(),
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
@@ -494,8 +482,6 @@ mod tests {
                     "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
                         .to_string(),
                 action: "create".to_string(),
-                entry_hash: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
-                    .to_string(),
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
@@ -516,8 +502,6 @@ mod tests {
                     "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
                         .to_string(),
                 action: "create".to_string(),
-                entry_hash: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
-                    .to_string(),
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
@@ -538,8 +522,6 @@ mod tests {
                     "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
                         .to_string(),
                 action: "create".to_string(),
-                entry_hash: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
-                    .to_string(),
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
@@ -560,8 +542,6 @@ mod tests {
                     "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
                         .to_string(),
                 action: "create".to_string(),
-                entry_hash: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
-                    .to_string(),
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
@@ -582,8 +562,6 @@ mod tests {
                     "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
                         .to_string(),
                 action: "create".to_string(),
-                entry_hash: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
-                    .to_string(),
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
@@ -604,8 +582,6 @@ mod tests {
                     "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
                         .to_string(),
                 action: "create".to_string(),
-                entry_hash: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
-                    .to_string(),
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),

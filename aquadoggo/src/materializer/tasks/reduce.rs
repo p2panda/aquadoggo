@@ -207,6 +207,7 @@ mod tests {
 
     use crate::config::Configuration;
     use crate::context::Context;
+    use crate::db::provider::SqlStorage;
     use crate::db::stores::test_utils::{send_to_store, test_db, TestDatabase, TestDatabaseRunner};
     use crate::db::traits::DocumentStore;
     use crate::materializer::tasks::reduce_task;
@@ -227,7 +228,7 @@ mod tests {
         )]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             let context = Context::new(
                 db.store,
                 Configuration::default(),
@@ -256,7 +257,7 @@ mod tests {
         #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             let document_id = db.test_data.documents.first().unwrap();
             let key_pair = db.test_data.key_pairs.first().unwrap();
 
@@ -282,7 +283,7 @@ mod tests {
                     Some(document_id.as_str().parse().unwrap()),
                     None,
                 ),
-                Some(document_id),
+                Some(&document_id),
                 key_pair,
             )
             .await;
@@ -292,7 +293,11 @@ mod tests {
             assert!(reduce_task(context.clone(), input).await.is_ok());
 
             // The new view should exist and the document should refer to it.
-            let document_view = context.store.get_document_by_id(document_id).await.unwrap();
+            let document_view = context
+                .store
+                .get_document_by_id(&document_id)
+                .await
+                .unwrap();
             assert_eq!(
                 document_view.unwrap().get("username").unwrap().value(),
                 &OperationValue::Text("meeeeeee".to_string())
@@ -306,7 +311,7 @@ mod tests {
         #[with( 2, 1, 1, false, SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::Text("panda".into()))], vec![("username", OperationValue::Text("PANDA".into()))])]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             let document_operations = db
                 .store
                 .get_operations_by_document_id(&db.test_data.documents[0])
@@ -367,7 +372,7 @@ mod tests {
         #[with(3, 1, 20, true)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             let context = Context::new(
                 db.store.clone(),
                 Configuration::default(),
@@ -414,7 +419,7 @@ mod tests {
         #[case] runner: TestDatabaseRunner,
         #[case] is_next_task: bool,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
+        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
             let context = Context::new(
                 db.store.clone(),
                 Configuration::default(),
@@ -436,7 +441,7 @@ mod tests {
         #[case] document_view_id: Option<DocumentViewId>,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             let context = Context::new(
                 db.store,
                 Configuration::default(),
@@ -457,7 +462,7 @@ mod tests {
         #[from(random_document_view_id)] document_view_id: DocumentViewId,
     ) {
         // Prepare empty database.
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             let context = Context::new(
                 db.store.clone(),
                 Configuration::default(),

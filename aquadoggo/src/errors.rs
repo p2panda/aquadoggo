@@ -3,8 +3,8 @@
 use p2panda_rs::schema::{SchemaId, SchemaIdError};
 use thiserror::Error;
 
-/// A specialized result type for the storage provider.
-pub type StorageProviderResult<T> = anyhow::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+/// A result type used in aquadoggo modules.
+pub type Result<T> = anyhow::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 /// Errors returned by schema service.
 #[derive(Error, Debug)]

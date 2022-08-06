@@ -7,6 +7,7 @@ use axum::extract::Extension;
 use axum::http::Method;
 use axum::routing::get;
 use axum::Router;
+use log::{debug, warn};
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::bus::ServiceSender;
@@ -14,7 +15,7 @@ use crate::context::Context;
 use crate::graphql::GraphQLSchemaManager;
 use crate::http::api::{handle_graphql_playground, handle_graphql_query};
 use crate::http::context::HttpServiceContext;
-use crate::manager::Shutdown;
+use crate::manager::{ServiceReadySender, Shutdown};
 
 const GRAPHQL_ROUTE: &str = "/graphql";
 
@@ -39,7 +40,12 @@ pub fn build_server(http_context: HttpServiceContext) -> Router {
 }
 
 /// Start HTTP server.
-pub async fn http_service(context: Context, signal: Shutdown, tx: ServiceSender) -> Result<()> {
+pub async fn http_service(
+    context: Context,
+    signal: Shutdown,
+    tx: ServiceSender,
+    tx_ready: ServiceReadySender,
+) -> Result<()> {
     let http_port = context.config.http_port;
     let http_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), http_port);
 
@@ -53,6 +59,11 @@ pub async fn http_service(context: Context, signal: Shutdown, tx: ServiceSender)
     axum::Server::try_bind(&http_address)?
         .serve(build_server(http_context).into_make_service())
         .with_graceful_shutdown(async {
+            debug!("HTTP service is ready");
+            if tx_ready.send(()).is_err() {
+                warn!("No subscriber informed about HTTP service being ready");
+            };
+
             signal.await.ok();
         })
         .await?;
@@ -66,6 +77,7 @@ mod tests {
     use serde_json::json;
     use tokio::sync::broadcast;
 
+    use crate::db::provider::SqlStorage;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
     use crate::graphql::GraphQLSchemaManager;
     use crate::http::context::HttpServiceContext;
@@ -76,7 +88,7 @@ mod tests {
 
     #[rstest]
     fn graphql_endpoint(#[from(test_db)] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             let (tx, _) = broadcast::channel(16);
             let schema_provider = SchemaProvider::default();
             let graphql_schema_manager =

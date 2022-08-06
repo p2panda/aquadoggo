@@ -86,25 +86,23 @@ impl OperationStore<VerifiedOperation> for SqlStorage {
                     author,
                     document_id,
                     operation_id,
-                    entry_hash,
                     action,
                     schema_id,
                     previous_operations
                 )
             VALUES
-                ($1, $2, $3, $4, $5, $6, $7)
+                ($1, $2, $3, $4, $5, $6)
             ",
         )
         .bind(operation.public_key().as_str())
         .bind(document_id.as_str())
         .bind(operation.operation_id().as_str())
-        .bind(operation.operation_id().as_hash().as_str())
         .bind(operation.action().as_str())
-        .bind(operation.schema().as_str())
+        .bind(operation.schema().to_string())
         .bind(
             operation
                 .previous_operations()
-                .map(|document_view_id| document_view_id.as_str()),
+                .map(|document_view_id| document_view_id.to_string()),
         )
         .execute(&self.pool)
         .await
@@ -193,7 +191,6 @@ impl OperationStore<VerifiedOperation> for SqlStorage {
                 operations_v1.author,
                 operations_v1.document_id,
                 operations_v1.operation_id,
-                operations_v1.entry_hash,
                 operations_v1.action,
                 operations_v1.schema_id,
                 operations_v1.previous_operations,
@@ -232,7 +229,6 @@ impl OperationStore<VerifiedOperation> for SqlStorage {
                 operations_v1.author,
                 operations_v1.document_id,
                 operations_v1.operation_id,
-                operations_v1.entry_hash,
                 operations_v1.action,
                 operations_v1.schema_id,
                 operations_v1.previous_operations,
@@ -298,6 +294,7 @@ mod tests {
     };
     use rstest::rstest;
 
+    use crate::db::provider::SqlStorage;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
     #[rstest]
@@ -313,7 +310,7 @@ mod tests {
         document_id: DocumentId,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             // Construct the storage operation.
             let operation = VerifiedOperation::new(&author, &operation_id, &operation).unwrap();
 
@@ -341,7 +338,7 @@ mod tests {
         document_id: DocumentId,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             db.store
                 .insert_operation(&verified_operation, &document_id)
                 .await
@@ -366,7 +363,7 @@ mod tests {
         document_id: DocumentId,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             assert!(db
                 .store
                 .get_document_by_operation_id(create_operation.operation_id())
@@ -411,7 +408,7 @@ mod tests {
         #[with(5, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
             let latest_entry = db

@@ -4,7 +4,6 @@ CREATE TABLE IF NOT EXISTS operations_v1 (
     author                  TEXT            NOT NULL,
     document_id             TEXT            NOT NULL,
     operation_id            TEXT            NOT NULL UNIQUE,
-    entry_hash              TEXT            NOT NULL UNIQUE,
     action                  TEXT            NOT NULL,
     schema_id               TEXT            NOT NULL,
     previous_operations     TEXT            NULL,

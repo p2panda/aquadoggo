@@ -60,13 +60,26 @@ impl Node {
         let mut manager = ServiceManager::<Context, ServiceMessage>::new(1024, context);
 
         // Start materializer service.
-        manager.add("materializer", materializer_service);
-
+        if manager
+            .add("materializer", materializer_service)
+            .await
+            .is_err()
+        {
+            panic!("Failed starting materialiser service");
+        }
         // Start replication service
-        manager.add("replication", replication_service);
+        if manager
+            .add("replication", replication_service)
+            .await
+            .is_err()
+        {
+            panic!("Failed starting replication service");
+        }
 
         // Start HTTP server with GraphQL API
-        manager.add("http", http_service);
+        if manager.add("http", http_service).await.is_err() {
+            panic!("Failed starting HTTP service");
+        }
 
         Self { pool, manager }
     }

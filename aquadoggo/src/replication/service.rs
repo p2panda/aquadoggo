@@ -5,23 +5,19 @@ use std::time::Duration;
 
 use anyhow::{anyhow, Result};
 use bamboo_rs_core_ed25519_yasmf::verify::verify_batch;
-use futures::TryFutureExt;
 use log::{debug, error, trace, warn};
 use p2panda_rs::entry::LogId;
 use p2panda_rs::entry::SeqNum;
 use p2panda_rs::identity::Author;
-use p2panda_rs::operation::{AsVerifiedOperation, VerifiedOperation};
-use p2panda_rs::storage_provider::traits::{
-    AsStorageEntry, EntryStore, OperationStore, StorageProvider,
-};
+use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
 use tokio::task;
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
-use crate::db::request::PublishEntryRequest;
 use crate::db::stores::StorageEntry;
+use crate::domain::publish;
 use crate::graphql::replication::client;
-use crate::manager::Shutdown;
+use crate::manager::{ServiceReadySender, Shutdown};
 
 /// Replication service polling other nodes frequently to ask them about new entries from a defined
 /// set of authors and log ids.
@@ -29,6 +25,7 @@ pub async fn replication_service(
     context: Context,
     shutdown: Shutdown,
     tx: ServiceSender,
+    tx_ready: ServiceReadySender,
 ) -> Result<()> {
     // Prepare replication configuration
     let config = &context.config.replication;
@@ -101,6 +98,11 @@ pub async fn replication_service(
         }
     });
 
+    debug!("Replication service is ready");
+    if tx_ready.send(()).is_err() {
+        warn!("No subscriber informed about replication service being ready");
+    };
+
     tokio::select! {
         _ = handle => (),
         _ = shutdown => (),
@@ -154,66 +156,29 @@ async fn insert_new_entries(
     tx: ServiceSender,
 ) -> Result<()> {
     for entry in new_entries {
-        // Parse and validate parameters
-        let args = PublishEntryRequest {
-            entry: entry.entry_signed().clone(),
-            // We know a storage entry has an operation so we safely unwrap here.
-            operation: entry.operation_encoded().unwrap().clone(),
-        };
-
         // This is the method used to publish entries arriving from clients. They all contain a
         // payload (operation).
         //
         // @TODO: This is not a great fit for replication, as it performs validation we either do
-        // not need or already done in a previous step. We plan to refactor this into a more
+        // not need or have already done in a previous step. We plan to refactor this into a more
         // modular set of methods which can definitely be used here more cleanly. For now, we do it
         // this way.
-        context
-            .0
-            .store
-            .publish_entry(&args)
-            .await
-            .map_err(|err| anyhow!(format!("Error inserting new entry into db: {:?}", err)))?;
+        //
+        // @TODO: Additionally, when we implement payload deletion and partial replication we will
+        // be expecting entries to arrive here possibly without payloads.
 
-        // @TODO: We have to publish the operation too, once again, this will be improved with the
-        // above mentioned refactor.
-        let document_id = context
-            .0
-            .store
-            .get_document_by_entry(&entry.hash())
-            .await
-            .map_err(|err| anyhow!(format!("Error retrieving document id from db: {:?}", err)))?;
+        publish(
+            &context.0.store,
+            entry.entry_signed(),
+            entry
+                .operation_encoded()
+                .expect("All stored entries contain an operation"),
+        )
+        .await
+        .map_err(|err| anyhow!(format!("Error inserting new entry into db: {:?}", err)))?;
 
-        match document_id {
-            Some(document_id) => {
-                let operation = VerifiedOperation::new_from_entry(
-                    entry.entry_signed(),
-                    entry.operation_encoded().unwrap(),
-                )
-                // Safely unwrap here as the entry and operation were already validated.
-                .unwrap();
-
-                context
-                    .0
-                    .store
-                    .insert_operation(&operation, &document_id)
-                    .map_ok({
-                        let entry = entry.clone();
-                        let tx = tx.clone();
-
-                        move |_| {
-                            send_new_entry_service_message(tx.clone(), &entry);
-                        }
-                    })
-                    .map_err(|err| {
-                        anyhow!(format!("Error inserting new operation into db: {:?}", err))
-                    })
-                    .await
-            }
-            None => Err(anyhow!(
-                "No document found for published operation".to_string()
-            )),
-        }?;
+        // Send new entry & operation to other services.
+        send_new_entry_service_message(tx.clone(), entry);
     }
 
     Ok(())
@@ -246,7 +211,7 @@ async fn add_certpool_to_entries_for_verification(
     Ok(())
 }
 
-/// Helper method to inform other services (like materialization service) about new operations.
+/// Helper method to inform other services (like materialisation service) about new operations.
 fn send_new_entry_service_message(tx: ServiceSender, entry: &StorageEntry) {
     let bus_message = ServiceMessage::NewOperation(entry.entry_signed().hash().into());
 
@@ -275,7 +240,7 @@ mod tests {
     use p2panda_rs::storage_provider::traits::EntryStore;
     use p2panda_rs::test_utils::constants::SCHEMA_ID;
     use rstest::rstest;
-    use tokio::sync::broadcast;
+    use tokio::sync::{broadcast, oneshot};
     use tokio::task;
 
     use crate::context::Context;
@@ -323,12 +288,17 @@ mod tests {
                 },
                 SchemaProvider::default(),
             );
+            let (tx_ready, rx_ready) = oneshot::channel::<()>();
 
             let http_server_billie = task::spawn(async {
-                http_service(context_billie, shutdown_billie, tx_billie)
+                http_service(context_billie, shutdown_billie, tx_billie, tx_ready)
                     .await
                     .unwrap();
             });
+
+            if rx_ready.await.is_err() {
+                panic!("Service dropped");
+            }
 
             // Our test database helper already populated the database for us. We retreive the
             // public keys here of the authors who created these test data entries
@@ -359,13 +329,18 @@ mod tests {
                 Context::new(ada_db.store.clone(), config_ada, SchemaProvider::default());
             let tx_ada = tx.clone();
             let shutdown_ada = shutdown_handle();
+            let (tx_ready, rx_ready) = oneshot::channel::<()>();
 
             // Ada starts replication service to get data from Billies GraphQL API
             let replication_service_ada = task::spawn(async {
-                replication_service(context_ada, shutdown_ada, tx_ada)
+                replication_service(context_ada, shutdown_ada, tx_ada, tx_ready)
                     .await
                     .unwrap();
             });
+
+            if rx_ready.await.is_err() {
+                panic!("Service dropped");
+            }
 
             // Wait a little bit for replication to take place
             tokio::time::sleep(Duration::from_millis(500)).await;

@@ -103,6 +103,62 @@ mod tests {
             );
         })
     }
+    #[rstest]
+    fn next_entry_args_valid_query_with_document_id(
+        #[with(1, 1, 1)]
+        #[from(test_db)]
+        runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
+            let (tx, _) = broadcast::channel(16);
+            let context = HttpServiceContext::new(db.store, tx);
+            let client = TestClient::new(build_server(context));
+
+            let document_id = db.test_data.documents.get(0).unwrap();
+            let author =
+                Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
+
+            // Selected fields need to be alphabetically sorted because that's what the `json`
+            // macro that is used in the assert below produces.
+            let received_entry_args = client
+                .post("/graphql")
+                .json(&json!({
+                    "query":
+                        format!(
+                            "{{
+                        nextEntryArgs(
+                            publicKey: \"{}\",
+                            documentId: \"{}\"
+                        ) {{
+                            logId,
+                            seqNum,
+                            backlink,
+                            skiplink
+                        }}
+                    }}",
+                            author.as_str(),
+                            document_id.as_str()
+                        )
+                }))
+                .send()
+                .await
+                .json::<Response>()
+                .await;
+
+            assert!(received_entry_args.is_ok());
+            assert_eq!(
+                received_entry_args.data,
+                value!({
+                    "nextEntryArgs": {
+                        "logId": "0",
+                        "seqNum": "2",
+                        "backlink": "0020c8e09edd863b308f9c60b8ba506f29da512d0c9b5a131287f402c57777af5678",
+                        "skiplink": null,
+                    }
+                })
+            );
+        })
+    }
 
     #[rstest]
     fn next_entry_args_error_response(#[from(test_db)] runner: TestDatabaseRunner) {
