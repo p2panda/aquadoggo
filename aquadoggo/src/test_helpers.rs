@@ -169,19 +169,7 @@ pub fn shutdown_handle() -> JoinHandle<()> {
 
 /// Create test database.
 pub async fn initialize_db() -> Pool {
-    // Reset database first
-    drop_database().await;
-    create_database(&TEST_CONFIG.database_url).await.unwrap();
-
-    // Create connection pool and run all migrations
-    let pool = connection_pool(&TEST_CONFIG.database_url, 25)
-        .await
-        .unwrap();
-    if run_pending_migrations(&pool).await.is_err() {
-        pool.close().await;
-    }
-
-    pool
+    initialize_db_with_url(&TEST_CONFIG.database_url).await
 }
 
 /// Create test database.
