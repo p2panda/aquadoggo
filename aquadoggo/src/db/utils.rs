@@ -198,11 +198,11 @@ pub fn parse_value_to_string_vec(value: &OperationValue) -> Vec<String> {
             db_values
         }
         OperationValue::PinnedRelation(pinned_relation) => {
-            vec![pinned_relation.view_id().as_str()]
+            vec![pinned_relation.view_id().to_string()]
         }
         OperationValue::PinnedRelationList(pinned_relation_list) => pinned_relation_list
             .iter()
-            .map(|document_view_id| document_view_id.as_str())
+            .map(|document_view_id| document_view_id.to_string())
             .collect(),
     }
 }

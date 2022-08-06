@@ -81,6 +81,7 @@ mod tests {
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
     use rstest::rstest;
 
+    use crate::db::provider::SqlStorage;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
     use crate::graphql::replication::ReplicationRoot;
 
@@ -90,7 +91,7 @@ mod tests {
         #[with(13, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             let replication_root = ReplicationRoot::default();
             let schema = Schema::build(replication_root, EmptyMutation, EmptySubscription)
                 .data(db.store.clone())

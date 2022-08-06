@@ -126,6 +126,7 @@ mod tests {
     use rstest::rstest;
 
     use crate::context::Context;
+    use crate::db::provider::SqlStorage;
     use crate::db::stores::test_utils::{send_to_store, test_db, TestDatabase, TestDatabaseRunner};
     use crate::db::traits::DocumentStore;
     use crate::materializer::tasks::reduce_task;
@@ -138,7 +139,7 @@ mod tests {
     /// Insert a test schema definition and schema field definition and run reduce tasks for both.
     async fn create_schema_documents(
         context: &Context,
-        db: &TestDatabase,
+        db: &TestDatabase<SqlStorage>,
     ) -> (DocumentViewId, DocumentViewId) {
         // Create field definition
         let create_field_definition = Operation::new_create(
@@ -210,7 +211,7 @@ mod tests {
         #[with(1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             let context = Context::new(
                 db.store.clone(),
                 Configuration::default(),

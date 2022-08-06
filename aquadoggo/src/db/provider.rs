@@ -7,13 +7,14 @@ use p2panda_rs::operation::VerifiedOperation;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::errors::OperationStorageError;
 use p2panda_rs::storage_provider::traits::StorageProvider;
+use p2panda_rs::test_utils::db::{
+    EntryArgsRequest, EntryArgsResponse, PublishEntryRequest, PublishEntryResponse,
+};
 use sqlx::query_scalar;
 
-use crate::db::request::{EntryArgsRequest, PublishEntryRequest};
 use crate::db::stores::{StorageEntry, StorageLog};
 use crate::db::Pool;
-use crate::errors::StorageProviderResult;
-use crate::graphql::client::NextEntryArguments;
+use crate::errors::Result;
 
 /// Sql based storage that implements `StorageProvider`.
 #[derive(Clone, Debug)]
@@ -31,21 +32,21 @@ impl SqlStorage {
 /// A `StorageProvider` implementation based on `sqlx` that supports SQLite and PostgreSQL
 /// databases.
 #[async_trait]
-impl StorageProvider<StorageEntry, StorageLog, VerifiedOperation> for SqlStorage {
-    type EntryArgsResponse = NextEntryArguments;
+impl StorageProvider for SqlStorage {
     type EntryArgsRequest = EntryArgsRequest;
-    type PublishEntryResponse = NextEntryArguments;
+    type EntryArgsResponse = EntryArgsResponse;
     type PublishEntryRequest = PublishEntryRequest;
+    type PublishEntryResponse = PublishEntryResponse;
+    type StorageLog = StorageLog;
+    type StorageEntry = StorageEntry;
+    type StorageOperation = VerifiedOperation;
 
     /// Returns the related document for any entry.
     ///
     /// Every entry is part of a document and, through that, associated with a specific log id used
     /// by this document and author. This method returns that document id by looking up the log
     /// that the entry was stored in.
-    async fn get_document_by_entry(
-        &self,
-        entry_hash: &Hash,
-    ) -> StorageProviderResult<Option<DocumentId>> {
+    async fn get_document_by_entry(&self, entry_hash: &Hash) -> Result<Option<DocumentId>> {
         let result: Option<String> = query_scalar(
             "
             SELECT
@@ -81,7 +82,7 @@ impl SqlStorage {
     pub async fn get_schema_by_document_view(
         &self,
         view_id: &DocumentViewId,
-    ) -> StorageProviderResult<Option<SchemaId>> {
+    ) -> Result<Option<SchemaId>> {
         let result: Option<String> = query_scalar(
             "
             SELECT
@@ -92,7 +93,7 @@ impl SqlStorage {
                 document_view_id = $1
             ",
         )
-        .bind(view_id.as_str())
+        .bind(view_id.to_string())
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
@@ -120,8 +121,10 @@ mod tests {
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
     use crate::db::traits::DocumentStore;
 
+    use super::SqlStorage;
+
     /// Inserts a `DocumentView` into the db and returns its view id.
-    async fn insert_document_view(db: &TestDatabase) -> DocumentViewId {
+    async fn insert_document_view(db: &TestDatabase<SqlStorage>) -> DocumentViewId {
         let author = Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
         let entry = db
             .store
@@ -153,7 +156,7 @@ mod tests {
         #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             let document_view_id = insert_document_view(&db).await;
             let result = db
                 .store
@@ -172,7 +175,7 @@ mod tests {
         #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             let result = db
                 .store
                 .get_schema_by_document_view(&random_document_view_id)

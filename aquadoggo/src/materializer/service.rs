@@ -154,6 +154,7 @@ mod tests {
     use tokio::task;
 
     use crate::context::Context;
+    use crate::db::provider::SqlStorage;
     use crate::db::stores::test_utils::{send_to_store, test_db, TestDatabase, TestDatabaseRunner};
     use crate::db::traits::DocumentStore;
     use crate::materializer::{Task, TaskInput};
@@ -169,7 +170,7 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         // Prepare database which inserts data for one document
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             // Identify document and operation which was inserted for testing
             let document_id = db.test_data.documents.first().unwrap();
             let verified_operation = db
@@ -235,7 +236,7 @@ mod tests {
                 .await
                 .unwrap()
                 .expect("We expect that the document is `Some`");
-            assert_eq!(document.id().as_str(), document_id.as_str());
+            assert_eq!(document.id().to_string(), document_id.to_string());
             assert_eq!(
                 document.fields().get("name").unwrap().value().to_owned(),
                 OperationValue::Text("panda".into())
@@ -250,7 +251,7 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         // Prepare database which inserts data for one document
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             // Identify document and operation which was inserted for testing
             let document_id = db.test_data.documents.first().unwrap();
 
@@ -305,7 +306,7 @@ mod tests {
                 .await
                 .unwrap()
                 .expect("We expect that the document is `Some`");
-            assert_eq!(document.id().as_str(), document_id.as_str());
+            assert_eq!(document.id().to_string(), document_id.to_string());
             assert_eq!(
                 document.fields().get("name").unwrap().value().to_owned(),
                 OperationValue::Text("panda".into())
@@ -320,7 +321,7 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         // Prepare database which inserts data for one document
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             // Identify key_[air, document and operation which was inserted for testing
             let key_pair = db.test_data.key_pairs.first().unwrap();
             let document_id = db.test_data.documents.first().unwrap();
@@ -460,7 +461,7 @@ mod tests {
         key_pair: KeyPair,
     ) {
         // Prepare empty database
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
             // Prepare arguments for service
             let context = Context::new(
                 db.store.clone(),
