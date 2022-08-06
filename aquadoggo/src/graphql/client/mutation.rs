@@ -1,11 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_graphql::{Context, Object, Result};
-use p2panda_rs::entry::decode_entry;
-use p2panda_rs::entry::EntrySigned;
-use p2panda_rs::operation::Operation;
-use p2panda_rs::operation::OperationEncoded;
-use p2panda_rs::operation::OperationId;
+use p2panda_rs::entry::{decode_entry, EntrySigned};
+use p2panda_rs::operation::{Operation, OperationEncoded, OperationId};
 use p2panda_rs::Validate;
 
 use crate::bus::{ServiceMessage, ServiceSender};
