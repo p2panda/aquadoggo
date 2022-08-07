@@ -77,7 +77,6 @@ mod tests {
     use serde_json::json;
     use tokio::sync::broadcast;
 
-    use crate::db::provider::SqlStorage;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
     use crate::graphql::GraphQLSchemaManager;
     use crate::http::context::HttpServiceContext;
@@ -88,7 +87,7 @@ mod tests {
 
     #[rstest]
     fn graphql_endpoint(#[from(test_db)] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let (tx, _) = broadcast::channel(16);
             let schema_provider = SchemaProvider::default();
             let graphql_schema_manager =

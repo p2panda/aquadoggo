@@ -23,7 +23,7 @@ impl ScalarType for DocumentViewIdScalar {
     }
 
     fn to_value(&self) -> Value {
-        Value::String(self.0.as_str())
+        Value::String(self.0.to_string())
     }
 }
 

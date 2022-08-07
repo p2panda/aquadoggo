@@ -294,7 +294,6 @@ mod tests {
     };
     use rstest::rstest;
 
-    use crate::db::provider::SqlStorage;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
     #[rstest]
@@ -310,7 +309,7 @@ mod tests {
         document_id: DocumentId,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             // Construct the storage operation.
             let operation = VerifiedOperation::new(&author, &operation_id, &operation).unwrap();
 
@@ -338,7 +337,7 @@ mod tests {
         document_id: DocumentId,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             db.store
                 .insert_operation(&verified_operation, &document_id)
                 .await
@@ -363,7 +362,7 @@ mod tests {
         document_id: DocumentId,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             assert!(db
                 .store
                 .get_document_by_operation_id(create_operation.operation_id())
@@ -408,7 +407,7 @@ mod tests {
         #[with(5, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
             let latest_entry = db

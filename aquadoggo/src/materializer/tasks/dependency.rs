@@ -190,7 +190,6 @@ mod tests {
 
     use crate::config::Configuration;
     use crate::context::Context;
-    use crate::db::provider::SqlStorage;
     use crate::db::stores::test_utils::{
         insert_entry_operation_and_view, send_to_store, test_db, TestDatabase, TestDatabaseRunner,
     };
@@ -310,7 +309,7 @@ mod tests {
         #[case] runner: TestDatabaseRunner,
         #[case] expected_next_tasks: usize,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
             let context = Context::new(
                 db.store.clone(),
                 Configuration::default(),
@@ -350,7 +349,7 @@ mod tests {
         #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let context = Context::new(
                 db.store.clone(),
                 Configuration::default(),
@@ -414,7 +413,7 @@ mod tests {
         #[case] document_view_id: Option<DocumentViewId>,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let context = Context::new(
                 db.store,
                 Configuration::default(),
@@ -460,7 +459,7 @@ mod tests {
         )
     )]
     fn fails_on_deleted_documents(#[case] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let context = Context::new(
                 db.store.clone(),
                 Configuration::default(),
@@ -497,7 +496,7 @@ mod tests {
         ])]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let context = Context::new(
                 db.store.clone(),
                 Configuration::default(),
@@ -582,7 +581,7 @@ mod tests {
         ])]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
             let context = Context::new(
                 db.store.clone(),
                 Configuration::default(),

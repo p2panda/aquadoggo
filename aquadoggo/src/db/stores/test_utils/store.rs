@@ -2,25 +2,135 @@
 
 use std::convert::TryFrom;
 
+use log::{debug, info};
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::{Author, KeyPair};
-use p2panda_rs::operation::{Operation, OperationEncoded, OperationValue};
-use p2panda_rs::schema::SchemaId;
+use p2panda_rs::operation::{Operation, OperationEncoded, OperationFields, OperationValue};
+use p2panda_rs::schema::{FieldType, Schema, SchemaId};
 use p2panda_rs::storage_provider::traits::StorageProvider;
 use p2panda_rs::test_utils::constants::SCHEMA_ID;
 use p2panda_rs::test_utils::fixtures::{operation, operation_fields};
 
+use crate::context::Context;
+use crate::db::provider::SqlStorage;
 use crate::db::stores::test_utils::{doggo_test_fields, test_key_pairs};
 use crate::domain::{next_args, publish};
 use crate::graphql::client::NextEntryArguments;
+use crate::materializer::tasks::{dependency_task, reduce_task, schema_task};
+use crate::materializer::TaskInput;
+use crate::{Configuration, SchemaProvider};
 
 /// Container for `SqlStore` with access to the document ids and key_pairs used in the
 /// pre-populated database for testing.
-pub struct TestDatabase<S: StorageProvider> {
+pub struct TestDatabase<S: StorageProvider = SqlStorage> {
+    pub context: Context<S>,
     pub store: S,
     pub test_data: TestData,
+}
+
+impl<S: StorageProvider + Clone> TestDatabase<S> {
+    pub fn new(store: S) -> Self {
+        // Initialise context for store.
+        let context = Context::new(
+            store.clone(),
+            Configuration::default(),
+            SchemaProvider::default(),
+        );
+
+        // Initialise finished test database.
+        TestDatabase {
+            context,
+            store,
+            test_data: TestData::default(),
+        }
+    }
+}
+
+impl TestDatabase {
+    /// Publish a document and materialise it in the store.
+    ///
+    /// Also runs dependency task for document.
+    pub async fn add_document(
+        &mut self,
+        schema_id: &SchemaId,
+        fields: OperationFields,
+        key_pair: &KeyPair,
+    ) -> DocumentViewId {
+        info!("Creating document for {}", schema_id);
+
+        // Get requested schema from store.
+        let schema = self
+            .context
+            .schema_provider
+            .get(schema_id)
+            .await
+            .expect("Schema not found");
+
+        // Build, publish and reduce create operation for document.
+        let create_op = Operation::new_create(schema.id().to_owned(), fields).unwrap();
+        let (entry_signed, _) = send_to_store(&self.store, &create_op, None, key_pair).await;
+        let input = TaskInput::new(Some(DocumentId::from(entry_signed.hash())), None);
+        let dependency_tasks = reduce_task(self.context.clone(), input.clone())
+            .await
+            .unwrap();
+
+        // Run dependency tasks
+        if let Some(tasks) = dependency_tasks {
+            for task in tasks {
+                dependency_task(self.context.clone(), task.input().to_owned())
+                    .await
+                    .unwrap();
+            }
+        }
+        DocumentViewId::from(entry_signed.hash())
+    }
+
+    /// Publish a schema and materialise it in the store.
+    pub async fn add_schema(
+        &mut self,
+        name: &str,
+        fields: Vec<(&str, FieldType)>,
+        key_pair: &KeyPair,
+    ) -> Schema {
+        info!("Creating schema {}", name);
+        let mut field_ids = Vec::new();
+
+        // Build and reduce schema field definitions
+        for field in fields {
+            let create_field_op = Schema::create_field(field.0, field.1.clone()).unwrap();
+            let (entry_signed, _) =
+                send_to_store(&self.store, &create_field_op, None, key_pair).await;
+
+            let input = TaskInput::new(Some(DocumentId::from(entry_signed.hash())), None);
+            reduce_task(self.context.clone(), input).await.unwrap();
+
+            info!("Added field '{}' ({})", field.0, field.1);
+            field_ids.push(DocumentViewId::from(entry_signed.hash()));
+        }
+
+        // Build and reduce schema definition
+        let create_schema_op = Schema::create(name, "test schema description", field_ids).unwrap();
+        let (entry_signed, _) = send_to_store(&self.store, &create_schema_op, None, key_pair).await;
+        let input = TaskInput::new(None, Some(DocumentViewId::from(entry_signed.hash())));
+        reduce_task(self.context.clone(), input.clone())
+            .await
+            .unwrap();
+
+        // Run schema task for this spec
+        schema_task(self.context.clone(), input).await.unwrap();
+
+        let view_id = DocumentViewId::from(entry_signed.hash());
+        let schema_id = SchemaId::Application(name.to_string(), view_id);
+
+        debug!("Done building {}", schema_id);
+        self.context
+            .schema_provider
+            .get(&schema_id)
+            .await
+            .expect("Failed adding schema to provider.")
+    }
 }
 
 /// Data collected when populating a `TestDatabase` in order to easily check values which
@@ -160,7 +270,7 @@ pub async fn send_to_store<S: StorageProvider>(
     // Publish the entry and get the next entry args.
     let publish_entry_response = publish(store, &entry_encoded, &operation_encoded)
         .await
-        .unwrap();
+        .expect("Error publishing entry");
 
     (entry_encoded, publish_entry_response)
 }

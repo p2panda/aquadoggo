@@ -255,7 +255,7 @@ mod test {
                 .await;
 
             assert_eq!(
-                schema.id().as_str(),
+                schema.id().to_string(),
                 type_name,
                 "Please update `type_name` const above to fix this test."
             );

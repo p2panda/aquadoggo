@@ -79,7 +79,7 @@ impl DocumentMeta {
             if meta_field.name() == VIEW_ID_FIELD && view_id.is_some() {
                 meta_fields.insert(
                     Name::new(VIEW_ID_FIELD),
-                    Value::String(view_id.unwrap().as_str().to_string()),
+                    Value::String(view_id.unwrap().to_string()),
                 );
             }
         }

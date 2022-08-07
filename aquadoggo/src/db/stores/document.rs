@@ -333,7 +333,6 @@ mod tests {
     };
     use rstest::rstest;
 
-    use crate::db::provider::SqlStorage;
     use crate::db::stores::document::{DocumentStore, DocumentView};
     use crate::db::stores::entry::StorageEntry;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
@@ -374,7 +373,7 @@ mod tests {
         #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let author =
                 Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
 
@@ -436,7 +435,7 @@ mod tests {
         #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let view_does_not_exist = db
                 .store
                 .get_document_view_by_id(&random_document_view_id)
@@ -453,7 +452,7 @@ mod tests {
         #[with(10, 1, 1, false, SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::Text("panda".into()))], vec![("username", OperationValue::Text("PANDA".into()))])]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let author =
                 Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
             let schema_id = SchemaId::from_str(SCHEMA_ID).unwrap();
@@ -511,7 +510,7 @@ mod tests {
         #[from(test_db)] runner: TestDatabaseRunner,
         operation: Operation,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let document_view = DocumentView::new(
                 &document_view_id,
                 &DocumentViewFields::new_from_operation_fields(
@@ -535,7 +534,7 @@ mod tests {
         #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let document_id = db.test_data.documents[0].clone();
 
             let document_operations = db
@@ -582,7 +581,7 @@ mod tests {
         #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let document_id = db.test_data.documents[0].clone();
 
             let document_operations = db
@@ -629,7 +628,7 @@ mod tests {
         #[with(10, 1, 1, true)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let document_id = db.test_data.documents[0].clone();
 
             let document_operations = db
@@ -656,7 +655,7 @@ mod tests {
         #[with(10, 1, 1, true)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let document_id = db.test_data.documents[0].clone();
 
             let document_operations = db
@@ -687,7 +686,7 @@ mod tests {
         #[with(10, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let document_id = db.test_data.documents[0].clone();
 
             let document_operations = db
@@ -722,7 +721,7 @@ mod tests {
         #[with(10, 2, 1, false, SCHEMA_ID.parse().unwrap())]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let schema_id = SchemaId::from_str(SCHEMA_ID).unwrap();
 
             for document_id in &db.test_data.documents {

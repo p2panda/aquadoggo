@@ -16,7 +16,7 @@ impl DocumentFields {
 
     /// Returns the type name, formatted like `<SchemaId>Fields`.
     pub fn type_name(&self) -> String {
-        format!("{}Fields", self.0.id().as_str())
+        format!("{}Fields", self.0.id())
     }
 
     /// Generate an object type and register it in a GraphQL schema registry.

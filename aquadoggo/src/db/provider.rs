@@ -121,10 +121,8 @@ mod tests {
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
     use crate::db::traits::DocumentStore;
 
-    use super::SqlStorage;
-
     /// Inserts a `DocumentView` into the db and returns its view id.
-    async fn insert_document_view(db: &TestDatabase<SqlStorage>) -> DocumentViewId {
+    async fn insert_document_view(db: &TestDatabase) -> DocumentViewId {
         let author = Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
         let entry = db
             .store
@@ -156,7 +154,7 @@ mod tests {
         #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let document_view_id = insert_document_view(&db).await;
             let result = db
                 .store
@@ -175,7 +173,7 @@ mod tests {
         #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let result = db
                 .store
                 .get_schema_by_document_view(&random_document_view_id)

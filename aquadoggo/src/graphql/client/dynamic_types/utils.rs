@@ -16,10 +16,10 @@ pub fn graphql_typename(operation_field_type: &FieldType) -> String {
         FieldType::String => "String".to_string(),
 
         // Relations
-        FieldType::Relation(schema_id) => schema_id.as_str(),
-        FieldType::PinnedRelation(schema_id) => schema_id.as_str(),
-        FieldType::RelationList(schema_id) => format!("[{}]", schema_id.as_str()),
-        FieldType::PinnedRelationList(schema_id) => format!("[{}]", schema_id.as_str()),
+        FieldType::Relation(schema_id) => schema_id.to_string(),
+        FieldType::PinnedRelation(schema_id) => schema_id.to_string(),
+        FieldType::RelationList(schema_id) => format!("[{}]", schema_id),
+        FieldType::PinnedRelationList(schema_id) => format!("[{}]", schema_id),
     }
 }
 

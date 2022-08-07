@@ -45,7 +45,7 @@ fn scalar_fields(#[from(test_db)] runner: TestDatabaseRunner) {
         ]
         .try_into()
         .unwrap();
-        let view_id = db.add_document(&schema.id(), doc_fields, &key_pair).await;
+        let view_id = db.add_document(schema.id(), doc_fields, &key_pair).await;
 
         // Configure and send test query.
         let client = graphql_test_client(&db).await;
@@ -60,8 +60,8 @@ fn scalar_fields(#[from(test_db)] runner: TestDatabaseRunner) {
                     }}
                 }},
             }}"#,
-            type_name = schema.id().as_str(),
-            view_id = view_id.as_str()
+            type_name = schema.id(),
+            view_id = view_id
         );
 
         let response = client
@@ -129,13 +129,13 @@ fn relation_fields(#[from(test_db)] runner: TestDatabaseRunner) {
         // Publish child document on node.
         let child_view_id = db
             .add_document(
-                &child_schema.id(),
+                child_schema.id(),
                 vec![("it_works", true.into())].try_into().unwrap(),
                 &key_pair,
             )
             .await;
         // There is only one operation so view id = doc id.
-        let child_doc_id: DocumentId = child_view_id.as_str().parse().unwrap();
+        let child_doc_id: DocumentId = child_view_id.to_string().parse().unwrap();
 
         // Publish parent document on node.
         let parent_fields: OperationFields = vec![
@@ -164,8 +164,8 @@ fn relation_fields(#[from(test_db)] runner: TestDatabaseRunner) {
                     }}
                 }}
             }}"#,
-            parent_schema.id().as_str(),
-            parent_view_id.as_str(),
+            parent_schema.id(),
+            parent_view_id,
         );
 
         let response = client

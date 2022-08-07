@@ -406,10 +406,9 @@ mod tests {
     };
     use rstest::rstest;
 
-    use crate::db::provider::SqlStorage;
     use crate::db::stores::test_utils::{
         doggo_test_fields, encode_entry_and_operation, populate_test_db, send_to_store, test_db,
-        test_db_config, PopulateDatabaseConfig, TestData, TestDatabase, TestDatabaseRunner,
+        test_db_config, PopulateDatabaseConfig, TestDatabase, TestDatabaseRunner,
     };
     use crate::domain::publish;
     use crate::graphql::client::NextEntryArguments;
@@ -450,7 +449,7 @@ mod tests {
         #[from(test_db)] runner: TestDatabaseRunner,
         #[from(random_document_view_id)] document_view_id: DocumentViewId,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let result = get_checked_document_id_for_view_id(&db.store, &document_view_id).await;
             assert!(result.is_err());
         });
@@ -462,7 +461,7 @@ mod tests {
         operation: Operation,
         operation_fields: OperationFields,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             // Store one entry and operation in the store.
             let (entry, _) = send_to_store(&db.store, &operation, None, &KeyPair::new()).await;
             let operation_one_id: OperationId = entry.hash().into();
@@ -538,11 +537,8 @@ mod tests {
         #[with(8, 1, 1)]
         config: PopulateDatabaseConfig,
     ) {
-        // Populate the db with 8 entries.
-        let mut db = TestDatabase {
-            store: MemoryStore::default(),
-            test_data: TestData::default(),
-        };
+        let store = MemoryStore::default();
+        let mut db = TestDatabase::new(store.clone());
         populate_test_db(&mut db, &config).await;
 
         // The author who has published to the db.
@@ -604,12 +600,10 @@ mod tests {
         #[with(8, 2, 1)]
         config: PopulateDatabaseConfig,
     ) {
-        // Populate the db with 8 entries.
-        let mut db = TestDatabase {
-            store: MemoryStore::default(),
-            test_data: TestData::default(),
-        };
+        let store = MemoryStore::default();
+        let mut db = TestDatabase::new(store.clone());
         populate_test_db(&mut db, &config).await;
+
         let author = Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
 
         // Get the document id.
@@ -684,11 +678,10 @@ mod tests {
         #[with(8, 2, 1)]
         config: PopulateDatabaseConfig,
     ) {
-        let mut db = TestDatabase {
-            store: MemoryStore::default(),
-            test_data: TestData::default(),
-        };
+        let store = MemoryStore::default();
+        let mut db = TestDatabase::new(store.clone());
         populate_test_db(&mut db, &config).await;
+
         let author_with_removed_operations =
             Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
         let author_making_request = Author::try_from(key_pair.public_key().to_owned()).unwrap();
@@ -753,17 +746,14 @@ mod tests {
         #[case] document_view_id: Option<SeqNumU64>,
         #[case] expected_next_args: (SeqNumU64, Backlink, Skiplink),
     ) {
+        let store = MemoryStore::default();
+        let mut db = TestDatabase::new(store.clone());
         // Populate the db with the number of entries defined in the test params.
         let config = PopulateDatabaseConfig {
             no_of_entries,
             no_of_logs: 1,
             no_of_authors: 1,
             ..PopulateDatabaseConfig::default()
-        };
-
-        let mut db = TestDatabase {
-            store: MemoryStore::default(),
-            test_data: TestData::default(),
         };
         populate_test_db(&mut db, &config).await;
 
@@ -823,10 +813,8 @@ mod tests {
         #[with(7, 1, 1)]
         config: PopulateDatabaseConfig,
     ) {
-        let mut db = TestDatabase {
-            store: MemoryStore::default(),
-            test_data: TestData::default(),
-        };
+        let store = MemoryStore::default();
+        let mut db = TestDatabase::new(store.clone());
         populate_test_db(&mut db, &config).await;
 
         // Get with no DocumentViewId given.
@@ -889,10 +877,8 @@ mod tests {
         #[with(2, 1, 1)]
         config: PopulateDatabaseConfig,
     ) {
-        let mut db = TestDatabase {
-            store: MemoryStore::default(),
-            test_data: TestData::default(),
-        };
+        let store = MemoryStore::default();
+        let mut db = TestDatabase::new(store.clone());
         populate_test_db(&mut db, &config).await;
 
         let document_id = db.test_data.documents.first().unwrap();
@@ -955,10 +941,8 @@ mod tests {
         #[with(1, 2, 1)]
         config: PopulateDatabaseConfig,
     ) {
-        let mut db = TestDatabase {
-            store: MemoryStore::default(),
-            test_data: TestData::default(),
-        };
+        let store = MemoryStore::default();
+        let mut db = TestDatabase::new(store.clone());
         populate_test_db(&mut db, &config).await;
 
         let entry = Entry::new(&log_id, Some(&operation), None, None, &SeqNum::default()).unwrap();
@@ -987,11 +971,10 @@ mod tests {
         #[with(2, 1, 1, true)]
         config: PopulateDatabaseConfig,
     ) {
-        let mut db = TestDatabase {
-            store: MemoryStore::default(),
-            test_data: TestData::default(),
-        };
+        let store = MemoryStore::default();
+        let mut db = TestDatabase::new(store.clone());
         populate_test_db(&mut db, &config).await;
+
         let document_id = db.test_data.documents.first().unwrap();
         let document_view_id: DocumentViewId = document_id.as_str().parse().unwrap();
         let author_performing_update = Author::try_from(key_pair.public_key().to_owned()).unwrap();
@@ -1036,11 +1019,10 @@ mod tests {
         #[with(3, 1, 1, true)]
         config: PopulateDatabaseConfig,
     ) {
-        let mut db = TestDatabase {
-            store: MemoryStore::default(),
-            test_data: TestData::default(),
-        };
+        let store = MemoryStore::default();
+        let mut db = TestDatabase::new(store.clone());
         populate_test_db(&mut db, &config).await;
+
         let document_id = db.test_data.documents.first().unwrap();
         let document_view_id: DocumentViewId = document_id.as_str().parse().unwrap();
         let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
@@ -1052,7 +1034,7 @@ mod tests {
 
     #[rstest]
     fn publish_many_entries(key_pair: KeyPair, #[from(test_db)] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let num_of_entries = 13;
             let mut document_id: Option<DocumentId> = None;
             let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
@@ -1107,11 +1089,8 @@ mod tests {
         #[with(2, 1, 1, false)]
         config: PopulateDatabaseConfig,
     ) {
-        let mut db = TestDatabase {
-            store: MemoryStore::default(),
-            test_data: TestData::default(),
-        };
-
+        let store = MemoryStore::default();
+        let mut db = TestDatabase::new(store.clone());
         populate_test_db(&mut db, &config).await;
 
         let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
@@ -1157,11 +1136,8 @@ mod tests {
         #[with(2, 1, 1, false)]
         config: PopulateDatabaseConfig,
     ) {
-        let mut db = TestDatabase {
-            store: MemoryStore::default(),
-            test_data: TestData::default(),
-        };
-
+        let store = MemoryStore::default();
+        let mut db = TestDatabase::new(store.clone());
         populate_test_db(&mut db, &config).await;
 
         let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();

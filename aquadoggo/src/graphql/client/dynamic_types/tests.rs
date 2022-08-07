@@ -11,8 +11,8 @@ use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 use crate::test_helpers::graphql_test_client;
 
 #[rstest]
-#[case(SYSTEM_SCHEMAS[0].id().as_str(), SYSTEM_SCHEMAS[0].description().to_string())]
-#[case(SYSTEM_SCHEMAS[1].id().as_str(), SYSTEM_SCHEMAS[1].description().to_string())]
+#[case(SYSTEM_SCHEMAS[0].id().to_string(), SYSTEM_SCHEMAS[0].description().to_string())]
+#[case(SYSTEM_SCHEMAS[1].id().to_string(), SYSTEM_SCHEMAS[1].description().to_string())]
 fn system_schema_container_type(
     #[from(test_db)] runner: TestDatabaseRunner,
     #[case] type_name: String,
@@ -83,7 +83,7 @@ fn application_schema_container_type(#[from(test_db)] runner: TestDatabaseRunner
                 &key_pair,
             )
             .await;
-        let type_name = schema.id().as_str();
+        let type_name = schema.id().to_string();
 
         let client = graphql_test_client(&db).await;
         let response = client
@@ -161,7 +161,7 @@ fn application_schema_fields_type(#[from(test_db)] runner: TestDatabaseRunner) {
                 &key_pair,
             )
             .await;
-        let type_name = schema.id().as_str();
+        let type_name = schema.id().to_string();
 
         let client = graphql_test_client(&db).await;
         let response = client

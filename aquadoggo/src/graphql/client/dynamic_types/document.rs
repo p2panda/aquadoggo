@@ -22,7 +22,7 @@ impl Document {
 
     /// Access the schema's name.
     pub fn type_name(&self) -> String {
-        self.schema().id().as_str()
+        self.schema().id().to_string()
     }
 
     /// Generate an object type that represents documents of this schema in the GraphQL API.

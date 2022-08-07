@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 //! Static fields of the client api.
-use async_graphql::{Context, Error, Object, Result};
-use p2panda_rs::document::DocumentId;
-use p2panda_rs::storage_provider::traits::StorageProvider;
+use async_graphql::{Context, Object, Result};
+use p2panda_rs::document::{DocumentId, DocumentViewId};
+use p2panda_rs::identity::Author;
 use p2panda_rs::Validate;
 
 use crate::db::provider::SqlStorage;
-use crate::db::request::EntryArgsRequest;
+use crate::domain::next_args;
 use crate::graphql::client::NextEntryArguments;
 use crate::graphql::scalars;
 
@@ -34,22 +34,35 @@ impl StaticQuery {
         )]
         document_id: Option<scalars::DocumentIdScalar>,
     ) -> Result<NextEntryArguments> {
-        let document_id = document_id.map(|val| DocumentId::from(&val));
-        let args = EntryArgsRequest {
-            public_key: public_key.into(),
-            document_id,
-        };
-        args.validate()?;
+        // @TODO: The api for `next_entry_args` needs to be updated to accept a `DocumentViewId`
 
-        // Load and return next entry arguments
+        // Access the store from context.
         let store = ctx.data::<SqlStorage>()?;
-        store.get_entry_args(&args).await.map_err(Error::from)
+
+        // Convert and validate passed parameters.
+        let public_key: Author = public_key.into();
+        let document_id = document_id.map(|val| DocumentId::from(&val));
+
+        public_key.validate()?;
+        if let Some(ref document_view_id) = document_id {
+            document_view_id.validate()?;
+        }
+
+        // Convert document_id into document_view_id and unwrap as we already validated above.
+        let document_view_id: Option<DocumentViewId> =
+            document_id.map(|id| id.as_str().parse().unwrap());
+
+        // Calculate next entry args.
+        next_args(store, &public_key, document_view_id.as_ref()).await
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::convert::TryFrom;
+
     use async_graphql::{value, Response};
+    use p2panda_rs::identity::Author;
     use rstest::rstest;
     use serde_json::json;
     use tokio::sync::broadcast;
@@ -109,9 +122,11 @@ mod tests {
         #[from(test_db)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
             let (tx, _) = broadcast::channel(16);
-            let context = HttpServiceContext::new(db.store, tx);
+            let schema_provider = SchemaProvider::default();
+            let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
+            let context = HttpServiceContext::new(manager);
             let client = TestClient::new(build_server(context));
 
             let document_id = db.test_data.documents.get(0).unwrap();

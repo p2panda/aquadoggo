@@ -400,8 +400,8 @@ mod test {
                     fields {{ bool }}
                 }}
             }}"#,
-                type_name = schema.id().as_str(),
-                view_id = view_id.as_str(),
+                type_name = schema.id().to_string(),
+                view_id = view_id.to_string(),
                 document_id = document_id.as_str()
             );
 
@@ -524,7 +524,7 @@ mod test {
                     fields {{ bool }}
                 }},
             }}"#,
-                type_name = schema.id().as_str(),
+                type_name = schema.id(),
             );
 
             let response = client

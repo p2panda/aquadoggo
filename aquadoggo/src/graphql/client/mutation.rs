@@ -1,12 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 //! Mutation root.
-use async_graphql::{Context, Error, Object, Result};
+use async_graphql::{Context, Object, Result};
 use p2panda_rs::entry::{decode_entry, EntrySigned};
-use p2panda_rs::operation::{
-    AsVerifiedOperation, Operation, OperationEncoded, OperationId, VerifiedOperation,
-};
-use p2panda_rs::storage_provider::traits::{OperationStore, StorageProvider};
+use p2panda_rs::operation::{Operation, OperationEncoded, OperationId};
 use p2panda_rs::Validate;
 
 use crate::bus::{ServiceMessage, ServiceSender};
@@ -116,7 +113,6 @@ mod tests {
     use tokio::sync::broadcast;
 
     use crate::bus::ServiceMessage;
-    use crate::db::provider::SqlStorage;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
     use crate::domain::next_args;
     use crate::graphql::GraphQLSchemaManager;
@@ -258,7 +254,7 @@ mod tests {
         #[from(test_db)] runner: TestDatabaseRunner,
         publish_entry_request: Request,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
             let (tx, mut rx) = broadcast::channel(16);
             let schema_provider = SchemaProvider::default();
             let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
@@ -280,7 +276,7 @@ mod tests {
 
     #[rstest]
     fn publish_entry_error_handling(#[from(test_db)] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
             let (tx, _rx) = broadcast::channel(16);
             let schema_provider = SchemaProvider::default();
             let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
@@ -306,7 +302,7 @@ mod tests {
         #[from(test_db)] runner: TestDatabaseRunner,
         publish_entry_request: Request,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
             let (tx, _rx) = broadcast::channel(16);
             let schema_provider = SchemaProvider::default();
             let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
@@ -523,9 +519,11 @@ mod tests {
         let operation_encoded = operation_encoded.to_string();
         let expected_error_message = expected_error_message.to_string();
 
-        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
             let (tx, _rx) = broadcast::channel(16);
-            let context = HttpServiceContext::new(db.store, tx);
+            let schema_provider = SchemaProvider::default();
+            let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
+            let context = HttpServiceContext::new(manager);
             let client = TestClient::new(build_server(context));
 
             let publish_entry_request = publish_entry_request(&entry_encoded, &operation_encoded);
@@ -654,7 +652,7 @@ mod tests {
         let operation_encoded = operation_encoded.to_string();
         let expected_error_message = expected_error_message.to_string();
 
-        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
             let (tx, _rx) = broadcast::channel(16);
             let schema_provider = SchemaProvider::default();
             let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
@@ -685,7 +683,7 @@ mod tests {
 
     #[rstest]
     fn publish_many_entries(#[from(test_db)] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let key_pairs = vec![KeyPair::new(), KeyPair::new()];
             let num_of_entries = 13;
 
@@ -760,7 +758,7 @@ mod tests {
         #[with(1, 1, 1, false, SCHEMA_ID.parse().unwrap())]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|populated_db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|populated_db: TestDatabase| async move {
             let (tx, _rx) = broadcast::channel(16);
             let schema_provider = SchemaProvider::default();
             let manager =
