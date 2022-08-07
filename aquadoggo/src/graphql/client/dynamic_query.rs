@@ -12,6 +12,7 @@ use log::{debug, error, info};
 use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
+use p2panda_rs::Human;
 
 use crate::db::provider::SqlStorage;
 use crate::db::traits::DocumentStore;
@@ -74,7 +75,7 @@ impl DynamicQuery {
         schema_id: &SchemaId,
         ctx: &Context<'_>,
     ) -> ServerResult<Option<Value>> {
-        info!("Handling single query for {}", schema_id);
+        info!("Handling single query for {}", schema_id.display());
 
         let document_id_arg = ctx.param_value::<Option<DocumentIdScalar>>(
             dynamic_types::dynamic_query_output::DOCUMENT_ID_ARGUMENT,
@@ -127,7 +128,7 @@ impl DynamicQuery {
         schema_id: &SchemaId,
         ctx: &Context<'_>,
     ) -> ServerResult<Option<Value>> {
-        info!("Handling collection query for {}", schema_id);
+        info!("Handling collection query for {}", schema_id.display());
 
         let store = ctx.data_unchecked::<SqlStorage>();
 
@@ -162,7 +163,7 @@ impl DynamicQuery {
         selected_fields: Vec<SelectionField<'async_recursion>>,
         validate_schema: Option<&'async_recursion SchemaId>,
     ) -> ServerResult<Value> {
-        debug!("Fetching <Document {}> from store", document_id);
+        debug!("Fetching {} from store", document_id.display());
 
         let store = ctx.data_unchecked::<SqlStorage>();
         let view = store.get_document_by_id(&document_id).await.unwrap();
@@ -202,7 +203,7 @@ impl DynamicQuery {
         selected_fields: Vec<SelectionField<'async_recursion>>,
         validate_schema: Option<&'async_recursion SchemaId>,
     ) -> ServerResult<Value> {
-        debug!("Fetching <DocumentView {}> from store", document_view_id);
+        debug!("Fetching {} from store", document_view_id.display());
 
         let store = ctx.data_unchecked::<SqlStorage>();
         let view = store
