@@ -36,12 +36,12 @@ impl ContainerType for DynamicQuery {
     /// can actually be parsed in of the two forms:
     ///
     /// - `<SchemaId>` - query a single document
-    /// - `all_<SchemaId>` - query a listing of documents
+    /// - `all_<SchemaId>` - query a collection of documents
     async fn resolve_field(&self, ctx: &Context<'_>) -> ServerResult<Option<Value>> {
         let field_name = ctx.field().name();
 
-        // Optimistically parse as listing query if field name begins with `all_` (it might still
-        // be a single document query if the schema name itself starts with `all_`).
+        // Optimistically parse as collection query if field name begins with `all_` (it might
+        // still be a single document query if the schema name itself starts with `all_`).
         if field_name.starts_with("all_") {
             if let Ok(schema_id) = field_name.split_at(4).1.parse::<SchemaId>() {
                 // Retrieve the schema to make sure that this is actually a schema and doesn't just
@@ -127,7 +127,7 @@ impl DynamicQuery {
         schema_id: &SchemaId,
         ctx: &Context<'_>,
     ) -> ServerResult<Option<Value>> {
-        info!("Handling listing query for {}", schema_id);
+        info!("Handling collection query for {}", schema_id);
 
         let store = ctx.data_unchecked::<SqlStorage>();
 
@@ -504,8 +504,8 @@ mod test {
     }
 
     #[rstest]
-    fn listing_query(#[from(test_db)] runner: TestDatabaseRunner) {
-        // Test listing query parameter variations.
+    fn collection_query(#[from(test_db)] runner: TestDatabaseRunner) {
+        // Test collection query parameter variations.
 
         runner.with_db_teardown(&|mut db: TestDatabase| async move {
             let key_pair = random_key_pair();
@@ -527,7 +527,7 @@ mod test {
             let client = graphql_test_client(&db).await;
             let query = format!(
                 r#"{{
-                listing: all_{type_name} {{
+                collection: all_{type_name} {{
                     fields {{ bool }}
                 }},
             }}"#,
@@ -545,7 +545,7 @@ mod test {
             let response: Response = response.json().await;
 
             let expected_data = value!({
-                "listing": value!([{ "fields": { "bool": true, } }]),
+                "collection": value!([{ "fields": { "bool": true, } }]),
             });
             assert_eq!(response.data, expected_data, "{:#?}", response.errors);
         });

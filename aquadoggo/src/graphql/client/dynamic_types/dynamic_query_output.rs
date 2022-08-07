@@ -48,8 +48,8 @@ impl OutputType for DynamicQuery {
                 let document_type = Document::new(schema);
                 document_type.register_type(reg);
 
-                // Insert a single and listing query field for every schema with which documents of
-                // that schema can be queried.
+                // Insert a single and collection query field for every schema with which documents
+                // of that schema can be queried.
                 fields.insert(
                     document_type.type_name(),
                     MetaField {
