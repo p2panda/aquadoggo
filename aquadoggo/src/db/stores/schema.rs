@@ -56,6 +56,8 @@ impl SchemaStore for SqlStorage {
     /// Get all Schema which have been published to this node.
     ///
     /// Returns an error if a fatal db error occured.
+    ///
+    /// Silently ignores incomplete or broken schema definitions.
     async fn get_all_schema(&self) -> Result<Vec<Schema>, SchemaStoreError> {
         let schema_views: Vec<SchemaView> = self
             .get_documents_by_schema(&SchemaId::new("schema_definition_v1")?)
@@ -184,7 +186,7 @@ mod tests {
     ) {
         let cddl_str = cddl_str.to_string();
 
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let document_view_id =
                 insert_schema_field_definition(&db.store, &key_pair, schema_field_definition).await;
 
@@ -251,7 +253,7 @@ mod tests {
     ) {
         let err_str = err_str.to_string();
 
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let document_view_id =
                 insert_schema_field_definition(&db.store, &key_pair, schema_field_definition).await;
 
@@ -298,7 +300,7 @@ mod tests {
         key_pair: KeyPair,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
             let document_view_id =
                 insert_schema_field_definition(&db.store, &key_pair, schema_field_definition).await;
 
@@ -324,7 +326,7 @@ mod tests {
         #[from(test_db)] runner: TestDatabaseRunner,
         key_pair: KeyPair,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let document_view_id = insert_schema_definition(
                 &db.store,
                 &key_pair,

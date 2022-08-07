@@ -178,7 +178,6 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::{key_pair, random_document_id};
     use rstest::rstest;
 
-    use crate::db::provider::SqlStorage;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
     use super::{
@@ -258,7 +257,7 @@ mod tests {
         #[with(2, 2, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
             // Unwrap the passed document id or select the first valid one from the database.
             let document_id =
                 document_id.unwrap_or_else(|| db.test_data.documents.first().unwrap().to_owned());
@@ -291,7 +290,7 @@ mod tests {
         #[with(7, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
             let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
             get_expected_skiplink(&db.store, &author, &log_id, &seq_num)
@@ -320,7 +319,7 @@ mod tests {
         #[with(10, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
             let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
 
             let skiplink_entry =
@@ -339,7 +338,7 @@ mod tests {
         #[with(3, 1, 1, true)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
             let document_id = db.test_data.documents.first().unwrap();
             ensure_document_not_deleted(&db.store, document_id)
                 .await
@@ -353,7 +352,7 @@ mod tests {
         #[with(3, 1, 1, false)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
             let document_id = db.test_data.documents.first().unwrap();
             assert!(ensure_document_not_deleted(&db.store, document_id)
                 .await

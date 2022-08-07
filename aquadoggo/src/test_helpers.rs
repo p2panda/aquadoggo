@@ -14,11 +14,15 @@ use once_cell::sync::Lazy;
 use serde::Deserialize;
 use sqlx::migrate::MigrateDatabase;
 use sqlx::Any;
+use tokio::sync::broadcast;
 use tokio::task::{self, JoinHandle};
 use tower::make::Shared;
 use tower_service::Service;
 
+use crate::db::stores::test_utils::TestDatabase;
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
+use crate::graphql::GraphQLSchemaManager;
+use crate::http::{build_server, HttpServiceContext};
 
 /// Configuration used in test helper methods.
 #[derive(Deserialize, Debug)]
@@ -47,7 +51,7 @@ impl Default for TestConfiguration {
 
 pub static TEST_CONFIG: Lazy<TestConfiguration> = Lazy::new(|| TestConfiguration::new());
 
-pub(crate) struct TestClient {
+pub struct TestClient {
     client: reqwest::Client,
     addr: SocketAddr,
 }
@@ -93,6 +97,15 @@ impl TestClient {
             builder: self.client.post(format!("http://{}{}", self.addr, url)),
         }
     }
+}
+
+/// Configures a test client that can be used for GraphQL testing.
+pub async fn graphql_test_client(db: &TestDatabase) -> TestClient {
+    let (tx, _) = broadcast::channel(16);
+    let manager =
+        GraphQLSchemaManager::new(db.store.clone(), tx, db.context.schema_provider.clone()).await;
+    let http_context = HttpServiceContext::new(manager);
+    TestClient::new(build_server(http_context))
 }
 
 pub(crate) struct RequestBuilder {

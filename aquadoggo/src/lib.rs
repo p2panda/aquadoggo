@@ -34,6 +34,7 @@ mod test_helpers;
 pub use crate::config::Configuration;
 pub use crate::replication::ReplicationConfiguration;
 pub use node::Node;
+pub use schema::SchemaProvider;
 
 /// Init env_logger before the test suite runs to handle logging outputs.
 ///

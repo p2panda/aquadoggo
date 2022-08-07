@@ -231,7 +231,6 @@ mod tests {
     };
     use rstest::rstest;
 
-    use crate::db::provider::SqlStorage;
     use crate::db::stores::entry::StorageEntry;
     use crate::db::stores::log::StorageLog;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
@@ -241,7 +240,7 @@ mod tests {
         #[from(public_key)] author: Author,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let log_id = db.store.find_document_log_id(&author, None).await.unwrap();
             assert_eq!(log_id, LogId::default());
         });
@@ -254,7 +253,7 @@ mod tests {
         #[from(random_document_id)] document: DocumentId,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let log = StorageLog::new(&author, &schema, &document.clone(), &LogId::default());
             assert!(db.store.insert_log(log).await.is_ok());
 
@@ -271,7 +270,7 @@ mod tests {
         #[from(random_document_id)] document: DocumentId,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let schema = SchemaId::new_application(
                 "venue",
                 &DocumentViewId::new(&[operation_id_1, operation_id_2]).unwrap(),
@@ -289,7 +288,7 @@ mod tests {
         #[from(schema)] schema: SchemaId,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let log_id = db.store.find_document_log_id(&author, None).await.unwrap();
 
             // We expect to be given the next log id when asking for a possible log id for a new
@@ -317,7 +316,7 @@ mod tests {
         #[from(test_db)] runner: TestDatabaseRunner,
         #[from(random_document_id)] document_id: DocumentId,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let log_id = db.store.latest_log_id(&author).await.unwrap();
 
             assert_eq!(log_id, None);
@@ -339,7 +338,7 @@ mod tests {
         #[from(operation_encoded)] operation_encoded: OperationEncoded,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             // Expect database to return nothing yet
             assert_eq!(
                 db.store
@@ -396,7 +395,7 @@ mod tests {
         #[from(random_document_id)] document_third: DocumentId,
         #[from(random_document_id)] document_forth: DocumentId,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             // Register two log ids at the beginning
             let log_1 = StorageLog::new(&author, &schema, &document_first, &LogId::default());
             let log_2 = StorageLog::new(&author, &schema, &document_second, &LogId::new(1));

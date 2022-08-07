@@ -12,6 +12,7 @@ use tower_http::cors::{Any, CorsLayer};
 
 use crate::bus::ServiceSender;
 use crate::context::Context;
+use crate::graphql::GraphQLSchemaManager;
 use crate::http::api::{handle_graphql_playground, handle_graphql_query};
 use crate::http::context::HttpServiceContext;
 use crate::manager::{ServiceReadySender, Shutdown};
@@ -48,8 +49,12 @@ pub async fn http_service(
     let http_port = context.config.http_port;
     let http_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), http_port);
 
+    // Prepare GraphQL manager executing incoming GraphQL queries via HTTP
+    let graphql_schema_manager =
+        GraphQLSchemaManager::new(context.store.clone(), tx, context.schema_provider.clone()).await;
+
     // Introduce a new context for all HTTP routes
-    let http_context = HttpServiceContext::new(context.store.clone(), tx);
+    let http_context = HttpServiceContext::new(graphql_schema_manager);
 
     axum::Server::try_bind(&http_address)?
         .serve(build_server(http_context).into_make_service())
@@ -72,18 +77,22 @@ mod tests {
     use serde_json::json;
     use tokio::sync::broadcast;
 
-    use crate::db::provider::SqlStorage;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+    use crate::graphql::GraphQLSchemaManager;
     use crate::http::context::HttpServiceContext;
+    use crate::schema::SchemaProvider;
     use crate::test_helpers::TestClient;
 
     use super::build_server;
 
     #[rstest]
     fn graphql_endpoint(#[from(test_db)] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let (tx, _) = broadcast::channel(16);
-            let context = HttpServiceContext::new(db.store, tx);
+            let schema_provider = SchemaProvider::default();
+            let graphql_schema_manager =
+                GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
+            let context = HttpServiceContext::new(graphql_schema_manager);
             let client = TestClient::new(build_server(context));
 
             let response = client

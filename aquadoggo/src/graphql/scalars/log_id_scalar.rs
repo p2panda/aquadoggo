@@ -3,25 +3,26 @@
 use std::fmt::Display;
 
 use async_graphql::scalar;
+use p2panda_rs::entry::LogId;
 use serde::{Deserialize, Serialize};
 
 /// Log id of a bamboo entry.
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
-pub struct LogId(p2panda_rs::entry::LogId);
+pub struct LogIdScalar(LogId);
 
-impl From<p2panda_rs::entry::LogId> for LogId {
-    fn from(log_id: p2panda_rs::entry::LogId) -> Self {
+impl From<LogId> for LogIdScalar {
+    fn from(log_id: LogId) -> Self {
         Self(log_id)
     }
 }
 
-impl From<LogId> for p2panda_rs::entry::LogId {
-    fn from(log_id: LogId) -> p2panda_rs::entry::LogId {
+impl From<LogIdScalar> for LogId {
+    fn from(log_id: LogIdScalar) -> LogId {
         log_id.0
     }
 }
 
-impl Serialize for LogId {
+impl Serialize for LogIdScalar {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -32,44 +33,45 @@ impl Serialize for LogId {
     }
 }
 
-impl<'de> Deserialize<'de> for LogId {
+impl<'de> Deserialize<'de> for LogIdScalar {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
         let str: String = Deserialize::deserialize(deserializer)?;
 
-        let log_id: p2panda_rs::entry::LogId = str
+        let log_id: LogId = str
             .parse()
             .map_err(|_| serde::de::Error::custom("Could not parse log_id string as u64"))?;
 
-        Ok(LogId(log_id))
+        Ok(LogIdScalar(log_id))
     }
 }
 
-impl Display for LogId {
+impl Display for LogIdScalar {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0.as_u64())
     }
 }
 
-scalar!(LogId);
+scalar!(LogIdScalar);
 
 #[cfg(test)]
 mod tests {
+    use p2panda_rs::entry::LogId;
     use serde::{Deserialize, Serialize};
 
-    use super::LogId;
+    use super::LogIdScalar;
 
     #[test]
     fn serde_log_id_as_string() {
         #[derive(Serialize, Deserialize, PartialEq, Debug)]
         struct Value {
-            log_id: LogId,
+            log_id: LogIdScalar,
         }
 
         let val = Value {
-            log_id: p2panda_rs::entry::LogId::default().into(),
+            log_id: LogId::default().into(),
         };
 
         let serialised = serde_json::to_string(&val).unwrap();

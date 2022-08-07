@@ -154,7 +154,6 @@ mod tests {
     use tokio::task;
 
     use crate::context::Context;
-    use crate::db::provider::SqlStorage;
     use crate::db::stores::test_utils::{send_to_store, test_db, TestDatabase, TestDatabaseRunner};
     use crate::db::traits::DocumentStore;
     use crate::materializer::{Task, TaskInput};
@@ -170,7 +169,7 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         // Prepare database which inserts data for one document
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             // Identify document and operation which was inserted for testing
             let document_id = db.test_data.documents.first().unwrap();
             let verified_operation = db
@@ -251,7 +250,7 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         // Prepare database which inserts data for one document
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             // Identify document and operation which was inserted for testing
             let document_id = db.test_data.documents.first().unwrap();
 
@@ -321,7 +320,7 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         // Prepare database which inserts data for one document
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             // Identify key_[air, document and operation which was inserted for testing
             let key_pair = db.test_data.key_pairs.first().unwrap();
             let document_id = db.test_data.documents.first().unwrap();
@@ -368,7 +367,7 @@ mod tests {
             .unwrap();
 
             // Wait a little bit for work being done ..
-            tokio::time::sleep(Duration::from_millis(50)).await;
+            tokio::time::sleep(Duration::from_millis(100)).await;
 
             // Then straight away publish an UPDATE on this document and send it over the bus too.
             let (entry_encoded, _) = send_to_store(
@@ -393,7 +392,7 @@ mod tests {
             .unwrap();
 
             // Wait a little bit for work being done ..
-            tokio::time::sleep(Duration::from_millis(50)).await;
+            tokio::time::sleep(Duration::from_millis(100)).await;
 
             // Make sure the service did not crash and is still running
             assert_eq!(handle.is_finished(), false);
@@ -461,7 +460,7 @@ mod tests {
         key_pair: KeyPair,
     ) {
         // Prepare empty database
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             // Prepare arguments for service
             let context = Context::new(
                 db.store.clone(),
@@ -474,7 +473,7 @@ mod tests {
                     tokio::time::sleep(Duration::from_millis(100)).await;
                 }
             });
-            let (tx, _) = broadcast::channel(1024);
+            let (tx, _rx) = broadcast::channel(1024);
 
             // Start materializer service
             let tx_clone = tx.clone();

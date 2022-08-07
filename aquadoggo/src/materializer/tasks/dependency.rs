@@ -11,6 +11,8 @@ use crate::materializer::TaskInput;
 
 /// A dependency task prepares _reduce_ tasks for all pinned relations of a given document view.
 ///
+/// The `input` argument must contain only a view id.
+///
 /// This task is dispatched after a reduce task completes. It identifies any pinned relations
 /// present in a given document view as we need to guarantee the required document views are
 /// materialised and stored in the database. We may have the required operations on the node
@@ -148,6 +150,7 @@ async fn construct_relation_task(
     document_view_id: DocumentViewId,
 ) -> Result<Option<Task<TaskInput>>, TaskError> {
     debug!("Get view for pinned relation with id: {}", document_view_id);
+
     match context
         .store
         .get_document_view_by_id(&document_view_id)
@@ -187,7 +190,6 @@ mod tests {
 
     use crate::config::Configuration;
     use crate::context::Context;
-    use crate::db::provider::SqlStorage;
     use crate::db::stores::test_utils::{
         insert_entry_operation_and_view, send_to_store, test_db, TestDatabase, TestDatabaseRunner,
     };
@@ -307,7 +309,7 @@ mod tests {
         #[case] runner: TestDatabaseRunner,
         #[case] expected_next_tasks: usize,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
             let context = Context::new(
                 db.store.clone(),
                 Configuration::default(),
@@ -347,7 +349,7 @@ mod tests {
         #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let context = Context::new(
                 db.store.clone(),
                 Configuration::default(),
@@ -411,7 +413,7 @@ mod tests {
         #[case] document_view_id: Option<DocumentViewId>,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let context = Context::new(
                 db.store,
                 Configuration::default(),
@@ -457,7 +459,7 @@ mod tests {
         )
     )]
     fn fails_on_deleted_documents(#[case] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let context = Context::new(
                 db.store.clone(),
                 Configuration::default(),
@@ -494,7 +496,7 @@ mod tests {
         ])]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let context = Context::new(
                 db.store.clone(),
                 Configuration::default(),
@@ -579,7 +581,7 @@ mod tests {
         ])]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
             let context = Context::new(
                 db.store.clone(),
                 Configuration::default(),
@@ -589,8 +591,6 @@ mod tests {
             // The document id for the schema_field_definition who's operation already exists in
             // the store.
             let schema_field_document_id = db.test_data.documents.first().unwrap();
-
-            println!("THIS {}", schema_field_document_id.as_str());
 
             // Materialise the schema field definition.
             let input = TaskInput::new(Some(schema_field_document_id.to_owned()), None);

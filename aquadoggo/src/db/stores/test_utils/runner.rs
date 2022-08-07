@@ -11,27 +11,29 @@ use rstest::fixture;
 use tokio::runtime::Builder;
 use tokio::sync::Mutex;
 
+use crate::context::Context;
 use crate::db::provider::SqlStorage;
 use crate::db::stores::test_utils::{
     populate_test_db, PopulateDatabaseConfig, TestData, TestDatabase,
 };
 use crate::db::Pool;
 use crate::test_helpers::{initialize_db, initialize_db_with_url};
+use crate::{Configuration, SchemaProvider};
 
 use super::doggo_test_fields;
 
 #[async_trait::async_trait]
 pub trait AsyncTestFn {
-    async fn call(self, db: TestDatabase<SqlStorage>);
+    async fn call(self, db: TestDatabase);
 }
 
 #[async_trait::async_trait]
 impl<FN, F> AsyncTestFn for FN
 where
-    FN: FnOnce(TestDatabase<SqlStorage>) -> F + Sync + Send,
+    FN: FnOnce(TestDatabase) -> F + Sync + Send,
     F: Future<Output = ()> + Send,
 {
-    async fn call(self, db: TestDatabase<SqlStorage>) {
+    async fn call(self, db: TestDatabase) {
         self(db).await
     }
 }
@@ -77,8 +79,15 @@ impl TestDatabaseRunner {
         runtime.block_on(async {
             // Initialise test database
             let pool = initialize_db().await;
+            let store = SqlStorage::new(pool);
+            let context = Context::new(
+                store.clone(),
+                Configuration::default(),
+                SchemaProvider::default(),
+            );
             let mut db = TestDatabase {
-                store: SqlStorage::new(pool),
+                context,
+                store,
                 test_data: TestData::default(),
             };
 
@@ -123,13 +132,14 @@ impl TestDatabaseManager {
         Self::default()
     }
 
-    pub async fn create(&self, url: &str) -> TestDatabase<SqlStorage> {
-        // Initialise test database
+    pub async fn create(&self, url: &str) -> TestDatabase {
         let pool = initialize_db_with_url(url).await;
-        let test_db = TestDatabase {
-            store: SqlStorage::new(pool.clone()),
-            test_data: TestData::default(),
-        };
+
+        // Initialise test store using pool.
+        let store = SqlStorage::new(pool.clone());
+
+        let test_db = TestDatabase::new(store.clone());
+
         self.pools.lock().await.push(pool);
         test_db
     }

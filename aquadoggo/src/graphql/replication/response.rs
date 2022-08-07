@@ -17,10 +17,10 @@ use crate::graphql::scalars;
 #[graphql(complex)]
 pub struct EncodedEntryAndOperation {
     /// Signed and encoded bamboo entry.
-    pub entry: scalars::EncodedEntry,
+    pub entry: scalars::EntrySignedScalar,
 
     /// p2panda operation, CBOR bytes encoded as hexadecimal string.
-    pub operation: Option<scalars::EncodedOperation>,
+    pub operation: Option<scalars::EncodedOperationScalar>,
 }
 
 #[ComplexObject]
@@ -29,7 +29,7 @@ impl EncodedEntryAndOperation {
     async fn certificate_pool<'a>(
         &self,
         ctx: &Context<'a>,
-    ) -> async_graphql::Result<Vec<scalars::EncodedEntry>> {
+    ) -> async_graphql::Result<Vec<scalars::EntrySignedScalar>> {
         let store = ctx.data::<SqlStorage>()?;
 
         // Decode entry
@@ -81,7 +81,6 @@ mod tests {
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
     use rstest::rstest;
 
-    use crate::db::provider::SqlStorage;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
     use crate::graphql::replication::ReplicationRoot;
 
@@ -91,7 +90,7 @@ mod tests {
         #[with(13, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let replication_root = ReplicationRoot::default();
             let schema = Schema::build(replication_root, EmptyMutation, EmptySubscription)
                 .data(db.store.clone())

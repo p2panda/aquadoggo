@@ -18,7 +18,7 @@ const DEFAULT_PAGINATION_SIZE: usize = 10;
 
 /// Response type for paginated queries.
 type ConnectionResult =
-    Connection<scalars::SeqNum, EncodedEntryAndOperation, EmptyFields, EmptyFields>;
+    Connection<scalars::SeqNumScalar, EncodedEntryAndOperation, EmptyFields, EmptyFields>;
 
 /// GraphQL queries for the Replication API.
 #[derive(Default, Debug, Copy, Clone)]
@@ -48,10 +48,11 @@ impl ReplicationRoot {
     async fn entry_by_log_id_and_seq_num<'a>(
         &self,
         ctx: &Context<'a>,
-        #[graphql(name = "logId", desc = "Log id of entry")] log_id: scalars::LogId,
-        #[graphql(name = "seqNum", desc = "Sequence number of entry")] seq_num: scalars::SeqNum,
+        #[graphql(name = "logId", desc = "Log id of entry")] log_id: scalars::LogIdScalar,
+        #[graphql(name = "seqNum", desc = "Sequence number of entry")]
+        seq_num: scalars::SeqNumScalar,
         #[graphql(name = "publicKey", desc = "Public key of the entry author")]
-        public_key: scalars::PublicKey,
+        public_key: scalars::PublicKeyScalar,
     ) -> Result<EncodedEntryAndOperation> {
         let store = ctx.data::<SqlStorage>()?;
 
@@ -73,14 +74,14 @@ impl ReplicationRoot {
     async fn entries_newer_than_seq_num<'a>(
         &self,
         ctx: &Context<'a>,
-        #[graphql(name = "logId", desc = "Log id of entries")] log_id: scalars::LogId,
+        #[graphql(name = "logId", desc = "Log id of entries")] log_id: scalars::LogIdScalar,
         #[graphql(name = "publicKey", desc = "Public key of the author")]
-        public_key: scalars::PublicKey,
+        public_key: scalars::PublicKeyScalar,
         #[graphql(
             name = "seqNum",
             desc = "Query entries starting from this sequence number"
         )]
-        seq_num: Option<scalars::SeqNum>,
+        seq_num: Option<scalars::SeqNumScalar>,
         first: Option<i32>,
         after: Option<String>,
     ) -> Result<ConnectionResult> {
@@ -91,7 +92,7 @@ impl ReplicationRoot {
             None,
             first,
             None,
-            |after: Option<scalars::SeqNum>, _, first, _| async move {
+            |after: Option<scalars::SeqNumScalar>, _, first, _| async move {
                 // Add `seq_num` to the `after` cursor to get starting sequence number
                 let seq_num = seq_num.map(|seq| seq.as_u64()).unwrap_or_else(|| 0);
                 let start: u64 = seq_num + after.map(|a| a.as_u64()).unwrap_or_else(|| 0);
@@ -140,7 +141,7 @@ impl ReplicationRoot {
 }
 
 /// Use sequence numbers as cursor to paginate entry queries.
-impl CursorType for scalars::SeqNum {
+impl CursorType for scalars::SeqNumScalar {
     type Error = Error;
 
     fn decode_cursor(str: &str) -> Result<Self, Self::Error> {
@@ -162,7 +163,6 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::random_hash;
     use rstest::rstest;
 
-    use crate::db::provider::SqlStorage;
     use crate::db::stores::test_utils::{
         populate_test_db, test_db, with_db_manager_teardown, PopulateDatabaseConfig, TestDatabase,
         TestDatabaseManager, TestDatabaseRunner,
@@ -176,7 +176,7 @@ mod tests {
         #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let replication_root = ReplicationRoot::default();
             let schema = Schema::build(replication_root, EmptyMutation, EmptySubscription)
                 .data(db.store)
@@ -217,7 +217,7 @@ mod tests {
         #[from(test_db)] runner: TestDatabaseRunner,
         #[from(random_hash)] random_hash: Hash,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let replication_root = ReplicationRoot::default();
             let schema = Schema::build(replication_root, EmptyMutation, EmptySubscription)
                 .data(db.store)
@@ -240,7 +240,7 @@ mod tests {
         #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let replication_root = ReplicationRoot::default();
             let schema = Schema::build(replication_root, EmptyMutation, EmptySubscription)
                 .data(db.store)
@@ -288,7 +288,7 @@ mod tests {
 
     #[rstest]
     fn entry_by_log_id_and_seq_num_not_found(#[from(test_db)] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let replication_root = ReplicationRoot::default();
             let schema = Schema::build(replication_root, EmptyMutation, EmptySubscription)
                 .data(db.store)

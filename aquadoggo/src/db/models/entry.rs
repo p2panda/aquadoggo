@@ -8,7 +8,7 @@ use sqlx::FromRow;
 ///
 /// We store the u64 integer values of `log_id` and `seq_num` as strings since SQLite doesn't
 /// support storing unsigned 64 bit integers.
-#[derive(FromRow, Debug, Serialize, Clone, PartialEq)]
+#[derive(FromRow, Debug, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct EntryRow {
     /// Public key of the author.

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+//! API for replicating data with other p2panda nodes
 pub mod client;
 mod query;
 mod response;

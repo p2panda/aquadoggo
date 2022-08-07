@@ -1,20 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use crate::bus::ServiceSender;
-use crate::db::provider::SqlStorage;
-use crate::graphql::{build_root_schema, RootSchema};
+use crate::graphql::GraphQLSchemaManager;
 
 #[derive(Clone)]
 pub struct HttpServiceContext {
-    /// Root GraphQL schema.
-    pub schema: RootSchema,
+    /// Dynamic GraphQL schema manager.
+    pub schema: GraphQLSchemaManager,
 }
 
 impl HttpServiceContext {
     /// Create a new HttpServiceContext.
-    pub fn new(store: SqlStorage, tx: ServiceSender) -> Self {
-        Self {
-            schema: build_root_schema(store, tx),
-        }
+    pub fn new(schema: GraphQLSchemaManager) -> Self {
+        Self { schema }
     }
 }

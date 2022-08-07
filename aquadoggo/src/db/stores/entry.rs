@@ -22,7 +22,7 @@ use crate::db::provider::SqlStorage;
 ///
 /// This struct implements the `AsStorageEntry` trait which is required when constructing the
 /// `EntryStore`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StorageEntry {
     entry_signed: EntrySigned,
     operation_encoded: OperationEncoded,
@@ -430,13 +430,12 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::{entry, key_pair};
     use rstest::rstest;
 
-    use crate::db::provider::SqlStorage;
     use crate::db::stores::entry::StorageEntry;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
     #[rstest]
     fn insert_entry(key_pair: KeyPair, entry: Entry, #[from(test_db)] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let entry_encoded = sign_and_encode(&entry, &key_pair).unwrap();
             let operation_encoded = OperationEncoded::try_from(entry.operation().unwrap()).unwrap();
             let doggo_entry = StorageEntry::new(&entry_encoded, &operation_encoded).unwrap();
@@ -452,7 +451,7 @@ mod tests {
         #[with(10, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let author =
                 Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
             let log_id = LogId::default();
@@ -481,7 +480,7 @@ mod tests {
         #[with(20, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let author_not_in_db = Author::try_from(*KeyPair::new().public_key()).unwrap();
             let log_id = LogId::default();
 
@@ -510,7 +509,7 @@ mod tests {
         #[with(20, 1, 2, false, SCHEMA_ID.parse().unwrap())]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let schema_not_in_the_db = SchemaId::new_application(
                 "venue",
                 &Hash::new_from_bytes(vec![1, 2, 3]).unwrap().into(),
@@ -540,7 +539,7 @@ mod tests {
         #[with(10, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let author =
                 Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
 
@@ -590,7 +589,7 @@ mod tests {
         #[with(20, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let author =
                 Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
 
@@ -629,7 +628,7 @@ mod tests {
         #[with(30, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let author =
                 Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
 
@@ -666,7 +665,7 @@ mod tests {
         #[with(20, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let author =
                 Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
 

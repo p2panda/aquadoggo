@@ -3,13 +3,25 @@
 use log::{debug, info};
 use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
 use p2panda_rs::operation::VerifiedOperation;
-use p2panda_rs::storage_provider::traits::OperationStore;
+use p2panda_rs::storage_provider::traits::{OperationStore, StorageProvider};
 
 use crate::context::Context;
 use crate::db::traits::DocumentStore;
 use crate::materializer::worker::{Task, TaskError, TaskResult};
 use crate::materializer::TaskInput;
 
+/// Build a materialised view for a document by reducing the document's operation graph and storing to disk.
+///
+/// ## Task input
+///
+/// If the task input contains a document view id, only this view is stored and any document id
+/// also existing on the task input is ignored.
+///
+/// If the task input contains a document id, the latest view for that document is built and stored
+/// and also, the document itself is updated in the store.
+///
+/// ## Integration with other tasks
+///
 /// A reduce task is dispatched for every entry and operation pair which arrives at a node.
 ///
 /// They may also be dispatched from a dependency task when a pinned relations is present on an
@@ -66,8 +78,8 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
 /// If the task input is invalid (both document_id and document_view_id missing or given) we
 /// critically fail the task at this point. If only a document_view_id was passed we retrieve the
 /// document_id as it is needed later.
-async fn resolve_document_id(
-    context: &Context,
+async fn resolve_document_id<S: StorageProvider>(
+    context: &Context<S>,
     input: &TaskInput,
 ) -> Result<Option<DocumentId>, TaskError> {
     match (&input.document_id, &input.document_view_id) {
@@ -168,7 +180,7 @@ async fn reduce_document(
                 return Ok(None);
             }
 
-            info!("Stored {} view {}", document, document.view_id());
+            info!("Stored {} latest view {}", document, document.view_id());
 
             // Return the new document_view id to be used in the resulting dependency task
             Ok(Some(document.view_id().to_owned()))
@@ -195,7 +207,6 @@ mod tests {
 
     use crate::config::Configuration;
     use crate::context::Context;
-    use crate::db::provider::SqlStorage;
     use crate::db::stores::test_utils::{send_to_store, test_db, TestDatabase, TestDatabaseRunner};
     use crate::db::traits::DocumentStore;
     use crate::materializer::tasks::reduce_task;
@@ -216,7 +227,7 @@ mod tests {
         )]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let context = Context::new(
                 db.store,
                 Configuration::default(),
@@ -245,7 +256,7 @@ mod tests {
         #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let document_id = db.test_data.documents.first().unwrap();
             let key_pair = db.test_data.key_pairs.first().unwrap();
 
@@ -299,7 +310,7 @@ mod tests {
         #[with( 2, 1, 1, false, SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::Text("panda".into()))], vec![("username", OperationValue::Text("PANDA".into()))])]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let document_operations = db
                 .store
                 .get_operations_by_document_id(&db.test_data.documents[0])
@@ -360,7 +371,7 @@ mod tests {
         #[with(3, 1, 20, true)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let context = Context::new(
                 db.store.clone(),
                 Configuration::default(),
@@ -407,7 +418,7 @@ mod tests {
         #[case] runner: TestDatabaseRunner,
         #[case] is_next_task: bool,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
             let context = Context::new(
                 db.store.clone(),
                 Configuration::default(),
@@ -429,7 +440,7 @@ mod tests {
         #[case] document_view_id: Option<DocumentViewId>,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let context = Context::new(
                 db.store,
                 Configuration::default(),
@@ -450,7 +461,7 @@ mod tests {
         #[from(random_document_view_id)] document_view_id: DocumentViewId,
     ) {
         // Prepare empty database.
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let context = Context::new(
                 db.store.clone(),
                 Configuration::default(),

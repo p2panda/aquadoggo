@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+//! Mutation root.
 use async_graphql::{Context, Object, Result};
 use p2panda_rs::entry::{decode_entry, EntrySigned};
 use p2panda_rs::operation::{Operation, OperationEncoded, OperationId};
@@ -24,12 +25,12 @@ impl ClientMutationRoot {
         &self,
         ctx: &Context<'_>,
         #[graphql(name = "entry", desc = "Signed and encoded entry to publish")]
-        entry: scalars::EncodedEntry,
+        entry: scalars::EntrySignedScalar,
         #[graphql(
             name = "operation",
             desc = "p2panda operation representing the entry payload."
         )]
-        operation: scalars::EncodedOperation,
+        operation: scalars::EncodedOperationScalar,
     ) -> Result<NextEntryArguments> {
         let store = ctx.data::<SqlStorage>()?;
         let tx = ctx.data::<ServiceSender>()?;
@@ -112,10 +113,11 @@ mod tests {
     use tokio::sync::broadcast;
 
     use crate::bus::ServiceMessage;
-    use crate::db::provider::SqlStorage;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
     use crate::domain::next_args;
+    use crate::graphql::GraphQLSchemaManager;
     use crate::http::{build_server, HttpServiceContext};
+    use crate::schema::SchemaProvider;
     use crate::test_helpers::TestClient;
 
     fn to_hex(value: Value) -> String {
@@ -225,9 +227,12 @@ mod tests {
 
     #[rstest]
     fn publish_entry(#[from(test_db)] runner: TestDatabaseRunner, publish_entry_request: Request) {
-        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
-            let (tx, _) = broadcast::channel(16);
-            let context = HttpServiceContext::new(db.store, tx);
+        runner.with_db_teardown(move |db: TestDatabase| async move {
+            let (tx, _rx) = broadcast::channel(16);
+            let schema_provider = SchemaProvider::default();
+            let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
+            let context = HttpServiceContext::new(manager);
+
             let response = context.schema.execute(publish_entry_request).await;
 
             assert_eq!(
@@ -249,9 +254,11 @@ mod tests {
         #[from(test_db)] runner: TestDatabaseRunner,
         publish_entry_request: Request,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
             let (tx, mut rx) = broadcast::channel(16);
-            let context = HttpServiceContext::new(db.store, tx);
+            let schema_provider = SchemaProvider::default();
+            let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
+            let context = HttpServiceContext::new(manager);
 
             context.schema.execute(publish_entry_request).await;
 
@@ -269,9 +276,11 @@ mod tests {
 
     #[rstest]
     fn publish_entry_error_handling(#[from(test_db)] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
             let (tx, _rx) = broadcast::channel(16);
-            let context = HttpServiceContext::new(db.store, tx);
+            let schema_provider = SchemaProvider::default();
+            let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
+            let context = HttpServiceContext::new(manager);
 
             let parameters = Variables::from_value(value!({
                 "entry": ENTRY_ENCODED.to_string(),
@@ -293,9 +302,11 @@ mod tests {
         #[from(test_db)] runner: TestDatabaseRunner,
         publish_entry_request: Request,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
             let (tx, _rx) = broadcast::channel(16);
-            let context = HttpServiceContext::new(db.store, tx);
+            let schema_provider = SchemaProvider::default();
+            let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
+            let context = HttpServiceContext::new(manager);
             let client = TestClient::new(build_server(context));
 
             let response = client
@@ -325,12 +336,20 @@ mod tests {
     }
 
     #[rstest]
-    #[case::no_entry("", "", "Bytes to decode had length of 0")]
-    #[case::invalid_entry_bytes("AB01", "", "Could not decode author public key from bytes")]
+    #[case::no_entry(
+        "",
+        "",
+        "Failed to parse \"EntrySignedScalar\": Bytes to decode had length of 0"
+    )]
+    #[case::invalid_entry_bytes(
+        "AB01",
+        "",
+        "Failed to parse \"EntrySignedScalar\": Could not decode author public key from bytes"
+    )]
     #[case::invalid_entry_hex_encoding(
         "-/74='4,.=4-=235m-0   34.6-3",
         &OPERATION_ENCODED,
-        "invalid hex encoding in entry"
+        "Failed to parse \"EntrySignedScalar\": invalid hex encoding in entry"
     )]
     #[case::no_operation(
         &ENTRY_ENCODED,
@@ -345,7 +364,7 @@ mod tests {
     #[case::invalid_operation_hex_encoding(
         &ENTRY_ENCODED,
         "0-25.-%5930n3544[{{{   @@@",
-        "invalid hex encoding in operation"
+        "Failed to parse \"EncodedOperationScalar\": invalid hex encoding in operation"
     )]
     #[case::operation_does_not_match(
         &ENTRY_ENCODED,
@@ -363,12 +382,12 @@ mod tests {
     #[case::valid_entry_with_extra_hex_char_at_end(
         &{ENTRY_ENCODED.to_string() + "A"},
         &OPERATION_ENCODED,
-        "invalid hex encoding in entry"
+        "Failed to parse \"EntrySignedScalar\": invalid hex encoding in entry"
     )]
     #[case::valid_entry_with_extra_hex_char_at_start(
         &{"A".to_string() + &ENTRY_ENCODED},
         &OPERATION_ENCODED,
-        "invalid hex encoding in entry"
+        "Failed to parse \"EntrySignedScalar\": invalid hex encoding in entry"
     )]
     #[case::should_not_have_skiplink(
         &entry_signed_encoded_unvalidated(
@@ -380,7 +399,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
-        "Could not decode payload hash DecodeError"
+        "Failed to parse \"EntrySignedScalar\": Could not decode payload hash DecodeError"
     )]
     #[case::should_not_have_backlink(
         &entry_signed_encoded_unvalidated(
@@ -392,7 +411,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
-        "Could not decode payload hash DecodeError"
+        "Failed to parse \"EntrySignedScalar\": Could not decode payload hash DecodeError"
     )]
     #[case::should_not_have_backlink_or_skiplink(
         &entry_signed_encoded_unvalidated(
@@ -404,7 +423,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
-        "Could not decode payload hash DecodeError"
+        "Failed to parse \"EntrySignedScalar\": Could not decode payload hash DecodeError"
     )]
     #[case::missing_backlink(
         &entry_signed_encoded_unvalidated(
@@ -416,7 +435,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
-        "Could not decode backlink yamf hash: DecodeError"
+        "Failed to parse \"EntrySignedScalar\": Could not decode backlink yamf hash: DecodeError"
     )]
     #[case::missing_skiplink(
         &entry_signed_encoded_unvalidated(
@@ -428,7 +447,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
-        "Could not decode backlink yamf hash: DecodeError"
+        "Failed to parse \"EntrySignedScalar\": Could not decode backlink yamf hash: DecodeError"
     )]
     #[case::should_not_include_skiplink(
         &entry_signed_encoded_unvalidated(
@@ -440,7 +459,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
-        "Could not decode payload hash DecodeError"
+        "Failed to parse \"EntrySignedScalar\": Could not decode payload hash DecodeError"
     )]
     #[case::payload_hash_and_size_missing(
         &entry_signed_encoded_unvalidated(
@@ -452,7 +471,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
-        "Could not decode payload hash DecodeError"
+        "Failed to parse \"EntrySignedScalar\": Could not decode payload hash DecodeError"
     )]
     #[case::create_operation_with_previous_operations(
         &entry_signed_encoded_unvalidated(
@@ -500,9 +519,11 @@ mod tests {
         let operation_encoded = operation_encoded.to_string();
         let expected_error_message = expected_error_message.to_string();
 
-        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
             let (tx, _rx) = broadcast::channel(16);
-            let context = HttpServiceContext::new(db.store, tx);
+            let schema_provider = SchemaProvider::default();
+            let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
+            let context = HttpServiceContext::new(manager);
             let client = TestClient::new(build_server(context));
 
             let publish_entry_request = publish_entry_request(&entry_encoded, &operation_encoded);
@@ -631,9 +652,11 @@ mod tests {
         let operation_encoded = operation_encoded.to_string();
         let expected_error_message = expected_error_message.to_string();
 
-        runner.with_db_teardown(move |db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
             let (tx, _rx) = broadcast::channel(16);
-            let context = HttpServiceContext::new(db.store, tx);
+            let schema_provider = SchemaProvider::default();
+            let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
+            let context = HttpServiceContext::new(manager);
             let client = TestClient::new(build_server(context));
 
             let publish_entry_request = publish_entry_request(&entry_encoded, &operation_encoded);
@@ -660,12 +683,14 @@ mod tests {
 
     #[rstest]
     fn publish_many_entries(#[from(test_db)] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(|db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let key_pairs = vec![KeyPair::new(), KeyPair::new()];
             let num_of_entries = 13;
 
             let (tx, _rx) = broadcast::channel(16);
-            let context = HttpServiceContext::new(db.store.clone(), tx);
+            let schema_provider = SchemaProvider::default();
+            let manager = GraphQLSchemaManager::new(db.store.clone(), tx, schema_provider).await;
+            let context = HttpServiceContext::new(manager);
             let client = TestClient::new(build_server(context));
 
             for key_pair in &key_pairs {
@@ -733,9 +758,12 @@ mod tests {
         #[with(1, 1, 1, false, SCHEMA_ID.parse().unwrap())]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|populated_db: TestDatabase<SqlStorage>| async move {
+        runner.with_db_teardown(|populated_db: TestDatabase| async move {
             let (tx, _rx) = broadcast::channel(16);
-            let context = HttpServiceContext::new(populated_db.store.clone(), tx);
+            let schema_provider = SchemaProvider::default();
+            let manager =
+                GraphQLSchemaManager::new(populated_db.store.clone(), tx, schema_provider).await;
+            let context = HttpServiceContext::new(manager);
             let client = TestClient::new(build_server(context));
 
             // Get the one entry from the store.

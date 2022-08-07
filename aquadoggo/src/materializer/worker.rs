@@ -495,10 +495,8 @@ where
                         }
                     }
 
-                    // Trigger status update when successful
-                    if result.is_ok() {
-                        on_complete(item.input());
-                    }
+                    // Trigger removing the task from the task store
+                    on_complete(item.input());
 
                     // Check the result
                     match result {

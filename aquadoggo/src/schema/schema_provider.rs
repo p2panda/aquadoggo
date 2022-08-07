@@ -3,18 +3,23 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use log::info;
+use log::{debug, info, warn};
 use p2panda_rs::schema::{Schema, SchemaId, SYSTEM_SCHEMAS};
+use tokio::sync::broadcast::{channel, Receiver, Sender};
 use tokio::sync::Mutex;
 
 /// Provides fast thread-safe access to system and application schemas.
 ///
 /// Application schemas can be added and updated.
 #[derive(Clone, Debug)]
-pub struct SchemaProvider(Arc<Mutex<HashMap<SchemaId, Schema>>>);
+pub struct SchemaProvider {
+    /// In-memory store of registered schemas.
+    schemas: Arc<Mutex<HashMap<SchemaId, Schema>>>,
 
-// Dead code allowed until this is used for https://github.com/p2panda/aquadoggo/pull/141
-#[allow(dead_code)]
+    /// Sender for broadcast channel informing subscribers about updated schemas.
+    tx: Sender<SchemaId>,
+}
+
 impl SchemaProvider {
     /// Returns a `SchemaProvider` containing the given application schemas and all system schemas.
     pub fn new(application_schemas: Vec<Schema>) -> Self {
@@ -27,17 +32,37 @@ impl SchemaProvider {
         for schema in schemas {
             index.insert(schema.id().to_owned(), schema.to_owned());
         }
-        Self(Arc::new(Mutex::new(index)))
+
+        let (tx, _) = channel(64);
+
+        debug!(
+            "Initialised schema provider:\n- {}",
+            index
+                .values()
+                .map(|schema| schema.to_string())
+                .collect::<Vec<String>>()
+                .join("\n- ")
+        );
+
+        Self {
+            schemas: Arc::new(Mutex::new(index)),
+            tx,
+        }
+    }
+
+    /// Returns receiver for broadcast channel.
+    pub fn on_schema_added(&self) -> Receiver<SchemaId> {
+        self.tx.subscribe()
     }
 
     /// Retrieve a schema that may be a system or application schema by its schema id.
     pub async fn get(&self, schema_id: &SchemaId) -> Option<Schema> {
-        self.0.lock().await.get(schema_id).cloned()
+        self.schemas.lock().await.get(schema_id).cloned()
     }
 
     /// Returns all system and application schemas.
     pub async fn all(&self) -> Vec<Schema> {
-        self.0.lock().await.values().cloned().collect()
+        self.schemas.lock().await.values().cloned().collect()
     }
 
     /// Inserts or updates the given schema in this provider.
@@ -45,8 +70,17 @@ impl SchemaProvider {
     /// Returns `true` if a schema was updated and `false` if it was inserted.
     pub async fn update(&self, schema: Schema) -> bool {
         info!("Updating {}", schema);
-        let mut schemas = self.0.lock().await;
-        schemas.insert(schema.id().clone(), schema).is_some()
+        let mut schemas = self.schemas.lock().await;
+        let is_update = schemas
+            .insert(schema.id().clone(), schema.clone())
+            .is_some();
+
+        // Inform subscribers about new schema
+        if self.tx.send(schema.id().to_owned()).is_err() {
+            warn!("No subscriber has been informed about inserted / updated schema");
+        }
+
+        is_update
     }
 }
 
