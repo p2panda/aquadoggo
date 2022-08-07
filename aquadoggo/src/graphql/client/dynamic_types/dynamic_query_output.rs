@@ -20,6 +20,12 @@ use crate::graphql::client::DynamicQuery;
 use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
 use crate::schema::load_static_schemas;
 
+/// Name of the field argument for requesting a document id.
+pub const DOCUMENT_ID_ARGUMENT: &str = "id";
+
+/// Name of the field argument for requesting a document view id.
+pub const VIEW_ID_ARGUMENT: &str = "viewId";
+
 #[async_trait::async_trait]
 impl OutputType for DynamicQuery {
     /// Register all GraphQL types for schemas currently available in the schema provider.
@@ -53,9 +59,9 @@ impl OutputType for DynamicQuery {
                         args: {
                             let mut single_args = IndexMap::new();
                             single_args.insert(
-                                "id".to_string(),
+                                DOCUMENT_ID_ARGUMENT.to_string(),
                                 MetaInputValue {
-                                    name: "id",
+                                    name: DOCUMENT_ID_ARGUMENT,
                                     description: None,
                                     ty: DocumentIdScalar::type_name().to_string(),
                                     default_value: None,
@@ -64,9 +70,9 @@ impl OutputType for DynamicQuery {
                                 },
                             );
                             single_args.insert(
-                                "viewId".to_string(),
+                                VIEW_ID_ARGUMENT.to_string(),
                                 MetaInputValue {
-                                    name: "viewId",
+                                    name: VIEW_ID_ARGUMENT,
                                     description: None,
                                     ty: DocumentViewIdScalar::type_name().to_string(),
                                     default_value: None,

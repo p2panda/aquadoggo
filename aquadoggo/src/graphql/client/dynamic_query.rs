@@ -15,6 +15,7 @@ use p2panda_rs::schema::SchemaId;
 
 use crate::db::provider::SqlStorage;
 use crate::db::traits::DocumentStore;
+use crate::graphql::client::dynamic_types;
 use crate::graphql::client::dynamic_types::DocumentMeta;
 use crate::graphql::client::utils::validate_view_matches_schema;
 use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
@@ -75,8 +76,14 @@ impl DynamicQuery {
     ) -> ServerResult<Option<Value>> {
         info!("Handling single query for {}", schema_id);
 
-        let document_id_arg = ctx.param_value::<Option<DocumentIdScalar>>("id", None)?;
-        let view_id_arg = ctx.param_value::<Option<DocumentViewIdScalar>>("viewId", None)?;
+        let document_id_arg = ctx.param_value::<Option<DocumentIdScalar>>(
+            dynamic_types::dynamic_query_output::DOCUMENT_ID_ARGUMENT,
+            None,
+        )?;
+        let view_id_arg = ctx.param_value::<Option<DocumentViewIdScalar>>(
+            dynamic_types::dynamic_query_output::VIEW_ID_ARGUMENT,
+            None,
+        )?;
 
         // Answer queries where the `viewId` argument is given.
         if let Some(view_id_scalar) = view_id_arg.clone().1 {
@@ -234,7 +241,7 @@ impl DynamicQuery {
 
         for field in selected_fields {
             // Assemble selected metadata values.
-            if field.name() == "meta" {
+            if field.name() == dynamic_types::document::META_FIELD {
                 document_fields.insert(
                     Name::new(field.alias().unwrap_or_else(|| field.name())),
                     DocumentMeta::resolve(field, None, Some(view.id())),
@@ -242,7 +249,7 @@ impl DynamicQuery {
             }
 
             // Assemble selected document field values.
-            if field.name() == "fields" {
+            if field.name() == dynamic_types::document::FIELDS_FIELD {
                 let subselection = field.selection_set().collect();
                 document_fields.insert(
                     Name::new(field.alias().unwrap_or_else(|| field.name())),
@@ -381,7 +388,7 @@ mod test {
             // Publish document on node.
             let view_id = db
                 .add_document(
-                    &schema.id(),
+                    schema.id(),
                     vec![("bool", true.into())].try_into().unwrap(),
                     &key_pair,
                 )

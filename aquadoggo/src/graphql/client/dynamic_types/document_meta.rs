@@ -8,10 +8,10 @@ use crate::graphql::client::dynamic_types::utils::{metafield, metaobject};
 use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
 
 /// Name of the field for accessing the document's id.
-const DOCUMENT_ID_FIELD: &str = "documentId";
+pub const DOCUMENT_ID_FIELD: &str = "documentId";
 
 /// Name of the field for accessing the document's view id.
-const VIEW_ID_FIELD: &str = "viewId";
+pub const VIEW_ID_FIELD: &str = "viewId";
 
 /// The GraphQL type for generic document metadata.
 pub struct DocumentMeta;

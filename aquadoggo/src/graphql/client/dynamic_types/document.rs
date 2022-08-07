@@ -6,11 +6,17 @@ use p2panda_rs::schema::Schema;
 use crate::graphql::client::dynamic_types::utils::{metafield, metaobject};
 use crate::graphql::client::dynamic_types::{DocumentFields, DocumentMeta};
 
+/// Fieldname on document for accessing document metadata.
+pub const META_FIELD: &str = "meta";
+
+/// Fieldname on document for accessing document view fields.
+pub const FIELDS_FIELD: &str = "fields";
+
 /// Represents documents of a p2panda schema.
 pub struct Document(&'static Schema);
 
 impl Document {
-    /// Ger a new instance for the given schema, which must be `static`.
+    /// Get a new instance for the given schema, which must be `static`.
     pub fn new(schema: &'static Schema) -> Self {
         Self(schema)
     }
@@ -39,14 +45,14 @@ impl Document {
 
         // Insert field `meta`.
         fields.insert(
-            "meta".to_string(),
-            metafield("meta", None, DocumentMeta::type_name()),
+            META_FIELD.to_string(),
+            metafield(META_FIELD, None, DocumentMeta::type_name()),
         );
 
         // Insert field `fields`.
         fields.insert(
-            "fields".to_string(),
-            metafield("fields", None, &fields_type.type_name()),
+            FIELDS_FIELD.to_string(),
+            metafield(FIELDS_FIELD, None, &fields_type.type_name()),
         );
 
         // Finally register the metatype for this schema.
