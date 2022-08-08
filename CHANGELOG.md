@@ -10,9 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - GraphQL replication service gets and verifies new entries and inserts them into the db [#137](https://github.com/p2panda/aquadoggo/pull/137)
-- Dynamically generated GraphQL types and query fields for accessing materialised documents [#141](https://github.com/p2panda/aquadoggo/pull/141)
-- `validation` and `domain` modules used for publish and next args API [#204](https://github.com/p2panda/aquadoggo/pull/204)
-- Schema task and schema provider that update when new schema views are materialised [#166](https://github.com/p2panda/aquadoggo/pull/166)
+- Dynamically generated GraphQL types and query fields for accessing materialised documents [#141](https://github.com/p2panda/aquadoggo/pull/141) 🥞
+- `validation` and `domain` modules used for publish and next args API [#204](https://github.com/p2panda/aquadoggo/pull/204) 🥞
+- Schema task and schema provider that update when new schema views are materialised [#166](https://github.com/p2panda/aquadoggo/pull/166) 🥞
 - Service ready signal [#218](https://github.com/p2panda/aquadoggo/pull/218)
 
 ### Changed
