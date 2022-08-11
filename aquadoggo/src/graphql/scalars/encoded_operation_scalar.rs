@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
 pub struct EncodedOperationScalar(OperationEncoded);
 
-#[Scalar]
+#[Scalar(name = "EncodedOperation")]
 impl ScalarType for EncodedOperationScalar {
     fn parse(value: Value) -> InputValueResult<Self> {
         match &value {

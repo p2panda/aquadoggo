@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct DocumentIdScalar(DocumentId);
 
-#[Scalar]
+#[Scalar(name = "DocumentId")]
 impl ScalarType for DocumentIdScalar {
     fn parse(value: Value) -> InputValueResult<Self> {
         match &value {

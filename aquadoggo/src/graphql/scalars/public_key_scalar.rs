@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct PublicKeyScalar(Author);
 
-#[Scalar]
+#[Scalar(name = "PublicKey")]
 impl ScalarType for PublicKeyScalar {
     fn parse(value: Value) -> async_graphql::InputValueResult<Self> {
         match &value {

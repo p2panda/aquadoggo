@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
 pub struct EntrySignedScalar(EntrySigned);
 
-#[Scalar]
+#[Scalar(name = "EntrySigned")]
 impl ScalarType for EntrySignedScalar {
     fn parse(value: Value) -> async_graphql::InputValueResult<Self> {
         match &value {
