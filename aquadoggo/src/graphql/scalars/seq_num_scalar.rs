@@ -26,7 +26,7 @@ impl SeqNumScalar {
     }
 }
 
-#[Scalar]
+#[Scalar(name = "SeqNum")]
 impl ScalarType for SeqNumScalar {
     fn parse(value: Value) -> Result<Self, InputValueError<Self>> {
         match &value {
