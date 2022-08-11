@@ -7,11 +7,12 @@ use async_graphql::Result;
 use bamboo_rs_core_ed25519_yasmf::entry::is_lipmaa_required;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::entry::decode::decode_entry;
+use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
 use p2panda_rs::entry::{EncodedEntry, LogId, SeqNum};
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::traits::{AsOperation, AsVerifiedOperation};
 use p2panda_rs::operation::{EncodedOperation, Operation, OperationAction};
-use p2panda_rs::storage_provider::traits::{AsStorageEntry, AsStorageLog, StorageProvider};
+use p2panda_rs::storage_provider::traits::{AsStorageLog, EntryWithOperation, StorageProvider};
 use p2panda_rs::Human;
 
 use crate::graphql::client::NextEntryArguments;
@@ -223,7 +224,7 @@ pub async fn publish<S: StorageProvider>(
     // Verify that the claimed seq num matches the expected seq num for this author and log.
     let latest_entry = store.get_latest_entry(&author, log_id).await?;
     let latest_seq_num = latest_entry.as_ref().map(|entry| entry.seq_num());
-    is_next_seq_num(latest_seq_num.as_ref(), seq_num)?;
+    is_next_seq_num(latest_seq_num, seq_num)?;
 
     // The backlink for this entry is the latest entry from this public key's log.
     let backlink = latest_entry;
@@ -394,14 +395,15 @@ mod tests {
 
     use p2panda_rs::document::{DocumentId, DocumentViewId};
     use p2panda_rs::entry::encode::sign_and_encode_entry;
-    use p2panda_rs::entry::{Entry, LogId, SeqNum};
+    use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
+    use p2panda_rs::entry::{EncodedEntry, Entry, LogId, SeqNum};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::encode::encode_operation;
     use p2panda_rs::operation::{
         EncodedOperation, Operation, OperationFields, OperationId, OperationValue,
     };
-    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
+    use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
     use p2panda_rs::test_utils::constants::{PRIVATE_KEY, SCHEMA_ID};
     use p2panda_rs::test_utils::db::{MemoryStore, StorageEntry};
     use p2panda_rs::test_utils::fixtures::{
@@ -425,7 +427,7 @@ mod tests {
     fn remove_entries(store: &MemoryStore, author: &Author, entries_to_remove: &[LogIdAndSeqNum]) {
         store.entries.lock().unwrap().retain(|_, entry| {
             !entries_to_remove.contains(&(entry.log_id().as_u64(), entry.seq_num().as_u64()))
-                && &entry.author() == author
+                && entry.public_key() == author
         });
     }
 
@@ -437,7 +439,7 @@ mod tests {
     ) {
         for (hash, entry) in store.entries.lock().unwrap().iter() {
             if operations_to_remove.contains(&(entry.log_id().as_u64(), entry.seq_num().as_u64()))
-                && &entry.author() == author
+                && entry.public_key() == author
             {
                 store
                     .operations
@@ -567,8 +569,10 @@ mod tests {
         // Publish the latest entry again and see what happens.
         let result = publish(
             &db.store,
-            &next_entry.entry_signed(),
-            &next_entry.encoded_operation().unwrap(),
+            &EncodedEntry::new(&next_entry.into_bytes()),
+            &entry
+                .payload()
+                .map(|payload| EncodedOperation::new(&payload.into_bytes())),
         )
         .await;
 
@@ -624,8 +628,8 @@ mod tests {
                     .values()
                     .find(|entry| {
                         entry.seq_num().as_u64() == *seq_num
-                            && entry.log_id.as_u64() == *log_id
-                            && entry.author() == author
+                            && *entry.log_id().as_u64() == log_id
+                            && *entry.public_key() == author
                     })
                     .map(|entry| entry.hash().into())
             })
@@ -700,8 +704,8 @@ mod tests {
                     .values()
                     .find(|entry| {
                         entry.seq_num().as_u64() == *seq_num
-                            && entry.log_id.as_u64() == *log_id
-                            && entry.author() == author_with_removed_operations
+                            && *entry.log_id().as_u64() == log_id
+                            && *entry.public_key() == author_with_removed_operations
                     })
                     .map(|entry| entry.hash().into())
             })
@@ -1112,7 +1116,7 @@ mod tests {
             &SeqNum::new(u64::MAX).unwrap(),
             Some(&random_hash()),
             Some(&random_hash()),
-            &entry_two.encoded_operation(),
+            &entry_two.payload().unwrap(),
             &key_pair,
         )
         .unwrap();
@@ -1161,7 +1165,7 @@ mod tests {
             &SeqNum::new(18446744073709551611).unwrap(),
             Some(&random_hash()),
             Some(&random_hash()),
-            &entry_two.encoded_operation(),
+            entry_two.payload().unwrap(),
             &key_pair,
         )
         .unwrap();
@@ -1180,7 +1184,7 @@ mod tests {
             &SeqNum::new(u64::MAX - 1).unwrap(),
             Some(&random_hash()),
             Some(&random_hash()),
-            &entry_two.encoded_operation(),
+            entry_two.payload().unwrap(),
             &key_pair,
         )
         .unwrap();
@@ -1199,18 +1203,13 @@ mod tests {
             &SeqNum::new(u64::MAX).unwrap(),
             Some(&skiplink.hash()),
             Some(&backlink.hash()),
-            &entry_two.operation(),
+            entry_two.payload().unwrap(),
             &key_pair,
         )
         .unwrap();
 
         // Publish the MAX_SEQ_NUM entry
-        let result = publish(
-            &db.store,
-            &entry_encoded,
-            &entry_two.encoded_operation().unwrap(),
-        )
-        .await;
+        let result = publish(&db.store, &entry_encoded, entry_two.payload().unwrap()).await;
 
         // try and get the MAX_SEQ_NUM entry again (it shouldn't be there)
         let entry_at_max_seq_num = db

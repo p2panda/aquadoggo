@@ -217,6 +217,7 @@ impl LogStore<StorageLog> for SqlStorage {
 #[cfg(test)]
 mod tests {
     use p2panda_rs::document::{DocumentId, DocumentViewId};
+    use p2panda_rs::entry::traits::AsEncodedEntry;
     use p2panda_rs::entry::{EncodedEntry, LogId};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::Author;

@@ -94,7 +94,7 @@ pub async fn get_expected_skiplink<S: StorageProvider>(
     author: &Author,
     log_id: &LogId,
     seq_num: &SeqNum,
-) -> Result<S::StorageEntry> {
+) -> Result<S::Entry> {
     ensure!(
         !seq_num.is_first(),
         anyhow!("Entry with seq num 1 can not have skiplink")
@@ -173,7 +173,7 @@ mod tests {
     use p2panda_rs::document::DocumentId;
     use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::identity::{Author, KeyPair};
-    use p2panda_rs::storage_provider::traits::AsStorageEntry;
+    use p2panda_rs::storage_provider::traits::EntryWithOperation;
     use p2panda_rs::test_utils::constants::PRIVATE_KEY;
     use p2panda_rs::test_utils::fixtures::{key_pair, random_document_id};
     use rstest::rstest;

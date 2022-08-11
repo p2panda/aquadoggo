@@ -31,7 +31,7 @@ impl SqlStorage {
 #[async_trait]
 impl StorageProvider for SqlStorage {
     type StorageLog = StorageLog;
-    type StorageEntry = StorageEntry;
+    type Entry = StorageEntry;
     type StorageOperation = VerifiedOperation;
 
     /// Returns the related document for any entry.

@@ -6,10 +6,12 @@ use std::time::Duration;
 use anyhow::{anyhow, Result};
 use bamboo_rs_core_ed25519_yasmf::verify::verify_batch;
 use log::{debug, error, trace, warn};
+use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
+use p2panda_rs::entry::EncodedEntry;
 use p2panda_rs::entry::LogId;
 use p2panda_rs::entry::SeqNum;
 use p2panda_rs::identity::Author;
-use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
+use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
 use tokio::task;
 
 use crate::bus::{ServiceMessage, ServiceSender};
@@ -121,7 +123,7 @@ async fn verify_entries(entries: &[StorageEntry], context: &Context) -> Result<(
     match first_entry.as_ref() {
         // If the entry is the first in the log then we can don't need to attempt to get the
         // skiplink and previous
-        Some(entry) if entry.seq_num() == SeqNum::new(1).unwrap() => {
+        Some(entry) if *entry.seq_num() == SeqNum::new(1).unwrap() => {
             trace!("First entry had seq_num 1 do no need to get previous entries in db");
         }
         Some(entry) => {
@@ -136,10 +138,8 @@ async fn verify_entries(entries: &[StorageEntry], context: &Context) -> Result<(
         .iter()
         .map(|entry| {
             (
-                entry.entry_bytes(),
-                entry
-                    .operation_encoded()
-                    .map(|operation| operation.to_bytes()),
+                entry.into_bytes(),
+                entry.payload().map(|payload| payload.into_bytes()),
             )
         })
         .collect();
@@ -169,9 +169,9 @@ async fn insert_new_entries(
 
         publish(
             &context.0.store,
-            &entry.entry_signed(),
+            &EncodedEntry::new(&entry.into_bytes()),
             entry
-                .operation_encoded()
+                .payload()
                 .expect("All stored entries contain an operation"),
         )
         .await
@@ -199,7 +199,7 @@ async fn add_certpool_to_entries_for_verification(
         .0
         .store
         .get_certificate_pool(
-            &first_entry.author(),
+            &first_entry.public_key(),
             &first_entry.log_id(),
             &first_entry.seq_num(),
         )
@@ -213,7 +213,7 @@ async fn add_certpool_to_entries_for_verification(
 
 /// Helper method to inform other services (like materialisation service) about new operations.
 fn send_new_entry_service_message(tx: ServiceSender, entry: &StorageEntry) {
-    let bus_message = ServiceMessage::NewOperation(entry.entry_signed().hash().into());
+    let bus_message = ServiceMessage::NewOperation(entry.hash().into());
 
     if tx.send(bus_message).is_err() {
         // Silently fail here as we don't mind if there are no subscribers
@@ -228,7 +228,7 @@ async fn get_latest_seq_num(context: &Context, log_id: &LogId, author: &Author) 
         .await
         .ok()
         .flatten()
-        .map(|entry| *entry.entry_decoded().seq_num())
+        .map(|entry| *entry.seq_num())
 }
 
 #[cfg(test)]
@@ -302,15 +302,9 @@ mod tests {
 
             // Our test database helper already populated the database for us. We retreive the
             // public keys here of the authors who created these test data entries
-            let public_key = billie_db
-                .test_data
-                .key_pairs
-                .first()
-                .unwrap()
-                .public_key()
-                .to_owned();
+            let public_key = billie_db.test_data.key_pairs.first().unwrap().public_key();
 
-            let author = Author::try_from(public_key).unwrap();
+            let author = Author::from(public_key);
             let log_ids: Vec<u64> = vec![0];
             let author_str: String = author.as_str().into();
             let endpoint: String = "http://localhost:3022/graphql".into();

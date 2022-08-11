@@ -119,6 +119,7 @@ async fn get_related_schema_definitions(
 mod tests {
     use log::debug;
     use p2panda_rs::document::{DocumentId, DocumentViewId};
+    use p2panda_rs::entry::traits::AsEncodedEntry;
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::{Operation, OperationValue, PinnedRelationList};
     use p2panda_rs::schema::{FieldType, SchemaId};

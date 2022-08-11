@@ -5,8 +5,9 @@ use std::convert::TryFrom;
 use anyhow::{anyhow, Error};
 use async_graphql::{ComplexObject, Context, SimpleObject};
 use p2panda_rs::entry::decode::decode_entry;
+use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
 use p2panda_rs::entry::EncodedEntry;
-use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
+use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
 use serde::{Deserialize, Serialize};
 
 use crate::db::provider::SqlStorage;
@@ -44,7 +45,7 @@ impl EncodedEntryAndOperation {
 
         let entries = result
             .into_iter()
-            .map(|entry| entry.entry_signed().clone().into())
+            .map(|entry| EncodedEntry::new(&entry.into_bytes()).into())
             .collect();
 
         Ok(entries)
@@ -52,9 +53,9 @@ impl EncodedEntryAndOperation {
 }
 
 impl From<StorageEntry> for EncodedEntryAndOperation {
-    fn from(entry_row: StorageEntry) -> Self {
-        let entry = entry_row.entry_signed().to_owned().into();
-        let operation = entry_row.operation_encoded().map(|op| op.to_owned().into());
+    fn from(storage_entry: StorageEntry) -> Self {
+        let entry = EncodedEntry::new(&storage_entry.into_bytes()).into();
+        let operation = Some(storage_entry.payload().to_owned().into());
         Self { entry, operation }
     }
 }
@@ -66,8 +67,22 @@ impl TryFrom<EncodedEntryAndOperation> for StorageEntry {
         let operation = encoded
             .operation
             .ok_or_else(|| anyhow!("Storage entry requires operation to be given"))?;
+        let encoded_entry = encoded.entry;
+        let entry = decode_entry(&encoded_entry.into())?;
 
-        Ok(StorageEntry::new(&encoded.entry.into())?)
+        let storage_entry = StorageEntry {
+            author: entry.public_key().to_owned(),
+            log_id: entry.log_id().to_owned(),
+            seq_num: entry.seq_num().to_owned(),
+            skiplink: entry.skiplink().cloned(),
+            backlink: entry.backlink().cloned(),
+            payload_size: entry.payload_size(),
+            payload_hash: entry.payload_hash().to_owned(),
+            signature: entry.signature().to_owned(),
+            encoded_entry: encoded_entry.into(),
+            payload: operation.into(),
+        };
+        Ok(storage_entry)
     }
 }
 
@@ -79,7 +94,7 @@ mod tests {
     use bamboo_rs_core_ed25519_yasmf::verify_batch;
     use p2panda_rs::entry::{EncodedEntry, LogId};
     use p2panda_rs::identity::Author;
-    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
+    use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
     use rstest::rstest;
 
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};

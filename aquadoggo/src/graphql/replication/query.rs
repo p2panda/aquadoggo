@@ -3,8 +3,9 @@
 use anyhow::Error;
 use async_graphql::connection::{query, Connection, CursorType, Edge, EmptyFields};
 use async_graphql::{Context, Object, Result};
+use p2panda_rs::entry::traits::AsEntry;
 use p2panda_rs::entry::SeqNum;
-use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
+use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
 
 use crate::db::provider::SqlStorage;
 use crate::graphql::replication::response::EncodedEntryAndOperation;

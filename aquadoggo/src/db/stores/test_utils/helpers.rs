@@ -4,6 +4,7 @@ use std::convert::TryFrom;
 
 use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
 use p2panda_rs::entry::encode::sign_and_encode_entry;
+use p2panda_rs::entry::traits::AsEncodedEntry;
 use p2panda_rs::entry::{EncodedEntry, Entry};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::{Author, KeyPair};
