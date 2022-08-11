@@ -2,13 +2,30 @@
 
 use std::fmt::Display;
 
-use async_graphql::scalar;
+use async_graphql::{InputValueError, InputValueResult, Scalar, ScalarType, Value};
 use p2panda_rs::entry::LogId;
 use serde::{Deserialize, Serialize};
 
 /// Log id of a bamboo entry.
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub struct LogIdScalar(LogId);
+
+#[Scalar(name = "LogId")]
+impl ScalarType for LogIdScalar {
+    fn parse(value: Value) -> InputValueResult<Self> {
+        match &value {
+            Value::String(str_value) => {
+                let log_id = str_value.as_str().parse::<LogId>()?;
+                Ok(LogIdScalar(log_id))
+            }
+            _ => Err(InputValueError::expected_type(value)),
+        }
+    }
+
+    fn to_value(&self) -> Value {
+        Value::String(self.0.as_u64().to_string())
+    }
+}
 
 impl From<LogId> for LogIdScalar {
     fn from(log_id: LogId) -> Self {
@@ -54,10 +71,9 @@ impl Display for LogIdScalar {
     }
 }
 
-scalar!(LogIdScalar);
-
 #[cfg(test)]
 mod tests {
+    use async_graphql::ScalarType;
     use p2panda_rs::entry::LogId;
     use serde::{Deserialize, Serialize};
 
@@ -77,5 +93,21 @@ mod tests {
         let serialised = serde_json::to_string(&val).unwrap();
         assert_eq!(serialised, "{\"log_id\":\"0\"}".to_string());
         assert_eq!(val, serde_json::from_str(&serialised).unwrap());
+    }
+
+    #[test]
+    fn scalar_type() {
+        // Convert to gql value
+        let value = LogId::default();
+        let scalar_value: LogIdScalar = value.into();
+        let gql_value: async_graphql::Value = scalar_value.to_value();
+
+        // Convert back
+        let converted_value = LogIdScalar::parse(gql_value).unwrap().into();
+        assert_eq!(value, converted_value);
+
+        // Convert invalid type
+        let invalid_conversion = LogIdScalar::parse(async_graphql::Value::Boolean(true));
+        assert!(invalid_conversion.is_err())
     }
 }
