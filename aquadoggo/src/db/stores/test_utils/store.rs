@@ -17,7 +17,7 @@ use crate::context::Context;
 use crate::db::provider::SqlStorage;
 use crate::db::stores::test_utils::{doggo_test_fields, test_key_pairs};
 use crate::domain::{next_args, publish};
-use crate::graphql::client::NextEntryArguments;
+use crate::graphql::client::NextArguments;
 use crate::materializer::tasks::{dependency_task, reduce_task, schema_task};
 use crate::materializer::TaskInput;
 use crate::{Configuration, SchemaProvider};
@@ -243,23 +243,23 @@ pub async fn send_to_store<S: StorageProvider>(
     operation: &Operation,
     document_id: Option<&DocumentId>,
     key_pair: &KeyPair,
-) -> (EntrySigned, NextEntryArguments) {
+) -> (EntrySigned, NextArguments) {
     // Get an Author from the key_pair.
     let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
     let document_view_id: Option<DocumentViewId> =
         document_id.map(|id| id.as_str().parse().unwrap());
 
-    let next_entry_args = next_args(store, &author, document_view_id.as_ref())
+    let next_args = next_args(store, &author, document_view_id.as_ref())
         .await
         .unwrap();
 
     // Construct the next entry.
     let next_entry = Entry::new(
-        &next_entry_args.log_id.into(),
+        &next_args.log_id.into(),
         Some(operation),
-        next_entry_args.skiplink.map(Hash::from).as_ref(),
-        next_entry_args.backlink.map(Hash::from).as_ref(),
-        &next_entry_args.seq_num.into(),
+        next_args.skiplink.map(Hash::from).as_ref(),
+        next_args.backlink.map(Hash::from).as_ref(),
+        &next_args.seq_num.into(),
     )
     .unwrap();
 
@@ -267,7 +267,7 @@ pub async fn send_to_store<S: StorageProvider>(
     let entry_encoded = sign_and_encode(&next_entry, key_pair).unwrap();
     let operation_encoded = OperationEncoded::try_from(operation).unwrap();
 
-    // Publish the entry and get the next entry args.
+    // Publish the entry and get the next entry's arguments.
     let publish_entry_response = publish(store, &entry_encoded, &operation_encoded)
         .await
         .expect("Error publishing entry");

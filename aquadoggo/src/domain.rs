@@ -14,7 +14,7 @@ use p2panda_rs::operation::{
 use p2panda_rs::storage_provider::traits::{AsStorageEntry, AsStorageLog, StorageProvider};
 use p2panda_rs::Human;
 
-use crate::graphql::client::NextEntryArguments;
+use crate::graphql::client::NextArguments;
 use crate::validation::{
     ensure_document_not_deleted, get_expected_skiplink, increment_seq_num, is_next_seq_num,
     next_log_id, verify_log_id,
@@ -57,9 +57,9 @@ pub async fn next_args<S: StorageProvider>(
     store: &S,
     public_key: &Author,
     document_view_id: Option<&DocumentViewId>,
-) -> Result<NextEntryArguments> {
+) -> Result<NextArguments> {
     // Init the next args with base default values.
-    let mut next_args = NextEntryArguments {
+    let mut next_args = NextArguments {
         backlink: None,
         skiplink: None,
         seq_num: SeqNum::default().into(),
@@ -204,7 +204,7 @@ pub async fn publish<S: StorageProvider>(
     store: &S,
     entry_encoded: &EntrySigned,
     operation_encoded: &OperationEncoded,
-) -> Result<NextEntryArguments> {
+) -> Result<NextArguments> {
     ////////////////////////////////
     // DECODE ENTRY AND OPERATION //
     ////////////////////////////////
@@ -322,7 +322,7 @@ pub async fn publish<S: StorageProvider>(
     }
     .map(|entry| entry.hash());
 
-    let next_args = NextEntryArguments {
+    let next_args = NextArguments {
         log_id: (*log_id).into(),
         seq_num: next_seq_num.into(),
         backlink: backlink.map(|hash| hash.into()),
@@ -411,7 +411,7 @@ mod tests {
         test_db_config, PopulateDatabaseConfig, TestDatabase, TestDatabaseRunner,
     };
     use crate::domain::publish;
-    use crate::graphql::client::NextEntryArguments;
+    use crate::graphql::client::NextArguments;
 
     use super::{get_checked_document_id_for_view_id, next_args};
 
@@ -793,7 +793,7 @@ mod tests {
                 .map(|entry| entry.hash()),
             None => None,
         };
-        let expected_next_args = NextEntryArguments {
+        let expected_next_args = NextArguments {
             log_id: expected_log_id.into(),
             seq_num: expected_seq_num.into(),
             backlink: expected_backlink.map(|hash| hash.into()),
@@ -821,7 +821,7 @@ mod tests {
         let result = next_args(&db.store, &public_key, None).await;
         assert!(result.is_ok());
         assert_eq!(
-            NextEntryArguments {
+            NextArguments {
                 backlink: None,
                 skiplink: None,
                 log_id: LogId::new(1).into(),
@@ -1042,27 +1042,27 @@ mod tests {
                 let document_view_id: Option<DocumentViewId> =
                     document_id.clone().map(|id| id.as_str().parse().unwrap());
 
-                let next_entry_args = next_args(&db.store, &author, document_view_id.as_ref())
+                let next_args = next_args(&db.store, &author, document_view_id.as_ref())
                     .await
                     .unwrap();
 
                 let operation = if index == 0 {
                     create_operation(&[("name", OperationValue::Text("Panda".to_string()))])
                 } else if index == (num_of_entries - 1) {
-                    delete_operation(&next_entry_args.backlink.clone().unwrap().into())
+                    delete_operation(&next_args.backlink.clone().unwrap().into())
                 } else {
                     update_operation(
                         &[("name", OperationValue::Text("🐼".to_string()))],
-                        &next_entry_args.backlink.clone().unwrap().into(),
+                        &next_args.backlink.clone().unwrap().into(),
                     )
                 };
 
                 let entry = Entry::new(
-                    &next_entry_args.log_id.into(),
+                    &next_args.log_id.into(),
                     Some(&operation),
-                    next_entry_args.skiplink.map(Hash::from).as_ref(),
-                    next_entry_args.backlink.map(Hash::from).as_ref(),
-                    &next_entry_args.seq_num.into(),
+                    next_args.skiplink.map(Hash::from).as_ref(),
+                    next_args.backlink.map(Hash::from).as_ref(),
+                    &next_args.seq_num.into(),
                 )
                 .unwrap();
 

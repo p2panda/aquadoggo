@@ -9,7 +9,7 @@ use p2panda_rs::Validate;
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::provider::SqlStorage;
 use crate::domain::publish;
-use crate::graphql::client::NextEntryArguments;
+use crate::graphql::client::NextArguments;
 use crate::graphql::scalars;
 
 /// GraphQL queries for the Client API.
@@ -18,7 +18,7 @@ pub struct ClientMutationRoot;
 
 #[Object]
 impl ClientMutationRoot {
-    /// Publish an entry using parameters obtained through `nextEntryArgs` query.
+    /// Publish an entry using parameters obtained through `nextArgs` query.
     ///
     /// Returns arguments for publishing the next entry in the same log.
     async fn publish_entry(
@@ -31,7 +31,7 @@ impl ClientMutationRoot {
             desc = "p2panda operation representing the entry payload."
         )]
         operation: scalars::EncodedOperationScalar,
-    ) -> Result<NextEntryArguments> {
+    ) -> Result<NextArguments> {
         let store = ctx.data::<SqlStorage>()?;
         let tx = ctx.data::<ServiceSender>()?;
 
@@ -700,27 +700,27 @@ mod tests {
                     let document_view_id: Option<DocumentViewId> =
                         document_id.clone().map(|id| id.as_str().parse().unwrap());
 
-                    let next_entry_args = next_args(&db.store, &author, document_view_id.as_ref())
+                    let next_args = next_args(&db.store, &author, document_view_id.as_ref())
                         .await
                         .unwrap();
 
                     let operation = if index == 0 {
                         create_operation(&[("name", OperationValue::Text("Panda".to_string()))])
                     } else if index == (num_of_entries - 1) {
-                        delete_operation(&next_entry_args.backlink.clone().unwrap().into())
+                        delete_operation(&next_args.backlink.clone().unwrap().into())
                     } else {
                         update_operation(
                             &[("name", OperationValue::Text("🐼".to_string()))],
-                            &next_entry_args.backlink.clone().unwrap().into(),
+                            &next_args.backlink.clone().unwrap().into(),
                         )
                     };
 
                     let entry = Entry::new(
-                        &next_entry_args.log_id.into(),
+                        &next_args.log_id.into(),
                         Some(&operation),
-                        next_entry_args.skiplink.map(Hash::from).as_ref(),
-                        next_entry_args.backlink.map(Hash::from).as_ref(),
-                        &next_entry_args.seq_num.into(),
+                        next_args.skiplink.map(Hash::from).as_ref(),
+                        next_args.backlink.map(Hash::from).as_ref(),
+                        &next_args.seq_num.into(),
                     )
                     .unwrap();
 

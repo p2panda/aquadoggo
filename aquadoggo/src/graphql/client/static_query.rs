@@ -8,7 +8,7 @@ use p2panda_rs::Validate;
 
 use crate::db::provider::SqlStorage;
 use crate::domain::next_args;
-use crate::graphql::client::NextEntryArguments;
+use crate::graphql::client::NextArguments;
 use crate::graphql::scalars;
 
 /// GraphQL queries for the Client API.
@@ -18,7 +18,7 @@ pub struct StaticQuery;
 #[Object]
 impl StaticQuery {
     /// Return required arguments for publishing the next entry.
-    async fn next_entry_args(
+    async fn next_args(
         &self,
         ctx: &Context<'_>,
         #[graphql(
@@ -33,8 +33,8 @@ impl StaticQuery {
             can be left empty when it is a CREATE operation"
         )]
         document_id: Option<scalars::DocumentIdScalar>,
-    ) -> Result<NextEntryArguments> {
-        // @TODO: The api for `next_entry_args` needs to be updated to accept a `DocumentViewId`
+    ) -> Result<NextArguments> {
+        // @TODO: The api for `next_args` needs to be updated to accept a `DocumentViewId`
 
         // Access the store from context.
         let store = ctx.data::<SqlStorage>()?;
@@ -52,7 +52,7 @@ impl StaticQuery {
         let document_view_id: Option<DocumentViewId> =
             document_id.map(|id| id.as_str().parse().unwrap());
 
-        // Calculate next entry args.
+        // Calculate next entry's arguments.
         next_args(store, &public_key, document_view_id.as_ref()).await
     }
 }
@@ -74,7 +74,7 @@ mod tests {
     use crate::test_helpers::TestClient;
 
     #[rstest]
-    fn next_entry_args_valid_query(#[from(test_db)] runner: TestDatabaseRunner) {
+    fn next_args_valid_query(#[from(test_db)] runner: TestDatabaseRunner) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
             let (tx, _) = broadcast::channel(16);
             let schema_provider = SchemaProvider::default();
@@ -88,7 +88,7 @@ mod tests {
                 .post("/graphql")
                 .json(&json!({
                     "query": r#"{
-                        nextEntryArgs(
+                        nextArgs(
                             publicKey: "8b52ae153142288402382fd6d9619e018978e015e6bc372b1b0c7bd40c6a240a"
                         ) {
                             logId,
@@ -106,7 +106,7 @@ mod tests {
             assert_eq!(
                 received_entry_args.data,
                 value!({
-                    "nextEntryArgs": {
+                    "nextArgs": {
                         "logId": "0",
                         "seqNum": "1",
                         "backlink": null,
@@ -117,7 +117,7 @@ mod tests {
         })
     }
     #[rstest]
-    fn next_entry_args_valid_query_with_document_id(
+    fn next_args_valid_query_with_document_id(
         #[with(1, 1, 1)]
         #[from(test_db)]
         runner: TestDatabaseRunner,
@@ -141,7 +141,7 @@ mod tests {
                     "query":
                         format!(
                             "{{
-                        nextEntryArgs(
+                        nextArgs(
                             publicKey: \"{}\",
                             documentId: \"{}\"
                         ) {{
@@ -164,7 +164,7 @@ mod tests {
             assert_eq!(
                 received_entry_args.data,
                 value!({
-                    "nextEntryArgs": {
+                    "nextArgs": {
                         "logId": "0",
                         "seqNum": "2",
                         "backlink": "0020c8e09edd863b308f9c60b8ba506f29da512d0c9b5a131287f402c57777af5678",
@@ -176,7 +176,7 @@ mod tests {
     }
 
     #[rstest]
-    fn next_entry_args_error_response(#[from(test_db)] runner: TestDatabaseRunner) {
+    fn next_args_error_response(#[from(test_db)] runner: TestDatabaseRunner) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
             let (tx, _) = broadcast::channel(16);
             let schema_provider = SchemaProvider::default();
@@ -188,7 +188,7 @@ mod tests {
                 .post("/graphql")
                 .json(&json!({
                     "query": r#"{
-                    nextEntryArgs(publicKey: "nope") {
+                    nextArgs(publicKey: "nope") {
                         logId
                     }
                 }"#,
