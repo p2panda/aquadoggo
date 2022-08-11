@@ -15,7 +15,7 @@ use p2panda_rs::operation::{
 };
 use p2panda_rs::schema::{FieldType, Schema, SchemaId};
 use p2panda_rs::storage_provider::traits::StorageProvider;
-use p2panda_rs::test_utils::constants::SCHEMA_ID;
+use p2panda_rs::test_utils::constants::{test_fields, SCHEMA_ID};
 use p2panda_rs::test_utils::fixtures::{operation, operation_fields};
 
 use crate::context::Context;
@@ -60,7 +60,6 @@ impl TestDatabase {
     pub async fn add_document(
         &mut self,
         schema_id: &SchemaId,
-        fields: OperationFields,
         key_pair: &KeyPair,
     ) -> DocumentViewId {
         info!("Creating document for {}", schema_id);
@@ -75,7 +74,7 @@ impl TestDatabase {
 
         // Build, publish and reduce create operation for document.
         let create_op = OperationBuilder::new(schema.id())
-            .fields(&fields.into())
+            .fields(&test_fields())
             .build()
             .unwrap();
         let (entry_signed, _) = send_to_store(&self.store, &create_op, None, key_pair).await;
