@@ -401,14 +401,15 @@ mod tests {
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::encode::encode_operation;
     use p2panda_rs::operation::{
-        EncodedOperation, Operation, OperationFields, OperationId, OperationValue,
+        EncodedOperation, Operation, OperationBuilder, OperationFields, OperationId, OperationValue,
     };
+    use p2panda_rs::schema::SchemaId;
     use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
     use p2panda_rs::test_utils::constants::{PRIVATE_KEY, SCHEMA_ID};
     use p2panda_rs::test_utils::db::{MemoryStore, StorageEntry};
     use p2panda_rs::test_utils::fixtures::{
         create_operation, delete_operation, key_pair, operation, operation_fields, public_key,
-        random_document_view_id, random_hash, update_operation,
+        random_document_view_id, random_hash, schema_id, update_operation,
     };
     use rstest::rstest;
 
@@ -463,6 +464,7 @@ mod tests {
 
     #[rstest]
     fn gets_document_id_for_view(
+        schema_id: SchemaId,
         #[from(test_db)] runner: TestDatabaseRunner,
         operation: Operation,
         operation_fields: OperationFields,
@@ -473,12 +475,11 @@ mod tests {
             let operation_one_id: OperationId = entry.hash().into();
 
             // Store another entry and operation, from a different author, which perform an update on the earlier operation.
-            let update_operation = Operation::new_update(
-                SCHEMA_ID.parse().unwrap(),
-                operation_one_id.clone().into(),
-                operation_fields,
-            )
-            .unwrap();
+            let update_operation = OperationBuilder::new(&schema_id)
+                .previous_operations(&operation_one_id.clone().into())
+                .fields(operation_fields.into())
+                .build()
+                .unwrap();
 
             let (entry, _) = send_to_store(
                 &db.store,
@@ -599,6 +600,7 @@ mod tests {
     #[case::previous_operations_invalid_multiple_document_id(&[], &[(0, 8), (1, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
     #[tokio::test]
     async fn publish_with_missing_operations(
+        schema_id: SchemaId,
         // The operations to be removed from the db
         #[case] operations_to_remove: &[LogIdAndSeqNum],
         // The previous operations described by their log id and seq number (log_id, seq_num)
@@ -638,12 +640,11 @@ mod tests {
         let document_view_id = DocumentViewId::new(&previous_operations);
 
         // Compose the next operation.
-        let next_operation = Operation::new_update(
-            SCHEMA_ID.parse().unwrap(),
-            document_view_id,
-            operation_fields(doggo_test_fields()),
-        )
-        .unwrap();
+        let next_operation = OperationBuilder::new(&schema_id)
+            .previous_operations(&document_view_id)
+            .fields(&doggo_test_fields())
+            .build()
+            .unwrap();
 
         // Encode an entry and the operation.
         let (entry, operation) =
@@ -877,6 +878,7 @@ mod tests {
     #[case::new_author_updates_to_wrong_new_log(LogId::new(1), KeyPair::new())]
     #[tokio::test]
     async fn publish_update_log_tests(
+        schema_id: SchemaId,
         #[case] log_id: LogId,
         #[case] key_pair: KeyPair,
         #[from(test_db_config)]
@@ -891,12 +893,11 @@ mod tests {
         let document_view_id: DocumentViewId = document_id.as_str().parse().unwrap();
         let author_performing_update = Author::from(key_pair.public_key());
 
-        let update_operation = Operation::new_update(
-            SCHEMA_ID.parse().unwrap(),
-            document_view_id.clone(),
-            operation_fields(doggo_test_fields()),
-        )
-        .unwrap();
+        let update_operation = OperationBuilder::new(&schema_id)
+            .previous_operations(&document_view_id)
+            .fields(&doggo_test_fields())
+            .build()
+            .unwrap();
 
         let latest_entry = db
             .store
@@ -977,6 +978,7 @@ mod tests {
     #[case(KeyPair::new())]
     #[tokio::test]
     async fn publish_to_deleted_documents(
+        schema_id: SchemaId,
         #[case] key_pair: KeyPair,
         #[from(test_db_config)]
         #[with(2, 1, 1, true)]
@@ -990,8 +992,10 @@ mod tests {
         let document_view_id: DocumentViewId = document_id.as_str().parse().unwrap();
         let author_performing_update = Author::from(key_pair.public_key());
 
-        let delete_operation =
-            Operation::new_delete(SCHEMA_ID.parse().unwrap(), document_view_id.clone()).unwrap();
+        let delete_operation = OperationBuilder::new(&schema_id)
+            .previous_operations(&document_view_id)
+            .build()
+            .unwrap();
 
         let latest_entry = db
             .store

@@ -10,7 +10,9 @@ use p2panda_rs::entry::{EncodedEntry, Entry};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::{Author, KeyPair};
 use p2panda_rs::operation::encode::encode_operation;
-use p2panda_rs::operation::{EncodedOperation, Operation, OperationFields, OperationValue};
+use p2panda_rs::operation::{
+    EncodedOperation, Operation, OperationBuilder, OperationFields, OperationValue,
+};
 use p2panda_rs::schema::{FieldType, Schema, SchemaId};
 use p2panda_rs::storage_provider::traits::StorageProvider;
 use p2panda_rs::test_utils::constants::SCHEMA_ID;
@@ -72,7 +74,10 @@ impl TestDatabase {
             .expect("Schema not found");
 
         // Build, publish and reduce create operation for document.
-        let create_op = Operation::new_create(schema.id().to_owned(), fields).unwrap();
+        let create_op = OperationBuilder::new(schema.id())
+            .fields(&fields.into())
+            .build()
+            .unwrap();
         let (entry_signed, _) = send_to_store(&self.store, &create_op, None, key_pair).await;
         let input = TaskInput::new(Some(DocumentId::from(entry_signed.hash())), None);
         let dependency_tasks = reduce_task(self.context.clone(), input.clone())

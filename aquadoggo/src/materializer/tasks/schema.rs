@@ -121,7 +121,7 @@ mod tests {
     use p2panda_rs::document::{DocumentId, DocumentViewId};
     use p2panda_rs::entry::traits::AsEncodedEntry;
     use p2panda_rs::identity::KeyPair;
-    use p2panda_rs::operation::{Operation, OperationValue, PinnedRelationList};
+    use p2panda_rs::operation::{Operation, OperationBuilder, OperationValue, PinnedRelationList};
     use p2panda_rs::schema::{FieldType, SchemaId};
     use p2panda_rs::test_utils::fixtures::operation_fields;
     use rstest::rstest;
@@ -142,14 +142,13 @@ mod tests {
         db: &TestDatabase,
     ) -> (DocumentViewId, DocumentViewId) {
         // Create field definition
-        let create_field_definition = Operation::new_create(
-            SchemaId::SchemaFieldDefinition(1),
-            operation_fields(vec![
+        let create_field_definition = OperationBuilder::new(&SchemaId::SchemaFieldDefinition(1))
+            .fields(&[
                 ("name", OperationValue::String("field_name".to_string())),
                 ("type", FieldType::String.into()),
-            ]),
-        )
-        .unwrap();
+            ])
+            .build()
+            .unwrap();
 
         let (entry_signed, _) =
             send_to_store(&db.store, &create_field_definition, None, &KeyPair::new()).await;
@@ -168,9 +167,8 @@ mod tests {
         debug!("Created field definition {}", &field_view_id);
 
         // Create schema definition
-        let create_schema_definition = Operation::new_create(
-            SchemaId::SchemaDefinition(1),
-            operation_fields(vec![
+        let create_schema_definition = OperationBuilder::new(&SchemaId::SchemaDefinition(1))
+            .fields(&[
                 ("name", OperationValue::String("schema_name".to_string())),
                 (
                     "description",
@@ -182,9 +180,9 @@ mod tests {
                         field_view_id.clone(),
                     ])),
                 ),
-            ]),
-        )
-        .unwrap();
+            ])
+            .build()
+            .unwrap();
 
         let (entry_signed, _) =
             send_to_store(&db.store, &create_schema_definition, None, &KeyPair::new()).await;

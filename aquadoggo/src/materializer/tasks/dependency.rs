@@ -178,7 +178,8 @@ mod tests {
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::traits::AsVerifiedOperation;
     use p2panda_rs::operation::{
-        Operation, OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList,
+        Operation, OperationBuilder, OperationValue, PinnedRelation, PinnedRelationList, Relation,
+        RelationList,
     };
     use p2panda_rs::schema::{FieldType, SchemaId};
     use p2panda_rs::storage_provider::traits::OperationStore;
@@ -530,9 +531,8 @@ mod tests {
 
     #[rstest]
     #[case::schema_definition_with_dependencies_met_dispatches_one_schema_task(
-        Operation::new_create(
-            SchemaId::SchemaDefinition(1),
-            operation_fields(vec![
+        OperationBuilder::new(&SchemaId::SchemaDefinition(1))
+            .fields(&[
                 ("name", OperationValue::Text("schema_name".to_string())),
                 (
                     "description",
@@ -547,14 +547,12 @@ mod tests {
                             .parse().unwrap(),
                     ])),
                 ),
-            ]),
-        ).unwrap(),
+            ]).build().unwrap(),
         1
     )]
     #[case::schema_definition_without_dependencies_met_dispatches_zero_schema_task(
-        Operation::new_create(
-            SchemaId::SchemaDefinition(1),
-            operation_fields(vec![
+        OperationBuilder::new(&SchemaId::SchemaDefinition(1))
+            .fields(&[
                 ("name", OperationValue::Text("schema_name".to_string())),
                 (
                     "description",
@@ -567,8 +565,7 @@ mod tests {
                         random_document_view_id(),
                     ])),
                 ),
-            ]),
-        ).unwrap(),
+            ]).build().unwrap(),
         0
     )]
     fn dispatches_schema_tasks_for_schema_definitions(
