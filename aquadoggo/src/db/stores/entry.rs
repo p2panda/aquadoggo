@@ -2,14 +2,14 @@
 
 use async_trait::async_trait;
 use lipmaa_link::get_lipmaa_links_back_to;
-use p2panda_rs::entry::{decode_entry, Entry, EntrySigned, LogId, SeqNum};
+use p2panda_rs::entry::decode::decode_entry;
+use p2panda_rs::entry::{EncodedEntry, Entry, LogId, SeqNum};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
-use p2panda_rs::operation::{Operation, OperationEncoded};
+use p2panda_rs::operation::{EncodedOperation, Operation};
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::storage_provider::errors::EntryStorageError;
+use p2panda_rs::storage_provider::error::{EntryStorageError, ValidationError};
 use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
-use p2panda_rs::storage_provider::ValidationError;
 use p2panda_rs::Validate;
 use sqlx::{query, query_as};
 
@@ -22,72 +22,60 @@ use crate::db::provider::SqlStorage;
 ///
 /// This struct implements the `AsStorageEntry` trait which is required when constructing the
 /// `EntryStore`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct StorageEntry {
-    entry_signed: EntrySigned,
-    operation_encoded: OperationEncoded,
+    /// Public key of the author.
+    pub author: Author,
+
+    /// Actual Bamboo entry data.
+    pub entry_bytes: EncodedEntry,
+
+    /// Hash of Bamboo entry data.
+    pub entry_hash: Hash,
+
+    /// Used log for this entry.
+    pub log_id: LogId,
+
+    /// Hash of payload data.
+    pub payload_hash: Hash,
+
+    /// Sequence number of this entry.
+    pub seq_num: SeqNum,
 }
 
 impl StorageEntry {
+    /// Get the decoded entry.
     pub fn entry_decoded(&self) -> Entry {
-        // Unwrapping as validation occurs in `EntryWithOperation`.
-        decode_entry(self.entry_signed(), self.operation_encoded()).unwrap()
+        // Unwrapping as validation occurs in constructor.
+        decode_entry(&self.entry_signed()).unwrap()
     }
 
-    pub fn entry_signed(&self) -> &EntrySigned {
-        &self.entry_signed
-    }
-
-    pub fn operation_encoded(&self) -> Option<&OperationEncoded> {
-        Some(&self.operation_encoded)
+    /// Get the encoded entry.
+    pub fn entry_signed(&self) -> EncodedEntry {
+        self.entry_bytes.clone()
     }
 }
 
-impl Validate for StorageEntry {
-    type Error = ValidationError;
-
-    fn validate(&self) -> Result<(), Self::Error> {
-        self.entry_signed().validate()?;
-        if let Some(operation) = self.operation_encoded() {
-            operation.validate()?;
-        }
-        decode_entry(self.entry_signed(), self.operation_encoded())?;
-        Ok(())
-    }
-}
-
-/// `From` implementation for converting an `EntryRow` into a `StorageEntry`. This is useful when
-/// retrieving entries from the database. The `sqlx` crate coerces returned entry rows into
-/// `EntryRow` but we normally want them as `StorageEntry`.
-impl From<EntryRow> for StorageEntry {
-    fn from(entry_row: EntryRow) -> Self {
-        // Unwrapping everything here as we assume values coming from the database are valid.
-        let entry_signed = EntrySigned::new(&entry_row.entry_bytes).unwrap();
-        let operation_encoded = OperationEncoded::new(&entry_row.payload_bytes.unwrap()).unwrap();
-        StorageEntry::new(&entry_signed, &operation_encoded).unwrap()
-    }
-}
-
-/// Implement `AsStorageEntry` trait for `EntryRow`.
 impl AsStorageEntry for StorageEntry {
     type AsStorageEntryError = EntryStorageError;
 
-    fn new(
-        entry_signed: &EntrySigned,
-        operation_encoded: &OperationEncoded,
-    ) -> Result<Self, Self::AsStorageEntryError> {
-        let storage_entry = Self {
-            entry_signed: entry_signed.clone(),
-            operation_encoded: operation_encoded.clone(),
+    fn new(entry: &EncodedEntry) -> Result<Self, Self::AsStorageEntryError> {
+        let entry_decoded = decode_entry(entry).unwrap();
+
+        let entry = StorageEntry {
+            author: entry_decoded.public_key().to_owned(),
+            entry_bytes: entry.clone(),
+            entry_hash: entry.hash(),
+            log_id: entry_decoded.log_id().to_owned(),
+            payload_hash: entry_decoded.payload_hash().to_owned(),
+            seq_num: entry_decoded.seq_num().to_owned(),
         };
 
-        storage_entry.validate()?;
-
-        Ok(storage_entry)
+        Ok(entry)
     }
 
     fn author(&self) -> Author {
-        self.entry_signed.author()
+        self.entry_decoded().public_key().to_owned()
     }
 
     fn hash(&self) -> Hash {
@@ -95,15 +83,15 @@ impl AsStorageEntry for StorageEntry {
     }
 
     fn entry_bytes(&self) -> Vec<u8> {
-        self.entry_signed().to_bytes()
+        self.entry_signed().into_bytes()
     }
 
     fn backlink_hash(&self) -> Option<Hash> {
-        self.entry_decoded().backlink_hash().cloned()
+        self.entry_decoded().backlink().cloned()
     }
 
     fn skiplink_hash(&self) -> Option<Hash> {
-        self.entry_decoded().skiplink_hash().cloned()
+        self.entry_decoded().skiplink().cloned()
     }
 
     fn seq_num(&self) -> SeqNum {
@@ -113,10 +101,16 @@ impl AsStorageEntry for StorageEntry {
     fn log_id(&self) -> LogId {
         *self.entry_decoded().log_id()
     }
+}
 
-    fn operation(&self) -> Operation {
-        let operation_encoded = self.operation_encoded().unwrap();
-        Operation::from(operation_encoded)
+/// `From` implementation for converting an `EntryRow` into a `StorageEntry`. This is useful when
+/// retrieving entries from the database. The `sqlx` crate coerces returned entry rows into
+/// `EntryRow` but we normally want them as `StorageEntry`.
+impl From<EntryRow> for StorageEntry {
+    fn from(entry_row: EntryRow) -> Self {
+        // Unwrapping everything here as we assume values coming from the database are valid.
+        let entry_signed = EncodedEntry::new(&entry_row.entry_bytes.as_bytes());
+        StorageEntry::new(&entry_signed).unwrap()
     }
 }
 
@@ -149,7 +143,7 @@ impl EntryStore<StorageEntry> for SqlStorage {
             ",
         )
         .bind(entry.author().as_str())
-        .bind(entry.entry_signed().as_str())
+        .bind(entry.entry_signed().to_string())
         .bind(entry.hash().as_str())
         .bind(entry.log_id().as_u64().to_string())
         .bind(entry.operation_encoded().unwrap().as_str())
@@ -419,26 +413,25 @@ impl EntryStore<StorageEntry> for SqlStorage {
 mod tests {
     use std::convert::TryFrom;
 
-    use p2panda_rs::entry::{sign_and_encode, Entry};
+    use p2panda_rs::entry::encode::sign_and_encode_entry;
+    use p2panda_rs::entry::{EncodedEntry, Entry};
     use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
-    use p2panda_rs::operation::OperationEncoded;
+    use p2panda_rs::operation::EncodedOperation;
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
     use p2panda_rs::test_utils::constants::SCHEMA_ID;
-    use p2panda_rs::test_utils::fixtures::{entry, key_pair};
+    use p2panda_rs::test_utils::fixtures::{encoded_entry, entry, key_pair, random_hash};
     use rstest::rstest;
 
     use crate::db::stores::entry::StorageEntry;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
     #[rstest]
-    fn insert_entry(key_pair: KeyPair, entry: Entry, #[from(test_db)] runner: TestDatabaseRunner) {
+    fn insert_entry(encoded_entry: EncodedEntry, #[from(test_db)] runner: TestDatabaseRunner) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let entry_encoded = sign_and_encode(&entry, &key_pair).unwrap();
-            let operation_encoded = OperationEncoded::try_from(entry.operation().unwrap()).unwrap();
-            let doggo_entry = StorageEntry::new(&entry_encoded, &operation_encoded).unwrap();
+            let doggo_entry = StorageEntry::new(&encoded_entry).unwrap();
             let result = db.store.insert_entry(doggo_entry).await;
 
             assert!(result.is_ok());
@@ -452,8 +445,7 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let author =
-                Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
+            let author = Author::from(db.test_data.key_pairs[0].public_key());
             let log_id = LogId::default();
 
             let first_entry = db
@@ -463,11 +455,7 @@ mod tests {
                 .unwrap()
                 .unwrap();
 
-            let duplicate_doggo_entry = StorageEntry::new(
-                first_entry.entry_signed(),
-                first_entry.operation_encoded().unwrap(),
-            )
-            .unwrap();
+            let duplicate_doggo_entry = StorageEntry::new(first_entry.entry_signed()).unwrap();
 
             let result = db.store.insert_entry(duplicate_doggo_entry).await;
             assert!(result.is_err());
@@ -481,7 +469,7 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let author_not_in_db = Author::try_from(*KeyPair::new().public_key()).unwrap();
+            let author_not_in_db = Author::from(KeyPair::new().public_key());
             let log_id = LogId::default();
 
             let latest_entry = db
@@ -491,8 +479,7 @@ mod tests {
                 .unwrap();
             assert!(latest_entry.is_none());
 
-            let author_in_db =
-                Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
+            let author_in_db = Author::from(db.test_data.key_pairs[0].public_key());
 
             let latest_entry = db
                 .store
@@ -505,15 +492,13 @@ mod tests {
 
     #[rstest]
     fn entries_by_schema(
+        #[from(random_hash)] hash: Hash,
         #[from(test_db)]
         #[with(20, 1, 2, false, SCHEMA_ID.parse().unwrap())]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let schema_not_in_the_db = SchemaId::new_application(
-                "venue",
-                &Hash::new_from_bytes(vec![1, 2, 3]).unwrap().into(),
-            );
+            let schema_not_in_the_db = SchemaId::new_application("venue", &hash.into());
 
             let entries = db
                 .store
@@ -540,8 +525,7 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let author =
-                Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
+            let author = Author::from(db.test_data.key_pairs[0].public_key());
 
             for seq_num in 1..10 {
                 let seq_num = SeqNum::new(seq_num).unwrap();
@@ -561,7 +545,7 @@ mod tests {
                 .unwrap();
             assert!(entry.is_none());
 
-            let author_not_in_db = Author::try_from(*KeyPair::new().public_key()).unwrap();
+            let author_not_in_db = Author::from(KeyPair::new().public_key());
             let entry = db
                 .store
                 .get_entry_at_seq_num(
@@ -590,8 +574,7 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let author =
-                Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
+            let author = Author::from(db.test_data.key_pairs[0].public_key());
 
             for seq_num in [1, 11, 18] {
                 let seq_num = SeqNum::new(seq_num).unwrap();
@@ -612,7 +595,7 @@ mod tests {
                 assert_eq!(entry, entry_by_hash)
             }
 
-            let entry_hash_not_in_db = Hash::new_from_bytes(vec![1, 2, 3]).unwrap();
+            let entry_hash_not_in_db = random_hash();
             let entry = db
                 .store
                 .get_entry_by_hash(&entry_hash_not_in_db)
@@ -629,8 +612,7 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let author =
-                Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
+            let author = Author::from(db.test_data.key_pairs[0].public_key());
 
             let entries = db
                 .store
@@ -666,8 +648,7 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let author =
-                Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
+            let author = Author::from(db.test_data.key_pairs[0].public_key());
 
             let entries = db
                 .store

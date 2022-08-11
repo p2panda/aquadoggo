@@ -169,7 +169,7 @@ async fn insert_new_entries(
 
         publish(
             &context.0.store,
-            entry.entry_signed(),
+            &entry.entry_signed(),
             entry
                 .operation_encoded()
                 .expect("All stored entries contain an operation"),

@@ -131,7 +131,7 @@ mod tests {
 
             let document_id = db.test_data.documents.get(0).unwrap();
             let author =
-                Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
+                Author::from(db.test_data.key_pairs[0].public_key());
 
             // Selected fields need to be alphabetically sorted because that's what the `json`
             // macro that is used in the assert below produces.

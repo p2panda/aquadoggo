@@ -4,7 +4,7 @@ use anyhow::{anyhow, ensure, Result};
 use p2panda_rs::document::DocumentId;
 use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::identity::Author;
-use p2panda_rs::operation::AsOperation;
+use p2panda_rs::operation::traits::AsOperation;
 use p2panda_rs::storage_provider::traits::StorageProvider;
 use p2panda_rs::Human;
 

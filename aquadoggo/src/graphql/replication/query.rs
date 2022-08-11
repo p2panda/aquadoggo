@@ -248,15 +248,7 @@ mod tests {
 
             // The test runner creates a test entry for us, we can retreive the public key from the
             // author
-            let public_key: Author = db
-                .test_data
-                .key_pairs
-                .first()
-                .unwrap()
-                .public_key()
-                .to_owned()
-                .try_into()
-                .unwrap();
+            let public_key: Author = db.test_data.key_pairs.first().unwrap().public_key().into();
 
             // Construct the query
             let gql_query = format!(
@@ -348,15 +340,9 @@ mod tests {
 
             // Get public key from author of generated test data
             let public_key: String = {
-                let key_from_db = billie_db
-                    .test_data
-                    .key_pairs
-                    .first()
-                    .unwrap()
-                    .public_key()
-                    .to_owned();
+                let key_from_db = billie_db.test_data.key_pairs.first().unwrap().public_key();
 
-                let author = Author::try_from(key_from_db).unwrap();
+                let author = Author::from(key_from_db);
                 author.as_str().into()
             };
 

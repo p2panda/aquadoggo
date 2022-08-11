@@ -79,11 +79,7 @@ impl SchemaStore for SqlStorage {
             let schema_fields: Vec<SchemaFieldView> = schema_view
                 .fields()
                 .iter()
-                .filter_map(|field_id| {
-                    schema_field_views
-                        .iter()
-                        .find(|view| view.id() == &field_id)
-                })
+                .filter_map(|field_id| schema_field_views.iter().find(|view| view.id() == field_id))
                 .map(|field| field.to_owned())
                 .collect();
 
@@ -119,7 +115,7 @@ mod tests {
         mut schema_definition: OperationFields,
     ) -> DocumentViewId {
         schema_definition
-            .add(
+            .insert(
                 "fields",
                 // This pinned relation points at the previously published field.
                 OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
@@ -135,7 +131,7 @@ mod tests {
             &operation(
                 Some(schema_definition),
                 None,
-                Some(SchemaId::new("schema_definition_v1").unwrap()),
+                SchemaId::new("schema_definition_v1").unwrap(),
             ),
         )
         .await;
@@ -155,7 +151,7 @@ mod tests {
             &operation(
                 Some(schema_field_definition),
                 None,
-                Some(SchemaId::new("schema_field_definition_v1").unwrap()),
+                SchemaId::new("schema_field_definition_v1").unwrap(),
             ),
         )
         .await;
@@ -164,84 +160,40 @@ mod tests {
     }
 
     #[rstest]
-    #[case::valid_schema_and_fields(
-        r#"venue_name = { type: "str", value: tstr, }
-        create-fields = { venue_name }
-        update-fields = { + ( venue_name ) }"#,
-        operation_fields(vec![
-                         ("name", OperationValue::Text("venue_name".to_string())),
-                         ("type", FieldType::String.into())
-        ]),
-        operation_fields(vec![
-                         ("name", OperationValue::Text("venue".to_string())),
-                         ("description", OperationValue::Text("My venue".to_string()))
-        ])
-    )]
-    fn get_schema(
-        #[case] cddl_str: &str,
-        #[case] schema_field_definition: OperationFields,
-        #[case] schema_definition: OperationFields,
-        key_pair: KeyPair,
-        #[from(test_db)] runner: TestDatabaseRunner,
-    ) {
-        let cddl_str = cddl_str.to_string();
-
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            let document_view_id =
-                insert_schema_field_definition(&db.store, &key_pair, schema_field_definition).await;
-
-            let document_view_id = insert_schema_definition(
-                &db.store,
-                &key_pair,
-                &document_view_id,
-                schema_definition,
-            )
-            .await;
-
-            let schema = db.store.get_schema_by_id(&document_view_id).await.unwrap();
-
-            assert_eq!(
-                schema.unwrap().as_cddl().replace(" ", ""),
-                cddl_str.replace(" ", "")
-            );
-        });
-    }
-
-    #[rstest]
     #[case::fields_missing_name_field("missing field \"name\"",
         operation_fields(vec![
                          ("type", FieldType::String.into())
         ]),
         operation_fields(vec![
-                         ("name", OperationValue::Text("venue".to_string())),
-                         ("description", OperationValue::Text("My venue".to_string()))
+                         ("name", OperationValue::String("venue".to_string())),
+                         ("description", OperationValue::String("My venue".to_string()))
         ])
     )]
     #[case::fields_missing_type_field("missing field \"type\"",
         operation_fields(vec![
-                         ("name", OperationValue::Text("venue_name".to_string()))
+                         ("name", OperationValue::String("venue_name".to_string()))
         ]),
         operation_fields(vec![
-                         ("name", OperationValue::Text("venue".to_string())),
-                         ("description", OperationValue::Text("My venue".to_string()))
+                         ("name", OperationValue::String("venue".to_string())),
+                         ("description", OperationValue::String("My venue".to_string()))
         ])
     )]
     #[case::schema_missing_name_field("missing field \"name\"",
         operation_fields(vec![
-                         ("name", OperationValue::Text("venue_name".to_string())),
+                         ("name", OperationValue::String("venue_name".to_string())),
                          ("type", FieldType::String.into())
         ]),
         operation_fields(vec![
-                         ("description", OperationValue::Text("My venue".to_string()))
+                         ("description", OperationValue::String("My venue".to_string()))
         ])
     )]
     #[case::schema_missing_name_description("missing field \"description\"",
         operation_fields(vec![
-                         ("name", OperationValue::Text("venue_name".to_string())),
+                         ("name", OperationValue::String("venue_name".to_string())),
                          ("type", FieldType::String.into())
         ]),
         operation_fields(vec![
-                         ("name", OperationValue::Text("venue".to_string()))
+                         ("name", OperationValue::String("venue".to_string()))
         ])
     )]
     fn get_schema_errors(
@@ -274,22 +226,22 @@ mod tests {
     #[rstest]
     #[case::works(
         operation_fields(vec![
-                         ("name", OperationValue::Text("venue_name".to_string())),
+                         ("name", OperationValue::String("venue_name".to_string())),
                          ("type", FieldType::String.into())
         ]),
         operation_fields(vec![
-                         ("name", OperationValue::Text("venue".to_string())),
-                         ("description", OperationValue::Text("My venue".to_string()))
+                         ("name", OperationValue::String("venue".to_string())),
+                         ("description", OperationValue::String("My venue".to_string()))
         ]),
         1
     )]
     #[case::does_not_work(
         operation_fields(vec![
-                         ("name", OperationValue::Text("venue_name".to_string()))
+                         ("name", OperationValue::String("venue_name".to_string()))
         ]),
         operation_fields(vec![
-                         ("name", OperationValue::Text("venue".to_string())),
-                         ("description", OperationValue::Text("My venue".to_string()))
+                         ("name", OperationValue::String("venue".to_string())),
+                         ("description", OperationValue::String("My venue".to_string()))
         ]),
         0
     )]
@@ -316,8 +268,8 @@ mod tests {
     #[rstest]
     #[case::schema_fields_do_not_exist(
         operation_fields(vec![
-                         ("name", OperationValue::Text("venue".to_string())),
-                         ("description", OperationValue::Text("My venue".to_string()))
+                         ("name", OperationValue::String("venue".to_string())),
+                         ("description", OperationValue::String("My venue".to_string()))
         ])
     )]
     fn schema_fields_do_not_exist(

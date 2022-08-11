@@ -4,9 +4,10 @@ use std::collections::BTreeMap;
 
 use p2panda_rs::document::{DocumentId, DocumentViewFields, DocumentViewId, DocumentViewValue};
 use p2panda_rs::identity::Author;
+use p2panda_rs::operation::traits::AsOperation;
 use p2panda_rs::operation::{
-    AsVerifiedOperation, Operation, OperationFields, OperationId, OperationValue, PinnedRelation,
-    PinnedRelationList, Relation, RelationList, VerifiedOperation,
+    Operation, OperationBuilder, OperationId, OperationValue, PinnedRelation, PinnedRelationList,
+    Relation, RelationList, VerifiedOperation,
 };
 use p2panda_rs::schema::SchemaId;
 
@@ -28,14 +29,14 @@ pub fn parse_operation_rows(
     };
 
     // Unwrapping as we assume values coming from the db are valid
-    let schema: SchemaId = first_row.schema_id.parse().unwrap();
+    let schema_id: SchemaId = first_row.schema_id.parse().unwrap();
     let author = Author::new(&first_row.author).unwrap();
     let operation_id = first_row.operation_id.parse().unwrap();
 
     let mut relation_lists: BTreeMap<String, Vec<DocumentId>> = BTreeMap::new();
     let mut pinned_relation_lists: BTreeMap<String, Vec<DocumentViewId>> = BTreeMap::new();
 
-    let mut operation_fields = OperationFields::new();
+    let mut operation_fields = Vec::new();
 
     // Iterate over returned field values, for each value:
     //  - if it is a simple value type, parse it into an OperationValue and add it to the operation_fields
@@ -43,49 +44,40 @@ pub fn parse_operation_rows(
     //    the suitable vec (instantiated above)
     if first_row.action != "delete" {
         operation_rows.iter().for_each(|row| {
-            let field_type = row.field_type.as_ref().unwrap();
-            let field_name = row.name.as_ref().unwrap();
+            let field_type = row.field_type.unwrap().as_str();
+            let field_name = row.name.unwrap().as_str();
             let field_value = row.value.as_ref().unwrap();
 
-            match field_type.as_str() {
+            match field_type {
                 "bool" => {
-                    operation_fields
-                        .add(
-                            field_name,
-                            OperationValue::Boolean(field_value.parse::<bool>().unwrap()),
-                        )
-                        .unwrap();
+                    operation_fields.push((
+                        field_name,
+                        OperationValue::Boolean(field_value.parse::<bool>().unwrap()),
+                    ));
                 }
                 "int" => {
-                    operation_fields
-                        .add(
-                            field_name,
-                            OperationValue::Integer(field_value.parse::<i64>().unwrap()),
-                        )
-                        .unwrap();
+                    operation_fields.push((
+                        field_name,
+                        OperationValue::Integer(field_value.parse::<i64>().unwrap()),
+                    ));
                 }
                 "float" => {
-                    operation_fields
-                        .add(
-                            field_name,
-                            OperationValue::Float(field_value.parse::<f64>().unwrap()),
-                        )
-                        .unwrap();
+                    operation_fields.push((
+                        field_name,
+                        OperationValue::Float(field_value.parse::<f64>().unwrap()),
+                    ));
                 }
                 "str" => {
                     operation_fields
-                        .add(field_name, OperationValue::Text(field_value.clone()))
-                        .unwrap();
+                        .push((field_name, OperationValue::String(field_value.clone())));
                 }
                 "relation" => {
-                    operation_fields
-                        .add(
-                            field_name,
-                            OperationValue::Relation(Relation::new(
-                                field_value.parse::<DocumentId>().unwrap(),
-                            )),
-                        )
-                        .unwrap();
+                    operation_fields.push((
+                        field_name,
+                        OperationValue::Relation(Relation::new(
+                            field_value.parse::<DocumentId>().unwrap(),
+                        )),
+                    ));
                 }
                 // This is a list item, so we push it to a vec but _don't_ add it
                 // to the operation_fields yet.
@@ -94,21 +86,19 @@ pub fn parse_operation_rows(
                         Some(list) => list.push(field_value.parse::<DocumentId>().unwrap()),
                         None => {
                             relation_lists.insert(
-                                field_name.clone(),
+                                field_name.to_string(),
                                 vec![field_value.parse::<DocumentId>().unwrap()],
                             );
                         }
                     };
                 }
                 "pinned_relation" => {
-                    operation_fields
-                        .add(
-                            field_name,
-                            OperationValue::PinnedRelation(PinnedRelation::new(
-                                field_value.parse::<DocumentViewId>().unwrap(),
-                            )),
-                        )
-                        .unwrap();
+                    operation_fields.push((
+                        field_name,
+                        OperationValue::PinnedRelation(PinnedRelation::new(
+                            field_value.parse::<DocumentViewId>().unwrap(),
+                        )),
+                    ));
                 }
                 // This is a list item, so we push it to a vec but _don't_ add it
                 // to the operation_fields yet.
@@ -117,7 +107,7 @@ pub fn parse_operation_rows(
                         Some(list) => list.push(field_value.parse::<DocumentViewId>().unwrap()),
                         None => {
                             pinned_relation_lists.insert(
-                                field_name.clone(),
+                                field_name.to_string(),
                                 vec![field_value.parse::<DocumentViewId>().unwrap()],
                             );
                         }
@@ -129,44 +119,36 @@ pub fn parse_operation_rows(
     };
 
     for (ref field_name, relation_list) in relation_lists {
-        operation_fields
-            .add(
-                field_name,
-                OperationValue::RelationList(RelationList::new(relation_list)),
-            )
-            .unwrap();
+        operation_fields.push((
+            field_name,
+            OperationValue::RelationList(RelationList::new(relation_list)),
+        ));
     }
 
     for (ref field_name, pinned_relation_list) in pinned_relation_lists {
-        operation_fields
-            .add(
-                field_name,
-                OperationValue::PinnedRelationList(PinnedRelationList::new(pinned_relation_list)),
-            )
-            .unwrap();
+        operation_fields.push((
+            field_name,
+            OperationValue::PinnedRelationList(PinnedRelationList::new(pinned_relation_list)),
+        ));
     }
 
+    let operation_builder = OperationBuilder::new(&schema_id);
+    let previous_operations = first_row
+        .previous_operations
+        .map(|previous| previous.parse().unwrap())
+        .as_ref();
+
     let operation = match first_row.action.as_str() {
-        "create" => Operation::new_create(schema, operation_fields),
-        "update" => Operation::new_update(
-            schema,
-            first_row
-                .previous_operations
-                .as_ref()
-                .unwrap()
-                .parse()
-                .unwrap(),
-            operation_fields,
-        ),
-        "delete" => Operation::new_delete(
-            schema,
-            first_row
-                .previous_operations
-                .as_ref()
-                .unwrap()
-                .parse()
-                .unwrap(),
-        ),
+        "create" => operation_builder
+            .fields(operation_fields.as_slice())
+            .build(),
+        "update" => operation_builder
+            .fields(operation_fields.as_slice())
+            .previous_operations(previous_operations.unwrap())
+            .build(),
+        "delete" => operation_builder
+            .previous_operations(previous_operations.unwrap())
+            .build(),
         _ => panic!("Operation which was not CREATE, UPDATE or DELETE found."),
     }
     // Unwrap as we are sure values coming from the db are validated
@@ -186,7 +168,7 @@ pub fn parse_value_to_string_vec(value: &OperationValue) -> Vec<String> {
         OperationValue::Boolean(bool) => vec![bool.to_string()],
         OperationValue::Integer(int) => vec![int.to_string()],
         OperationValue::Float(float) => vec![float.to_string()],
-        OperationValue::Text(str) => vec![str.to_string()],
+        OperationValue::String(str) => vec![str.to_string()],
         OperationValue::Relation(relation) => {
             vec![relation.document_id().as_str().to_string()]
         }
@@ -260,7 +242,7 @@ pub fn parse_document_view_field_rows(
                     &row.name,
                     DocumentViewValue::new(
                         &row.operation_id.parse::<OperationId>().unwrap(),
-                        &OperationValue::Text(row.value.clone()),
+                        &OperationValue::String(row.value.clone()),
                     ),
                 );
             }
@@ -348,11 +330,13 @@ pub fn parse_document_view_field_rows(
 #[cfg(test)]
 mod tests {
     use p2panda_rs::document::DocumentViewValue;
+    use p2panda_rs::operation::traits::AsOperation;
     use p2panda_rs::operation::{
-        AsOperation, OperationId, OperationValue, PinnedRelation, PinnedRelationList, Relation,
-        RelationList,
+        OperationId, OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList,
     };
-    use p2panda_rs::test_utils::fixtures::create_operation;
+    use p2panda_rs::schema::SchemaId;
+    use p2panda_rs::test_utils::fixtures::{create_operation, schema_id};
+    use rstest::rstest;
 
     use crate::db::models::{document::DocumentViewFieldRow, OperationFieldsJoinedRow};
     use crate::db::stores::test_utils::doggo_test_fields;
@@ -596,7 +580,7 @@ mod tests {
 
         assert_eq!(
             operation.fields().unwrap().get("username").unwrap(),
-            &OperationValue::Text("bubu".to_string())
+            &OperationValue::String("bubu".to_string())
         );
         assert_eq!(
             operation.fields().unwrap().get("age").unwrap(),
@@ -678,8 +662,8 @@ mod tests {
         )
     }
 
-    #[test]
-    fn operation_values_to_string_vec() {
+    #[rstest]
+    fn operation_values_to_string_vec(schema_id: SchemaId) {
         let expected_list = vec![
             "28",
             "0020abababababababababababababababababababababababababababababababab",
@@ -695,7 +679,7 @@ mod tests {
             "bubu",
         ];
         let mut string_value_list = vec![];
-        let operation = create_operation(&doggo_test_fields());
+        let operation = create_operation(doggo_test_fields(), schema_id);
         for (_, value) in operation.fields().unwrap().iter() {
             string_value_list.push(parse_value_to_string_vec(value));
         }
@@ -832,7 +816,7 @@ mod tests {
 
         assert_eq!(
             document_fields.get("username").unwrap(),
-            &DocumentViewValue::new(&operation_id, &OperationValue::Text("bubu".to_string()))
+            &DocumentViewValue::new(&operation_id, &OperationValue::String("bubu".to_string()))
         );
         assert_eq!(
             document_fields.get("age").unwrap(),

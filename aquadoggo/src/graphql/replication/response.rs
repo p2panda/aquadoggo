@@ -4,7 +4,8 @@ use std::convert::TryFrom;
 
 use anyhow::{anyhow, Error};
 use async_graphql::{ComplexObject, Context, SimpleObject};
-use p2panda_rs::entry::{decode_entry, EntrySigned};
+use p2panda_rs::entry::decode::decode_entry;
+use p2panda_rs::entry::EncodedEntry;
 use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
 use serde::{Deserialize, Serialize};
 
@@ -33,12 +34,12 @@ impl EncodedEntryAndOperation {
         let store = ctx.data::<SqlStorage>()?;
 
         // Decode entry
-        let entry_encoded: EntrySigned = self.entry.clone().into();
-        let entry = decode_entry(&entry_encoded, None)?;
+        let entry_encoded: EncodedEntry = self.entry.clone().into();
+        let entry = decode_entry(&entry_encoded)?;
 
         // Load certificate pool from database
         let result = store
-            .get_certificate_pool(&entry_encoded.author(), entry.log_id(), entry.seq_num())
+            .get_certificate_pool(entry.public_key(), entry.log_id(), entry.seq_num())
             .await?;
 
         let entries = result
@@ -66,7 +67,7 @@ impl TryFrom<EncodedEntryAndOperation> for StorageEntry {
             .operation
             .ok_or_else(|| anyhow!("Storage entry requires operation to be given"))?;
 
-        Ok(StorageEntry::new(&encoded.entry.into(), &operation.into())?)
+        Ok(StorageEntry::new(&encoded.entry.into())?)
     }
 }
 
@@ -76,7 +77,7 @@ mod tests {
 
     use async_graphql::{EmptyMutation, EmptySubscription, Request, Schema};
     use bamboo_rs_core_ed25519_yasmf::verify_batch;
-    use p2panda_rs::entry::{EntrySigned, LogId};
+    use p2panda_rs::entry::{EncodedEntry, LogId};
     use p2panda_rs::identity::Author;
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
     use rstest::rstest;
@@ -97,15 +98,7 @@ mod tests {
                 .finish();
 
             // Retreive last entry of author from test database
-            let author: Author = db
-                .test_data
-                .key_pairs
-                .first()
-                .unwrap()
-                .public_key()
-                .to_owned()
-                .try_into()
-                .unwrap();
+            let author: Author = db.test_data.key_pairs.first().unwrap().public_key().into();
 
             let latest_entry_hash = db
                 .store
@@ -144,7 +137,7 @@ mod tests {
             let entries_to_verify: Vec<(Vec<u8>, Option<Vec<u8>>)> = entries
                 .iter()
                 .map(|entry| {
-                    let entry = EntrySigned::new(entry.as_str().unwrap()).unwrap();
+                    let entry = EncodedEntry::new(entry.as_str().unwrap()).unwrap();
                     (entry.to_bytes(), None)
                 })
                 .collect();

@@ -140,9 +140,9 @@ mod tests {
 
     use p2panda_rs::document::DocumentViewId;
     use p2panda_rs::identity::KeyPair;
+    use p2panda_rs::operation::traits::AsOperation;
     use p2panda_rs::operation::{
-        AsVerifiedOperation, Operation, OperationValue, PinnedRelation, PinnedRelationList,
-        Relation, RelationList,
+        Operation, OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList,
     };
     use p2panda_rs::storage_provider::traits::OperationStore;
     use p2panda_rs::test_utils::constants::SCHEMA_ID;

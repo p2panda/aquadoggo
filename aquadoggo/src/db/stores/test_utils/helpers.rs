@@ -3,13 +3,17 @@
 use std::convert::TryFrom;
 
 use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
-use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned};
+use p2panda_rs::entry::encode::sign_and_encode_entry;
+use p2panda_rs::entry::{EncodedEntry, Entry};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::{Author, KeyPair};
+use p2panda_rs::operation::encode::encode_operation;
+use p2panda_rs::operation::traits::{AsOperation, AsVerifiedOperation};
 use p2panda_rs::operation::{
-    AsOperation, Operation, OperationEncoded, OperationValue, PinnedRelation, PinnedRelationList,
-    Relation, RelationList,
+    EncodedOperation, Operation, OperationValue, PinnedRelation, PinnedRelationList, Relation,
+    RelationList,
 };
+
 use p2panda_rs::storage_provider::traits::{OperationStore, StorageProvider};
 use p2panda_rs::test_utils::constants::PRIVATE_KEY;
 
@@ -20,7 +24,7 @@ use crate::domain::{next_args, publish};
 /// A complex set of fields which can be used in aquadoggo tests.
 pub fn doggo_test_fields() -> Vec<(&'static str, OperationValue)> {
     vec![
-        ("username", OperationValue::Text("bubu".to_owned())),
+        ("username", OperationValue::String("bubu".to_owned())),
         ("height", OperationValue::Float(3.5)),
         ("age", OperationValue::Integer(28)),
         ("is_admin", OperationValue::Boolean(false)),
@@ -96,8 +100,8 @@ pub async fn encode_entry_and_operation<S: StorageProvider>(
     operation: &Operation,
     key_pair: &KeyPair,
     document_id: Option<&DocumentId>,
-) -> (EntrySigned, OperationEncoded) {
-    let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+) -> (EncodedEntry, EncodedOperation) {
+    let author = Author::from(key_pair.public_key());
     let document_view_id: Option<DocumentViewId> =
         document_id.map(|id| id.as_str().parse().unwrap());
 
@@ -106,23 +110,20 @@ pub async fn encode_entry_and_operation<S: StorageProvider>(
         .await
         .unwrap();
 
-    // Construct the entry with passed operation.
-    let entry = Entry::new(
+    // Sign and encode the entry and operation.
+    let operation_encoded = encode_operation(operation).unwrap();
+    let entry_encoded = sign_and_encode_entry(
         &next_args.log_id.into(),
-        Some(operation),
+        &next_args.seq_num.into(),
         next_args.skiplink.map(Hash::from).as_ref(),
         next_args.backlink.map(Hash::from).as_ref(),
-        &next_args.seq_num.into(),
+        &operation_encoded,
+        key_pair,
     )
     .unwrap();
 
-    // Sign and encode the entry.
-    let entry = sign_and_encode(&entry, key_pair).unwrap();
-    // Encode the operation.
-    let operation = OperationEncoded::try_from(operation).unwrap();
-
     // Return encoded entry and operation.
-    (entry, operation)
+    (entry_encoded, operation_encoded)
 }
 
 /// Helper for inserting an entry, operation and document_view into the store.

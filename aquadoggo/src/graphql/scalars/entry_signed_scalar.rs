@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_graphql::{InputValueError, Scalar, ScalarType, Value};
-use p2panda_rs::entry::EntrySigned;
+use p2panda_rs::entry::EncodedEntry;
 use serde::{Deserialize, Serialize};
 
 /// Signed bamboo entry, encoded as a hexadecimal string.
 #[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
-pub struct EntrySignedScalar(EntrySigned);
+pub struct EntrySignedScalar(EncodedEntry);
 
 #[Scalar]
 impl ScalarType for EntrySignedScalar {
     fn parse(value: Value) -> async_graphql::InputValueResult<Self> {
         match &value {
             Value::String(str_value) => {
-                let panda_value = EntrySigned::new(str_value)?;
+                let panda_value = EncodedEntry::new(str_value.as_bytes());
                 Ok(EntrySignedScalar(panda_value))
             }
             _ => Err(InputValueError::expected_type(value)),
@@ -21,18 +21,18 @@ impl ScalarType for EntrySignedScalar {
     }
 
     fn to_value(&self) -> Value {
-        Value::String(self.0.as_str().to_string())
+        Value::String(self.0.to_string())
     }
 }
 
-impl From<EntrySigned> for EntrySignedScalar {
-    fn from(entry: EntrySigned) -> Self {
+impl From<EncodedEntry> for EntrySignedScalar {
+    fn from(entry: EncodedEntry) -> Self {
         Self(entry)
     }
 }
 
-impl From<EntrySignedScalar> for EntrySigned {
-    fn from(entry: EntrySignedScalar) -> EntrySigned {
+impl From<EntrySignedScalar> for EncodedEntry {
+    fn from(entry: EntrySignedScalar) -> EncodedEntry {
         entry.0
     }
 }

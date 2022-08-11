@@ -2,8 +2,9 @@
 
 //! Mutation root.
 use async_graphql::{Context, Object, Result};
-use p2panda_rs::entry::{decode_entry, EntrySigned};
-use p2panda_rs::operation::{Operation, OperationEncoded, OperationId};
+use p2panda_rs::entry::decode::decode_entry;
+use p2panda_rs::entry::EncodedEntry;
+use p2panda_rs::operation::{EncodedOperation, Operation, OperationId};
 use p2panda_rs::Validate;
 
 use crate::bus::{ServiceMessage, ServiceSender};
@@ -35,8 +36,8 @@ impl ClientMutationRoot {
         let store = ctx.data::<SqlStorage>()?;
         let tx = ctx.data::<ServiceSender>()?;
 
-        let entry_signed: EntrySigned = entry.into();
-        let operation_encoded: OperationEncoded = operation.into();
+        let entry_signed: EncodedEntry = entry.into();
+        let encoded_operation: EncodedOperation = operation.into();
 
         /////////////////////////////////////////////////////
         // VALIDATE ENTRY AND OPERATION INTERNAL INTEGRITY //
@@ -48,28 +49,29 @@ impl ClientMutationRoot {
         // themselves bt are only constructed _after_ all other validation has taken place). Lot's to be
         // improved here in general I think. Nice to see it as a very seperate step before `publish` i think.
 
-        // Validate the encoded entry
-        entry_signed.validate()?;
-
-        // Validate the encoded operation
-        operation_encoded.validate()?;
-
-        // Decode the entry with it's operation.
+        // TODO: refactor all validation using new methods
+        // // Validate the encoded entry
+        // entry_signed.validate()?;
         //
-        // @TODO: Without this `publish` fails
-        decode_entry(&entry_signed, Some(&operation_encoded))?;
-
-        // Also need to validate the decoded operation to catch internally invalid operations
+        // // Validate the encoded operation
+        // encoded_operation.validate()?;
         //
-        // @TODO: Without this `publish` fails
-        let operation = Operation::from(&operation_encoded);
-        operation.validate()?;
+        // // Decode the entry with it's operation.
+        // //
+        // // @TODO: Without this `publish` fails
+        // decode_entry(&entry_signed, Some(&encoded_operation))?;
+        //
+        // // Also need to validate the decoded operation to catch internally invalid operations
+        // //
+        // // @TODO: Without this `publish` fails
+        // let operation = Operation::from(&encoded_operation);
+        // operation.validate()?;
 
         /////////////////////////////////////
         // PUBLISH THE ENTRY AND OPERATION //
         /////////////////////////////////////
 
-        let next_args = publish(store, &entry_signed, &operation_encoded).await?;
+        let next_args = publish(store, &entry_signed, &encoded_operation).await?;
 
         ////////////////////////////////////////
         // SEND THE OPERATION TO MATERIALIZER //
@@ -98,15 +100,18 @@ mod tests {
     use ciborium::value::Value;
     use once_cell::sync::Lazy;
     use p2panda_rs::document::{DocumentId, DocumentViewId};
-    use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned, LogId, SeqNum};
+    use p2panda_rs::entry::encode::sign_and_encode_entry;
+    use p2panda_rs::entry::{EncodedEntry, Entry, LogId, SeqNum};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
-    use p2panda_rs::operation::{Operation, OperationEncoded, OperationValue};
+    use p2panda_rs::operation::decode::decode_operation;
+    use p2panda_rs::operation::{EncodedOperation, Operation, OperationValue};
     use p2panda_rs::storage_provider::traits::EntryStore;
     use p2panda_rs::test_utils::constants::{HASH, PRIVATE_KEY, SCHEMA_ID};
     use p2panda_rs::test_utils::fixtures::{
-        create_operation, delete_operation, entry_signed_encoded, entry_signed_encoded_unvalidated,
-        key_pair, operation, operation_encoded, operation_fields, random_hash, update_operation,
+        create_operation, delete_operation, encoded_entry, encoded_operation,
+        entry_signed_encoded_unvalidated, key_pair, operation, operation_fields, random_hash,
+        update_operation,
     };
     use rstest::{fixture, rstest};
     use serde_json::json;
@@ -137,20 +142,14 @@ mod tests {
         }"#;
 
     pub static ENTRY_ENCODED: Lazy<String> = Lazy::new(|| {
-        entry_signed_encoded(
-            Entry::new(
-                &LogId::default(),
-                Some(&Operation::from(
-                    &OperationEncoded::new(&OPERATION_ENCODED).unwrap(),
-                )),
-                None,
-                None,
-                &SeqNum::default(),
-            )
-            .unwrap(),
+        encoded_entry(
+            1,
+            0,
+            None,
+            None,
+            decode_operation(&EncodedOperation::new(&OPERATION_ENCODED.as_bytes())).unwrap(),
             key_pair(PRIVATE_KEY),
         )
-        .as_str()
         .to_string()
     });
 
@@ -214,12 +213,12 @@ mod tests {
     #[fixture]
     fn publish_entry_request(
         #[default(&ENTRY_ENCODED)] entry_encoded: &str,
-        #[default(&OPERATION_ENCODED)] operation_encoded: &str,
+        #[default(&OPERATION_ENCODED)] encoded_operation: &str,
     ) -> Request {
         // Prepare GraphQL mutation publishing an entry
         let parameters = Variables::from_value(value!({
             "entry": entry_encoded,
-            "operation": operation_encoded,
+            "operation": encoded_operation,
         }));
 
         Request::new(PUBLISH_ENTRY_QUERY).variables(parameters)
@@ -263,7 +262,7 @@ mod tests {
             context.schema.execute(publish_entry_request).await;
 
             // Find out hash of test entry to determine operation id
-            let entry_encoded = EntrySigned::new(&ENTRY_ENCODED).unwrap();
+            let entry_encoded = EncodedEntry::new(&ENTRY_ENCODED).unwrap();
 
             // Expect receiver to receive sent message
             let message = rx.recv().await.unwrap();
@@ -368,7 +367,7 @@ mod tests {
     )]
     #[case::operation_does_not_match(
         &ENTRY_ENCODED,
-        &{operation_encoded(
+        &{encoded_operation(
             Some(
                 operation_fields(
                     vec![("silly", OperationValue::Text("Sausage".to_string()))]
@@ -395,7 +394,7 @@ mod tests {
             0,
             None,
             Some(random_hash()),
-            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
+            Some(Operation::from(&EncodedOperation::new(&OPERATION_ENCODED).unwrap())),
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
@@ -407,7 +406,7 @@ mod tests {
             0,
             Some(random_hash()),
             None,
-            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
+            Some(Operation::from(&EncodedOperation::new(&OPERATION_ENCODED).unwrap())),
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
@@ -419,7 +418,7 @@ mod tests {
             0,
             Some(HASH.parse().unwrap()),
             Some(HASH.parse().unwrap()),
-            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())) ,
+            Some(Operation::from(&EncodedOperation::new(&OPERATION_ENCODED).unwrap())) ,
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
@@ -431,7 +430,7 @@ mod tests {
             0,
             None,
             None,
-            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
+            Some(Operation::from(&EncodedOperation::new(&OPERATION_ENCODED).unwrap())),
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
@@ -443,7 +442,7 @@ mod tests {
             0,
             Some(random_hash()),
             None,
-            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
+            Some(Operation::from(&EncodedOperation::new(&OPERATION_ENCODED).unwrap())),
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
@@ -455,7 +454,7 @@ mod tests {
             0,
             Some(HASH.parse().unwrap()),
             Some(HASH.parse().unwrap()),
-            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
+            Some(Operation::from(&EncodedOperation::new(&OPERATION_ENCODED).unwrap())),
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
@@ -479,7 +478,7 @@ mod tests {
             0,
             None,
             None,
-            Some(Operation::from(&OperationEncoded::new(&CREATE_OPERATION_WITH_PREVIOUS_OPS).unwrap())),
+            Some(Operation::from(&EncodedOperation::new(&CREATE_OPERATION_WITH_PREVIOUS_OPS).unwrap())),
             key_pair(PRIVATE_KEY)
         ),
         &CREATE_OPERATION_WITH_PREVIOUS_OPS,
@@ -491,7 +490,7 @@ mod tests {
             0,
             None,
             None,
-            Some(Operation::from(&OperationEncoded::new(&UPDATE_OPERATION_NO_PREVIOUS_OPS).unwrap())),
+            Some(Operation::from(&EncodedOperation::new(&UPDATE_OPERATION_NO_PREVIOUS_OPS).unwrap())),
             key_pair(PRIVATE_KEY)
         ),
         &UPDATE_OPERATION_NO_PREVIOUS_OPS,
@@ -503,7 +502,7 @@ mod tests {
             0,
             None,
             None,
-            Some(Operation::from(&OperationEncoded::new(&DELETE_OPERATION_NO_PREVIOUS_OPS).unwrap())),
+            Some(Operation::from(&EncodedOperation::new(&DELETE_OPERATION_NO_PREVIOUS_OPS).unwrap())),
             key_pair(PRIVATE_KEY)
         ),
         &DELETE_OPERATION_NO_PREVIOUS_OPS,
@@ -511,12 +510,12 @@ mod tests {
     )]
     fn validates_encoded_entry_and_operation_integrity(
         #[case] entry_encoded: &str,
-        #[case] operation_encoded: &str,
+        #[case] encoded_operation: &str,
         #[case] expected_error_message: &str,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
         let entry_encoded = entry_encoded.to_string();
-        let operation_encoded = operation_encoded.to_string();
+        let encoded_operation = encoded_operation.to_string();
         let expected_error_message = expected_error_message.to_string();
 
         runner.with_db_teardown(move |db: TestDatabase| async move {
@@ -526,7 +525,7 @@ mod tests {
             let context = HttpServiceContext::new(manager);
             let client = TestClient::new(build_server(context));
 
-            let publish_entry_request = publish_entry_request(&entry_encoded, &operation_encoded);
+            let publish_entry_request = publish_entry_request(&entry_encoded, &encoded_operation);
 
             let response = client
                 .post("/graphql")
@@ -555,7 +554,7 @@ mod tests {
             1,
             Some(HASH.parse().unwrap()),
             Some(Hash::new_from_bytes(vec![2, 3, 4]).unwrap()),
-            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
+            Some(Operation::from(&EncodedOperation::new(&OPERATION_ENCODED).unwrap())),
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
@@ -567,7 +566,7 @@ mod tests {
             0,
             Some(random_hash()),
             None,
-            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
+            Some(Operation::from(&EncodedOperation::new(&OPERATION_ENCODED).unwrap())),
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
@@ -579,7 +578,7 @@ mod tests {
             0,
             Some(random_hash()),
             None,
-            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
+            Some(Operation::from(&EncodedOperation::new(&OPERATION_ENCODED).unwrap())),
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
@@ -591,7 +590,7 @@ mod tests {
             0,
             Some(random_hash()),
             None,
-            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
+            Some(Operation::from(&EncodedOperation::new(&OPERATION_ENCODED).unwrap())),
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
@@ -616,7 +615,7 @@ mod tests {
             ),
             key_pair(PRIVATE_KEY)
         ),
-        &{operation_encoded(
+        &{encoded_operation(
                 Some(
                     operation_fields(
                         vec![("silly", OperationValue::Text("Sausage".to_string()))]
@@ -634,7 +633,7 @@ mod tests {
             2,
             None,
             None,
-            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
+            Some(Operation::from(&EncodedOperation::new(&OPERATION_ENCODED).unwrap())),
             key_pair(PRIVATE_KEY)
         ),
         &OPERATION_ENCODED,
@@ -642,14 +641,14 @@ mod tests {
     )]
     fn validation_of_entry_and_operation_values(
         #[case] entry_encoded: &str,
-        #[case] operation_encoded: &str,
+        #[case] encoded_operation: &str,
         #[case] expected_error_message: &str,
         #[from(test_db)]
         #[with(10, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
         let entry_encoded = entry_encoded.to_string();
-        let operation_encoded = operation_encoded.to_string();
+        let encoded_operation = encoded_operation.to_string();
         let expected_error_message = expected_error_message.to_string();
 
         runner.with_db_teardown(move |db: TestDatabase| async move {
@@ -659,7 +658,7 @@ mod tests {
             let context = HttpServiceContext::new(manager);
             let client = TestClient::new(build_server(context));
 
-            let publish_entry_request = publish_entry_request(&entry_encoded, &operation_encoded);
+            let publish_entry_request = publish_entry_request(&entry_encoded, &encoded_operation);
 
             let response = client
                 .post("/graphql")
@@ -715,17 +714,16 @@ mod tests {
                         )
                     };
 
-                    let entry = Entry::new(
+                    let encoded_operation = EncodedOperation::try_from(&operation).unwrap();
+                    let entry_encoded = sign_and_encode_entry(
                         &next_entry_args.log_id.into(),
-                        Some(&operation),
+                        &next_entry_args.seq_num.into(),
                         next_entry_args.skiplink.map(Hash::from).as_ref(),
                         next_entry_args.backlink.map(Hash::from).as_ref(),
-                        &next_entry_args.seq_num.into(),
+                        &encoded_operation,
+                        key_pair,
                     )
                     .unwrap();
-
-                    let entry_encoded = sign_and_encode(&entry, key_pair).unwrap();
-                    let operation_encoded = OperationEncoded::try_from(&operation).unwrap();
 
                     if index == 0 {
                         document_id = Some(entry_encoded.hash().into());
@@ -733,7 +731,7 @@ mod tests {
 
                     // Prepare a publish entry request for each entry.
                     let publish_entry_request =
-                        publish_entry_request(entry_encoded.as_str(), operation_encoded.as_str());
+                        publish_entry_request(entry_encoded.as_str(), encoded_operation.as_str());
 
                     // Publish the entry.
                     let result = client
@@ -777,7 +775,7 @@ mod tests {
             // Prepare a publish entry request for the entry.
             let publish_entry_request = publish_entry_request(
                 entry.entry_signed().as_str(),
-                entry.operation_encoded().unwrap().as_str(),
+                entry.encoded_operation().unwrap().as_str(),
             );
 
             // Publish the entry and parse response.

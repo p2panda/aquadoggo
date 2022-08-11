@@ -97,7 +97,7 @@ async fn get_related_schema_definitions(
         if let OperationValue::PinnedRelationList(fields) = fields_value {
             if fields
                 .iter()
-                .any(|field_view_id| &field_view_id == target_field_definition)
+                .any(|field_view_id| field_view_id == target_field_definition)
             {
                 related_schema_definitions.push(schema.id().clone())
             } else {
@@ -144,7 +144,7 @@ mod tests {
         let create_field_definition = Operation::new_create(
             SchemaId::SchemaFieldDefinition(1),
             operation_fields(vec![
-                ("name", OperationValue::Text("field_name".to_string())),
+                ("name", OperationValue::String("field_name".to_string())),
                 ("type", FieldType::String.into()),
             ]),
         )
@@ -170,10 +170,10 @@ mod tests {
         let create_schema_definition = Operation::new_create(
             SchemaId::SchemaDefinition(1),
             operation_fields(vec![
-                ("name", OperationValue::Text("schema_name".to_string())),
+                ("name", OperationValue::String("schema_name".to_string())),
                 (
                     "description",
-                    OperationValue::Text("description".to_string()),
+                    OperationValue::String("description".to_string()),
                 ),
                 (
                     "fields",

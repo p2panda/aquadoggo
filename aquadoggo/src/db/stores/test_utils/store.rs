@@ -4,10 +4,12 @@ use std::convert::TryFrom;
 
 use log::{debug, info};
 use p2panda_rs::document::{DocumentId, DocumentViewId};
-use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned};
+use p2panda_rs::entry::encode::sign_and_encode_entry;
+use p2panda_rs::entry::{EncodedEntry, Entry};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::{Author, KeyPair};
-use p2panda_rs::operation::{Operation, OperationEncoded, OperationFields, OperationValue};
+use p2panda_rs::operation::encode::encode_operation;
+use p2panda_rs::operation::{EncodedOperation, Operation, OperationFields, OperationValue};
 use p2panda_rs::schema::{FieldType, Schema, SchemaId};
 use p2panda_rs::storage_provider::traits::StorageProvider;
 use p2panda_rs::test_utils::constants::SCHEMA_ID;
@@ -99,7 +101,7 @@ impl TestDatabase {
 
         // Build and reduce schema field definitions
         for field in fields {
-            let create_field_op = Schema::create_field(field.0, field.1.clone()).unwrap();
+            let create_field_op = Schema::create_field(field.0, field.1.clone());
             let (entry_signed, _) =
                 send_to_store(&self.store, &create_field_op, None, key_pair).await;
 
@@ -111,7 +113,7 @@ impl TestDatabase {
         }
 
         // Build and reduce schema definition
-        let create_schema_op = Schema::create(name, "test schema description", field_ids).unwrap();
+        let create_schema_op = Schema::create(name, "test schema description", field_ids);
         let (entry_signed, _) = send_to_store(&self.store, &create_schema_op, None, key_pair).await;
         let input = TaskInput::new(None, Some(DocumentViewId::from(entry_signed.hash())));
         reduce_task(self.context.clone(), input.clone())
@@ -217,7 +219,7 @@ pub async fn populate_test_db<S: StorageProvider>(
                     &operation(
                         next_operation_fields,
                         previous_operation,
-                        Some(config.schema.to_owned()),
+                        config.schema.to_owned(),
                     ),
                     document_id.as_ref(),
                     key_pair,
@@ -243,9 +245,9 @@ pub async fn send_to_store<S: StorageProvider>(
     operation: &Operation,
     document_id: Option<&DocumentId>,
     key_pair: &KeyPair,
-) -> (EntrySigned, NextEntryArguments) {
+) -> (EncodedEntry, NextEntryArguments) {
     // Get an Author from the key_pair.
-    let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+    let author = Author::from(key_pair.public_key());
     let document_view_id: Option<DocumentViewId> =
         document_id.map(|id| id.as_str().parse().unwrap());
 
@@ -253,19 +255,17 @@ pub async fn send_to_store<S: StorageProvider>(
         .await
         .unwrap();
 
-    // Construct the next entry.
-    let next_entry = Entry::new(
+    // Sign and encode the entry and operation.
+    let operation_encoded = encode_operation(operation).unwrap();
+    let entry_encoded = sign_and_encode_entry(
         &next_entry_args.log_id.into(),
-        Some(operation),
+        &next_entry_args.seq_num.into(),
         next_entry_args.skiplink.map(Hash::from).as_ref(),
         next_entry_args.backlink.map(Hash::from).as_ref(),
-        &next_entry_args.seq_num.into(),
+        &operation_encoded,
+        key_pair,
     )
     .unwrap();
-
-    // Encode both the entry and operation.
-    let entry_encoded = sign_and_encode(&next_entry, key_pair).unwrap();
-    let operation_encoded = OperationEncoded::try_from(operation).unwrap();
 
     // Publish the entry and get the next entry args.
     let publish_entry_response = publish(store, &entry_encoded, &operation_encoded)

@@ -324,7 +324,8 @@ mod tests {
     };
     use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::identity::Author;
-    use p2panda_rs::operation::{AsOperation, Operation, OperationId, OperationValue};
+    use p2panda_rs::operation::traits::AsOperation;
+    use p2panda_rs::operation::{Operation, OperationId, OperationValue};
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, OperationStore};
     use p2panda_rs::test_utils::constants::SCHEMA_ID;
@@ -374,8 +375,7 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let author =
-                Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
+            let author = Author::from(db.test_data.key_pairs[0].public_key());
 
             // Get one entry from the pre-polulated db
             let entry = db
@@ -449,12 +449,11 @@ mod tests {
     #[rstest]
     fn inserts_gets_many_document_views(
         #[from(test_db)]
-        #[with(10, 1, 1, false, SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::Text("panda".into()))], vec![("username", OperationValue::Text("PANDA".into()))])]
+        #[with(10, 1, 1, false, SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::String("panda".into()))], vec![("username", OperationValue::String("PANDA".into()))])]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let author =
-                Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
+            let author = Author::from(db.test_data.key_pairs[0].public_key());
             let schema_id = SchemaId::from_str(SCHEMA_ID).unwrap();
 
             let log_id = LogId::default();
@@ -490,12 +489,12 @@ mod tests {
                 let expected_username = if count == 0 {
                     DocumentViewValue::new(
                         &entry.hash().into(),
-                        &OperationValue::Text("panda".to_string()),
+                        &OperationValue::String("panda".to_string()),
                     )
                 } else {
                     DocumentViewValue::new(
                         &entry.hash().into(),
-                        &OperationValue::Text("PANDA".to_string()),
+                        &OperationValue::String("PANDA".to_string()),
                     )
                 };
                 assert_eq!(document_view.get("username").unwrap(), &expected_username);

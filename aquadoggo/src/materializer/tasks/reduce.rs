@@ -92,11 +92,11 @@ async fn resolve_document_id<S: StorageProvider>(
             // https://github.com/p2panda/aquadoggo/issues/148
             debug!("Find document for view with id: {}", document_view_id);
 
-            let operation_id = document_view_id.clone().into_iter().next().unwrap();
+            let operation_id = document_view_id.iter().next().unwrap();
 
             context
                 .store
-                .get_document_by_operation_id(&operation_id)
+                .get_document_by_operation_id(operation_id)
                 .await
                 .map_err(|err| TaskError::Critical(err.to_string()))
         }
@@ -197,7 +197,8 @@ async fn reduce_document(
 #[cfg(test)]
 mod tests {
     use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
-    use p2panda_rs::operation::{AsVerifiedOperation, OperationValue};
+    use p2panda_rs::operation::traits::AsVerifiedOperation;
+    use p2panda_rs::operation::OperationValue;
     use p2panda_rs::storage_provider::traits::OperationStore;
     use p2panda_rs::test_utils::constants::SCHEMA_ID;
     use p2panda_rs::test_utils::fixtures::{
