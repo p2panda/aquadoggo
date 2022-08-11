@@ -21,7 +21,7 @@ impl ClientMutationRoot {
     /// Publish an entry using parameters obtained through `nextArgs` query.
     ///
     /// Returns arguments for publishing the next entry in the same log.
-    async fn publish_entry(
+    async fn publish(
         &self,
         ctx: &Context<'_>,
         #[graphql(name = "entry", desc = "Signed and encoded entry to publish")]
@@ -126,9 +126,9 @@ mod tests {
         hex::encode(cbor_bytes)
     }
 
-    const PUBLISH_ENTRY_QUERY: &str = r#"
-        mutation TestPublishEntry($entry: String!, $operation: String!) {
-            publishEntry(entry: $entry, operation: $operation) {
+    const PUBLISH_QUERY: &str = r#"
+        mutation TestPublish($entry: String!, $operation: String!) {
+            publish(entry: $entry, operation: $operation) {
                 logId,
                 seqNum,
                 backlink,
@@ -212,7 +212,7 @@ mod tests {
     });
 
     #[fixture]
-    fn publish_entry_request(
+    fn publish_request(
         #[default(&ENTRY_ENCODED)] entry_encoded: &str,
         #[default(&OPERATION_ENCODED)] operation_encoded: &str,
     ) -> Request {
@@ -222,23 +222,23 @@ mod tests {
             "operation": operation_encoded,
         }));
 
-        Request::new(PUBLISH_ENTRY_QUERY).variables(parameters)
+        Request::new(PUBLISH_QUERY).variables(parameters)
     }
 
     #[rstest]
-    fn publish_entry(#[from(test_db)] runner: TestDatabaseRunner, publish_entry_request: Request) {
+    fn publish(#[from(test_db)] runner: TestDatabaseRunner, publish_request: Request) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
             let (tx, _rx) = broadcast::channel(16);
             let schema_provider = SchemaProvider::default();
             let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
             let context = HttpServiceContext::new(manager);
 
-            let response = context.schema.execute(publish_entry_request).await;
+            let response = context.schema.execute(publish_request).await;
 
             assert_eq!(
                 response.data,
                 value!({
-                    "publishEntry": {
+                    "publish": {
                         "logId": "0",
                         "seqNum": "2",
                         "backlink": "0020c096422b3c865e5b85ec67a82d5c1d19de43d57c4a3d902ea62b90d96ad32fda",
@@ -252,7 +252,7 @@ mod tests {
     #[rstest]
     fn sends_message_on_communication_bus(
         #[from(test_db)] runner: TestDatabaseRunner,
-        publish_entry_request: Request,
+        publish_request: Request,
     ) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
             let (tx, mut rx) = broadcast::channel(16);
@@ -260,7 +260,7 @@ mod tests {
             let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
             let context = HttpServiceContext::new(manager);
 
-            context.schema.execute(publish_entry_request).await;
+            context.schema.execute(publish_request).await;
 
             // Find out hash of test entry to determine operation id
             let entry_encoded = EntrySigned::new(&ENTRY_ENCODED).unwrap();
@@ -275,7 +275,7 @@ mod tests {
     }
 
     #[rstest]
-    fn publish_entry_error_handling(#[from(test_db)] runner: TestDatabaseRunner) {
+    fn publish_error_handling(#[from(test_db)] runner: TestDatabaseRunner) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
             let (tx, _rx) = broadcast::channel(16);
             let schema_provider = SchemaProvider::default();
@@ -286,7 +286,7 @@ mod tests {
                 "entry": ENTRY_ENCODED.to_string(),
                 "operation": "".to_string()
             }));
-            let request = Request::new(PUBLISH_ENTRY_QUERY).variables(parameters);
+            let request = Request::new(PUBLISH_QUERY).variables(parameters);
             let response = context.schema.execute(request).await;
 
             assert!(response.is_err());
@@ -298,10 +298,7 @@ mod tests {
     }
 
     #[rstest]
-    fn post_gql_mutation(
-        #[from(test_db)] runner: TestDatabaseRunner,
-        publish_entry_request: Request,
-    ) {
+    fn post_gql_mutation(#[from(test_db)] runner: TestDatabaseRunner, publish_request: Request) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
             let (tx, _rx) = broadcast::channel(16);
             let schema_provider = SchemaProvider::default();
@@ -312,8 +309,8 @@ mod tests {
             let response = client
                 .post("/graphql")
                 .json(&json!({
-                  "query": publish_entry_request.query,
-                  "variables": publish_entry_request.variables
+                  "query": publish_request.query,
+                  "variables": publish_request.variables
                 }
                 ))
                 .send()
@@ -323,7 +320,7 @@ mod tests {
                 response.json::<serde_json::Value>().await,
                 json!({
                     "data": {
-                        "publishEntry": {
+                        "publish": {
                             "logId": "0",
                             "seqNum": "2",
                             "backlink": "0020c096422b3c865e5b85ec67a82d5c1d19de43d57c4a3d902ea62b90d96ad32fda",
@@ -526,13 +523,13 @@ mod tests {
             let context = HttpServiceContext::new(manager);
             let client = TestClient::new(build_server(context));
 
-            let publish_entry_request = publish_entry_request(&entry_encoded, &operation_encoded);
+            let publish_request = publish_request(&entry_encoded, &operation_encoded);
 
             let response = client
                 .post("/graphql")
                 .json(&json!({
-                  "query": publish_entry_request.query,
-                  "variables": publish_entry_request.variables
+                  "query": publish_request.query,
+                  "variables": publish_request.variables
                 }
                 ))
                 .send()
@@ -659,13 +656,13 @@ mod tests {
             let context = HttpServiceContext::new(manager);
             let client = TestClient::new(build_server(context));
 
-            let publish_entry_request = publish_entry_request(&entry_encoded, &operation_encoded);
+            let publish_request = publish_request(&entry_encoded, &operation_encoded);
 
             let response = client
                 .post("/graphql")
                 .json(&json!({
-                  "query": publish_entry_request.query,
-                  "variables": publish_entry_request.variables
+                  "query": publish_request.query,
+                  "variables": publish_request.variables
                 }
                 ))
                 .send()
@@ -732,15 +729,15 @@ mod tests {
                     }
 
                     // Prepare a publish entry request for each entry.
-                    let publish_entry_request =
-                        publish_entry_request(entry_encoded.as_str(), operation_encoded.as_str());
+                    let publish_request =
+                        publish_request(entry_encoded.as_str(), operation_encoded.as_str());
 
                     // Publish the entry.
                     let result = client
                         .post("/graphql")
                         .json(&json!({
-                              "query": publish_entry_request.query,
-                              "variables": publish_entry_request.variables
+                              "query": publish_request.query,
+                              "variables": publish_request.variables
                             }
                         ))
                         .send()
@@ -775,7 +772,7 @@ mod tests {
             let entry = entries.first().unwrap();
 
             // Prepare a publish entry request for the entry.
-            let publish_entry_request = publish_entry_request(
+            let publish_request = publish_request(
                 entry.entry_signed().as_str(),
                 entry.operation_encoded().unwrap().as_str(),
             );
@@ -784,8 +781,8 @@ mod tests {
             let response = client
                 .post("/graphql")
                 .json(&json!({
-                  "query": publish_entry_request.query,
-                  "variables": publish_entry_request.variables
+                  "query": publish_request.query,
+                  "variables": publish_request.variables
                 }
                 ))
                 .send()

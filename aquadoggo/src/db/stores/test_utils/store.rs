@@ -212,7 +212,7 @@ pub async fn populate_test_db<S: StorageProvider>(
                 };
 
                 // Publish the operation encoded on an entry to storage.
-                let (entry_encoded, publish_entry_response) = send_to_store::<S>(
+                let (entry_encoded, publish_response) = send_to_store::<S>(
                     &db.store,
                     &operation(
                         next_operation_fields,
@@ -225,7 +225,7 @@ pub async fn populate_test_db<S: StorageProvider>(
                 .await;
 
                 // Set the previous_operations based on the backlink
-                previous_operation = publish_entry_response.backlink.map(DocumentViewId::from);
+                previous_operation = publish_response.backlink.map(DocumentViewId::from);
 
                 // If this was the first entry in the document, store the doucment id for later.
                 if index == 0 {
@@ -268,9 +268,9 @@ pub async fn send_to_store<S: StorageProvider>(
     let operation_encoded = OperationEncoded::try_from(operation).unwrap();
 
     // Publish the entry and get the next entry's arguments.
-    let publish_entry_response = publish(store, &entry_encoded, &operation_encoded)
+    let publish_response = publish(store, &entry_encoded, &operation_encoded)
         .await
         .expect("Error publishing entry");
 
-    (entry_encoded, publish_entry_response)
+    (entry_encoded, publish_response)
 }
