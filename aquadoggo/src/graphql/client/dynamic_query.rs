@@ -449,12 +449,12 @@ mod test {
     #[case::malformed_document_id(
         "id: \"verboten\"",
         Value::Null,
-        vec!["Failed to parse \"DocumentIdScalar\": invalid hex encoding in hash string".to_string()]
+        vec!["Failed to parse \"DocumentId\": invalid hex encoding in hash string".to_string()]
     )]
     #[case::malformed_view_id(
         "viewId: \"verboten\"",
         Value::Null,
-        vec!["Failed to parse \"DocumentViewIdScalar\": invalid hex encoding in hash string".to_string()]
+        vec!["Failed to parse \"DocumentViewId\": invalid hex encoding in hash string".to_string()]
     )]
     #[case::missing_parameters(
         "id: null",

@@ -199,7 +199,7 @@ mod tests {
             let response: Response = response.json().await;
             assert_eq!(
                 response.errors[0].message,
-                "Failed to parse \"PublicKeyScalar\": invalid hex encoding in author string"
+                "Failed to parse \"PublicKey\": invalid hex encoding in author string"
             )
         })
     }
