@@ -94,6 +94,7 @@ mod tests {
 
     use async_graphql::{EmptyMutation, EmptySubscription, Request, Schema};
     use bamboo_rs_core_ed25519_yasmf::verify_batch;
+    use p2panda_rs::entry::traits::AsEncodedEntry;
     use p2panda_rs::entry::{EncodedEntry, LogId};
     use p2panda_rs::identity::Author;
     use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
@@ -154,7 +155,7 @@ mod tests {
             let entries_to_verify: Vec<(Vec<u8>, Option<Vec<u8>>)> = entries
                 .iter()
                 .map(|entry| {
-                    let entry = EncodedEntry::new(entry.as_str().unwrap()).unwrap();
+                    let entry = EncodedEntry::new(entry.as_str().unwrap());
                     (entry.to_bytes(), None)
                 })
                 .collect();
