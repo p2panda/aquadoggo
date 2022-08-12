@@ -199,10 +199,11 @@ mod tests {
     use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
     use p2panda_rs::operation::traits::AsVerifiedOperation;
     use p2panda_rs::operation::OperationValue;
+    use p2panda_rs::schema::SchemaId;
     use p2panda_rs::storage_provider::traits::OperationStore;
     use p2panda_rs::test_utils::constants::SCHEMA_ID;
     use p2panda_rs::test_utils::fixtures::{
-        operation, operation_fields, random_document_id, random_document_view_id,
+        operation, operation_fields, random_document_id, random_document_view_id, schema_id,
     };
     use rstest::rstest;
 
@@ -223,8 +224,8 @@ mod tests {
             20,
             false,
             SCHEMA_ID.parse().unwrap(),
-            vec![("username", OperationValue::Text("panda".into()))],
-            vec![("username", OperationValue::Text("PANDA".into()))]
+            vec![("username", OperationValue::String("panda".into()))],
+            vec![("username", OperationValue::String("PANDA".into()))]
         )]
         runner: TestDatabaseRunner,
     ) {
@@ -245,7 +246,7 @@ mod tests {
 
                 assert_eq!(
                     document_view.unwrap().get("username").unwrap().value(),
-                    &OperationValue::Text("PANDA".to_string())
+                    &OperationValue::String("PANDA".to_string())
                 )
             }
         });
@@ -253,6 +254,7 @@ mod tests {
 
     #[rstest]
     fn updates_a_document(
+        schema_id: SchemaId,
         #[from(test_db)]
         #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
@@ -278,10 +280,10 @@ mod tests {
                 &operation(
                     Some(operation_fields(vec![(
                         "username",
-                        OperationValue::Text("meeeeeee".to_string()),
+                        OperationValue::String("meeeeeee".to_string()),
                     )])),
                     Some(document_id.as_str().parse().unwrap()),
-                    None,
+                    schema_id,
                 ),
                 Some(&document_id),
                 key_pair,
@@ -300,7 +302,7 @@ mod tests {
                 .unwrap();
             assert_eq!(
                 document_view.unwrap().get("username").unwrap().value(),
-                &OperationValue::Text("meeeeeee".to_string())
+                &OperationValue::String("meeeeeee".to_string())
             )
         })
     }
@@ -308,7 +310,7 @@ mod tests {
     #[rstest]
     fn reduces_document_to_specific_view_id(
         #[from(test_db)]
-        #[with( 2, 1, 1, false, SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::Text("panda".into()))], vec![("username", OperationValue::Text("PANDA".into()))])]
+        #[with( 2, 1, 1, false, SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::String("panda".into()))], vec![("username", OperationValue::String("PANDA".into()))])]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
@@ -345,7 +347,7 @@ mod tests {
 
             assert_eq!(
                 document_view.unwrap().get("username").unwrap().value(),
-                &OperationValue::Text("PANDA".to_string())
+                &OperationValue::String("PANDA".to_string())
             );
 
             // We didn't reduce this document_view_id so it shouldn't exist in the db.
@@ -407,12 +409,12 @@ mod tests {
 
     #[rstest]
     #[case(
-        test_db( 3, 1, 1, false, SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::Text("panda".into()))], vec![("username", OperationValue::Text("PANDA".into()))]),
+        test_db( 3, 1, 1, false, SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::String("panda".into()))], vec![("username", OperationValue::String("PANDA".into()))]),
         true
     )]
     // This document is deleted, it shouldn't spawn a dependency task.
     #[case(
-        test_db( 3, 1, 1, true, SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::Text("panda".into()))], vec![("username", OperationValue::Text("PANDA".into()))]),
+        test_db( 3, 1, 1, true, SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::String("panda".into()))], vec![("username", OperationValue::String("PANDA".into()))]),
         false
     )]
     fn returns_dependency_task_inputs(
