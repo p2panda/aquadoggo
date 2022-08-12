@@ -66,21 +66,29 @@ impl DocumentMeta {
         document_id: Option<&DocumentId>,
         view_id: Option<&DocumentViewId>,
     ) -> Value {
-        let mut meta_fields = IndexMap::new();
+        let mut meta_fields = IndexMap::<Name, Value>::new();
 
         for meta_field in root_field.selection_set() {
-            if meta_field.name() == DOCUMENT_ID_FIELD && document_id.is_some() {
-                meta_fields.insert(
-                    Name::new(DOCUMENT_ID_FIELD),
-                    DocumentIdScalar::from(document_id.unwrap()).to_value(),
-                );
-            }
+            let response_key = Name::new(meta_field.alias().unwrap_or_else(|| meta_field.name()));
 
-            if meta_field.name() == VIEW_ID_FIELD && view_id.is_some() {
-                meta_fields.insert(
-                    Name::new(VIEW_ID_FIELD),
-                    Value::String(view_id.unwrap().to_string()),
-                );
+            match meta_field.name() {
+                "__typename" => {
+                    meta_fields.insert(
+                        response_key,
+                        Value::String(DocumentMeta::type_name().to_string()),
+                    );
+                }
+                DOCUMENT_ID_FIELD => {
+                    if let Some(document_id) = document_id {
+                        meta_fields
+                            .insert(response_key, DocumentIdScalar::from(document_id).to_value());
+                    }
+                }
+                VIEW_ID_FIELD => {
+                    if let Some(view_id) = view_id {
+                        meta_fields.insert(response_key, Value::String(view_id.to_string()));
+                    }
+                }
             }
         }
         Value::Object(meta_fields)
