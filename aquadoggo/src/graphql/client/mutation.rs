@@ -40,39 +40,16 @@ impl ClientMutationRoot {
         let entry_signed: EncodedEntry = entry.into();
         let encoded_operation: EncodedOperation = operation.into();
 
-        /////////////////////////////////////////////////////
-        // VALIDATE ENTRY AND OPERATION INTERNAL INTEGRITY //
-        /////////////////////////////////////////////////////
-
-        //@TODO: This pre-publishing validation needs to be reviewed in detail. Some problems come up here
-        // because we are not verifying the encoded operations against cddl yet. We should consider the
-        // role and expectations of `VerifiedOperation` and `StorageEntry` as well (they perform validation
-        // themselves bt are only constructed _after_ all other validation has taken place). Lot's to be
-        // improved here in general I think. Nice to see it as a very seperate step before `publish` i think.
-
-        // TODO: refactor all validation using new methods
-        // // Validate the encoded entry
-        // entry_signed.validate()?;
-        //
-        // // Validate the encoded operation
-        // encoded_operation.validate()?;
-        //
-        // // Decode the entry with it's operation.
-        // //
-        // // @TODO: Without this `publish` fails
-        // decode_entry(&entry_signed, Some(&encoded_operation))?;
-        //
-        // // Also need to validate the decoded operation to catch internally invalid operations
-        // //
-        // // @TODO: Without this `publish` fails
-        // let operation = Operation::from(&encoded_operation);
-        // operation.validate()?;
+        // TODO:
+        // - decode operation
+        // - get the schema
+        // - pass all into `publish()`
 
         /////////////////////////////////////
         // PUBLISH THE ENTRY AND OPERATION //
         /////////////////////////////////////
 
-        let next_args = publish(store, &entry_signed, &encoded_operation).await?;
+        // let next_args = publish(store, &entry_signed, &encoded_operation).await?;
 
         ////////////////////////////////////////
         // SEND THE OPERATION TO MATERIALIZER //
@@ -88,7 +65,8 @@ impl ClientMutationRoot {
             // tests in other places to check if messages arrive.
         }
 
-        Ok(next_args)
+        todo!()
+        // Ok(next_args)
     }
 }
 //
