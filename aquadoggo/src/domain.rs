@@ -11,6 +11,7 @@ use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
 use p2panda_rs::entry::{EncodedEntry, Entry, LogId, SeqNum};
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::decode::decode_operation;
+use p2panda_rs::operation::plain::PlainOperation;
 use p2panda_rs::operation::traits::{AsOperation, AsVerifiedOperation};
 use p2panda_rs::operation::validate::validate_operation_with_entry;
 use p2panda_rs::operation::{EncodedOperation, Operation, OperationAction};
@@ -206,17 +207,16 @@ pub async fn next_args<S: StorageProvider>(
 /// ## Compute and return next entry arguments
 pub async fn publish<S: StorageProvider>(
     store: &S,
-    // TODO: Actually, we need to get this in here somewhere...
-    schema: Schema,
+    schema: &Schema,
     encoded_entry: &EncodedEntry,
+    plain_operation: &PlainOperation,
     encoded_operation: &EncodedOperation,
 ) -> Result<NextEntryArguments> {
-    ////////////////////////////////
-    // DECODE ENTRY AND OPERATION //
-    ////////////////////////////////
+    //////////////////
+    // DECODE ENTRY //
+    //////////////////
 
     let entry = decode_entry(encoded_entry)?;
-    let plain_operation = decode_operation(encoded_operation)?;
     let author = entry.public_key();
     let log_id = entry.log_id();
     let seq_num = entry.seq_num();
@@ -400,17 +400,18 @@ mod tests {
     use p2panda_rs::entry::{EncodedEntry, Entry, LogId, SeqNum};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
+    use p2panda_rs::operation::decode::decode_operation;
     use p2panda_rs::operation::encode::encode_operation;
     use p2panda_rs::operation::{
         EncodedOperation, Operation, OperationBuilder, OperationFields, OperationId, OperationValue,
     };
-    use p2panda_rs::schema::SchemaId;
+    use p2panda_rs::schema::{Schema, SchemaId};
     use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
     use p2panda_rs::test_utils::constants::{test_fields, PRIVATE_KEY, SCHEMA_ID};
     use p2panda_rs::test_utils::db::{MemoryStore, StorageEntry};
     use p2panda_rs::test_utils::fixtures::{
         create_operation, delete_operation, key_pair, operation, operation_fields, public_key,
-        random_document_view_id, random_hash, schema_id, update_operation,
+        random_document_view_id, random_hash, schema, schema_id, update_operation,
     };
     use rstest::rstest;
 
@@ -465,7 +466,7 @@ mod tests {
 
     #[rstest]
     fn gets_document_id_for_view(
-        schema_id: SchemaId,
+        schema: Schema,
         #[from(test_db)] runner: TestDatabaseRunner,
         operation: Operation,
     ) {
@@ -475,7 +476,7 @@ mod tests {
             let operation_one_id: OperationId = entry.hash().into();
 
             // Store another entry and operation, from a different author, which perform an update on the earlier operation.
-            let update_operation = OperationBuilder::new(&schema_id)
+            let update_operation = OperationBuilder::new(schema.id())
                 .previous_operations(&operation_one_id.clone().into())
                 .fields(&test_fields())
                 .build()
@@ -538,6 +539,7 @@ mod tests {
     #[case::no_entries_yet(&[(0, 1), (0, 2), (0, 3), (0, 4), (0, 5), (0, 6), (0, 7), (0, 8)], (0, 8))]
     #[tokio::test]
     async fn publish_with_missing_entries(
+        schema: Schema,
         #[case] entries_to_remove: &[LogIdAndSeqNum],
         #[case] entry_to_publish: LogIdAndSeqNum,
         #[from(test_db_config)]
@@ -568,10 +570,13 @@ mod tests {
         remove_entries(&db.store, &author, entries_to_remove);
 
         // Publish the latest entry again and see what happens.
+        let operation = next_entry.payload().unwrap();
         let result = publish(
             &db.store,
-            &EncodedEntry::new(&next_entry.into_bytes()),
-            &next_entry.payload().unwrap(),
+            &schema,
+            &next_entry.clone().into(),
+            &decode_operation(operation).unwrap(),
+            operation,
         )
         .await;
 
@@ -598,7 +603,7 @@ mod tests {
     #[case::previous_operations_invalid_multiple_document_id(&[], &[(0, 8), (1, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
     #[tokio::test]
     async fn publish_with_missing_operations(
-        schema_id: SchemaId,
+        schema: Schema,
         // The operations to be removed from the db
         #[case] operations_to_remove: &[LogIdAndSeqNum],
         // The previous operations described by their log id and seq number (log_id, seq_num)
@@ -638,7 +643,7 @@ mod tests {
         let document_view_id = DocumentViewId::new(&previous_operations);
 
         // Compose the next operation.
-        let next_operation = OperationBuilder::new(&schema_id)
+        let next_operation = OperationBuilder::new(schema.id())
             .previous_operations(&document_view_id)
             .fields(&doggo_test_fields())
             .build()
@@ -653,7 +658,14 @@ mod tests {
         remove_operations(&db.store, &author, operations_to_remove);
 
         // Publish the entry and operation.
-        let result = publish(&db.store, &entry, &operation).await;
+        let result = publish(
+            &db.store,
+            &schema,
+            &entry,
+            &decode_operation(&operation).unwrap(),
+            &operation,
+        )
+        .await;
 
         // Unwrap here causing a panic, we check the errors match what we expect.
         result.unwrap();
@@ -876,7 +888,7 @@ mod tests {
     #[case::new_author_updates_to_wrong_new_log(LogId::new(1), KeyPair::new())]
     #[tokio::test]
     async fn publish_update_log_tests(
-        schema_id: SchemaId,
+        schema: Schema,
         #[case] log_id: LogId,
         #[case] key_pair: KeyPair,
         #[from(test_db_config)]
@@ -891,7 +903,7 @@ mod tests {
         let document_view_id: DocumentViewId = document_id.as_str().parse().unwrap();
         let author_performing_update = Author::from(key_pair.public_key());
 
-        let update_operation = OperationBuilder::new(&schema_id)
+        let update_operation = OperationBuilder::new(schema.id())
             .previous_operations(&document_view_id)
             .fields(&doggo_test_fields())
             .build()
@@ -917,7 +929,14 @@ mod tests {
         )
         .unwrap();
 
-        let result = publish(&db.store, &encoded_entry, &encoded_operation).await;
+        let result = publish(
+            &db.store,
+            &schema,
+            &encoded_entry.clone().into(),
+            &decode_operation(&encoded_operation).unwrap(),
+            &encoded_operation,
+        )
+        .await;
 
         result.unwrap();
     }
@@ -939,6 +958,7 @@ mod tests {
     #[case::new_author_publishes_to_wrong_new_log(LogId::new(1), KeyPair::new())]
     #[tokio::test]
     async fn publish_create_log_tests(
+        schema: Schema,
         #[case] log_id: LogId,
         #[case] key_pair: KeyPair,
         operation: Operation,
@@ -961,7 +981,14 @@ mod tests {
         )
         .unwrap();
 
-        let result = publish(&db.store, &encoded_entry, &encoded_operation).await;
+        let result = publish(
+            &db.store,
+            &schema,
+            &encoded_entry,
+            &decode_operation(&encoded_operation).unwrap(),
+            &encoded_operation,
+        )
+        .await;
 
         result.unwrap();
     }
@@ -977,7 +1004,7 @@ mod tests {
     #[case(KeyPair::new())]
     #[tokio::test]
     async fn publish_to_deleted_documents(
-        schema_id: SchemaId,
+        schema: Schema,
         #[case] key_pair: KeyPair,
         #[from(test_db_config)]
         #[with(2, 1, 1, true)]
@@ -991,7 +1018,7 @@ mod tests {
         let document_view_id: DocumentViewId = document_id.as_str().parse().unwrap();
         let author_performing_update = Author::from(key_pair.public_key());
 
-        let delete_operation = OperationBuilder::new(&schema_id)
+        let delete_operation = OperationBuilder::new(schema.id())
             .previous_operations(&document_view_id)
             .build()
             .unwrap();
@@ -1016,7 +1043,14 @@ mod tests {
         )
         .unwrap();
 
-        let result = publish(&db.store, &encoded_entry, &encoded_operation).await;
+        let result = publish(
+            &db.store,
+            &schema,
+            &encoded_entry.clone().into(),
+            &decode_operation(&encoded_operation).unwrap(),
+            &encoded_operation,
+        )
+        .await;
 
         result.unwrap();
     }
@@ -1047,7 +1081,11 @@ mod tests {
     }
 
     #[rstest]
-    fn publish_many_entries(key_pair: KeyPair, #[from(test_db)] runner: TestDatabaseRunner) {
+    fn publish_many_entries(
+        schema: Schema,
+        key_pair: KeyPair,
+        #[from(test_db)] runner: TestDatabaseRunner,
+    ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
             let num_of_entries = 13;
             let mut document_id: Option<DocumentId> = None;
@@ -1086,7 +1124,14 @@ mod tests {
                     document_id = Some(encoded_entry.hash().into());
                 }
 
-                let result = publish(&db.store, &encoded_entry, &encoded_operation).await;
+                let result = publish(
+                    &db.store,
+                    &schema,
+                    &encoded_entry.clone().into(),
+                    &decode_operation(&encoded_operation).unwrap(),
+                    &encoded_operation,
+                )
+                .await;
 
                 assert!(result.is_ok());
             }
@@ -1142,6 +1187,7 @@ mod tests {
     #[should_panic(expected = "Max sequence number reached for <Author 53fc96> log 0")]
     #[tokio::test]
     async fn publish_max_seq_num_reached(
+        schema: Schema,
         key_pair: KeyPair,
         #[from(test_db_config)]
         #[with(2, 1, 1, false)]
@@ -1211,7 +1257,15 @@ mod tests {
         .unwrap();
 
         // Publish the MAX_SEQ_NUM entry
-        let result = publish(&db.store, &encoded_entry, entry_two.payload().unwrap()).await;
+        let operation = entry_two.payload().unwrap();
+        let result = publish(
+            &db.store,
+            &schema,
+            &encoded_entry.clone().into(),
+            &decode_operation(operation).unwrap(),
+            operation,
+        )
+        .await;
 
         // try and get the MAX_SEQ_NUM entry again (it shouldn't be there)
         let entry_at_max_seq_num = db
