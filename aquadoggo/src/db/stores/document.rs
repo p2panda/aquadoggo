@@ -338,97 +338,8 @@ mod tests {
     use crate::db::stores::document::{DocumentStore, DocumentView};
     use crate::db::stores::entry::StorageEntry;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
-    //
-    //     fn entries_to_document_views(entries: &[StorageEntry]) -> Vec<DocumentView> {
-    //         let mut document_views = Vec::new();
-    //         let mut current_document_view_fields = DocumentViewFields::new();
-    //
-    //         for entry in entries {
-    //             let operation_id: OperationId = entry.hash().into();
-    //
-    //             for (name, value) in entry.operation().fields().unwrap().iter() {
-    //                 if entry.operation().is_delete() {
-    //                     continue;
-    //                 } else {
-    //                     current_document_view_fields
-    //                         .insert(name, DocumentViewValue::new(&operation_id, value));
-    //                 }
-    //             }
-    //
-    //             let document_view_fields = DocumentViewFields::new_from_operation_fields(
-    //                 &operation_id,
-    //                 &entry.operation().fields().unwrap(),
-    //             );
-    //
-    //             let document_view =
-    //                 DocumentView::new(&operation_id.clone().into(), &document_view_fields);
-    //
-    //             document_views.push(document_view)
-    //         }
-    //
-    //         document_views
-    //     }
-    //
-    // TODO: Get operation from store
-    //     #[rstest]
-    //     fn inserts_gets_one_document_view(
-    //         #[from(test_db)]
-    //         #[with(1, 1, 1)]
-    //         runner: TestDatabaseRunner,
-    //     ) {
-    //         runner.with_db_teardown(|db: TestDatabase| async move {
-    //             let author = Author::from(db.test_data.key_pairs[0].public_key());
-    //
-    //             // Get one entry from the pre-polulated db
-    //             let entry = db
-    //                 .store
-    //                 .get_entry_at_seq_num(&author, &LogId::default(), &SeqNum::new(1).unwrap())
-    //                 .await
-    //                 .unwrap()
-    //                 .unwrap();
-    //
-    //             // Construct a `DocumentView`
-    //             let operation_id: OperationId = entry.hash().into();
-    //             let document_view_id: DocumentViewId = operation_id.clone().into();
-    //             let document_view = DocumentView::new(
-    //                 &document_view_id,
-    //                 &DocumentViewFields::new_from_operation_fields(
-    //                     &operation_id,
-    //                     &entry.operation().fields().unwrap(),
-    //                 ),
-    //             );
-    //
-    //             // Insert into db
-    //             let result = db
-    //                 .store
-    //                 .insert_document_view(&document_view, &SchemaId::from_str(SCHEMA_ID).unwrap())
-    //                 .await;
-    //
-    //             assert!(result.is_ok());
-    //
-    //             let retrieved_document_view = db
-    //                 .store
-    //                 .get_document_view_by_id(&document_view_id)
-    //                 .await
-    //                 .unwrap()
-    //                 .unwrap();
-    //
-    //             for key in [
-    //                 "username",
-    //                 "age",
-    //                 "height",
-    //                 "is_admin",
-    //                 "profile_picture",
-    //                 "many_profile_pictures",
-    //                 "special_profile_picture",
-    //                 "many_special_profile_pictures",
-    //                 "another_relation_field",
-    //             ] {
-    //                 assert!(retrieved_document_view.get(key).is_some());
-    //                 assert_eq!(retrieved_document_view.get(key), document_view.get(key));
-    //             }
-    //         });
-    //     }
+
+    // TODO: bring back inserts_gets_one_document_view test
 
     #[rstest]
     fn document_view_does_not_exist(
@@ -447,62 +358,8 @@ mod tests {
             assert!(view_does_not_exist.is_none());
         });
     }
-    //
-    //     #[rstest]
-    //     fn inserts_gets_many_document_views(
-    //         #[from(test_db)]
-    //         #[with(10, 1, 1, false, SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::String("panda".into()))], vec![("username", OperationValue::String("PANDA".into()))])]
-    //         runner: TestDatabaseRunner,
-    //     ) {
-    //         runner.with_db_teardown(|db: TestDatabase| async move {
-    //             let author = Author::from(db.test_data.key_pairs[0].public_key());
-    //             let schema_id = SchemaId::from_str(SCHEMA_ID).unwrap();
-    //
-    //             let log_id = LogId::default();
-    //             let seq_num = SeqNum::default();
-    //
-    //             // Get 10 entries from the pre-populated test db
-    //             let entries = db
-    //                 .store
-    //                 .get_paginated_log_entries(&author, &log_id, &seq_num, 10)
-    //                 .await
-    //                 .unwrap();
-    //
-    //             // Parse them into document views
-    //             let document_views = entries_to_document_views(&entries);
-    //
-    //             // Insert each of these views into the db
-    //             for document_view in document_views.clone() {
-    //                 db.store
-    //                     .insert_document_view(&document_view, &schema_id)
-    //                     .await
-    //                     .unwrap();
-    //             }
-    //
-    //             // Retrieve them again and assert they are the same as the inserted ones
-    //             for (count, entry) in entries.iter().enumerate() {
-    //                 let result = db.store.get_document_view_by_id(&entry.hash().into()).await;
-    //
-    //                 assert!(result.is_ok());
-    //
-    //                 let document_view = result.unwrap().unwrap();
-    //
-    //                 // The update operation should be included in the view correctly, we check that here.
-    //                 let expected_username = if count == 0 {
-    //                     DocumentViewValue::new(
-    //                         &entry.hash().into(),
-    //                         &OperationValue::String("panda".to_string()),
-    //                     )
-    //                 } else {
-    //                     DocumentViewValue::new(
-    //                         &entry.hash().into(),
-    //                         &OperationValue::String("PANDA".to_string()),
-    //                     )
-    //                 };
-    //                 assert_eq!(document_view.get("username").unwrap(), &expected_username);
-    //             }
-    //         });
-    //     }
+
+    // TODO: bring back inserts_gets_many_document_views test
 
     #[rstest]
     fn insert_document_view_with_missing_operation(

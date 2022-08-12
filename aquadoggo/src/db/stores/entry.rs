@@ -469,15 +469,7 @@ mod tests {
     use crate::db::stores::entry::StorageEntry;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
-    //     #[rstest]
-    //     fn insert_entry(encoded_entry: EncodedEntry, #[from(test_db)] runner: TestDatabaseRunner) {
-    //         runner.with_db_teardown(|db: TestDatabase| async move {
-    //             let doggo_entry = StorageEntry::new(&encoded_entry).unwrap();
-    //             let result = db.store.insert_entry(doggo_entry).await;
-    //
-    //             assert!(result.is_ok());
-    //         });
-    //     }
+    // TODO: bring back insert_entry test
 
     #[rstest]
     fn try_insert_non_unique_entry(

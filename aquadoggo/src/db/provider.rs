@@ -114,52 +114,8 @@ mod tests {
 
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
     use crate::db::traits::DocumentStore;
-    // TODO: Look at this test again, maybe use a different helper method
-    //
-    //     /// Inserts a `DocumentView` into the db and returns its view id.
-    //     async fn insert_document_view(db: &TestDatabase) -> DocumentViewId {
-    //         let author = Author::from(db.test_data.key_pairs[0].public_key()).unwrap();
-    //         let entry = db
-    //             .store
-    //             .get_entry_at_seq_num(&author, &LogId::new(0), &SeqNum::new(1).unwrap())
-    //             .await
-    //             .unwrap()
-    //             .unwrap();
-    //         let operation_id: OperationId = entry.hash().into();
-    //         let document_view_id: DocumentViewId = operation_id.clone().into();
-    //         let document_view = DocumentView::new(
-    //             &document_view_id,
-    //             &DocumentViewFields::new_from_operation_fields(
-    //                 &operation_id,
-    //                 &entry.operation().fields().unwrap(),
-    //             ),
-    //         );
-    //         let result = db
-    //             .store
-    //             .insert_document_view(&document_view, &SchemaId::from_str(SCHEMA_ID).unwrap())
-    //             .await;
-    //
-    //         assert!(result.is_ok());
-    //         document_view_id
-    //     }
-    //
-    //     #[rstest]
-    //     fn test_get_schema_for_view(
-    //         #[from(test_db)]
-    //         #[with(1, 1, 1)]
-    //         runner: TestDatabaseRunner,
-    //     ) {
-    //         runner.with_db_teardown(|db: TestDatabase| async move {
-    //             let document_view_id = insert_document_view(&db).await;
-    //             let result = db
-    //                 .store
-    //                 .get_schema_by_document_view(&document_view_id)
-    //                 .await;
-    //
-    //             assert!(result.is_ok());
-    //             assert_eq!(result.unwrap().unwrap().name(), "venue");
-    //         });
-    //     }
+
+    // TODO: bring back test_get_schema_for_view test
 
     #[rstest]
     fn test_get_schema_for_missing_view(

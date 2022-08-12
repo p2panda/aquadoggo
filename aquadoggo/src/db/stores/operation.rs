@@ -362,41 +362,8 @@ mod tests {
     use rstest::rstest;
 
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
-    //
-    //     #[rstest]
-    //     #[case::create_operation(create_operation(&test_fields()))]
-    //     #[case::update_operation(update_operation(&test_fields(), &HASH.parse().unwrap()))]
-    //     #[case::update_operation_many_prev_ops(update_operation(&test_fields(), &random_previous_operations(12)))]
-    //     #[case::delete_operation(delete_operation(&HASH.parse().unwrap()))]
-    //     #[case::delete_operation_many_prev_ops(delete_operation(&random_previous_operations(12)))]
-    //     fn insert_get_operations(
-    //         #[case] operation: Operation,
-    //         #[from(public_key)] author: Author,
-    //         operation_id: OperationId,
-    //         document_id: DocumentId,
-    //         #[from(test_db)] runner: TestDatabaseRunner,
-    //     ) {
-    //         runner.with_db_teardown(|db: TestDatabase| async move {
-    //             // Construct the storage operation.
-    //             let operation = VerifiedOperation::new(&author, &operation_id, &operation).unwrap();
-    //
-    //             // Insert the doggo operation into the db, returns Ok(true) when succesful.
-    //             let result = db.store.insert_operation(&operation, &document_id).await;
-    //             assert!(result.is_ok());
-    //
-    //             // Request the previously inserted operation by it's id.
-    //             let returned_operation = db
-    //                 .store
-    //                 .get_operation_by_id(operation.id())
-    //                 .await
-    //                 .unwrap()
-    //                 .unwrap();
-    //
-    //             assert_eq!(returned_operation.public_key(), operation.public_key());
-    //             assert_eq!(returned_operation.fields(), operation.fields());
-    //             assert_eq!(returned_operation.id(), operation.id());
-    //         });
-    //     }
+
+    // TODO: bring back insert_get_operations test
 
     #[rstest]
     fn insert_operation_twice(
