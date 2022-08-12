@@ -484,8 +484,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            let document_view_id: DocumentViewId =
-                document_operations[1].operation_id().clone().into();
+            let document_view_id: DocumentViewId = document_operations[1].id().clone().into();
 
             let input = TaskInput::new(None, Some(document_view_id.clone()));
 

@@ -218,7 +218,7 @@ pub async fn materializer_service(
 //
 //             // Send a message over the bus which kicks in materialization
 //             tx.send(crate::bus::ServiceMessage::NewOperation(
-//                 verified_operation.operation_id().to_owned(),
+//                 verified_operation.id().to_owned(),
 //             ))
 //             .unwrap();
 //
@@ -362,7 +362,7 @@ pub async fn materializer_service(
 //
 //             // Send a message over the bus which kicks in materialization
 //             tx.send(crate::bus::ServiceMessage::NewOperation(
-//                 verified_operation.operation_id().to_owned(),
+//                 verified_operation.id().to_owned(),
 //             ))
 //             .unwrap();
 //
@@ -377,7 +377,7 @@ pub async fn materializer_service(
 //                         "name",
 //                         OperationValue::Text("panda123".into()),
 //                     )])),
-//                     Some(verified_operation.operation_id().to_owned().into()),
+//                     Some(verified_operation.id().to_owned().into()),
 //                     Some(SCHEMA_ID.parse().unwrap()),
 //                 ),
 //                 Some(document_id),

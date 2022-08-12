@@ -9,7 +9,7 @@ use p2panda_rs::storage_provider::error::OperationStorageError;
 use p2panda_rs::storage_provider::traits::StorageProvider;
 use sqlx::query_scalar;
 
-use crate::db::stores::{StorageEntry, StorageLog};
+use crate::db::stores::{StorageEntry, StorageLog, StorageOperation};
 use crate::db::Pool;
 use crate::errors::Result;
 
@@ -32,7 +32,7 @@ impl SqlStorage {
 impl StorageProvider for SqlStorage {
     type StorageLog = StorageLog;
     type Entry = StorageEntry;
-    type StorageOperation = VerifiedOperation;
+    type Operation = StorageOperation;
 
     /// Returns the related document for any entry.
     ///

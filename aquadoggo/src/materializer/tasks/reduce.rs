@@ -2,6 +2,7 @@
 
 use log::{debug, info};
 use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
+use p2panda_rs::operation::traits::AsVerifiedOperation;
 use p2panda_rs::operation::VerifiedOperation;
 use p2panda_rs::storage_provider::traits::{OperationStore, StorageProvider};
 
@@ -110,10 +111,10 @@ async fn resolve_document_id<S: StorageProvider>(
 ///
 /// It returns `None` if either that document view reached "deleted" status or we don't have enough
 /// operations to materialise.
-async fn reduce_document_view(
+async fn reduce_document_view<O: AsVerifiedOperation>(
     context: &Context,
     document_view_id: &DocumentViewId,
-    operations: Vec<VerifiedOperation>,
+    operations: Vec<O>,
 ) -> Result<Option<DocumentViewId>, TaskError> {
     let document = match DocumentBuilder::new(operations)
         .build_to_view_id(Some(document_view_id.to_owned()))
@@ -161,9 +162,9 @@ async fn reduce_document_view(
 ///
 /// It returns `None` if either that document view reached "deleted" status or we don't have enough
 /// operations to materialise.
-async fn reduce_document(
+async fn reduce_document<O: AsVerifiedOperation>(
     context: &Context,
-    operations: Vec<VerifiedOperation>,
+    operations: Vec<O>,
 ) -> Result<Option<DocumentViewId>, TaskError> {
     match DocumentBuilder::new(operations).build() {
         Ok(document) => {
@@ -326,7 +327,7 @@ mod tests {
             let document_view_id: DocumentViewId = sorted_document_operations
                 .pop()
                 .unwrap()
-                .operation_id()
+                .id()
                 .clone()
                 .into();
 
@@ -354,7 +355,7 @@ mod tests {
             let document_view_id: DocumentViewId = sorted_document_operations
                 .pop()
                 .unwrap()
-                .operation_id()
+                .id()
                 .clone()
                 .into();
 

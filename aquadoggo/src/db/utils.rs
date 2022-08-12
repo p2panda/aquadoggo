@@ -14,6 +14,8 @@ use p2panda_rs::schema::SchemaId;
 use crate::db::models::document::DocumentViewFieldRow;
 use crate::db::models::OperationFieldsJoinedRow;
 
+use super::stores::StorageOperation;
+
 /// Takes a vector of `OperationFieldsJoinedRow` and parses them into an `VerifiedOperation`
 /// struct.
 ///
@@ -22,7 +24,7 @@ use crate::db::models::OperationFieldsJoinedRow;
 /// when retrieving an operation from the db.
 pub fn parse_operation_rows(
     operation_rows: Vec<OperationFieldsJoinedRow>,
-) -> Option<VerifiedOperation> {
+) -> Option<StorageOperation> {
     let first_row = match operation_rows.get(0) {
         Some(row) => row,
         None => return None,
@@ -154,7 +156,17 @@ pub fn parse_operation_rows(
     // Unwrap as we are sure values coming from the db are validated
     .unwrap();
 
-    Some(VerifiedOperation::new(&author, &operation_id, &operation).unwrap())
+    let operation = StorageOperation {
+        id: operation_id,
+        version: operation.version(),
+        action: operation.action(),
+        schema_id,
+        previous_operations: operation.previous_operations(),
+        fields: operation.fields(),
+        public_key: author,
+    };
+
+    Some(operation)
 }
 
 /// Takes a single `OperationValue` and parses it into a vector of string values.

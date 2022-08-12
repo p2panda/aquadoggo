@@ -4,9 +4,13 @@ use std::collections::BTreeMap;
 
 use async_trait::async_trait;
 use futures::future::try_join_all;
-use p2panda_rs::document::DocumentId;
+use p2panda_rs::document::{DocumentId, DocumentViewId};
+use p2panda_rs::identity::Author;
 use p2panda_rs::operation::traits::{AsOperation, AsVerifiedOperation};
-use p2panda_rs::operation::{OperationId, VerifiedOperation};
+use p2panda_rs::operation::{
+    OperationAction, OperationFields, OperationId, OperationVersion, VerifiedOperation,
+};
+use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::error::OperationStorageError;
 use p2panda_rs::storage_provider::traits::OperationStore;
 use sqlx::{query, query_as, query_scalar};
@@ -14,6 +18,68 @@ use sqlx::{query, query_as, query_scalar};
 use crate::db::models::OperationFieldsJoinedRow;
 use crate::db::provider::SqlStorage;
 use crate::db::utils::{parse_operation_rows, parse_value_to_string_vec};
+
+pub struct StorageOperation {
+    /// Identifier of the operation.
+    pub(crate) id: OperationId,
+
+    /// Version of this operation.
+    pub(crate) version: OperationVersion,
+
+    /// Action of this operation.
+    pub(crate) action: OperationAction,
+
+    /// Schema instance of this operation.
+    pub(crate) schema_id: SchemaId,
+
+    /// Previous operations field.
+    pub(crate) previous_operations: Option<DocumentViewId>,
+
+    /// Operation fields.
+    pub(crate) fields: Option<OperationFields>,
+
+    /// The public key of the key pair used to publish this operation.
+    pub(crate) public_key: Author,
+}
+
+impl AsVerifiedOperation for StorageOperation {
+    /// Returns the identifier for this operation.
+    fn id(&self) -> &OperationId {
+        &self.id
+    }
+
+    /// Returns the public key of the author of this operation.
+    fn public_key(&self) -> &Author {
+        &self.public_key
+    }
+}
+
+impl AsOperation for StorageOperation {
+    /// Returns action type of operation.
+    fn action(&self) -> OperationAction {
+        self.action.to_owned()
+    }
+
+    /// Returns schema if of operation.
+    fn schema_id(&self) -> SchemaId {
+        self.schema_id.to_owned()
+    }
+
+    /// Returns version of operation.
+    fn version(&self) -> OperationVersion {
+        self.version.to_owned()
+    }
+
+    /// Returns application data fields of operation.
+    fn fields(&self) -> Option<OperationFields> {
+        self.fields.clone()
+    }
+
+    /// Returns vector of this operation's previous operation ids
+    fn previous_operations(&self) -> Option<DocumentViewId> {
+        self.previous_operations.clone()
+    }
+}
 
 /// Implementation of `OperationStore` trait which is required when constructing a
 /// `StorageProvider`.
@@ -26,7 +92,7 @@ use crate::db::utils::{parse_operation_rows, parse_value_to_string_vec};
 /// relations are stored. These are used in conjunction with the `sqlx` library
 /// to coerce raw values into structs when querying the database.
 #[async_trait]
-impl OperationStore<VerifiedOperation> for SqlStorage {
+impl OperationStore<StorageOperation> for SqlStorage {
     /// Get the id of the document an operation is part of.
     ///
     /// Returns a result containing a `DocumentId` wrapped in an option. If no
@@ -97,7 +163,7 @@ impl OperationStore<VerifiedOperation> for SqlStorage {
         )
         .bind(operation.public_key().as_str())
         .bind(document_id.as_str())
-        .bind(operation.operation_id().as_str())
+        .bind(operation.id().as_str())
         .bind(operation.action().as_str())
         .bind(operation.schema_id().to_string())
         .bind(
@@ -139,7 +205,7 @@ impl OperationStore<VerifiedOperation> for SqlStorage {
                                 ($1, $2, $3, $4, $5)
                             ",
                             )
-                            .bind(operation.operation_id().as_str().to_owned())
+                            .bind(operation.id().as_str().to_owned())
                             .bind(name.to_owned())
                             .bind(value.field_type().to_string())
                             .bind(db_value)
@@ -164,7 +230,7 @@ impl OperationStore<VerifiedOperation> for SqlStorage {
                 .any(|query_result| query_result.rows_affected() != 1)
         {
             return Err(OperationStorageError::InsertionError(
-                operation.operation_id().clone(),
+                operation.id().clone(),
             ));
         }
 
@@ -185,7 +251,7 @@ impl OperationStore<VerifiedOperation> for SqlStorage {
     async fn get_operation_by_id(
         &self,
         id: &OperationId,
-    ) -> Result<Option<VerifiedOperation>, OperationStorageError> {
+    ) -> Result<Option<StorageOperation>, OperationStorageError> {
         let operation_rows = query_as::<_, OperationFieldsJoinedRow>(
             "
             SELECT
@@ -223,7 +289,7 @@ impl OperationStore<VerifiedOperation> for SqlStorage {
     async fn get_operations_by_document_id(
         &self,
         id: &DocumentId,
-    ) -> Result<Vec<VerifiedOperation>, OperationStorageError> {
+    ) -> Result<Vec<StorageOperation>, OperationStorageError> {
         let operation_rows = query_as::<_, OperationFieldsJoinedRow>(
             "
             SELECT
@@ -267,7 +333,7 @@ impl OperationStore<VerifiedOperation> for SqlStorage {
             };
         }
 
-        let operations: Vec<VerifiedOperation> = grouped_operation_rows
+        let operations: Vec<StorageOperation> = grouped_operation_rows
             .iter()
             .filter_map(|(_id, operation_rows)| parse_operation_rows(operation_rows.to_owned()))
             .collect();
@@ -321,14 +387,14 @@ mod tests {
     //             // Request the previously inserted operation by it's id.
     //             let returned_operation = db
     //                 .store
-    //                 .get_operation_by_id(operation.operation_id())
+    //                 .get_operation_by_id(operation.id())
     //                 .await
     //                 .unwrap()
     //                 .unwrap();
     //
     //             assert_eq!(returned_operation.public_key(), operation.public_key());
     //             assert_eq!(returned_operation.fields(), operation.fields());
-    //             assert_eq!(returned_operation.operation_id(), operation.operation_id());
+    //             assert_eq!(returned_operation.id(), operation.id());
     //         });
     //     }
 
@@ -362,7 +428,7 @@ mod tests {
         runner.with_db_teardown(|db: TestDatabase| async move {
             assert!(db
                 .store
-                .get_document_by_operation_id(create_operation.operation_id())
+                .get_document_by_operation_id(create_operation.id())
                 .await
                 .unwrap()
                 .is_none());
@@ -374,7 +440,7 @@ mod tests {
 
             assert_eq!(
                 db.store
-                    .get_document_by_operation_id(create_operation.operation_id())
+                    .get_document_by_operation_id(create_operation.id())
                     .await
                     .unwrap()
                     .unwrap(),
@@ -388,7 +454,7 @@ mod tests {
 
             assert_eq!(
                 db.store
-                    .get_document_by_operation_id(create_operation.operation_id())
+                    .get_document_by_operation_id(create_operation.id())
                     .await
                     .unwrap()
                     .unwrap(),
