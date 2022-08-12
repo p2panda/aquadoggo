@@ -1111,11 +1111,11 @@ mod tests {
                         schema_id,
                     )
                 } else if index == (num_of_entries - 1) {
-                    delete_operation(&next_entry_args.backlink.clone().unwrap().into(), schema_id)
+                    delete_operation(next_entry_args.backlink.clone().unwrap().into(), schema_id)
                 } else {
                     update_operation(
                         vec![("name", OperationValue::String("🐼".to_string()))],
-                        &next_entry_args.backlink.clone().unwrap().into(),
+                        next_entry_args.backlink.clone().unwrap().into(),
                         schema_id,
                     )
                 };
