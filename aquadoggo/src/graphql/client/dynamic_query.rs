@@ -241,6 +241,7 @@ impl DynamicQuery {
         let mut document_fields = IndexMap::new();
 
         for field in selected_fields {
+            // Name with which this field appears in the response
             let response_key = Name::new(field.alias().unwrap_or_else(|| field.name()));
 
             match field.name() {
@@ -318,7 +319,7 @@ impl DynamicQuery {
                     .unwrap_or_else(|| selected_field.name()),
             );
 
-            // Handle `__typename` field and `continue` to next selection.
+            // Handle `__typename` field and continue to next selection.
             if selected_field.name() == "__typename" {
                 let type_name = dynamic_types::document_fields::type_name(&schema);
                 view_fields.insert(response_key, Value::String(type_name));
