@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_graphql::indexmap::IndexMap;
-use async_graphql::{Name, OutputType, ScalarType, SelectionField, Value};
+use async_graphql::{
+    Name, OutputType, ScalarType, SelectionField, ServerError, ServerResult, Value,
+};
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 
 use crate::graphql::client::dynamic_types::utils::{metafield, metaobject};
@@ -65,7 +67,7 @@ impl DocumentMeta {
         root_field: SelectionField,
         document_id: Option<&DocumentId>,
         view_id: Option<&DocumentViewId>,
-    ) -> Value {
+    ) -> ServerResult<Value> {
         let mut meta_fields = IndexMap::<Name, Value>::new();
 
         for meta_field in root_field.selection_set() {
@@ -89,8 +91,16 @@ impl DocumentMeta {
                         meta_fields.insert(response_key, Value::String(view_id.to_string()));
                     }
                 }
+                _ => Err(ServerError::new(
+                    format!(
+                        "Field '{}' does not exist on {}",
+                        meta_field.name(),
+                        Self::type_name(),
+                    ),
+                    None,
+                ))?,
             }
         }
-        Value::Object(meta_fields)
+        Ok(Value::Object(meta_fields))
     }
 }

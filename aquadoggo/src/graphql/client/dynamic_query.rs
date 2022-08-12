@@ -250,13 +250,14 @@ impl DynamicQuery {
                         .get_schema_by_document_view(view.id())
                         .await
                         .map_err(|err| ServerError::new(err.to_string(), None))?
-                        .unwrap();
-                    document_fields.insert(resolved_name, Value::String(schema_id.to_string()));
+                        .unwrap()
+                        .to_string();
+                    document_fields.insert(resolved_name, Value::String(schema_id));
                 }
                 dynamic_types::document::META_FIELD => {
                     document_fields.insert(
                         resolved_name,
-                        DocumentMeta::resolve(field, None, Some(view.id())),
+                        DocumentMeta::resolve(field, None, Some(view.id()))?,
                     );
                 }
                 dynamic_types::document::FIELDS_FIELD => {
@@ -266,6 +267,19 @@ impl DynamicQuery {
                         self.document_fields_response(view.clone(), ctx, subselection)
                             .await?,
                     );
+                }
+                _ => {
+                    let store = ctx.data_unchecked::<SqlStorage>();
+                    let schema_id = store
+                        .get_schema_by_document_view(view.id())
+                        .await
+                        .map_err(|err| ServerError::new(err.to_string(), None))?
+                        .unwrap()
+                        .to_string();
+                    Err(ServerError::new(
+                        format!("Field '{}' does not exist on {}", field.name(), schema_id,),
+                        None,
+                    ))?
                 }
             }
         }
