@@ -29,7 +29,7 @@ fn scalar_fields(#[from(test_db)] runner: TestDatabaseRunner) {
                 vec![
                     ("bool", FieldType::Boolean),
                     ("float", FieldType::Float),
-                    ("int", FieldType::Int),
+                    ("int", FieldType::Integer),
                     ("text", FieldType::String),
                 ],
                 &key_pair,
