@@ -79,7 +79,7 @@ fn application_schema_container_type(#[from(test_db)] runner: TestDatabaseRunner
         let schema = db
             .add_schema(
                 "schema_name",
-                vec![("bool_field", FieldType::Bool)],
+                vec![("bool_field", FieldType::Boolean)],
                 &key_pair,
             )
             .await;
@@ -146,7 +146,7 @@ fn application_schema_fields_type(#[from(test_db)] runner: TestDatabaseRunner) {
                 "schema_name",
                 vec![
                     // scalar field
-                    ("bool_field", FieldType::Bool),
+                    ("bool_field", FieldType::Boolean),
                     // object field
                     (
                         "relation_field",
