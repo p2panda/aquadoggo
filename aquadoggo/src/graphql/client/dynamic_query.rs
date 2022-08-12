@@ -241,7 +241,7 @@ impl DynamicQuery {
         let mut document_fields = IndexMap::new();
 
         for field in selected_fields {
-            let resolved_name = Name::new(field.alias().unwrap_or_else(|| field.name()));
+            let response_key = Name::new(field.alias().unwrap_or_else(|| field.name()));
 
             match field.name() {
                 "__typename" => {
@@ -252,18 +252,18 @@ impl DynamicQuery {
                         .map_err(|err| ServerError::new(err.to_string(), None))?
                         .unwrap()
                         .to_string();
-                    document_fields.insert(resolved_name, Value::String(schema_id));
+                    document_fields.insert(response_key, Value::String(schema_id));
                 }
                 dynamic_types::document::META_FIELD => {
                     document_fields.insert(
-                        resolved_name,
+                        response_key,
                         DocumentMeta::resolve(field, None, Some(view.id()))?,
                     );
                 }
                 dynamic_types::document::FIELDS_FIELD => {
                     let subselection = field.selection_set().collect();
                     document_fields.insert(
-                        resolved_name,
+                        response_key,
                         self.document_fields_response(view.clone(), ctx, subselection)
                             .await?,
                     );
