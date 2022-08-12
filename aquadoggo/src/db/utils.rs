@@ -46,36 +46,38 @@ pub fn parse_operation_rows(
     //    the suitable vec (instantiated above)
     if first_row.action != "delete" {
         operation_rows.iter().for_each(|row| {
-            let field_type = row.field_type.unwrap().as_str();
-            let field_name = row.name.unwrap().as_str();
+            let field_type = row.field_type.as_ref().unwrap().as_str();
+            let field_name = row.name.as_ref().unwrap();
             let field_value = row.value.as_ref().unwrap();
 
             match field_type {
                 "bool" => {
                     operation_fields.push((
-                        field_name,
+                        field_name.to_string(),
                         OperationValue::Boolean(field_value.parse::<bool>().unwrap()),
                     ));
                 }
                 "int" => {
                     operation_fields.push((
-                        field_name,
+                        field_name.to_string(),
                         OperationValue::Integer(field_value.parse::<i64>().unwrap()),
                     ));
                 }
                 "float" => {
                     operation_fields.push((
-                        field_name,
+                        field_name.to_string(),
                         OperationValue::Float(field_value.parse::<f64>().unwrap()),
                     ));
                 }
                 "str" => {
-                    operation_fields
-                        .push((field_name, OperationValue::String(field_value.clone())));
+                    operation_fields.push((
+                        field_name.to_string(),
+                        OperationValue::String(field_value.clone()),
+                    ));
                 }
                 "relation" => {
                     operation_fields.push((
-                        field_name,
+                        field_name.to_string(),
                         OperationValue::Relation(Relation::new(
                             field_value.parse::<DocumentId>().unwrap(),
                         )),
@@ -96,7 +98,7 @@ pub fn parse_operation_rows(
                 }
                 "pinned_relation" => {
                     operation_fields.push((
-                        field_name,
+                        field_name.to_string(),
                         OperationValue::PinnedRelation(PinnedRelation::new(
                             field_value.parse::<DocumentViewId>().unwrap(),
                         )),
@@ -120,14 +122,14 @@ pub fn parse_operation_rows(
         })
     };
 
-    for (ref field_name, relation_list) in relation_lists {
+    for (field_name, relation_list) in relation_lists {
         operation_fields.push((
             field_name,
             OperationValue::RelationList(RelationList::new(relation_list)),
         ));
     }
 
-    for (ref field_name, pinned_relation_list) in pinned_relation_lists {
+    for (field_name, pinned_relation_list) in pinned_relation_lists {
         operation_fields.push((
             field_name,
             OperationValue::PinnedRelationList(PinnedRelationList::new(pinned_relation_list)),
@@ -135,21 +137,21 @@ pub fn parse_operation_rows(
     }
 
     let operation_builder = OperationBuilder::new(&schema_id);
-    let previous_operations = first_row
-        .previous_operations
-        .map(|previous| previous.parse().unwrap())
-        .as_ref();
+    let previous_operations = first_row.previous_operations.clone();
+    let previous_operations = previous_operations.map(|previous| previous.parse().unwrap());
+    let fields: Vec<(&str, OperationValue)> = operation_fields
+        .iter()
+        .map(|(name, value)| (name.as_str(), value.to_owned()))
+        .collect();
 
     let operation = match first_row.action.as_str() {
-        "create" => operation_builder
-            .fields(operation_fields.as_slice())
-            .build(),
+        "create" => operation_builder.fields(fields.as_slice()).build(),
         "update" => operation_builder
-            .fields(operation_fields.as_slice())
-            .previous_operations(previous_operations.unwrap())
+            .fields(fields.as_slice())
+            .previous_operations(previous_operations.as_ref().unwrap())
             .build(),
         "delete" => operation_builder
-            .previous_operations(previous_operations.unwrap())
+            .previous_operations(previous_operations.as_ref().unwrap())
             .build(),
         _ => panic!("Operation which was not CREATE, UPDATE or DELETE found."),
     }
