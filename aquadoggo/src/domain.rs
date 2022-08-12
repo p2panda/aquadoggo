@@ -1104,14 +1104,19 @@ mod tests {
                     .await
                     .unwrap();
 
+                let schema_id = schema.id().to_owned();
                 let operation = if index == 0 {
-                    create_operation(&[("name", OperationValue::String("Panda".to_string()))])
+                    create_operation(
+                        vec![("name", OperationValue::String("Panda".to_string()))],
+                        schema_id,
+                    )
                 } else if index == (num_of_entries - 1) {
-                    delete_operation(&next_entry_args.backlink.clone().unwrap().into())
+                    delete_operation(&next_entry_args.backlink.clone().unwrap().into(), schema_id)
                 } else {
                     update_operation(
-                        &[("name", OperationValue::String("🐼".to_string()))],
+                        vec![("name", OperationValue::String("🐼".to_string()))],
                         &next_entry_args.backlink.clone().unwrap().into(),
+                        schema_id,
                     )
                 };
 
