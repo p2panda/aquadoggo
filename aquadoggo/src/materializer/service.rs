@@ -133,385 +133,385 @@ pub async fn materializer_service(
 
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use std::time::Duration;
-
-    use p2panda_rs::document::DocumentViewId;
-    use p2panda_rs::identity::KeyPair;
-    use p2panda_rs::operation::traits::AsOperation;
-    use p2panda_rs::operation::{
-        Operation, OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList,
-    };
-    use p2panda_rs::storage_provider::traits::OperationStore;
-    use p2panda_rs::test_utils::constants::SCHEMA_ID;
-    use p2panda_rs::test_utils::fixtures::{
-        key_pair, operation, operation_fields, random_document_id, random_operation_id,
-    };
-    use rstest::rstest;
-    use tokio::sync::{broadcast, oneshot};
-    use tokio::task;
-
-    use crate::context::Context;
-    use crate::db::stores::test_utils::{send_to_store, test_db, TestDatabase, TestDatabaseRunner};
-    use crate::db::traits::DocumentStore;
-    use crate::materializer::{Task, TaskInput};
-    use crate::schema::SchemaProvider;
-    use crate::Configuration;
-
-    use super::materializer_service;
-
-    #[rstest]
-    fn materialize_document_from_bus(
-        #[from(test_db)]
-        #[with(1, 1, 1, false, SCHEMA_ID.parse().unwrap(), vec![("name", OperationValue::Text("panda".into()))])]
-        runner: TestDatabaseRunner,
-    ) {
-        // Prepare database which inserts data for one document
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            // Identify document and operation which was inserted for testing
-            let document_id = db.test_data.documents.first().unwrap();
-            let verified_operation = db
-                .store
-                .get_operations_by_document_id(document_id)
-                .await
-                .unwrap()
-                .first()
-                .unwrap()
-                .to_owned();
-
-            // We expect that the database does not contain any materialized document yet
-            assert!(db
-                .store
-                .get_document_by_id(document_id)
-                .await
-                .unwrap()
-                .is_none());
-
-            // Prepare arguments for service
-            let context = Context::new(
-                db.store.clone(),
-                Configuration::default(),
-                SchemaProvider::default(),
-            );
-            let shutdown = task::spawn(async {
-                loop {
-                    // Do this forever .. this means that the shutdown handler will never resolve
-                    tokio::time::sleep(Duration::from_millis(100)).await;
-                }
-            });
-            let (tx, _) = broadcast::channel(1024);
-            let (tx_ready, rx_ready) = oneshot::channel::<()>();
-
-            // Start materializer service
-            let tx_clone = tx.clone();
-            let handle = tokio::spawn(async move {
-                materializer_service(context, shutdown, tx_clone, tx_ready)
-                    .await
-                    .unwrap();
-            });
-
-            if rx_ready.await.is_err() {
-                panic!("Service dropped");
-            }
-
-            // Send a message over the bus which kicks in materialization
-            tx.send(crate::bus::ServiceMessage::NewOperation(
-                verified_operation.operation_id().to_owned(),
-            ))
-            .unwrap();
-
-            // Wait a little bit for work being done ..
-            tokio::time::sleep(Duration::from_millis(100)).await;
-
-            // Make sure the service did not crash and is still running
-            assert_eq!(handle.is_finished(), false);
-
-            // Check database for materialized documents
-            let document = db
-                .store
-                .get_document_by_id(document_id)
-                .await
-                .unwrap()
-                .expect("We expect that the document is `Some`");
-            assert_eq!(document.id().to_string(), document_id.to_string());
-            assert_eq!(
-                document.fields().get("name").unwrap().value().to_owned(),
-                OperationValue::Text("panda".into())
-            );
-        });
-    }
-
-    #[rstest]
-    fn materialize_document_from_last_runtime(
-        #[from(test_db)]
-        #[with(1, 1, 1, false, SCHEMA_ID.parse().unwrap(), vec![("name", OperationValue::Text("panda".into()))])]
-        runner: TestDatabaseRunner,
-    ) {
-        // Prepare database which inserts data for one document
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            // Identify document and operation which was inserted for testing
-            let document_id = db.test_data.documents.first().unwrap();
-
-            // Store a pending "reduce" task from last runtime in the database so it gets picked up by
-            // the materializer service
-            db.store
-                .insert_task(&Task::new(
-                    "reduce",
-                    TaskInput::new(Some(document_id.to_owned()), None),
-                ))
-                .await
-                .unwrap();
-
-            // Prepare arguments for service
-            let context = Context::new(
-                db.store.clone(),
-                Configuration::default(),
-                SchemaProvider::default(),
-            );
-            let shutdown = task::spawn(async {
-                loop {
-                    // Do this forever .. this means that the shutdown handler will never resolve
-                    tokio::time::sleep(Duration::from_millis(100)).await;
-                }
-            });
-            let (tx, _) = broadcast::channel(1024);
-            let (tx_ready, rx_ready) = oneshot::channel::<()>();
-
-            // Start materializer service
-            let tx_clone = tx.clone();
-            let handle = tokio::spawn(async move {
-                materializer_service(context, shutdown, tx_clone, tx_ready)
-                    .await
-                    .unwrap();
-            });
-
-            if rx_ready.await.is_err() {
-                panic!("Service dropped");
-            }
-
-            // Wait for service to be done .. it should materialize the document since it was waiting
-            // as a "pending" task in the database
-            tokio::time::sleep(Duration::from_millis(200)).await;
-
-            // Make sure the service did not crash and is still running
-            assert_eq!(handle.is_finished(), false);
-
-            // Check database for materialized documents
-            let document = db
-                .store
-                .get_document_by_id(document_id)
-                .await
-                .unwrap()
-                .expect("We expect that the document is `Some`");
-            assert_eq!(document.id().to_string(), document_id.to_string());
-            assert_eq!(
-                document.fields().get("name").unwrap().value().to_owned(),
-                OperationValue::Text("panda".into())
-            );
-        });
-    }
-
-    #[rstest]
-    fn materialize_update_document(
-        #[from(test_db)]
-        #[with(1, 1, 1, false, SCHEMA_ID.parse().unwrap(), vec![("name", OperationValue::Text("panda".into()))])]
-        runner: TestDatabaseRunner,
-    ) {
-        // Prepare database which inserts data for one document
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            // Identify key_[air, document and operation which was inserted for testing
-            let key_pair = db.test_data.key_pairs.first().unwrap();
-            let document_id = db.test_data.documents.first().unwrap();
-            let verified_operation = db
-                .store
-                .get_operations_by_document_id(document_id)
-                .await
-                .unwrap()
-                .first()
-                .unwrap()
-                .to_owned();
-
-            // Prepare arguments for service
-            let context = Context::new(
-                db.store.clone(),
-                Configuration::default(),
-                SchemaProvider::default(),
-            );
-            let shutdown = task::spawn(async {
-                loop {
-                    // Do this forever .. this means that the shutdown handler will never resolve
-                    tokio::time::sleep(Duration::from_millis(100)).await;
-                }
-            });
-            let (tx, _) = broadcast::channel(1024);
-            let (tx_ready, rx_ready) = oneshot::channel::<()>();
-
-            // Start materializer service
-            let tx_clone = tx.clone();
-            let handle = tokio::spawn(async move {
-                materializer_service(context, shutdown, tx_clone, tx_ready)
-                    .await
-                    .unwrap();
-            });
-
-            if rx_ready.await.is_err() {
-                panic!("Service dropped");
-            }
-
-            // Send a message over the bus which kicks in materialization
-            tx.send(crate::bus::ServiceMessage::NewOperation(
-                verified_operation.operation_id().to_owned(),
-            ))
-            .unwrap();
-
-            // Wait a little bit for work being done ..
-            tokio::time::sleep(Duration::from_millis(100)).await;
-
-            // Then straight away publish an UPDATE on this document and send it over the bus too.
-            let (entry_encoded, _) = send_to_store(
-                &db.store,
-                &operation(
-                    Some(operation_fields(vec![(
-                        "name",
-                        OperationValue::Text("panda123".into()),
-                    )])),
-                    Some(verified_operation.operation_id().to_owned().into()),
-                    Some(SCHEMA_ID.parse().unwrap()),
-                ),
-                Some(document_id),
-                key_pair,
-            )
-            .await;
-
-            // Send a message over the bus which kicks in materialization
-            tx.send(crate::bus::ServiceMessage::NewOperation(
-                entry_encoded.hash().into(),
-            ))
-            .unwrap();
-
-            // Wait a little bit for work being done ..
-            tokio::time::sleep(Duration::from_millis(100)).await;
-
-            // Make sure the service did not crash and is still running
-            assert_eq!(handle.is_finished(), false);
-
-            // Check database for materialized documents
-            let document = db
-                .store
-                .get_document_by_id(document_id)
-                .await
-                .unwrap()
-                .expect("We expect that the document is `Some`");
-            assert_eq!(document.id(), &entry_encoded.hash().into());
-            assert_eq!(
-                document.fields().get("name").unwrap().value().to_owned(),
-                OperationValue::Text("panda123".into())
-            );
-        });
-    }
-
-    #[rstest]
-    #[case(
-        operation(Some(operation_fields(vec![(
-            "relation",
-            OperationValue::Relation(Relation::new(
-                random_document_id(),
-            )),
-        )])), None, None)
-    )]
-    #[case(
-        operation(Some(operation_fields(vec![(
-            "pinned_relation",
-            OperationValue::PinnedRelation(PinnedRelation::new(
-                DocumentViewId::new(&[random_operation_id(), random_operation_id()]).unwrap(),
-            )),
-        )])), None, None)
-    )]
-    #[case(
-        operation(Some(operation_fields(vec![(
-            "relation_list",
-            OperationValue::RelationList(RelationList::new(
-                vec![
-                    random_document_id(),
-                    random_document_id(),
-                    random_document_id()
-                ],
-            )),
-        )])), None, None)
-    )]
-    #[case(
-        operation(Some(operation_fields(vec![(
-            "pinned_relation_list",
-            OperationValue::PinnedRelationList(PinnedRelationList::new(
-                vec![
-                    DocumentViewId::new(&[random_operation_id(), random_operation_id()]).unwrap(),
-                    DocumentViewId::new(&[random_operation_id(), random_operation_id(), random_operation_id()]).unwrap()
-                ],
-            )),
-        )])), None, None)
-    )]
-    fn materialize_complex_documents(
-        #[from(test_db)]
-        #[with(0, 0, 0)]
-        runner: TestDatabaseRunner,
-        #[case] operation: Operation,
-        key_pair: KeyPair,
-    ) {
-        // Prepare empty database
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            // Prepare arguments for service
-            let context = Context::new(
-                db.store.clone(),
-                Configuration::default(),
-                SchemaProvider::default(),
-            );
-            let shutdown = task::spawn(async {
-                loop {
-                    // Do this forever .. this means that the shutdown handler will never resolve
-                    tokio::time::sleep(Duration::from_millis(100)).await;
-                }
-            });
-            let (tx, _rx) = broadcast::channel(1024);
-
-            // Start materializer service
-            let tx_clone = tx.clone();
-            let (tx_ready, rx_ready) = oneshot::channel::<()>();
-
-            let handle = tokio::spawn(async move {
-                materializer_service(context, shutdown, tx_clone, tx_ready)
-                    .await
-                    .unwrap();
-            });
-
-            if rx_ready.await.is_err() {
-                panic!("Service dropped");
-            }
-
-            // Then straight away publish a CREATE operation and send it to the bus.
-            let (entry_encoded, _) = send_to_store(&db.store, &operation, None, &key_pair).await;
-
-            // Send a message over the bus which kicks in materialization
-            tx.send(crate::bus::ServiceMessage::NewOperation(
-                entry_encoded.hash().into(),
-            ))
-            .unwrap();
-
-            // Wait a little bit for work being done ..
-            tokio::time::sleep(Duration::from_millis(200)).await;
-
-            // Make sure the service did not crash and is still running
-            assert_eq!(handle.is_finished(), false);
-
-            // Check database for materialized documents
-            let document = db
-                .store
-                .get_document_by_id(&entry_encoded.hash().into())
-                .await
-                .unwrap()
-                .expect("We expect that the document is `Some`");
-            assert_eq!(document.id(), &entry_encoded.hash().into());
-        });
-    }
-}
+//
+// #[cfg(test)]
+// mod tests {
+//     use std::time::Duration;
+//
+//     use p2panda_rs::document::DocumentViewId;
+//     use p2panda_rs::identity::KeyPair;
+//     use p2panda_rs::operation::traits::AsOperation;
+//     use p2panda_rs::operation::{
+//         Operation, OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList,
+//     };
+//     use p2panda_rs::storage_provider::traits::OperationStore;
+//     use p2panda_rs::test_utils::constants::SCHEMA_ID;
+//     use p2panda_rs::test_utils::fixtures::{
+//         key_pair, operation, operation_fields, random_document_id, random_operation_id,
+//     };
+//     use rstest::rstest;
+//     use tokio::sync::{broadcast, oneshot};
+//     use tokio::task;
+//
+//     use crate::context::Context;
+//     use crate::db::stores::test_utils::{send_to_store, test_db, TestDatabase, TestDatabaseRunner};
+//     use crate::db::traits::DocumentStore;
+//     use crate::materializer::{Task, TaskInput};
+//     use crate::schema::SchemaProvider;
+//     use crate::Configuration;
+//
+//     use super::materializer_service;
+//
+//     #[rstest]
+//     fn materialize_document_from_bus(
+//         #[from(test_db)]
+//         #[with(1, 1, 1, false, SCHEMA_ID.parse().unwrap(), vec![("name", OperationValue::Text("panda".into()))])]
+//         runner: TestDatabaseRunner,
+//     ) {
+//         // Prepare database which inserts data for one document
+//         runner.with_db_teardown(|db: TestDatabase| async move {
+//             // Identify document and operation which was inserted for testing
+//             let document_id = db.test_data.documents.first().unwrap();
+//             let verified_operation = db
+//                 .store
+//                 .get_operations_by_document_id(document_id)
+//                 .await
+//                 .unwrap()
+//                 .first()
+//                 .unwrap()
+//                 .to_owned();
+//
+//             // We expect that the database does not contain any materialized document yet
+//             assert!(db
+//                 .store
+//                 .get_document_by_id(document_id)
+//                 .await
+//                 .unwrap()
+//                 .is_none());
+//
+//             // Prepare arguments for service
+//             let context = Context::new(
+//                 db.store.clone(),
+//                 Configuration::default(),
+//                 SchemaProvider::default(),
+//             );
+//             let shutdown = task::spawn(async {
+//                 loop {
+//                     // Do this forever .. this means that the shutdown handler will never resolve
+//                     tokio::time::sleep(Duration::from_millis(100)).await;
+//                 }
+//             });
+//             let (tx, _) = broadcast::channel(1024);
+//             let (tx_ready, rx_ready) = oneshot::channel::<()>();
+//
+//             // Start materializer service
+//             let tx_clone = tx.clone();
+//             let handle = tokio::spawn(async move {
+//                 materializer_service(context, shutdown, tx_clone, tx_ready)
+//                     .await
+//                     .unwrap();
+//             });
+//
+//             if rx_ready.await.is_err() {
+//                 panic!("Service dropped");
+//             }
+//
+//             // Send a message over the bus which kicks in materialization
+//             tx.send(crate::bus::ServiceMessage::NewOperation(
+//                 verified_operation.operation_id().to_owned(),
+//             ))
+//             .unwrap();
+//
+//             // Wait a little bit for work being done ..
+//             tokio::time::sleep(Duration::from_millis(100)).await;
+//
+//             // Make sure the service did not crash and is still running
+//             assert_eq!(handle.is_finished(), false);
+//
+//             // Check database for materialized documents
+//             let document = db
+//                 .store
+//                 .get_document_by_id(document_id)
+//                 .await
+//                 .unwrap()
+//                 .expect("We expect that the document is `Some`");
+//             assert_eq!(document.id().to_string(), document_id.to_string());
+//             assert_eq!(
+//                 document.fields().get("name").unwrap().value().to_owned(),
+//                 OperationValue::Text("panda".into())
+//             );
+//         });
+//     }
+//
+//     #[rstest]
+//     fn materialize_document_from_last_runtime(
+//         #[from(test_db)]
+//         #[with(1, 1, 1, false, SCHEMA_ID.parse().unwrap(), vec![("name", OperationValue::Text("panda".into()))])]
+//         runner: TestDatabaseRunner,
+//     ) {
+//         // Prepare database which inserts data for one document
+//         runner.with_db_teardown(|db: TestDatabase| async move {
+//             // Identify document and operation which was inserted for testing
+//             let document_id = db.test_data.documents.first().unwrap();
+//
+//             // Store a pending "reduce" task from last runtime in the database so it gets picked up by
+//             // the materializer service
+//             db.store
+//                 .insert_task(&Task::new(
+//                     "reduce",
+//                     TaskInput::new(Some(document_id.to_owned()), None),
+//                 ))
+//                 .await
+//                 .unwrap();
+//
+//             // Prepare arguments for service
+//             let context = Context::new(
+//                 db.store.clone(),
+//                 Configuration::default(),
+//                 SchemaProvider::default(),
+//             );
+//             let shutdown = task::spawn(async {
+//                 loop {
+//                     // Do this forever .. this means that the shutdown handler will never resolve
+//                     tokio::time::sleep(Duration::from_millis(100)).await;
+//                 }
+//             });
+//             let (tx, _) = broadcast::channel(1024);
+//             let (tx_ready, rx_ready) = oneshot::channel::<()>();
+//
+//             // Start materializer service
+//             let tx_clone = tx.clone();
+//             let handle = tokio::spawn(async move {
+//                 materializer_service(context, shutdown, tx_clone, tx_ready)
+//                     .await
+//                     .unwrap();
+//             });
+//
+//             if rx_ready.await.is_err() {
+//                 panic!("Service dropped");
+//             }
+//
+//             // Wait for service to be done .. it should materialize the document since it was waiting
+//             // as a "pending" task in the database
+//             tokio::time::sleep(Duration::from_millis(200)).await;
+//
+//             // Make sure the service did not crash and is still running
+//             assert_eq!(handle.is_finished(), false);
+//
+//             // Check database for materialized documents
+//             let document = db
+//                 .store
+//                 .get_document_by_id(document_id)
+//                 .await
+//                 .unwrap()
+//                 .expect("We expect that the document is `Some`");
+//             assert_eq!(document.id().to_string(), document_id.to_string());
+//             assert_eq!(
+//                 document.fields().get("name").unwrap().value().to_owned(),
+//                 OperationValue::Text("panda".into())
+//             );
+//         });
+//     }
+//
+//     #[rstest]
+//     fn materialize_update_document(
+//         #[from(test_db)]
+//         #[with(1, 1, 1, false, SCHEMA_ID.parse().unwrap(), vec![("name", OperationValue::Text("panda".into()))])]
+//         runner: TestDatabaseRunner,
+//     ) {
+//         // Prepare database which inserts data for one document
+//         runner.with_db_teardown(|db: TestDatabase| async move {
+//             // Identify key_[air, document and operation which was inserted for testing
+//             let key_pair = db.test_data.key_pairs.first().unwrap();
+//             let document_id = db.test_data.documents.first().unwrap();
+//             let verified_operation = db
+//                 .store
+//                 .get_operations_by_document_id(document_id)
+//                 .await
+//                 .unwrap()
+//                 .first()
+//                 .unwrap()
+//                 .to_owned();
+//
+//             // Prepare arguments for service
+//             let context = Context::new(
+//                 db.store.clone(),
+//                 Configuration::default(),
+//                 SchemaProvider::default(),
+//             );
+//             let shutdown = task::spawn(async {
+//                 loop {
+//                     // Do this forever .. this means that the shutdown handler will never resolve
+//                     tokio::time::sleep(Duration::from_millis(100)).await;
+//                 }
+//             });
+//             let (tx, _) = broadcast::channel(1024);
+//             let (tx_ready, rx_ready) = oneshot::channel::<()>();
+//
+//             // Start materializer service
+//             let tx_clone = tx.clone();
+//             let handle = tokio::spawn(async move {
+//                 materializer_service(context, shutdown, tx_clone, tx_ready)
+//                     .await
+//                     .unwrap();
+//             });
+//
+//             if rx_ready.await.is_err() {
+//                 panic!("Service dropped");
+//             }
+//
+//             // Send a message over the bus which kicks in materialization
+//             tx.send(crate::bus::ServiceMessage::NewOperation(
+//                 verified_operation.operation_id().to_owned(),
+//             ))
+//             .unwrap();
+//
+//             // Wait a little bit for work being done ..
+//             tokio::time::sleep(Duration::from_millis(100)).await;
+//
+//             // Then straight away publish an UPDATE on this document and send it over the bus too.
+//             let (entry_encoded, _) = send_to_store(
+//                 &db.store,
+//                 &operation(
+//                     Some(operation_fields(vec![(
+//                         "name",
+//                         OperationValue::Text("panda123".into()),
+//                     )])),
+//                     Some(verified_operation.operation_id().to_owned().into()),
+//                     Some(SCHEMA_ID.parse().unwrap()),
+//                 ),
+//                 Some(document_id),
+//                 key_pair,
+//             )
+//             .await;
+//
+//             // Send a message over the bus which kicks in materialization
+//             tx.send(crate::bus::ServiceMessage::NewOperation(
+//                 entry_encoded.hash().into(),
+//             ))
+//             .unwrap();
+//
+//             // Wait a little bit for work being done ..
+//             tokio::time::sleep(Duration::from_millis(100)).await;
+//
+//             // Make sure the service did not crash and is still running
+//             assert_eq!(handle.is_finished(), false);
+//
+//             // Check database for materialized documents
+//             let document = db
+//                 .store
+//                 .get_document_by_id(document_id)
+//                 .await
+//                 .unwrap()
+//                 .expect("We expect that the document is `Some`");
+//             assert_eq!(document.id(), &entry_encoded.hash().into());
+//             assert_eq!(
+//                 document.fields().get("name").unwrap().value().to_owned(),
+//                 OperationValue::Text("panda123".into())
+//             );
+//         });
+//     }
+//
+//     #[rstest]
+//     #[case(
+//         operation(Some(operation_fields(vec![(
+//             "relation",
+//             OperationValue::Relation(Relation::new(
+//                 random_document_id(),
+//             )),
+//         )])), None, None)
+//     )]
+//     #[case(
+//         operation(Some(operation_fields(vec![(
+//             "pinned_relation",
+//             OperationValue::PinnedRelation(PinnedRelation::new(
+//                 DocumentViewId::new(&[random_operation_id(), random_operation_id()]).unwrap(),
+//             )),
+//         )])), None, None)
+//     )]
+//     #[case(
+//         operation(Some(operation_fields(vec![(
+//             "relation_list",
+//             OperationValue::RelationList(RelationList::new(
+//                 vec![
+//                     random_document_id(),
+//                     random_document_id(),
+//                     random_document_id()
+//                 ],
+//             )),
+//         )])), None, None)
+//     )]
+//     #[case(
+//         operation(Some(operation_fields(vec![(
+//             "pinned_relation_list",
+//             OperationValue::PinnedRelationList(PinnedRelationList::new(
+//                 vec![
+//                     DocumentViewId::new(&[random_operation_id(), random_operation_id()]).unwrap(),
+//                     DocumentViewId::new(&[random_operation_id(), random_operation_id(), random_operation_id()]).unwrap()
+//                 ],
+//             )),
+//         )])), None, None)
+//     )]
+//     fn materialize_complex_documents(
+//         #[from(test_db)]
+//         #[with(0, 0, 0)]
+//         runner: TestDatabaseRunner,
+//         #[case] operation: Operation,
+//         key_pair: KeyPair,
+//     ) {
+//         // Prepare empty database
+//         runner.with_db_teardown(|db: TestDatabase| async move {
+//             // Prepare arguments for service
+//             let context = Context::new(
+//                 db.store.clone(),
+//                 Configuration::default(),
+//                 SchemaProvider::default(),
+//             );
+//             let shutdown = task::spawn(async {
+//                 loop {
+//                     // Do this forever .. this means that the shutdown handler will never resolve
+//                     tokio::time::sleep(Duration::from_millis(100)).await;
+//                 }
+//             });
+//             let (tx, _rx) = broadcast::channel(1024);
+//
+//             // Start materializer service
+//             let tx_clone = tx.clone();
+//             let (tx_ready, rx_ready) = oneshot::channel::<()>();
+//
+//             let handle = tokio::spawn(async move {
+//                 materializer_service(context, shutdown, tx_clone, tx_ready)
+//                     .await
+//                     .unwrap();
+//             });
+//
+//             if rx_ready.await.is_err() {
+//                 panic!("Service dropped");
+//             }
+//
+//             // Then straight away publish a CREATE operation and send it to the bus.
+//             let (entry_encoded, _) = send_to_store(&db.store, &operation, None, &key_pair).await;
+//
+//             // Send a message over the bus which kicks in materialization
+//             tx.send(crate::bus::ServiceMessage::NewOperation(
+//                 entry_encoded.hash().into(),
+//             ))
+//             .unwrap();
+//
+//             // Wait a little bit for work being done ..
+//             tokio::time::sleep(Duration::from_millis(200)).await;
+//
+//             // Make sure the service did not crash and is still running
+//             assert_eq!(handle.is_finished(), false);
+//
+//             // Check database for materialized documents
+//             let document = db
+//                 .store
+//                 .get_document_by_id(&entry_encoded.hash().into())
+//                 .await
+//                 .unwrap()
+//                 .expect("We expect that the document is `Some`");
+//             assert_eq!(document.id(), &entry_encoded.hash().into());
+//         });
+//     }
+// }
