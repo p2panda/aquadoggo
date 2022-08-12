@@ -499,8 +499,8 @@ mod tests {
             let result = db
                 .store
                 .insert_entry(
-                    &first_entry.into(),
-                    &first_entry.into(),
+                    &first_entry.clone().into(),
+                    &first_entry.clone().into(),
                     first_entry.payload(),
                 )
                 .await;
