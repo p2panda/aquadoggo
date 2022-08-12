@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use lipmaa_link::get_lipmaa_links_back_to;
 use p2panda_rs::entry::decode::decode_entry;
 use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
-use p2panda_rs::entry::{EncodedEntry, LogId, SeqNum, Signature};
+use p2panda_rs::entry::{EncodedEntry, Entry, LogId, SeqNum, Signature};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::EncodedOperation;
@@ -160,7 +160,12 @@ impl EntryStore<StorageEntry> for SqlStorage {
     ///
     /// Returns an error if the insertion doesn't result in exactly one
     /// affected row.
-    async fn insert_entry(&self, entry: StorageEntry) -> Result<(), EntryStorageError> {
+    async fn insert_entry(
+        &self,
+        entry: &Entry,
+        encoded_entry: &EncodedEntry,
+        encoded_operation: Option<&EncodedOperation>,
+    ) -> Result<(), EntryStorageError> {
         let insert_entry_result = query(
             "
             INSERT INTO
@@ -178,10 +183,10 @@ impl EntryStore<StorageEntry> for SqlStorage {
             ",
         )
         .bind(entry.public_key().as_str())
-        .bind(entry.into_hex())
-        .bind(entry.hash().as_str())
+        .bind(encoded_entry.into_hex())
+        .bind(encoded_entry.hash().as_str())
         .bind(entry.log_id().as_u64().to_string())
-        .bind(entry.payload().map(|payload| payload.to_string()))
+        .bind(encoded_operation.map(|payload| payload.to_string()))
         .bind(entry.payload_hash().as_str())
         .bind(entry.seq_num().as_u64().to_string())
         .execute(&self.pool)
@@ -191,7 +196,7 @@ impl EntryStore<StorageEntry> for SqlStorage {
         if insert_entry_result.rows_affected() != 1 {
             return Err(EntryStorageError::Custom(format!(
                 "Unexpected number of inserts occured for entry with id: {}",
-                entry.hash()
+                encoded_entry.hash()
             )));
         }
 
@@ -491,7 +496,14 @@ mod tests {
                 .unwrap()
                 .unwrap();
 
-            let result = db.store.insert_entry(first_entry).await;
+            let result = db
+                .store
+                .insert_entry(
+                    &first_entry.into(),
+                    &first_entry.into(),
+                    first_entry.payload(),
+                )
+                .await;
             assert!(result.is_err());
         });
     }

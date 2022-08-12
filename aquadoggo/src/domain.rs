@@ -339,7 +339,7 @@ pub async fn publish<S: StorageProvider>(
 
     // Insert the entry into the store.
     store
-        .insert_entry(S::StorageEntry::new(encoded_entry)?)
+        .insert_entry(&entry, &encoded_entry, Some(&encoded_operation))
         .await?;
     // Insert the operation into the store.
     store

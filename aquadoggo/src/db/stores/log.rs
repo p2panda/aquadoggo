@@ -217,7 +217,8 @@ impl LogStore<StorageLog> for SqlStorage {
 #[cfg(test)]
 mod tests {
     use p2panda_rs::document::{DocumentId, DocumentViewId};
-    use p2panda_rs::entry::traits::AsEncodedEntry;
+    use p2panda_rs::entry::decode::decode_entry;
+    use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
     use p2panda_rs::entry::{EncodedEntry, LogId};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::Author;
@@ -334,49 +335,52 @@ mod tests {
     #[rstest]
     fn document_log_id(
         #[from(schema_id)] schema_id: SchemaId,
-        #[from(encoded_entry)] entry_encoded: EncodedEntry,
+        #[from(encoded_entry)] encoded_entry: EncodedEntry,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
             // Expect database to return nothing yet
             assert_eq!(
                 db.store
-                    .get_document_by_entry(&entry_encoded.hash())
+                    .get_document_by_entry(&encoded_entry.hash())
                     .await
                     .unwrap(),
                 None
             );
 
-            let entry = StorageEntry::new(&entry_encoded.clone()).unwrap();
-            let author = entry.author();
-
+            let entry = decode_entry(&encoded_entry).unwrap();
+            let author = entry.public_key();
             // Store entry in database
-            assert!(db.store.insert_entry(entry).await.is_ok());
+            assert!(db
+                .store
+                .insert_entry(&entry, &encoded_entry, None)
+                .await
+                .is_ok());
 
             let log = StorageLog::new(
                 &author,
                 &schema_id,
-                &entry_encoded.hash().into(),
+                &encoded_entry.hash().into(),
                 &LogId::default(),
             );
 
             // Store log in database
             assert!(db.store.insert_log(log).await.is_ok());
 
-            // Expect to find document in database. The document hash should be the same as the
-            // hash of the entry which referred to the `CREATE` operation.
+            // Expect to find document id in database. The document id should be the same as the
+            // hash of the first entry in the log.
             assert_eq!(
                 db.store
-                    .get_document_by_entry(&entry_encoded.hash())
+                    .get_document_by_entry(&encoded_entry.hash())
                     .await
                     .unwrap(),
-                Some(entry_encoded.hash().into())
+                Some(encoded_entry.hash().into())
             );
 
             // We expect to find this document in the default log
             assert_eq!(
                 db.store
-                    .find_document_log_id(&author, Some(&entry_encoded.hash().into()))
+                    .find_document_log_id(&author, Some(&encoded_entry.hash().into()))
                     .await
                     .unwrap(),
                 LogId::default()
