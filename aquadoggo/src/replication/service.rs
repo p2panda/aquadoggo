@@ -167,15 +167,17 @@ async fn insert_new_entries(
         // @TODO: Additionally, when we implement payload deletion and partial replication we will
         // be expecting entries to arrive here possibly without payloads.
 
-        publish(
-            &context.0.store,
-            &EncodedEntry::new(&entry.into_bytes()),
-            entry
-                .payload()
-                .expect("All stored entries contain an operation"),
-        )
-        .await
-        .map_err(|err| anyhow!(format!("Error inserting new entry into db: {:?}", err)))?;
+        // TODO: Reinstate publishing of an entry here:
+        //
+        //         publish(
+        //             &context.0.store,
+        //             &EncodedEntry::new(&entry.into_bytes()),
+        //             entry
+        //                 .payload()
+        //                 .expect("All stored entries contain an operation"),
+        //         )
+        //         .await
+        //         .map_err(|err| anyhow!(format!("Error inserting new entry into db: {:?}", err)))?;
 
         // Send new entry & operation to other services.
         send_new_entry_service_message(tx.clone(), entry);
