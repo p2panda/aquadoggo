@@ -175,7 +175,7 @@ async fn construct_relation_task(
 mod tests {
 
     use p2panda_rs::document::{DocumentId, DocumentViewId};
-    use p2panda_rs::entry::traits::AsEntry;
+    use p2panda_rs::entry::traits::AsEncodedEntry;
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::traits::AsVerifiedOperation;
     use p2panda_rs::operation::{
@@ -378,7 +378,7 @@ mod tests {
             // Create a new document referencing the existing materialised document.
 
             let operation = create_operation(
-                &[
+                vec![
                     (
                         "pinned_relation_to_existing_document",
                         OperationValue::PinnedRelation(PinnedRelation::new(
@@ -392,7 +392,7 @@ mod tests {
                         )),
                     ),
                 ],
-                &schema_id,
+                schema_id,
             );
 
             let (_, document_view_id) =
