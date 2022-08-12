@@ -342,12 +342,7 @@ pub async fn publish<S: StorageProvider>(
         .insert_entry(&entry, &encoded_entry, Some(&encoded_operation))
         .await?;
     // Insert the operation into the store.
-    store
-        .insert_operation(
-            &S::StorageOperation::new(&author, &encoded_entry.hash().into(), &operation).unwrap(),
-            &document_id,
-        )
-        .await?;
+    store.insert_operation(&operation, &document_id).await?;
 
     Ok(next_args)
 }
