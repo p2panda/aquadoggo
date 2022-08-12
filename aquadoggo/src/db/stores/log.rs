@@ -224,7 +224,7 @@ mod tests {
     use p2panda_rs::operation::{EncodedOperation, OperationId};
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::storage_provider::traits::{
-        AsStorageEntry, AsStorageLog, EntryStore, LogStore, StorageProvider,
+        AsStorageLog, EntryStore, LogStore, StorageProvider,
     };
     use p2panda_rs::test_utils::fixtures::{
         encoded_entry, encoded_operation, public_key, random_document_id, random_operation_id,

@@ -107,7 +107,7 @@ mod tests {
     use p2panda_rs::operation::traits::AsOperation;
     use p2panda_rs::operation::OperationId;
     use p2panda_rs::schema::SchemaId;
-    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
+    use p2panda_rs::storage_provider::traits::EntryStore;
     use p2panda_rs::test_utils::constants::SCHEMA_ID;
     use p2panda_rs::test_utils::fixtures::random_document_view_id;
     use rstest::rstest;

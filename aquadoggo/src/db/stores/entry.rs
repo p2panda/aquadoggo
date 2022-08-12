@@ -449,7 +449,7 @@ mod tests {
     use std::convert::TryFrom;
 
     use p2panda_rs::entry::encode::sign_and_encode_entry;
-    use p2panda_rs::entry::traits::AsEntry;
+    use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
     use p2panda_rs::entry::{EncodedEntry, Entry};
     use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::hash::Hash;

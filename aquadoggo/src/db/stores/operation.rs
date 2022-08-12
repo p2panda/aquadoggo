@@ -281,12 +281,13 @@ mod tests {
     use std::convert::TryFrom;
 
     use p2panda_rs::document::DocumentId;
+    use p2panda_rs::entry::traits::AsEncodedEntry;
     use p2panda_rs::entry::LogId;
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::traits::{AsOperation, AsVerifiedOperation};
     use p2panda_rs::operation::{Operation, OperationId, VerifiedOperation};
     use p2panda_rs::storage_provider::traits::OperationStore;
-    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, StorageProvider};
+    use p2panda_rs::storage_provider::traits::{EntryStore, StorageProvider};
     use p2panda_rs::test_utils::constants::{test_fields, HASH};
     use p2panda_rs::test_utils::fixtures::{
         create_operation, delete_operation, document_id, key_pair, operation_fields, operation_id,
@@ -353,12 +354,8 @@ mod tests {
 
     #[rstest]
     fn gets_document_by_operation_id(
-        #[from(verified_operation)]
-        #[with(Some(operation_fields(test_fields())), None, None, None, Some(HASH.parse().unwrap()))]
-        create_operation: VerifiedOperation,
-        #[from(verified_operation)]
-        #[with(Some(operation_fields(test_fields())), Some(HASH.parse().unwrap()))]
-        update_operation: VerifiedOperation,
+        #[from(verified_operation)] create_operation: VerifiedOperation,
+        #[from(verified_operation)] update_operation: VerifiedOperation,
         document_id: DocumentId,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
