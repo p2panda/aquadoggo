@@ -171,6 +171,7 @@ mod tests {
     use std::convert::TryFrom;
 
     use p2panda_rs::document::DocumentId;
+    use p2panda_rs::entry::traits::AsEntry;
     use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::storage_provider::traits::EntryWithOperation;
@@ -262,7 +263,7 @@ mod tests {
             let document_id =
                 document_id.unwrap_or_else(|| db.test_data.documents.first().unwrap().to_owned());
 
-            let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+            let author = Author::from(key_pair.public_key());
 
             verify_log_id(&db.store, &author, &claimed_log_id, &document_id)
                 .await
@@ -291,7 +292,7 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
-            let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+            let author = Author::from(key_pair.public_key());
 
             get_expected_skiplink(&db.store, &author, &log_id, &seq_num)
                 .await
@@ -320,7 +321,7 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
-            let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+            let author = Author::from(key_pair.public_key());
 
             let skiplink_entry =
                 get_expected_skiplink(&db.store, &author, &LogId::default(), &seq_num)
