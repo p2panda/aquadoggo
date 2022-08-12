@@ -8,10 +8,13 @@ use bamboo_rs_core_ed25519_yasmf::entry::is_lipmaa_required;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::entry::decode::decode_entry;
 use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
-use p2panda_rs::entry::{EncodedEntry, LogId, SeqNum};
+use p2panda_rs::entry::{EncodedEntry, Entry, LogId, SeqNum};
 use p2panda_rs::identity::Author;
+use p2panda_rs::operation::decode::decode_operation;
 use p2panda_rs::operation::traits::{AsOperation, AsVerifiedOperation};
+use p2panda_rs::operation::validate::validate_operation_with_entry;
 use p2panda_rs::operation::{EncodedOperation, Operation, OperationAction};
+use p2panda_rs::schema::Schema;
 use p2panda_rs::storage_provider::traits::{AsStorageLog, EntryWithOperation, StorageProvider};
 use p2panda_rs::Human;
 
@@ -119,7 +122,7 @@ pub async fn next_args<S: StorageProvider>(
             // If the latest entry is None, then we must be at seq num 1.
             let seq_num = match latest_entry {
                 Some(ref latest_entry) => {
-                    let mut latest_seq_num = latest_entry.seq_num();
+                    let mut latest_seq_num = latest_entry.seq_num().to_owned();
                     increment_seq_num(&mut latest_seq_num)
                 }
                 None => Ok(SeqNum::default()),
@@ -203,23 +206,26 @@ pub async fn next_args<S: StorageProvider>(
 /// ## Compute and return next entry arguments
 pub async fn publish<S: StorageProvider>(
     store: &S,
-    entry_encoded: &EncodedEntry,
+    // TODO: Actually, we need to get this in here somewhere...
+    schema: Schema,
+    encoded_entry: &EncodedEntry,
     encoded_operation: &EncodedOperation,
 ) -> Result<NextEntryArguments> {
     ////////////////////////////////
     // DECODE ENTRY AND OPERATION //
     ////////////////////////////////
 
-    // TODO: Rework this accounting for new validation flows.
-    let entry = decode_entry(entry_encoded)?;
-    let operation = Operation::from(encoded_operation);
+    let entry = decode_entry(encoded_entry)?;
+    let plain_operation = decode_operation(encoded_operation)?;
     let author = entry.public_key();
     let log_id = entry.log_id();
     let seq_num = entry.seq_num();
 
-    ///////////////////////////
-    // VALIDATE ENTRY VALUES //
-    ///////////////////////////
+    //////////////////////////////////
+    // VALIDATE ENTRY AND OPERATION //
+    //////////////////////////////////
+
+    // TODO: Check this validation flow is still correct.
 
     // Verify that the claimed seq num matches the expected seq num for this author and log.
     let latest_entry = store.get_latest_entry(&author, log_id).await?;
@@ -236,14 +242,16 @@ pub async fn publish<S: StorageProvider>(
         None => None,
     };
 
-    // TODO: Use new validation methods
-    // // Verify the bamboo entry providing the encoded operation and retrieved backlink and skiplink.
-    // bamboo_rs_core_ed25519_yasmf::verify(
-    //     &entry_encoded.to_bytes(),
-    //     Some(&encoded_operation.to_bytes()),
-    //     skiplink.map(|entry| entry.entry_bytes()).as_deref(),
-    //     backlink.map(|entry| entry.entry_bytes()).as_deref(),
-    // )?;
+    // Perform validation of the entry and it's operation.
+    let operation = validate_operation_with_entry(
+        &entry,
+        &encoded_entry,
+        skiplink.map(|entry| (&entry.into(), &entry.hash())),
+        backlink.map(|entry| (&entry.into(), &entry.hash())),
+        &plain_operation,
+        &encoded_operation,
+        &schema,
+    )?;
 
     ///////////////////////////////////
     // ENSURE SINGLE NODE PER AUTHOR //
@@ -252,13 +260,6 @@ pub async fn publish<S: StorageProvider>(
     // @TODO: Missing a step here where we check if the author has published to this node before, and also
     // if we know of any other nodes they have published to. Not sure how to do this yet.
 
-    ///////////////////////////////
-    // VALIDATE OPERATION VALUES //
-    ///////////////////////////////
-
-    // @TODO: We skip this for now and will implement it in a follow-up PR
-    // validate_operation_against_schema(store, operation.operation()).await?;
-
     //////////////////////////
     // DETERMINE DOCUMENT ID //
     //////////////////////////
@@ -266,7 +267,7 @@ pub async fn publish<S: StorageProvider>(
     let document_id = match operation.action() {
         OperationAction::Create => {
             // Derive the document id for this new document.
-            entry_encoded.hash().into()
+            encoded_entry.hash().into()
         }
         _ => {
             // We can unwrap previous operations here as we know all UPDATE and DELETE operations contain them.
@@ -315,7 +316,7 @@ pub async fn publish<S: StorageProvider>(
             log_id.as_u64()
         )
     })?;
-    let backlink = Some(entry_encoded.hash());
+    let backlink = Some(encoded_entry.hash());
 
     // Check if skiplink is required and return hash if so
     let skiplink = if is_lipmaa_required(next_seq_num.as_u64()) {
@@ -338,12 +339,12 @@ pub async fn publish<S: StorageProvider>(
 
     // Insert the entry into the store.
     store
-        .insert_entry(S::StorageEntry::new(entry_encoded)?)
+        .insert_entry(S::StorageEntry::new(encoded_entry)?)
         .await?;
     // Insert the operation into the store.
     store
         .insert_operation(
-            &S::StorageOperation::new(&author, &entry_encoded.hash().into(), &operation).unwrap(),
+            &S::StorageOperation::new(&author, &encoded_entry.hash().into(), &operation).unwrap(),
             &document_id,
         )
         .await?;
@@ -405,7 +406,7 @@ mod tests {
     };
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
-    use p2panda_rs::test_utils::constants::{PRIVATE_KEY, SCHEMA_ID};
+    use p2panda_rs::test_utils::constants::{test_fields, PRIVATE_KEY, SCHEMA_ID};
     use p2panda_rs::test_utils::db::{MemoryStore, StorageEntry};
     use p2panda_rs::test_utils::fixtures::{
         create_operation, delete_operation, key_pair, operation, operation_fields, public_key,
@@ -467,7 +468,6 @@ mod tests {
         schema_id: SchemaId,
         #[from(test_db)] runner: TestDatabaseRunner,
         operation: Operation,
-        operation_fields: OperationFields,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
             // Store one entry and operation in the store.
@@ -477,7 +477,7 @@ mod tests {
             // Store another entry and operation, from a different author, which perform an update on the earlier operation.
             let update_operation = OperationBuilder::new(&schema_id)
                 .previous_operations(&operation_one_id.clone().into())
-                .fields(operation_fields.into())
+                .fields(&test_fields())
                 .build()
                 .unwrap();
 
@@ -571,9 +571,7 @@ mod tests {
         let result = publish(
             &db.store,
             &EncodedEntry::new(&next_entry.into_bytes()),
-            &entry
-                .payload()
-                .map(|payload| EncodedOperation::new(&payload.into_bytes())),
+            &next_entry.payload().unwrap(),
         )
         .await;
 
@@ -630,7 +628,7 @@ mod tests {
                     .values()
                     .find(|entry| {
                         entry.seq_num().as_u64() == *seq_num
-                            && *entry.log_id().as_u64() == log_id
+                            && entry.log_id().as_u64() == *log_id
                             && *entry.public_key() == author
                     })
                     .map(|entry| entry.hash().into())
@@ -705,7 +703,7 @@ mod tests {
                     .values()
                     .find(|entry| {
                         entry.seq_num().as_u64() == *seq_num
-                            && *entry.log_id().as_u64() == log_id
+                            && entry.log_id().as_u64() == *log_id
                             && *entry.public_key() == author_with_removed_operations
                     })
                     .map(|entry| entry.hash().into())
@@ -906,19 +904,20 @@ mod tests {
             .unwrap();
 
         let encoded_operation = encode_operation(&update_operation).unwrap();
-        let entry_encoded = sign_and_encode_entry(
+        let encoded_entry = sign_and_encode_entry(
             &log_id,
             &latest_entry
-                .map(|entry| entry.seq_num().next().unwrap())
+                .as_ref()
+                .map(|entry| entry.seq_num().clone().next().unwrap())
                 .unwrap_or_default(),
             None,
-            latest_entry.as_ref().map(|entry| entry.hash()).as_ref(),
+            latest_entry.map(|entry| entry.hash()).as_ref(),
             &encoded_operation,
             &key_pair,
         )
         .unwrap();
 
-        let result = publish(&db.store, &entry_encoded, &encoded_operation).await;
+        let result = publish(&db.store, &encoded_entry, &encoded_operation).await;
 
         result.unwrap();
     }
@@ -952,7 +951,7 @@ mod tests {
         populate_test_db(&mut db, &config).await;
 
         let encoded_operation = encode_operation(&operation).unwrap();
-        let entry_encoded = sign_and_encode_entry(
+        let encoded_entry = sign_and_encode_entry(
             &log_id,
             &SeqNum::default(),
             None,
@@ -962,7 +961,7 @@ mod tests {
         )
         .unwrap();
 
-        let result = publish(&db.store, &entry_encoded, &encoded_operation).await;
+        let result = publish(&db.store, &encoded_entry, &encoded_operation).await;
 
         result.unwrap();
     }
@@ -1004,19 +1003,20 @@ mod tests {
             .unwrap();
 
         let encoded_operation = encode_operation(&delete_operation).unwrap();
-        let entry_encoded = sign_and_encode_entry(
+        let encoded_entry = sign_and_encode_entry(
             &LogId::default(),
             &latest_entry
-                .map(|entry| entry.seq_num().next().unwrap())
+                .as_ref()
+                .map(|entry| entry.seq_num().clone().next().unwrap())
                 .unwrap_or_default(),
             None,
-            latest_entry.as_ref().map(|entry| entry.hash()).as_ref(),
+            latest_entry.map(|entry| entry.hash()).as_ref(),
             &encoded_operation,
             &key_pair,
         )
         .unwrap();
 
-        let result = publish(&db.store, &entry_encoded, &encoded_operation).await;
+        let result = publish(&db.store, &encoded_entry, &encoded_operation).await;
 
         result.unwrap();
     }
@@ -1072,7 +1072,7 @@ mod tests {
                 };
 
                 let encoded_operation = encode_operation(&operation).unwrap();
-                let entry_encoded = sign_and_encode_entry(
+                let encoded_entry = sign_and_encode_entry(
                     &next_entry_args.log_id.into(),
                     &next_entry_args.seq_num.into(),
                     next_entry_args.skiplink.map(Hash::from).as_ref(),
@@ -1083,10 +1083,10 @@ mod tests {
                 .unwrap();
 
                 if index == 0 {
-                    document_id = Some(entry_encoded.hash().into());
+                    document_id = Some(encoded_entry.hash().into());
                 }
 
-                let result = publish(&db.store, &entry_encoded, &encoded_operation).await;
+                let result = publish(&db.store, &encoded_entry, &encoded_operation).await;
 
                 assert!(result.is_ok());
             }
@@ -1115,7 +1115,7 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        let entry_encoded = sign_and_encode_entry(
+        let encoded_entry = sign_and_encode_entry(
             &LogId::default(),
             &SeqNum::new(u64::MAX).unwrap(),
             Some(&random_hash()),
@@ -1125,7 +1125,7 @@ mod tests {
         )
         .unwrap();
 
-        let entry = StorageEntry::new(&entry_encoded).unwrap();
+        let entry = StorageEntry::new(&encoded_entry, entry_two.payload());
 
         db.store
             .entries
@@ -1164,7 +1164,7 @@ mod tests {
 
         // Create and insert the skiplink for MAX_SEQ_NUM entry
 
-        let entry_encoded = sign_and_encode_entry(
+        let encoded_entry = sign_and_encode_entry(
             &LogId::default(),
             &SeqNum::new(18446744073709551611).unwrap(),
             Some(&random_hash()),
@@ -1174,8 +1174,7 @@ mod tests {
         )
         .unwrap();
 
-        let skiplink = StorageEntry::new(&entry_encoded).unwrap();
-
+        let skiplink = StorageEntry::new(&encoded_entry, entry_two.payload());
         db.store
             .entries
             .lock()
@@ -1183,7 +1182,7 @@ mod tests {
             .insert(skiplink.hash(), skiplink.clone());
 
         // Create and insert the backlink for MAX_SEQ_NUM entry
-        let entry_encoded = sign_and_encode_entry(
+        let encoded_entry = sign_and_encode_entry(
             &LogId::default(),
             &SeqNum::new(u64::MAX - 1).unwrap(),
             Some(&random_hash()),
@@ -1193,8 +1192,7 @@ mod tests {
         )
         .unwrap();
 
-        let backlink = StorageEntry::new(&entry_encoded).unwrap();
-
+        let backlink = StorageEntry::new(&encoded_entry, entry_two.payload());
         db.store
             .entries
             .lock()
@@ -1202,7 +1200,7 @@ mod tests {
             .insert(backlink.hash(), backlink.clone());
 
         // Create the MAX_SEQ_NUM entry using the above skiplink and backlink
-        let entry_encoded = sign_and_encode_entry(
+        let encoded_entry = sign_and_encode_entry(
             &LogId::default(),
             &SeqNum::new(u64::MAX).unwrap(),
             Some(&skiplink.hash()),
@@ -1213,12 +1211,12 @@ mod tests {
         .unwrap();
 
         // Publish the MAX_SEQ_NUM entry
-        let result = publish(&db.store, &entry_encoded, entry_two.payload().unwrap()).await;
+        let result = publish(&db.store, &encoded_entry, entry_two.payload().unwrap()).await;
 
         // try and get the MAX_SEQ_NUM entry again (it shouldn't be there)
         let entry_at_max_seq_num = db
             .store
-            .get_entry_by_hash(&entry_encoded.hash())
+            .get_entry_by_hash(&encoded_entry.hash())
             .await
             .unwrap();
 
