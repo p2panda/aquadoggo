@@ -9,6 +9,7 @@ use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::entry::decode::decode_entry;
 use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
 use p2panda_rs::entry::{EncodedEntry, Entry, LogId, SeqNum};
+use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::decode::decode_operation;
 use p2panda_rs::operation::plain::PlainOperation;
@@ -242,12 +243,22 @@ pub async fn publish<S: StorageProvider>(
         None => None,
     };
 
+    let skiplink_params: Option<(Entry, Hash)> = skiplink.map(|entry| {
+        let hash = entry.hash();
+        (entry.into(), hash)
+    });
+
+    let backlink_params: Option<(Entry, Hash)> = backlink.map(|entry| {
+        let hash = entry.hash();
+        (entry.into(), hash)
+    });
+
     // Perform validation of the entry and it's operation.
     let operation = validate_operation_with_entry(
         &entry,
         &encoded_entry,
-        skiplink.map(|entry| (&entry.into(), &entry.hash())),
-        backlink.map(|entry| (&entry.into(), &entry.hash())),
+        skiplink_params.as_ref().map(|(entry, hash)| (entry, hash)),
+        backlink_params.as_ref().map(|(entry, hash)| (entry, hash)),
         &plain_operation,
         &encoded_operation,
         &schema,
