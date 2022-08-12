@@ -249,7 +249,7 @@ mod test {
             let schema = db
                 .add_schema(
                     "schema_name",
-                    vec![("bool_field", FieldType::Bool)],
+                    vec![("bool_field", FieldType::Boolean)],
                     &key_pair,
                 )
                 .await;

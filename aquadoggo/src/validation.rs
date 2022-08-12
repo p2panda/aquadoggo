@@ -328,7 +328,7 @@ mod tests {
                     .await
                     .unwrap();
 
-            assert_eq!(skiplink_entry.seq_num(), expected_seq_num)
+            assert_eq!(skiplink_entry.seq_num(), &expected_seq_num)
         })
     }
 
