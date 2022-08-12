@@ -137,30 +137,6 @@ pub async fn insert_entry_operation_and_view(
     if !operation.is_create() && document_id.is_none() {
         panic!("UPDATE and DELETE operations require a DocumentId to be passed")
     }
-
-    // Encode entry and operation.
-    let (entry_signed, operation_encoded) =
-        encode_entry_and_operation(store, operation, key_pair, document_id).await;
-
-    // Unwrap document_id or construct it from the entry hash.
-    let document_id = document_id
-        .cloned()
-        .unwrap_or_else(|| entry_signed.hash().into());
-    let document_view_id: DocumentViewId = entry_signed.hash().into();
-
-    // Publish the entry.
-    publish(store, &entry_signed, &operation_encoded)
-        .await
-        .unwrap();
-
-    // Materialise the effected document.
-    let document_operations = store
-        .get_operations_by_document_id(&document_id)
-        .await
-        .unwrap();
-    let document = DocumentBuilder::new(document_operations).build().unwrap();
-    store.insert_document(&document).await.unwrap();
-
-    // Return the document_id and document_view_id.
-    (document_id, document_view_id)
+    // TODO: Need full refactor
+    todo!()
 }

@@ -60,6 +60,7 @@ impl TestDatabase {
     pub async fn add_document(
         &mut self,
         schema_id: &SchemaId,
+        fields: Vec<(&str, OperationValue)>,
         key_pair: &KeyPair,
     ) -> DocumentViewId {
         info!("Creating document for {}", schema_id);
@@ -74,7 +75,7 @@ impl TestDatabase {
 
         // Build, publish and reduce create operation for document.
         let create_op = OperationBuilder::new(schema.id())
-            .fields(&test_fields())
+            .fields(&fields)
             .build()
             .unwrap();
         let (entry_signed, _) = send_to_store(&self.store, &create_op, None, key_pair).await;
@@ -251,31 +252,6 @@ pub async fn send_to_store<S: StorageProvider>(
     document_id: Option<&DocumentId>,
     key_pair: &KeyPair,
 ) -> (EncodedEntry, NextEntryArguments) {
-    // Get an Author from the key_pair.
-    let author = Author::from(key_pair.public_key());
-    let document_view_id: Option<DocumentViewId> =
-        document_id.map(|id| id.as_str().parse().unwrap());
-
-    let next_entry_args = next_args(store, &author, document_view_id.as_ref())
-        .await
-        .unwrap();
-
-    // Sign and encode the entry and operation.
-    let operation_encoded = encode_operation(operation).unwrap();
-    let entry_encoded = sign_and_encode_entry(
-        &next_entry_args.log_id.into(),
-        &next_entry_args.seq_num.into(),
-        next_entry_args.skiplink.map(Hash::from).as_ref(),
-        next_entry_args.backlink.map(Hash::from).as_ref(),
-        &operation_encoded,
-        key_pair,
-    )
-    .unwrap();
-
-    // Publish the entry and get the next entry args.
-    let publish_entry_response = publish(store, &entry_encoded, &operation_encoded)
-        .await
-        .expect("Error publishing entry");
-
-    (entry_encoded, publish_entry_response)
+    // TODO: Needed full refactor
+    todo!()
 }

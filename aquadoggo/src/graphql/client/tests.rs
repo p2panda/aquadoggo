@@ -27,7 +27,7 @@ fn scalar_fields(#[from(test_db)] runner: TestDatabaseRunner) {
             .add_schema(
                 "schema_name",
                 vec![
-                    ("bool", FieldType::Bool),
+                    ("bool", FieldType::Boolean),
                     ("float", FieldType::Float),
                     ("int", FieldType::Int),
                     ("text", FieldType::String),
@@ -98,7 +98,7 @@ fn relation_fields(#[from(test_db)] runner: TestDatabaseRunner) {
 
         // Add schemas to node.
         let child_schema = db
-            .add_schema("child", vec![("it_works", FieldType::Bool)], &key_pair)
+            .add_schema("child", vec![("it_works", FieldType::Boolean)], &key_pair)
             .await;
 
         let parent_schema = db
@@ -138,14 +138,12 @@ fn relation_fields(#[from(test_db)] runner: TestDatabaseRunner) {
         let child_doc_id: DocumentId = child_view_id.to_string().parse().unwrap();
 
         // Publish parent document on node.
-        let parent_fields: OperationFields = vec![
+        let parent_fields = vec![
             ("by_relation", child_doc_id.clone().into()),
             ("by_pinned_relation", child_view_id.clone().into()),
             ("by_relation_list", vec![child_doc_id].into()),
             ("by_pinned_relation_list", vec![child_view_id].into()),
-        ]
-        .try_into()
-        .unwrap();
+        ];
 
         let parent_view_id = db
             .add_document(parent_schema.id(), parent_fields, &key_pair)
