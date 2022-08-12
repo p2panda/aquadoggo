@@ -175,6 +175,7 @@ async fn construct_relation_task(
 mod tests {
 
     use p2panda_rs::document::{DocumentId, DocumentViewId};
+    use p2panda_rs::entry::traits::AsEntry;
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::traits::AsVerifiedOperation;
     use p2panda_rs::operation::{
@@ -185,7 +186,7 @@ mod tests {
     use p2panda_rs::storage_provider::traits::OperationStore;
     use p2panda_rs::test_utils::constants::SCHEMA_ID;
     use p2panda_rs::test_utils::fixtures::{
-        create_operation, operation_fields, random_document_id, random_document_view_id,
+        create_operation, operation_fields, random_document_id, random_document_view_id, schema_id,
     };
     use rstest::rstest;
 
@@ -346,6 +347,7 @@ mod tests {
 
     #[rstest]
     fn no_reduce_task_for_materialised_document_relations(
+        schema_id: SchemaId,
         #[from(test_db)]
         #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
@@ -375,18 +377,23 @@ mod tests {
 
             // Create a new document referencing the existing materialised document.
 
-            let operation = create_operation(&[
-                (
-                    "pinned_relation_to_existing_document",
-                    OperationValue::PinnedRelation(PinnedRelation::new(
-                        document_view_id_of_child.clone(),
-                    )),
-                ),
-                (
-                    "pinned_relation_to_not_existing_document",
-                    OperationValue::PinnedRelation(PinnedRelation::new(random_document_view_id())),
-                ),
-            ]);
+            let operation = create_operation(
+                &[
+                    (
+                        "pinned_relation_to_existing_document",
+                        OperationValue::PinnedRelation(PinnedRelation::new(
+                            document_view_id_of_child.clone(),
+                        )),
+                    ),
+                    (
+                        "pinned_relation_to_not_existing_document",
+                        OperationValue::PinnedRelation(PinnedRelation::new(
+                            random_document_view_id(),
+                        )),
+                    ),
+                ],
+                &schema_id,
+            );
 
             let (_, document_view_id) =
                 insert_entry_operation_and_view(&db.store, &KeyPair::new(), None, &operation).await;
@@ -492,7 +499,7 @@ mod tests {
     fn dispatches_schema_tasks_for_field_definitions(
         #[from(test_db)]
         #[with(1, 1, 1, false, SchemaId::SchemaFieldDefinition(1), vec![
-            ("name", OperationValue::Text("field_name".to_string())),
+            ("name", OperationValue::String("field_name".to_string())),
             ("type", FieldType::String.into()),
         ])]
         runner: TestDatabaseRunner,
@@ -533,10 +540,10 @@ mod tests {
     #[case::schema_definition_with_dependencies_met_dispatches_one_schema_task(
         OperationBuilder::new(&SchemaId::SchemaDefinition(1))
             .fields(&[
-                ("name", OperationValue::Text("schema_name".to_string())),
+                ("name", OperationValue::String("schema_name".to_string())),
                 (
                     "description",
-                    OperationValue::Text("description".to_string()),
+                    OperationValue::String("description".to_string()),
                 ),
                 (
                     "fields",
@@ -553,10 +560,10 @@ mod tests {
     #[case::schema_definition_without_dependencies_met_dispatches_zero_schema_task(
         OperationBuilder::new(&SchemaId::SchemaDefinition(1))
             .fields(&[
-                ("name", OperationValue::Text("schema_name".to_string())),
+                ("name", OperationValue::String("schema_name".to_string())),
                 (
                     "description",
-                    OperationValue::Text("description".to_string()),
+                    OperationValue::String("description".to_string()),
                 ),
                 (
                     "fields",
@@ -573,7 +580,7 @@ mod tests {
         #[case] expected_schema_tasks: usize,
         #[from(test_db)]
         #[with(1, 1, 1, false, SchemaId::SchemaFieldDefinition(1), vec![
-            ("name", OperationValue::Text("field_name".to_string())),
+            ("name", OperationValue::String("field_name".to_string())),
             ("type", FieldType::String.into()),
         ])]
         runner: TestDatabaseRunner,
