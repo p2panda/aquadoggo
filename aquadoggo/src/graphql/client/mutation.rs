@@ -3,6 +3,7 @@
 //! Mutation root.
 use async_graphql::{Context, Object, Result};
 use p2panda_rs::entry::decode::decode_entry;
+use p2panda_rs::entry::traits::AsEncodedEntry;
 use p2panda_rs::entry::EncodedEntry;
 use p2panda_rs::operation::{EncodedOperation, Operation, OperationId};
 use p2panda_rs::Validate;
