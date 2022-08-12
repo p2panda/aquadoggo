@@ -55,7 +55,9 @@ impl EncodedEntryAndOperation {
 impl From<StorageEntry> for EncodedEntryAndOperation {
     fn from(storage_entry: StorageEntry) -> Self {
         let entry = EncodedEntry::new(&storage_entry.into_bytes()).into();
-        let operation = Some(storage_entry.payload().to_owned().into());
+        let operation = storage_entry
+            .payload()
+            .map(|payload| payload.to_owned().into());
         Self { entry, operation }
     }
 }
@@ -80,7 +82,7 @@ impl TryFrom<EncodedEntryAndOperation> for StorageEntry {
             payload_hash: entry.payload_hash().to_owned(),
             signature: entry.signature().to_owned(),
             encoded_entry: encoded_entry.into(),
-            payload: operation.into(),
+            payload: Some(operation.into()),
         };
         Ok(storage_entry)
     }
