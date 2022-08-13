@@ -2,20 +2,25 @@
 
 use std::convert::TryFrom;
 
+use log::{debug, info};
 use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
 use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::{Author, KeyPair};
 use p2panda_rs::operation::{
-    AsOperation, Operation, OperationEncoded, OperationValue, PinnedRelation, PinnedRelationList,
-    Relation, RelationList,
+    AsOperation, Operation, OperationEncoded, OperationFields, OperationValue, PinnedRelation,
+    PinnedRelationList, Relation, RelationList,
 };
+use p2panda_rs::schema::{FieldType, Schema, SchemaId};
 use p2panda_rs::storage_provider::traits::{OperationStore, StorageProvider};
 use p2panda_rs::test_utils::constants::PRIVATE_KEY;
 
 use crate::db::provider::SqlStorage;
+use crate::db::stores::test_utils::{send_to_store, TestDatabase};
 use crate::db::traits::DocumentStore;
 use crate::domain::{next_args, publish};
+use crate::materializer::tasks::{dependency_task, reduce_task, schema_task};
+use crate::materializer::TaskInput;
 
 /// A complex set of fields which can be used in aquadoggo tests.
 pub fn doggo_test_fields() -> Vec<(&'static str, OperationValue)> {
@@ -74,6 +79,90 @@ pub fn doggo_test_fields() -> Vec<(&'static str, OperationValue)> {
             ])),
         ),
     ]
+}
+
+/// Publish a document and materialise it in a given `TestDatabase`.
+///
+/// Also runs dependency task for document.
+pub async fn add_document(
+    test_db: &mut TestDatabase,
+    schema_id: &SchemaId,
+    fields: OperationFields,
+    key_pair: &KeyPair,
+) -> DocumentViewId {
+    info!("Creating document for {}", schema_id);
+
+    // Get requested schema from store.
+    let schema = test_db
+        .context
+        .schema_provider
+        .get(schema_id)
+        .await
+        .expect("Schema not found");
+
+    // Build, publish and reduce create operation for document.
+    let create_op = Operation::new_create(schema.id().to_owned(), fields).unwrap();
+    let (entry_signed, _) = send_to_store(&test_db.store, &create_op, None, key_pair).await;
+    let input = TaskInput::new(Some(DocumentId::from(entry_signed.hash())), None);
+    let dependency_tasks = reduce_task(test_db.context.clone(), input.clone())
+        .await
+        .unwrap();
+
+    // Run dependency tasks
+    if let Some(tasks) = dependency_tasks {
+        for task in tasks {
+            dependency_task(test_db.context.clone(), task.input().to_owned())
+                .await
+                .unwrap();
+        }
+    }
+    DocumentViewId::from(entry_signed.hash())
+}
+
+/// Publish a schema and materialise it in a given `TestDatabase`.
+pub async fn add_schema(
+    test_db: &mut TestDatabase,
+    name: &str,
+    fields: Vec<(&str, FieldType)>,
+    key_pair: &KeyPair,
+) -> Schema {
+    info!("Creating schema {}", name);
+    let mut field_ids = Vec::new();
+
+    // Build and reduce schema field definitions
+    for field in fields {
+        let create_field_op = Schema::create_field(field.0, field.1.clone()).unwrap();
+        let (entry_signed, _) =
+            send_to_store(&test_db.store, &create_field_op, None, key_pair).await;
+
+        let input = TaskInput::new(Some(DocumentId::from(entry_signed.hash())), None);
+        reduce_task(test_db.context.clone(), input).await.unwrap();
+
+        info!("Added field '{}' ({})", field.0, field.1);
+        field_ids.push(DocumentViewId::from(entry_signed.hash()));
+    }
+
+    // Build and reduce schema definition
+    let create_schema_op = Schema::create(name, "test schema description", field_ids).unwrap();
+    let (entry_signed, _) = send_to_store(&test_db.store, &create_schema_op, None, key_pair).await;
+    let input = TaskInput::new(None, Some(DocumentViewId::from(entry_signed.hash())));
+    reduce_task(test_db.context.clone(), input.clone())
+        .await
+        .unwrap();
+
+    // Run schema task for this spec
+    schema_task(test_db.context.clone(), input).await.unwrap();
+
+    let view_id = DocumentViewId::from(entry_signed.hash());
+    let schema_id = SchemaId::Application(name.to_string(), view_id);
+
+    debug!("Done building {}", schema_id);
+    test_db
+        .context
+        .schema_provider
+        .get(&schema_id)
+        .await
+        .expect("Failed adding schema to provider.")
 }
 
 /// Helper for creating many key_pairs.

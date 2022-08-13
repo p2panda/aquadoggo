@@ -11,7 +11,9 @@ use p2panda_rs::test_utils::fixtures::random_key_pair;
 use rstest::rstest;
 use serde_json::json;
 
-use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+use crate::db::stores::test_utils::{
+    add_document, add_schema, test_db, TestDatabase, TestDatabaseRunner,
+};
 use crate::test_helpers::graphql_test_client;
 
 #[rstest]
@@ -23,18 +25,18 @@ fn scalar_fields(#[from(test_db)] runner: TestDatabaseRunner) {
         let key_pair = random_key_pair();
 
         // Add schema to node.
-        let schema = db
-            .add_schema(
-                "schema_name",
-                vec![
-                    ("bool", FieldType::Bool),
-                    ("float", FieldType::Float),
-                    ("int", FieldType::Int),
-                    ("text", FieldType::String),
-                ],
-                &key_pair,
-            )
-            .await;
+        let schema = add_schema(
+            &mut db,
+            "schema_name",
+            vec![
+                ("bool", FieldType::Bool),
+                ("float", FieldType::Float),
+                ("int", FieldType::Int),
+                ("text", FieldType::String),
+            ],
+            &key_pair,
+        )
+        .await;
 
         // Publish document on node.
         let doc_fields = vec![
@@ -45,7 +47,7 @@ fn scalar_fields(#[from(test_db)] runner: TestDatabaseRunner) {
         ]
         .try_into()
         .unwrap();
-        let view_id = db.add_document(schema.id(), doc_fields, &key_pair).await;
+        let view_id = add_document(&mut db, schema.id(), doc_fields, &key_pair).await;
 
         // Configure and send test query.
         let client = graphql_test_client(&db).await;
@@ -97,43 +99,47 @@ fn relation_fields(#[from(test_db)] runner: TestDatabaseRunner) {
         let key_pair = random_key_pair();
 
         // Add schemas to node.
-        let child_schema = db
-            .add_schema("child", vec![("it_works", FieldType::Bool)], &key_pair)
-            .await;
+        let child_schema = add_schema(
+            &mut db,
+            "child",
+            vec![("it_works", FieldType::Bool)],
+            &key_pair,
+        )
+        .await;
 
-        let parent_schema = db
-            .add_schema(
-                "parent",
-                vec![
-                    (
-                        "by_relation",
-                        FieldType::Relation(child_schema.id().clone()),
-                    ),
-                    (
-                        "by_pinned_relation",
-                        FieldType::PinnedRelation(child_schema.id().clone()),
-                    ),
-                    (
-                        "by_relation_list",
-                        FieldType::RelationList(child_schema.id().clone()),
-                    ),
-                    (
-                        "by_pinned_relation_list",
-                        FieldType::PinnedRelationList(child_schema.id().clone()),
-                    ),
-                ],
-                &key_pair,
-            )
-            .await;
+        let parent_schema = add_schema(
+            &mut db,
+            "parent",
+            vec![
+                (
+                    "by_relation",
+                    FieldType::Relation(child_schema.id().clone()),
+                ),
+                (
+                    "by_pinned_relation",
+                    FieldType::PinnedRelation(child_schema.id().clone()),
+                ),
+                (
+                    "by_relation_list",
+                    FieldType::RelationList(child_schema.id().clone()),
+                ),
+                (
+                    "by_pinned_relation_list",
+                    FieldType::PinnedRelationList(child_schema.id().clone()),
+                ),
+            ],
+            &key_pair,
+        )
+        .await;
 
         // Publish child document on node.
-        let child_view_id = db
-            .add_document(
-                child_schema.id(),
-                vec![("it_works", true.into())].try_into().unwrap(),
-                &key_pair,
-            )
-            .await;
+        let child_view_id = add_document(
+            &mut db,
+            child_schema.id(),
+            vec![("it_works", true.into())].try_into().unwrap(),
+            &key_pair,
+        )
+        .await;
         // There is only one operation so view id = doc id.
         let child_doc_id: DocumentId = child_view_id.to_string().parse().unwrap();
 
@@ -147,9 +153,8 @@ fn relation_fields(#[from(test_db)] runner: TestDatabaseRunner) {
         .try_into()
         .unwrap();
 
-        let parent_view_id = db
-            .add_document(parent_schema.id(), parent_fields, &key_pair)
-            .await;
+        let parent_view_id =
+            add_document(&mut db, parent_schema.id(), parent_fields, &key_pair).await;
 
         // Configure and send test query.
         let client = graphql_test_client(&db).await;

@@ -203,7 +203,7 @@ mod test {
     use rstest::rstest;
     use serde_json::{json, Value};
 
-    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+    use crate::db::stores::test_utils::{add_schema, test_db, TestDatabase, TestDatabaseRunner};
     use crate::test_helpers::graphql_test_client;
 
     #[rstest]
@@ -246,13 +246,13 @@ mod test {
             );
 
             // Add schema to node.
-            let schema = db
-                .add_schema(
-                    "schema_name",
-                    vec![("bool_field", FieldType::Bool)],
-                    &key_pair,
-                )
-                .await;
+            let schema = add_schema(
+                &mut db,
+                "schema_name",
+                vec![("bool_field", FieldType::Bool)],
+                &key_pair,
+            )
+            .await;
 
             assert_eq!(
                 schema.id().to_string(),
