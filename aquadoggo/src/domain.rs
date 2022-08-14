@@ -422,8 +422,8 @@ mod tests {
     use rstest::rstest;
 
     use crate::db::stores::test_utils::{
-        doggo_test_fields, encode_entry_and_operation, populate_test_db, send_to_store, test_db,
-        test_db_config, PopulateDatabaseConfig, TestDatabase, TestDatabaseRunner,
+        encode_entry_and_operation, populate_test_db, send_to_store, test_db, test_db_config,
+        PopulateDatabaseConfig, TestDatabase, TestDatabaseRunner,
     };
     use crate::domain::publish;
     use crate::graphql::client::NextEntryArguments;
@@ -651,7 +651,7 @@ mod tests {
         // Compose the next operation.
         let next_operation = OperationBuilder::new(schema.id())
             .previous_operations(&document_view_id)
-            .fields(&doggo_test_fields())
+            .fields(&test_fields())
             .build()
             .unwrap();
 
@@ -911,7 +911,7 @@ mod tests {
 
         let update_operation = OperationBuilder::new(schema.id())
             .previous_operations(&document_view_id)
-            .fields(&doggo_test_fields())
+            .fields(&test_fields())
             .build()
             .unwrap();
 

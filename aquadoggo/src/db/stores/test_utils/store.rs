@@ -20,7 +20,7 @@ use p2panda_rs::test_utils::fixtures::{operation, operation_fields};
 
 use crate::context::Context;
 use crate::db::provider::SqlStorage;
-use crate::db::stores::test_utils::{doggo_test_fields, test_key_pairs};
+use crate::db::stores::test_utils::test_key_pairs;
 use crate::domain::{next_args, publish};
 use crate::graphql::client::NextEntryArguments;
 use crate::materializer::tasks::{dependency_task, reduce_task, schema_task};
@@ -181,8 +181,8 @@ impl Default for PopulateDatabaseConfig {
             no_of_authors: 0,
             with_delete: false,
             schema: SCHEMA_ID.parse().unwrap(),
-            create_operation_fields: doggo_test_fields(),
-            update_operation_fields: doggo_test_fields(),
+            create_operation_fields: test_fields(),
+            update_operation_fields: test_fields(),
         }
     }
 }

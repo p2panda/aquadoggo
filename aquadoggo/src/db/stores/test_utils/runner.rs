@@ -6,7 +6,7 @@ use std::sync::Arc;
 use futures::Future;
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::test_utils::constants::SCHEMA_ID;
+use p2panda_rs::test_utils::constants::{test_fields, SCHEMA_ID};
 use rstest::fixture;
 use tokio::runtime::Builder;
 use tokio::sync::Mutex;
@@ -19,8 +19,6 @@ use crate::db::stores::test_utils::{
 use crate::db::Pool;
 use crate::test_helpers::{initialize_db, initialize_db_with_url};
 use crate::{Configuration, SchemaProvider};
-
-use super::doggo_test_fields;
 
 #[async_trait::async_trait]
 pub trait AsyncTestFn {
@@ -167,9 +165,9 @@ pub fn test_db(
     // The schema used for all operations in the db
     #[default(SCHEMA_ID.parse().unwrap())] schema: SchemaId,
     // The fields used for every CREATE operation
-    #[default(doggo_test_fields())] create_operation_fields: Vec<(&'static str, OperationValue)>,
+    #[default(test_fields())] create_operation_fields: Vec<(&'static str, OperationValue)>,
     // The fields used for every UPDATE operation
-    #[default(doggo_test_fields())] update_operation_fields: Vec<(&'static str, OperationValue)>,
+    #[default(test_fields())] update_operation_fields: Vec<(&'static str, OperationValue)>,
 ) -> TestDatabaseRunner {
     let config = PopulateDatabaseConfig {
         no_of_entries,
@@ -198,9 +196,9 @@ pub fn test_db_config(
     // The schema used for all operations in the db
     #[default(SCHEMA_ID.parse().unwrap())] schema: SchemaId,
     // The fields used for every CREATE operation
-    #[default(doggo_test_fields())] create_operation_fields: Vec<(&'static str, OperationValue)>,
+    #[default(test_fields())] create_operation_fields: Vec<(&'static str, OperationValue)>,
     // The fields used for every UPDATE operation
-    #[default(doggo_test_fields())] update_operation_fields: Vec<(&'static str, OperationValue)>,
+    #[default(test_fields())] update_operation_fields: Vec<(&'static str, OperationValue)>,
 ) -> PopulateDatabaseConfig {
     PopulateDatabaseConfig {
         no_of_entries,

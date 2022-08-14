@@ -349,11 +349,11 @@ mod tests {
         OperationId, OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList,
     };
     use p2panda_rs::schema::SchemaId;
+    use p2panda_rs::test_utils::constants::test_fields;
     use p2panda_rs::test_utils::fixtures::{create_operation, schema_id};
     use rstest::rstest;
 
     use crate::db::models::{document::DocumentViewFieldRow, OperationFieldsJoinedRow};
-    use crate::db::stores::test_utils::doggo_test_fields;
 
     use super::{parse_document_view_field_rows, parse_operation_rows, parse_value_to_string_vec};
 
@@ -678,25 +678,24 @@ mod tests {
 
     #[rstest]
     fn operation_values_to_string_vec(schema_id: SchemaId) {
-        let expected_list = vec![
-            "28",
-            "0020abababababababababababababababababababababababababababababababab",
-            "0020cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
-            "3.5",
-            "false",
-            "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-            "0020dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-            "0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-            "0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-            "bubu",
-        ];
+        let expected_list  = vec![
+            "28", 
+            "00204f0dd3a1b8205b6d4ce3fd4c158bb91c9e131bd842e727164ea220b5b6d09346", 
+            "002019ed3e9b39cd17f1dbc0f6e31a6e7b9c9ab7e349332e710c946a441b7d308eb5_0020995d53f460293c5686c42037b72787ed28668ad8b6d18e9d5f02c5d3301161f0", 
+            "3.5", 
+            "false", 
+            "00209a2149589672fa1ac2348e48b4c56fc208a0eff44938464dd2091850f444a323", 
+            "0020475488c0e2bbb9f5a81929e2fe11de81c1f83c8045de41da43899d25ad0d4afa_0020f7a17e14b9a5e87435decdbc28d562662fbf37da39b94e8469d8e1873336e80e", 
+            "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543", 
+            "bubu"];
+
+        let operation = create_operation(test_fields(), schema_id);
+
         let mut string_value_list = vec![];
-        let operation = create_operation(doggo_test_fields(), schema_id);
         for (_, value) in operation.fields().unwrap().iter() {
             string_value_list.push(parse_value_to_string_vec(value));
         }
+
         let string_value_list: Vec<&String> = string_value_list.iter().flatten().collect();
         assert_eq!(expected_list, string_value_list)
     }
