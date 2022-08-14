@@ -7,7 +7,7 @@ use p2panda_rs::document::DocumentId;
 use serde::{Deserialize, Serialize};
 
 /// Id of a p2panda document.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DocumentIdScalar(DocumentId);
 
 #[Scalar]
