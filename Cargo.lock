@@ -2021,7 +2021,7 @@ dependencies = [
 [[package]]
 name = "p2panda-rs"
 version = "0.4.0"
-source = "git+https://github.com/p2panda/p2panda?rev=8d440ecd39e422612079f686df8f241def1deb5b#8d440ecd39e422612079f686df8f241def1deb5b"
+source = "git+https://github.com/p2panda/p2panda?rev=90985fef01c4b056616146ccbf896a1a4db6e74c#90985fef01c4b056616146ccbf896a1a4db6e74c"
 dependencies = [
  "arrayvec 0.5.2",
  "async-trait",
