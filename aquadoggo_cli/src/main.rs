@@ -63,7 +63,7 @@ impl TryFrom<Opt> for Configuration {
 
         config.replication = ReplicationConfiguration {
             remote_peers: opt.remote_node_addresses,
-            authors_to_replicate,
+            replicate_by_author: authors_to_replicate,
             ..ReplicationConfiguration::default()
         };
 

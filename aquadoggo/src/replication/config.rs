@@ -5,6 +5,7 @@ use std::convert::TryFrom;
 use anyhow::{Error, Result};
 use p2panda_rs::entry::LogId;
 use p2panda_rs::identity::Author;
+use p2panda_rs::schema::SchemaId;
 use serde::Deserialize;
 
 /// Configuration for the replication service.
@@ -18,7 +19,10 @@ pub struct ReplicationConfiguration {
     pub remote_peers: Vec<String>,
 
     /// The authors to replicate and their log ids.
-    pub authors_to_replicate: Vec<AuthorToReplicate>,
+    pub replicate_by_author: Option<Vec<AuthorToReplicate>>,
+
+    /// The schema ids of schemas to replicate.
+    pub replicate_by_schema: Option<Vec<SchemaId>>,
 }
 
 impl Default for ReplicationConfiguration {
@@ -26,7 +30,8 @@ impl Default for ReplicationConfiguration {
         Self {
             connection_interval_seconds: 30,
             remote_peers: Vec::new(),
-            authors_to_replicate: Vec::new(),
+            replicate_by_author: Some(Vec::new()),
+            replicate_by_schema: Some(Vec::new()),
         }
     }
 }
