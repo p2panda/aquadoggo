@@ -238,17 +238,6 @@ mod tests {
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
     #[rstest]
-    fn initial_log_id(
-        #[from(public_key)] author: Author,
-        #[from(test_db)] runner: TestDatabaseRunner,
-    ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            let log_id = db.store.find_document_log_id(&author, None).await.unwrap();
-            assert_eq!(log_id, LogId::default());
-        });
-    }
-
-    #[rstest]
     fn prevent_duplicate_log_ids(
         #[from(public_key)] author: Author,
         #[from(schema_id)] schema_id: SchemaId,
@@ -281,32 +270,6 @@ mod tests {
             let log = StorageLog::new(&author, &schema, &document, &LogId::default());
 
             assert!(db.store.insert_log(log).await.is_ok());
-        });
-    }
-
-    #[rstest]
-    fn selecting_next_log_id(
-        #[from(public_key)] author: Author,
-        #[from(schema_id)] schema_id: SchemaId,
-        #[from(test_db)] runner: TestDatabaseRunner,
-    ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            let log_id = db.store.find_document_log_id(&author, None).await.unwrap();
-
-            // We expect to be given the next log id when asking for a possible log id for a new
-            // document by the same author
-            assert_eq!(log_id, LogId::default());
-
-            // Starting with an empty db, we expect to be able to count up from 0 and expect each
-            // inserted document's log id to be equal to the count index
-            for n in 0..12 {
-                let log_id = db.store.find_document_log_id(&author, None).await.unwrap();
-
-                assert_eq!(LogId::new(n as u64), log_id);
-
-                let log = StorageLog::new(&author, &schema_id, &random_document_id(), &log_id);
-                db.store.insert_log(log).await.unwrap();
-            }
         });
     }
 
@@ -375,15 +338,6 @@ mod tests {
                     .await
                     .unwrap(),
                 Some(encoded_entry.hash().into())
-            );
-
-            // We expect to find this document in the default log
-            assert_eq!(
-                db.store
-                    .find_document_log_id(&author, Some(&encoded_entry.hash().into()))
-                    .await
-                    .unwrap(),
-                LogId::default()
             );
         });
     }
