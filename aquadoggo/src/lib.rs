@@ -32,7 +32,7 @@ mod validation;
 mod test_helpers;
 
 pub use crate::config::Configuration;
-pub use crate::replication::ReplicationConfiguration;
+pub use crate::replication::{ReplicationConfiguration, AuthorToReplicate, SchemaToReplicate};
 pub use node::Node;
 pub use schema::SchemaProvider;
 

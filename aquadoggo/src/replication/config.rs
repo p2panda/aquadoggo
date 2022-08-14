@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::convert::TryFrom;
+use std::str::FromStr;
 
 use anyhow::{Error, Result};
 use p2panda_rs::entry::LogId;
@@ -22,7 +23,7 @@ pub struct ReplicationConfiguration {
     pub replicate_by_author: Option<Vec<AuthorToReplicate>>,
 
     /// The schema ids of schemas to replicate.
-    pub replicate_by_schema: Option<Vec<SchemaId>>,
+    pub replicate_by_schema: Option<Vec<SchemaToReplicate>>,
 }
 
 impl Default for ReplicationConfiguration {
@@ -60,5 +61,28 @@ impl TryFrom<(String, Vec<u64>)> for AuthorToReplicate {
         let log_ids = value.1.into_iter().map(LogId::new).collect();
 
         Ok(Self(author, log_ids))
+    }
+}
+
+/// Replication configuration for a single schema.
+///
+/// Currently only contains the schema's id.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SchemaToReplicate(SchemaId);
+
+impl SchemaToReplicate {
+    /// Access the configured schema id.
+    pub fn schema_id(&self) -> &SchemaId {
+        &self.0
+    }
+}
+
+impl TryFrom<String> for SchemaToReplicate {
+    type Error = Error;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        let schema_id = SchemaId::from_str(&value)?;
+
+        Ok(Self(schema_id))
     }
 }

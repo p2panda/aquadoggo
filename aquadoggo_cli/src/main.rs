@@ -4,7 +4,7 @@ use std::convert::{TryFrom, TryInto};
 use std::error::Error;
 
 use anyhow::Result;
-use aquadoggo::{Configuration, Node, ReplicationConfiguration};
+use aquadoggo::{AuthorToReplicate, Configuration, Node, ReplicationConfiguration, SchemaToReplicate};
 use structopt::StructOpt;
 
 /// Helper method to parse a single key-value pair.
@@ -46,7 +46,11 @@ struct Opt {
     /// - "123abc" with log_ids 1, 2, 345
     /// - "456def" with log_ids 6 7
     #[structopt(short = "A", parse(try_from_str = parse_key_val), number_of_values = 1)]
-    authors_to_replicate: Vec<(String, Vec<u64>)>,
+    authors_to_replicate: Option<Vec<(String, Vec<u64>)>>,
+
+    /// A collection of schema ids for schemas to replicate
+    #[structopt(short = "S")]
+    schemas_to_replicate: Option<Vec<String>>,
 }
 
 impl TryFrom<Opt> for Configuration {
@@ -55,15 +59,32 @@ impl TryFrom<Opt> for Configuration {
     fn try_from(opt: Opt) -> Result<Self, Self::Error> {
         let mut config = Configuration::new(opt.data_dir)?;
 
-        let authors_to_replicate = opt
+        // Parse optional authors to replicate
+        let replicate_by_author = opt
             .authors_to_replicate
-            .into_iter()
-            .map(|elem| elem.try_into())
-            .collect::<Result<_>>()?;
+            .map(|authors| {
+                authors
+                    .into_iter()
+                    .map(AuthorToReplicate::try_from)
+                    .collect::<Result<_>>()
+            })
+            .transpose()?;
+
+            // Parse optional authors to replicate
+            let replicate_by_schema = opt
+                .schemas_to_replicate
+                .map(|authors| {
+                    authors
+                        .into_iter()
+                        .map(SchemaToReplicate::try_from)
+                        .collect::<Result<_>>()
+                    })
+                    .transpose()?;
 
         config.replication = ReplicationConfiguration {
             remote_peers: opt.remote_node_addresses,
-            replicate_by_author: authors_to_replicate,
+            replicate_by_author,
+            replicate_by_schema,
             ..ReplicationConfiguration::default()
         };
 

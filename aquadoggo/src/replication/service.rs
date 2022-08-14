@@ -197,7 +197,7 @@ mod tests {
     use crate::replication::ReplicationConfiguration;
     use crate::schema::SchemaProvider;
     use crate::test_helpers::shutdown_handle;
-    use crate::Configuration;
+    use crate::{Configuration, SchemaToReplicate};
 
     use super::replication_service;
 
@@ -305,6 +305,7 @@ mod tests {
         })
     }
 
+    #[rstest]
     fn replication_by_schema() {
         with_db_manager_teardown(|db_manager: TestDatabaseManager| async move {
             init_env_logger();
@@ -345,20 +346,18 @@ mod tests {
 
             // Our test database helper already populated the database for us. We retreive the
             // public keys here of the authors who created these test data entries
-            let public_key = billie_db
-                .test_data
-                .documents
-                .first()
-                .unwrap();
+            let public_key = billie_db.test_data.documents.first().unwrap();
 
             let endpoint: String = "http://localhost:3022/graphql".into();
 
-            let schemas = vec![populate_db_config.schema];
+            let schema_config =
+                SchemaToReplicate::try_from(populate_db_config.schema.to_string())
+                    .unwrap();
 
             // Construct database and context for Ada
             let config_ada = Configuration {
                 replication: ReplicationConfiguration {
-                    replicate_by_schema: Some(schemas),
+                    replicate_by_schema: Some(vec![schema_config]),
                     remote_peers: vec![endpoint],
                     ..ReplicationConfiguration::default()
                 },
