@@ -97,7 +97,7 @@ mod tests {
     use p2panda_rs::operation::{OperationFields, OperationValue, PinnedRelationList};
     use p2panda_rs::schema::{FieldType, SchemaId};
     use p2panda_rs::test_utils::fixtures::{
-        document_view_id, key_pair, operation, operation_fields,
+        document_view_id, key_pair, operation, operation_fields, schema_fields,
     };
     use rstest::rstest;
 
@@ -224,40 +224,29 @@ mod tests {
     }
 
     #[rstest]
-    #[case::works(
-        operation_fields(vec![
-                         ("name", OperationValue::String("venue_name".to_string())),
-                         ("type", FieldType::String.into())
-        ]),
-        operation_fields(vec![
-                         ("name", OperationValue::String("venue".to_string())),
-                         ("description", OperationValue::String("My venue".to_string()))
-        ]),
+    #[case(
+        vec![
+            ("venue", FieldType::String),
+            ("address", FieldType::String)
+        ],
         1
     )]
-    #[case::does_not_work(
-        operation_fields(vec![
-                         ("name", OperationValue::String("venue_name".to_string()))
-        ]),
-        operation_fields(vec![
-                         ("name", OperationValue::String("venue".to_string())),
-                         ("description", OperationValue::String("My venue".to_string()))
-        ]),
-        0
-    )]
     fn get_all_schema(
-        #[case] schema_field_definition: OperationFields,
-        #[case] schema_definition: OperationFields,
+        #[case] schema_definition: Vec<(&'static str, FieldType)>,
         #[case] expected_schema_count: usize,
         key_pair: KeyPair,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
-            let document_view_id =
-                insert_schema_field_definition(&db.store, &key_pair, schema_field_definition).await;
-
-            insert_schema_definition(&db.store, &key_pair, &document_view_id, schema_definition)
+        runner.with_db_teardown(move |mut db: TestDatabase| async move {
+            let schema = db
+                .add_schema("test_schema", schema_definition, &key_pair)
                 .await;
+
+            // For later...
+            // let id = match schema.id() {
+            //     SchemaId::Application(name, id) => id,
+            //     _ => panic!("Not interested in this"),
+            // };
 
             let schemas = db.store.get_all_schema().await;
 
