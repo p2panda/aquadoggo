@@ -127,12 +127,13 @@ impl TestDatabase {
         .await
         .expect("Publish schema");
 
-        let input = TaskInput::new(None, Some(DocumentViewId::from(entry_signed.hash())));
+        let input = TaskInput::new(Some(DocumentId::from(entry_signed.hash())), None);
         reduce_task(self.context.clone(), input.clone())
             .await
             .expect("Reduce schema document");
 
         // Run schema task for this spec
+        let input = TaskInput::new(None, Some(DocumentViewId::from(entry_signed.hash())));
         schema_task(self.context.clone(), input)
             .await
             .expect("Run schema task");
