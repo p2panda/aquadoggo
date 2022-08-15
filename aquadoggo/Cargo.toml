@@ -33,7 +33,7 @@ lipmaa-link = "^0.2.2"
 log = "^0.4.17"
 once_cell = "^1.12.0"
 openssl-probe = "^0.1.5"
-p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "90985fef01c4b056616146ccbf896a1a4db6e74c" }
+p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "e928fe1d0817e455ff68a676c2e2383dcc0f2a9b" }
 serde = { version = "^1.0.137", features = ["derive"] }
 sqlx = { version = "^0.6.0", features = [
     "any",
@@ -63,7 +63,7 @@ hex = "0.4.3"
 http = "^0.2.8"
 hyper = "^0.14.19"
 once_cell = "^1.12.0"
-p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "90985fef01c4b056616146ccbf896a1a4db6e74c", features = [
+p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "e928fe1d0817e455ff68a676c2e2383dcc0f2a9b", features = [
     "testing",
 ] }
 rand = "^0.8.5"
