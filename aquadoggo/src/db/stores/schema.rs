@@ -206,7 +206,6 @@ mod tests {
         let err_str = err_str.to_string();
 
         runner.with_db_teardown(|db: TestDatabase| async move {
-            db.add_schema(name, schema_definition, &key_pair);
             let document_view_id =
                 insert_schema_field_definition(&db.store, &key_pair, schema_field_definition).await;
 

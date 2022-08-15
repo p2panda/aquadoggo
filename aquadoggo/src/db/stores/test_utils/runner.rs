@@ -86,12 +86,12 @@ impl TestDatabaseRunner {
                 documents,
             };
 
+            // Init schema provider and insert the configured schema
+            let schema_provider = SchemaProvider::default();
+            schema_provider.update(self.config.schema.clone()).await;
+
             // Construct the context
-            let context = Context::new(
-                store.clone(),
-                Configuration::default(),
-                SchemaProvider::default(),
-            );
+            let context = Context::new(store.clone(), Configuration::default(), schema_provider);
 
             // Construct the actual test database
             let mut db = TestDatabase {
