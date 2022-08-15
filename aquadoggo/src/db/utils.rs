@@ -6,8 +6,8 @@ use p2panda_rs::document::{DocumentId, DocumentViewFields, DocumentViewId, Docum
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::traits::AsOperation;
 use p2panda_rs::operation::{
-    Operation, OperationBuilder, OperationId, OperationValue, PinnedRelation, PinnedRelationList,
-    Relation, RelationList, VerifiedOperation,
+    Operation, OperationAction, OperationBuilder, OperationId, OperationValue, PinnedRelation,
+    PinnedRelationList, Relation, RelationList, VerifiedOperation,
 };
 use p2panda_rs::schema::SchemaId;
 
@@ -147,10 +147,12 @@ pub fn parse_operation_rows(
     let operation = match first_row.action.as_str() {
         "create" => operation_builder.fields(fields.as_slice()).build(),
         "update" => operation_builder
+            .action(OperationAction::Update)
             .fields(fields.as_slice())
             .previous_operations(previous_operations.as_ref().unwrap())
             .build(),
         "delete" => operation_builder
+            .action(OperationAction::Delete)
             .previous_operations(previous_operations.as_ref().unwrap())
             .build(),
         _ => panic!("Operation which was not CREATE, UPDATE or DELETE found."),

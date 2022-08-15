@@ -329,7 +329,7 @@ mod tests {
     use p2panda_rs::operation::{Operation, OperationId, OperationValue};
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation, OperationStore};
-    use p2panda_rs::test_utils::constants::SCHEMA_ID;
+    use p2panda_rs::test_utils::constants;
     use p2panda_rs::test_utils::fixtures::{
         operation, random_document_view_id, random_operation_id,
     };
@@ -379,7 +379,7 @@ mod tests {
 
             let result = db
                 .store
-                .insert_document_view(&document_view, &SchemaId::from_str(SCHEMA_ID).unwrap())
+                .insert_document_view(&document_view, constants::schema().id())
                 .await;
 
             assert!(result.is_err());
@@ -530,7 +530,7 @@ mod tests {
 
             let document_views = db
                 .store
-                .get_documents_by_schema(&SCHEMA_ID.parse().unwrap())
+                .get_documents_by_schema(constants::schema().id())
                 .await
                 .unwrap();
 
@@ -576,12 +576,10 @@ mod tests {
     #[rstest]
     fn gets_documents_by_schema(
         #[from(test_db)]
-        #[with(10, 2, 1, false, SCHEMA_ID.parse().unwrap())]
+        #[with(10, 2, 1, false, constants::schema())]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let schema_id = SchemaId::from_str(SCHEMA_ID).unwrap();
-
             for document_id in &db.test_data.documents {
                 let document_operations = db
                     .store
@@ -594,7 +592,11 @@ mod tests {
                 db.store.insert_document(&document).await.unwrap();
             }
 
-            let schema_documents = db.store.get_documents_by_schema(&schema_id).await.unwrap();
+            let schema_documents = db
+                .store
+                .get_documents_by_schema(constants::schema().id())
+                .await
+                .unwrap();
 
             assert_eq!(schema_documents.len(), 2);
         });

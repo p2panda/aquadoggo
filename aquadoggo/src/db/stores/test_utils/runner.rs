@@ -5,17 +5,17 @@ use std::sync::Arc;
 
 use futures::Future;
 use p2panda_rs::operation::OperationValue;
-use p2panda_rs::schema::SchemaId;
-use p2panda_rs::test_utils::constants::{test_fields, SCHEMA_ID};
+use p2panda_rs::schema::{Schema, SchemaId};
+use p2panda_rs::test_utils::constants;
+use p2panda_rs::test_utils::db::test_db::{populate_store, PopulateDatabaseConfig};
+use p2panda_rs::test_utils::fixtures::key_pair;
 use rstest::fixture;
 use tokio::runtime::Builder;
 use tokio::sync::Mutex;
 
 use crate::context::Context;
 use crate::db::provider::SqlStorage;
-use crate::db::stores::test_utils::{
-    populate_test_db, PopulateDatabaseConfig, TestData, TestDatabase,
-};
+use crate::db::stores::test_utils::{TestData, TestDatabase};
 use crate::db::Pool;
 use crate::test_helpers::{initialize_db, initialize_db_with_url};
 use crate::{Configuration, SchemaProvider};
@@ -75,22 +75,30 @@ impl TestDatabaseRunner {
             .expect("Could not build tokio Runtime for test");
 
         runtime.block_on(async {
-            // Initialise test database
+            // Initialise store
             let pool = initialize_db().await;
             let store = SqlStorage::new(pool);
+
+            // Populate the store and construct test data
+            let (key_pairs, documents) = populate_store(&store, &self.config).await;
+            let test_data = TestData {
+                key_pairs,
+                documents,
+            };
+
+            // Construct the context
             let context = Context::new(
                 store.clone(),
                 Configuration::default(),
                 SchemaProvider::default(),
             );
+
+            // Construct the actual test database
             let mut db = TestDatabase {
                 context,
                 store,
-                test_data: TestData::default(),
+                test_data,
             };
-
-            // Populate the test db
-            populate_test_db(&mut db, &self.config).await;
 
             // Get a handle of the underlying database connection pool
             let pool = db.store.pool.clone();
@@ -163,11 +171,17 @@ pub fn test_db(
     // A boolean flag for wether all logs should contain a delete operation
     #[default(false)] with_delete: bool,
     // The schema used for all operations in the db
-    #[default(SCHEMA_ID.parse().unwrap())] schema: SchemaId,
+    #[default(constants::schema())] schema: Schema,
     // The fields used for every CREATE operation
-    #[default(test_fields())] create_operation_fields: Vec<(&'static str, OperationValue)>,
+    #[default(constants::test_fields())] create_operation_fields: Vec<(
+        &'static str,
+        OperationValue,
+    )>,
     // The fields used for every UPDATE operation
-    #[default(test_fields())] update_operation_fields: Vec<(&'static str, OperationValue)>,
+    #[default(constants::test_fields())] update_operation_fields: Vec<(
+        &'static str,
+        OperationValue,
+    )>,
 ) -> TestDatabaseRunner {
     let config = PopulateDatabaseConfig {
         no_of_entries,
@@ -180,35 +194,6 @@ pub fn test_db(
     };
 
     TestDatabaseRunner { config }
-}
-
-/// Fixture for passing in `PopulateDatabaseConfig` into tests.
-#[fixture]
-pub fn test_db_config(
-    // Number of entries per log/document
-    #[default(0)] no_of_entries: usize,
-    // Number of logs for each author
-    #[default(0)] no_of_logs: usize,
-    // Number of authors, each with logs populated as defined above
-    #[default(0)] no_of_authors: usize,
-    // A boolean flag for wether all logs should contain a delete operation
-    #[default(false)] with_delete: bool,
-    // The schema used for all operations in the db
-    #[default(SCHEMA_ID.parse().unwrap())] schema: SchemaId,
-    // The fields used for every CREATE operation
-    #[default(test_fields())] create_operation_fields: Vec<(&'static str, OperationValue)>,
-    // The fields used for every UPDATE operation
-    #[default(test_fields())] update_operation_fields: Vec<(&'static str, OperationValue)>,
-) -> PopulateDatabaseConfig {
-    PopulateDatabaseConfig {
-        no_of_entries,
-        no_of_logs,
-        no_of_authors,
-        with_delete,
-        schema,
-        create_operation_fields,
-        update_operation_fields,
-    }
 }
 
 /// Method which provides a safe way to write tests with the ability to build many databases and

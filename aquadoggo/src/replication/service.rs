@@ -241,14 +241,13 @@ mod tests {
     use p2panda_rs::identity::Author;
     use p2panda_rs::storage_provider::traits::EntryStore;
     use p2panda_rs::test_utils::constants::SCHEMA_ID;
+    use p2panda_rs::test_utils::db::test_db::{populate_store, PopulateDatabaseConfig};
     use rstest::rstest;
     use tokio::sync::{broadcast, oneshot};
     use tokio::task;
 
     use crate::context::Context;
-    use crate::db::stores::test_utils::{
-        populate_test_db, with_db_manager_teardown, PopulateDatabaseConfig, TestDatabaseManager,
-    };
+    use crate::db::stores::test_utils::{with_db_manager_teardown, TestDatabaseManager};
     use crate::http::http_service;
     use crate::replication::ReplicationConfiguration;
     use crate::schema::SchemaProvider;
@@ -276,7 +275,7 @@ mod tests {
                 no_of_authors: 1,
                 ..Default::default()
             };
-            populate_test_db(&mut billie_db, &populate_db_config).await;
+            populate_store(&billie_db.store, &populate_db_config).await;
 
             // Launch HTTP service of Billie
             let (tx, _rx) = broadcast::channel(16);

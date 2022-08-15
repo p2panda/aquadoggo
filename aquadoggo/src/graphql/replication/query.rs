@@ -156,17 +156,15 @@ impl CursorType for scalars::SeqNumScalar {
 
 #[cfg(test)]
 mod tests {
-    use std::convert::{TryFrom, TryInto};
-
     use async_graphql::{EmptyMutation, EmptySubscription, Request, Schema};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::Author;
+    use p2panda_rs::test_utils::db::test_db::{populate_store, PopulateDatabaseConfig};
     use p2panda_rs::test_utils::fixtures::random_hash;
     use rstest::rstest;
 
     use crate::db::stores::test_utils::{
-        populate_test_db, test_db, with_db_manager_teardown, PopulateDatabaseConfig, TestDatabase,
-        TestDatabaseManager, TestDatabaseRunner,
+        test_db, with_db_manager_teardown, TestDatabase, TestDatabaseManager, TestDatabaseRunner,
     };
 
     use super::ReplicationRoot;
@@ -322,8 +320,8 @@ mod tests {
             // Build and populate Billie's database
             let mut billie_db = db_manager.create("sqlite::memory:").await;
 
-            populate_test_db(
-                &mut billie_db,
+            populate_store(
+                &billie_db.store,
                 &PopulateDatabaseConfig {
                     no_of_entries: entries_in_log,
                     no_of_logs: 1,

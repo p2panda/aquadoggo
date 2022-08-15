@@ -122,12 +122,13 @@ mod tests {
     use p2panda_rs::entry::traits::AsEncodedEntry;
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::{Operation, OperationBuilder, OperationValue, PinnedRelationList};
-    use p2panda_rs::schema::{FieldType, SchemaId};
+    use p2panda_rs::schema::{FieldType, Schema, SchemaId};
+    use p2panda_rs::test_utils::db::test_db::{send_to_store, PopulateDatabaseConfig};
     use p2panda_rs::test_utils::fixtures::operation_fields;
     use rstest::rstest;
 
     use crate::context::Context;
-    use crate::db::stores::test_utils::{send_to_store, test_db, TestDatabase, TestDatabaseRunner};
+    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
     use crate::db::traits::DocumentStore;
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
@@ -150,8 +151,14 @@ mod tests {
             .build()
             .unwrap();
 
-        let (entry_signed, _) =
-            send_to_store(&db.store, &create_field_definition, None, &KeyPair::new()).await;
+        let (entry_signed, _) = send_to_store(
+            &db.store,
+            &create_field_definition,
+            &Schema::get_system(SchemaId::SchemaFieldDefinition(1)).unwrap(),
+            &KeyPair::new(),
+        )
+        .await
+        .unwrap();
         let field_definition_id: DocumentId = entry_signed.hash().into();
 
         let input = TaskInput::new(Some(field_definition_id.clone()), None);
@@ -184,8 +191,15 @@ mod tests {
             .build()
             .unwrap();
 
-        let (entry_signed, _) =
-            send_to_store(&db.store, &create_schema_definition, None, &KeyPair::new()).await;
+        let (entry_signed, _) = send_to_store(
+            &db.store,
+            &create_schema_definition,
+            &Schema::get_system(SchemaId::SchemaDefinition(1)).unwrap(),
+            &KeyPair::new(),
+        )
+        .await
+        .unwrap();
+
         let schema_definition_id: DocumentId = entry_signed.hash().into();
 
         let input = TaskInput::new(Some(schema_definition_id.clone()), None);

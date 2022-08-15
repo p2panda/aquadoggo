@@ -14,58 +14,81 @@ use p2panda_rs::operation::{
     EncodedOperation, Operation, OperationValue, PinnedRelation, PinnedRelationList, Relation,
     RelationList,
 };
+use p2panda_rs::test_utils::constants;
+use p2panda_rs::test_utils::fixtures::{document_view_id, schema, schema_fields};
 
+use p2panda_rs::schema::{Schema, SchemaId};
 use p2panda_rs::storage_provider::traits::{OperationStore, StorageProvider};
-use p2panda_rs::test_utils::constants::PRIVATE_KEY;
 
 use crate::db::provider::SqlStorage;
 use crate::db::traits::DocumentStore;
 use crate::domain::{next_args, publish};
 
-/// Helper for creating many key_pairs.
-///
-/// The first keypair created will allways be `PRIVATE_KEY`.
-pub fn test_key_pairs(no_of_authors: usize) -> Vec<KeyPair> {
-    let mut key_pairs = vec![KeyPair::from_private_key_str(PRIVATE_KEY).unwrap()];
-
-    for _index in 1..no_of_authors {
-        key_pairs.push(KeyPair::new())
-    }
-
-    key_pairs
+pub fn doggo_schema() -> Schema {
+    schema(
+        schema_fields(doggo_fields(), constants::SCHEMA_ID.parse().unwrap()),
+        constants::SCHEMA_ID.parse().unwrap(),
+        "A doggo schema for testing",
+    )
 }
 
-/// Helper for constructing a valid encoded entry and operation using valid next_args retrieved
-/// from the passed store.
-pub async fn encode_entry_and_operation<S: StorageProvider>(
-    store: &S,
-    operation: &Operation,
-    key_pair: &KeyPair,
-    document_id: Option<&DocumentId>,
-) -> (EncodedEntry, EncodedOperation) {
-    let author = Author::from(key_pair.public_key());
-    let document_view_id: Option<DocumentViewId> =
-        document_id.map(|id| id.as_str().parse().unwrap());
-
-    // Get next args
-    let next_args = next_args::<S>(store, &author, document_view_id.as_ref())
-        .await
-        .unwrap();
-
-    // Sign and encode the entry and operation.
-    let operation_encoded = encode_operation(operation).unwrap();
-    let entry_encoded = sign_and_encode_entry(
-        &next_args.log_id.into(),
-        &next_args.seq_num.into(),
-        next_args.skiplink.map(Hash::from).as_ref(),
-        next_args.backlink.map(Hash::from).as_ref(),
-        &operation_encoded,
-        key_pair,
-    )
-    .unwrap();
-
-    // Return encoded entry and operation.
-    (entry_encoded, operation_encoded)
+/// A complex set of fields which can be used in aquadoggo tests.
+pub fn doggo_fields() -> Vec<(&'static str, OperationValue)> {
+    vec![
+        ("username", OperationValue::String("bubu".to_owned())),
+        ("height", OperationValue::Float(3.5)),
+        ("age", OperationValue::Integer(28)),
+        ("is_admin", OperationValue::Boolean(false)),
+        (
+            "profile_picture",
+            OperationValue::Relation(Relation::new(
+                Hash::new("0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
+                    .unwrap()
+                    .into(),
+            )),
+        ),
+        (
+            "special_profile_picture",
+            OperationValue::PinnedRelation(PinnedRelation::new(
+                Hash::new("0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+                    .unwrap()
+                    .into(),
+            )),
+        ),
+        (
+            "many_profile_pictures",
+            OperationValue::RelationList(RelationList::new(vec![
+                Hash::new("0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+                    .unwrap()
+                    .into(),
+                Hash::new("0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+                    .unwrap()
+                    .into(),
+            ])),
+        ),
+        (
+            "many_special_profile_pictures",
+            OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
+                Hash::new("0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")
+                    .unwrap()
+                    .into(),
+                Hash::new("0020dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd")
+                    .unwrap()
+                    .into(),
+            ])),
+        ),
+        (
+            "another_relation_field",
+            OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
+                Hash::new("0020abababababababababababababababababababababababababababababababab")
+                    .unwrap()
+                    .into(),
+                Hash::new("0020cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd")
+                    .unwrap()
+                    .into(),
+            ])),
+        ),
+    ]
 }
 
 /// Helper for inserting an entry, operation and document_view into the store.

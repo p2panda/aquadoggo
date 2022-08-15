@@ -1,28 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::convert::TryFrom;
-
 use log::{debug, info};
 use p2panda_rs::document::{DocumentId, DocumentViewId};
-use p2panda_rs::entry::encode::sign_and_encode_entry;
 use p2panda_rs::entry::traits::AsEncodedEntry;
-use p2panda_rs::entry::{EncodedEntry, Entry};
-use p2panda_rs::hash::Hash;
-use p2panda_rs::identity::{Author, KeyPair};
-use p2panda_rs::operation::encode::encode_operation;
-use p2panda_rs::operation::{
-    EncodedOperation, Operation, OperationBuilder, OperationFields, OperationValue,
-};
+use p2panda_rs::identity::KeyPair;
+use p2panda_rs::operation::{OperationBuilder, OperationValue};
 use p2panda_rs::schema::{FieldType, Schema, SchemaId};
 use p2panda_rs::storage_provider::traits::StorageProvider;
-use p2panda_rs::test_utils::constants::{test_fields, SCHEMA_ID};
-use p2panda_rs::test_utils::fixtures::{operation, operation_fields};
+use p2panda_rs::test_utils::db::test_db::send_to_store;
 
 use crate::context::Context;
 use crate::db::provider::SqlStorage;
-use crate::db::stores::test_utils::test_key_pairs;
-use crate::domain::{next_args, publish};
-use crate::graphql::client::NextEntryArguments;
 use crate::materializer::tasks::{dependency_task, reduce_task, schema_task};
 use crate::materializer::TaskInput;
 use crate::{Configuration, SchemaProvider};
@@ -77,19 +65,23 @@ impl TestDatabase {
         let create_op = OperationBuilder::new(schema.id())
             .fields(&fields)
             .build()
-            .unwrap();
-        let (entry_signed, _) = send_to_store(&self.store, &create_op, None, key_pair).await;
+            .expect("Build operation");
+
+        let (entry_signed, _) = send_to_store(&self.store, &create_op, &schema, key_pair)
+            .await
+            .expect("Publish create operation");
+
         let input = TaskInput::new(Some(DocumentId::from(entry_signed.hash())), None);
         let dependency_tasks = reduce_task(self.context.clone(), input.clone())
             .await
-            .unwrap();
+            .expect("Reduce document");
 
         // Run dependency tasks
         if let Some(tasks) = dependency_tasks {
             for task in tasks {
                 dependency_task(self.context.clone(), task.input().to_owned())
                     .await
-                    .unwrap();
+                    .expect("Run dependency task");
             }
         }
         DocumentViewId::from(entry_signed.hash())
@@ -108,8 +100,14 @@ impl TestDatabase {
         // Build and reduce schema field definitions
         for field in fields {
             let create_field_op = Schema::create_field(field.0, field.1.clone());
-            let (entry_signed, _) =
-                send_to_store(&self.store, &create_field_op, None, key_pair).await;
+            let (entry_signed, _) = send_to_store(
+                &self.store,
+                &create_field_op,
+                &Schema::get_system(SchemaId::SchemaFieldDefinition(1)).unwrap(),
+                key_pair,
+            )
+            .await
+            .expect("Publish schema fields");
 
             let input = TaskInput::new(Some(DocumentId::from(entry_signed.hash())), None);
             reduce_task(self.context.clone(), input).await.unwrap();
@@ -120,14 +118,24 @@ impl TestDatabase {
 
         // Build and reduce schema definition
         let create_schema_op = Schema::create(name, "test schema description", field_ids);
-        let (entry_signed, _) = send_to_store(&self.store, &create_schema_op, None, key_pair).await;
+        let (entry_signed, _) = send_to_store(
+            &self.store,
+            &create_schema_op,
+            &Schema::get_system(SchemaId::SchemaDefinition(1)).unwrap(),
+            key_pair,
+        )
+        .await
+        .expect("Publish schema");
+
         let input = TaskInput::new(None, Some(DocumentViewId::from(entry_signed.hash())));
         reduce_task(self.context.clone(), input.clone())
             .await
-            .unwrap();
+            .expect("Reduce schema document");
 
         // Run schema task for this spec
-        schema_task(self.context.clone(), input).await.unwrap();
+        schema_task(self.context.clone(), input)
+            .await
+            .expect("Run schema task");
 
         let view_id = DocumentViewId::from(entry_signed.hash());
         let schema_id = SchemaId::Application(name.to_string(), view_id);
@@ -147,111 +155,4 @@ impl TestDatabase {
 pub struct TestData {
     pub key_pairs: Vec<KeyPair>,
     pub documents: Vec<DocumentId>,
-}
-
-/// Configuration used when populating a `TestDatabase`.
-pub struct PopulateDatabaseConfig {
-    /// Number of entries per log/document.
-    pub no_of_entries: usize,
-
-    /// Number of logs for each author.
-    pub no_of_logs: usize,
-
-    /// Number of authors, each with logs populated as defined above.
-    pub no_of_authors: usize,
-
-    /// A boolean flag for wether all logs should contain a delete operation.
-    pub with_delete: bool,
-
-    /// The schema used for all operations in the db.
-    pub schema: SchemaId,
-
-    /// The fields used for every CREATE operation.
-    pub create_operation_fields: Vec<(&'static str, OperationValue)>,
-
-    /// The fields used for every UPDATE operation.
-    pub update_operation_fields: Vec<(&'static str, OperationValue)>,
-}
-
-impl Default for PopulateDatabaseConfig {
-    fn default() -> Self {
-        Self {
-            no_of_entries: 0,
-            no_of_logs: 0,
-            no_of_authors: 0,
-            with_delete: false,
-            schema: SCHEMA_ID.parse().unwrap(),
-            create_operation_fields: test_fields(),
-            update_operation_fields: test_fields(),
-        }
-    }
-}
-
-/// Helper method for populating a `TestDatabase` with configurable data.
-///
-/// Passed parameters define what the db should contain. The first entry in each log contains a
-/// valid CREATE operation following entries contain duplicate UPDATE operations. If the
-/// with_delete flag is set to true the last entry in all logs contain be a DELETE operation.
-pub async fn populate_test_db<S: StorageProvider>(
-    db: &mut TestDatabase<S>,
-    config: &PopulateDatabaseConfig,
-) {
-    let key_pairs = test_key_pairs(config.no_of_authors);
-
-    for key_pair in &key_pairs {
-        db.test_data
-            .key_pairs
-            .push(KeyPair::from_private_key(key_pair.private_key()).unwrap());
-
-        for _log_id in 0..config.no_of_logs {
-            let mut document_id: Option<DocumentId> = None;
-            let mut previous_operation: Option<DocumentViewId> = None;
-
-            for index in 0..config.no_of_entries {
-                // Create an operation based on the current index and whether this document should
-                // contain a DELETE operation
-                let next_operation_fields = match index {
-                    // First operation is CREATE
-                    0 => Some(operation_fields(config.create_operation_fields.clone())),
-                    // Last operation is DELETE if the with_delete flag is set
-                    seq if seq == (config.no_of_entries - 1) && config.with_delete => None,
-                    // All other operations are UPDATE
-                    _ => Some(operation_fields(config.update_operation_fields.clone())),
-                };
-
-                // Publish the operation encoded on an entry to storage.
-                let (entry_encoded, publish_entry_response) = send_to_store::<S>(
-                    &db.store,
-                    &operation(
-                        next_operation_fields,
-                        previous_operation,
-                        config.schema.to_owned(),
-                    ),
-                    document_id.as_ref(),
-                    key_pair,
-                )
-                .await;
-
-                // Set the previous_operations based on the backlink
-                previous_operation = publish_entry_response.backlink.map(DocumentViewId::from);
-
-                // If this was the first entry in the document, store the doucment id for later.
-                if index == 0 {
-                    document_id = Some(entry_encoded.hash().into());
-                    db.test_data.documents.push(document_id.clone().unwrap());
-                }
-            }
-        }
-    }
-}
-
-/// Helper method for publishing an operation encoded on an entry to a store.
-pub async fn send_to_store<S: StorageProvider>(
-    store: &S,
-    operation: &Operation,
-    document_id: Option<&DocumentId>,
-    key_pair: &KeyPair,
-) -> (EncodedEntry, NextEntryArguments) {
-    // TODO: Needed full refactor
-    todo!()
 }

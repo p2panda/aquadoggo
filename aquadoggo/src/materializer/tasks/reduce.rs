@@ -200,17 +200,18 @@ mod tests {
     use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
     use p2panda_rs::operation::traits::AsVerifiedOperation;
     use p2panda_rs::operation::OperationValue;
-    use p2panda_rs::schema::SchemaId;
+    use p2panda_rs::schema::{Schema, SchemaId};
     use p2panda_rs::storage_provider::traits::OperationStore;
-    use p2panda_rs::test_utils::constants::SCHEMA_ID;
+    use p2panda_rs::test_utils::constants;
+    use p2panda_rs::test_utils::db::test_db::{send_to_store, PopulateDatabaseConfig};
     use p2panda_rs::test_utils::fixtures::{
-        operation, operation_fields, random_document_id, random_document_view_id, schema_id,
+        operation, operation_fields, random_document_id, random_document_view_id, schema, schema_id,
     };
     use rstest::rstest;
 
     use crate::config::Configuration;
     use crate::context::Context;
-    use crate::db::stores::test_utils::{send_to_store, test_db, TestDatabase, TestDatabaseRunner};
+    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
     use crate::db::traits::DocumentStore;
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
@@ -224,7 +225,7 @@ mod tests {
             1,
             20,
             false,
-            SCHEMA_ID.parse().unwrap(),
+            constants::schema(),
             vec![("username", OperationValue::String("panda".into()))],
             vec![("username", OperationValue::String("PANDA".into()))]
         )]
@@ -255,7 +256,7 @@ mod tests {
 
     #[rstest]
     fn updates_a_document(
-        schema_id: SchemaId,
+        schema: Schema,
         #[from(test_db)]
         #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
@@ -284,12 +285,13 @@ mod tests {
                         OperationValue::String("meeeeeee".to_string()),
                     )])),
                     Some(document_id.as_str().parse().unwrap()),
-                    schema_id,
+                    schema.id().to_owned(),
                 ),
-                Some(&document_id),
+                &schema,
                 key_pair,
             )
-            .await;
+            .await
+            .unwrap();
 
             // This should now find the new UPDATE operation and perform an update on the document
             // in the documents table.
@@ -311,7 +313,7 @@ mod tests {
     #[rstest]
     fn reduces_document_to_specific_view_id(
         #[from(test_db)]
-        #[with( 2, 1, 1, false, SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::String("panda".into()))], vec![("username", OperationValue::String("PANDA".into()))])]
+        #[with( 2, 1, 1, false, constants::schema(), vec![("username", OperationValue::String("panda".into()))], vec![("username", OperationValue::String("PANDA".into()))])]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
@@ -410,12 +412,12 @@ mod tests {
 
     #[rstest]
     #[case(
-        test_db( 3, 1, 1, false, SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::String("panda".into()))], vec![("username", OperationValue::String("PANDA".into()))]),
+        test_db( 3, 1, 1, false, constants::schema(), vec![("username", OperationValue::String("panda".into()))], vec![("username", OperationValue::String("PANDA".into()))]),
         true
     )]
     // This document is deleted, it shouldn't spawn a dependency task.
     #[case(
-        test_db( 3, 1, 1, true, SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::String("panda".into()))], vec![("username", OperationValue::String("PANDA".into()))]),
+        test_db( 3, 1, 1, true, constants::schema(), vec![("username", OperationValue::String("panda".into()))], vec![("username", OperationValue::String("PANDA".into()))]),
         false
     )]
     fn returns_dependency_task_inputs(

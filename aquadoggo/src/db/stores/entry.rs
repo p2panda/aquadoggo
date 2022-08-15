@@ -129,7 +129,7 @@ impl From<EntryRow> for StorageEntry {
         // like this, we should rather store every entry value in the table. However I don't
         // want to change that as part of this PR so I write this sad note and raise an issue
         // later.
-        let encoded_entry = EncodedEntry::new(entry_row.entry_bytes.as_bytes());
+        let encoded_entry = EncodedEntry::from_str(&entry_row.entry_bytes);
         let entry = decode_entry(&encoded_entry).unwrap();
         StorageEntry {
             author: entry.public_key().to_owned(),
@@ -451,22 +451,16 @@ impl EntryStore<StorageEntry> for SqlStorage {
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryFrom;
-
-    use p2panda_rs::entry::encode::sign_and_encode_entry;
     use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
-    use p2panda_rs::entry::{EncodedEntry, Entry};
     use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
-    use p2panda_rs::operation::EncodedOperation;
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
-    use p2panda_rs::test_utils::constants::SCHEMA_ID;
-    use p2panda_rs::test_utils::fixtures::{encoded_entry, entry, key_pair, random_hash};
+    use p2panda_rs::test_utils::constants;
+    use p2panda_rs::test_utils::fixtures::random_hash;
     use rstest::rstest;
 
-    use crate::db::stores::entry::StorageEntry;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
     // TODO: bring back insert_entry test
@@ -532,7 +526,7 @@ mod tests {
     fn entries_by_schema(
         #[from(random_hash)] hash: Hash,
         #[from(test_db)]
-        #[with(20, 1, 2, false, SCHEMA_ID.parse().unwrap())]
+        #[with(20, 1, 2, false, constants::schema())]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
@@ -545,11 +539,9 @@ mod tests {
                 .unwrap();
             assert!(entries.is_empty());
 
-            let schema_in_the_db = SCHEMA_ID.parse().unwrap();
-
             let entries = db
                 .store
-                .get_entries_by_schema(&schema_in_the_db)
+                .get_entries_by_schema(constants::schema().id())
                 .await
                 .unwrap();
             assert!(entries.len() == 40);

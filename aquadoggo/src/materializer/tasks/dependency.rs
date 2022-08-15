@@ -182,18 +182,21 @@ mod tests {
         Operation, OperationBuilder, OperationValue, PinnedRelation, PinnedRelationList, Relation,
         RelationList,
     };
-    use p2panda_rs::schema::{FieldType, SchemaId};
+    use p2panda_rs::schema::{FieldType, Schema, SchemaId};
     use p2panda_rs::storage_provider::traits::OperationStore;
-    use p2panda_rs::test_utils::constants::SCHEMA_ID;
+    use p2panda_rs::test_utils::constants;
+    use p2panda_rs::test_utils::db::test_db::{send_to_store, PopulateDatabaseConfig};
     use p2panda_rs::test_utils::fixtures::{
-        create_operation, operation_fields, random_document_id, random_document_view_id, schema_id,
+        create_operation, operation_fields, random_document_id, random_document_view_id, schema,
+        schema_fields, schema_id,
     };
     use rstest::rstest;
 
     use crate::config::Configuration;
     use crate::context::Context;
     use crate::db::stores::test_utils::{
-        insert_entry_operation_and_view, send_to_store, test_db, TestDatabase, TestDatabaseRunner,
+        doggo_fields, doggo_schema, insert_entry_operation_and_view, test_db, TestDatabase,
+        TestDatabaseRunner,
     };
     use crate::db::traits::DocumentStore;
     use crate::materializer::tasks::reduce_task;
@@ -202,6 +205,13 @@ mod tests {
 
     use super::dependency_task;
 
+    fn schema_from_fields(fields: Vec<(&str, OperationValue)>) -> Schema {
+        schema(
+            schema_fields(fields, constants::SCHEMA_ID.parse().unwrap()),
+            constants::SCHEMA_ID.parse().unwrap(),
+            "A doggo schema for testing",
+        )
+    }
     #[rstest]
     #[case(
         test_db(
@@ -209,7 +219,7 @@ mod tests {
             1,
             1,
             false,
-            SCHEMA_ID.parse().unwrap(),
+            schema_from_fields(vec![("profile_picture", OperationValue::Relation(Relation::new(random_document_id())))]),
             vec![("profile_picture", OperationValue::Relation(Relation::new(random_document_id())))],
             vec![]
         ),
@@ -221,7 +231,11 @@ mod tests {
             1,
             1,
             false,
-            SCHEMA_ID.parse().unwrap(),
+            schema_from_fields(vec![
+                ("favorite_book_images", OperationValue::RelationList(
+                    RelationList::new(
+                        [0; 6].iter().map(|_|random_document_id()).collect())))
+            ]),
             vec![
                 ("favorite_book_images", OperationValue::RelationList(
                     RelationList::new(
@@ -237,7 +251,10 @@ mod tests {
             1,
             1,
             false,
-            SCHEMA_ID.parse().unwrap(),
+            schema_from_fields(vec![
+                ("something_from_the_past", OperationValue::PinnedRelation(
+                    PinnedRelation::new(random_document_view_id())))
+            ]),
             vec![
                 ("something_from_the_past", OperationValue::PinnedRelation(
                     PinnedRelation::new(random_document_view_id())))
@@ -252,7 +269,11 @@ mod tests {
             1,
             1,
             false,
-            SCHEMA_ID.parse().unwrap(),
+            schema_from_fields(vec![
+                ("many_previous_drafts", OperationValue::PinnedRelationList(
+                    PinnedRelationList::new(
+                        [0; 2].iter().map(|_|random_document_view_id()).collect())))
+            ]),
             vec![
                 ("many_previous_drafts", OperationValue::PinnedRelationList(
                     PinnedRelationList::new(
@@ -268,7 +289,14 @@ mod tests {
             1,
             1,
             false,
-            SCHEMA_ID.parse().unwrap(),
+            schema_from_fields(vec![
+                ("one_relation_field", OperationValue::PinnedRelationList(
+                    PinnedRelationList::new(
+                        [0; 2].iter().map(|_|random_document_view_id()).collect()))),
+                ("another_relation_field", OperationValue::RelationList(
+                    RelationList::new(
+                        [0; 6].iter().map(|_|random_document_id()).collect())))
+            ]),
             vec![
                 ("one_relation_field", OperationValue::PinnedRelationList(
                     PinnedRelationList::new(
@@ -288,7 +316,14 @@ mod tests {
             1,
             1,
             false,
-            SCHEMA_ID.parse().unwrap(),
+            schema_from_fields(vec![
+                ("one_relation_field", OperationValue::PinnedRelationList(
+                    PinnedRelationList::new(
+                        [0; 2].iter().map(|_|random_document_view_id()).collect()))),
+                ("another_relation_field", OperationValue::RelationList(
+                    RelationList::new(
+                        [0; 6].iter().map(|_|random_document_id()).collect())))
+            ]),
             vec![
                 ("one_relation_field", OperationValue::PinnedRelationList(
                     PinnedRelationList::new(
@@ -440,7 +475,10 @@ mod tests {
             1,
             1,
             true,
-            SCHEMA_ID.parse().unwrap(),
+            schema_from_fields(vec![
+                ("profile_picture", OperationValue::Relation(
+                        Relation::new(random_document_id())))
+            ]),
             vec![
                 ("profile_picture", OperationValue::Relation(
                         Relation::new(random_document_id())))
@@ -454,7 +492,14 @@ mod tests {
             1,
             1,
             true,
-            SCHEMA_ID.parse().unwrap(),
+            schema_from_fields(vec![
+                ("one_relation_field", OperationValue::PinnedRelationList(
+                     PinnedRelationList::new(
+                         [0; 2].iter().map(|_|random_document_view_id()).collect()))),
+                ("another_relation_field", OperationValue::RelationList(
+                     RelationList::new(
+                         [0; 6].iter().map(|_|random_document_id()).collect())))
+            ]),
             vec![
                 ("one_relation_field", OperationValue::PinnedRelationList(
                      PinnedRelationList::new(
@@ -497,7 +542,7 @@ mod tests {
     #[rstest]
     fn dispatches_schema_tasks_for_field_definitions(
         #[from(test_db)]
-        #[with(1, 1, 1, false, SchemaId::SchemaFieldDefinition(1), vec![
+        #[with(1, 1, 1, false, Schema::get_system(SchemaId::SchemaFieldDefinition(1)).unwrap().to_owned(), vec![
             ("name", OperationValue::String("field_name".to_string())),
             ("type", FieldType::String.into()),
         ])]
@@ -578,7 +623,7 @@ mod tests {
         #[case] schema_create_operation: Operation,
         #[case] expected_schema_tasks: usize,
         #[from(test_db)]
-        #[with(1, 1, 1, false, SchemaId::SchemaFieldDefinition(1), vec![
+        #[with(1, 1, 1, false, Schema::get_system(SchemaId::SchemaFieldDefinition(1)).unwrap().to_owned(), vec![
             ("name", OperationValue::String("field_name".to_string())),
             ("type", FieldType::String.into()),
         ])]
@@ -600,8 +645,14 @@ mod tests {
             reduce_task(context.clone(), input.clone()).await.unwrap();
 
             // Persist a schema definition entry and operation to the store.
-            let (entry_signed, _) =
-                send_to_store(&db.store, &schema_create_operation, None, &KeyPair::new()).await;
+            let (entry_signed, _) = send_to_store(
+                &db.store,
+                &schema_create_operation,
+                Schema::get_system(SchemaId::SchemaDefinition(1)).unwrap(),
+                &KeyPair::new(),
+            )
+            .await
+            .unwrap();
 
             // Materialise the schema definition.
             let document_view_id: DocumentViewId = entry_signed.hash().into();

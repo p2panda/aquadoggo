@@ -409,11 +409,15 @@ mod tests {
     use p2panda_rs::operation::decode::decode_operation;
     use p2panda_rs::operation::encode::encode_operation;
     use p2panda_rs::operation::{
-        EncodedOperation, Operation, OperationBuilder, OperationFields, OperationId, OperationValue,
+        EncodedOperation, Operation, OperationAction, OperationBuilder, OperationFields,
+        OperationId, OperationValue,
     };
-    use p2panda_rs::schema::{Schema, SchemaId};
+    use p2panda_rs::schema::{FieldType, Schema, SchemaId};
     use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
     use p2panda_rs::test_utils::constants::{test_fields, PRIVATE_KEY, SCHEMA_ID};
+    use p2panda_rs::test_utils::db::test_db::{
+        populate_store, send_to_store, test_db_config, PopulateDatabaseConfig,
+    };
     use p2panda_rs::test_utils::db::{MemoryStore, StorageEntry};
     use p2panda_rs::test_utils::fixtures::{
         create_operation, delete_operation, key_pair, operation, operation_fields, public_key,
@@ -421,10 +425,6 @@ mod tests {
     };
     use rstest::rstest;
 
-    use crate::db::stores::test_utils::{
-        encode_entry_and_operation, populate_test_db, send_to_store, test_db, test_db_config,
-        PopulateDatabaseConfig, TestDatabase, TestDatabaseRunner,
-    };
     use crate::domain::publish;
     use crate::graphql::client::NextEntryArguments;
 
@@ -460,57 +460,52 @@ mod tests {
     }
 
     #[rstest]
-    fn errors_when_passed_non_existent_view_id(
-        #[from(test_db)] runner: TestDatabaseRunner,
+    #[tokio::test]
+    async fn errors_when_passed_non_existent_view_id(
         #[from(random_document_view_id)] document_view_id: DocumentViewId,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            let result = get_checked_document_id_for_view_id(&db.store, &document_view_id).await;
-            assert!(result.is_err());
-        });
+        let store = MemoryStore::default();
+        let result = get_checked_document_id_for_view_id(&store, &document_view_id).await;
+        assert!(result.is_err());
     }
 
     #[rstest]
-    fn gets_document_id_for_view(
-        schema: Schema,
-        #[from(test_db)] runner: TestDatabaseRunner,
-        operation: Operation,
-    ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            // Store one entry and operation in the store.
-            let (entry, _) = send_to_store(&db.store, &operation, None, &KeyPair::new()).await;
-            let operation_one_id: OperationId = entry.hash().into();
+    #[tokio::test]
+    async fn gets_document_id_for_view(schema: Schema, operation: Operation) {
+        let store = MemoryStore::default();
 
-            // Store another entry and operation, from a different author, which perform an update on the earlier operation.
-            let update_operation = OperationBuilder::new(schema.id())
-                .previous_operations(&operation_one_id.clone().into())
-                .fields(&test_fields())
-                .build()
-                .unwrap();
+        // Store one entry and operation in the store.
+        let (entry, _) = send_to_store(&store, &operation, &schema, &KeyPair::new())
+            .await
+            .unwrap();
+        let operation_one_id: OperationId = entry.hash().into();
 
-            let (entry, _) = send_to_store(
-                &db.store,
-                &update_operation,
-                Some(&entry.hash().into()),
-                &KeyPair::new(),
-            )
-            .await;
-            let operation_two_id: OperationId = entry.hash().into();
+        // Store another entry and operation, from a different author, which perform an update on the earlier operation.
+        let update_operation = OperationBuilder::new(schema.id())
+            .action(OperationAction::Update)
+            .previous_operations(&operation_one_id.clone().into())
+            .fields(&test_fields())
+            .build()
+            .unwrap();
 
-            // Get the document id for the passed view id.
-            let result = get_checked_document_id_for_view_id(
-                &db.store,
-                &DocumentViewId::new(&[operation_one_id.clone(), operation_two_id]),
-            )
-            .await;
+        let (entry, _) = send_to_store(&store, &update_operation, &schema, &KeyPair::new())
+            .await
+            .unwrap();
+        let operation_two_id: OperationId = entry.hash().into();
 
-            // Result should be ok.
-            assert!(result.is_ok());
+        // Get the document id for the passed view id.
+        let result = get_checked_document_id_for_view_id(
+            &store,
+            &DocumentViewId::new(&[operation_one_id.clone(), operation_two_id]),
+        )
+        .await;
 
-            // The returned document id should match the expected one.
-            let document_id = result.unwrap();
-            assert_eq!(document_id, DocumentId::new(&operation_one_id))
-        });
+        // Result should be ok.
+        assert!(result.is_ok());
+
+        // The returned document id should match the expected one.
+        let document_id = result.unwrap();
+        assert_eq!(document_id, DocumentId::new(&operation_one_id))
     }
 
     #[rstest]
@@ -553,15 +548,13 @@ mod tests {
         config: PopulateDatabaseConfig,
     ) {
         let store = MemoryStore::default();
-        let mut db = TestDatabase::new(store.clone());
-        populate_test_db(&mut db, &config).await;
+        let (key_pairs, _) = populate_store(&store, &config).await;
 
         // The author who has published to the db.
-        let author = Author::from(db.test_data.key_pairs[0].public_key());
+        let author = Author::from(key_pairs[0].public_key());
 
         // Get the latest entry from the db.
-        let next_entry = db
-            .store
+        let next_entry = store
             .get_entry_at_seq_num(
                 &author,
                 &LogId::new(entry_to_publish.0),
@@ -572,13 +565,13 @@ mod tests {
             .unwrap();
 
         // Remove some entries and operations from the database.
-        remove_operations(&db.store, &author, entries_to_remove);
-        remove_entries(&db.store, &author, entries_to_remove);
+        remove_operations(&store, &author, entries_to_remove);
+        remove_entries(&store, &author, entries_to_remove);
 
         // Publish the latest entry again and see what happens.
         let operation = next_entry.payload().unwrap();
         let result = publish(
-            &db.store,
+            &store,
             &schema,
             &next_entry.clone().into(),
             &decode_operation(operation).unwrap(),
@@ -595,13 +588,13 @@ mod tests {
     // Weird case where all previous operations are on the same branch, but still valid.
     #[case::ok_many_previous_operations(&[], &[(0, 8), (0, 7), (0, 6)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
     #[case::ok_multi_writer(&[], &[(0, 8)], KeyPair::new())]
-    #[should_panic(expected = "<Operation 76e89a> not found, could not determine document id")]
+    #[should_panic(expected = "<Operation 534d03> not found, could not determine document id")]
     #[case::previous_operation_missing(&[(0, 8)], &[(0, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
-    #[should_panic(expected = "<Operation 51fbba> not found, could not determine document id")]
+    #[should_panic(expected = "<Operation af5ecf> not found, could not determine document id")]
     #[case::one_of_some_previous_operations_missing(&[(0, 7)], &[(0, 7), (0, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
-    #[should_panic(expected = "<Operation 76e89a> not found, could not determine document id")]
+    #[should_panic(expected = "<Operation 534d03> not found, could not determine document id")]
     #[case::one_of_some_previous_operations_missing(&[(0, 8)], &[(0, 7), (0, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
-    #[should_panic(expected = "<Operation 76e89a> not found, could not determine document id")]
+    #[should_panic(expected = "<Operation 534d03> not found, could not determine document id")]
     #[case::missing_previous_operation_multi_writer(&[(0, 8)], &[(0, 8)], KeyPair::new())]
     #[should_panic(
         expected = "Invalid document view id: operations in passed document view id originate from different documents"
@@ -620,19 +613,18 @@ mod tests {
         config: PopulateDatabaseConfig,
     ) {
         let store = MemoryStore::default();
-        let mut db = TestDatabase::new(store.clone());
-        populate_test_db(&mut db, &config).await;
+        let (key_pairs, documents) = populate_store(&store, &config).await;
 
-        let author = Author::from(db.test_data.key_pairs[0].public_key());
+        let existing_author = Author::from(key_pairs[0].public_key());
 
         // Get the document id.
-        let document_id = db.test_data.documents.first().unwrap();
+        let document = documents.first().map(|id| id.as_str().parse().unwrap());
 
         // Map the passed &[LogIdAndSeqNum] into a DocumentViewId containing the claimed operations.
         let previous_operations: Vec<OperationId> = previous_operations
             .iter()
             .filter_map(|(log_id, seq_num)| {
-                db.store
+                store
                     .entries
                     .lock()
                     .unwrap()
@@ -640,36 +632,50 @@ mod tests {
                     .find(|entry| {
                         entry.seq_num().as_u64() == *seq_num
                             && entry.log_id().as_u64() == *log_id
-                            && *entry.public_key() == author
+                            && *entry.public_key() == existing_author
                     })
                     .map(|entry| entry.hash().into())
             })
             .collect();
+
         // Construct document view id for previous operations.
         let document_view_id = DocumentViewId::new(&previous_operations);
 
         // Compose the next operation.
         let next_operation = OperationBuilder::new(schema.id())
+            .action(OperationAction::Update)
             .previous_operations(&document_view_id)
             .fields(&test_fields())
             .build()
             .unwrap();
 
-        // Encode an entry and the operation.
-        let (entry, operation) =
-            encode_entry_and_operation(&db.store, &next_operation, &key_pair, Some(document_id))
-                .await;
+        // The existing_author who will publish the next entry.
+        let author_to_publish = Author::from(key_pair.public_key());
+        let next_args = next_args(&store, &author_to_publish, document.as_ref())
+            .await
+            .unwrap();
+
+        let encoded_operation = encode_operation(&next_operation).unwrap();
+        let encoded_entry = sign_and_encode_entry(
+            &next_args.log_id.into(),
+            &next_args.seq_num.into(),
+            next_args.skiplink.map(Hash::from).as_ref(),
+            next_args.backlink.map(Hash::from).as_ref(),
+            &encoded_operation,
+            &key_pair,
+        )
+        .unwrap();
 
         // Remove some entries from the db.
-        remove_operations(&db.store, &author, operations_to_remove);
+        remove_operations(&store, &existing_author, operations_to_remove);
 
         // Publish the entry and operation.
         let result = publish(
-            &db.store,
+            &store,
             &schema,
-            &entry,
-            &decode_operation(&operation).unwrap(),
-            &operation,
+            &encoded_entry,
+            &decode_operation(&encoded_operation).unwrap(),
+            &encoded_operation,
         )
         .await;
 
@@ -682,13 +688,13 @@ mod tests {
     #[case::ok_many_previous_operations(&[], &[(0, 8), (0, 7), (0, 6)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
     #[case::ok_not_the_most_recent_document_view_id(&[], &[(0, 1)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
     #[case::ok_multi_writer(&[], &[(0, 8)], KeyPair::new())]
-    #[should_panic(expected = "<Operation 76e89a> not found, could not determine document id")]
+    #[should_panic(expected = "<Operation 534d03> not found, could not determine document id")]
     #[case::previous_operation_missing(&[(0, 8)], &[(0, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
-    #[should_panic(expected = "<Operation 51fbba> not found, could not determine document id")]
+    #[should_panic(expected = "<Operation af5ecf> not found, could not determine document id")]
     #[case::one_of_some_previous_operations_missing(&[(0, 7)], &[(0, 7), (0, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
-    #[should_panic(expected = "<Operation 76e89a> not found, could not determine document id")]
+    #[should_panic(expected = "<Operation 534d03> not found, could not determine document id")]
     #[case::one_of_some_previous_operations_missing(&[(0, 8)], &[(0, 7), (0, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
-    #[should_panic(expected = "<Operation 76e89a> not found, could not determine document id")]
+    #[should_panic(expected = "<Operation 534d03> not found, could not determine document id")]
     #[case::missing_previous_operation_multi_writer(&[(0, 8)], &[(0, 8)], KeyPair::new())]
     #[should_panic(
         expected = "Invalid document view id: operations in passed document view id originate from different documents"
@@ -704,17 +710,16 @@ mod tests {
         config: PopulateDatabaseConfig,
     ) {
         let store = MemoryStore::default();
-        let mut db = TestDatabase::new(store.clone());
-        populate_test_db(&mut db, &config).await;
+        let (key_pairs, _) = populate_store(&store, &config).await;
 
-        let author_with_removed_operations = Author::from(db.test_data.key_pairs[0].public_key());
+        let author_with_removed_operations = Author::from(key_pairs[0].public_key());
         let author_making_request = Author::from(key_pair.public_key());
 
         // Map the passed &[LogIdAndSeqNum] into a DocumentViewId containing the claimed operations.
         let document_view_id: Vec<OperationId> = document_view_id
             .iter()
             .filter_map(|(log_id, seq_num)| {
-                db.store
+                store
                     .entries
                     .lock()
                     .unwrap()
@@ -733,13 +738,13 @@ mod tests {
 
         // Remove some operations.
         remove_operations(
-            &db.store,
+            &store,
             &author_with_removed_operations,
             operations_to_remove,
         );
 
         // Get the next args.
-        let result = next_args(&db.store, &author_making_request, Some(&document_view_id)).await;
+        let result = next_args(&store, &author_making_request, Some(&document_view_id)).await;
 
         // Unwrap here causing a panic, we check the errors match what we expect.
         result.unwrap();
@@ -771,7 +776,6 @@ mod tests {
         #[case] expected_next_args: (SeqNumU64, Backlink, Skiplink),
     ) {
         let store = MemoryStore::default();
-        let mut db = TestDatabase::new(store.clone());
         // Populate the db with the number of entries defined in the test params.
         let config = PopulateDatabaseConfig {
             no_of_entries,
@@ -779,14 +783,14 @@ mod tests {
             no_of_authors: 1,
             ..PopulateDatabaseConfig::default()
         };
-        populate_test_db(&mut db, &config).await;
+        let (key_pairs, _) = populate_store(&store, &config).await;
 
         // The author who published the entries.
-        let author = Author::from(db.test_data.key_pairs[0].public_key());
+        let author = Author::from(key_pairs[0].public_key());
 
         // Construct the passed document view id (specified by a single sequence number)
         let document_view_id: Option<DocumentViewId> = document_view_id.map(|seq_num| {
-            db.store
+            store
                 .entries
                 .lock()
                 .unwrap()
@@ -800,8 +804,7 @@ mod tests {
         let expected_seq_num = SeqNum::new(expected_next_args.0).unwrap();
         let expected_log_id = LogId::default();
         let expected_backlink = match expected_next_args.1 {
-            Some(backlink) => db
-                .store
+            Some(backlink) => store
                 .get_entry_at_seq_num(&author, &expected_log_id, &SeqNum::new(backlink).unwrap())
                 .await
                 .unwrap()
@@ -809,8 +812,7 @@ mod tests {
             None => None,
         };
         let expected_skiplink = match expected_next_args.2 {
-            Some(skiplink) => db
-                .store
+            Some(skiplink) => store
                 .get_entry_at_seq_num(&author, &expected_log_id, &SeqNum::new(skiplink).unwrap())
                 .await
                 .unwrap()
@@ -825,7 +827,7 @@ mod tests {
         };
 
         // Request next args for the author and docuent view.
-        let result = next_args(&db.store, &author, document_view_id.as_ref()).await;
+        let result = next_args(&store, &author, document_view_id.as_ref()).await;
         assert_eq!(result.unwrap(), expected_next_args);
     }
 
@@ -838,11 +840,10 @@ mod tests {
         config: PopulateDatabaseConfig,
     ) {
         let store = MemoryStore::default();
-        let mut db = TestDatabase::new(store.clone());
-        populate_test_db(&mut db, &config).await;
+        let (_, documents) = populate_store(&store, &config).await;
 
         // Get with no DocumentViewId given.
-        let result = next_args(&db.store, &public_key, None).await;
+        let result = next_args(&store, &public_key, None).await;
         assert!(result.is_ok());
         assert_eq!(
             NextEntryArguments {
@@ -855,7 +856,7 @@ mod tests {
         );
 
         // Get with non-existent DocumentViewId given.
-        let result = next_args(&db.store, &public_key, Some(&random_document_view_id())).await;
+        let result = next_args(&store, &public_key, Some(&random_document_view_id())).await;
         assert!(result.is_err());
         assert!(
             result
@@ -866,11 +867,11 @@ mod tests {
         );
 
         // Here we are missing the skiplink.
-        remove_entries(&db.store, &public_key, &[(0, 4)]);
-        let document_id = db.test_data.documents.get(0).unwrap();
+        remove_entries(&store, &public_key, &[(0, 4)]);
+        let document_id = documents.get(0).unwrap();
         let document_view_id = DocumentViewId::new(&[document_id.as_str().parse().unwrap()]);
 
-        let result = next_args(&db.store, &public_key, Some(&document_view_id)).await;
+        let result = next_args(&store, &public_key, Some(&document_view_id)).await;
         assert_eq!(
             result.unwrap_err().message.as_str(),
             "Expected skiplink target not found in store: <Author 53fc96>, log id 0, seq num 4"
@@ -902,21 +903,20 @@ mod tests {
         config: PopulateDatabaseConfig,
     ) {
         let store = MemoryStore::default();
-        let mut db = TestDatabase::new(store.clone());
-        populate_test_db(&mut db, &config).await;
+        let (_, documents) = populate_store(&store, &config).await;
 
-        let document_id = db.test_data.documents.first().unwrap();
+        let document_id = documents.first().unwrap();
         let document_view_id: DocumentViewId = document_id.as_str().parse().unwrap();
         let author_performing_update = Author::from(key_pair.public_key());
 
         let update_operation = OperationBuilder::new(schema.id())
+            .action(OperationAction::Update)
             .previous_operations(&document_view_id)
             .fields(&test_fields())
             .build()
             .unwrap();
 
-        let latest_entry = db
-            .store
+        let latest_entry = store
             .get_latest_entry(&author_performing_update, &log_id)
             .await
             .unwrap();
@@ -936,9 +936,9 @@ mod tests {
         .unwrap();
 
         let result = publish(
-            &db.store,
+            &store,
             &schema,
-            &encoded_entry.clone().into(),
+            &encoded_entry.clone(),
             &decode_operation(&encoded_operation).unwrap(),
             &encoded_operation,
         )
@@ -973,8 +973,7 @@ mod tests {
         config: PopulateDatabaseConfig,
     ) {
         let store = MemoryStore::default();
-        let mut db = TestDatabase::new(store.clone());
-        populate_test_db(&mut db, &config).await;
+        let _ = populate_store(&store, &config).await;
 
         let encoded_operation = encode_operation(&operation).unwrap();
         let encoded_entry = sign_and_encode_entry(
@@ -988,7 +987,7 @@ mod tests {
         .unwrap();
 
         let result = publish(
-            &db.store,
+            &store,
             &schema,
             &encoded_entry,
             &decode_operation(&encoded_operation).unwrap(),
@@ -1017,20 +1016,19 @@ mod tests {
         config: PopulateDatabaseConfig,
     ) {
         let store = MemoryStore::default();
-        let mut db = TestDatabase::new(store.clone());
-        populate_test_db(&mut db, &config).await;
+        let (_, documents) = populate_store(&store, &config).await;
 
-        let document_id = db.test_data.documents.first().unwrap();
+        let document_id = documents.first().unwrap();
         let document_view_id: DocumentViewId = document_id.as_str().parse().unwrap();
         let author_performing_update = Author::from(key_pair.public_key());
 
         let delete_operation = OperationBuilder::new(schema.id())
+            .action(OperationAction::Delete)
             .previous_operations(&document_view_id)
             .build()
             .unwrap();
 
-        let latest_entry = db
-            .store
+        let latest_entry = store
             .get_latest_entry(&author_performing_update, &LogId::default())
             .await
             .unwrap();
@@ -1050,9 +1048,9 @@ mod tests {
         .unwrap();
 
         let result = publish(
-            &db.store,
+            &store,
             &schema,
-            &encoded_entry.clone().into(),
+            &encoded_entry.clone(),
             &decode_operation(&encoded_operation).unwrap(),
             &encoded_operation,
         )
@@ -1074,79 +1072,85 @@ mod tests {
         config: PopulateDatabaseConfig,
     ) {
         let store = MemoryStore::default();
-        let mut db = TestDatabase::new(store.clone());
-        populate_test_db(&mut db, &config).await;
+        let (_, documents) = populate_store(&store, &config).await;
 
-        let document_id = db.test_data.documents.first().unwrap();
+        let document_id = documents.first().unwrap();
         let document_view_id: DocumentViewId = document_id.as_str().parse().unwrap();
         let author = Author::from(key_pair.public_key());
 
-        let result = next_args(&db.store, &author, Some(&document_view_id)).await;
+        let result = next_args(&store, &author, Some(&document_view_id)).await;
 
         result.unwrap();
     }
 
     #[rstest]
-    fn publish_many_entries(
-        schema: Schema,
+    #[tokio::test]
+    async fn publish_many_entries(
+        #[with(vec![("name".to_string(), FieldType::String)])] schema: Schema,
         key_pair: KeyPair,
-        #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            let num_of_entries = 13;
-            let mut document_id: Option<DocumentId> = None;
-            let author = Author::from(key_pair.public_key());
-            for index in 0..num_of_entries {
-                let document_view_id: Option<DocumentViewId> =
-                    document_id.clone().map(|id| id.as_str().parse().unwrap());
+        let store = MemoryStore::default();
 
-                let next_entry_args = next_args(&db.store, &author, document_view_id.as_ref())
-                    .await
-                    .unwrap();
+        let num_of_entries = 13;
+        let mut document_id: Option<DocumentId> = None;
+        let author = Author::from(key_pair.public_key());
 
-                let schema_id = schema.id().to_owned();
-                let operation = if index == 0 {
-                    create_operation(
-                        vec![("name", OperationValue::String("Panda".to_string()))],
-                        schema_id,
-                    )
-                } else if index == (num_of_entries - 1) {
-                    delete_operation(next_entry_args.backlink.clone().unwrap().into(), schema_id)
-                } else {
-                    update_operation(
-                        vec![("name", OperationValue::String("🐼".to_string()))],
-                        next_entry_args.backlink.clone().unwrap().into(),
-                        schema_id,
-                    )
-                };
+        for index in 0..num_of_entries {
+            let document_view_id: Option<DocumentViewId> =
+                document_id.clone().map(|id| id.as_str().parse().unwrap());
 
-                let encoded_operation = encode_operation(&operation).unwrap();
-                let encoded_entry = sign_and_encode_entry(
-                    &next_entry_args.log_id.into(),
-                    &next_entry_args.seq_num.into(),
-                    next_entry_args.skiplink.map(Hash::from).as_ref(),
-                    next_entry_args.backlink.map(Hash::from).as_ref(),
-                    &encoded_operation,
-                    &key_pair,
-                )
+            let next_entry_args = next_args(&store, &author, document_view_id.as_ref())
+                .await
                 .unwrap();
 
-                if index == 0 {
-                    document_id = Some(encoded_entry.hash().into());
-                }
-
-                let result = publish(
-                    &db.store,
-                    &schema,
-                    &encoded_entry.clone().into(),
-                    &decode_operation(&encoded_operation).unwrap(),
-                    &encoded_operation,
+            let schema_id = schema.id().to_owned();
+            let operation = if index == 0 {
+                create_operation(
+                    vec![("name", OperationValue::String("Panda".to_string()))],
+                    schema_id,
                 )
-                .await;
+            } else if index == (num_of_entries - 1) {
+                delete_operation(next_entry_args.backlink.clone().unwrap().into(), schema_id)
+            } else {
+                update_operation(
+                    vec![("name", OperationValue::String("🐼".to_string()))],
+                    next_entry_args.backlink.clone().unwrap().into(),
+                    schema_id,
+                )
+            };
 
-                assert!(result.is_ok());
+            let encoded_operation = encode_operation(&operation).unwrap();
+            let encoded_entry = sign_and_encode_entry(
+                &next_entry_args.log_id.into(),
+                &next_entry_args.seq_num.into(),
+                next_entry_args.skiplink.map(Hash::from).as_ref(),
+                next_entry_args.backlink.map(Hash::from).as_ref(),
+                &encoded_operation,
+                &key_pair,
+            )
+            .unwrap();
+
+            if index == 0 {
+                document_id = Some(encoded_entry.hash().into());
             }
-        });
+
+            let result = publish(
+                &store,
+                &schema,
+                &encoded_entry.clone(),
+                &decode_operation(&encoded_operation).unwrap(),
+                &encoded_operation,
+            )
+            .await;
+
+            assert!(result.is_ok());
+
+            let publish_entry_response = result.unwrap();
+            let seq_num: SeqNum = publish_entry_response.seq_num.into();
+            let mut previous_seq_num: SeqNum = next_entry_args.seq_num.into();
+
+            assert_eq!(seq_num, previous_seq_num.next().unwrap());
+        }
     }
 
     #[rstest]
@@ -1159,13 +1163,11 @@ mod tests {
         config: PopulateDatabaseConfig,
     ) {
         let store = MemoryStore::default();
-        let mut db = TestDatabase::new(store.clone());
-        populate_test_db(&mut db, &config).await;
+        let _ = populate_store(&store, &config).await;
 
         let author = Author::from(key_pair.public_key());
 
-        let entry_two = db
-            .store
+        let entry_two = store
             .get_entry_at_seq_num(&author, &LogId::default(), &SeqNum::new(2).unwrap())
             .await
             .unwrap()
@@ -1176,20 +1178,20 @@ mod tests {
             &SeqNum::new(u64::MAX).unwrap(),
             Some(&random_hash()),
             Some(&random_hash()),
-            &entry_two.payload().unwrap(),
+            entry_two.payload().unwrap(),
             &key_pair,
         )
         .unwrap();
 
         let entry = StorageEntry::new(&encoded_entry, entry_two.payload());
 
-        db.store
+        store
             .entries
             .lock()
             .unwrap()
             .insert(entry.hash(), entry.clone());
 
-        let result = next_args(&db.store, &author, Some(&entry_two.hash().into())).await;
+        let result = next_args(&store, &author, Some(&entry_two.hash().into())).await;
 
         result.unwrap();
     }
@@ -1205,15 +1207,13 @@ mod tests {
         config: PopulateDatabaseConfig,
     ) {
         let store = MemoryStore::default();
-        let mut db = TestDatabase::new(store.clone());
-        populate_test_db(&mut db, &config).await;
+        let _ = populate_store(&store, &config).await;
 
         let author = Author::from(key_pair.public_key());
 
         // Get the latest entry, we will use it's operation in all other entries (doesn't matter if it's a duplicate, just need the previous
         // operations to exist).
-        let entry_two = db
-            .store
+        let entry_two = store
             .get_entry_at_seq_num(&author, &LogId::default(), &SeqNum::new(2).unwrap())
             .await
             .unwrap()
@@ -1232,7 +1232,7 @@ mod tests {
         .unwrap();
 
         let skiplink = StorageEntry::new(&encoded_entry, entry_two.payload());
-        db.store
+        store
             .entries
             .lock()
             .unwrap()
@@ -1242,7 +1242,7 @@ mod tests {
         let encoded_entry = sign_and_encode_entry(
             &LogId::default(),
             &SeqNum::new(u64::MAX - 1).unwrap(),
-            Some(&random_hash()),
+            None,
             Some(&random_hash()),
             entry_two.payload().unwrap(),
             &key_pair,
@@ -1250,7 +1250,7 @@ mod tests {
         .unwrap();
 
         let backlink = StorageEntry::new(&encoded_entry, entry_two.payload());
-        db.store
+        store
             .entries
             .lock()
             .unwrap()
@@ -1270,17 +1270,16 @@ mod tests {
         // Publish the MAX_SEQ_NUM entry
         let operation = entry_two.payload().unwrap();
         let result = publish(
-            &db.store,
+            &store,
             &schema,
-            &encoded_entry.clone().into(),
+            &encoded_entry.clone(),
             &decode_operation(operation).unwrap(),
             operation,
         )
         .await;
 
         // try and get the MAX_SEQ_NUM entry again (it shouldn't be there)
-        let entry_at_max_seq_num = db
-            .store
+        let entry_at_max_seq_num = store
             .get_entry_by_hash(&encoded_entry.hash())
             .await
             .unwrap();
