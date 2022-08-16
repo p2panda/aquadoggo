@@ -92,55 +92,62 @@ impl SchemaStore for SqlStorage {
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::document::DocumentViewId;
     use p2panda_rs::identity::KeyPair;
-    use p2panda_rs::operation::{OperationFields, OperationValue, PinnedRelationList};
-    use p2panda_rs::schema::{FieldType, Schema, SchemaId};
-    use p2panda_rs::test_utils::fixtures::{
-        document_view_id, key_pair, operation, operation_fields, schema_fields,
-    };
+    use p2panda_rs::schema::{FieldType, SchemaId};
+    use p2panda_rs::test_utils::fixtures::{key_pair, random_document_view_id};
     use rstest::rstest;
 
-    use crate::db::provider::SqlStorage;
-    use crate::db::stores::test_utils::{
-        insert_entry_operation_and_view, test_db, TestDatabase, TestDatabaseRunner,
-    };
+    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
-    use super::{DocumentStore, SchemaStore};
+    use super::SchemaStore;
 
     #[rstest]
-    #[case(
-        vec![
-            ("venue", FieldType::String),
-            ("address", FieldType::String)
-        ],
-        1
-    )]
-    fn get_all_schema(
-        #[case] schema_definition: Vec<(&'static str, FieldType)>,
-        #[case] expected_schema_count: usize,
-        key_pair: KeyPair,
-        #[from(test_db)] runner: TestDatabaseRunner,
-    ) {
+    fn get_schema(key_pair: KeyPair, #[from(test_db)] runner: TestDatabaseRunner) {
         runner.with_db_teardown(move |mut db: TestDatabase| async move {
             let schema = db
-                .add_schema("test_schema", schema_definition, &key_pair)
+                .add_schema(
+                    "test_schema",
+                    vec![
+                        ("description", FieldType::String),
+                        ("profile_name", FieldType::String),
+                    ],
+                    &key_pair,
+                )
                 .await;
 
-            // For later...
-            // let id = match schema.id() {
-            //     SchemaId::Application(name, id) => id,
-            //     _ => panic!("Not interested in this"),
-            // };
+            let document_view_id = match schema.id() {
+                SchemaId::Application(_, view_id) => view_id,
+                _ => panic!("Invalid schema id"),
+            };
 
-            let schema_documents = db
+            let result = db
                 .store
-                .get_documents_by_schema(&SchemaId::SchemaDefinition(1))
+                .get_schema_by_id(document_view_id)
                 .await
+                .unwrap()
                 .unwrap();
 
+            assert_eq!(result.id(), schema.id());
+        });
+    }
+
+    #[rstest]
+    fn get_all_schema(key_pair: KeyPair, #[from(test_db)] runner: TestDatabaseRunner) {
+        runner.with_db_teardown(move |mut db: TestDatabase| async move {
+            for i in 0..5 {
+                db.add_schema(
+                    &format!("test_schema_{}", i),
+                    vec![
+                        ("description", FieldType::String),
+                        ("profile_name", FieldType::String),
+                    ],
+                    &key_pair,
+                )
+                .await;
+            }
+
             let schemas = db.store.get_all_schema().await;
-            assert_eq!(schemas.unwrap().len(), expected_schema_count);
+            assert_eq!(schemas.unwrap().len(), 5);
         });
     }
 
@@ -154,6 +161,7 @@ mod tests {
                     vec![
                         ("name", "test_schema".into()),
                         ("description", "My schema without fields".into()),
+                        ("fields", vec![random_document_view_id()].into()),
                     ],
                     &key_pair,
                 )

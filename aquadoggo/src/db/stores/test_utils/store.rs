@@ -69,7 +69,7 @@ impl TestDatabase {
 
         let (entry_signed, _) = send_to_store(&self.store, &create_op, &schema, key_pair)
             .await
-            .expect("Publish create operation");
+            .expect("Publish CREATE operation");
 
         let input = TaskInput::new(Some(DocumentId::from(entry_signed.hash())), None);
         let dependency_tasks = reduce_task(self.context.clone(), input.clone())
