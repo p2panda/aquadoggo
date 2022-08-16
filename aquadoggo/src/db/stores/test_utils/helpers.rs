@@ -90,17 +90,3 @@ pub fn doggo_fields() -> Vec<(&'static str, OperationValue)> {
         ),
     ]
 }
-
-/// Helper for inserting an entry, operation and document_view into the store.
-pub async fn insert_entry_operation_and_view(
-    store: &SqlStorage,
-    key_pair: &KeyPair,
-    document_id: Option<&DocumentId>,
-    operation: &Operation,
-) -> (DocumentId, DocumentViewId) {
-    if !operation.is_create() && document_id.is_none() {
-        panic!("UPDATE and DELETE operations require a DocumentId to be passed")
-    }
-    // @TODO: Need full refactor
-    todo!()
-}
