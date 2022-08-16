@@ -75,7 +75,7 @@ impl AsOperation for StorageOperation {
         self.fields.clone()
     }
 
-    /// Returns vector of this operation's previous operation ids
+    /// Returns vector of this operation's previous operation ids.
     fn previous_operations(&self) -> Option<DocumentViewId> {
         self.previous_operations.clone()
     }
@@ -84,20 +84,19 @@ impl AsOperation for StorageOperation {
 /// Implementation of `OperationStore` trait which is required when constructing a
 /// `StorageProvider`.
 ///
-/// Handles storage and retrieval of operations in the form of `VerifiedOperation` which
-/// implements the required `AsVerifiedOperation` trait.
+/// Handles storage and retrieval of operations in the form of `VerifiedOperation` which implements
+/// the required `AsVerifiedOperation` trait.
 ///
-/// There are several intermediary structs defined in `db/models/` which represent
-/// rows from tables in the database where this entry, it's fields and opreation
-/// relations are stored. These are used in conjunction with the `sqlx` library
-/// to coerce raw values into structs when querying the database.
+/// There are several intermediary structs defined in `db/models/` which represent rows from tables
+/// in the database where this entry, it's fields and opreation relations are stored. These are
+/// used in conjunction with the `sqlx` library to coerce raw values into structs when querying the
+/// database.
 #[async_trait]
 impl OperationStore<StorageOperation> for SqlStorage {
     /// Get the id of the document an operation is part of.
     ///
-    /// Returns a result containing a `DocumentId` wrapped in an option. If no
-    /// document was found, then this method returns None. Errors if a fatal
-    /// storage error occurs.
+    /// Returns a result containing a `DocumentId` wrapped in an option. If no document was found,
+    /// then this method returns None. Errors if a fatal storage error occurs.
     async fn get_document_by_operation_id(
         &self,
         id: &OperationId,
@@ -125,27 +124,27 @@ impl OperationStore<StorageOperation> for SqlStorage {
     /// This requires a DoggoOperation to be composed elsewhere, it contains an `Author`,
     /// `DocumentId`, `OperationId` and the actual `Operation` we want to store.
     ///
-    /// Returns a result containing `true` when one insertion occured, and false
-    /// when no insertions occured. Errors when a fatal storage error occurs.
+    /// Returns a result containing `true` when one insertion occured, and false when no insertions
+    /// occured. Errors when a fatal storage error occurs.
     ///
-    /// In aquadoggo we store an operation in the database in three different tables:
-    /// `operations`, `previous_operations` and `operation_fields`. This means that
-    /// this method actually makes 3 different sets of insertions.
+    /// In aquadoggo we store an operation in the database in three different tables: `operations`,
+    /// `previous_operations` and `operation_fields`. This means that this method actually makes 3
+    /// different sets of insertions.
     async fn insert_operation(
         &self,
         operation: &VerifiedOperation,
         document_id: &DocumentId,
     ) -> Result<(), OperationStorageError> {
-        // Start a transaction, any db insertions after this point, and before the `commit()`
-        // will be rolled back in the event of an error.
+        // Start a transaction, any db insertions after this point, and before the `commit()` will
+        // be rolled back in the event of an error.
         let transaction = self
             .pool
             .begin()
             .await
             .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
 
-        // Consruct query for inserting operation an row, execute it
-        // and check exactly one row was affected.
+        // Construct query for inserting operation an row, execute it and check exactly one row was
+        // affected.
         let operation_insertion_result = query(
             "
             INSERT INTO
@@ -175,14 +174,15 @@ impl OperationStore<StorageOperation> for SqlStorage {
         .await
         .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
 
-        // Construct and execute the queries, return their futures and execute
-        // all of them with `try_join_all()`.
+        // Construct and execute the queries, return their futures and execute all of them with
+        // `try_join_all()`.
         let fields_insertion_result = match operation.fields() {
             Some(fields) => {
                 let result = try_join_all(fields.iter().flat_map(|(name, value)| {
-                    // If the value is a relation_list or pinned_relation_list we need to insert a new field row for
-                    // every item in the list. Here we collect these items and return them in a vector. If this operation
-                    // value is anything except for the above list types, we will return a vec containing a single item.
+                    // If the value is a relation_list or pinned_relation_list we need to insert a
+                    // new field row for every item in the list. Here we collect these items and
+                    // return them in a vector. If this operation value is anything except for the
+                    // above list types, we will return a vec containing a single item.
                     let db_values = parse_value_to_string_vec(value);
 
                     // Collect all query futures.
@@ -217,6 +217,7 @@ impl OperationStore<StorageOperation> for SqlStorage {
                 .await
                 // If any queries error, we catch that here.
                 .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
+
                 Some(result)
             }
             None => None,
@@ -245,9 +246,8 @@ impl OperationStore<StorageOperation> for SqlStorage {
 
     /// Get an operation identified by it's `OperationId`.
     ///
-    /// Returns a result containing an `VerifiedOperation` wrapped in an option, if no
-    /// operation with this id was found, returns none. Errors if a fatal storage
-    /// error occured.
+    /// Returns a result containing an `VerifiedOperation` wrapped in an option, if no operation
+    /// with this id was found, returns none. Errors if a fatal storage error occured.
     async fn get_operation_by_id(
         &self,
         id: &OperationId,
