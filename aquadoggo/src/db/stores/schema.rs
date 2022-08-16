@@ -175,6 +175,4 @@ mod tests {
             assert!(schema.is_none());
         });
     }
-
-    // @TODO: bring back insert_get test
 }
