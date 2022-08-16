@@ -344,21 +344,18 @@ impl OperationStore<StorageOperation> for SqlStorage {
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryFrom;
-
     use p2panda_rs::document::DocumentId;
     use p2panda_rs::entry::traits::AsEncodedEntry;
     use p2panda_rs::entry::LogId;
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::traits::{AsOperation, AsVerifiedOperation};
-    use p2panda_rs::operation::{Operation, OperationId, VerifiedOperation};
+    use p2panda_rs::operation::VerifiedOperation;
     use p2panda_rs::storage_provider::traits::OperationStore;
     use p2panda_rs::storage_provider::traits::{EntryStore, StorageProvider};
-    use p2panda_rs::test_utils::constants::{test_fields, HASH};
+    use p2panda_rs::test_utils::constants::test_fields;
     use p2panda_rs::test_utils::fixtures::{
-        create_operation, delete_operation, document_id, key_pair, operation_fields, operation_id,
-        public_key, random_key_pair, random_previous_operations, update_operation,
-        verified_operation,
+        document_id, key_pair, operation_fields, random_document_view_id, random_key_pair,
+        random_previous_operations, verified_operation, verified_operation_with_schema,
     };
     use rstest::rstest;
 
@@ -366,7 +363,57 @@ mod tests {
         doggo_fields, doggo_schema, test_db, TestDatabase, TestDatabaseRunner,
     };
 
-    // @TODO: bring back insert_get_operations test
+    #[rstest]
+    #[case::create_operation(verified_operation_with_schema(
+        Some(test_fields().into()),
+        None,
+        random_key_pair()
+    ))]
+    #[case::update_operation(verified_operation_with_schema(
+        Some(test_fields().into()),
+        Some(random_document_view_id()),
+        random_key_pair()
+    ))]
+    #[case::update_operation_many_prev_ops(
+        verified_operation_with_schema(
+            Some(test_fields().into()),
+            Some(random_previous_operations(12)),
+            random_key_pair()
+        )
+    )]
+    #[case::delete_operation(verified_operation_with_schema(
+        None,
+        Some(random_document_view_id()),
+        random_key_pair()
+    ))]
+    #[case::delete_operation_many_prev_ops(verified_operation_with_schema(
+        None,
+        Some(random_previous_operations(12)),
+        random_key_pair()
+    ))]
+    fn insert_and_get_operations(
+        #[case] operation: VerifiedOperation,
+        document_id: DocumentId,
+        #[from(test_db)] runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            // Insert the doggo operation into the db, returns Ok(true) when succesful.
+            let result = db.store.insert_operation(&operation, &document_id).await;
+            assert!(result.is_ok());
+
+            // Request the previously inserted operation by it's id.
+            let returned_operation = db
+                .store
+                .get_operation_by_id(operation.id())
+                .await
+                .unwrap()
+                .unwrap();
+
+            assert_eq!(returned_operation.public_key(), operation.public_key());
+            assert_eq!(returned_operation.fields(), operation.fields());
+            assert_eq!(returned_operation.id(), operation.id());
+        });
+    }
 
     #[rstest]
     fn insert_operation_twice(
@@ -392,7 +439,6 @@ mod tests {
     fn gets_document_by_operation_id(
         #[from(verified_operation)] create_operation: VerifiedOperation,
         key_pair: KeyPair,
-        #[from(random_key_pair)] key_pair_new: KeyPair,
         document_id: DocumentId,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
