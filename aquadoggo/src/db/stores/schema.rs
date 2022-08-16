@@ -20,8 +20,8 @@ impl SchemaStore for SqlStorage {
     /// - fetch the document views for every field defined in the schema definition
     /// - combine the returned fields into a Schema struct
     ///
-    /// If no schema definition with the passed id is found then None is returned,
-    /// if any of the other steps can't be completed, then an error is returned.
+    /// If no schema definition with the passed id is found then None is returned, if any of the
+    /// other steps can't be completed, then an error is returned.
     async fn get_schema_by_id(
         &self,
         id: &DocumentViewId,
@@ -46,8 +46,8 @@ impl SchemaStore for SqlStorage {
         }
 
         // We silently ignore errors as we are assuming views we retrieve from the database
-        // themselves are valid, meaning any error in constructing the schema must be because
-        // some of it's fields are simply missing from our database.
+        // themselves are valid, meaning any error in constructing the schema must be because some
+        // of it's fields are simply missing from our database.
         let schema = Schema::from_views(schema_view, schema_fields).ok();
 
         Ok(schema)
@@ -144,6 +144,29 @@ mod tests {
         });
     }
 
-    // @TODO: bring back schema_fields_do_not_exist test
+    #[rstest]
+    fn schema_fields_do_not_exist(#[from(test_db)] runner: TestDatabaseRunner, key_pair: KeyPair) {
+        runner.with_db_teardown(|mut db: TestDatabase| async move {
+            // Create a schema definition but no schema field definitions
+            let document_view_id = db
+                .add_document(
+                    &SchemaId::SchemaDefinition(1),
+                    vec![
+                        ("name", "test_schema".into()),
+                        ("description", "My schema without fields".into()),
+                    ],
+                    &key_pair,
+                )
+                .await;
+
+            // Retrieve the schema by it's document view id. We unwrap here as we expect an `Ok`
+            // result for the succeeding db query, even though the schema could not be built.
+            let schema = db.store.get_schema_by_id(&document_view_id).await.unwrap();
+
+            // We receive nothing as the fields are missing for this schema
+            assert!(schema.is_none());
+        });
+    }
+
     // @TODO: bring back insert_get test
 }
