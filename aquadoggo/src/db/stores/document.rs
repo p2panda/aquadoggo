@@ -337,9 +337,9 @@ mod tests {
 
     use crate::db::stores::document::{DocumentStore, DocumentView};
     use crate::db::stores::entry::StorageEntry;
-    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+    use crate::db::stores::test_utils::{doggo_schema, test_db, TestDatabase, TestDatabaseRunner};
 
-    // TODO: bring back inserts_gets_one_document_view test
+    // @TODO: bring back inserts_gets_one_document_view test
 
     #[rstest]
     fn document_view_does_not_exist(
@@ -359,7 +359,7 @@ mod tests {
         });
     }
 
-    // TODO: bring back inserts_gets_many_document_views test
+    // @TODO: bring back inserts_gets_many_document_views test
 
     #[rstest]
     fn insert_document_view_with_missing_operation(
@@ -576,7 +576,7 @@ mod tests {
     #[rstest]
     fn gets_documents_by_schema(
         #[from(test_db)]
-        #[with(10, 2, 1, false, constants::schema())]
+        #[with(10, 2, 1, false)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
@@ -594,7 +594,7 @@ mod tests {
 
             let schema_documents = db
                 .store
-                .get_documents_by_schema(constants::schema().id())
+                .get_documents_by_schema(doggo_schema().id())
                 .await
                 .unwrap();
 

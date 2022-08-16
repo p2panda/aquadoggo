@@ -226,7 +226,7 @@ pub async fn publish<S: StorageProvider>(
     // VALIDATE ENTRY AND OPERATION //
     //////////////////////////////////
 
-    // TODO: Check this validation flow is still correct.
+    // @TODO: Check this validation flow is still correct.
 
     // Verify that the claimed seq num matches the expected seq num for this author and log.
     let latest_entry = store.get_latest_entry(&author, log_id).await?;

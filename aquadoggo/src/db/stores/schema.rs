@@ -95,7 +95,7 @@ mod tests {
     use p2panda_rs::document::DocumentViewId;
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::{OperationFields, OperationValue, PinnedRelationList};
-    use p2panda_rs::schema::{FieldType, SchemaId};
+    use p2panda_rs::schema::{FieldType, Schema, SchemaId};
     use p2panda_rs::test_utils::fixtures::{
         document_view_id, key_pair, operation, operation_fields, schema_fields,
     };
@@ -106,122 +106,7 @@ mod tests {
         insert_entry_operation_and_view, test_db, TestDatabase, TestDatabaseRunner,
     };
 
-    use super::SchemaStore;
-
-    async fn insert_schema_definition(
-        storage_provider: &SqlStorage,
-        key_pair: &KeyPair,
-        schema_field_id: &DocumentViewId,
-        mut schema_definition: OperationFields,
-    ) -> DocumentViewId {
-        schema_definition
-            .insert(
-                "fields",
-                // This pinned relation points at the previously published field.
-                OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
-                    schema_field_id.clone()
-                ])),
-            )
-            .unwrap();
-
-        let (_, document_view_id) = insert_entry_operation_and_view(
-            storage_provider,
-            key_pair,
-            None,
-            &operation(
-                Some(schema_definition),
-                None,
-                SchemaId::new("schema_definition_v1").unwrap(),
-            ),
-        )
-        .await;
-        document_view_id
-    }
-
-    async fn insert_schema_field_definition(
-        storage_provider: &SqlStorage,
-        key_pair: &KeyPair,
-        schema_field_definition: OperationFields,
-    ) -> DocumentViewId {
-        // Publish it encoded in an entry, insert the operation and materialised document view into the db
-        let (_, document_view_id) = insert_entry_operation_and_view(
-            storage_provider,
-            key_pair,
-            None,
-            &operation(
-                Some(schema_field_definition),
-                None,
-                SchemaId::new("schema_field_definition_v1").unwrap(),
-            ),
-        )
-        .await;
-
-        document_view_id
-    }
-
-    #[rstest]
-    #[case::fields_missing_name_field("missing field \"name\"",
-        operation_fields(vec![
-                         ("type", FieldType::String.into())
-        ]),
-        operation_fields(vec![
-                         ("name", OperationValue::String("venue".to_string())),
-                         ("description", OperationValue::String("My venue".to_string()))
-        ])
-    )]
-    #[case::fields_missing_type_field("missing field \"type\"",
-        operation_fields(vec![
-                         ("name", OperationValue::String("venue_name".to_string()))
-        ]),
-        operation_fields(vec![
-                         ("name", OperationValue::String("venue".to_string())),
-                         ("description", OperationValue::String("My venue".to_string()))
-        ])
-    )]
-    #[case::schema_missing_name_field("missing field \"name\"",
-        operation_fields(vec![
-                         ("name", OperationValue::String("venue_name".to_string())),
-                         ("type", FieldType::String.into())
-        ]),
-        operation_fields(vec![
-                         ("description", OperationValue::String("My venue".to_string()))
-        ])
-    )]
-    #[case::schema_missing_name_description("missing field \"description\"",
-        operation_fields(vec![
-                         ("name", OperationValue::String("venue_name".to_string())),
-                         ("type", FieldType::String.into())
-        ]),
-        operation_fields(vec![
-                         ("name", OperationValue::String("venue".to_string()))
-        ])
-    )]
-    fn get_schema_errors(
-        #[case] err_str: &str,
-        #[case] schema_field_definition: OperationFields,
-        #[case] schema_definition: OperationFields,
-        key_pair: KeyPair,
-        #[from(test_db)] runner: TestDatabaseRunner,
-    ) {
-        let err_str = err_str.to_string();
-
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            let document_view_id =
-                insert_schema_field_definition(&db.store, &key_pair, schema_field_definition).await;
-
-            let document_view_id = insert_schema_definition(
-                &db.store,
-                &key_pair,
-                &document_view_id,
-                schema_definition,
-            )
-            .await;
-
-            let schema = db.store.get_schema_by_id(&document_view_id).await;
-
-            assert_eq!(schema.unwrap_err().to_string(), err_str);
-        });
-    }
+    use super::{DocumentStore, SchemaStore};
 
     #[rstest]
     #[case(
@@ -248,40 +133,17 @@ mod tests {
             //     _ => panic!("Not interested in this"),
             // };
 
-            let schemas = db.store.get_all_schema().await;
+            let schema_documents = db
+                .store
+                .get_documents_by_schema(&SchemaId::SchemaDefinition(1))
+                .await
+                .unwrap();
 
+            let schemas = db.store.get_all_schema().await;
             assert_eq!(schemas.unwrap().len(), expected_schema_count);
         });
     }
 
-    #[rstest]
-    #[case::schema_fields_do_not_exist(
-        operation_fields(vec![
-                         ("name", OperationValue::String("venue".to_string())),
-                         ("description", OperationValue::String("My venue".to_string()))
-        ])
-    )]
-    fn schema_fields_do_not_exist(
-        #[case] schema_definition: OperationFields,
-        #[from(document_view_id)] schema_fields_id: DocumentViewId,
-        #[from(test_db)] runner: TestDatabaseRunner,
-        key_pair: KeyPair,
-    ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            let document_view_id = insert_schema_definition(
-                &db.store,
-                &key_pair,
-                &schema_fields_id,
-                schema_definition,
-            )
-            .await;
-
-            // Retrieve the schema by it's document_view_id.
-
-            // We unwrap here as we expect an `Ok` result even though the schema could not be built.
-            let schema = db.store.get_schema_by_id(&document_view_id).await.unwrap();
-
-            assert!(schema.is_none());
-        });
-    }
+    // @TODO: bring back schema_fields_do_not_exist test
+    // @TODO: bring back insert_get test
 }

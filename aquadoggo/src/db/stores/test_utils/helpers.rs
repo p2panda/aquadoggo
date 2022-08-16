@@ -101,6 +101,6 @@ pub async fn insert_entry_operation_and_view(
     if !operation.is_create() && document_id.is_none() {
         panic!("UPDATE and DELETE operations require a DocumentId to be passed")
     }
-    // TODO: Need full refactor
+    // @TODO: Need full refactor
     todo!()
 }

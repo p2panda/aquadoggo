@@ -217,7 +217,7 @@ mod test {
             // This test uses a fixed private key to allow us to anticipate the schema typename.
             let key_pair = key_pair(PRIVATE_KEY);
             let type_name =
-                "schema_name_002050d1a071ef2061eb3ddb1f1420b22a52687ed134a9ba9f094b237104b4e7058c";
+                "schema_name_0020f71816cb258a24bab65d63d42298467cc983670adc0bb2dd35e19f937011fbb2";
 
             // Check that the schema does not exist yet.
             let response = client

@@ -357,13 +357,16 @@ mod tests {
     use p2panda_rs::test_utils::constants::{test_fields, HASH};
     use p2panda_rs::test_utils::fixtures::{
         create_operation, delete_operation, document_id, key_pair, operation_fields, operation_id,
-        public_key, random_previous_operations, update_operation, verified_operation,
+        public_key, random_key_pair, random_previous_operations, update_operation,
+        verified_operation,
     };
     use rstest::rstest;
 
-    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+    use crate::db::stores::test_utils::{
+        doggo_fields, doggo_schema, test_db, TestDatabase, TestDatabaseRunner,
+    };
 
-    // TODO: bring back insert_get_operations test
+    // @TODO: bring back insert_get_operations test
 
     #[rstest]
     fn insert_operation_twice(
@@ -388,7 +391,8 @@ mod tests {
     #[rstest]
     fn gets_document_by_operation_id(
         #[from(verified_operation)] create_operation: VerifiedOperation,
-        #[from(verified_operation)] update_operation: VerifiedOperation,
+        key_pair: KeyPair,
+        #[from(random_key_pair)] key_pair_new: KeyPair,
         document_id: DocumentId,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
@@ -414,6 +418,13 @@ mod tests {
                 document_id.clone()
             );
 
+            let update_operation = verified_operation(
+                Some(operation_fields(doggo_fields())),
+                doggo_schema(),
+                Some(create_operation.id().to_owned().into()),
+                key_pair,
+            );
+
             db.store
                 .insert_operation(&update_operation, &document_id)
                 .await
@@ -421,7 +432,7 @@ mod tests {
 
             assert_eq!(
                 db.store
-                    .get_document_by_operation_id(create_operation.id())
+                    .get_document_by_operation_id(update_operation.id())
                     .await
                     .unwrap()
                     .unwrap(),

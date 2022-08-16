@@ -125,7 +125,7 @@ impl AsEncodedEntry for StorageEntry {
 /// `EntryRow` but we want them as `StorageEntry` which contains typed values.
 impl From<EntryRow> for StorageEntry {
     fn from(entry_row: EntryRow) -> Self {
-        // TODO: It's ridiculous we need to decode the entry from the bytes when we access it
+        // @TODO: It's ridiculous we need to decode the entry from the bytes when we access it
         // like this, we should rather store every entry value in the table. However I don't
         // want to change that as part of this PR so I write this sad note and raise an issue
         // later.
@@ -461,9 +461,9 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::random_hash;
     use rstest::rstest;
 
-    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+    use crate::db::stores::test_utils::{doggo_schema, test_db, TestDatabase, TestDatabaseRunner};
 
-    // TODO: bring back insert_entry test
+    // @TODO: bring back insert_entry test
 
     #[rstest]
     fn try_insert_non_unique_entry(
@@ -526,7 +526,7 @@ mod tests {
     fn entries_by_schema(
         #[from(random_hash)] hash: Hash,
         #[from(test_db)]
-        #[with(20, 1, 2, false, constants::schema())]
+        #[with(20, 2, 1, false, doggo_schema())]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
@@ -541,9 +541,10 @@ mod tests {
 
             let entries = db
                 .store
-                .get_entries_by_schema(constants::schema().id())
+                .get_entries_by_schema(doggo_schema().id())
                 .await
                 .unwrap();
+            println!("{}", entries.len());
             assert!(entries.len() == 40);
         });
     }

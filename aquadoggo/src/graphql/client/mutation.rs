@@ -40,7 +40,7 @@ impl ClientMutationRoot {
         let entry_signed: EncodedEntry = entry.into();
         let encoded_operation: EncodedOperation = operation.into();
 
-        // TODO:
+        // @TODO:
         // - decode operation
         // - get the schema
         // - pass all into `publish()`
@@ -70,4 +70,4 @@ impl ClientMutationRoot {
     }
 }
 
-// TODO: bring back _all_ mutation tests
+// @TODO: bring back _all_ mutation tests

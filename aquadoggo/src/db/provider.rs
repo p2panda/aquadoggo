@@ -115,7 +115,7 @@ mod tests {
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
     use crate::db::traits::DocumentStore;
 
-    // TODO: bring back test_get_schema_for_view test
+    // @TODO: bring back test_get_schema_for_view test
 
     #[rstest]
     fn test_get_schema_for_missing_view(

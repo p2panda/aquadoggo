@@ -224,24 +224,20 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let context = Context::new(
-                db.store.clone(),
-                Configuration::default(),
-                SchemaProvider::default(),
-            );
-
             // Prepare schema definition and schema field definition
-            let (definition_view_id, field_view_id) = create_schema_documents(&context, &db).await;
+            let (definition_view_id, field_view_id) =
+                create_schema_documents(&db.context, &db).await;
 
             // Start a task with each as input
             let input = TaskInput::new(None, Some(definition_view_id.clone()));
-            assert!(schema_task(context.clone(), input).await.is_ok());
+            assert!(schema_task(db.context.clone(), input).await.is_ok());
 
             let input = TaskInput::new(None, Some(field_view_id));
-            assert!(schema_task(context.clone(), input).await.is_ok());
+            assert!(schema_task(db.context.clone(), input).await.is_ok());
 
             // The new schema should be available on storage provider.
-            let schema = context
+            let schema = db
+                .context
                 .schema_provider
                 .get(&SchemaId::Application(
                     "schema_name".to_string(),

@@ -20,6 +20,8 @@ use crate::db::Pool;
 use crate::test_helpers::{initialize_db, initialize_db_with_url};
 use crate::{Configuration, SchemaProvider};
 
+use super::{doggo_fields, doggo_schema};
+
 #[async_trait::async_trait]
 pub trait AsyncTestFn {
     async fn call(self, db: TestDatabase);
@@ -171,17 +173,11 @@ pub fn test_db(
     // A boolean flag for wether all logs should contain a delete operation
     #[default(false)] with_delete: bool,
     // The schema used for all operations in the db
-    #[default(constants::schema())] schema: Schema,
+    #[default(doggo_schema())] schema: Schema,
     // The fields used for every CREATE operation
-    #[default(constants::test_fields())] create_operation_fields: Vec<(
-        &'static str,
-        OperationValue,
-    )>,
+    #[default(doggo_fields())] create_operation_fields: Vec<(&'static str, OperationValue)>,
     // The fields used for every UPDATE operation
-    #[default(constants::test_fields())] update_operation_fields: Vec<(
-        &'static str,
-        OperationValue,
-    )>,
+    #[default(doggo_fields())] update_operation_fields: Vec<(&'static str, OperationValue)>,
 ) -> TestDatabaseRunner {
     let config = PopulateDatabaseConfig {
         no_of_entries,

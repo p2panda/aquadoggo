@@ -318,9 +318,9 @@ mod tests {
     ) {
         with_db_manager_teardown(move |db_manager: TestDatabaseManager| async move {
             // Build and populate Billie's database
-            let mut billie_db = db_manager.create("sqlite::memory:").await;
+            let billie_db = db_manager.create("sqlite::memory:").await;
 
-            populate_store(
+            let (key_pairs, _) = populate_store(
                 &billie_db.store,
                 &PopulateDatabaseConfig {
                     no_of_entries: entries_in_log,
@@ -339,7 +339,7 @@ mod tests {
 
             // Get public key from author of generated test data
             let public_key: String = {
-                let key_from_db = billie_db.test_data.key_pairs.first().unwrap().public_key();
+                let key_from_db = key_pairs.first().unwrap().public_key();
 
                 let author = Author::from(key_from_db);
                 author.as_str().into()

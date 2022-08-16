@@ -154,7 +154,12 @@ mod tests {
             // Prepare entries and batch-validate them
             let entries_to_verify: Vec<(Vec<u8>, Option<Vec<u8>>)> = entries
                 .iter()
-                .map(|entry| (entry.to_string().as_bytes().to_owned(), None))
+                .map(|entry| {
+                    (
+                        EncodedEntry::from_str(entry.as_str().unwrap()).into_bytes(),
+                        None,
+                    )
+                })
                 .collect();
 
             // Make sure we can validate single entry based on the certificate pool
