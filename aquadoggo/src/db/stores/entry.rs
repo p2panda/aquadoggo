@@ -452,18 +452,32 @@ impl EntryStore<StorageEntry> for SqlStorage {
 #[cfg(test)]
 mod tests {
     use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
-    use p2panda_rs::entry::{LogId, SeqNum};
+    use p2panda_rs::entry::{EncodedEntry, Entry, LogId, SeqNum};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
+    use p2panda_rs::operation::EncodedOperation;
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
-    use p2panda_rs::test_utils::constants;
-    use p2panda_rs::test_utils::fixtures::random_hash;
+    use p2panda_rs::test_utils::fixtures::{encoded_entry, encoded_operation, entry, random_hash};
     use rstest::rstest;
 
     use crate::db::stores::test_utils::{doggo_schema, test_db, TestDatabase, TestDatabaseRunner};
 
-    // @TODO: bring back insert_entry test
+    #[rstest]
+    fn insert_entry(
+        encoded_entry: EncodedEntry,
+        entry: Entry,
+        encoded_operation: EncodedOperation,
+        #[from(test_db)] runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let result = db
+                .store
+                .insert_entry(&entry, &encoded_entry, Some(&encoded_operation))
+                .await;
+            assert!(result.is_ok());
+        });
+    }
 
     #[rstest]
     fn try_insert_non_unique_entry(
