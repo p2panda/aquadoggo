@@ -257,33 +257,6 @@ mod tests {
     }
 
     #[rstest]
-    fn publish_entry_error_handling(
-        #[from(test_db)]
-        #[with(0, 0, 0, false, test_schema())]
-        runner: TestDatabaseRunner,
-    ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
-            let (tx, _rx) = broadcast::channel(16);
-            let manager =
-                GraphQLSchemaManager::new(db.store, tx, db.context.schema_provider.clone()).await;
-            let context = HttpServiceContext::new(manager);
-
-            let parameters = Variables::from_value(value!({
-                "entry": EncodedEntry::new(&ENTRY_ENCODED).to_string(),
-                "operation": "".to_string()
-            }));
-            let request = Request::new(PUBLISH_ENTRY_QUERY).variables(parameters);
-            let response = context.schema.execute(request).await;
-
-            assert!(response.is_err());
-            assert_eq!(
-                "operation needs to match payload hash of encoded entry".to_string(),
-                response.errors[0].to_string()
-            );
-        });
-    }
-
-    #[rstest]
     fn post_gql_mutation(
         #[from(test_db)]
         #[with(0, 0, 0, false, test_schema())]
@@ -314,7 +287,7 @@ mod tests {
                         "publishEntry": {
                             "logId": "0",
                             "seqNum": "2",
-                            "backlink": "0020c096422b3c865e5b85ec67a82d5c1d19de43d57c4a3d902ea62b90d96ad32fda",
+                            "backlink": "0020dda3b3977477e4c621ce124903a736e54b139afcb033e99677a6c8470b26514c",
                             "skiplink": null
                         }
                     }
@@ -326,18 +299,18 @@ mod tests {
     #[rstest]
     #[case::no_entry(
         "",
-        "".as_bytes(),
-        "Failed to parse \"EntrySignedScalar\": Bytes to decode had length of 0"
+        &OPERATION_ENCODED,
+        "Bytes to decode had length of 0"
     )]
     #[case::invalid_entry_bytes(
         "AB01",
-        "".as_bytes(),
-        "Failed to parse \"EntrySignedScalar\": Could not decode author public key from bytes"
+        &OPERATION_ENCODED,
+        "Could not decode author public key from bytes"
     )]
     #[case::invalid_entry_hex_encoding(
         "-/74='4,.=4-=235m-0   34.6-3",
         &OPERATION_ENCODED,
-        "Failed to parse \"EntrySignedScalar\": invalid hex encoding in entry"
+        "Failed to parse \"EntrySignedScalar\": Invalid character '-' at position 0"
     )]
     #[case::no_operation(
         &EncodedEntry::new(&ENTRY_ENCODED).to_string(),
@@ -347,35 +320,35 @@ mod tests {
     #[case::invalid_operation_bytes(
         &EncodedEntry::new(&ENTRY_ENCODED).to_string(),
         "AB01".as_bytes(),
-        "operation needs to match payload hash of encoded entry"
+        "invalid type: bytes, expected array"
     )]
     #[case::invalid_operation_hex_encoding(
         &EncodedEntry::new(&ENTRY_ENCODED).to_string(),
         "0-25.-%5930n3544[{{{   @@@".as_bytes(),
-        "Failed to parse \"EncodedOperationScalar\": invalid hex encoding in operation"
+        "invalid type: integer `-17`, expected array"
     )]
     #[case::operation_does_not_match(
         &EncodedEntry::new(&ENTRY_ENCODED).to_string(),
         &{encoded_operation(
             Some(
                 operation_fields(
-                    vec![("silly", OperationValue::String("Sausage".to_string()))]
+                    vec![("message", OperationValue::String("Mwahaha!".to_string()))]
                 )
             ),
             None,
-            SCHEMA_ID.parse().unwrap()
+            test_schema().id().to_owned()
         ).into_bytes()},
         "operation needs to match payload hash of encoded entry"
     )]
     #[case::valid_entry_with_extra_hex_char_at_end(
         &{EncodedEntry::new(&ENTRY_ENCODED).to_string() + "A"},
         &OPERATION_ENCODED,
-        "Failed to parse \"EntrySignedScalar\": invalid hex encoding in entry"
+        "Failed to parse \"EntrySignedScalar\": Odd number of digits"
     )]
     #[case::valid_entry_with_extra_hex_char_at_start(
         &{"A".to_string() + &EncodedEntry::new(&ENTRY_ENCODED).to_string()},
         &OPERATION_ENCODED,
-        "Failed to parse \"EntrySignedScalar\": invalid hex encoding in entry"
+        "Failed to parse \"EntrySignedScalar\": Odd number of digits"
     )]
     #[case::should_not_have_skiplink(
         &entry_signed_encoded_unvalidated(
@@ -387,7 +360,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &OPERATION_ENCODED,
-        "Failed to parse \"EntrySignedScalar\": Could not decode payload hash DecodeError"
+        "Could not decode payload hash DecodeError"
     )]
     #[case::should_not_have_backlink(
         &entry_signed_encoded_unvalidated(
@@ -399,7 +372,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &OPERATION_ENCODED,
-        "Failed to parse \"EntrySignedScalar\": Could not decode payload hash DecodeError"
+        "Could not decode payload hash DecodeError"
     )]
     #[case::should_not_have_backlink_or_skiplink(
         &entry_signed_encoded_unvalidated(
@@ -411,7 +384,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &OPERATION_ENCODED,
-        "Failed to parse \"EntrySignedScalar\": Could not decode payload hash DecodeError"
+        "Could not decode payload hash DecodeError"
     )]
     #[case::missing_backlink(
         &entry_signed_encoded_unvalidated(
@@ -423,7 +396,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &OPERATION_ENCODED,
-        "Failed to parse \"EntrySignedScalar\": Could not decode backlink yamf hash: DecodeError"
+        "Could not decode backlink yamf hash: DecodeError"
     )]
     #[case::missing_skiplink(
         &entry_signed_encoded_unvalidated(
@@ -435,7 +408,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &OPERATION_ENCODED,
-        "Failed to parse \"EntrySignedScalar\": Could not decode backlink yamf hash: DecodeError"
+        "Could not decode backlink yamf hash: DecodeError"
     )]
     #[case::should_not_include_skiplink(
         &entry_signed_encoded_unvalidated(
@@ -447,7 +420,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &OPERATION_ENCODED,
-        "Failed to parse \"EntrySignedScalar\": Could not decode payload hash DecodeError"
+        "Could not decode payload hash DecodeError"
     )]
     #[case::payload_hash_and_size_missing(
         &entry_signed_encoded_unvalidated(
@@ -459,7 +432,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &OPERATION_ENCODED,
-        "Failed to parse \"EntrySignedScalar\": Could not decode payload hash DecodeError"
+        "Could not decode payload hash DecodeError"
     )]
     #[case::create_operation_with_previous_operations(
         &entry_signed_encoded_unvalidated(
@@ -471,7 +444,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &CREATE_OPERATION_WITH_PREVIOUS_OPS,
-        "previous_operations field should be empty"
+        "invalid type: sequence, expected map"
     )]
     #[case::update_operation_no_previous_operations(
         &entry_signed_encoded_unvalidated(
@@ -483,7 +456,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &UPDATE_OPERATION_NO_PREVIOUS_OPS,
-        "previous_operations field can not be empty"
+        "invalid type: map, expected array"
     )]
     #[case::delete_operation_no_previous_operations(
         &entry_signed_encoded_unvalidated(
@@ -495,7 +468,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &DELETE_OPERATION_NO_PREVIOUS_OPS,
-        "previous_operations field can not be empty"
+        "missing previous_operations for this operation action"
     )]
     fn validates_encoded_entry_and_operation_integrity(
         #[case] entry_encoded: &str,
@@ -561,7 +534,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &OPERATION_ENCODED,
-        "The backlink hash encoded in the entry does not match the lipmaa entry provided" //Think this error message is wrong
+        "claimed hash does not match backlink entry"
     )]
     #[case::not_the_next_seq_num(
         &entry_signed_encoded_unvalidated(
@@ -597,11 +570,11 @@ mod tests {
                 encoded_operation(
                     Some(
                         operation_fields(
-                            vec![("silly", OperationValue::String("Sausage".to_string()))]
+                            vec![("message", OperationValue::String("Sausage".to_string()))]
                         )
                     ),
                     Some(HASH.parse().unwrap()),
-                    SCHEMA_ID.parse().unwrap()
+                    test_schema().id().to_owned()
                 )
             ),
             key_pair(PRIVATE_KEY)
@@ -609,11 +582,11 @@ mod tests {
         &{encoded_operation(
                 Some(
                     operation_fields(
-                        vec![("silly", OperationValue::String("Sausage".to_string()))]
+                        vec![("message", OperationValue::String("Sausage".to_string()))]
                     )
                 ),
                 Some(HASH.parse().unwrap()),
-                SCHEMA_ID.parse().unwrap()
+                test_schema().id().to_owned()
             ).into_bytes()
         },
         "<Operation 496543> not found, could not determine document id"
@@ -674,7 +647,7 @@ mod tests {
     #[rstest]
     fn publish_many_entries(
         #[from(test_db)]
-        #[with(0, 0, 0, false, test_schema())]
+        #[with(0, 0, 0, false, doggo_schema())]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
@@ -758,16 +731,15 @@ mod tests {
         #[with(1, 1, 1, false, doggo_schema())]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|populated_db: TestDatabase| async move {
+        runner.with_db_teardown(|db: TestDatabase| async move {
             let (tx, _rx) = broadcast::channel(16);
-            let schema_provider = SchemaProvider::default();
             let manager =
-                GraphQLSchemaManager::new(populated_db.store.clone(), tx, schema_provider).await;
+                GraphQLSchemaManager::new(db.store.clone(), tx, db.context.schema_provider.clone()).await;
             let context = HttpServiceContext::new(manager);
             let client = TestClient::new(build_server(context));
 
             // Get the one entry from the store.
-            let entries = populated_db
+            let entries = db
                 .store
                 .get_entries_by_schema(doggo_schema().id())
                 .await
