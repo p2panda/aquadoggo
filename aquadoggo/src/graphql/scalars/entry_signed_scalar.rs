@@ -13,7 +13,7 @@ impl ScalarType for EntrySignedScalar {
     fn parse(value: Value) -> async_graphql::InputValueResult<Self> {
         match &value {
             Value::String(str_value) => {
-                let panda_value = EncodedEntry::new(str_value.as_bytes());
+                let panda_value = EncodedEntry::from_str(str_value);
                 Ok(EntrySignedScalar(panda_value))
             }
             _ => Err(InputValueError::expected_type(value)),

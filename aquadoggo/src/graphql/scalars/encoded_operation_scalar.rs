@@ -13,7 +13,7 @@ impl ScalarType for EncodedOperationScalar {
     fn parse(value: Value) -> InputValueResult<Self> {
         match &value {
             Value::String(str_value) => {
-                let panda_value = EncodedOperation::new(str_value.as_bytes());
+                let panda_value = EncodedOperation::from_str(str_value);
                 Ok(EncodedOperationScalar(panda_value))
             }
             _ => Err(InputValueError::expected_type(value)),
