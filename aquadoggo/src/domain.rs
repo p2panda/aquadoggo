@@ -459,7 +459,7 @@ mod tests {
         }
     }
 
-    // @TODO: Need test for multi-writer UPDATE operation published on entry with seq_num 1.
+    // @TODO: Need correct log id test for multi-writer UPDATE operation published on entry with seq_num 1.
 
     #[rstest]
     #[tokio::test]
