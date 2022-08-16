@@ -195,8 +195,7 @@ mod tests {
     use crate::config::Configuration;
     use crate::context::Context;
     use crate::db::stores::test_utils::{
-        doggo_fields, doggo_schema, insert_entry_operation_and_view, test_db, TestDatabase,
-        TestDatabaseRunner,
+        doggo_fields, doggo_schema, test_db, TestDatabase, TestDatabaseRunner,
     };
     use crate::db::traits::DocumentStore;
     use crate::materializer::tasks::reduce_task;
