@@ -303,17 +303,6 @@ pub async fn publish<S: StorageProvider>(
     // Verify the claimed log id against the expected one for this document id and author.
     verify_log_id(store, &author, log_id, &document_id).await?;
 
-    ///////////////
-    // STORE LOG //
-    ///////////////
-
-    // If this is a CREATE operation it goes into a new log which we insert here.
-    if operation.is_create() {
-        let log = S::StorageLog::new(&author, &operation.schema_id(), &document_id, log_id);
-
-        store.insert_log(log).await?;
-    }
-
     /////////////////////////////////////
     // DETERMINE NEXT ENTRY ARG VALUES //
     /////////////////////////////////////
@@ -343,6 +332,17 @@ pub async fn publish<S: StorageProvider>(
         backlink: backlink.map(|hash| hash.into()),
         skiplink: skiplink.map(|hash| hash.into()),
     };
+
+    ///////////////
+    // STORE LOG //
+    ///////////////
+
+    // If the entries' seq num is 1 we insert a new log here.
+    if entry.seq_num().is_first() {
+        let log = S::StorageLog::new(&author, &operation.schema_id(), &document_id, log_id);
+
+        store.insert_log(log).await?;
+    }
 
     ///////////////////////////////
     // STORE ENTRY AND OPERATION //
@@ -458,6 +458,8 @@ mod tests {
             }
         }
     }
+
+    // @TODO: Need test for multi-writer UPDATE operation published on entry with seq_num 1.
 
     #[rstest]
     #[tokio::test]
