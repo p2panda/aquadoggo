@@ -16,10 +16,9 @@ impl ScalarType for EntrySignedScalar {
         match &value {
             Value::String(str_value) => {
                 //@TODO: I'm sure this isn't the best way to do this...
-                // also, I'm not sure why `::new` is visible here when it should
+                // also, I'm not sure why `::from_str` is visible here when it should
                 // be behind the testing flag in p2panda-rs ;-p
-                let bytes = deserialize_hex(value)?;
-                Ok(EntrySignedScalar(EncodedEntry::new(&bytes)))
+                Ok(EntrySignedScalar(EncodedEntry::from_str(&str_value)))
             }
             _ => Err(InputValueError::expected_type(value)),
         }
