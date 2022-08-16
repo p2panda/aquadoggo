@@ -144,7 +144,7 @@ impl From<EntryRow> for StorageEntry {
             // We unwrap now as all entries currently contain a payload.
             payload: entry_row
                 .payload_bytes
-                .map(|payload| EncodedOperation::new(payload.as_bytes())),
+                .map(|payload| EncodedOperation::from_str(&payload)),
         }
     }
 }
