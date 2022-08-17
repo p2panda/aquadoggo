@@ -201,6 +201,7 @@ mod tests {
     use p2panda_rs::operation::OperationValue;
     use p2panda_rs::schema::Schema;
     use p2panda_rs::storage_provider::traits::OperationStore;
+    use p2panda_rs::test_utils::constants;
     use p2panda_rs::test_utils::db::test_db::send_to_store;
     use p2panda_rs::test_utils::fixtures::{
         operation, operation_fields, random_document_id, random_document_view_id, schema,
@@ -249,7 +250,15 @@ mod tests {
     fn updates_a_document(
         schema: Schema,
         #[from(test_db)]
-        #[with(1, 1, 1)]
+        #[with(
+            1,
+            1,
+            1,
+            false,
+            constants::schema(),
+            constants::test_fields(),
+            constants::test_fields()
+        )]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {

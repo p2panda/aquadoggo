@@ -165,7 +165,7 @@ mod tests {
                     "nextEntryArgs": {
                         "logId": "0",
                         "seqNum": "2",
-                        "backlink": "0020cab251e873e34dc9d2b422b5b94f3c6973d3b107a59c3dc0008993b5ef145948",
+                        "backlink": "00203c56166a80316aec6b629814ffbafb6bf54d9e30093e122b3cb0f7220e82f15d",
                         "skiplink": null,
                     }
                 })
