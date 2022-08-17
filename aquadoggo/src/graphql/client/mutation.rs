@@ -475,19 +475,23 @@ mod tests {
         #[with(0, 0, 0, false, test_schema())]
         runner: TestDatabaseRunner,
     ) {
+        // Encode the entry and operation as string values.
         let entry_encoded = entry_encoded.to_string();
-        let encoded_operation = hex::encode(encoded_operation.to_owned());
+        let encoded_operation = hex::encode(encoded_operation);
         let expected_error_message = expected_error_message.to_string();
 
         runner.with_db_teardown(move |db: TestDatabase| async move {
+            // Setup the test services.
             let (tx, _rx) = broadcast::channel(16);
             let manager =
                 GraphQLSchemaManager::new(db.store, tx, db.context.schema_provider.clone()).await;
             let context = HttpServiceContext::new(manager);
             let client = TestClient::new(build_server(context));
 
+            // Prepare the GQL publish request,
             let publish_entry_request = publish_entry_request(&entry_encoded, &encoded_operation);
 
+            // Send the publish request.
             let response = client
                 .post("/graphql")
                 .json(&json!({
@@ -498,6 +502,7 @@ mod tests {
                 .send()
                 .await;
 
+            // Parse the response and check any errors match the expected ones.
             let response = response.json::<serde_json::Value>().await;
             for error in response.get("errors").unwrap().as_array().unwrap() {
                 assert_eq!(
@@ -648,9 +653,12 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
+            // Two key airs representing two different authors
             let key_pairs = vec![KeyPair::new(), KeyPair::new()];
+            // Each will publish 13 entries (unlucky for some!).
             let num_of_entries = 13;
 
+            // Prepare test services.
             let (tx, _rx) = broadcast::channel(16);
             let manager =
                 GraphQLSchemaManager::new(db.store.clone(), tx, db.context.schema_provider.clone())
@@ -658,17 +666,23 @@ mod tests {
             let context = HttpServiceContext::new(manager);
             let client = TestClient::new(build_server(context));
 
+            // Iterate over each key pair.
             for key_pair in &key_pairs {
                 let mut document_id: Option<DocumentId> = None;
                 let author = Author::from(key_pair.public_key());
+
+                // Iterate of the number of entries we want to publish.
                 for index in 0..num_of_entries {
+                    // Derive the document_view_id from the document id.
                     let document_view_id: Option<DocumentViewId> =
                         document_id.clone().map(|id| id.as_str().parse().unwrap());
 
+                    // Get the next entry args for the document view id and author.
                     let next_entry_args = next_args(&db.store, &author, document_view_id.as_ref())
                         .await
                         .unwrap();
 
+                    // Construct a CREATE, UPDATE or DELETE operation based on the iterator index.
                     let operation = if index == 0 {
                         create_operation(doggo_fields(), doggo_schema().id().to_owned())
                     } else if index == (num_of_entries - 1) {
@@ -684,7 +698,10 @@ mod tests {
                         )
                     };
 
-                    let encoded_operation = encode_operation(&operation).unwrap();
+                    // Encode the operation.
+                    let encoded_operation = encode_operation(&operation).expect("Encode operation");
+
+                    // Encode the entry.
                     let entry_encoded = sign_and_encode_entry(
                         &next_entry_args.log_id.into(),
                         &next_entry_args.seq_num.into(),
@@ -693,9 +710,10 @@ mod tests {
                         &encoded_operation,
                         key_pair,
                     )
-                    .unwrap();
+                    .expect("Encode entry");
 
                     if index == 0 {
+                        // Set the document id based on the first entry in this log (index == 0)
                         document_id = Some(entry_encoded.hash().into());
                     }
 
@@ -716,6 +734,7 @@ mod tests {
                         .send()
                         .await;
 
+                    // Every publihsh request should succeed.
                     assert!(result.status().is_success())
                 }
             }
