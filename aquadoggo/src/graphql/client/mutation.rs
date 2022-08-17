@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 //! Mutation root.
+use anyhow::anyhow;
 use async_graphql::{Context, Object, Result};
 use p2panda_rs::entry::traits::AsEncodedEntry;
 use p2panda_rs::entry::EncodedEntry;
@@ -44,11 +45,10 @@ impl ClientMutationRoot {
 
         let operation = decode_operation(&encoded_operation)?;
 
-        // @TODO: Need error for when schema not present.
         let schema = schema_provider
             .get(operation.schema_id())
             .await
-            .expect("Get schema");
+            .ok_or_else(|| return anyhow!("Schema not found"))?;
 
         /////////////////////////////////////
         // PUBLISH THE ENTRY AND OPERATION //
@@ -769,5 +769,42 @@ mod tests {
         });
     }
 
-    //@TODO: Test for publishing to schema not supported by this node.
+    #[rstest]
+    fn publish_unsupported_schema(
+        #[from(encoded_entry)] entry_with_unsupported_schema: EncodedEntry,
+        #[from(encoded_operation)] operation_with_unsupported_schema: EncodedOperation,
+        #[from(test_db)] runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            let (tx, _rx) = broadcast::channel(16);
+            let manager =
+                GraphQLSchemaManager::new(db.store.clone(), tx, db.context.schema_provider.clone())
+                    .await;
+            let context = HttpServiceContext::new(manager);
+            let client = TestClient::new(build_server(context));
+
+            // Prepare a publish entry request for the entry.
+            let publish_entry_request = publish_entry_request(
+                &entry_with_unsupported_schema.to_string(),
+                &operation_with_unsupported_schema.to_string(),
+            );
+
+            // Publish the entry and parse response.
+            let response = client
+                .post("/graphql")
+                .json(&json!({
+                  "query": publish_entry_request.query,
+                  "variables": publish_entry_request.variables
+                }
+                ))
+                .send()
+                .await;
+
+            let response = response.json::<serde_json::Value>().await;
+
+            for error in response.get("errors").unwrap().as_array().unwrap() {
+                assert_eq!(error.get("message").unwrap(), "Schema not found")
+            }
+        });
+    }
 }

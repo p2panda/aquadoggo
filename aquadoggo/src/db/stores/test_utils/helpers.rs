@@ -1,33 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::convert::TryFrom;
-
-use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
-use p2panda_rs::entry::encode::sign_and_encode_entry;
-use p2panda_rs::entry::traits::AsEncodedEntry;
-use p2panda_rs::entry::{EncodedEntry, Entry};
 use p2panda_rs::hash::Hash;
-use p2panda_rs::identity::{Author, KeyPair};
-use p2panda_rs::operation::encode::encode_operation;
-use p2panda_rs::operation::traits::{AsOperation, AsVerifiedOperation};
 use p2panda_rs::operation::{
-    EncodedOperation, Operation, OperationValue, PinnedRelation, PinnedRelationList, Relation,
-    RelationList,
+    OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList,
 };
+use p2panda_rs::schema::{Schema, SchemaId};
 use p2panda_rs::test_utils::constants;
 use p2panda_rs::test_utils::fixtures::{document_view_id, schema, schema_fields};
 
-use p2panda_rs::schema::{Schema, SchemaId};
-use p2panda_rs::storage_provider::traits::{OperationStore, StorageProvider};
-
-use crate::db::provider::SqlStorage;
-use crate::db::traits::DocumentStore;
-use crate::domain::{next_args, publish};
+fn doggo_schema_id() -> SchemaId {
+    SchemaId::new_application("doggo_schema", &constants::HASH.to_owned().parse().unwrap())
+}
 
 pub fn doggo_schema() -> Schema {
     schema(
-        schema_fields(doggo_fields(), constants::SCHEMA_ID.parse().unwrap()),
-        constants::SCHEMA_ID.parse().unwrap(),
+        schema_fields(doggo_fields(), doggo_schema_id()),
+        doggo_schema_id(),
         "A doggo schema for testing",
     )
 }
