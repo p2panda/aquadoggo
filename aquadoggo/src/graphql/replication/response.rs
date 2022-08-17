@@ -45,7 +45,7 @@ impl EncodedEntryAndOperation {
 
         let entries = result
             .into_iter()
-            .map(|entry| EncodedEntry::new(&entry.into_bytes()).into())
+            .map(|entry| EncodedEntry::from_bytes(&entry.into_bytes()).into())
             .collect();
 
         Ok(entries)
@@ -54,7 +54,7 @@ impl EncodedEntryAndOperation {
 
 impl From<StorageEntry> for EncodedEntryAndOperation {
     fn from(storage_entry: StorageEntry) -> Self {
-        let entry = EncodedEntry::new(&storage_entry.into_bytes()).into();
+        let entry = EncodedEntry::from_bytes(&storage_entry.into_bytes()).into();
         let operation = storage_entry
             .payload()
             .map(|payload| payload.to_owned().into());
@@ -154,12 +154,7 @@ mod tests {
             // Prepare entries and batch-validate them
             let entries_to_verify: Vec<(Vec<u8>, Option<Vec<u8>>)> = entries
                 .iter()
-                .map(|entry| {
-                    (
-                        EncodedEntry::from_str(entry.as_str().unwrap()).into_bytes(),
-                        None,
-                    )
-                })
+                .map(|entry| (hex::decode(entry.as_str().unwrap()).unwrap(), None))
                 .collect();
 
             // Make sure we can validate single entry based on the certificate pool

@@ -14,11 +14,9 @@ impl ScalarType for EncodedOperationScalar {
     fn parse(value: Value) -> InputValueResult<Self> {
         match &value {
             Value::String(str_value) => {
-                //@TODO: I'm sure this isn't the best way to do this...
-                // also, I'm not sure why `::from_str` is visible here when it should
-                // be behind the testing flag in p2panda-rs ;-p
-                Ok(EncodedOperationScalar(EncodedOperation::from_str(
-                    str_value,
+                let bytes = hex::decode(str_value)?;
+                Ok(EncodedOperationScalar(EncodedOperation::from_bytes(
+                    &bytes,
                 )))
             }
             _ => Err(InputValueError::expected_type(value)),

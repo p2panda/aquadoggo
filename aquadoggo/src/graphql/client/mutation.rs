@@ -149,7 +149,7 @@ mod tests {
             0,
             None,
             None,
-            EncodedOperation::new(&OPERATION_ENCODED),
+            EncodedOperation::from_bytes(&OPERATION_ENCODED),
             key_pair(PRIVATE_KEY),
         )
         .into_bytes()
@@ -189,8 +189,8 @@ mod tests {
 
     #[fixture]
     fn publish_entry_request(
-        #[default(&EncodedEntry::new(&ENTRY_ENCODED).to_string())] entry_encoded: &str,
-        #[default(&EncodedOperation::new(&OPERATION_ENCODED).to_string())] encoded_operation: &str,
+        #[default(&EncodedEntry::from_bytes(&ENTRY_ENCODED).to_string())] entry_encoded: &str,
+        #[default(&EncodedOperation::from_bytes(&OPERATION_ENCODED).to_string())] encoded_operation: &str,
     ) -> Request {
         // Prepare GraphQL mutation publishing an entry
         let parameters = Variables::from_value(value!({
@@ -245,7 +245,7 @@ mod tests {
             context.schema.execute(publish_entry_request).await;
 
             // Find out hash of test entry to determine operation id
-            let entry_encoded = EncodedEntry::new(&ENTRY_ENCODED);
+            let entry_encoded = EncodedEntry::from_bytes(&ENTRY_ENCODED);
 
             // Expect receiver to receive sent message
             let message = rx.recv().await.unwrap();
@@ -313,22 +313,22 @@ mod tests {
         "Failed to parse \"EntrySignedScalar\": Invalid character '-' at position 0"
     )]
     #[case::no_operation(
-        &EncodedEntry::new(&ENTRY_ENCODED).to_string(),
+        &EncodedEntry::from_bytes(&ENTRY_ENCODED).to_string(),
         "".as_bytes(),
-        "operation needs to match payload hash of encoded entry"
+        "cbor decoder failed failed to fill whole buffer"
     )]
     #[case::invalid_operation_bytes(
-        &EncodedEntry::new(&ENTRY_ENCODED).to_string(),
+        &EncodedEntry::from_bytes(&ENTRY_ENCODED).to_string(),
         "AB01".as_bytes(),
         "invalid type: bytes, expected array"
     )]
     #[case::invalid_operation_hex_encoding(
-        &EncodedEntry::new(&ENTRY_ENCODED).to_string(),
+        &EncodedEntry::from_bytes(&ENTRY_ENCODED).to_string(),
         "0-25.-%5930n3544[{{{   @@@".as_bytes(),
         "invalid type: integer `-17`, expected array"
     )]
     #[case::operation_does_not_match(
-        &EncodedEntry::new(&ENTRY_ENCODED).to_string(),
+        &EncodedEntry::from_bytes(&ENTRY_ENCODED).to_string(),
         &{encoded_operation(
             Some(
                 operation_fields(
@@ -341,12 +341,12 @@ mod tests {
         "operation needs to match payload hash of encoded entry"
     )]
     #[case::valid_entry_with_extra_hex_char_at_end(
-        &{EncodedEntry::new(&ENTRY_ENCODED).to_string() + "A"},
+        &{EncodedEntry::from_bytes(&ENTRY_ENCODED).to_string() + "A"},
         &OPERATION_ENCODED,
         "Failed to parse \"EntrySignedScalar\": Odd number of digits"
     )]
     #[case::valid_entry_with_extra_hex_char_at_start(
-        &{"A".to_string() + &EncodedEntry::new(&ENTRY_ENCODED).to_string()},
+        &{"A".to_string() + &EncodedEntry::from_bytes(&ENTRY_ENCODED).to_string()},
         &OPERATION_ENCODED,
         "Failed to parse \"EntrySignedScalar\": Odd number of digits"
     )]
@@ -356,7 +356,7 @@ mod tests {
             0,
             None,
             Some(random_hash()),
-            Some(EncodedOperation::new(&OPERATION_ENCODED)),
+            Some(EncodedOperation::from_bytes(&OPERATION_ENCODED)),
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &OPERATION_ENCODED,
@@ -368,7 +368,7 @@ mod tests {
             0,
             Some(random_hash()),
             None,
-            Some(EncodedOperation::new(&OPERATION_ENCODED)),
+            Some(EncodedOperation::from_bytes(&OPERATION_ENCODED)),
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &OPERATION_ENCODED,
@@ -380,7 +380,7 @@ mod tests {
             0,
             Some(HASH.parse().unwrap()),
             Some(HASH.parse().unwrap()),
-            Some(EncodedOperation::new(&OPERATION_ENCODED)) ,
+            Some(EncodedOperation::from_bytes(&OPERATION_ENCODED)) ,
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &OPERATION_ENCODED,
@@ -392,7 +392,7 @@ mod tests {
             0,
             None,
             None,
-            Some(EncodedOperation::new(&OPERATION_ENCODED)),
+            Some(EncodedOperation::from_bytes(&OPERATION_ENCODED)),
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &OPERATION_ENCODED,
@@ -404,7 +404,7 @@ mod tests {
             0,
             Some(random_hash()),
             None,
-            Some(EncodedOperation::new(&OPERATION_ENCODED)),
+            Some(EncodedOperation::from_bytes(&OPERATION_ENCODED)),
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &OPERATION_ENCODED,
@@ -416,7 +416,7 @@ mod tests {
             0,
             Some(HASH.parse().unwrap()),
             Some(HASH.parse().unwrap()),
-            Some(EncodedOperation::new(&OPERATION_ENCODED)),
+            Some(EncodedOperation::from_bytes(&OPERATION_ENCODED)),
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &OPERATION_ENCODED,
@@ -440,7 +440,7 @@ mod tests {
             0,
             None,
             None,
-            Some(EncodedOperation::new(&CREATE_OPERATION_WITH_PREVIOUS_OPS)),
+            Some(EncodedOperation::from_bytes(&CREATE_OPERATION_WITH_PREVIOUS_OPS)),
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &CREATE_OPERATION_WITH_PREVIOUS_OPS,
@@ -452,7 +452,7 @@ mod tests {
             0,
             None,
             None,
-            Some(EncodedOperation::new(&UPDATE_OPERATION_NO_PREVIOUS_OPS)),
+            Some(EncodedOperation::from_bytes(&UPDATE_OPERATION_NO_PREVIOUS_OPS)),
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &UPDATE_OPERATION_NO_PREVIOUS_OPS,
@@ -464,7 +464,7 @@ mod tests {
             0,
             None,
             None,
-            Some(EncodedOperation::new(&DELETE_OPERATION_NO_PREVIOUS_OPS)),
+            Some(EncodedOperation::from_bytes(&DELETE_OPERATION_NO_PREVIOUS_OPS)),
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &DELETE_OPERATION_NO_PREVIOUS_OPS,
@@ -518,7 +518,7 @@ mod tests {
             1,
             Some(HASH.parse().unwrap()),
             Some(Hash::new_from_bytes(&vec![2, 3, 4])),
-            Some(EncodedOperation::new(&OPERATION_ENCODED)),
+            Some(EncodedOperation::from_bytes(&OPERATION_ENCODED)),
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &OPERATION_ENCODED,
@@ -530,7 +530,7 @@ mod tests {
             0,
             Some(random_hash()),
             None,
-            Some(EncodedOperation::new(&OPERATION_ENCODED)),
+            Some(EncodedOperation::from_bytes(&OPERATION_ENCODED)),
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &OPERATION_ENCODED,
@@ -542,7 +542,7 @@ mod tests {
             0,
             Some(random_hash()),
             None,
-            Some(EncodedOperation::new(&OPERATION_ENCODED)),
+            Some(EncodedOperation::from_bytes(&OPERATION_ENCODED)),
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &OPERATION_ENCODED,
@@ -554,7 +554,7 @@ mod tests {
             0,
             Some(random_hash()),
             None,
-            Some(EncodedOperation::new(&OPERATION_ENCODED)),
+            Some(EncodedOperation::from_bytes(&OPERATION_ENCODED)),
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &OPERATION_ENCODED,
@@ -597,7 +597,7 @@ mod tests {
             2,
             None,
             None,
-            Some(EncodedOperation::new(&OPERATION_ENCODED)),
+            Some(EncodedOperation::from_bytes(&OPERATION_ENCODED)),
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &OPERATION_ENCODED,

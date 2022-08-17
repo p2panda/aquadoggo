@@ -129,8 +129,11 @@ impl From<EntryRow> for StorageEntry {
         // like this, we should rather store every entry value in the table. However I don't
         // want to change that as part of this PR so I write this sad note and raise an issue
         // later.
-        let encoded_entry = EncodedEntry::from_str(&entry_row.entry_bytes);
-        let entry = decode_entry(&encoded_entry).unwrap();
+        let encoded_entry = EncodedEntry::from_bytes(
+            &hex::decode(entry_row.entry_bytes)
+                .expect("Decode entry hex entry bytes from database"),
+        );
+        let entry = decode_entry(&encoded_entry).expect("Decoding encoded entry from database");
         StorageEntry {
             author: entry.public_key().to_owned(),
             log_id: entry.log_id().to_owned(),
@@ -142,9 +145,11 @@ impl From<EntryRow> for StorageEntry {
             signature: entry.signature().to_owned(),
             encoded_entry,
             // We unwrap now as all entries currently contain a payload.
-            payload: entry_row
-                .payload_bytes
-                .map(|payload| EncodedOperation::from_str(&payload)),
+            payload: entry_row.payload_bytes.map(|payload| {
+                EncodedOperation::from_bytes(
+                    &hex::decode(payload).expect("Decode entry payload from database"),
+                )
+            }),
         }
     }
 }

@@ -15,10 +15,8 @@ impl ScalarType for EntrySignedScalar {
     fn parse(value: Value) -> async_graphql::InputValueResult<Self> {
         match &value {
             Value::String(str_value) => {
-                //@TODO: I'm sure this isn't the best way to do this...
-                // also, I'm not sure why `::from_str` is visible here when it should
-                // be behind the testing flag in p2panda-rs ;-p
-                Ok(EntrySignedScalar(EncodedEntry::from_str(&str_value)))
+                let bytes = hex::decode(str_value)?;
+                Ok(EntrySignedScalar(EncodedEntry::from_bytes(&bytes)))
             }
             _ => Err(InputValueError::expected_type(value)),
         }
