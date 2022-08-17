@@ -439,31 +439,37 @@ mod tests {
     fn gets_document_by_operation_id(
         #[from(verified_operation)] create_operation: VerifiedOperation,
         key_pair: KeyPair,
+        #[from(random_key_pair)] new_author_key_pair: KeyPair,
         document_id: DocumentId,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
+            // Getting a document by operation id which isn't stored in the database
+            // should return none.
             assert!(db
                 .store
                 .get_document_by_operation_id(create_operation.id())
                 .await
-                .unwrap()
+                .expect("Get document id by operation id")
                 .is_none());
 
+            // Now we insert the operation.
             db.store
                 .insert_operation(&create_operation, &document_id)
                 .await
                 .unwrap();
 
+            // The same request should return the expected document id.
             assert_eq!(
                 db.store
                     .get_document_by_operation_id(create_operation.id())
                     .await
-                    .unwrap()
-                    .unwrap(),
+                    .expect("Get document id by operation id")
+                    .expect("Unwrap document id"),
                 document_id.clone()
             );
 
+            // We now create and insert an update to the same document.
             let update_operation = verified_operation(
                 Some(operation_fields(doggo_fields())),
                 doggo_schema(),
@@ -476,12 +482,13 @@ mod tests {
                 .await
                 .unwrap();
 
+            // Getting the document by the id of the new update document should also work.
             assert_eq!(
                 db.store
                     .get_document_by_operation_id(update_operation.id())
                     .await
-                    .unwrap()
-                    .unwrap(),
+                    .expect("Get document id by operation id")
+                    .expect("Unwrap document id"),
                 document_id.clone()
             );
         });
@@ -495,28 +502,16 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let author = Author::from(key_pair.public_key());
-
-            let latest_entry = db
-                .store
-                .get_latest_entry(&author, &LogId::default())
-                .await
-                .unwrap()
-                .unwrap();
-
-            let document_id = db
-                .store
-                .get_document_by_entry(&latest_entry.hash())
-                .await
-                .unwrap()
-                .unwrap();
+            // This is the document id of the document in the test store.
+            let document_id = db.test_data.documents.first().unwrap();
 
             let operations_by_document_id = db
                 .store
                 .get_operations_by_document_id(&document_id)
                 .await
-                .unwrap();
+                .expect("Get operations by their document id");
 
+            // We expect the number of operations returned to match the expected number.
             assert_eq!(operations_by_document_id.len(), 5)
         });
     }
