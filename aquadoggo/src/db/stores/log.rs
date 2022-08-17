@@ -318,9 +318,9 @@ mod tests {
                 .is_ok());
 
             let log = StorageLog::new(
-                &author,
+                author,
                 &schema_id,
-                encoded_entry.hash().into(),
+                &encoded_entry.hash().into(),
                 &LogId::default(),
             );
 
