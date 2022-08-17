@@ -413,7 +413,7 @@ mod tests {
         OperationId, OperationValue,
     };
     use p2panda_rs::schema::{FieldType, Schema, SchemaId};
-    use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
+    use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation, LogStore};
     use p2panda_rs::test_utils::constants::{test_fields, PRIVATE_KEY, SCHEMA_ID};
     use p2panda_rs::test_utils::db::test_db::{
         populate_store, send_to_store, test_db_config, PopulateDatabaseConfig,
@@ -946,7 +946,17 @@ mod tests {
         )
         .await;
 
+        // The test will panic here when there is an error
         result.unwrap();
+
+        // For non error cases we test that there is a log for the updated document.
+        let log = store
+            .get(&author_performing_update, &document_id)
+            .await
+            .unwrap();
+
+        assert!(log.is_some());
+        assert_eq!(log.unwrap(), LogId::new(0));
     }
 
     #[rstest]
