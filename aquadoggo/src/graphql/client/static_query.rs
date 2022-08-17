@@ -63,23 +63,14 @@ mod tests {
     use p2panda_rs::identity::Author;
     use rstest::rstest;
     use serde_json::json;
-    use tokio::sync::broadcast;
 
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
-    use crate::graphql::GraphQLSchemaManager;
-    use crate::http::{build_server, HttpServiceContext};
-    use crate::schema::SchemaProvider;
-    use crate::test_helpers::TestClient;
+    use crate::test_helpers::{graphql_test_client};
 
     #[rstest]
     fn next_entry_args_valid_query(#[from(test_db)] runner: TestDatabaseRunner) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
-            let (tx, _) = broadcast::channel(16);
-            let schema_provider = SchemaProvider::default();
-            let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
-            let context = HttpServiceContext::new(manager);
-            let client = TestClient::new(build_server(context));
-
+            let client = graphql_test_client(&db).await;
             // Selected fields need to be alphabetically sorted because that's what the `json`
             // macro that is used in the assert below produces.
             let received_entry_args = client
@@ -121,12 +112,7 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
-            let (tx, _) = broadcast::channel(16);
-            let schema_provider = SchemaProvider::default();
-            let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
-            let context = HttpServiceContext::new(manager);
-            let client = TestClient::new(build_server(context));
-
+            let client = graphql_test_client(&db).await;
             let document_id = db.test_data.documents.get(0).unwrap();
             let author =
                 Author::from(db.test_data.key_pairs[0].public_key());
@@ -176,12 +162,7 @@ mod tests {
     #[rstest]
     fn next_entry_args_error_response(#[from(test_db)] runner: TestDatabaseRunner) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
-            let (tx, _) = broadcast::channel(16);
-            let schema_provider = SchemaProvider::default();
-            let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
-            let context = HttpServiceContext::new(manager);
-            let client = TestClient::new(build_server(context));
-
+            let client = graphql_test_client(&db).await;
             let response = client
                 .post("/graphql")
                 .json(&json!({

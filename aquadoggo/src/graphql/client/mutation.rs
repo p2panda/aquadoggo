@@ -115,8 +115,8 @@ mod tests {
     };
     use crate::domain::next_args;
     use crate::graphql::GraphQLSchemaManager;
-    use crate::http::{build_server, HttpServiceContext};
-    use crate::test_helpers::TestClient;
+    use crate::http::HttpServiceContext;
+    use crate::test_helpers::graphql_test_client;
 
     fn test_schema() -> Schema {
         Schema::new(
@@ -261,11 +261,9 @@ mod tests {
         publish_entry_request: Request,
     ) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
-            let (tx, _rx) = broadcast::channel(16);
-            let manager =
-                GraphQLSchemaManager::new(db.store, tx, db.context.schema_provider.clone()).await;
-            let context = HttpServiceContext::new(manager);
-            let client = TestClient::new(build_server(context));
+            // Init the test client.
+            let client = graphql_test_client(&db).await;
+
 
             let response = client
                 .post("/graphql")
@@ -481,12 +479,8 @@ mod tests {
         let expected_error_message = expected_error_message.to_string();
 
         runner.with_db_teardown(move |db: TestDatabase| async move {
-            // Setup the test services.
-            let (tx, _rx) = broadcast::channel(16);
-            let manager =
-                GraphQLSchemaManager::new(db.store, tx, db.context.schema_provider.clone()).await;
-            let context = HttpServiceContext::new(manager);
-            let client = TestClient::new(build_server(context));
+            // Init the test client.
+            let client = graphql_test_client(&db).await;
 
             // Prepare the GQL publish request,
             let publish_entry_request = publish_entry_request(&entry_encoded, &encoded_operation);
@@ -618,11 +612,8 @@ mod tests {
         let expected_error_message = expected_error_message.to_string();
 
         runner.with_db_teardown(move |db: TestDatabase| async move {
-            let (tx, _rx) = broadcast::channel(16);
-            let manager =
-                GraphQLSchemaManager::new(db.store, tx, db.context.schema_provider.clone()).await;
-            let context = HttpServiceContext::new(manager);
-            let client = TestClient::new(build_server(context));
+            // Init the test client.
+            let client = graphql_test_client(&db).await;
 
             let publish_entry_request = publish_entry_request(&entry_encoded, &encoded_operation);
 
@@ -653,18 +644,13 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
+            // Init the test client.
+            let client = graphql_test_client(&db).await;
+
             // Two key pairs representing two different authors
             let key_pairs = vec![KeyPair::new(), KeyPair::new()];
             // Each will publish 13 entries (unlucky for some!).
             let num_of_entries = 13;
-
-            // Prepare test services.
-            let (tx, _rx) = broadcast::channel(16);
-            let manager =
-                GraphQLSchemaManager::new(db.store.clone(), tx, db.context.schema_provider.clone())
-                    .await;
-            let context = HttpServiceContext::new(manager);
-            let client = TestClient::new(build_server(context));
 
             // Iterate over each key pair.
             for key_pair in &key_pairs {
@@ -748,11 +734,9 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let (tx, _rx) = broadcast::channel(16);
-            let manager =
-                GraphQLSchemaManager::new(db.store.clone(), tx, db.context.schema_provider.clone()).await;
-            let context = HttpServiceContext::new(manager);
-            let client = TestClient::new(build_server(context));
+            // Init the test client.
+                        let client = graphql_test_client(&db).await;
+
 
             // Get the one entry from the store.
             let entries = db
@@ -795,12 +779,8 @@ mod tests {
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let (tx, _rx) = broadcast::channel(16);
-            let manager =
-                GraphQLSchemaManager::new(db.store.clone(), tx, db.context.schema_provider.clone())
-                    .await;
-            let context = HttpServiceContext::new(manager);
-            let client = TestClient::new(build_server(context));
+            // Init the test client.
+            let client = graphql_test_client(&db).await;
 
             // Prepare a publish entry request for the entry.
             let publish_entry_request = publish_entry_request(
