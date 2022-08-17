@@ -168,16 +168,13 @@ pub fn increment_log_id(log_id: &mut LogId) -> Result<LogId> {
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryFrom;
-
     use p2panda_rs::document::DocumentId;
     use p2panda_rs::entry::traits::AsEntry;
     use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::identity::{Author, KeyPair};
-    use p2panda_rs::storage_provider::traits::EntryWithOperation;
     use p2panda_rs::test_utils::constants::PRIVATE_KEY;
     use p2panda_rs::test_utils::db::test_db::{
-        populate_store, send_to_store, test_db_config, PopulateDatabaseConfig,
+        populate_store, test_db_config, PopulateDatabaseConfig,
     };
     use p2panda_rs::test_utils::db::MemoryStore;
     use p2panda_rs::test_utils::fixtures::{key_pair, random_document_id};

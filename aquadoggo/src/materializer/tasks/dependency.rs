@@ -185,22 +185,16 @@ mod tests {
     use p2panda_rs::schema::{FieldType, Schema, SchemaId};
     use p2panda_rs::storage_provider::traits::OperationStore;
     use p2panda_rs::test_utils::constants;
-    use p2panda_rs::test_utils::db::test_db::{send_to_store, PopulateDatabaseConfig};
+    use p2panda_rs::test_utils::db::test_db::send_to_store;
     use p2panda_rs::test_utils::fixtures::{
-        create_operation, key_pair, operation_fields, random_document_id, random_document_view_id,
-        schema, schema_fields, schema_id,
+        key_pair, random_document_id, random_document_view_id, schema, schema_fields, schema_id,
     };
     use rstest::rstest;
 
-    use crate::config::Configuration;
-    use crate::context::Context;
-    use crate::db::stores::test_utils::{
-        doggo_fields, doggo_schema, test_db, TestDatabase, TestDatabaseRunner,
-    };
+    use crate::db::stores::test_utils::{doggo_schema, test_db, TestDatabase, TestDatabaseRunner};
     use crate::db::traits::DocumentStore;
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
-    use crate::schema::SchemaProvider;
 
     use super::dependency_task;
 

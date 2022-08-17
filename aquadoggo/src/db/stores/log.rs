@@ -220,20 +220,17 @@ mod tests {
     use p2panda_rs::entry::decode::decode_entry;
     use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
     use p2panda_rs::entry::{EncodedEntry, LogId};
-    use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::Author;
-    use p2panda_rs::operation::{EncodedOperation, OperationId};
+    use p2panda_rs::operation::OperationId;
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::storage_provider::traits::{
         AsStorageLog, EntryStore, LogStore, StorageProvider,
     };
     use p2panda_rs::test_utils::fixtures::{
-        encoded_entry, encoded_operation, public_key, random_document_id, random_operation_id,
-        schema_id,
+        encoded_entry, public_key, random_document_id, random_operation_id, schema_id,
     };
     use rstest::rstest;
 
-    use crate::db::stores::entry::StorageEntry;
     use crate::db::stores::log::StorageLog;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
@@ -323,7 +320,7 @@ mod tests {
             let log = StorageLog::new(
                 &author,
                 &schema_id,
-                &encoded_entry.hash().into(),
+                encoded_entry.hash().into(),
                 &LogId::default(),
             );
 

@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_graphql::{InputValueError, Scalar, ScalarType, Value};
-use p2panda_rs::entry::traits::AsEncodedEntry;
 use p2panda_rs::entry::EncodedEntry;
-use p2panda_rs::serde::deserialize_hex;
 use serde::{Deserialize, Serialize};
 
 /// Signed bamboo entry, encoded as a hexadecimal string.

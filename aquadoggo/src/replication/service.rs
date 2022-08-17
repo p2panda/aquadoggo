@@ -212,9 +212,9 @@ async fn add_certpool_to_entries_for_verification(
         .0
         .store
         .get_certificate_pool(
-            &first_entry.public_key(),
-            &first_entry.log_id(),
-            &first_entry.seq_num(),
+            first_entry.public_key(),
+            first_entry.log_id(),
+            first_entry.seq_num(),
         )
         .await?;
 
@@ -370,7 +370,7 @@ mod tests {
             // Check the entry arrived into Ada's database
             let entries = ada_db
                 .store
-                .get_entries_by_schema(&doggo_schema().id())
+                .get_entries_by_schema(doggo_schema().id())
                 .await
                 .unwrap();
             assert_eq!(entries.len(), 1);

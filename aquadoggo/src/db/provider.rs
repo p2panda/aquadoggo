@@ -3,7 +3,6 @@
 use async_trait::async_trait;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::hash::Hash;
-use p2panda_rs::operation::VerifiedOperation;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::error::OperationStorageError;
 use p2panda_rs::storage_provider::traits::StorageProvider;
@@ -98,22 +97,11 @@ impl SqlStorage {
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryFrom;
-    use std::str::FromStr;
-
-    use p2panda_rs::document::{DocumentView, DocumentViewFields, DocumentViewId};
-    use p2panda_rs::entry::{LogId, SeqNum};
-    use p2panda_rs::identity::Author;
-    use p2panda_rs::operation::traits::AsOperation;
-    use p2panda_rs::operation::OperationId;
-    use p2panda_rs::schema::SchemaId;
-    use p2panda_rs::storage_provider::traits::EntryStore;
-    use p2panda_rs::test_utils::constants::SCHEMA_ID;
+    use p2panda_rs::document::DocumentViewId;
     use p2panda_rs::test_utils::fixtures::random_document_view_id;
     use rstest::rstest;
 
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
-    use crate::db::traits::DocumentStore;
 
     // @TODO: bring back test_get_schema_for_view test
 

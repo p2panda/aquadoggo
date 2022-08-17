@@ -3,7 +3,6 @@
 use log::{debug, info};
 use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
 use p2panda_rs::operation::traits::AsVerifiedOperation;
-use p2panda_rs::operation::VerifiedOperation;
 use p2panda_rs::storage_provider::traits::{OperationStore, StorageProvider};
 
 use crate::context::Context;
@@ -200,24 +199,20 @@ mod tests {
     use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
     use p2panda_rs::operation::traits::AsVerifiedOperation;
     use p2panda_rs::operation::OperationValue;
-    use p2panda_rs::schema::{Schema, SchemaId};
+    use p2panda_rs::schema::Schema;
     use p2panda_rs::storage_provider::traits::OperationStore;
-    use p2panda_rs::test_utils::constants;
-    use p2panda_rs::test_utils::db::test_db::{send_to_store, PopulateDatabaseConfig};
+    use p2panda_rs::test_utils::db::test_db::send_to_store;
     use p2panda_rs::test_utils::fixtures::{
-        operation, operation_fields, random_document_id, random_document_view_id, schema, schema_id,
+        operation, operation_fields, random_document_id, random_document_view_id, schema,
     };
     use rstest::rstest;
 
-    use crate::config::Configuration;
-    use crate::context::Context;
     use crate::db::stores::test_utils::{
         doggo_fields, doggo_schema, test_db, TestDatabase, TestDatabaseRunner,
     };
     use crate::db::traits::DocumentStore;
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
-    use crate::schema::SchemaProvider;
 
     #[rstest]
     fn reduces_documents(

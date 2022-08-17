@@ -90,14 +90,12 @@ impl TryFrom<EncodedEntryAndOperation> for StorageEntry {
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryInto;
-
     use async_graphql::{EmptyMutation, EmptySubscription, Request, Schema};
     use bamboo_rs_core_ed25519_yasmf::verify_batch;
     use p2panda_rs::entry::traits::AsEncodedEntry;
-    use p2panda_rs::entry::{EncodedEntry, LogId};
+    use p2panda_rs::entry::LogId;
     use p2panda_rs::identity::Author;
-    use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
+    use p2panda_rs::storage_provider::traits::EntryStore;
     use rstest::rstest;
 
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};

@@ -5,7 +5,6 @@ use std::convert::TryInto;
 
 use async_graphql::{value, Response};
 use p2panda_rs::document::DocumentId;
-use p2panda_rs::operation::OperationFields;
 use p2panda_rs::schema::FieldType;
 use p2panda_rs::test_utils::fixtures::random_key_pair;
 use rstest::rstest;

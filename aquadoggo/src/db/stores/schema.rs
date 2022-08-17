@@ -37,7 +37,7 @@ impl SchemaStore for SqlStorage {
         for field_id in schema_view.fields().iter() {
             // Fetch schema field document views
             let scheme_field_view: SchemaFieldView =
-                match self.get_document_view_by_id(&field_id).await? {
+                match self.get_document_view_by_id(field_id).await? {
                     Some(document_view) => document_view.try_into()?,
                     None => return Ok(None),
                 };

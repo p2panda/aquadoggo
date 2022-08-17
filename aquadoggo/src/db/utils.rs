@@ -6,8 +6,8 @@ use p2panda_rs::document::{DocumentId, DocumentViewFields, DocumentViewId, Docum
 use p2panda_rs::identity::Author;
 use p2panda_rs::operation::traits::AsOperation;
 use p2panda_rs::operation::{
-    Operation, OperationAction, OperationBuilder, OperationId, OperationValue, PinnedRelation,
-    PinnedRelationList, Relation, RelationList, VerifiedOperation,
+    OperationAction, OperationBuilder, OperationId, OperationValue, PinnedRelation,
+    PinnedRelationList, Relation, RelationList,
 };
 use p2panda_rs::schema::SchemaId;
 

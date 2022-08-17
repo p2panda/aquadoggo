@@ -59,8 +59,6 @@ impl StaticQuery {
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryFrom;
-
     use async_graphql::{value, Response};
     use p2panda_rs::identity::Author;
     use rstest::rstest;

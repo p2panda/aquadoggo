@@ -2,13 +2,11 @@
 
 //! Mutation root.
 use async_graphql::{Context, Object, Result};
-use p2panda_rs::entry::decode::decode_entry;
 use p2panda_rs::entry::traits::AsEncodedEntry;
 use p2panda_rs::entry::EncodedEntry;
 use p2panda_rs::operation::decode::decode_operation;
 use p2panda_rs::operation::traits::Schematic;
-use p2panda_rs::operation::{EncodedOperation, Operation, OperationId};
-use p2panda_rs::Validate;
+use p2panda_rs::operation::{EncodedOperation, OperationId};
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::provider::SqlStorage;
@@ -97,14 +95,14 @@ mod tests {
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::encode::encode_operation;
-    use p2panda_rs::operation::{EncodedOperation, Operation, OperationValue};
+    use p2panda_rs::operation::{EncodedOperation, OperationValue};
     use p2panda_rs::schema::{FieldType, Schema, SchemaId};
     use p2panda_rs::serde::serialize_value;
     use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
-    use p2panda_rs::test_utils::constants::{HASH, PRIVATE_KEY, SCHEMA_ID};
+    use p2panda_rs::test_utils::constants::{HASH, PRIVATE_KEY};
     use p2panda_rs::test_utils::fixtures::{
         create_operation, delete_operation, encoded_entry, encoded_operation,
-        entry_signed_encoded_unvalidated, key_pair, operation, operation_fields, random_hash,
+        entry_signed_encoded_unvalidated, key_pair, operation_fields, random_hash,
         update_operation,
     };
     use rstest::{fixture, rstest};
@@ -118,7 +116,6 @@ mod tests {
     use crate::domain::next_args;
     use crate::graphql::GraphQLSchemaManager;
     use crate::http::{build_server, HttpServiceContext};
-    use crate::schema::SchemaProvider;
     use crate::test_helpers::TestClient;
 
     fn test_schema() -> Schema {

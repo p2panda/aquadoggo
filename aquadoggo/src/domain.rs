@@ -11,13 +11,12 @@ use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
 use p2panda_rs::entry::{EncodedEntry, Entry, LogId, SeqNum};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::Author;
-use p2panda_rs::operation::decode::decode_operation;
 use p2panda_rs::operation::plain::PlainOperation;
-use p2panda_rs::operation::traits::{AsOperation, AsVerifiedOperation};
+use p2panda_rs::operation::traits::AsOperation;
 use p2panda_rs::operation::validate::validate_operation_with_entry;
-use p2panda_rs::operation::{EncodedOperation, Operation, OperationAction};
+use p2panda_rs::operation::{EncodedOperation, OperationAction};
 use p2panda_rs::schema::Schema;
-use p2panda_rs::storage_provider::traits::{AsStorageLog, EntryWithOperation, StorageProvider};
+use p2panda_rs::storage_provider::traits::{AsStorageLog, StorageProvider};
 use p2panda_rs::Human;
 
 use crate::graphql::client::NextEntryArguments;
@@ -229,7 +228,7 @@ pub async fn publish<S: StorageProvider>(
     // @TODO: Check this validation flow is still correct.
 
     // Verify that the claimed seq num matches the expected seq num for this author and log.
-    let latest_entry = store.get_latest_entry(&author, log_id).await?;
+    let latest_entry = store.get_latest_entry(author, log_id).await?;
     let latest_seq_num = latest_entry.as_ref().map(|entry| entry.seq_num());
     is_next_seq_num(latest_seq_num, seq_num)?;
 
@@ -239,7 +238,7 @@ pub async fn publish<S: StorageProvider>(
     // If a skiplink is claimed, get the expected skiplink from the database, errors
     // if it can't be found.
     let skiplink = match entry.skiplink() {
-        Some(_) => Some(get_expected_skiplink(store, &author, log_id, seq_num).await?),
+        Some(_) => Some(get_expected_skiplink(store, author, log_id, seq_num).await?),
         None => None,
     };
 
@@ -256,12 +255,12 @@ pub async fn publish<S: StorageProvider>(
     // Perform validation of the entry and it's operation.
     let operation = validate_operation_with_entry(
         &entry,
-        &encoded_entry,
+        encoded_entry,
         skiplink_params.as_ref().map(|(entry, hash)| (entry, hash)),
         backlink_params.as_ref().map(|(entry, hash)| (entry, hash)),
-        &plain_operation,
-        &encoded_operation,
-        &schema,
+        plain_operation,
+        encoded_operation,
+        schema,
     )?;
 
     ///////////////////////////////////
@@ -301,7 +300,7 @@ pub async fn publish<S: StorageProvider>(
     };
 
     // Verify the claimed log id against the expected one for this document id and author.
-    verify_log_id(store, &author, log_id, &document_id).await?;
+    verify_log_id(store, author, log_id, &document_id).await?;
 
     /////////////////////////////////////
     // DETERMINE NEXT ENTRY ARG VALUES //
@@ -320,7 +319,7 @@ pub async fn publish<S: StorageProvider>(
 
     // Check if skiplink is required and return hash if so
     let skiplink = if is_lipmaa_required(next_seq_num.as_u64()) {
-        Some(get_expected_skiplink(store, &author, log_id, &next_seq_num).await?)
+        Some(get_expected_skiplink(store, author, log_id, &next_seq_num).await?)
     } else {
         None
     }
@@ -339,7 +338,7 @@ pub async fn publish<S: StorageProvider>(
 
     // If the entries' seq num is 1 we insert a new log here.
     if entry.seq_num().is_first() {
-        let log = S::StorageLog::new(&author, &operation.schema_id(), &document_id, log_id);
+        let log = S::StorageLog::new(author, &operation.schema_id(), &document_id, log_id);
 
         store.insert_log(log).await?;
     }
@@ -350,7 +349,7 @@ pub async fn publish<S: StorageProvider>(
 
     // Insert the entry into the store.
     store
-        .insert_entry(&entry, &encoded_entry, Some(&encoded_operation))
+        .insert_entry(&entry, encoded_entry, Some(encoded_operation))
         .await?;
     // Insert the operation into the store.
     store.insert_operation(&operation, &document_id).await?;
@@ -398,30 +397,28 @@ pub async fn get_checked_document_id_for_view_id<S: StorageProvider>(
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryFrom;
 
     use p2panda_rs::document::{DocumentId, DocumentViewId};
     use p2panda_rs::entry::encode::sign_and_encode_entry;
     use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
-    use p2panda_rs::entry::{EncodedEntry, Entry, LogId, SeqNum};
+    use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
     use p2panda_rs::operation::decode::decode_operation;
     use p2panda_rs::operation::encode::encode_operation;
     use p2panda_rs::operation::{
-        EncodedOperation, Operation, OperationAction, OperationBuilder, OperationFields,
-        OperationId, OperationValue,
+        Operation, OperationAction, OperationBuilder, OperationId, OperationValue,
     };
-    use p2panda_rs::schema::{FieldType, Schema, SchemaId};
+    use p2panda_rs::schema::{FieldType, Schema};
     use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation, LogStore};
-    use p2panda_rs::test_utils::constants::{test_fields, PRIVATE_KEY, SCHEMA_ID};
+    use p2panda_rs::test_utils::constants::{test_fields, PRIVATE_KEY};
     use p2panda_rs::test_utils::db::test_db::{
         populate_store, send_to_store, test_db_config, PopulateDatabaseConfig,
     };
     use p2panda_rs::test_utils::db::{MemoryStore, StorageEntry};
     use p2panda_rs::test_utils::fixtures::{
-        create_operation, delete_operation, key_pair, operation, operation_fields, public_key,
-        random_document_view_id, random_hash, schema, schema_id, update_operation,
+        create_operation, delete_operation, key_pair, operation, public_key,
+        random_document_view_id, random_hash, schema, update_operation,
     };
     use rstest::rstest;
 
@@ -951,7 +948,7 @@ mod tests {
 
         // For non error cases we test that there is a log for the updated document.
         let log = store
-            .get(&author_performing_update, &document_id)
+            .get(&author_performing_update, document_id)
             .await
             .unwrap();
 

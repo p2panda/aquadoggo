@@ -121,10 +121,9 @@ mod tests {
     use p2panda_rs::document::{DocumentId, DocumentViewId};
     use p2panda_rs::entry::traits::AsEncodedEntry;
     use p2panda_rs::identity::KeyPair;
-    use p2panda_rs::operation::{Operation, OperationBuilder, OperationValue, PinnedRelationList};
+    use p2panda_rs::operation::{OperationBuilder, OperationValue, PinnedRelationList};
     use p2panda_rs::schema::{FieldType, Schema, SchemaId};
-    use p2panda_rs::test_utils::db::test_db::{send_to_store, PopulateDatabaseConfig};
-    use p2panda_rs::test_utils::fixtures::operation_fields;
+    use p2panda_rs::test_utils::db::test_db::send_to_store;
     use rstest::rstest;
 
     use crate::context::Context;
@@ -132,8 +131,6 @@ mod tests {
     use crate::db::traits::DocumentStore;
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
-    use crate::schema::SchemaProvider;
-    use crate::Configuration;
 
     use super::schema_task;
 
@@ -154,7 +151,7 @@ mod tests {
         let (entry_signed, _) = send_to_store(
             &db.store,
             &create_field_definition,
-            &Schema::get_system(SchemaId::SchemaFieldDefinition(1)).unwrap(),
+            Schema::get_system(SchemaId::SchemaFieldDefinition(1)).unwrap(),
             &KeyPair::new(),
         )
         .await
@@ -194,7 +191,7 @@ mod tests {
         let (entry_signed, _) = send_to_store(
             &db.store,
             &create_schema_definition,
-            &Schema::get_system(SchemaId::SchemaDefinition(1)).unwrap(),
+            Schema::get_system(SchemaId::SchemaDefinition(1)).unwrap(),
             &KeyPair::new(),
         )
         .await

@@ -2,7 +2,6 @@
 
 use async_graphql::{InputValueError, InputValueResult, Scalar, ScalarType, Value};
 use p2panda_rs::operation::EncodedOperation;
-use p2panda_rs::serde::deserialize_hex;
 use serde::{Deserialize, Serialize};
 
 /// Entry payload and p2panda operation, CBOR bytes encoded as a hexadecimal string.
@@ -15,9 +14,7 @@ impl ScalarType for EncodedOperationScalar {
         match &value {
             Value::String(str_value) => {
                 let bytes = hex::decode(str_value)?;
-                Ok(EncodedOperationScalar(EncodedOperation::from_bytes(
-                    &bytes,
-                )))
+                Ok(EncodedOperationScalar(EncodedOperation::from_bytes(&bytes)))
             }
             _ => Err(InputValueError::expected_type(value)),
         }
