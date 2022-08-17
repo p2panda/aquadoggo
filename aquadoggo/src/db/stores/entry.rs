@@ -476,11 +476,43 @@ mod tests {
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
+            // Insert one entry into the store.
             let result = db
                 .store
                 .insert_entry(&entry, &encoded_entry, Some(&encoded_operation))
                 .await;
             assert!(result.is_ok());
+
+            // Retrieve the entry again by it's hash.
+            let retrieved_entry = db
+                .store
+                .get_entry_by_hash(&encoded_entry.hash())
+                .await
+                .expect("Get entry")
+                .expect("Unwrap entry");
+
+            // The returned values should match the inserted ones.
+            assert_eq!(entry.log_id(), retrieved_entry.log_id());
+            assert_eq!(entry.seq_num(), retrieved_entry.seq_num());
+            assert_eq!(entry.backlink(), retrieved_entry.backlink());
+            assert_eq!(entry.skiplink(), retrieved_entry.skiplink());
+            assert_eq!(entry.public_key(), retrieved_entry.public_key());
+            assert_eq!(entry.signature(), retrieved_entry.signature());
+            assert_eq!(entry.payload_size(), retrieved_entry.payload_size());
+            assert_eq!(entry.payload_hash(), retrieved_entry.payload_hash());
+            assert_eq!(encoded_entry.hash(), retrieved_entry.hash());
+            assert_eq!(
+                encoded_operation,
+                retrieved_entry.payload().unwrap().to_owned()
+            );
+
+            // Convert the retrieved entry back into the types we inserted.
+            let retreved_entry: Entry = retrieved_entry.clone().into();
+            let retreved_encoded_entry: EncodedEntry = retrieved_entry.into();
+
+            // The types should match.
+            assert_eq!(retreved_entry, entry);
+            assert_eq!(retreved_encoded_entry, encoded_entry);
         });
     }
 
@@ -491,16 +523,19 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
+            // This author published the entries in the database
             let author = Author::from(db.test_data.key_pairs[0].public_key());
-            let log_id = LogId::default();
 
+            // We get back the first entry.
             let first_entry = db
                 .store
-                .get_entry_at_seq_num(&author, &log_id, &SeqNum::new(1).unwrap())
+                .get_entry_at_seq_num(&author, &LogId::default(), &SeqNum::new(1).unwrap())
                 .await
-                .unwrap()
+                .expect("Get entry")
                 .unwrap();
 
+            // We try to publish it again which should error as entry hashes
+            // have a unique constraint.
             let result = db
                 .store
                 .insert_entry(
@@ -509,6 +544,7 @@ mod tests {
                     first_entry.payload(),
                 )
                 .await;
+
             assert!(result.is_err());
         });
     }
@@ -520,24 +556,37 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
+            // This author published the entries in the database
+            let author_in_db = Author::from(db.test_data.key_pairs[0].public_key());
+            // This author did not.
             let author_not_in_db = Author::from(KeyPair::new().public_key());
             let log_id = LogId::default();
 
+            // We expect no latest entry for an author who did not
+            // publish to this store at this log yet.
             let latest_entry = db
                 .store
                 .get_latest_entry(&author_not_in_db, &log_id)
                 .await
-                .unwrap();
+                .expect("Get latest entry for author and log id");
             assert!(latest_entry.is_none());
 
-            let author_in_db = Author::from(db.test_data.key_pairs[0].public_key());
-
+            // We expect the latest entry for the requested author and log.
             let latest_entry = db
                 .store
                 .get_latest_entry(&author_in_db, &log_id)
                 .await
-                .unwrap();
+                .expect("Get latest entry for author and log id");
             assert_eq!(latest_entry.unwrap().seq_num(), &SeqNum::new(20).unwrap());
+
+            // If we request for an existing author but a non-existant log, then we again
+            // expect no latest entry.
+            let latest_entry = db
+                .store
+                .get_latest_entry(&author_in_db, &LogId::new(1))
+                .await
+                .expect("Get latest entry for author and log id");
+            assert!(latest_entry.is_none());
         });
     }
 
@@ -545,26 +594,37 @@ mod tests {
     fn entries_by_schema(
         #[from(random_hash)] hash: Hash,
         #[from(test_db)]
-        #[with(20, 2, 1, false, doggo_schema())]
+        #[with(20, 2, 2, false, doggo_schema())]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
+            // No entries were published containing an operation which follows this schema.
             let schema_not_in_the_db = SchemaId::new_application("venue", &hash.into());
+            // This schema was used when publishing the test entries.
+            let schema_in_the_db = doggo_schema().id().to_owned();
 
+            // Get entries by schema not in db.
             let entries = db
                 .store
                 .get_entries_by_schema(&schema_not_in_the_db)
                 .await
-                .unwrap();
+                .expect("Get entries by schema");
+
+            // We expect no entries when the schema has not been used.
             assert!(entries.is_empty());
 
+            // Get entries by schema which is in the db.
             let entries = db
                 .store
-                .get_entries_by_schema(doggo_schema().id())
+                .get_entries_by_schema(&schema_in_the_db)
                 .await
-                .unwrap();
-            println!("{}", entries.len());
-            assert!(entries.len() == 40);
+                .expect("Get entries by schema");
+
+            // Here we expect 80 entries as there are 2 authors each publishing to 2 documents which each contain 20
+            // entries.
+            //
+            // 2 * 2 * 20 = 80
+            assert!(entries.len() == 80);
         });
     }
 
@@ -575,26 +635,37 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
+            // This author published the entries to the database
             let author = Author::from(db.test_data.key_pairs[0].public_key());
+            let log_id = LogId::default();
 
+            // We should be able to get each entry by it's author, log_id and seq_num.
             for seq_num in 1..10 {
                 let seq_num = SeqNum::new(seq_num).unwrap();
+
+                // We expect the retrieved entry to match the values we requested.
                 let entry = db
                     .store
                     .get_entry_at_seq_num(&author, &LogId::default(), &seq_num)
                     .await
-                    .unwrap();
-                assert_eq!(entry.unwrap().seq_num(), &seq_num)
+                    .expect("Get entry from store")
+                    .expect("Optimistically unwrap entry");
+
+                assert_eq!(entry.seq_num(), &seq_num);
+                assert_eq!(entry.log_id(), &log_id);
+                assert_eq!(entry.public_key(), &author);
             }
 
+            // We expect a request to an empty log to return no entries.
             let wrong_log = LogId::new(2);
             let entry = db
                 .store
                 .get_entry_at_seq_num(&author, &wrong_log, &SeqNum::new(1).unwrap())
                 .await
-                .unwrap();
+                .expect("Get entry from store");
             assert!(entry.is_none());
 
+            // We expect a request to the wrong author to return no entries.
             let author_not_in_db = Author::from(KeyPair::new().public_key());
             let entry = db
                 .store
@@ -604,15 +675,17 @@ mod tests {
                     &SeqNum::new(1).unwrap(),
                 )
                 .await
-                .unwrap();
+                .expect("Get entry from store");
             assert!(entry.is_none());
 
+            // We expect a request for a sequence number which is too high
+            // to return no entries.
             let seq_num_not_in_log = SeqNum::new(1000).unwrap();
             let entry = db
                 .store
                 .get_entry_at_seq_num(&author_not_in_db, &LogId::default(), &seq_num_not_in_log)
                 .await
-                .unwrap();
+                .expect("Get entry from store");
             assert!(entry.is_none());
         });
     }
@@ -626,8 +699,10 @@ mod tests {
         runner.with_db_teardown(|db: TestDatabase| async move {
             let author = Author::from(db.test_data.key_pairs[0].public_key());
 
+            // We pick a few entries from the ones in the db to retrieve.
             for seq_num in [1, 11, 18] {
                 let seq_num = SeqNum::new(seq_num).unwrap();
+                // We get them by their sequence number first.
                 let entry = db
                     .store
                     .get_entry_at_seq_num(&author, &LogId::default(), &seq_num)
@@ -635,6 +710,7 @@ mod tests {
                     .unwrap()
                     .unwrap();
 
+                // The we retrieve them by their hash.
                 let entry_hash = entry.hash();
                 let entry_by_hash = db
                     .store
@@ -642,9 +718,13 @@ mod tests {
                     .await
                     .unwrap()
                     .unwrap();
+
+                // The entries should match.
                 assert_eq!(entry, entry_by_hash)
             }
 
+            // If we try to retrieve with a hash of an entry not in the db then
+            // we should get none back.
             let entry_hash_not_in_db = random_hash();
             let entry = db
                 .store
@@ -656,38 +736,51 @@ mod tests {
     }
 
     #[rstest]
+    #[case(1, 0, 0)]
+    #[case(1, 20, 20)]
+    #[case(1, 30, 30)]
+    #[case(10, 20, 20)]
+    #[case(20, 20, 11)]
+    #[case(30, 20, 1)]
+    #[case(100, 20, 0)]
     fn paginated_log_entries(
+        #[case] from: u64,
+        #[case] num_of_entries: u64,
+        #[case] expected: usize,
         #[from(test_db)]
+        // We pre-populate the database with 30 entries for this test.
         #[with(30, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
+            // This author published the entries in the db.
             let author = Author::from(db.test_data.key_pairs[0].public_key());
 
-            let entries = db
-                .store
-                .get_paginated_log_entries(&author, &LogId::default(), &SeqNum::default(), 20)
-                .await
-                .unwrap();
-
-            for entry in entries.clone() {
-                assert!(entry.seq_num().as_u64() >= 1 && entry.seq_num().as_u64() <= 20)
-            }
-
-            assert_eq!(entries.len(), 20);
-
+            // Get paginated entries, starting with the one at seq num defined by `from` and
+            // continuing for `num_of_entries` or the end of the log is reached.
             let entries = db
                 .store
                 .get_paginated_log_entries(
                     &author,
                     &LogId::default(),
-                    &SeqNum::new(21).unwrap(),
-                    20,
+                    &SeqNum::new(from).unwrap(),
+                    num_of_entries as usize,
                 )
                 .await
                 .unwrap();
 
-            assert_eq!(entries.len(), 10);
+            for entry in &entries {
+                // We expect the seq num of every returned entry to lay between the
+                // `from` seq num and the `from` + `num_of_entries`
+                assert!(
+                    entry.seq_num().as_u64() >= from
+                        && entry.seq_num().as_u64() <= num_of_entries + from
+                )
+            }
+
+            // We expect the total number of entries returned to match our `expected`
+            // value.
+            assert_eq!(entries.len(), expected);
         });
     }
 
@@ -698,20 +791,23 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
+            // This author has published to the test database.
             let author = Author::from(db.test_data.key_pairs[0].public_key());
 
+            // Get the certificate pool for a specified author, log and seq num.
             let entries = db
                 .store
                 .get_certificate_pool(&author, &LogId::default(), &SeqNum::new(20).unwrap())
                 .await
                 .unwrap();
 
+            // Convert the seq num of each returned untry into a u64.
             let cert_pool_seq_nums = entries
                 .iter()
                 .map(|entry| entry.seq_num().as_u64())
                 .collect::<Vec<u64>>();
 
-            assert!(!entries.is_empty());
+            // The cert pool should match our expected values.
             assert_eq!(cert_pool_seq_nums, vec![19, 18, 17, 13, 4, 1]);
         });
     }
