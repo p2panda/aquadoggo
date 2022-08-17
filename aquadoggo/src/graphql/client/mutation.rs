@@ -653,7 +653,7 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            // Two key airs representing two different authors
+            // Two key pairs representing two different authors
             let key_pairs = vec![KeyPair::new(), KeyPair::new()];
             // Each will publish 13 entries (unlucky for some!).
             let num_of_entries = 13;
