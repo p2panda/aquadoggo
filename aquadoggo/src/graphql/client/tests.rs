@@ -355,6 +355,7 @@ fn e2e_publish_test(#[from(test_db)] runner: TestDatabaseRunner) {
 
         let panda_next_args = publish(&client, &panda, &panda_operation_1, &panda_next_args).await;
         let panda_entry_1_hash = panda_next_args.clone().2.unwrap();
+        let document_id: DocumentId = panda_next_args.clone().2.unwrap().into();
 
         // Panda publishes an UPDATE operation.
         // It contains the id of the previous operation in it's `previous_operations` array
@@ -432,6 +433,31 @@ fn e2e_publish_test(#[from(test_db)] runner: TestDatabaseRunner) {
 
         let penguin_next_args =
             publish(&client, &penguin, &penguin_operation_3, &penguin_next_args).await;
-        let _penguin_entry_3_hash = penguin_next_args.clone().2.unwrap();
+        let _penguin_entry_3_hash = penguin_next_args.2.unwrap();
+
+        let query = format!(
+            r#"{{
+                byDocumentId: {type_name}(id: "{document_id}") {{
+                    fields {{ name }}
+                }}
+            }}"#,
+            type_name = schema.id().to_string(),
+            document_id = document_id.as_str()
+        );
+
+        let response = client
+            .post("/graphql")
+            .json(&json!({
+                "query": query,
+            }))
+            .send()
+            .await;
+
+        let response: Response = response.json().await;
+
+        let expected_data = value!({
+            "byDocumentId": value!({ "fields": { "name": "Polar Bear Cafe!!!!!!!!!!", } }),
+        });
+        // assert_eq!(response.data, expected_data, "{:#?}", response.errors);
     })
 }
