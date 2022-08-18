@@ -29,6 +29,8 @@ mod schema;
 mod validation;
 
 #[cfg(test)]
+mod e2e_tests;
+#[cfg(test)]
 mod test_helpers;
 
 pub use crate::config::Configuration;
