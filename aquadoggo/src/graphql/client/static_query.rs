@@ -28,29 +28,18 @@ impl StaticQuery {
         )]
         public_key: scalars::PublicKeyScalar,
         #[graphql(
-            name = "documentId",
+            name = "documentViewId",
             desc = "Document the entry's UPDATE or DELETE operation is referring to, \
             can be left empty when it is a CREATE operation"
         )]
-        document_id: Option<scalars::DocumentIdScalar>,
+        document_view_id: Option<scalars::DocumentViewIdScalar>,
     ) -> Result<NextEntryArguments> {
-        // @TODO: The api for `next_entry_args` needs to be updated to accept a `DocumentViewId`
-
         // Access the store from context.
         let store = ctx.data::<SqlStorage>()?;
 
         // Convert and validate passed parameters.
         let public_key: Author = public_key.into();
-        let document_id = document_id.map(|val| DocumentId::from(&val));
-
-        public_key.validate()?;
-        if let Some(ref document_view_id) = document_id {
-            document_view_id.validate()?;
-        }
-
-        // Convert document_id into document_view_id and unwrap as we already validated above.
-        let document_view_id: Option<DocumentViewId> =
-            document_id.map(|id| id.as_str().parse().unwrap());
+        let document_view_id = document_view_id.map(|val| DocumentViewId::from(&val));
 
         // Calculate next entry args.
         next_args(store, &public_key, document_view_id.as_ref()).await
@@ -65,7 +54,7 @@ mod tests {
     use serde_json::json;
 
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
-    use crate::test_helpers::{graphql_test_client};
+    use crate::test_helpers::graphql_test_client;
 
     #[rstest]
     fn next_entry_args_valid_query(#[from(test_db)] runner: TestDatabaseRunner) {
@@ -127,7 +116,7 @@ mod tests {
                             "{{
                         nextEntryArgs(
                             publicKey: \"{}\",
-                            documentId: \"{}\"
+                            documentViewId: \"{}\"
                         ) {{
                             logId,
                             seqNum,
