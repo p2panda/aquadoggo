@@ -33,6 +33,13 @@ impl StaticQuery {
             can be left empty when it is a CREATE operation"
         )]
         document_view_id: Option<scalars::DocumentViewIdScalar>,
+        // @TODO: Figure out why this fixes things....
+        #[graphql(
+            name = "documentId",
+            desc = "Document the entry's UPDATE or DELETE operation is referring to, \
+            can be left empty when it is a CREATE operation"
+        )]
+        document_id: Option<scalars::DocumentIdScalar>,
     ) -> Result<NextEntryArguments> {
         // Access the store from context.
         let store = ctx.data::<SqlStorage>()?;
