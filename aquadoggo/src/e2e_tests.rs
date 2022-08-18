@@ -1,16 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! Integration tests for dynamic graphql schema generation and query resolution.
-use std::convert::TryInto;
+//! E2E test for aquadoggo.
 use std::str::FromStr;
 use std::time::Duration;
 
-use async_graphql::{value, Response as GqlResponse};
-use async_graphql::{Request, Variables};
+use async_graphql::Response as GqlResponse;
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::entry::encode::sign_and_encode_entry;
 use p2panda_rs::entry::traits::AsEncodedEntry;
-use p2panda_rs::entry::{EntryBuilder, LogId, SeqNum};
+use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::{Author, KeyPair};
 use p2panda_rs::operation::encode::encode_operation;
@@ -18,8 +16,7 @@ use p2panda_rs::operation::traits::Actionable;
 use p2panda_rs::operation::{Operation, OperationAction, OperationBuilder, OperationValue};
 use p2panda_rs::schema::{FieldType, Schema, SchemaId};
 use reqwest::Client;
-use reqwest::Response;
-use serde_json::json;
+use serde_json::{json, Map, Value};
 
 use crate::{Configuration, Node};
 
@@ -30,6 +27,7 @@ async fn e2e() {
     // We mostly go for default configuration options here. The only thing we want to do change
     // is the database config. We want an in memory sqlite db for this test, the default id to use
     // a postgres db.
+
     let config = Configuration {
         database_url: Some("sqlite::memory:".to_string()),
         ..Default::default()
@@ -43,7 +41,7 @@ async fn e2e() {
     //
     // Nodes are the workhorses of the p2panda network, we thank you for all your efforts 🙏🏻.
 
-    let _my_hero = Node::start(config).await; // 🐬🐕
+    let aquadoggo = Node::start(config).await; // 🐬🐕
 
     // Create some authors.
     //
@@ -88,7 +86,7 @@ async fn e2e() {
 
     // Create a new document.
     //
-    // Data in the p2panda network is encapsulated by something called a `document`. Documents can
+    // Data in the p2panda network is represented by something called a `document`. Documents can
     // be CREATED, UPDATED and DELETED. We do this by publishing data mutations called `operations`
     // which perform these actions.
     //
@@ -100,53 +98,90 @@ async fn e2e() {
     // will create a new document which is materialized on the node. It will only contain one
     // operation right now.
 
-    let panda_operation_1 = OperationBuilder::new(&cafe_schema_id)
+    let panda_cafe_operation = OperationBuilder::new(&cafe_schema_id)
         .action(OperationAction::Create)
         .fields(&[("name", OperationValue::String("Panda Cafe".to_string()))])
         .build()
         .unwrap();
 
+    // Document id's
+    //
+    // Here we publish the operation which in turn creates the new document, well done panda!
+    //
+    // Every time a document is mutated it gets a new view id representing the current state
+    // of the document. This id is globally unique and can be used to find an specific instance
+    // of a document. The first such id, from when a CREATE operation was published is special.
+    // It can be used as a general id for this document, often you will use this id when you
+    // just want the most current state of the document.
+
+    let panda_cafe_view_id = publish(&client, &panda, &panda_cafe_operation).await;
+    let panda_cafe_id = panda_cafe_view_id.clone();
+
     // Update a document.
     //
-    // Panda want's more impact for their new cafe name, they want to add some drama!
+    // Panda want's more impact for their new cafe name, they want to add some drama! This means
+    // they need to update the document by publishing an UPDATE operation containing the change
+    // to the field they want to update.
+    //
+    // In order to update the correct document, they include the current document view id in the
+    // `previous_operations` for this operation. This means this operation will be applied at
+    // the correct point in the document.
 
-    // @TOOD: Keep going with the story.
-
-    let panda_cafe_view_id = publish(&client, &panda, &panda_operation_1).await;
-
-    let panda_operation_2 = OperationBuilder::new(&cafe_schema_id)
+    let panda_cafe_operation = OperationBuilder::new(&cafe_schema_id)
         .action(OperationAction::Update)
         .fields(&[("name", OperationValue::String("Panda Cafe!".to_string()))])
         .previous_operations(&panda_cafe_view_id)
         .build()
         .unwrap();
 
-    let _panda_cafe_view_id = publish(&client, &panda, &panda_operation_2).await;
+    let panda_cafe_view_id = publish(&client, &panda, &panda_cafe_operation).await;
 
-    //     query(&client, &panda_cafe_view_id, &cafe_schema_id).await;
-    //     query_view_id(&client, &panda_cafe_view_id, &cafe_schema_id).await;
+    // Materialization.
     //
-    //     let penguin = KeyPair::from_private_key_str(
-    //         "1c86b2524b48f0ba86103cddc6bdfd87774ab77ab4c0ea989ed0eeab3d28827a",
-    //     )
-    //     .unwrap();
+    // When operations arrive on a node, a process called `materialization` kicks in which processes
+    // operations and creates or updates documents, storing the result in the db for easy access.
+
+    // Query a document.
+    //
+    // Now that the cafe has been created and updated we can query it from the client. We do can do
+    // this using it's schema and document or view id.
+
+    let panda_cafe = query(&client, &panda_cafe_view_id, &cafe_schema_id).await;
+
+    // The fields should represent the current state of the document, or if you query by a specific
+    // document view id, then the state at that point in the document. We also get a little meta
+    // data with each document, more to come ;-p
+
+    let panda_cafe_name = panda_cafe["fields"]["name"].as_str().unwrap();
+    let current_panda_cafe_view_id = panda_cafe["meta"]["viewId"].as_str().unwrap();
+
+    assert_eq!(panda_cafe_name, "Panda Cafe!");
+    assert_eq!(current_panda_cafe_view_id, panda_cafe_view_id.to_string());
+
+    // To be continued.........
+
+    aquadoggo.shutdown().await;
+}
+
+async fn post(client: &Client, query_str: &str) -> GqlResponse {
+    client
+        .post("http://127.0.0.1:2020/graphql")
+        .json(&json!({
+            "query": query_str,
+        }))
+        .send()
+        .await
+        .expect("Send query to node")
+        .json::<GqlResponse>()
+        .await
+        .expect("Parse GraphQL response")
 }
 
 async fn parse_next_args_response(
-    response: Response,
+    response: GqlResponse,
     field: &str,
 ) -> (LogId, SeqNum, Option<Hash>, Option<Hash>) {
-    let gql_response = response
-        .json::<GqlResponse>()
-        .await
-        .expect("Parse GraphQL response");
-
-    let json_value = gql_response
-        .data
-        .into_json()
-        .expect("Get response data field");
-
-    println!("{json_value}");
+    let json_value = response.data.into_json().expect("Get response data field");
 
     let log_id = json_value[field]["logId"].as_str().unwrap();
     let seq_num = json_value[field]["seqNum"].as_str().unwrap();
@@ -166,6 +201,8 @@ async fn next_args(
     author: &Author,
     view_id: Option<&DocumentViewId>,
 ) -> (LogId, SeqNum, Option<Hash>, Option<Hash>) {
+    // @TODO: Describe next args
+
     let args = match view_id {
         Some(id) => {
             format!("nextEntryArgs(publicKey: \"{author}\", documentViewId: \"{id}\")")
@@ -185,20 +222,12 @@ async fn next_args(
         }}"
     );
 
-    let response = client
-        .post("http://127.0.0.1:2020/graphql")
-        .json(&json!({
-            "query": query_str,
-        }))
-        .send()
-        .await
-        .expect("Query node for next args");
-
+    let response = post(client, &query_str).await;
     parse_next_args_response(response, "nextEntryArgs").await
 }
 
 async fn publish(client: &Client, key_pair: &KeyPair, operation: &Operation) -> DocumentViewId {
-    // @TODO: Add description of entries and logs.
+    // @TODO: Describe entries and logs
 
     let document_view_id = operation.previous_operations();
     let next_args = next_args(
@@ -221,34 +250,18 @@ async fn publish(client: &Client, key_pair: &KeyPair, operation: &Operation) -> 
     )
     .expect("Encode entry");
 
-    let parameters = Variables::from_value(value!({
-        "entry": encoded_entry.to_string(),
-        "operation": encoded_operation.to_string(),
-    }));
+    let query_str = format!(
+        "mutation TestPublishEntry {{
+            publishEntry(entry: \"{encoded_entry}\", operation: \"{encoded_operation}\") {{
+                logId,
+                seqNum,
+                backlink,
+                skiplink
+            }}
+        }}"
+    );
 
-    let request = Request::new(
-        r#"
-    mutation TestPublishEntry($entry: String!, $operation: String!) {
-        publishEntry(entry: $entry, operation: $operation) {
-            logId,
-            seqNum,
-            backlink,
-            skiplink
-        }
-    }"#,
-    )
-    .variables(parameters);
-
-    let response = client
-        .post("http://127.0.0.1:2020/graphql")
-        .json(&json!({
-          "query": request.query,
-          "variables": request.variables
-        }
-        ))
-        .send()
-        .await
-        .expect("Send entry and operation to node");
+    let _ = post(client, &query_str).await;
 
     // Wait a little time for materialization to happen.
     tokio::time::sleep(Duration::from_millis(200)).await;
@@ -256,97 +269,35 @@ async fn publish(client: &Client, key_pair: &KeyPair, operation: &Operation) -> 
     encoded_entry.hash().into()
 }
 
-// @TODO: This isn't working, I thought it would...
-//
-async fn query_view_id(client: &Client, document_view_id: &DocumentViewId, schema_id: &SchemaId) {
-    let query = format!(
+async fn query(
+    client: &Client,
+    document_view_id: &DocumentViewId,
+    schema_id: &SchemaId,
+) -> Map<String, Value> {
+    // @TODO: Describe querying
+
+    let query_str = format!(
         r#"{{
-        byViewId: {type_name}(viewId: "{view_id}") {{
-            fields {{ name }}
-        }},
-        byDocumentId: {type_name}(id: "{document_id}") {{
-            fields {{ name }}
-        }}
-    }}"#,
-        type_name = schema_id.to_string(),
-        view_id = document_view_id.to_string(),
-        document_id = document_view_id.to_string()
-    );
-
-    println!("{query}");
-
-    let response = client
-        .post("http://127.0.0.1:2020/graphql")
-        .json(&json!({
-            "query": query,
-        }))
-        .send()
-        .await
-        .expect("Query newest document view id");
-
-    let gql_response = response
-        .json::<GqlResponse>()
-        .await
-        .expect("Parse GraphQL response");
-
-    println!("{:#?}", gql_response);
-
-    let json_value = gql_response
-        .data
-        .into_json()
-        .expect("Get response data field");
-
-    // let view_id = json_value["meta"]["viewId"].as_str().unwrap();
-
-    // println!("{}", view_id)
-}
-
-async fn query(client: &Client, document_view_id: &DocumentViewId, schema_id: &SchemaId) {
-    let query = format!(
-        r#"{{
-            collection: all_{type_name} {{
+            documentQuery: {schema_id}(viewId: "{document_view_id}") {{
                 fields {{ name }}
-                meta {{ viewId }}
-            }}
+                meta {{ 
+                    viewId
+                }}
+            }},
         }}"#,
-        type_name = schema_id
     );
 
-    let response = client
-        .post("http://127.0.0.1:2020/graphql")
-        .json(&json!({
-            "query": query,
-        }))
-        .send()
-        .await
-        .expect("Query newest document view id");
-
-    let gql_response = response
-        .json::<GqlResponse>()
-        .await
-        .expect("Parse GraphQL response");
-
-    println!("{:#?}", gql_response);
-
-    let json_value = gql_response
-        .data
-        .into_json()
-        .expect("Get response data field");
-
-    //     let view_id = json_value["fields"]["name"].as_str().unwrap();
-    //
-    //     println!("{}", view_id)
+    let response = post(client, &query_str).await;
+    response.data.into_json().expect("Get response data field")["documentQuery"]
+        .as_object()
+        .expect("Unwrap object")
+        .to_owned()
 }
 
 async fn create_cafe_schema(client: &Client) -> SchemaId {
+    // @TODO: Describe schemas
+
     let shirokuma = KeyPair::new();
-
-    // @TODO: Finish this description of publishing a schema.
-
-    // Create `cafe` schema.
-    //
-    // The schema we want to create is called `cafe` and it has one field `name`. To make this happen
-    // we send an operation to our node.....
 
     let create_field_op = Schema::create_field("name", FieldType::String);
     let field_id = publish(&client, &shirokuma, &create_field_op).await;
