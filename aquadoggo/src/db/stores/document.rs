@@ -403,7 +403,7 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            // We try to retrieve a document view by it's id but now view
+            // We try to retrieve a document view by it's id but no view
             // with that id exists.
             let view_does_not_exist = db
                 .store

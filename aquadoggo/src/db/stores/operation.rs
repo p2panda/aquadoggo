@@ -60,7 +60,7 @@ impl AsOperation for StorageOperation {
         self.action.to_owned()
     }
 
-    /// Returns schema if of operation.
+    /// Returns schema id of operation.
     fn schema_id(&self) -> SchemaId {
         self.schema_id.to_owned()
     }
