@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! E2E test for aquadoggo.
+//! E2E test and mini-tutorial for aquadoggo.
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -22,11 +22,24 @@ use crate::{Configuration, Node};
 
 #[tokio::test]
 async fn e2e() {
+    // This is an aquadoggo E2E test.
+    //
+    // It is also an introduction to some key concepts and patterns you will come across when
+    // developing with p2panda. Please enjoy.
+
+    // Meet `aquadoggo`.
+    //
+    // `aquadoggo` is a rust impementation of a node in the p2panda network. A node is the full peer
+    // who interacts with other peers. They persist, replicate, materialize and serve data on the
+    // network. A node can be thought of as the "backend" of the p2panda stack.  Unlike a "normal"
+    // backend though, they may be running inside another application, or on your own device locally
+    // (laptop, mobile), or in fact somewhere else across a network.
+
     // Node configuration.
     //
-    // We mostly go for default configuration options here. The only thing we want to do change
-    // is the database config. We want an in memory sqlite db for this test, the default id to use
-    // a postgres db.
+    // Before even starting the node, we need to configure it a little. We mostly go for default
+    // options. The only thing we want to do change is the database config. We want an in memory
+    // sqlite db for this test, the default id to use a postgres db.
 
     let config = Configuration {
         database_url: Some("sqlite::memory:".to_string()),
@@ -57,10 +70,10 @@ async fn e2e() {
     // Create a GraphQL client.
     //
     // This is the client which will be communicating with the already running node. For this example we
-    // are running a node and client in the same application, in a real world setting they might be on the
+    // are running a node and client in the same application, in other settings they might be on the
     // the same device, or equally they could be speaking across a network. This seperation is important
     // for p2panda, as it's what enables the possibility to build very lightweight clients communicating
-    // with remote nodes who persist, replicate, materialize and serve data on the network.
+    // with remote nodes who persist, replicate, materialize and serve data the data.
 
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
@@ -79,10 +92,11 @@ async fn e2e() {
     // it's an initialization step which you (or someone else) does before you get going properly.
     // You could even re-use schema's someone else already published.
     //
-    // For that reason the details of this process are hidden here in this handy method. You know
-    // where to go if you want to know more.
+    // For the sake of brevity the details of this process are hidden here in this handy method. You
+    // know where to go if you want to know more.
 
-    let cafe_schema_id = create_cafe_schema(&client).await;
+    let cafe_schema_id =
+        create_schema(&client, "cafe", "A cafe", vec![("name", FieldType::String)]).await;
 
     // Create a new document.
     //
@@ -115,11 +129,11 @@ async fn e2e() {
     // just want the most current state of the document.
 
     let panda_cafe_view_id = publish(&client, &panda, &panda_cafe_operation).await;
-    let panda_cafe_id = panda_cafe_view_id.clone();
+    let _panda_cafe_id = panda_cafe_view_id.clone();
 
     // Update a document.
     //
-    // Panda want's more impact for their new cafe name, they want to add some drama! This means
+    // Panda wants more impact for their new cafe name, they want to add some drama! This means
     // they need to update the document by publishing an UPDATE operation containing the change
     // to the field they want to update.
     //
@@ -163,46 +177,148 @@ async fn e2e() {
     aquadoggo.shutdown().await;
 }
 
-async fn post(client: &Client, query_str: &str) -> GqlResponse {
-    client
-        .post("http://127.0.0.1:2020/graphql")
-        .json(&json!({
-            "query": query_str,
-        }))
-        .send()
-        .await
-        .expect("Send query to node")
-        .json::<GqlResponse>()
-        .await
-        .expect("Parse GraphQL response")
-}
+/// Publish an entry and it's operation to a node.
+async fn publish(client: &Client, key_pair: &KeyPair, operation: &Operation) -> DocumentViewId {
+    // Publihing operations.
+    //
+    // There are a few important topics we've glossed over so far. These are `entries` and
+    // `logs`. They for an important data structures for a p2p protocol such as p2panda.
+    // This is an `append-only`log`. This is way outside the scope of this example, but you
+    // can read more about `bamboo` (of course, the flavour of log a panda would use) here
+    // https://github.com/bamboo-rs/bamboo-rs-ed25519-yasmf/.
+    //
+    // The main thing to know is that `entries` are the signed data type which are used
+    // to author and verify operations. They are needed when publishing an entry.
 
-async fn parse_next_args_response(
-    response: GqlResponse,
-    field: &str,
-) -> (LogId, SeqNum, Option<Hash>, Option<Hash>) {
-    let json_value = response.data.into_json().expect("Get response data field");
+    // Composing an entry.
+    //
+    // Every entry contains a `log_id` and `seq_num`. Both these u64 values must be strictly
+    // monotonically incrementing per author. Entries and operations which are part of the
+    // same document live on the same log and the seq number increases. When new documents
+    // are created, the log id increments and the seq number starts from 0.
+    //
+    // In order to compose an entry with the correct values, we need to ask our node for them
+    // that's what this method does.
 
-    let log_id = json_value[field]["logId"].as_str().unwrap();
-    let seq_num = json_value[field]["seqNum"].as_str().unwrap();
-    let backlink = json_value[field]["backlink"].as_str();
-    let skiplink = json_value[field]["skiplink"].as_str();
-
-    (
-        LogId::from_str(log_id).unwrap(),
-        SeqNum::from_str(seq_num).unwrap(),
-        backlink.map(|hash| Hash::from_str(hash).unwrap()),
-        skiplink.map(|hash| Hash::from_str(hash).unwrap()),
+    let next_args = next_args(
+        client,
+        &Author::from(key_pair.public_key()),
+        operation.previous_operations(),
     )
+    .await;
+
+    // Encoding data.
+    //
+    // Once we have the correct entry aruments we are ready to go. First we encode our
+    // operation, then we add the hash of this to an entry which we sign and encode.
+    //
+    // A LOT more could be said here, please check the spec for much more detail.
+
+    let encoded_operation = encode_operation(&operation).expect("Encode operation");
+    let (log_id, seq_num, backlink, skiplink) = next_args;
+
+    let encoded_entry = sign_and_encode_entry(
+        &log_id,
+        &seq_num,
+        skiplink.as_ref(),
+        backlink.as_ref(),
+        &encoded_operation,
+        key_pair,
+    )
+    .expect("Encode entry");
+
+    // This is a plain old GraphQL query string.
+    let query_str = format!(
+        "mutation TestPublishEntry {{
+            publishEntry(entry: \"{encoded_entry}\", operation: \"{encoded_operation}\") {{
+                logId,
+                seqNum,
+                backlink,
+                skiplink
+            }}
+        }}"
+    );
+
+    // Which we post to the node.
+    let _ = post(client, &query_str).await;
+
+    // Wait a little time for materialization to happen.
+    tokio::time::sleep(Duration::from_millis(10)).await;
+
+    encoded_entry.hash().into()
 }
 
+/// Create a schema.
+async fn create_schema(
+    client: &Client,
+    name: &str,
+    description: &str,
+    fields: Vec<(&str, FieldType)>,
+) -> SchemaId {
+    // Schemas.
+    //
+    // As we learned before, all data on the p2panda network must follow pre-defined schema.
+    // If an application wants to use a new schema it mudt first be defined. This is the step we
+    // will outline here. We assume some existing knowledge of `operations` and `documents`.
+    //
+    // As a schema can be defined and subsequently used by any author we generate a new key pair
+    // here for this task only.
+
+    let shirokuma = KeyPair::new();
+
+    // Publish the schema fields.
+    //
+    // A schema is defined in two steps. First we define each field in the schema, then we define
+    // the whole schema made up of these parts. The avaliable field types are:
+    //
+    // - Boolean
+    // - Float
+    // - Integer
+    // - String
+    // - Relation
+    // - RelationList
+    // - PinnedRelation
+    // - PinnedRelationList
+    //
+    // (some of those types will be familiar, some... not so much. Check out the p2panda spec to
+    // fill in the gaps)
+    //
+    // Here we publish each schema field that was passed into this method. They are published
+    // as operations who's content follows the `schema_field_definition` schema and as with any
+    // other data a new document is created.
+    //
+    // We collect the returned ids of these documents.
+
+    let mut fields_ids = Vec::new();
+
+    for (key, field_type) in fields {
+        let create_field_operation = Schema::create_field(key, field_type);
+        let field_id = publish(client, &shirokuma, &create_field_operation).await;
+        fields_ids.push(field_id);
+    }
+
+    // Publish the schema.
+    //
+    // Now that we have our schema field ids we can publish the schema itself. We perform the
+    // same process: create operation, publish, retrieve document id. The create operation includes
+    // a name, description, and the field ids.
+    //
+    // The returned id is _important_. This is what we need to use any time we want to publish data
+    // following this schema. It can also be use to query all data from a specific schema, or even
+    // configure replication rules according to schema.
+
+    let create_schema_operation = Schema::create(name, description, fields_ids);
+    let schema_definition_id = publish(client, &shirokuma, &create_schema_operation).await;
+
+    SchemaId::Application(name.to_string(), schema_definition_id)
+}
+
+/// Get the next args for an `author` and `document`.
 async fn next_args(
     client: &Client,
     author: &Author,
     view_id: Option<&DocumentViewId>,
 ) -> (LogId, SeqNum, Option<Hash>, Option<Hash>) {
-    // @TODO: Describe next args
-
     let args = match view_id {
         Some(id) => {
             format!("nextEntryArgs(publicKey: \"{author}\", documentViewId: \"{id}\")")
@@ -226,56 +342,12 @@ async fn next_args(
     parse_next_args_response(response, "nextEntryArgs").await
 }
 
-async fn publish(client: &Client, key_pair: &KeyPair, operation: &Operation) -> DocumentViewId {
-    // @TODO: Describe entries and logs
-
-    let document_view_id = operation.previous_operations();
-    let next_args = next_args(
-        &client,
-        &Author::from(key_pair.public_key()),
-        document_view_id,
-    )
-    .await;
-
-    let encoded_operation = encode_operation(&operation).expect("Encode operation");
-    let (log_id, seq_num, backlink, skiplink) = next_args;
-
-    let encoded_entry = sign_and_encode_entry(
-        &log_id,
-        &seq_num,
-        skiplink.as_ref(),
-        backlink.as_ref(),
-        &encoded_operation,
-        &key_pair,
-    )
-    .expect("Encode entry");
-
-    let query_str = format!(
-        "mutation TestPublishEntry {{
-            publishEntry(entry: \"{encoded_entry}\", operation: \"{encoded_operation}\") {{
-                logId,
-                seqNum,
-                backlink,
-                skiplink
-            }}
-        }}"
-    );
-
-    let _ = post(client, &query_str).await;
-
-    // Wait a little time for materialization to happen.
-    tokio::time::sleep(Duration::from_millis(200)).await;
-
-    encoded_entry.hash().into()
-}
-
+/// Query a materialized document.
 async fn query(
     client: &Client,
     document_view_id: &DocumentViewId,
     schema_id: &SchemaId,
 ) -> Map<String, Value> {
-    // @TODO: Describe querying
-
     let query_str = format!(
         r#"{{
             documentQuery: {schema_id}(viewId: "{document_view_id}") {{
@@ -294,16 +366,37 @@ async fn query(
         .to_owned()
 }
 
-async fn create_cafe_schema(client: &Client) -> SchemaId {
-    // @TODO: Describe schemas
+/// Post a GraphQL query.
+async fn post(client: &Client, query_str: &str) -> GqlResponse {
+    client
+        .post("http://127.0.0.1:2020/graphql")
+        .json(&json!({
+            "query": query_str,
+        }))
+        .send()
+        .await
+        .expect("Send query to node")
+        .json::<GqlResponse>()
+        .await
+        .expect("Parse GraphQL response")
+}
 
-    let shirokuma = KeyPair::new();
+/// Parse next args response.
+async fn parse_next_args_response(
+    response: GqlResponse,
+    field: &str,
+) -> (LogId, SeqNum, Option<Hash>, Option<Hash>) {
+    let json_value = response.data.into_json().expect("Get response data field");
 
-    let create_field_op = Schema::create_field("name", FieldType::String);
-    let field_id = publish(&client, &shirokuma, &create_field_op).await;
+    let log_id = json_value[field]["logId"].as_str().unwrap();
+    let seq_num = json_value[field]["seqNum"].as_str().unwrap();
+    let backlink = json_value[field]["backlink"].as_str();
+    let skiplink = json_value[field]["skiplink"].as_str();
 
-    let create_schema_op = Schema::create("cafe", "A cafe", vec![field_id]);
-    let schema_definition_id = publish(&client, &shirokuma, &create_schema_op).await;
-    let cafe_schema_id = SchemaId::Application("cafe".to_string(), schema_definition_id);
-    cafe_schema_id
+    (
+        LogId::from_str(log_id).unwrap(),
+        SeqNum::from_str(seq_num).unwrap(),
+        backlink.map(|hash| Hash::from_str(hash).unwrap()),
+        skiplink.map(|hash| Hash::from_str(hash).unwrap()),
+    )
 }
