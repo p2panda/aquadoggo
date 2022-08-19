@@ -13,7 +13,7 @@ use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::{Author, KeyPair};
 use p2panda_rs::operation::encode::encode_operation;
 use p2panda_rs::operation::traits::Actionable;
-use p2panda_rs::operation::{Operation, OperationAction, OperationBuilder, OperationValue};
+use p2panda_rs::operation::{Operation, OperationAction, OperationBuilder};
 use p2panda_rs::schema::{FieldType, Schema, SchemaId};
 use reqwest::Client;
 use serde_json::{json, Map, Value};
@@ -29,17 +29,19 @@ async fn e2e() {
 
     // Meet `aquadoggo`.
     //
-    // `aquadoggo` is a rust impementation of a node in the p2panda network. A node is the full peer
-    // who interacts with other peers. They persist, replicate, materialize and serve data on the
-    // network. A node can be thought of as the "backend" of the p2panda stack.  Unlike a "normal"
-    // backend though, they may be running inside another application, or on your own device locally
-    // (laptop, mobile), or in fact somewhere else across a network.
+    // `aquadoggo` is a Rust implementation of a node in the p2panda network. A node is the full
+    // peer who interacts with other peers. They persist, replicate, materialise and serve data on
+    // the network. A node can be thought of as the "backend" of the p2panda stack. Unlike a
+    // "normal" backend though, they may be running inside another application, or on your own
+    // device locally (laptop, mobile), or in fact somewhere else across a network. Nodes are
+    // designed to be "local first" which means they are fine if there is currently no internet
+    // connection on your computer.
 
     // Node configuration.
     //
-    // Before even starting the node, we need to configure it a little. We mostly go for default
-    // options. The only thing we want to do change is the database config. We want an in memory
-    // sqlite db for this test, the default id to use a postgres db.
+    // Before even starting the node, we need to configure it a little. We mostly go for the
+    // default options. The only thing we want to do change is the database config. We want an
+    // in-memory sqlite database for this test.
 
     let config = Configuration {
         database_url: Some("sqlite::memory:".to_string()),
@@ -48,9 +50,10 @@ async fn e2e() {
 
     // Start the node.
     //
-    // There's quite a lot happening under the hood here. We initialize the db, start a http server with
-    // GraphQL endpoints, a service for materializing documents from entries and operation which arrive
-    // at the node, and finally a replication service for communicating and replicating with other nodes.
+    // There's quite a lot happening under the hood here. We initialize the database, start a http
+    // server with GraphQL endpoints, a service for materialising documents from entries and
+    // operation which arrive at the node, and finally a replication service for communicating and
+    // replicating with other nodes.
     //
     // Nodes are the workhorses of the p2panda network, we thank you for all your efforts 🙏🏻.
 
@@ -58,9 +61,9 @@ async fn e2e() {
 
     // Create some authors.
     //
-    // This is not a very "real world" step as you would usually have stored your key pair somewhere
-    // safe and be loading it into an app. Probably not something you want to copy-paste into your hot
-    // new app ;-p
+    // This is not a very "real world" step as you would usually have stored your key pair
+    // somewhere safe and be loading it into an app. Probably not something you want to copy-paste
+    // into your hot new app ;-p
 
     let panda = KeyPair::from_private_key_str(
         "ddcafe34db2625af34c8ba3cf35d46e23283d908c9848c8b43d1f5d0fde779ea",
@@ -69,11 +72,12 @@ async fn e2e() {
 
     // Create a GraphQL client.
     //
-    // This is the client which will be communicating with the already running node. For this example we
-    // are running a node and client in the same application, in other settings they might be on the
-    // the same device, or equally they could be speaking across a network. This seperation is important
-    // for p2panda, as it's what enables the possibility to build very lightweight clients communicating
-    // with remote nodes who persist, replicate, materialize and serve data the data.
+    // This is the client which will be communicating with the already running node. For this
+    // example we are running a node and client in the same application, in other settings they
+    // might be on the the same device, or equally they could be speaking across a network. This
+    // separation is important for p2panda, as it's what enables the possibility to build very
+    // lightweight clients communicating with remote nodes who persist, replicate, materialise and
+    // serve the data.
 
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
@@ -82,26 +86,27 @@ async fn e2e() {
 
     // Creating schema.
     //
-    // All data in the p2panda network adheres to pre-defined schema. "That's great!" I hear you say,
-    // "but who defines the data defining schema?"🐣.... Good question. For that we have two hard-coded
-    // p2panda "system schema" (more will appear in the future, but this is enough for now). These are
-    // `schema_field_definition` and `schema_definition`. With these two anyone can publish their own
-    // schema to a node.
+    // All data in the p2panda network adheres to pre-defined schemas. "That's great!" I hear you
+    // say, "but who defines the data defining schemas?"🐣.... Good question. For that we have two
+    // hard-coded p2panda "system schemas" (more will appear in the future, but this is enough for
+    // now). These are `schema_field_definition` and `schema_definition`. With these two anyone can
+    // publish their own schema to a node.
     //
-    // Creating schema isn't something you do everytime you run your app. Like creating key pairs
-    // it's an initialization step which you (or someone else) does before you get going properly.
-    // You could even re-use schema's someone else already published.
+    // Creating schemas isn't something you do everytime you run your app. Like creating key pairs
+    // it's an initialisation step which you (or someone else) does before you get going properly.
+    // You could even re-use schemas someone else already published.
     //
-    // For the sake of brevity the details of this process are hidden here in this handy method. You
-    // know where to go if you want to know more.
+    // For the sake of brevity the details of this process are hidden here in this handy method.
+    // You know where to go if you want to know more. In a nutshell: This is publishing data on the
+    // network announcing a new schema for nodes to pick up.
 
     let cafe_schema_id =
         create_schema(&client, "cafe", "A cafe", vec![("name", FieldType::String)]).await;
 
     // Create a new document.
     //
-    // Data in the p2panda network is represented by something called a `document`. Documents can
-    // be CREATED, UPDATED and DELETED. We do this by publishing data mutations called `operations`
+    // Data in the p2panda network is represented by something called a "document". Documents can
+    // be created, updated and deleted. We do this by publishing data mutations called "operations"
     // which perform these actions.
     //
     // Once again, there are a few steps happening in the background here, look into the respective
@@ -109,24 +114,24 @@ async fn e2e() {
     //
     // Here panda wants to create a new cafe called "Panda Cafe". In order to do this we construct
     // and publish a CREATE operation with the full fields defined by the `cafe_schema`. Doing this
-    // will create a new document which is materialized on the node. It will only contain one
+    // will create a new document which is materialised on the node. It will only contain one
     // operation right now.
 
     let panda_cafe_operation = OperationBuilder::new(&cafe_schema_id)
         .action(OperationAction::Create)
-        .fields(&[("name", OperationValue::String("Panda Cafe".to_string()))])
+        .fields(&[("name", "Panda Cafe".into())])
         .build()
         .unwrap();
 
-    // Document id's
+    // Document id's.
     //
     // Here we publish the operation which in turn creates the new document, well done panda!
     //
-    // Every time a document is mutated it gets a new view id representing the current state
-    // of the document. This id is globally unique and can be used to find an specific instance
-    // of a document. The first such id, from when a CREATE operation was published is special.
-    // It can be used as a general id for this document, often you will use this id when you
-    // just want the most current state of the document.
+    // Every time a document is mutated it gets a new view id representing the current state of the
+    // document. This id is globally unique and can be used to find an specific instance of a
+    // document. The first such id, from when a CREATE operation was published, is special. It can
+    // be used as a general id for this document, often you will use this id when you just want the
+    // most current state of the document.
 
     let panda_cafe_view_id = publish(&client, &panda, &panda_cafe_operation).await;
     let _panda_cafe_id = panda_cafe_view_id.clone();
@@ -134,31 +139,32 @@ async fn e2e() {
     // Update a document.
     //
     // Panda wants more impact for their new cafe name, they want to add some drama! This means
-    // they need to update the document by publishing an UPDATE operation containing the change
-    // to the field they want to update.
+    // they need to update the document by publishing an UPDATE operation containing the change to
+    // the field they want to update.
     //
     // In order to update the correct document, they include the current document view id in the
-    // `previous_operations` for this operation. This means this operation will be applied at
-    // the correct point in the document.
+    // `previous_operations` for this operation. This means this operation will be applied at the
+    // correct point in the document.
 
     let panda_cafe_operation = OperationBuilder::new(&cafe_schema_id)
         .action(OperationAction::Update)
-        .fields(&[("name", OperationValue::String("Panda Cafe!".to_string()))])
+        .fields(&[("name", "Panda Cafe!".into())])
         .previous_operations(&panda_cafe_view_id)
         .build()
         .unwrap();
 
     let panda_cafe_view_id = publish(&client, &panda, &panda_cafe_operation).await;
 
-    // Materialization.
+    // Materialisation.
     //
-    // When operations arrive on a node, a process called `materialization` kicks in which processes
-    // operations and creates or updates documents, storing the result in the db for easy access.
+    // When operations arrive on a node, a process called "materialisation" kicks in which
+    // processes operations and creates or updates documents, storing the result in the db for easy
+    // access.
 
     // Query a document.
     //
     // Now that the cafe has been created and updated we can query it from the client. We do can do
-    // this using it's schema and document or view id.
+    // this using it's schema id and document or view id.
 
     let panda_cafe = query(&client, &panda_cafe_view_id, &cafe_schema_id).await;
 
@@ -179,23 +185,23 @@ async fn e2e() {
 
 /// Publish an entry and it's operation to a node.
 async fn publish(client: &Client, key_pair: &KeyPair, operation: &Operation) -> DocumentViewId {
-    // Publihing operations.
+    // Publishing operations.
     //
-    // There are a few important topics we've glossed over so far. These are `entries` and
-    // `logs`. They for an important data structures for a p2p protocol such as p2panda.
-    // This is an `append-only`log`. This is way outside the scope of this example, but you
-    // can read more about `bamboo` (of course, the flavour of log a panda would use) here
-    // https://github.com/bamboo-rs/bamboo-rs-ed25519-yasmf/.
+    // There are a few important topics we've glossed over so far. These are "entries" and "logs".
+    // They for an important data structures for a p2p protocol such as p2panda. This is an
+    // "append-only" log. This is way outside the scope of this example, but you can read more
+    // about "Bamboo" (of course, the flavour of log a panda would use) here:
+    // https://github.com/AljoschaMeyer/bamboo
     //
-    // The main thing to know is that `entries` are the signed data type which are used
-    // to author and verify operations. They are needed when publishing an entry.
+    // The main thing to know is that entries are the signed data type which are used to author and
+    // verify operations. They are needed when publishing an entry.
 
     // Composing an entry.
     //
     // Every entry contains a `log_id` and `seq_num`. Both these u64 values must be strictly
-    // monotonically incrementing per author. Entries and operations which are part of the
-    // same document live on the same log and the seq number increases. When new documents
-    // are created, the log id increments and the seq number starts from 0.
+    // monotonically incrementing per author. Entries and operations which are part of the same
+    // document live on the same log and the seq number increases. When new documents are created,
+    // the log id increments and the sequence number starts from 0.
     //
     // In order to compose an entry with the correct values, we need to ask our node for them
     // that's what this method does.
@@ -209,10 +215,10 @@ async fn publish(client: &Client, key_pair: &KeyPair, operation: &Operation) -> 
 
     // Encoding data.
     //
-    // Once we have the correct entry aruments we are ready to go. First we encode our
-    // operation, then we add the hash of this to an entry which we sign and encode.
+    // Once we have the correct entry aruments we are ready to go. First we encode our operation,
+    // then we add the hash of this to an entry which we sign and encode.
     //
-    // A LOT more could be said here, please check the spec for much more detail.
+    // A LOT more could be said here, please check the specification for much more detail.
 
     let encoded_operation = encode_operation(&operation).expect("Encode operation");
     let (log_id, seq_num, backlink, skiplink) = next_args;
@@ -242,7 +248,7 @@ async fn publish(client: &Client, key_pair: &KeyPair, operation: &Operation) -> 
     // Which we post to the node.
     let _ = post(client, &query_str).await;
 
-    // Wait a little time for materialization to happen.
+    // Wait a little time for materialisation to happen.
     tokio::time::sleep(Duration::from_millis(300)).await;
 
     encoded_entry.hash().into()
@@ -257,19 +263,19 @@ async fn create_schema(
 ) -> SchemaId {
     // Schemas.
     //
-    // As we learned before, all data on the p2panda network must follow pre-defined schema.
-    // If an application wants to use a new schema it mudt first be defined. This is the step we
-    // will outline here. We assume some existing knowledge of `operations` and `documents`.
+    // As we learned before, all data on the p2panda network must follow pre-defined schemas. If an
+    // application wants to use a new schema it must first be defined. This is the step we will
+    // outline here. We assume some existing knowledge of "operations" and "documents".
     //
-    // As a schema can be defined and subsequently used by any author we generate a new key pair
+    // As a schema can be defined and subsequently used by any author, we generate a new key pair
     // here for this task only.
 
     let shirokuma = KeyPair::new();
 
     // Publish the schema fields.
     //
-    // A schema is defined in two steps. First we define each field in the schema, then we define
-    // the whole schema made up of these parts. The avaliable field types are:
+    // A schema is defined in two steps. First, we define each field in the schema, then we define
+    // the whole schema made up of these parts. The available field types are:
     //
     // - Boolean
     // - Float
@@ -281,11 +287,11 @@ async fn create_schema(
     // - PinnedRelationList
     //
     // (some of those types will be familiar, some... not so much. Check out the p2panda spec to
-    // fill in the gaps)
+    // fill in the gaps).
     //
-    // Here we publish each schema field that was passed into this method. They are published
-    // as operations who's content follows the `schema_field_definition` schema and as with any
-    // other data a new document is created.
+    // Here we publish each schema field that was passed into this method. They are published as
+    // operations who's content follows the `schema_field_definition` schema. As with any other
+    // data a new document is created by that.
     //
     // We collect the returned ids of these documents.
 
@@ -299,13 +305,13 @@ async fn create_schema(
 
     // Publish the schema.
     //
-    // Now that we have our schema field ids we can publish the schema itself. We perform the
-    // same process: create operation, publish, retrieve document id. The create operation includes
-    // a name, description, and the field ids.
+    // Now that we have our schema field ids we can publish the schema itself. We perform the same
+    // process: create operation, publish and finally retrieve the document id. The operation
+    // includes a name, description, and the field ids.
     //
-    // The returned id is _important_. This is what we need to use any time we want to publish data
-    // following this schema. It can also be use to query all data from a specific schema, or even
-    // configure replication rules according to schema.
+    // The returned id is _important_. This is what we need to use everytime we want to publish
+    // data following this schema. It can also be used to query all data from a specific schema, or
+    // even set the rules for replication.
 
     let create_schema_operation = Schema::create(name, description, fields_ids);
     let schema_definition_id = publish(client, &shirokuma, &create_schema_operation).await;
@@ -342,7 +348,7 @@ async fn next_args(
     parse_next_args_response(response, "nextEntryArgs").await
 }
 
-/// Query a materialized document.
+/// Query a materialised document.
 async fn query(
     client: &Client,
     document_view_id: &DocumentViewId,
@@ -352,7 +358,7 @@ async fn query(
         r#"{{
             documentQuery: {schema_id}(viewId: "{document_view_id}") {{
                 fields {{ name }}
-                meta {{ 
+                meta {{
                     viewId
                 }}
             }},
