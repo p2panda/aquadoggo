@@ -345,13 +345,10 @@ impl OperationStore<StorageOperation> for SqlStorage {
 #[cfg(test)]
 mod tests {
     use p2panda_rs::document::DocumentId;
-    use p2panda_rs::entry::traits::AsEncodedEntry;
-    use p2panda_rs::entry::LogId;
-    use p2panda_rs::identity::{Author, KeyPair};
+    use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::traits::{AsOperation, AsVerifiedOperation};
     use p2panda_rs::operation::VerifiedOperation;
     use p2panda_rs::storage_provider::traits::OperationStore;
-    use p2panda_rs::storage_provider::traits::{EntryStore, StorageProvider};
     use p2panda_rs::test_utils::constants::test_fields;
     use p2panda_rs::test_utils::fixtures::{
         document_id, key_pair, operation_fields, random_document_view_id, random_key_pair,
@@ -439,7 +436,6 @@ mod tests {
     fn gets_document_by_operation_id(
         #[from(verified_operation)] create_operation: VerifiedOperation,
         key_pair: KeyPair,
-        #[from(random_key_pair)] new_author_key_pair: KeyPair,
         document_id: DocumentId,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
@@ -496,7 +492,6 @@ mod tests {
 
     #[rstest]
     fn get_operations_by_document_id(
-        key_pair: KeyPair,
         #[from(test_db)]
         #[with(5, 1, 1)]
         runner: TestDatabaseRunner,

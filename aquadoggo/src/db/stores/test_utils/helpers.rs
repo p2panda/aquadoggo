@@ -6,7 +6,7 @@ use p2panda_rs::operation::{
 };
 use p2panda_rs::schema::{Schema, SchemaId};
 use p2panda_rs::test_utils::constants;
-use p2panda_rs::test_utils::fixtures::{document_view_id, schema, schema_fields};
+use p2panda_rs::test_utils::fixtures::{schema, schema_fields};
 
 fn doggo_schema_id() -> SchemaId {
     SchemaId::new_application("doggo_schema", &constants::HASH.to_owned().parse().unwrap())

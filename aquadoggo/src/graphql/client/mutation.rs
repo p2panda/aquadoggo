@@ -48,7 +48,7 @@ impl ClientMutationRoot {
         let schema = schema_provider
             .get(operation.schema_id())
             .await
-            .ok_or_else(|| return anyhow!("Schema not found"))?;
+            .ok_or_else(|| anyhow!("Schema not found"))?;
 
         /////////////////////////////////////
         // PUBLISH THE ENTRY AND OPERATION //

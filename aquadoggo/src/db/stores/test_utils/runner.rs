@@ -5,10 +5,8 @@ use std::sync::Arc;
 
 use futures::Future;
 use p2panda_rs::operation::OperationValue;
-use p2panda_rs::schema::{Schema, SchemaId};
-use p2panda_rs::test_utils::constants;
+use p2panda_rs::schema::Schema;
 use p2panda_rs::test_utils::db::test_db::{populate_store, PopulateDatabaseConfig};
-use p2panda_rs::test_utils::fixtures::key_pair;
 use rstest::fixture;
 use tokio::runtime::Builder;
 use tokio::sync::Mutex;
@@ -54,10 +52,11 @@ where
     }
 }
 
-// @TODO: I'm keeping this here for now as otherwise we would need to refactor _all_ the tests using it.
+// @TODO: I'm keeping this here for now as otherwise we would need to refactor _all_ the tests
+// using it.
 //
-// We may still want to keep this "single database" runner injected through `rstest` but in any case
-// probably best to consider that in a different PR.
+// We may still want to keep this "single database" runner injected through `rstest` but in any
+// case probably best to consider that in a different PR.
 pub struct TestDatabaseRunner {
     config: PopulateDatabaseConfig,
 }
@@ -96,7 +95,7 @@ impl TestDatabaseRunner {
             let context = Context::new(store.clone(), Configuration::default(), schema_provider);
 
             // Construct the actual test database
-            let mut db = TestDatabase {
+            let db = TestDatabase {
                 context,
                 store,
                 test_data,

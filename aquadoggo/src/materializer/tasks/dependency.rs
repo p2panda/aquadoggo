@@ -173,7 +173,6 @@ async fn construct_relation_task(
 
 #[cfg(test)]
 mod tests {
-
     use p2panda_rs::document::{DocumentId, DocumentViewId};
     use p2panda_rs::entry::traits::AsEncodedEntry;
     use p2panda_rs::identity::KeyPair;
@@ -187,7 +186,7 @@ mod tests {
     use p2panda_rs::test_utils::constants;
     use p2panda_rs::test_utils::db::test_db::send_to_store;
     use p2panda_rs::test_utils::fixtures::{
-        key_pair, random_document_id, random_document_view_id, schema, schema_fields, schema_id,
+        key_pair, random_document_id, random_document_view_id, schema, schema_fields,
     };
     use rstest::rstest;
 
@@ -372,7 +371,6 @@ mod tests {
 
     #[rstest]
     fn no_reduce_task_for_materialised_document_relations(
-        schema_id: SchemaId,
         key_pair: KeyPair,
         #[from(test_db)]
         #[with(1, 1, 1)]

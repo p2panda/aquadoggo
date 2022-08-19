@@ -2,39 +2,21 @@
 
 //! Integration tests for dynamic graphql schema generation and query resolution.
 use std::convert::TryInto;
-use std::str::FromStr;
 
 use async_graphql::{value, Response};
-use async_graphql::{Request, Variables};
-use p2panda_rs::document::{DocumentId, DocumentViewId};
-use p2panda_rs::entry::encode::sign_and_encode_entry;
-use p2panda_rs::entry::Entry;
-use p2panda_rs::entry::EntryBuilder;
-use p2panda_rs::entry::LogId;
-use p2panda_rs::entry::SeqNum;
-use p2panda_rs::hash::Hash;
-use p2panda_rs::identity::Author;
-use p2panda_rs::identity::KeyPair;
-use p2panda_rs::operation::encode::encode_operation;
-use p2panda_rs::operation::OperationBuilder;
-use p2panda_rs::operation::OperationValue;
-use p2panda_rs::operation::{Operation, OperationAction};
+use p2panda_rs::document::DocumentId;
 use p2panda_rs::schema::FieldType;
-use p2panda_rs::schema::Schema;
 use p2panda_rs::test_utils::fixtures::random_key_pair;
-use p2panda_rs::test_utils::fixtures::schema;
 use rstest::rstest;
 use serde_json::json;
 
 use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 use crate::test_helpers::graphql_test_client;
-use crate::test_helpers::TestClient;
 
+// Test querying application documents with scalar fields (no relations) by document id and by view
+// id.
 #[rstest]
 fn scalar_fields(#[from(test_db)] runner: TestDatabaseRunner) {
-    // Test querying application documents with scalar fields (no relations) by document id and by
-    // view id.
-
     runner.with_db_teardown(&|mut db: TestDatabase| async move {
         let key_pair = random_key_pair();
 
@@ -104,11 +86,10 @@ fn scalar_fields(#[from(test_db)] runner: TestDatabaseRunner) {
     });
 }
 
+// Test querying application documents across a parent-child relation using different kinds of
+// relation fields.
 #[rstest]
 fn relation_fields(#[from(test_db)] runner: TestDatabaseRunner) {
-    // Test querying application documents across a parent-child relation using different kinds of
-    // relation fields.
-
     runner.with_db_teardown(&|mut db: TestDatabase| async move {
         let key_pair = random_key_pair();
 
