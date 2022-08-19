@@ -296,7 +296,7 @@ mod tests {
             let (key_pairs, _) = populate_store(&billie_db.store, &populate_db_config).await;
 
             // Launch HTTP service of Billie
-            let (tx, _rx) = broadcast::channel(16);
+            let (tx, _rx) = broadcast::channel(120);
             let tx_billie = tx.clone();
             let shutdown_billie = shutdown_handle();
             let context_billie = Context::new(

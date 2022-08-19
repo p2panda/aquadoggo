@@ -206,7 +206,7 @@ mod tests {
         publish_entry_request: Request,
     ) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
-            let (tx, _rx) = broadcast::channel(16);
+            let (tx, _rx) = broadcast::channel(120);
             let manager = GraphQLSchemaManager::new(db.store, tx, db.context.schema_provider.clone()).await;
             let context = HttpServiceContext::new(manager);
 
@@ -234,7 +234,7 @@ mod tests {
         publish_entry_request: Request,
     ) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
-            let (tx, mut rx) = broadcast::channel(16);
+            let (tx, mut rx) = broadcast::channel(120);
             let manager =
                 GraphQLSchemaManager::new(db.store, tx, db.context.schema_provider.clone()).await;
             let context = HttpServiceContext::new(manager);
