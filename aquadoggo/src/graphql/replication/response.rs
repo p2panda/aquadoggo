@@ -4,8 +4,10 @@ use std::convert::TryFrom;
 
 use anyhow::{anyhow, Error};
 use async_graphql::{ComplexObject, Context, SimpleObject};
-use p2panda_rs::entry::{decode_entry, EntrySigned};
-use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
+use p2panda_rs::entry::decode::decode_entry;
+use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
+use p2panda_rs::entry::EncodedEntry;
+use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
 use serde::{Deserialize, Serialize};
 
 use crate::db::provider::SqlStorage;
@@ -33,17 +35,17 @@ impl EncodedEntryAndOperation {
         let store = ctx.data::<SqlStorage>()?;
 
         // Decode entry
-        let entry_encoded: EntrySigned = self.entry.clone().into();
-        let entry = decode_entry(&entry_encoded, None)?;
+        let entry_encoded: EncodedEntry = self.entry.clone().into();
+        let entry = decode_entry(&entry_encoded)?;
 
         // Load certificate pool from database
         let result = store
-            .get_certificate_pool(&entry_encoded.author(), entry.log_id(), entry.seq_num())
+            .get_certificate_pool(entry.public_key(), entry.log_id(), entry.seq_num())
             .await?;
 
         let entries = result
             .into_iter()
-            .map(|entry| entry.entry_signed().clone().into())
+            .map(|entry| EncodedEntry::from_bytes(&entry.into_bytes()).into())
             .collect();
 
         Ok(entries)
@@ -51,9 +53,11 @@ impl EncodedEntryAndOperation {
 }
 
 impl From<StorageEntry> for EncodedEntryAndOperation {
-    fn from(entry_row: StorageEntry) -> Self {
-        let entry = entry_row.entry_signed().to_owned().into();
-        let operation = entry_row.operation_encoded().map(|op| op.to_owned().into());
+    fn from(storage_entry: StorageEntry) -> Self {
+        let entry = EncodedEntry::from_bytes(&storage_entry.into_bytes()).into();
+        let operation = storage_entry
+            .payload()
+            .map(|payload| payload.to_owned().into());
         Self { entry, operation }
     }
 }
@@ -65,20 +69,33 @@ impl TryFrom<EncodedEntryAndOperation> for StorageEntry {
         let operation = encoded
             .operation
             .ok_or_else(|| anyhow!("Storage entry requires operation to be given"))?;
+        let encoded_entry = encoded.entry;
+        let entry = decode_entry(&encoded_entry.clone().into())?;
 
-        Ok(StorageEntry::new(&encoded.entry.into(), &operation.into())?)
+        let storage_entry = StorageEntry {
+            author: entry.public_key().to_owned(),
+            log_id: entry.log_id().to_owned(),
+            seq_num: entry.seq_num().to_owned(),
+            skiplink: entry.skiplink().cloned(),
+            backlink: entry.backlink().cloned(),
+            payload_size: entry.payload_size(),
+            payload_hash: entry.payload_hash().to_owned(),
+            signature: entry.signature().to_owned(),
+            encoded_entry: encoded_entry.into(),
+            payload: Some(operation.into()),
+        };
+        Ok(storage_entry)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryInto;
-
     use async_graphql::{EmptyMutation, EmptySubscription, Request, Schema};
     use bamboo_rs_core_ed25519_yasmf::verify_batch;
-    use p2panda_rs::entry::{EntrySigned, LogId};
+    use p2panda_rs::entry::traits::AsEncodedEntry;
+    use p2panda_rs::entry::LogId;
     use p2panda_rs::identity::Author;
-    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
+    use p2panda_rs::storage_provider::traits::EntryStore;
     use rstest::rstest;
 
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
@@ -97,15 +114,7 @@ mod tests {
                 .finish();
 
             // Retreive last entry of author from test database
-            let author: Author = db
-                .test_data
-                .key_pairs
-                .first()
-                .unwrap()
-                .public_key()
-                .to_owned()
-                .try_into()
-                .unwrap();
+            let author: Author = db.test_data.key_pairs.first().unwrap().public_key().into();
 
             let latest_entry_hash = db
                 .store
@@ -143,10 +152,7 @@ mod tests {
             // Prepare entries and batch-validate them
             let entries_to_verify: Vec<(Vec<u8>, Option<Vec<u8>>)> = entries
                 .iter()
-                .map(|entry| {
-                    let entry = EntrySigned::new(entry.as_str().unwrap()).unwrap();
-                    (entry.to_bytes(), None)
-                })
+                .map(|entry| (hex::decode(entry.as_str().unwrap()).unwrap(), None))
                 .collect();
 
             // Make sure we can validate single entry based on the certificate pool

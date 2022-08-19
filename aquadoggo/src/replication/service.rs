@@ -6,10 +6,14 @@ use std::time::Duration;
 use anyhow::{anyhow, Result};
 use bamboo_rs_core_ed25519_yasmf::verify::verify_batch;
 use log::{debug, error, trace, warn};
+use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
+use p2panda_rs::entry::EncodedEntry;
 use p2panda_rs::entry::LogId;
 use p2panda_rs::entry::SeqNum;
 use p2panda_rs::identity::Author;
-use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore};
+use p2panda_rs::operation::decode::decode_operation;
+use p2panda_rs::operation::traits::Schematic;
+use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
 use tokio::task;
 
 use crate::bus::{ServiceMessage, ServiceSender};
@@ -121,7 +125,7 @@ async fn verify_entries(entries: &[StorageEntry], context: &Context) -> Result<(
     match first_entry.as_ref() {
         // If the entry is the first in the log then we can don't need to attempt to get the
         // skiplink and previous
-        Some(entry) if entry.seq_num() == SeqNum::new(1).unwrap() => {
+        Some(entry) if *entry.seq_num() == SeqNum::new(1).unwrap() => {
             trace!("First entry had seq_num 1 do no need to get previous entries in db");
         }
         Some(entry) => {
@@ -136,14 +140,13 @@ async fn verify_entries(entries: &[StorageEntry], context: &Context) -> Result<(
         .iter()
         .map(|entry| {
             (
-                entry.entry_bytes(),
-                entry
-                    .operation_encoded()
-                    .map(|operation| operation.to_bytes()),
+                entry.into_bytes(),
+                entry.payload().map(|payload| payload.into_bytes()),
             )
         })
         .collect();
 
+    // @TODO: Do we want to use our own verification here?
     verify_batch(&entries_to_verify)?;
 
     Ok(())
@@ -163,16 +166,26 @@ async fn insert_new_entries(
         // not need or have already done in a previous step. We plan to refactor this into a more
         // modular set of methods which can definitely be used here more cleanly. For now, we do it
         // this way.
-        //
-        // @TODO: Additionally, when we implement payload deletion and partial replication we will
-        // be expecting entries to arrive here possibly without payloads.
+
+        let encoded_entry: EncodedEntry = entry.clone().into();
+        let encoded_operation = entry
+            .payload()
+            .expect("All stored entries contain an operation");
+        let operation = decode_operation(encoded_operation)?;
+
+        let schema = context
+            .schema_provider
+            .get(operation.schema_id())
+            .await
+            .ok_or("Schema not supported")
+            .map_err(|err| anyhow!(format!("{:?}", err)))?;
 
         publish(
             &context.0.store,
-            entry.entry_signed(),
-            entry
-                .operation_encoded()
-                .expect("All stored entries contain an operation"),
+            &schema,
+            &encoded_entry,
+            &operation,
+            encoded_operation,
         )
         .await
         .map_err(|err| anyhow!(format!("Error inserting new entry into db: {:?}", err)))?;
@@ -199,9 +212,9 @@ async fn add_certpool_to_entries_for_verification(
         .0
         .store
         .get_certificate_pool(
-            &first_entry.author(),
-            &first_entry.log_id(),
-            &first_entry.seq_num(),
+            first_entry.public_key(),
+            first_entry.log_id(),
+            first_entry.seq_num(),
         )
         .await?;
 
@@ -213,7 +226,7 @@ async fn add_certpool_to_entries_for_verification(
 
 /// Helper method to inform other services (like materialisation service) about new operations.
 fn send_new_entry_service_message(tx: ServiceSender, entry: &StorageEntry) {
-    let bus_message = ServiceMessage::NewOperation(entry.entry_signed().hash().into());
+    let bus_message = ServiceMessage::NewOperation(entry.hash().into());
 
     if tx.send(bus_message).is_err() {
         // Silently fail here as we don't mind if there are no subscribers
@@ -228,28 +241,27 @@ async fn get_latest_seq_num(context: &Context, log_id: &LogId, author: &Author) 
         .await
         .ok()
         .flatten()
-        .map(|entry| *entry.entry_decoded().seq_num())
+        .map(|entry| *entry.seq_num())
 }
 
 #[cfg(test)]
 mod tests {
-    use std::convert::{TryFrom, TryInto};
+    use std::convert::TryInto;
     use std::time::Duration;
 
     use p2panda_rs::identity::Author;
     use p2panda_rs::storage_provider::traits::EntryStore;
-    use p2panda_rs::test_utils::constants::SCHEMA_ID;
+    use p2panda_rs::test_utils::db::test_db::{populate_store, PopulateDatabaseConfig};
     use rstest::rstest;
     use tokio::sync::{broadcast, oneshot};
     use tokio::task;
 
     use crate::context::Context;
     use crate::db::stores::test_utils::{
-        populate_test_db, with_db_manager_teardown, PopulateDatabaseConfig, TestDatabaseManager,
+        doggo_fields, doggo_schema, with_db_manager_teardown, TestDatabaseManager,
     };
     use crate::http::http_service;
     use crate::replication::ReplicationConfiguration;
-    use crate::schema::SchemaProvider;
     use crate::test_helpers::shutdown_handle;
     use crate::Configuration;
 
@@ -260,24 +272,31 @@ mod tests {
     fn init_env_logger() {
         let _ = env_logger::builder().is_test(true).try_init();
     }
-
     #[rstest]
     fn full_replication() {
         with_db_manager_teardown(|db_manager: TestDatabaseManager| async move {
             init_env_logger();
 
             // Build and populate Billie's database
-            let mut billie_db = db_manager.create("sqlite::memory:").await;
+            let billie_db = db_manager.create("sqlite::memory:").await;
+            billie_db
+                .context
+                .schema_provider
+                .update(doggo_schema())
+                .await;
             let populate_db_config = PopulateDatabaseConfig {
                 no_of_entries: 1,
                 no_of_logs: 1,
                 no_of_authors: 1,
-                ..Default::default()
+                with_delete: false,
+                schema: doggo_schema(),
+                create_operation_fields: doggo_fields(),
+                update_operation_fields: doggo_fields(),
             };
-            populate_test_db(&mut billie_db, &populate_db_config).await;
+            let (key_pairs, _) = populate_store(&billie_db.store, &populate_db_config).await;
 
             // Launch HTTP service of Billie
-            let (tx, _rx) = broadcast::channel(16);
+            let (tx, _rx) = broadcast::channel(120);
             let tx_billie = tx.clone();
             let shutdown_billie = shutdown_handle();
             let context_billie = Context::new(
@@ -286,7 +305,7 @@ mod tests {
                     http_port: 3022,
                     ..Configuration::default()
                 },
-                SchemaProvider::default(),
+                billie_db.context.schema_provider.clone(),
             );
             let (tx_ready, rx_ready) = oneshot::channel::<()>();
 
@@ -302,15 +321,9 @@ mod tests {
 
             // Our test database helper already populated the database for us. We retreive the
             // public keys here of the authors who created these test data entries
-            let public_key = billie_db
-                .test_data
-                .key_pairs
-                .first()
-                .unwrap()
-                .public_key()
-                .to_owned();
+            let public_key = key_pairs.first().unwrap().public_key();
 
-            let author = Author::try_from(public_key).unwrap();
+            let author = Author::from(public_key);
             let log_ids: Vec<u64> = vec![0];
             let author_str: String = author.as_str().into();
             let endpoint: String = "http://localhost:3022/graphql".into();
@@ -325,8 +338,13 @@ mod tests {
                 ..Configuration::default()
             };
             let ada_db = db_manager.create("sqlite::memory:").await;
-            let context_ada =
-                Context::new(ada_db.store.clone(), config_ada, SchemaProvider::default());
+            ada_db.context.schema_provider.update(doggo_schema()).await;
+            let context_ada = Context::new(
+                ada_db.store.clone(),
+                config_ada,
+                // We want ada to have the same schema in her schema provider as billie.
+                ada_db.context.schema_provider.clone(),
+            );
             let tx_ada = tx.clone();
             let shutdown_ada = shutdown_handle();
             let (tx_ready, rx_ready) = oneshot::channel::<()>();
@@ -352,7 +370,7 @@ mod tests {
             // Check the entry arrived into Ada's database
             let entries = ada_db
                 .store
-                .get_entries_by_schema(&SCHEMA_ID.parse().unwrap())
+                .get_entries_by_schema(doggo_schema().id())
                 .await
                 .unwrap();
             assert_eq!(entries.len(), 1);

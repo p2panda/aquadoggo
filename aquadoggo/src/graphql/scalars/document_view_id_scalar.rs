@@ -35,8 +35,7 @@ impl From<&DocumentViewId> for DocumentViewIdScalar {
 
 impl From<&DocumentViewIdScalar> for DocumentViewId {
     fn from(value: &DocumentViewIdScalar) -> Self {
-        // Unwrap because `DocumentViewIdScalar` is always safely intialised.
-        DocumentViewId::new(value.0.graph_tips()).unwrap()
+        DocumentViewId::new(value.0.graph_tips())
     }
 }
 

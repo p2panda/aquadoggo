@@ -5,7 +5,7 @@ use p2panda_rs::document::DocumentId;
 use p2panda_rs::entry::LogId;
 use p2panda_rs::identity::Author;
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::storage_provider::errors::LogStorageError;
+use p2panda_rs::storage_provider::error::LogStorageError;
 use p2panda_rs::storage_provider::traits::{AsStorageLog, LogStore};
 use sqlx::{query, query_scalar};
 
@@ -217,47 +217,35 @@ impl LogStore<StorageLog> for SqlStorage {
 #[cfg(test)]
 mod tests {
     use p2panda_rs::document::{DocumentId, DocumentViewId};
-    use p2panda_rs::entry::{EntrySigned, LogId};
-    use p2panda_rs::hash::Hash;
+    use p2panda_rs::entry::decode::decode_entry;
+    use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
+    use p2panda_rs::entry::{EncodedEntry, LogId};
     use p2panda_rs::identity::Author;
-    use p2panda_rs::operation::{OperationEncoded, OperationId};
+    use p2panda_rs::operation::OperationId;
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::storage_provider::traits::{
-        AsStorageEntry, AsStorageLog, EntryStore, LogStore, StorageProvider,
+        AsStorageLog, EntryStore, LogStore, StorageProvider,
     };
     use p2panda_rs::test_utils::fixtures::{
-        entry_signed_encoded, operation_encoded, public_key, random_document_id,
-        random_operation_id, schema,
+        encoded_entry, public_key, random_document_id, random_operation_id, schema_id,
     };
     use rstest::rstest;
 
-    use crate::db::stores::entry::StorageEntry;
     use crate::db::stores::log::StorageLog;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
     #[rstest]
-    fn initial_log_id(
-        #[from(public_key)] author: Author,
-        #[from(test_db)] runner: TestDatabaseRunner,
-    ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            let log_id = db.store.find_document_log_id(&author, None).await.unwrap();
-            assert_eq!(log_id, LogId::default());
-        });
-    }
-
-    #[rstest]
     fn prevent_duplicate_log_ids(
         #[from(public_key)] author: Author,
-        #[from(schema)] schema: SchemaId,
+        #[from(schema_id)] schema_id: SchemaId,
         #[from(random_document_id)] document: DocumentId,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let log = StorageLog::new(&author, &schema, &document.clone(), &LogId::default());
+            let log = StorageLog::new(&author, &schema_id, &document.clone(), &LogId::default());
             assert!(db.store.insert_log(log).await.is_ok());
 
-            let log = StorageLog::new(&author, &schema, &document, &LogId::default());
+            let log = StorageLog::new(&author, &schema_id, &document, &LogId::default());
             assert!(db.store.insert_log(log).await.is_err());
         });
     }
@@ -273,7 +261,7 @@ mod tests {
         runner.with_db_teardown(|db: TestDatabase| async move {
             let schema = SchemaId::new_application(
                 "venue",
-                &DocumentViewId::new(&[operation_id_1, operation_id_2]).unwrap(),
+                &DocumentViewId::new(&[operation_id_1, operation_id_2]),
             );
 
             let log = StorageLog::new(&author, &schema, &document, &LogId::default());
@@ -283,36 +271,9 @@ mod tests {
     }
 
     #[rstest]
-    fn selecting_next_log_id(
-        #[from(public_key)] author: Author,
-        #[from(schema)] schema: SchemaId,
-        #[from(test_db)] runner: TestDatabaseRunner,
-    ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            let log_id = db.store.find_document_log_id(&author, None).await.unwrap();
-
-            // We expect to be given the next log id when asking for a possible log id for a new
-            // document by the same author
-            assert_eq!(log_id, LogId::default());
-
-            // Starting with an empty db, we expect to be able to count up from 0 and expect each
-            // inserted document's log id to be equal to the count index
-            for n in 0..12 {
-                let doc = Hash::new_from_bytes(vec![1, 2, n]).unwrap().into();
-                let log_id = db.store.find_document_log_id(&author, None).await.unwrap();
-
-                assert_eq!(LogId::new(n.into()), log_id);
-
-                let log = StorageLog::new(&author, &schema, &doc, &log_id);
-                db.store.insert_log(log).await.unwrap();
-            }
-        });
-    }
-
-    #[rstest]
     fn latest_log_id(
         #[from(public_key)] author: Author,
-        #[from(schema)] schema: SchemaId,
+        #[from(schema_id)] schema_id: SchemaId,
         #[from(test_db)] runner: TestDatabaseRunner,
         #[from(random_document_id)] document_id: DocumentId,
     ) {
@@ -322,7 +283,7 @@ mod tests {
             assert_eq!(log_id, None);
 
             for n in 0..12 {
-                let log = StorageLog::new(&author, &schema, &document_id, &LogId::new(n));
+                let log = StorageLog::new(&author, &schema_id, &document_id, &LogId::new(n));
                 db.store.insert_log(log).await.unwrap();
 
                 let log_id = db.store.latest_log_id(&author).await.unwrap();
@@ -333,54 +294,47 @@ mod tests {
 
     #[rstest]
     fn document_log_id(
-        #[from(schema)] schema: SchemaId,
-        #[from(entry_signed_encoded)] entry_encoded: EntrySigned,
-        #[from(operation_encoded)] operation_encoded: OperationEncoded,
+        #[from(schema_id)] schema_id: SchemaId,
+        #[from(encoded_entry)] encoded_entry: EncodedEntry,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
             // Expect database to return nothing yet
             assert_eq!(
                 db.store
-                    .get_document_by_entry(&entry_encoded.hash())
+                    .get_document_by_entry(&encoded_entry.hash())
                     .await
                     .unwrap(),
                 None
             );
 
-            let entry = StorageEntry::new(&entry_encoded.clone(), &operation_encoded).unwrap();
-            let author = entry.author();
-
+            let entry = decode_entry(&encoded_entry).unwrap();
+            let author = entry.public_key();
             // Store entry in database
-            assert!(db.store.insert_entry(entry).await.is_ok());
+            assert!(db
+                .store
+                .insert_entry(&entry, &encoded_entry, None)
+                .await
+                .is_ok());
 
             let log = StorageLog::new(
-                &author,
-                &schema,
-                &entry_encoded.hash().into(),
+                author,
+                &schema_id,
+                &encoded_entry.hash().into(),
                 &LogId::default(),
             );
 
             // Store log in database
             assert!(db.store.insert_log(log).await.is_ok());
 
-            // Expect to find document in database. The document hash should be the same as the
-            // hash of the entry which referred to the `CREATE` operation.
+            // Expect to find document id in database. The document id should be the same as the
+            // hash of the first entry in the log.
             assert_eq!(
                 db.store
-                    .get_document_by_entry(&entry_encoded.hash())
+                    .get_document_by_entry(&encoded_entry.hash())
                     .await
                     .unwrap(),
-                Some(entry_encoded.hash().into())
-            );
-
-            // We expect to find this document in the default log
-            assert_eq!(
-                db.store
-                    .find_document_log_id(&author, Some(&entry_encoded.hash().into()))
-                    .await
-                    .unwrap(),
-                LogId::default()
+                Some(encoded_entry.hash().into())
             );
         });
     }
@@ -389,7 +343,7 @@ mod tests {
     fn log_ids(
         #[from(public_key)] author: Author,
         #[from(test_db)] runner: TestDatabaseRunner,
-        #[from(schema)] schema: SchemaId,
+        #[from(schema_id)] schema_id: SchemaId,
         #[from(random_document_id)] document_first: DocumentId,
         #[from(random_document_id)] document_second: DocumentId,
         #[from(random_document_id)] document_third: DocumentId,
@@ -397,8 +351,8 @@ mod tests {
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
             // Register two log ids at the beginning
-            let log_1 = StorageLog::new(&author, &schema, &document_first, &LogId::default());
-            let log_2 = StorageLog::new(&author, &schema, &document_second, &LogId::new(1));
+            let log_1 = StorageLog::new(&author, &schema_id, &document_first, &LogId::default());
+            let log_2 = StorageLog::new(&author, &schema_id, &document_second, &LogId::new(1));
 
             db.store.insert_log(log_1).await.unwrap();
             db.store.insert_log(log_2).await.unwrap();
@@ -407,7 +361,7 @@ mod tests {
             let log_id = db.store.next_log_id(&author).await.unwrap();
             assert_eq!(log_id, LogId::new(2));
 
-            let log_3 = StorageLog::new(&author, &schema, &document_third, &log_id);
+            let log_3 = StorageLog::new(&author, &schema_id, &document_third, &log_id);
 
             db.store.insert_log(log_3).await.unwrap();
 
@@ -415,7 +369,7 @@ mod tests {
             let log_id = db.store.next_log_id(&author).await.unwrap();
             assert_eq!(log_id, LogId::new(3));
 
-            let log_4 = StorageLog::new(&author, &schema, &document_forth, &log_id);
+            let log_4 = StorageLog::new(&author, &schema_id, &document_forth, &log_id);
 
             db.store.insert_log(log_4).await.unwrap();
 

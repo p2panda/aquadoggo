@@ -6,7 +6,8 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use async_graphql::scalar;
-use p2panda_rs::entry::{SeqNum, SeqNumError};
+use p2panda_rs::entry::error::SeqNumError;
+use p2panda_rs::entry::SeqNum;
 use serde::{Deserialize, Serialize};
 
 /// Sequence number of an entry.

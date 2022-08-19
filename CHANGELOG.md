@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `validation` and `domain` modules used for publish and next args API [#204](https://github.com/p2panda/aquadoggo/pull/204) 🥞
 - Schema task and schema provider that update when new schema views are materialised [#166](https://github.com/p2panda/aquadoggo/pull/166) 🥞
 - Service ready signal [#218](https://github.com/p2panda/aquadoggo/pull/218)
+- Validate operations against their claimed schema [#245](https://github.com/p2panda/aquadoggo/pull/235)
 
 ### Changed
 
@@ -21,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Give error types of worker a string for better debugging [#194](https://github.com/p2panda/aquadoggo/pull/194)
 - Bump `p2panda-rs` which now supports log id's starting from `0` [#207](https://github.com/p2panda/aquadoggo/pull/207)
 - Removed unused field `entry_hash` from operation data model [#221](https://github.com/p2panda/aquadoggo/pull/221)
+- Implement new API for untagged operations [#245](https://github.com/p2panda/aquadoggo/pull/235)
 
 ### Fixed
 

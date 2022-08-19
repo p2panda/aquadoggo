@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use p2panda_rs::document::{DocumentId, DocumentViewId};
+use p2panda_rs::schema::error::{SchemaError, SchemaIdError};
 use p2panda_rs::schema::system::SystemSchemaError;
-use p2panda_rs::schema::{SchemaError, SchemaIdError};
 
 /// `SQLStorage` errors.
 #[derive(thiserror::Error, Debug)]

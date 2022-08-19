@@ -318,14 +318,24 @@ impl DynamicQuery {
 
                 // Recurse into view lists.
                 OperationValue::RelationList(rel) => {
-                    let queries = rel.clone().into_iter().map(|doc_id| {
-                        self.get_by_document_id(doc_id, ctx, next_selection.clone(), None)
+                    let queries = rel.iter().map(|doc_id| {
+                        self.get_by_document_id(
+                            doc_id.to_owned(),
+                            ctx,
+                            next_selection.clone(),
+                            None,
+                        )
                     });
                     Value::List(future::try_join_all(queries).await?)
                 }
                 OperationValue::PinnedRelationList(rel) => {
-                    let queries = rel.clone().into_iter().map(|view_id| {
-                        self.get_by_document_view_id(view_id, ctx, next_selection.clone(), None)
+                    let queries = rel.iter().map(|view_id| {
+                        self.get_by_document_view_id(
+                            view_id.to_owned(),
+                            ctx,
+                            next_selection.clone(),
+                            None,
+                        )
                     });
                     Value::List(future::try_join_all(queries).await?)
                 }
@@ -354,7 +364,7 @@ fn gql_scalar(operation_value: &OperationValue) -> Value {
         OperationValue::Boolean(value) => value.to_owned().into(),
         OperationValue::Integer(value) => value.to_owned().into(),
         OperationValue::Float(value) => value.to_owned().into(),
-        OperationValue::Text(value) => value.to_owned().into(),
+        OperationValue::String(value) => value.to_owned().into(),
         // only use for scalars
         _ => panic!("can only return scalar values"),
     }
@@ -383,7 +393,7 @@ mod test {
 
             // Add schema to node.
             let schema = db
-                .add_schema("schema_name", vec![("bool", FieldType::Bool)], &key_pair)
+                .add_schema("schema_name", vec![("bool", FieldType::Boolean)], &key_pair)
                 .await;
 
             // Publish document on node.
@@ -513,7 +523,7 @@ mod test {
 
             // Add schema to node.
             let schema = db
-                .add_schema("schema_name", vec![("bool", FieldType::Bool)], &key_pair)
+                .add_schema("schema_name", vec![("bool", FieldType::Boolean)], &key_pair)
                 .await;
 
             // Publish document on node.
