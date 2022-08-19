@@ -243,7 +243,7 @@ async fn publish(client: &Client, key_pair: &KeyPair, operation: &Operation) -> 
     let _ = post(client, &query_str).await;
 
     // Wait a little time for materialization to happen.
-    tokio::time::sleep(Duration::from_millis(10)).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
 
     encoded_entry.hash().into()
 }
