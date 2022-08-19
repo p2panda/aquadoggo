@@ -2,9 +2,8 @@
 
 //! Static fields of the client api.
 use async_graphql::{Context, Object, Result};
-use p2panda_rs::document::{DocumentId, DocumentViewId};
+use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::identity::Author;
-use p2panda_rs::Validate;
 
 use crate::db::provider::SqlStorage;
 use crate::domain::next_args;
@@ -39,7 +38,7 @@ impl StaticQuery {
             desc = "Document the entry's UPDATE or DELETE operation is referring to, \
             can be left empty when it is a CREATE operation"
         )]
-        document_id: Option<scalars::DocumentIdScalar>,
+        _document_id: Option<scalars::DocumentIdScalar>,
     ) -> Result<NextEntryArguments> {
         // Access the store from context.
         let store = ctx.data::<SqlStorage>()?;
