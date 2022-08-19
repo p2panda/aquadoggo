@@ -97,13 +97,48 @@ impl SqlStorage {
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::document::DocumentViewId;
-    use p2panda_rs::test_utils::fixtures::random_document_view_id;
+    use p2panda_rs::identity::KeyPair;
+    use p2panda_rs::schema::SchemaId;
+    use p2panda_rs::test_utils::fixtures::{key_pair, random_document_view_id};
+    use p2panda_rs::{document::DocumentViewId, schema::FieldType};
     use rstest::rstest;
 
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
-    // @TODO: bring back test_get_schema_for_view test
+    #[rstest]
+    fn test_get_schema_for_view(
+        key_pair: KeyPair,
+        #[from(test_db)]
+        #[with(1, 1, 1)]
+        runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(|mut db: TestDatabase| async move {
+            let schema = db
+                .add_schema(
+                    "venue",
+                    vec![
+                        ("description", FieldType::String),
+                        ("profile_name", FieldType::String),
+                    ],
+                    &key_pair,
+                )
+                .await;
+
+            let document_view_id = match schema.id() {
+                SchemaId::Application(_, view_id) => view_id,
+                _ => panic!("Invalid schema id"),
+            };
+
+            let result = db
+                .store
+                .get_schema_by_document_view(&document_view_id)
+                .await;
+
+            assert!(result.is_ok());
+            // This is the schema name of the schema document we published.
+            assert_eq!(result.unwrap().unwrap().name(), "schema_definition");
+        });
+    }
 
     #[rstest]
     fn test_get_schema_for_missing_view(
