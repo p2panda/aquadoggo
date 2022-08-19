@@ -76,7 +76,7 @@ async fn e2e() {
     // example we are running a node and client in the same application, in other settings they
     // might be on the the same device, or equally they could be speaking across a network. This
     // separation is important for p2panda, as it's what enables the possibility to build very
-    // lightweight clients communicating with remote nodes who persist, replicate, materialise and
+    // lightweight clients communicating with nodes who persist, replicate, materialise and
     // serve the data.
 
     let client = reqwest::Client::builder()
@@ -188,13 +188,13 @@ async fn publish(client: &Client, key_pair: &KeyPair, operation: &Operation) -> 
     // Publishing operations.
     //
     // There are a few important topics we've glossed over so far. These are "entries" and "logs".
-    // They for an important data structures for a p2p protocol such as p2panda. This is an
+    // They form an important data structures for a p2p protocol such as p2panda. This is an
     // "append-only" log. This is way outside the scope of this example, but you can read more
     // about "Bamboo" (of course, the flavour of log a panda would use) here:
     // https://github.com/AljoschaMeyer/bamboo
     //
     // The main thing to know is that entries are the signed data type which are used to author and
-    // verify operations. They are needed when publishing an entry.
+    // verify operations.
 
     // Composing an entry.
     //
@@ -203,7 +203,7 @@ async fn publish(client: &Client, key_pair: &KeyPair, operation: &Operation) -> 
     // document live on the same log and the seq number increases. When new documents are created,
     // the log id increments and the sequence number starts from 0.
     //
-    // In order to compose an entry with the correct values, we need to ask our node for them
+    // In order to compose an entry with the correct values, we need to ask our node for them,
     // that's what this method does.
 
     let next_args = next_args(
