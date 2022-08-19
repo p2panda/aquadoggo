@@ -179,13 +179,9 @@ pub async fn next_args<S: StorageProvider>(
 /// - Get the expected skiplink from storage.
 /// - Verify the bamboo entry (requires the expected backlink and skiplink to do this).
 ///
-/// ## Ensure single node per author
-///
-/// - @TODO
-///
 /// ## Validate operation against it's claimed schema:
 ///
-/// - @TODO
+/// - verify the content of an operation against it's stated schema.
 ///
 /// ## Determine document id
 ///
@@ -225,8 +221,6 @@ pub async fn publish<S: StorageProvider>(
     // VALIDATE ENTRY AND OPERATION //
     //////////////////////////////////
 
-    // @TODO: Check this validation flow is still correct.
-
     // Verify that the claimed seq num matches the expected seq num for this author and log.
     let latest_entry = store.get_latest_entry(author, log_id).await?;
     let latest_seq_num = latest_entry.as_ref().map(|entry| entry.seq_num());
@@ -262,13 +256,6 @@ pub async fn publish<S: StorageProvider>(
         encoded_operation,
         schema,
     )?;
-
-    ///////////////////////////////////
-    // ENSURE SINGLE NODE PER AUTHOR //
-    ///////////////////////////////////
-
-    // @TODO: Missing a step here where we check if the author has published to this node before, and also
-    // if we know of any other nodes they have published to. Not sure how to do this yet.
 
     //////////////////////////
     // DETERMINE DOCUMENT ID //
