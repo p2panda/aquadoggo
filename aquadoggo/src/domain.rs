@@ -28,20 +28,20 @@ use crate::validation::{
 /// Retrieve arguments required for constructing the next entry in a bamboo log for a specific
 /// author and document.
 ///
-/// We accept a `DocumentViewId` rather than a `DocumentId` as an argument and then identify
-/// the document id based on operations already existing in the store. Doing this means a document
-/// can be updated without knowing the document id itself.
+/// We accept a `DocumentViewId` rather than a `DocumentId` as an argument and then identify the
+/// document id based on operations already existing in the store. Doing this means a document can
+/// be updated without knowing the document id itself.
 ///
-/// This method is intended to be used behind a public API and so we assume all passed values
-/// are in themselves valid.
+/// This method is intended to be used behind a public API and so we assume all passed values are
+/// in themselves valid.
 ///
 /// The steps and validation checks this method performs are:
 ///
 /// Check if a document view id was passed
 ///
-/// - if it wasn't we are creating a new document, safely increment the latest log id for the
-///     passed author and return args immediately
-/// - if it was continue knowing we are updating an existing document
+/// - if it wasn't, we are creating a new document, safely increment the latest log id for the
+/// passed author and return args immediately
+/// - if it was, continue knowing we are updating an existing document
 ///
 /// Determine the document id we are concerned with
 ///
@@ -52,12 +52,12 @@ use crate::validation::{
 /// Determine next arguments
 ///
 /// - get the log id for this author and document id, or if none is found safely increment this
-///     authors latest log id
+/// authors latest log id
 /// - get the backlink entry (latest entry for this author and log)
 /// - get the skiplink for this author, log and next seq num
 /// - get the latest seq num for this author and log and safely increment
 ///
-/// Finally, return next arguments
+/// Finally, return next arguments.
 pub async fn next_args<S: StorageProvider>(
     store: &S,
     public_key: &Author,
@@ -111,12 +111,14 @@ pub async fn next_args<S: StorageProvider>(
             let next_log_id = next_log_id(store, public_key).await?;
             next_args.log_id = next_log_id.into()
         }
-        // If one was found, we need to get the backlink and skiplink, and safely increment the seq num.
+        // If one was found, we need to get the backlink and skiplink, and safely increment the seq
+        // num.
         Some(log_id) => {
             // Get the latest entry in this log.
             let latest_entry = store.get_latest_entry(public_key, &log_id).await?;
 
-            // Determine the next sequence number by incrementing one from the latest entry seq num.
+            // Determine the next sequence number by incrementing one from the latest entry seq
+            // num.
             //
             // If the latest entry is None, then we must be at seq num 1.
             let seq_num = match latest_entry {
@@ -159,8 +161,8 @@ pub async fn next_args<S: StorageProvider>(
 /// Returns the arguments required for constructing the next entry in a bamboo log for the
 /// specified author and document.
 ///
-/// This method is intended to be used behind a public API and so we assume all passed values
-/// are in themselves valid.
+/// This method is intended to be used behind a public API and so we assume all passed values are
+/// in themselves valid.
 ///
 /// # Steps and Validation Performed
 ///
@@ -172,7 +174,7 @@ pub async fn next_args<S: StorageProvider>(
 /// entries:
 ///
 /// - Verify the claimed sequence number against the expected next sequence number for the author
-///     and log.
+/// and log.
 /// - Get the expected backlink from storage.
 /// - Get the expected skiplink from storage.
 /// - Verify the bamboo entry (requires the expected backlink and skiplink to do this).
@@ -199,6 +201,8 @@ pub async fn next_args<S: StorageProvider>(
 /// - Store the operation.
 ///
 /// ## Compute and return next entry arguments
+///
+/// - Done!
 pub async fn publish<S: StorageProvider>(
     store: &S,
     schema: &Schema,
@@ -219,7 +223,7 @@ pub async fn publish<S: StorageProvider>(
     // VALIDATE ENTRY AND OPERATION //
     //////////////////////////////////
 
-    // Verify that the claimed seq num matches the expected seq num for this author and log.
+    // Verify that the claimed seq num matches the expected seq num for this public_key and log.
     let latest_entry = store.get_latest_entry(author, log_id).await?;
     let latest_seq_num = latest_entry.as_ref().map(|entry| entry.seq_num());
     is_next_seq_num(latest_seq_num, seq_num)?;
@@ -255,9 +259,9 @@ pub async fn publish<S: StorageProvider>(
         schema,
     )?;
 
-    //////////////////////////
+    ///////////////////////////
     // DETERMINE DOCUMENT ID //
-    //////////////////////////
+    ///////////////////////////
 
     let document_id = match operation.action() {
         OperationAction::Create => {
@@ -324,7 +328,6 @@ pub async fn publish<S: StorageProvider>(
     // If the entries' seq num is 1 we insert a new log here.
     if entry.seq_num().is_first() {
         let log = S::StorageLog::new(author, &operation.schema_id(), &document_id, log_id);
-
         store.insert_log(log).await?;
     }
 
@@ -336,6 +339,7 @@ pub async fn publish<S: StorageProvider>(
     store
         .insert_entry(&entry, encoded_entry, Some(encoded_operation))
         .await?;
+
     // Insert the operation into the store.
     store.insert_operation(&operation, &document_id).await?;
 
@@ -347,7 +351,8 @@ pub async fn publish<S: StorageProvider>(
 /// This will fail if:
 ///
 /// - any of the operations contained in the view id _don't_ exist in the store
-/// - any of the operations contained in the view id return a different document id than any of the others
+/// - any of the operations contained in the view id return a different document id than any of the
+/// others
 pub async fn get_checked_document_id_for_view_id<S: StorageProvider>(
     store: &S,
     view_id: &DocumentViewId,
@@ -382,7 +387,6 @@ pub async fn get_checked_document_id_for_view_id<S: StorageProvider>(
 
 #[cfg(test)]
 mod tests {
-
     use p2panda_rs::document::{DocumentId, DocumentViewId};
     use p2panda_rs::entry::encode::sign_and_encode_entry;
     use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
@@ -461,7 +465,8 @@ mod tests {
             .unwrap();
         let operation_one_id: OperationId = entry.hash().into();
 
-        // Store another entry and operation, from a different author, which perform an update on the earlier operation.
+        // Store another entry and operation, from a different author, which perform an update on
+        // the earlier operation.
         let update_operation = OperationBuilder::new(schema.id())
             .action(OperationAction::Update)
             .previous_operations(&operation_one_id.clone().into())
@@ -565,22 +570,54 @@ mod tests {
     }
 
     #[rstest]
-    #[case::ok_single_writer(&[], &[(0, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[case::ok_single_writer(
+        &[],
+        &[(0, 8)],
+        KeyPair::from_private_key_str(PRIVATE_KEY).unwrap()
+    )]
     // Weird case where all previous operations are on the same branch, but still valid.
-    #[case::ok_many_previous_operations(&[], &[(0, 8), (0, 7), (0, 6)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
-    #[case::ok_multi_writer(&[], &[(0, 8)], KeyPair::new())]
+    #[case::ok_many_previous_operations(
+        &[],
+        &[(0, 8), (0, 7), (0, 6)],
+        KeyPair::from_private_key_str(PRIVATE_KEY).unwrap()
+    )]
+    #[case::ok_multi_writer(
+        &[],
+        &[(0, 8)],
+        KeyPair::new()
+    )]
     #[should_panic(expected = "<Operation 534d03> not found, could not determine document id")]
-    #[case::previous_operation_missing(&[(0, 8)], &[(0, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[case::previous_operation_missing(
+        &[(0, 8)],
+        &[(0, 8)],
+        KeyPair::from_private_key_str(PRIVATE_KEY).unwrap()
+    )]
     #[should_panic(expected = "<Operation af5ecf> not found, could not determine document id")]
-    #[case::one_of_some_previous_operations_missing(&[(0, 7)], &[(0, 7), (0, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[case::one_of_some_previous_operations_missing(
+        &[(0, 7)],
+        &[(0, 7), (0, 8)],
+        KeyPair::from_private_key_str(PRIVATE_KEY).unwrap()
+    )]
     #[should_panic(expected = "<Operation 534d03> not found, could not determine document id")]
-    #[case::one_of_some_previous_operations_missing(&[(0, 8)], &[(0, 7), (0, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[case::one_of_some_previous_operations_missing(
+        &[(0, 8)],
+        &[(0, 7), (0, 8)],
+        KeyPair::from_private_key_str(PRIVATE_KEY).unwrap()
+    )]
     #[should_panic(expected = "<Operation 534d03> not found, could not determine document id")]
-    #[case::missing_previous_operation_multi_writer(&[(0, 8)], &[(0, 8)], KeyPair::new())]
+    #[case::missing_previous_operation_multi_writer(
+        &[(0, 8)],
+        &[(0, 8)],
+        KeyPair::new()
+    )]
     #[should_panic(
         expected = "Invalid document view id: operations in passed document view id originate from different documents"
     )]
-    #[case::previous_operations_invalid_multiple_document_id(&[], &[(0, 8), (1, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[case::previous_operations_invalid_multiple_document_id(
+        &[],
+        &[(0, 8), (1, 8)],
+        KeyPair::from_private_key_str(PRIVATE_KEY).unwrap()
+    )]
     #[tokio::test]
     async fn publish_with_missing_operations(
         schema: Schema,
@@ -665,22 +702,58 @@ mod tests {
     }
 
     #[rstest]
-    #[case::ok_single_writer(&[], &[(0, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
-    #[case::ok_many_previous_operations(&[], &[(0, 8), (0, 7), (0, 6)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
-    #[case::ok_not_the_most_recent_document_view_id(&[], &[(0, 1)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
-    #[case::ok_multi_writer(&[], &[(0, 8)], KeyPair::new())]
+    #[case::ok_single_writer(
+        &[],
+        &[(0, 8)],
+        KeyPair::from_private_key_str(PRIVATE_KEY).unwrap()
+    )]
+    #[case::ok_many_previous_operations(
+        &[],
+        &[(0, 8), (0, 7), (0, 6)],
+        KeyPair::from_private_key_str(PRIVATE_KEY).unwrap()
+    )]
+    #[case::ok_not_the_most_recent_document_view_id(
+        &[],
+        &[(0, 1)],
+        KeyPair::from_private_key_str(PRIVATE_KEY).unwrap()
+    )]
+    #[case::ok_multi_writer(
+        &[],
+        &[(0, 8)],
+        KeyPair::new()
+    )]
     #[should_panic(expected = "<Operation 534d03> not found, could not determine document id")]
-    #[case::previous_operation_missing(&[(0, 8)], &[(0, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[case::previous_operation_missing(
+        &[(0, 8)],
+        &[(0, 8)],
+        KeyPair::from_private_key_str(PRIVATE_KEY).unwrap()
+    )]
     #[should_panic(expected = "<Operation af5ecf> not found, could not determine document id")]
-    #[case::one_of_some_previous_operations_missing(&[(0, 7)], &[(0, 7), (0, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[case::one_of_some_previous_operations_missing(
+        &[(0, 7)],
+        &[(0, 7), (0, 8)],
+        KeyPair::from_private_key_str(PRIVATE_KEY).unwrap()
+    )]
     #[should_panic(expected = "<Operation 534d03> not found, could not determine document id")]
-    #[case::one_of_some_previous_operations_missing(&[(0, 8)], &[(0, 7), (0, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[case::one_of_some_previous_operations_missing(
+        &[(0, 8)],
+        &[(0, 7), (0, 8)],
+        KeyPair::from_private_key_str(PRIVATE_KEY).unwrap()
+    )]
     #[should_panic(expected = "<Operation 534d03> not found, could not determine document id")]
-    #[case::missing_previous_operation_multi_writer(&[(0, 8)], &[(0, 8)], KeyPair::new())]
+    #[case::missing_previous_operation_multi_writer(
+        &[(0, 8)],
+        &[(0, 8)],
+        KeyPair::new()
+    )]
     #[should_panic(
         expected = "Invalid document view id: operations in passed document view id originate from different documents"
     )]
-    #[case::previous_operations_invalid_multiple_document_id(&[], &[(0, 8), (1, 8)], KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[case::previous_operations_invalid_multiple_document_id(
+        &[],
+        &[(0, 8), (1, 8)],
+        KeyPair::from_private_key_str(PRIVATE_KEY).unwrap()
+    )]
     #[tokio::test]
     async fn next_args_with_missing_operations(
         #[case] operations_to_remove: &[LogIdAndSeqNum],
@@ -860,7 +933,10 @@ mod tests {
     }
 
     #[rstest]
-    #[case::owner_publishes_update_to_correct_log(LogId::new(0), KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[case::owner_publishes_update_to_correct_log(
+        LogId::new(0),
+        KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())
+    ]
     #[case::new_author_updates_to_new_log(LogId::new(0), KeyPair::new())]
     #[should_panic(
         expected = "Entry's claimed log id of 1 does not match existing log id of 0 for given author and document"
@@ -939,16 +1015,25 @@ mod tests {
     }
 
     #[rstest]
-    #[case::owner_publishes_to_correct_log(LogId::new(2), KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[case::owner_publishes_to_correct_log(
+        LogId::new(2),
+        KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())
+    ]
     #[case::new_author_publishes_to_new_log(LogId::new(0), KeyPair::new())]
     #[should_panic(
         expected = "Entry's claimed seq num of 1 does not match expected seq num of 2 for given author and log"
     )]
-    #[case::owner_publishes_to_wrong_and_taken_log(LogId::new(1), KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[case::owner_publishes_to_wrong_and_taken_log(
+        LogId::new(1),
+        KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())
+    ]
     #[should_panic(
         expected = "Entry's claimed log id of 3 does not match expected next log id of 2 for given author"
     )]
-    #[case::owner_publishes_to_wrong_but_free_log(LogId::new(3), KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())]
+    #[case::owner_publishes_to_wrong_but_free_log(
+        LogId::new(3),
+        KeyPair::from_private_key_str(PRIVATE_KEY).unwrap())
+    ]
     #[should_panic(
         expected = "Entry's claimed log id of 1 does not match expected next log id of 0 for given author"
     )]
