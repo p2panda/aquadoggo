@@ -102,8 +102,6 @@ pub async fn next_args<S: StorageProvider>(
     /////////////////////////
 
     // Retrieve the log_id for the found document_id and author.
-    //
-    // @TODO: (lolz, this method is just called `get()`)
     let log_id = store.get(public_key, &document_id).await?;
 
     // Check if an existing log id was found for this author and document.
@@ -409,10 +407,9 @@ mod tests {
     };
     use rstest::rstest;
 
-    use crate::domain::publish;
     use crate::graphql::client::NextEntryArguments;
 
-    use super::{get_checked_document_id_for_view_id, next_args};
+    use super::{get_checked_document_id_for_view_id, next_args, publish};
 
     type LogIdAndSeqNum = (u64, u64);
 
@@ -442,8 +439,6 @@ mod tests {
             }
         }
     }
-
-    // @TODO: Need correct log id test for multi-writer UPDATE operation published on entry with seq_num 1.
 
     #[rstest]
     #[tokio::test]
@@ -971,6 +966,7 @@ mod tests {
         let store = MemoryStore::default();
         let _ = populate_store(&store, &config).await;
 
+        // Construct and publish a new entry with the passed log id.
         let encoded_operation = encode_operation(&operation).unwrap();
         let encoded_entry = sign_and_encode_entry(
             &log_id,
@@ -982,16 +978,28 @@ mod tests {
         )
         .unwrap();
 
-        let result = publish(
+        // This will error (and panic as we unwrap) if the claimed log id is incorrect.
+        // We test the error string is correct.
+        let _result = publish(
             &store,
             &schema,
             &encoded_entry,
             &decode_operation(&encoded_operation).unwrap(),
             &encoded_operation,
         )
-        .await;
+        .await
+        .unwrap();
 
-        result.unwrap();
+        // If it didn't error the request succeeded, we check a new log was stored.
+        let author = Author::from(key_pair.public_key());
+        let document_id = encoded_entry.hash().into();
+
+        let retrieved_log_id = store
+            .get(&author, &document_id)
+            .await
+            .expect("Retrieve log id for document");
+
+        assert_eq!(log_id, retrieved_log_id.unwrap())
     }
 
     #[rstest]
@@ -1144,8 +1152,10 @@ mod tests {
             let publish_entry_response = result.unwrap();
             let seq_num: SeqNum = publish_entry_response.seq_num.into();
             let mut previous_seq_num: SeqNum = next_entry_args.seq_num.into();
+            let log_id: LogId = publish_entry_response.log_id.into();
 
             assert_eq!(seq_num, previous_seq_num.next().unwrap());
+            assert_eq!(log_id, LogId::default());
         }
     }
 
