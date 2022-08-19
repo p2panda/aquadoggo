@@ -134,88 +134,88 @@ fn application_schema_container_type(#[from(test_db)] runner: TestDatabaseRunner
         assert_eq!(response.data, expected_data, "\n{:#?}\n", response.errors);
     });
 }
-// @TODO: Failing test
-// #[rstest]
-// fn application_schema_fields_type(#[from(test_db)] runner: TestDatabaseRunner) {
-//     runner.with_db_teardown(move |mut db: TestDatabase| async move {
-//         let key_pair = random_key_pair();
-//
-//         // Add schema to node.
-//         let schema = db
-//             .add_schema(
-//                 "schema_name",
-//                 vec![
-//                     // scalar field
-//                     ("bool_field", FieldType::Boolean),
-//                     // object field
-//                     (
-//                         "relation_field",
-//                         FieldType::Relation(SchemaId::SchemaDefinition(1)),
-//                     ),
-//                     // list field
-//                     (
-//                         "list_field",
-//                         FieldType::RelationList(SchemaId::SchemaDefinition(1)),
-//                     ),
-//                 ],
-//                 &key_pair,
-//             )
-//             .await;
-//         let type_name = schema.id().to_string();
-//
-//         let client = graphql_test_client(&db).await;
-//         let response = client
-//             .post("/graphql")
-//             .json(&json!({
-//                 "query": format!(
-//                     r#"{{
-//                         schemaFields: __type(name: "{}") {{
-//                             description,
-//                             fields {{
-//                                 name,
-//                                 type {{
-//                                     kind,
-//                                     name
-//                                 }}
-//                             }}
-//                         }}
-//                     }}"#,
-//                     format!("{}Fields", type_name),
-//                 ),
-//             }))
-//             .send()
-//             .await;
-//
-//         let response: Response = response.json().await;
-//
-//         let expected_data = value!({
-//             "schemaFields": {
-//                 "description": "Data fields available on documents of this schema.",
-//                 "fields": [{
-//                     "name": "bool_field",
-//                     "type": {
-//                         "kind": "SCALAR",
-//                         "name": "Boolean"
-//                     }
-//                 },{
-//                     "name": "list_field",
-//                     "type": {
-//                         "kind": "LIST",
-//                         "name": Value::Null
-//                     }
-//                 },{
-//                     "name": "relation_field",
-//                     "type": {
-//                         "kind": "OBJECT",
-//                         "name": "schema_definition_v1"
-//                     }
-//                 }]
-//             }
-//         });
-//
-//         assert_eq!(response.data, expected_data, "\n{:#?}\n", response.errors);
-//     });
-// }
+
+#[rstest]
+fn application_schema_fields_type(#[from(test_db)] runner: TestDatabaseRunner) {
+    runner.with_db_teardown(move |mut db: TestDatabase| async move {
+        let key_pair = random_key_pair();
+
+        // Add schema to node.
+        let schema = db
+            .add_schema(
+                "schema_name",
+                vec![
+                    // scalar field
+                    ("bool_field", FieldType::Boolean),
+                    // object field
+                    (
+                        "relation_field",
+                        FieldType::Relation(SchemaId::SchemaDefinition(1)),
+                    ),
+                    // list field
+                    (
+                        "list_field",
+                        FieldType::RelationList(SchemaId::SchemaDefinition(1)),
+                    ),
+                ],
+                &key_pair,
+            )
+            .await;
+        let type_name = schema.id().to_string();
+
+        let client = graphql_test_client(&db).await;
+        let response = client
+            .post("/graphql")
+            .json(&json!({
+                "query": format!(
+                    r#"{{
+                        schemaFields: __type(name: "{}") {{
+                            description,
+                            fields {{
+                                name,
+                                type {{
+                                    kind,
+                                    name
+                                }}
+                            }}
+                        }}
+                    }}"#,
+                    format!("{}Fields", type_name),
+                ),
+            }))
+            .send()
+            .await;
+
+        let response: Response = response.json().await;
+
+        let expected_data = value!({
+            "schemaFields": {
+                "description": "Data fields available on documents of this schema.",
+                "fields": [{
+                    "name": "bool_field",
+                    "type": {
+                        "kind": "SCALAR",
+                        "name": "Boolean"
+                    }
+                },{
+                    "name": "list_field",
+                    "type": {
+                        "kind": "LIST",
+                        "name": Value::Null
+                    }
+                },{
+                    "name": "relation_field",
+                    "type": {
+                        "kind": "OBJECT",
+                        "name": "schema_definition_v1"
+                    }
+                }]
+            }
+        });
+
+        assert_eq!(response.data, expected_data, "\n{:#?}\n", response.errors);
+    });
+}
 
 #[rstest]
 fn metadata_type(#[from(test_db)] runner: TestDatabaseRunner) {
