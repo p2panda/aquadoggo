@@ -33,6 +33,7 @@ impl StaticQuery {
         )]
         document_view_id: Option<scalars::DocumentViewIdScalar>,
         // @TODO: Figure out why this fixes things....
+        // Related issue: https://github.com/p2panda/aquadoggo/issues/242
         #[graphql(
             name = "documentId",
             desc = "Document the entry's UPDATE or DELETE operation is referring to, \
