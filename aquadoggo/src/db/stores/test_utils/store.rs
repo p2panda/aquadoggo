@@ -9,11 +9,12 @@ use p2panda_rs::schema::{FieldType, Schema, SchemaId};
 use p2panda_rs::storage_provider::traits::StorageProvider;
 use p2panda_rs::test_utils::db::test_db::send_to_store;
 
+use crate::config::Configuration;
 use crate::context::Context;
 use crate::db::provider::SqlStorage;
 use crate::materializer::tasks::{dependency_task, reduce_task, schema_task};
 use crate::materializer::TaskInput;
-use crate::{Configuration, SchemaProvider};
+use crate::schema::SchemaProvider;
 
 /// Container for `SqlStore` with access to the document ids and key_pairs used in the
 /// pre-populated database for testing.

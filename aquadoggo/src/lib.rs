@@ -26,17 +26,15 @@ mod materializer;
 mod node;
 mod replication;
 mod schema;
-mod validation;
-
-#[cfg(test)]
-mod e2e_tests;
 #[cfg(test)]
 mod test_helpers;
+#[cfg(test)]
+mod tests;
+mod validation;
 
 pub use crate::config::Configuration;
 pub use crate::replication::ReplicationConfiguration;
 pub use node::Node;
-pub use schema::SchemaProvider;
 
 /// Init env_logger before the test suite runs to handle logging outputs.
 ///

@@ -14,7 +14,7 @@ use crate::db::provider::SqlStorage;
 use crate::domain::publish;
 use crate::graphql::client::NextEntryArguments;
 use crate::graphql::scalars;
-use crate::SchemaProvider;
+use crate::schema::SchemaProvider;
 
 /// GraphQL queries for the Client API.
 #[derive(Default, Debug, Copy, Clone)]
