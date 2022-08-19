@@ -125,10 +125,6 @@ impl AsEncodedEntry for StorageEntry {
 /// `EntryRow` but we want them as `StorageEntry` which contains typed values.
 impl From<EntryRow> for StorageEntry {
     fn from(entry_row: EntryRow) -> Self {
-        // @TODO: It's ridiculous we need to decode the entry from the bytes when we access it
-        // like this, we should rather store every entry value in the table. However I don't
-        // want to change that as part of this PR so I write this sad note and raise an issue
-        // later.
         let encoded_entry = EncodedEntry::from_bytes(
             &hex::decode(entry_row.entry_bytes)
                 .expect("Decode entry hex entry bytes from database"),
