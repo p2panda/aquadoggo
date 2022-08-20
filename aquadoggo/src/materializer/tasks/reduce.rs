@@ -199,7 +199,7 @@ mod tests {
     use p2panda_rs::operation::traits::AsVerifiedOperation;
     use p2panda_rs::operation::OperationValue;
     use p2panda_rs::schema::Schema;
-    use p2panda_rs::storage_provider::traits::{OperationStore, DocumentStore};
+    use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
     use p2panda_rs::test_utils::constants;
     use p2panda_rs::test_utils::db::test_db::send_to_store;
     use p2panda_rs::test_utils::fixtures::{
