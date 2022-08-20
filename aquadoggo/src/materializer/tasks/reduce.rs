@@ -3,10 +3,9 @@
 use log::{debug, info};
 use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
 use p2panda_rs::operation::traits::AsVerifiedOperation;
-use p2panda_rs::storage_provider::traits::{OperationStore, StorageProvider};
+use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore, StorageProvider};
 
 use crate::context::Context;
-use crate::db::traits::DocumentStore;
 use crate::materializer::worker::{Task, TaskError, TaskResult};
 use crate::materializer::TaskInput;
 
@@ -200,7 +199,7 @@ mod tests {
     use p2panda_rs::operation::traits::AsVerifiedOperation;
     use p2panda_rs::operation::OperationValue;
     use p2panda_rs::schema::Schema;
-    use p2panda_rs::storage_provider::traits::OperationStore;
+    use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
     use p2panda_rs::test_utils::constants;
     use p2panda_rs::test_utils::db::test_db::send_to_store;
     use p2panda_rs::test_utils::fixtures::{
@@ -211,7 +210,6 @@ mod tests {
     use crate::db::stores::test_utils::{
         doggo_fields, doggo_schema, test_db, TestDatabase, TestDatabaseRunner,
     };
-    use crate::db::traits::DocumentStore;
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
 

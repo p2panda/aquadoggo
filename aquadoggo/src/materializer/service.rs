@@ -142,6 +142,7 @@ mod tests {
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::{Operation, OperationId, OperationValue};
     use p2panda_rs::schema::FieldType;
+    use p2panda_rs::storage_provider::traits::DocumentStore;
     use p2panda_rs::test_utils::constants::SCHEMA_ID;
     use p2panda_rs::test_utils::db::test_db::send_to_store;
     use p2panda_rs::test_utils::fixtures::{key_pair, operation, operation_fields, schema};
@@ -153,7 +154,6 @@ mod tests {
     use crate::db::stores::test_utils::{
         doggo_fields, doggo_schema, test_db, TestDatabase, TestDatabaseRunner,
     };
-    use crate::db::traits::DocumentStore;
     use crate::materializer::{Task, TaskInput};
     use crate::schema::SchemaProvider;
     use crate::Configuration;
