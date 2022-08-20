@@ -13,9 +13,9 @@ use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::Human;
+use p2panda_rs::storage_provider::traits::DocumentStore;
 
 use crate::db::provider::SqlStorage;
-use crate::db::traits::DocumentStore;
 use crate::graphql::client::dynamic_types;
 use crate::graphql::client::dynamic_types::DocumentMeta;
 use crate::graphql::client::utils::validate_view_matches_schema;

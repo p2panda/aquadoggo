@@ -3,9 +3,9 @@
 use log::debug;
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::schema::SchemaId;
+use p2panda_rs::storage_provider::traits::DocumentStore;
 
 use crate::context::Context;
-use crate::db::traits::DocumentStore;
 use crate::materializer::worker::{Task, TaskError, TaskResult};
 use crate::materializer::TaskInput;
 
@@ -182,7 +182,7 @@ mod tests {
         RelationList,
     };
     use p2panda_rs::schema::{FieldType, Schema, SchemaId};
-    use p2panda_rs::storage_provider::traits::OperationStore;
+    use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
     use p2panda_rs::test_utils::constants;
     use p2panda_rs::test_utils::db::test_db::send_to_store;
     use p2panda_rs::test_utils::fixtures::{
@@ -191,7 +191,6 @@ mod tests {
     use rstest::rstest;
 
     use crate::db::stores::test_utils::{doggo_schema, test_db, TestDatabase, TestDatabaseRunner};
-    use crate::db::traits::DocumentStore;
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
 

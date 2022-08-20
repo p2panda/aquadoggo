@@ -6,12 +6,12 @@ use async_trait::async_trait;
 use futures::future::try_join_all;
 use p2panda_rs::document::{Document, DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::schema::SchemaId;
+use p2panda_rs::storage_provider::error::DocumentStorageError;
+use p2panda_rs::storage_provider::traits::DocumentStore;
 use sqlx::{query, query_as};
 
-use crate::db::errors::DocumentStorageError;
 use crate::db::models::document::DocumentViewFieldRow;
 use crate::db::provider::SqlStorage;
-use crate::db::traits::DocumentStore;
 use crate::db::utils::parse_document_view_field_rows;
 
 #[async_trait]

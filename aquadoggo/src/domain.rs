@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 
 use anyhow::{anyhow, ensure, Result as AnyhowResult};
-use async_graphql::Result;
+use async_graphql::{Any, Result};
 use bamboo_rs_core_ed25519_yasmf::entry::is_lipmaa_required;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::entry::decode::decode_entry;

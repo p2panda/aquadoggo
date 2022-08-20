@@ -4,9 +4,10 @@ use log::debug;
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
+use p2panda_rs::storage_provider::traits::DocumentStore;
 
 use crate::context::Context;
-use crate::db::traits::{DocumentStore, SchemaStore};
+use crate::db::traits::SchemaStore;
 use crate::materializer::worker::{TaskError, TaskResult};
 use crate::materializer::TaskInput;
 
@@ -123,12 +124,12 @@ mod tests {
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::{OperationBuilder, OperationValue, PinnedRelationList};
     use p2panda_rs::schema::{FieldType, Schema, SchemaId};
+    use p2panda_rs::storage_provider::traits::DocumentStore;
     use p2panda_rs::test_utils::db::test_db::send_to_store;
     use rstest::rstest;
 
     use crate::context::Context;
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
-    use crate::db::traits::DocumentStore;
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
 

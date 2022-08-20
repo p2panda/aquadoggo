@@ -3,6 +3,7 @@
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::schema::error::{SchemaError, SchemaIdError};
 use p2panda_rs::schema::system::SystemSchemaError;
+use p2panda_rs::storage_provider::error::DocumentStorageError;
 
 /// `SQLStorage` errors.
 #[derive(thiserror::Error, Debug)]
@@ -12,27 +13,6 @@ pub enum SqlStorageError {
 
     #[error("Deletion of row from table {0} did not show any effect")]
     Deletion(String),
-}
-
-/// `DocumentStore` errors.
-#[derive(thiserror::Error, Debug)]
-pub enum DocumentStorageError {
-    /// Catch all error which implementers can use for passing their own errors up the chain.
-    #[allow(dead_code)]
-    #[error("Error occured in DocumentStore: {0}")]
-    Custom(String),
-
-    /// A fatal error occured when performing a storage query.
-    #[error("A fatal error occured in DocumentStore: {0}")]
-    FatalStorageError(String),
-
-    /// Error which originates in `insert_document_view()` when the insertion fails.
-    #[error("Error occured when inserting a document view with id {0:?} into storage")]
-    DocumentViewInsertionError(DocumentViewId),
-
-    /// Error which originates in `insert_document()` when the insertion fails.
-    #[error("Error occured when inserting a document with id {0:?} into storage")]
-    DocumentInsertionError(DocumentId),
 }
 
 /// `SchemaStore` errors.

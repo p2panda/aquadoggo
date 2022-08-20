@@ -6,10 +6,11 @@ use async_trait::async_trait;
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::schema::system::{SchemaFieldView, SchemaView};
 use p2panda_rs::schema::{Schema, SchemaId};
+use p2panda_rs::storage_provider::traits::DocumentStore;
 
 use crate::db::errors::SchemaStoreError;
+use crate::db::provider::SqlStorage;
 use crate::db::traits::SchemaStore;
-use crate::db::{provider::SqlStorage, traits::DocumentStore};
 
 #[async_trait]
 impl SchemaStore for SqlStorage {
