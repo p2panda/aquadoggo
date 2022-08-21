@@ -41,7 +41,11 @@ OPTIONS:
 **Example:**
 
 ```
+// for all debug logs form aquadoggo and used crates
 RUST_LOG=debug DATABASE_URL=postgres://postgres:postgres@localhost:5432/db ./aquadoggo
+
+// for compact info logs only directly comming from aquadoggo
+RUST_LOG=aquadoggo=info DATABASE_URL=postgres://postgres:postgres@localhost:5432/db ./aquadoggo
 ```
 
 ## Development
