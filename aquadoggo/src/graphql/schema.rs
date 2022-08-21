@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use async_graphql::{EmptySubscription, MergedObject, Request, Response, Schema};
 use log::{debug, info};
+use p2panda_rs::Human;
 use tokio::sync::Mutex;
 
 use crate::bus::ServiceSender;
@@ -159,7 +160,10 @@ impl GraphQLSchemaManager {
             loop {
                 match on_schema_added.recv().await {
                     Ok(schema_id) => {
-                        info!("Changed schema {}, rebuilding GraphQL API", schema_id);
+                        info!(
+                            "Changed schema {}, rebuilding GraphQL API",
+                            schema_id.display()
+                        );
                         rebuild(shared.clone(), schemas.clone()).await;
                     }
                     Err(err) => {
