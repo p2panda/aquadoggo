@@ -169,7 +169,7 @@ fn application_schema_fields_type(#[from(test_db)] runner: TestDatabaseRunner) {
             .json(&json!({
                 "query": format!(
                     r#"{{
-                        schemaFields: __type(name: "{}") {{
+                        schemaFields: __type(name: "{}Fields") {{
                             description,
                             fields {{
                                 name,
@@ -180,7 +180,7 @@ fn application_schema_fields_type(#[from(test_db)] runner: TestDatabaseRunner) {
                             }}
                         }}
                     }}"#,
-                    format!("{}Fields", type_name),
+                    type_name,
                 ),
             }))
             .send()
@@ -252,13 +252,13 @@ fn metadata_type(#[from(test_db)] runner: TestDatabaseRunner) {
                 "fields": [{
                     "name": "documentId",
                     "type": {
-                        "name": "DocumentIdScalar"
+                        "name": "DocumentId"
                     }
                 },
                 {
                     "name": "viewId",
                     "type": {
-                        "name": "DocumentViewIdScalar"
+                        "name": "DocumentViewId"
                     }
                 }]
             }

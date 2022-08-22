@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! Mutation root.
 use anyhow::anyhow;
 use async_graphql::{Context, Object, Result};
 use p2panda_rs::entry::traits::AsEncodedEntry;
@@ -29,7 +28,7 @@ impl ClientMutationRoot {
         &self,
         ctx: &Context<'_>,
         #[graphql(name = "entry", desc = "Signed and encoded entry to publish")]
-        entry: scalars::EntrySignedScalar,
+        entry: scalars::EncodedEntryScalar,
         #[graphql(
             name = "operation",
             desc = "p2panda operation representing the entry payload."
@@ -292,11 +291,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case::no_entry(
-        "",
-        &OPERATION_ENCODED,
-        "Bytes to decode had length of 0"
-    )]
     #[case::invalid_entry_bytes(
         "AB01",
         &OPERATION_ENCODED,
@@ -305,7 +299,12 @@ mod tests {
     #[case::invalid_entry_hex_encoding(
         "-/74='4,.=4-=235m-0   34.6-3",
         &OPERATION_ENCODED,
-        "Failed to parse \"EntrySignedScalar\": Invalid character '-' at position 0"
+        "Failed to parse \"EncodedEntry\": invalid hex encoding in entry"
+    )]
+    #[case::no_entry(
+        "",
+        &OPERATION_ENCODED,
+        "Bytes to decode had length of 0"
     )]
     #[case::no_operation(
         &EncodedEntry::from_bytes(&ENTRY_ENCODED).to_string(),
@@ -338,12 +337,12 @@ mod tests {
     #[case::valid_entry_with_extra_hex_char_at_end(
         &{EncodedEntry::from_bytes(&ENTRY_ENCODED).to_string() + "A"},
         &OPERATION_ENCODED,
-        "Failed to parse \"EntrySignedScalar\": Odd number of digits"
+        "Failed to parse \"EncodedEntry\": invalid hex encoding in entry"
     )]
     #[case::valid_entry_with_extra_hex_char_at_start(
         &{"A".to_string() + &EncodedEntry::from_bytes(&ENTRY_ENCODED).to_string()},
         &OPERATION_ENCODED,
-        "Failed to parse \"EntrySignedScalar\": Odd number of digits"
+        "Failed to parse \"EncodedEntry\": invalid hex encoding in entry"
     )]
     #[case::should_not_have_skiplink(
         &entry_signed_encoded_unvalidated(

@@ -31,7 +31,7 @@ impl ReplicationRoot {
     async fn entry_by_hash<'a>(
         &self,
         ctx: &Context<'a>,
-        hash: scalars::EntryHash,
+        hash: scalars::EntryHashScalar,
     ) -> Result<EncodedEntryAndOperation> {
         let store = ctx.data::<SqlStorage>()?;
         let result = store.get_entry_by_hash(&hash.clone().into()).await?;
