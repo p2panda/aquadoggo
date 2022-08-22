@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::fmt::Display;
+use std::str::FromStr;
 
 use async_graphql::{InputValueError, Scalar, ScalarType, Value};
 use p2panda_rs::identity::Author;
-use serde::{Deserialize, Serialize};
 
 /// Public key that signed the entry.
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct PublicKeyScalar(Author);
 
-#[Scalar]
+#[Scalar(name = "PublicKey")]
 impl ScalarType for PublicKeyScalar {
     fn parse(value: Value) -> async_graphql::InputValueResult<Self> {
         match &value {
             Value::String(str_value) => {
-                let panda_value: Author = str_value.parse()?;
+                let panda_value = Author::from_str(str_value)?;
                 Ok(PublicKeyScalar(panda_value))
             }
             _ => Err(InputValueError::expected_type(value)),

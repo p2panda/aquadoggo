@@ -14,7 +14,7 @@ use crate::graphql::replication::response::EncodedEntryAndOperation;
 use crate::graphql::scalars;
 
 /// Response type of `entries_newer_than_seq_num` query.
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Response {
     entries_newer_than_seq_num: Paginated<EncodedEntryAndOperation, scalars::SeqNumScalar>,

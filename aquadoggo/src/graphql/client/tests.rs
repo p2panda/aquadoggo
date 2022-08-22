@@ -5,7 +5,6 @@ use std::convert::TryInto;
 
 use async_graphql::{value, Response};
 use p2panda_rs::document::DocumentId;
-use p2panda_rs::operation::OperationFields;
 use p2panda_rs::schema::FieldType;
 use p2panda_rs::test_utils::fixtures::random_key_pair;
 use rstest::rstest;
@@ -14,11 +13,10 @@ use serde_json::json;
 use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 use crate::test_helpers::graphql_test_client;
 
+// Test querying application documents with scalar fields (no relations) by document id and by view
+// id.
 #[rstest]
 fn scalar_fields(#[from(test_db)] runner: TestDatabaseRunner) {
-    // Test querying application documents with scalar fields (no relations) by document id and by
-    // view id.
-
     runner.with_db_teardown(&|mut db: TestDatabase| async move {
         let key_pair = random_key_pair();
 
@@ -27,9 +25,9 @@ fn scalar_fields(#[from(test_db)] runner: TestDatabaseRunner) {
             .add_schema(
                 "schema_name",
                 vec![
-                    ("bool", FieldType::Bool),
+                    ("bool", FieldType::Boolean),
                     ("float", FieldType::Float),
-                    ("int", FieldType::Int),
+                    ("int", FieldType::Integer),
                     ("text", FieldType::String),
                 ],
                 &key_pair,
@@ -88,17 +86,16 @@ fn scalar_fields(#[from(test_db)] runner: TestDatabaseRunner) {
     });
 }
 
+// Test querying application documents across a parent-child relation using different kinds of
+// relation fields.
 #[rstest]
 fn relation_fields(#[from(test_db)] runner: TestDatabaseRunner) {
-    // Test querying application documents across a parent-child relation using different kinds of
-    // relation fields.
-
     runner.with_db_teardown(&|mut db: TestDatabase| async move {
         let key_pair = random_key_pair();
 
         // Add schemas to node.
         let child_schema = db
-            .add_schema("child", vec![("it_works", FieldType::Bool)], &key_pair)
+            .add_schema("child", vec![("it_works", FieldType::Boolean)], &key_pair)
             .await;
 
         let parent_schema = db
@@ -138,14 +135,12 @@ fn relation_fields(#[from(test_db)] runner: TestDatabaseRunner) {
         let child_doc_id: DocumentId = child_view_id.to_string().parse().unwrap();
 
         // Publish parent document on node.
-        let parent_fields: OperationFields = vec![
+        let parent_fields = vec![
             ("by_relation", child_doc_id.clone().into()),
             ("by_pinned_relation", child_view_id.clone().into()),
             ("by_relation_list", vec![child_doc_id].into()),
             ("by_pinned_relation_list", vec![child_view_id].into()),
-        ]
-        .try_into()
-        .unwrap();
+        ];
 
         let parent_view_id = db
             .add_document(parent_schema.id(), parent_fields, &key_pair)

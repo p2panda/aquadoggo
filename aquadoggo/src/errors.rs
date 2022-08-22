@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use p2panda_rs::schema::{SchemaId, SchemaIdError};
+use p2panda_rs::schema::error::SchemaIdError;
+use p2panda_rs::schema::SchemaId;
 use thiserror::Error;
 
 /// A result type used in aquadoggo modules.

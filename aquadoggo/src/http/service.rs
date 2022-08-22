@@ -90,7 +90,7 @@ mod tests {
     #[rstest]
     fn graphql_endpoint(#[from(test_db)] runner: TestDatabaseRunner) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let (tx, _) = broadcast::channel(16);
+            let (tx, _) = broadcast::channel(120);
             let schema_provider = SchemaProvider::default();
             let graphql_schema_manager =
                 GraphQLSchemaManager::new(db.store, tx, schema_provider).await;

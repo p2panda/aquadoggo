@@ -12,10 +12,10 @@ use log::{debug, error, info};
 use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
+use p2panda_rs::storage_provider::traits::DocumentStore;
 use p2panda_rs::Human;
 
 use crate::db::provider::SqlStorage;
-use crate::db::traits::DocumentStore;
 use crate::graphql::client::dynamic_types;
 use crate::graphql::client::dynamic_types::DocumentMeta;
 use crate::graphql::client::utils::validate_view_matches_schema;
@@ -358,14 +358,24 @@ impl DynamicQuery {
 
                 // Recurse into view lists.
                 OperationValue::RelationList(rel) => {
-                    let queries = rel.clone().into_iter().map(|doc_id| {
-                        self.get_by_document_id(doc_id, ctx, next_selection.clone(), None)
+                    let queries = rel.iter().map(|doc_id| {
+                        self.get_by_document_id(
+                            doc_id.to_owned(),
+                            ctx,
+                            next_selection.clone(),
+                            None,
+                        )
                     });
                     Value::List(future::try_join_all(queries).await?)
                 }
                 OperationValue::PinnedRelationList(rel) => {
-                    let queries = rel.clone().into_iter().map(|view_id| {
-                        self.get_by_document_view_id(view_id, ctx, next_selection.clone(), None)
+                    let queries = rel.iter().map(|view_id| {
+                        self.get_by_document_view_id(
+                            view_id.to_owned(),
+                            ctx,
+                            next_selection.clone(),
+                            None,
+                        )
                     });
                     Value::List(future::try_join_all(queries).await?)
                 }
@@ -387,7 +397,7 @@ fn gql_scalar(operation_value: &OperationValue) -> Value {
         OperationValue::Boolean(value) => value.to_owned().into(),
         OperationValue::Integer(value) => value.to_owned().into(),
         OperationValue::Float(value) => value.to_owned().into(),
-        OperationValue::Text(value) => value.to_owned().into(),
+        OperationValue::String(value) => value.to_owned().into(),
         // only use for scalars
         _ => panic!("can only return scalar values"),
     }
@@ -416,7 +426,7 @@ mod test {
 
             // Add schema to node.
             let schema = db
-                .add_schema("schema_name", vec![("bool", FieldType::Bool)], &key_pair)
+                .add_schema("schema_name", vec![("bool", FieldType::Boolean)], &key_pair)
                 .await;
 
             // Publish document on node.
@@ -482,12 +492,12 @@ mod test {
     #[case::malformed_document_id(
         "id: \"verboten\"",
         Value::Null,
-        vec!["Failed to parse \"DocumentIdScalar\": invalid hex encoding in hash string".to_string()]
+        vec!["Failed to parse \"DocumentId\": invalid hex encoding in hash string".to_string()]
     )]
     #[case::malformed_view_id(
         "viewId: \"verboten\"",
         Value::Null,
-        vec!["Failed to parse \"DocumentViewIdScalar\": invalid hex encoding in hash string".to_string()]
+        vec!["Failed to parse \"DocumentViewId\": invalid hex encoding in hash string".to_string()]
     )]
     #[case::missing_parameters(
         "id: null",
@@ -546,7 +556,7 @@ mod test {
 
             // Add schema to node.
             let schema = db
-                .add_schema("schema_name", vec![("bool", FieldType::Bool)], &key_pair)
+                .add_schema("schema_name", vec![("bool", FieldType::Boolean)], &key_pair)
                 .await;
 
             // Publish document on node.
@@ -594,7 +604,7 @@ mod test {
 
             // Add schema to node.
             let schema = db
-                .add_schema("schema_name", vec![("bool", FieldType::Bool)], &key_pair)
+                .add_schema("schema_name", vec![("bool", FieldType::Boolean)], &key_pair)
                 .await;
 
             // Publish document on node.

@@ -919,14 +919,17 @@ mod tests {
         }
 
         // Check if all puzzles have been solved correctly
-        let completed: Vec<JigsawPuzzle> = database
-            .lock()
-            .unwrap()
-            .puzzles
-            .values()
-            .filter(|puzzle| puzzle.complete)
-            .cloned()
-            .collect();
-        assert_eq!(completed.len(), puzzles_count);
+
+        assert_eq!(
+            database
+                .lock()
+                .unwrap()
+                .puzzles
+                .values()
+                .filter(|puzzle| puzzle.complete)
+                .cloned()
+                .count(),
+            puzzles_count
+        );
     }
 }

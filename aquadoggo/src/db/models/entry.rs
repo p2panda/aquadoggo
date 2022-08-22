@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use serde::Serialize;
 use sqlx::FromRow;
 
 /// Representation of a row from the entries table as stored in the database. This is required
@@ -8,8 +7,7 @@ use sqlx::FromRow;
 ///
 /// We store the u64 integer values of `log_id` and `seq_num` as strings since SQLite doesn't
 /// support storing unsigned 64 bit integers.
-#[derive(FromRow, Debug, Serialize, Clone, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
+#[derive(FromRow, Debug, Clone, PartialEq, Eq)]
 pub struct EntryRow {
     /// Public key of the author.
     pub author: String,

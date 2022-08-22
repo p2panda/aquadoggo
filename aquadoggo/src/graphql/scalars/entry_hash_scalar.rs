@@ -1,49 +1,65 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::fmt::Display;
+use std::str::FromStr;
 
-use async_graphql::{scalar, Value};
+use async_graphql::{InputValueError, InputValueResult, Scalar, ScalarType, Value};
 use p2panda_rs::hash::Hash;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 /// Hash of a signed bamboo entry.
-#[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
-pub struct EntryHash(Hash);
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct EntryHashScalar(Hash);
 
-impl From<EntryHash> for Hash {
-    fn from(hash: EntryHash) -> Self {
+#[Scalar(name = "EntryHash")]
+impl ScalarType for EntryHashScalar {
+    fn parse(value: Value) -> InputValueResult<Self> {
+        match &value {
+            Value::String(str_value) => {
+                let hash = Hash::from_str(str_value)?;
+                Ok(EntryHashScalar(hash))
+            }
+            _ => Err(InputValueError::expected_type(value)),
+        }
+    }
+
+    fn to_value(&self) -> Value {
+        Value::String(self.0.to_string())
+    }
+}
+
+impl From<EntryHashScalar> for Hash {
+    fn from(hash: EntryHashScalar) -> Self {
         hash.0
     }
 }
 
-impl From<Hash> for EntryHash {
+impl From<Hash> for EntryHashScalar {
     fn from(hash: Hash) -> Self {
         Self(hash)
     }
 }
 
-impl From<EntryHash> for Value {
-    fn from(entry: EntryHash) -> Self {
+impl From<EntryHashScalar> for Value {
+    fn from(entry: EntryHashScalar) -> Self {
         async_graphql::ScalarType::to_value(&entry)
     }
 }
 
-impl Display for EntryHash {
+impl Display for EntryHashScalar {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
 }
 
-scalar!(EntryHash);
-
 #[cfg(test)]
 mod tests {
     use p2panda_rs::document::DocumentViewId;
 
-    use super::EntryHash;
+    use super::EntryHashScalar;
 
-    impl From<EntryHash> for DocumentViewId {
-        fn from(hash: EntryHash) -> Self {
+    impl From<EntryHashScalar> for DocumentViewId {
+        fn from(hash: EntryHashScalar) -> Self {
             hash.0.into()
         }
     }
