@@ -41,7 +41,7 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::random_key_pair;
     use rstest::rstest;
 
-    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+    use crate::db::stores::test_utils::{add_document, test_db, TestDatabase, TestDatabaseRunner};
     use crate::graphql::client::utils::validate_view_matches_schema;
 
     #[rstest]
@@ -49,18 +49,18 @@ mod tests {
         runner.with_db_teardown(&|mut db: TestDatabase| async move {
             let key_pair = random_key_pair();
 
-            let view_id = db
-                .add_document(
-                    &SchemaId::SchemaFieldDefinition(1),
-                    vec![
-                        ("name", "test_field".into()),
-                        ("type", FieldType::String.into()),
-                    ]
-                    .try_into()
-                    .unwrap(),
-                    &key_pair,
-                )
-                .await;
+            let view_id = add_document(
+                &mut db,
+                &SchemaId::SchemaFieldDefinition(1),
+                vec![
+                    ("name", "test_field".into()),
+                    ("type", FieldType::String.into()),
+                ]
+                .try_into()
+                .unwrap(),
+                &key_pair,
+            )
+            .await;
 
             assert!(validate_view_matches_schema(
                 &view_id,

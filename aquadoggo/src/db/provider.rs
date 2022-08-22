@@ -103,7 +103,7 @@ mod tests {
     use p2panda_rs::{document::DocumentViewId, schema::FieldType};
     use rstest::rstest;
 
-    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+    use crate::db::stores::test_utils::{add_schema, test_db, TestDatabase, TestDatabaseRunner};
 
     #[rstest]
     fn test_get_schema_for_view(
@@ -113,16 +113,16 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|mut db: TestDatabase| async move {
-            let schema = db
-                .add_schema(
-                    "venue",
-                    vec![
-                        ("description", FieldType::String),
-                        ("profile_name", FieldType::String),
-                    ],
-                    &key_pair,
-                )
-                .await;
+            let schema = add_schema(
+                &mut db,
+                "venue",
+                vec![
+                    ("description", FieldType::String),
+                    ("profile_name", FieldType::String),
+                ],
+                &key_pair,
+            )
+            .await;
 
             let document_view_id = match schema.id() {
                 SchemaId::Application(_, view_id) => view_id,

@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Give error types of worker a string for better debugging [#194](https://github.com/p2panda/aquadoggo/pull/194)
 - Bump `p2panda-rs` which now supports log id's starting from `0` [#207](https://github.com/p2panda/aquadoggo/pull/207)
 - Removed unused field `entry_hash` from operation data model [#221](https://github.com/p2panda/aquadoggo/pull/221)
+- Detach test helpers from test storage provider implementation [#237](https://github.com/p2panda/aquadoggo/pull/237)
 - Remove `Scalar` suffix from scalar types in GraphQL schema [#231](https://github.com/p2panda/aquadoggo/pull/231)
 - Implement new API for untagged operations [#245](https://github.com/p2panda/aquadoggo/pull/235)
 - Use `DocumentStore` trait from `p2panda_rs`[#249](https://github.com/p2panda/aquadoggo/pull/249)

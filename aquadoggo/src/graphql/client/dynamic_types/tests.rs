@@ -7,7 +7,7 @@ use p2panda_rs::test_utils::fixtures::random_key_pair;
 use rstest::rstest;
 use serde_json::json;
 
-use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+use crate::db::stores::test_utils::{add_schema, test_db, TestDatabase, TestDatabaseRunner};
 use crate::test_helpers::graphql_test_client;
 
 #[rstest]
@@ -75,14 +75,15 @@ fn application_schema_container_type(#[from(test_db)] runner: TestDatabaseRunner
     runner.with_db_teardown(move |mut db: TestDatabase| async move {
         let key_pair = random_key_pair();
 
-        // Add schema to node.
-        let schema = db
-            .add_schema(
-                "schema_name",
-                vec![("bool_field", FieldType::Boolean)],
-                &key_pair,
-            )
-            .await;
+        // Add schema to test database.
+        let schema = add_schema(
+            &mut db,
+            "schema_name",
+            vec![("bool_field", FieldType::Boolean)],
+            &key_pair,
+        )
+        .await;
+
         let type_name = schema.id().to_string();
 
         let client = graphql_test_client(&db).await;
@@ -141,26 +142,27 @@ fn application_schema_fields_type(#[from(test_db)] runner: TestDatabaseRunner) {
         let key_pair = random_key_pair();
 
         // Add schema to node.
-        let schema = db
-            .add_schema(
-                "schema_name",
-                vec![
-                    // scalar field
-                    ("bool_field", FieldType::Boolean),
-                    // object field
-                    (
-                        "relation_field",
-                        FieldType::Relation(SchemaId::SchemaDefinition(1)),
-                    ),
-                    // list field
-                    (
-                        "list_field",
-                        FieldType::RelationList(SchemaId::SchemaDefinition(1)),
-                    ),
-                ],
-                &key_pair,
-            )
-            .await;
+        let schema = add_schema(
+            &mut db,
+            "schema_name",
+            vec![
+                // scalar field
+                ("bool_field", FieldType::Boolean),
+                // object field
+                (
+                    "relation_field",
+                    FieldType::Relation(SchemaId::SchemaDefinition(1)),
+                ),
+                // list field
+                (
+                    "list_field",
+                    FieldType::RelationList(SchemaId::SchemaDefinition(1)),
+                ),
+            ],
+            &key_pair,
+        )
+        .await;
+
         let type_name = schema.id().to_string();
 
         let client = graphql_test_client(&db).await;

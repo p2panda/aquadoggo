@@ -414,7 +414,9 @@ mod test {
     use rstest::rstest;
     use serde_json::json;
 
-    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+    use crate::db::stores::test_utils::{
+        add_document, add_schema, test_db, TestDatabase, TestDatabaseRunner,
+    };
     use crate::test_helpers::graphql_test_client;
 
     #[rstest]
@@ -425,18 +427,22 @@ mod test {
             let key_pair = random_key_pair();
 
             // Add schema to node.
-            let schema = db
-                .add_schema("schema_name", vec![("bool", FieldType::Boolean)], &key_pair)
-                .await;
+            let schema = add_schema(
+                &mut db,
+                "schema_name",
+                vec![("bool", FieldType::Boolean)],
+                &key_pair,
+            )
+            .await;
 
             // Publish document on node.
-            let view_id = db
-                .add_document(
-                    schema.id(),
-                    vec![("bool", true.into())].try_into().unwrap(),
-                    &key_pair,
-                )
-                .await;
+            let view_id = add_document(
+                &mut db,
+                schema.id(),
+                vec![("bool", true.into())].try_into().unwrap(),
+                &key_pair,
+            )
+            .await;
             let document_id =
                 DocumentId::from(view_id.graph_tips().first().unwrap().as_hash().to_owned());
 
@@ -452,7 +458,7 @@ mod test {
                 }}
             }}"#,
                 type_name = schema.id().to_string(),
-                view_id = view_id.to_string(),
+                view_id = view_id,
                 document_id = document_id.as_str()
             );
 
@@ -555,13 +561,18 @@ mod test {
             let key_pair = random_key_pair();
 
             // Add schema to node.
-            let schema = db
-                .add_schema("schema_name", vec![("bool", FieldType::Boolean)], &key_pair)
-                .await;
+            let schema = add_schema(
+                &mut db,
+                "schema_name",
+                vec![("bool", FieldType::Boolean)],
+                &key_pair,
+            )
+            .await;
 
             // Publish document on node.
-            db.add_document(
-                &schema.id(),
+            add_document(
+                &mut db,
+                schema.id(),
                 vec![("bool", true.into())].try_into().unwrap(),
                 &key_pair,
             )
@@ -603,18 +614,22 @@ mod test {
             let key_pair = random_key_pair();
 
             // Add schema to node.
-            let schema = db
-                .add_schema("schema_name", vec![("bool", FieldType::Boolean)], &key_pair)
-                .await;
+            let schema = add_schema(
+                &mut db,
+                "schema_name",
+                vec![("bool", FieldType::Boolean)],
+                &key_pair,
+            )
+            .await;
 
             // Publish document on node.
-            let view_id = db
-                .add_document(
-                    &schema.id(),
-                    vec![("bool", true.into())].try_into().unwrap(),
-                    &key_pair,
-                )
-                .await;
+            let view_id = add_document(
+                &mut db,
+                &schema.id(),
+                vec![("bool", true.into())].try_into().unwrap(),
+                &key_pair,
+            )
+            .await;
 
             // Configure and send test query.
             let client = graphql_test_client(&db).await;
