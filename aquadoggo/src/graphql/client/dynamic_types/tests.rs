@@ -79,10 +79,11 @@ fn application_schema_container_type(#[from(test_db)] runner: TestDatabaseRunner
         let schema = add_schema(
             &mut db,
             "schema_name",
-            vec![("bool_field", FieldType::Bool)],
+            vec![("bool_field", FieldType::Boolean)],
             &key_pair,
         )
         .await;
+
         let type_name = schema.id().to_string();
 
         let client = graphql_test_client(&db).await;
@@ -146,7 +147,7 @@ fn application_schema_fields_type(#[from(test_db)] runner: TestDatabaseRunner) {
             "schema_name",
             vec![
                 // scalar field
-                ("bool_field", FieldType::Bool),
+                ("bool_field", FieldType::Boolean),
                 // object field
                 (
                     "relation_field",
@@ -161,6 +162,7 @@ fn application_schema_fields_type(#[from(test_db)] runner: TestDatabaseRunner) {
             &key_pair,
         )
         .await;
+
         let type_name = schema.id().to_string();
 
         let client = graphql_test_client(&db).await;
@@ -169,7 +171,7 @@ fn application_schema_fields_type(#[from(test_db)] runner: TestDatabaseRunner) {
             .json(&json!({
                 "query": format!(
                     r#"{{
-                        schemaFields: __type(name: "{}") {{
+                        schemaFields: __type(name: "{}Fields") {{
                             description,
                             fields {{
                                 name,
@@ -180,7 +182,7 @@ fn application_schema_fields_type(#[from(test_db)] runner: TestDatabaseRunner) {
                             }}
                         }}
                     }}"#,
-                    format!("{}Fields", type_name),
+                    type_name,
                 ),
             }))
             .send()
@@ -252,13 +254,13 @@ fn metadata_type(#[from(test_db)] runner: TestDatabaseRunner) {
                 "fields": [{
                     "name": "documentId",
                     "type": {
-                        "name": "DocumentIdScalar"
+                        "name": "DocumentId"
                     }
                 },
                 {
                     "name": "viewId",
                     "type": {
-                        "name": "DocumentViewIdScalar"
+                        "name": "DocumentViewId"
                     }
                 }]
             }

@@ -5,22 +5,21 @@ use std::sync::Arc;
 
 use futures::Future;
 use p2panda_rs::operation::OperationValue;
-use p2panda_rs::schema::SchemaId;
-use p2panda_rs::test_utils::constants::SCHEMA_ID;
+use p2panda_rs::schema::Schema;
+use p2panda_rs::test_utils::db::test_db::{populate_store, PopulateDatabaseConfig};
 use rstest::fixture;
 use tokio::runtime::Builder;
 use tokio::sync::Mutex;
 
+use crate::config::Configuration;
 use crate::context::Context;
 use crate::db::provider::SqlStorage;
-use crate::db::stores::test_utils::{
-    populate_test_db, PopulateDatabaseConfig, TestData, TestDatabase,
-};
+use crate::db::stores::test_utils::{TestData, TestDatabase};
 use crate::db::Pool;
+use crate::schema::SchemaProvider;
 use crate::test_helpers::{initialize_db, initialize_db_with_url};
-use crate::{Configuration, SchemaProvider};
 
-use super::doggo_test_fields;
+use super::{doggo_fields, doggo_schema};
 
 #[async_trait::async_trait]
 pub trait AsyncTestFn {
@@ -54,10 +53,11 @@ where
     }
 }
 
-// @TODO: I'm keeping this here for now as otherwise we would need to refactor _all_ the tests using it.
+// @TODO: I'm keeping this here for now as otherwise we would need to refactor _all_ the tests
+// using it.
 //
-// We may still want to keep this "single database" runner injected through `rstest` but in any case
-// probably best to consider that in a different PR.
+// We may still want to keep this "single database" runner injected through `rstest` but in any
+// case probably best to consider that in a different PR.
 pub struct TestDatabaseRunner {
     config: PopulateDatabaseConfig,
 }
@@ -77,22 +77,30 @@ impl TestDatabaseRunner {
             .expect("Could not build tokio Runtime for test");
 
         runtime.block_on(async {
-            // Initialise test database
+            // Initialise store
             let pool = initialize_db().await;
             let store = SqlStorage::new(pool);
-            let context = Context::new(
-                store.clone(),
-                Configuration::default(),
-                SchemaProvider::default(),
-            );
-            let mut db = TestDatabase {
-                context,
-                store,
-                test_data: TestData::default(),
+
+            // Populate the store and construct test data
+            let (key_pairs, documents) = populate_store(&store, &self.config).await;
+            let test_data = TestData {
+                key_pairs,
+                documents,
             };
 
-            // Populate the test db
-            populate_test_db(&mut db, &self.config).await;
+            // Init schema provider and insert the configured schema
+            let schema_provider = SchemaProvider::default();
+            schema_provider.update(self.config.schema.clone()).await;
+
+            // Construct the context
+            let context = Context::new(store.clone(), Configuration::default(), schema_provider);
+
+            // Construct the actual test database
+            let db = TestDatabase {
+                context,
+                store,
+                test_data,
+            };
 
             // Get a handle of the underlying database connection pool
             let pool = db.store.pool.clone();
@@ -165,11 +173,11 @@ pub fn test_db(
     // A boolean flag for wether all logs should contain a delete operation
     #[default(false)] with_delete: bool,
     // The schema used for all operations in the db
-    #[default(SCHEMA_ID.parse().unwrap())] schema: SchemaId,
+    #[default(doggo_schema())] schema: Schema,
     // The fields used for every CREATE operation
-    #[default(doggo_test_fields())] create_operation_fields: Vec<(&'static str, OperationValue)>,
+    #[default(doggo_fields())] create_operation_fields: Vec<(&'static str, OperationValue)>,
     // The fields used for every UPDATE operation
-    #[default(doggo_test_fields())] update_operation_fields: Vec<(&'static str, OperationValue)>,
+    #[default(doggo_fields())] update_operation_fields: Vec<(&'static str, OperationValue)>,
 ) -> TestDatabaseRunner {
     let config = PopulateDatabaseConfig {
         no_of_entries,
@@ -182,35 +190,6 @@ pub fn test_db(
     };
 
     TestDatabaseRunner { config }
-}
-
-/// Fixture for passing in `PopulateDatabaseConfig` into tests.
-#[fixture]
-pub fn test_db_config(
-    // Number of entries per log/document
-    #[default(0)] no_of_entries: usize,
-    // Number of logs for each author
-    #[default(0)] no_of_logs: usize,
-    // Number of authors, each with logs populated as defined above
-    #[default(0)] no_of_authors: usize,
-    // A boolean flag for wether all logs should contain a delete operation
-    #[default(false)] with_delete: bool,
-    // The schema used for all operations in the db
-    #[default(SCHEMA_ID.parse().unwrap())] schema: SchemaId,
-    // The fields used for every CREATE operation
-    #[default(doggo_test_fields())] create_operation_fields: Vec<(&'static str, OperationValue)>,
-    // The fields used for every UPDATE operation
-    #[default(doggo_test_fields())] update_operation_fields: Vec<(&'static str, OperationValue)>,
-) -> PopulateDatabaseConfig {
-    PopulateDatabaseConfig {
-        no_of_entries,
-        no_of_logs,
-        no_of_authors,
-        with_delete,
-        schema,
-        create_operation_fields,
-        update_operation_fields,
-    }
 }
 
 /// Method which provides a safe way to write tests with the ability to build many databases and

@@ -15,4 +15,4 @@ pub use dynamic_query::DynamicQuery;
 pub use mutation::ClientMutationRoot;
 pub use query::ClientRoot;
 pub use static_query::StaticQuery;
-pub use static_types::NextEntryArguments;
+pub use static_types::NextArguments;

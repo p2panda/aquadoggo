@@ -7,6 +7,7 @@ use axum::extract::Extension;
 use axum::http::Method;
 use axum::routing::get;
 use axum::Router;
+use http::header::CONTENT_TYPE;
 use log::{debug, warn};
 use tower_http::cors::{Any, CorsLayer};
 
@@ -24,6 +25,7 @@ pub fn build_server(http_context: HttpServiceContext) -> Router {
     // Configure CORS middleware
     let cors = CorsLayer::new()
         .allow_methods(vec![Method::GET, Method::POST, Method::OPTIONS])
+        .allow_headers([CONTENT_TYPE])
         .allow_credentials(false)
         .allow_origin(Any);
 
@@ -88,7 +90,7 @@ mod tests {
     #[rstest]
     fn graphql_endpoint(#[from(test_db)] runner: TestDatabaseRunner) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let (tx, _) = broadcast::channel(16);
+            let (tx, _) = broadcast::channel(120);
             let schema_provider = SchemaProvider::default();
             let graphql_schema_manager =
                 GraphQLSchemaManager::new(db.store, tx, schema_provider).await;

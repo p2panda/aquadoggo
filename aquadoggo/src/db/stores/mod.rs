@@ -11,3 +11,4 @@ pub mod test_utils;
 
 pub use self::log::StorageLog;
 pub use entry::StorageEntry;
+pub use operation::StorageOperation;

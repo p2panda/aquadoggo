@@ -2,13 +2,12 @@
 
 //! Static fields of the client api.
 use async_graphql::{Context, Object, Result};
-use p2panda_rs::document::{DocumentId, DocumentViewId};
+use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::identity::Author;
-use p2panda_rs::Validate;
 
 use crate::db::provider::SqlStorage;
 use crate::domain::next_args;
-use crate::graphql::client::NextEntryArguments;
+use crate::graphql::client::NextArguments;
 use crate::graphql::scalars;
 
 /// GraphQL queries for the Client API.
@@ -18,7 +17,7 @@ pub struct StaticQuery;
 #[Object]
 impl StaticQuery {
     /// Return required arguments for publishing the next entry.
-    async fn next_entry_args(
+    async fn next_args(
         &self,
         ctx: &Context<'_>,
         #[graphql(
@@ -28,67 +27,53 @@ impl StaticQuery {
         )]
         public_key: scalars::PublicKeyScalar,
         #[graphql(
+            name = "viewId",
+            desc = "Document the entry's UPDATE or DELETE operation is referring to, \
+            can be left empty when it is a CREATE operation"
+        )]
+        document_view_id: Option<scalars::DocumentViewIdScalar>,
+        // @TODO: Figure out why this fixes things....
+        // Related issue: https://github.com/p2panda/aquadoggo/issues/242
+        #[graphql(
             name = "documentId",
             desc = "Document the entry's UPDATE or DELETE operation is referring to, \
             can be left empty when it is a CREATE operation"
         )]
-        document_id: Option<scalars::DocumentIdScalar>,
-    ) -> Result<NextEntryArguments> {
-        // @TODO: The api for `next_entry_args` needs to be updated to accept a `DocumentViewId`
-
+        _document_id: Option<scalars::DocumentIdScalar>,
+    ) -> Result<NextArguments> {
         // Access the store from context.
         let store = ctx.data::<SqlStorage>()?;
 
         // Convert and validate passed parameters.
         let public_key: Author = public_key.into();
-        let document_id = document_id.map(|val| DocumentId::from(&val));
+        let document_view_id = document_view_id.map(|val| DocumentViewId::from(&val));
 
-        public_key.validate()?;
-        if let Some(ref document_view_id) = document_id {
-            document_view_id.validate()?;
-        }
-
-        // Convert document_id into document_view_id and unwrap as we already validated above.
-        let document_view_id: Option<DocumentViewId> =
-            document_id.map(|id| id.as_str().parse().unwrap());
-
-        // Calculate next entry args.
+        // Calculate next entry's arguments.
         next_args(store, &public_key, document_view_id.as_ref()).await
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryFrom;
-
     use async_graphql::{value, Response};
     use p2panda_rs::identity::Author;
     use rstest::rstest;
     use serde_json::json;
-    use tokio::sync::broadcast;
 
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
-    use crate::graphql::GraphQLSchemaManager;
-    use crate::http::{build_server, HttpServiceContext};
-    use crate::schema::SchemaProvider;
-    use crate::test_helpers::TestClient;
+    use crate::test_helpers::graphql_test_client;
 
     #[rstest]
-    fn next_entry_args_valid_query(#[from(test_db)] runner: TestDatabaseRunner) {
+    fn next_args_valid_query(#[from(test_db)] runner: TestDatabaseRunner) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
-            let (tx, _) = broadcast::channel(16);
-            let schema_provider = SchemaProvider::default();
-            let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
-            let context = HttpServiceContext::new(manager);
-            let client = TestClient::new(build_server(context));
-
+            let client = graphql_test_client(&db).await;
             // Selected fields need to be alphabetically sorted because that's what the `json`
             // macro that is used in the assert below produces.
             let received_entry_args = client
                 .post("/graphql")
                 .json(&json!({
                     "query": r#"{
-                        nextEntryArgs(
+                        nextArgs(
                             publicKey: "8b52ae153142288402382fd6d9619e018978e015e6bc372b1b0c7bd40c6a240a"
                         ) {
                             logId,
@@ -106,7 +91,7 @@ mod tests {
             assert_eq!(
                 received_entry_args.data,
                 value!({
-                    "nextEntryArgs": {
+                    "nextArgs": {
                         "logId": "0",
                         "seqNum": "1",
                         "backlink": null,
@@ -117,21 +102,16 @@ mod tests {
         })
     }
     #[rstest]
-    fn next_entry_args_valid_query_with_document_id(
+    fn next_args_valid_query_with_document_id(
         #[with(1, 1, 1)]
         #[from(test_db)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
-            let (tx, _) = broadcast::channel(16);
-            let schema_provider = SchemaProvider::default();
-            let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
-            let context = HttpServiceContext::new(manager);
-            let client = TestClient::new(build_server(context));
-
+            let client = graphql_test_client(&db).await;
             let document_id = db.test_data.documents.get(0).unwrap();
             let author =
-                Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
+                Author::from(db.test_data.key_pairs[0].public_key());
 
             // Selected fields need to be alphabetically sorted because that's what the `json`
             // macro that is used in the assert below produces.
@@ -139,18 +119,17 @@ mod tests {
                 .post("/graphql")
                 .json(&json!({
                     "query":
-                        format!(
-                            "{{
-                        nextEntryArgs(
-                            publicKey: \"{}\",
-                            documentId: \"{}\"
-                        ) {{
-                            logId,
-                            seqNum,
-                            backlink,
-                            skiplink
-                        }}
-                    }}",
+                        format!("{{
+                            nextArgs(
+                                publicKey: \"{}\",
+                                viewId: \"{}\"
+                            ) {{
+                                logId,
+                                seqNum,
+                                backlink,
+                                skiplink
+                            }}
+                        }}",
                             author.as_str(),
                             document_id.as_str()
                         )
@@ -164,10 +143,10 @@ mod tests {
             assert_eq!(
                 received_entry_args.data,
                 value!({
-                    "nextEntryArgs": {
+                    "nextArgs": {
                         "logId": "0",
                         "seqNum": "2",
-                        "backlink": "0020c8e09edd863b308f9c60b8ba506f29da512d0c9b5a131287f402c57777af5678",
+                        "backlink": "00203c56166a80316aec6b629814ffbafb6bf54d9e30093e122b3cb0f7220e82f15d",
                         "skiplink": null,
                     }
                 })
@@ -176,19 +155,14 @@ mod tests {
     }
 
     #[rstest]
-    fn next_entry_args_error_response(#[from(test_db)] runner: TestDatabaseRunner) {
+    fn next_args_error_response(#[from(test_db)] runner: TestDatabaseRunner) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
-            let (tx, _) = broadcast::channel(16);
-            let schema_provider = SchemaProvider::default();
-            let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
-            let context = HttpServiceContext::new(manager);
-            let client = TestClient::new(build_server(context));
-
+            let client = graphql_test_client(&db).await;
             let response = client
                 .post("/graphql")
                 .json(&json!({
                     "query": r#"{
-                    nextEntryArgs(publicKey: "nope") {
+                    nextArgs(publicKey: "nope") {
                         logId
                     }
                 }"#,
@@ -199,7 +173,7 @@ mod tests {
             let response: Response = response.json().await;
             assert_eq!(
                 response.errors[0].message,
-                "Failed to parse \"PublicKeyScalar\": invalid hex encoding in author string"
+                "Failed to parse \"PublicKey\": invalid hex encoding in author string"
             )
         })
     }
