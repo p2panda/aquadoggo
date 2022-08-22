@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Filter out deleted documents in `get_documents_by_schema` SQL query [#193](https://github.com/p2panda/aquadoggo/pull/193)
 - Resolve implicit `__typename` field on dynamically generated GraphQL objects [#236](https://github.com/p2panda/aquadoggo/pull/236)
 - Allow `Content-Type` header [#236](https://github.com/p2panda/aquadoggo/pull/236)
+- Do not forget to register `DocumentIdScalar` [#252](https://github.com/p2panda/aquadoggo/pull/252)
 
 ## [0.3.0]
 
