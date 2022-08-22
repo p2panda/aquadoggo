@@ -37,7 +37,7 @@ impl DocumentMeta {
         );
 
         // Manually register scalar type in registry because it's not used in the static api.
-        DocumentViewIdScalar::create_type_info(registry);
+        DocumentIdScalar::create_type_info(registry);
 
         fields.insert(
             VIEW_ID_FIELD.to_string(),
