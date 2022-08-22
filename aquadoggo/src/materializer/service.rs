@@ -138,24 +138,22 @@ pub async fn materializer_service(
 mod tests {
     use std::time::Duration;
 
-    use p2panda_rs::document::DocumentViewId;
+    use p2panda_rs::entry::traits::AsEncodedEntry;
     use p2panda_rs::identity::KeyPair;
-    use p2panda_rs::operation::{
-        AsVerifiedOperation, Operation, OperationValue, PinnedRelation, PinnedRelationList,
-        Relation, RelationList,
-    };
-    use p2panda_rs::storage_provider::traits::OperationStore;
+    use p2panda_rs::operation::{Operation, OperationId, OperationValue};
+    use p2panda_rs::schema::FieldType;
+    use p2panda_rs::storage_provider::traits::DocumentStore;
     use p2panda_rs::test_utils::constants::SCHEMA_ID;
-    use p2panda_rs::test_utils::fixtures::{
-        key_pair, operation, operation_fields, random_document_id, random_operation_id,
-    };
+    use p2panda_rs::test_utils::db::test_db::send_to_store;
+    use p2panda_rs::test_utils::fixtures::{key_pair, operation, operation_fields, schema};
     use rstest::rstest;
     use tokio::sync::{broadcast, oneshot};
     use tokio::task;
 
     use crate::context::Context;
-    use crate::db::stores::test_utils::{send_to_store, test_db, TestDatabase, TestDatabaseRunner};
-    use crate::db::traits::DocumentStore;
+    use crate::db::stores::test_utils::{
+        doggo_fields, doggo_schema, test_db, TestDatabase, TestDatabaseRunner,
+    };
     use crate::materializer::{Task, TaskInput};
     use crate::schema::SchemaProvider;
     use crate::Configuration;
@@ -165,21 +163,16 @@ mod tests {
     #[rstest]
     fn materialize_document_from_bus(
         #[from(test_db)]
-        #[with(1, 1, 1, false, SCHEMA_ID.parse().unwrap(), vec![("name", OperationValue::Text("panda".into()))])]
+        #[with(1, 1, 1, false, schema(vec![("name".to_string(), FieldType::String)], SCHEMA_ID.parse().unwrap(), "A test schema"), vec![("name", OperationValue::String("panda".into()))])]
         runner: TestDatabaseRunner,
     ) {
         // Prepare database which inserts data for one document
         runner.with_db_teardown(|db: TestDatabase| async move {
             // Identify document and operation which was inserted for testing
             let document_id = db.test_data.documents.first().unwrap();
-            let verified_operation = db
-                .store
-                .get_operations_by_document_id(document_id)
-                .await
-                .unwrap()
-                .first()
-                .unwrap()
-                .to_owned();
+
+            // We can infer the id of the first operation from the document id
+            let first_operation_id: OperationId = document_id.to_string().parse().unwrap();
 
             // We expect that the database does not contain any materialized document yet
             assert!(db
@@ -217,10 +210,8 @@ mod tests {
             }
 
             // Send a message over the bus which kicks in materialization
-            tx.send(crate::bus::ServiceMessage::NewOperation(
-                verified_operation.operation_id().to_owned(),
-            ))
-            .unwrap();
+            tx.send(crate::bus::ServiceMessage::NewOperation(first_operation_id))
+                .unwrap();
 
             // Wait a little bit for work being done ..
             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -238,7 +229,7 @@ mod tests {
             assert_eq!(document.id().to_string(), document_id.to_string());
             assert_eq!(
                 document.fields().get("name").unwrap().value().to_owned(),
-                OperationValue::Text("panda".into())
+                OperationValue::String("panda".into())
             );
         });
     }
@@ -246,7 +237,7 @@ mod tests {
     #[rstest]
     fn materialize_document_from_last_runtime(
         #[from(test_db)]
-        #[with(1, 1, 1, false, SCHEMA_ID.parse().unwrap(), vec![("name", OperationValue::Text("panda".into()))])]
+        #[with(1, 1, 1, false, schema(vec![("name".to_string(), FieldType::String)], SCHEMA_ID.parse().unwrap(), "A test schema"), vec![("name", OperationValue::String("panda".into()))])]
         runner: TestDatabaseRunner,
     ) {
         // Prepare database which inserts data for one document
@@ -308,7 +299,7 @@ mod tests {
             assert_eq!(document.id().to_string(), document_id.to_string());
             assert_eq!(
                 document.fields().get("name").unwrap().value().to_owned(),
-                OperationValue::Text("panda".into())
+                OperationValue::String("panda".into())
             );
         });
     }
@@ -316,22 +307,17 @@ mod tests {
     #[rstest]
     fn materialize_update_document(
         #[from(test_db)]
-        #[with(1, 1, 1, false, SCHEMA_ID.parse().unwrap(), vec![("name", OperationValue::Text("panda".into()))])]
+        #[with(1, 1, 1, false, schema(vec![("name".to_string(), FieldType::String)], SCHEMA_ID.parse().unwrap(), "A test schema"), vec![("name", OperationValue::String("panda".into()))])]
         runner: TestDatabaseRunner,
     ) {
         // Prepare database which inserts data for one document
         runner.with_db_teardown(|db: TestDatabase| async move {
-            // Identify key_[air, document and operation which was inserted for testing
+            // Identify key_pair, document and operation which was inserted for testing
             let key_pair = db.test_data.key_pairs.first().unwrap();
             let document_id = db.test_data.documents.first().unwrap();
-            let verified_operation = db
-                .store
-                .get_operations_by_document_id(document_id)
-                .await
-                .unwrap()
-                .first()
-                .unwrap()
-                .to_owned();
+
+            // We can infer the id of the first operation from the document id
+            let first_operation_id: OperationId = document_id.to_string().parse().unwrap();
 
             // Prepare arguments for service
             let context = Context::new(
@@ -362,7 +348,7 @@ mod tests {
 
             // Send a message over the bus which kicks in materialization
             tx.send(crate::bus::ServiceMessage::NewOperation(
-                verified_operation.operation_id().to_owned(),
+                first_operation_id.clone(),
             ))
             .unwrap();
 
@@ -375,15 +361,20 @@ mod tests {
                 &operation(
                     Some(operation_fields(vec![(
                         "name",
-                        OperationValue::Text("panda123".into()),
+                        OperationValue::String("panda123".into()),
                     )])),
-                    Some(verified_operation.operation_id().to_owned().into()),
-                    Some(SCHEMA_ID.parse().unwrap()),
+                    Some(first_operation_id.clone().into()),
+                    SCHEMA_ID.parse().unwrap(),
                 ),
-                Some(document_id),
+                &schema(
+                    vec![("name".to_string(), FieldType::String)],
+                    SCHEMA_ID.parse().unwrap(),
+                    "A test schema",
+                ),
                 key_pair,
             )
-            .await;
+            .await
+            .expect("Publish entry");
 
             // Send a message over the bus which kicks in materialization
             tx.send(crate::bus::ServiceMessage::NewOperation(
@@ -407,56 +398,20 @@ mod tests {
             assert_eq!(document.id(), &entry_encoded.hash().into());
             assert_eq!(
                 document.fields().get("name").unwrap().value().to_owned(),
-                OperationValue::Text("panda123".into())
+                OperationValue::String("panda123".into())
             );
         });
     }
 
     #[rstest]
-    #[case(
-        operation(Some(operation_fields(vec![(
-            "relation",
-            OperationValue::Relation(Relation::new(
-                random_document_id(),
-            )),
-        )])), None, None)
-    )]
-    #[case(
-        operation(Some(operation_fields(vec![(
-            "pinned_relation",
-            OperationValue::PinnedRelation(PinnedRelation::new(
-                DocumentViewId::new(&[random_operation_id(), random_operation_id()]).unwrap(),
-            )),
-        )])), None, None)
-    )]
-    #[case(
-        operation(Some(operation_fields(vec![(
-            "relation_list",
-            OperationValue::RelationList(RelationList::new(
-                vec![
-                    random_document_id(),
-                    random_document_id(),
-                    random_document_id()
-                ],
-            )),
-        )])), None, None)
-    )]
-    #[case(
-        operation(Some(operation_fields(vec![(
-            "pinned_relation_list",
-            OperationValue::PinnedRelationList(PinnedRelationList::new(
-                vec![
-                    DocumentViewId::new(&[random_operation_id(), random_operation_id()]).unwrap(),
-                    DocumentViewId::new(&[random_operation_id(), random_operation_id(), random_operation_id()]).unwrap()
-                ],
-            )),
-        )])), None, None)
-    )]
+
     fn materialize_complex_documents(
         #[from(test_db)]
         #[with(0, 0, 0)]
         runner: TestDatabaseRunner,
-        #[case] operation: Operation,
+        #[from(operation)]
+        #[with(Some(operation_fields(doggo_fields())), None, doggo_schema().id().to_owned())]
+        operation: Operation,
         key_pair: KeyPair,
     ) {
         // Prepare empty database
@@ -490,11 +445,14 @@ mod tests {
             }
 
             // Then straight away publish a CREATE operation and send it to the bus.
-            let (entry_encoded, _) = send_to_store(&db.store, &operation, None, &key_pair).await;
+            let (entry_encoded, _) =
+                send_to_store(&db.store, &operation, &doggo_schema(), &key_pair)
+                    .await
+                    .expect("Publish entry");
 
             // Send a message over the bus which kicks in materialization
             tx.send(crate::bus::ServiceMessage::NewOperation(
-                entry_encoded.hash().into(),
+                p2panda_rs::entry::traits::AsEncodedEntry::hash(&entry_encoded).into(),
             ))
             .unwrap();
 

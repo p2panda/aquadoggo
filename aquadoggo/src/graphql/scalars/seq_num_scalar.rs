@@ -6,7 +6,8 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use async_graphql::{InputValueError, Scalar, ScalarType, Value};
-use p2panda_rs::entry::{SeqNum, SeqNumError};
+use p2panda_rs::entry::error::SeqNumError;
+use p2panda_rs::entry::SeqNum;
 use serde::{Deserialize, Serialize};
 
 /// Sequence number of an entry.
@@ -18,12 +19,6 @@ impl SeqNumScalar {
     pub fn as_u64(&self) -> u64 {
         self.0.as_u64()
     }
-
-    /// Convert sequence number to string.
-    #[allow(clippy::inherent_to_string_shadow_display)]
-    pub fn to_string(self) -> String {
-        self.as_u64().to_string()
-    }
 }
 
 #[Scalar(name = "SeqNum")]
@@ -31,7 +26,7 @@ impl ScalarType for SeqNumScalar {
     fn parse(value: Value) -> Result<Self, InputValueError<Self>> {
         match &value {
             Value::String(str_value) => {
-                let seq_num = str_value.as_str().parse::<SeqNum>()?;
+                let seq_num = SeqNum::from_str(str_value)?;
                 Ok(SeqNumScalar(seq_num))
             }
             _ => Err(InputValueError::expected_type(value)),
@@ -43,7 +38,6 @@ impl ScalarType for SeqNumScalar {
     }
 }
 
-/// Convert from p2panda types to GraphQL scalars and back.
 impl From<SeqNum> for SeqNumScalar {
     fn from(seq_num: SeqNum) -> Self {
         Self(seq_num)
@@ -56,7 +50,6 @@ impl From<SeqNumScalar> for SeqNum {
     }
 }
 
-/// Convert from strings to sequence number.
 impl FromStr for SeqNumScalar {
     type Err = SeqNumError;
 

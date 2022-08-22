@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::fmt::Display;
+use std::str::FromStr;
 
 use async_graphql::{InputValueError, InputValueResult, Scalar, ScalarType, Value};
 use p2panda_rs::entry::LogId;
@@ -15,7 +16,7 @@ impl ScalarType for LogIdScalar {
     fn parse(value: Value) -> InputValueResult<Self> {
         match &value {
             Value::String(str_value) => {
-                let log_id = str_value.as_str().parse::<LogId>()?;
+                let log_id = LogId::from_str(str_value)?;
                 Ok(LogIdScalar(log_id))
             }
             _ => Err(InputValueError::expected_type(value)),

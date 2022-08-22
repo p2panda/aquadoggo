@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::fmt::Display;
+use std::{fmt::Display, str::FromStr};
 
 use async_graphql::{InputValueError, InputValueResult, Scalar, ScalarType, Value};
 use p2panda_rs::document::DocumentViewId;
-use serde::{Deserialize, Serialize};
 
 /// Document view id as a GraphQL scalar.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DocumentViewIdScalar(DocumentViewId);
 
 #[Scalar(name = "DocumentViewId")]
@@ -15,7 +14,7 @@ impl ScalarType for DocumentViewIdScalar {
     fn parse(value: Value) -> InputValueResult<Self> {
         match &value {
             Value::String(str_value) => {
-                let view_id = str_value.parse::<DocumentViewId>()?;
+                let view_id = DocumentViewId::from_str(str_value)?;
                 Ok(DocumentViewIdScalar(view_id))
             }
             _ => Err(InputValueError::expected_type(value)),
@@ -35,8 +34,7 @@ impl From<&DocumentViewId> for DocumentViewIdScalar {
 
 impl From<&DocumentViewIdScalar> for DocumentViewId {
     fn from(value: &DocumentViewIdScalar) -> Self {
-        // Unwrap because `DocumentViewIdScalar` is always safely intialised.
-        DocumentViewId::new(value.0.graph_tips()).unwrap()
+        DocumentViewId::new(value.0.graph_tips())
     }
 }
 

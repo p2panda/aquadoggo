@@ -4,7 +4,7 @@ use anyhow::{anyhow, ensure, Result};
 use p2panda_rs::document::DocumentId;
 use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::identity::Author;
-use p2panda_rs::operation::AsOperation;
+use p2panda_rs::operation::traits::AsOperation;
 use p2panda_rs::storage_provider::traits::StorageProvider;
 use p2panda_rs::Human;
 
@@ -94,7 +94,7 @@ pub async fn get_expected_skiplink<S: StorageProvider>(
     author: &Author,
     log_id: &LogId,
     seq_num: &SeqNum,
-) -> Result<S::StorageEntry> {
+) -> Result<S::Entry> {
     ensure!(
         !seq_num.is_first(),
         anyhow!("Entry with seq num 1 can not have skiplink")
@@ -168,23 +168,22 @@ pub fn increment_log_id(log_id: &mut LogId) -> Result<LogId> {
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryFrom;
-
     use p2panda_rs::document::DocumentId;
+    use p2panda_rs::entry::traits::AsEntry;
     use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::identity::{Author, KeyPair};
-    use p2panda_rs::storage_provider::traits::AsStorageEntry;
     use p2panda_rs::test_utils::constants::PRIVATE_KEY;
+    use p2panda_rs::test_utils::db::test_db::{
+        populate_store, test_db_config, PopulateDatabaseConfig,
+    };
+    use p2panda_rs::test_utils::db::MemoryStore;
     use p2panda_rs::test_utils::fixtures::{key_pair, random_document_id};
     use rstest::rstest;
-
-    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
     use super::{
         ensure_document_not_deleted, get_expected_skiplink, increment_log_id, increment_seq_num,
         is_next_seq_num, verify_log_id,
     };
-
     #[rstest]
     #[case(LogId::new(0), LogId::new(1))]
     #[should_panic(expected = "Max log id reached")]
@@ -249,25 +248,26 @@ mod tests {
         expected = "Entry's claimed log id of 3 does not match expected next log id of 2 for given author"
     )]
     #[case::new_document_not_next_log_id(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(3), Some(random_document_id()))]
-    fn verifies_log_id(
+    #[tokio::test]
+    async fn verifies_log_id(
         #[case] key_pair: KeyPair,
         #[case] claimed_log_id: LogId,
         #[case] document_id: Option<DocumentId>,
-        #[from(test_db)]
+        #[from(test_db_config)]
         #[with(2, 2, 1)]
-        runner: TestDatabaseRunner,
+        config: PopulateDatabaseConfig,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
-            // Unwrap the passed document id or select the first valid one from the database.
-            let document_id =
-                document_id.unwrap_or_else(|| db.test_data.documents.first().unwrap().to_owned());
+        let store = MemoryStore::default();
+        let (_, documents) = populate_store(&store, &config).await;
 
-            let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+        // Unwrap the passed document id or select the first valid one from the database.
+        let document_id = document_id.unwrap_or_else(|| documents.first().unwrap().to_owned());
 
-            verify_log_id(&db.store, &author, &claimed_log_id, &document_id)
-                .await
-                .unwrap();
-        })
+        let author = Author::from(key_pair.public_key());
+
+        verify_log_id(&store, &author, &claimed_log_id, &document_id)
+            .await
+            .unwrap();
     }
 
     #[rstest]
@@ -282,21 +282,23 @@ mod tests {
     #[case::log_id_is_wrong(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(4), SeqNum::new(7).unwrap())]
     #[should_panic(expected = "Entry with seq num 1 can not have skiplink")]
     #[case::seq_num_is_one(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(0), SeqNum::new(1).unwrap())]
-    fn get_expected_skiplink_errors(
+    #[tokio::test]
+    async fn get_expected_skiplink_errors(
         #[case] key_pair: KeyPair,
         #[case] log_id: LogId,
         #[case] seq_num: SeqNum,
-        #[from(test_db)]
+        #[from(test_db_config)]
         #[with(7, 1, 1)]
-        runner: TestDatabaseRunner,
+        config: PopulateDatabaseConfig,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
-            let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+        let store = MemoryStore::default();
+        let _ = populate_store(&store, &config).await;
 
-            get_expected_skiplink(&db.store, &author, &log_id, &seq_num)
-                .await
-                .unwrap();
-        })
+        let author = Author::from(key_pair.public_key());
+
+        get_expected_skiplink(&store, &author, &log_id, &seq_num)
+            .await
+            .unwrap();
     }
 
     #[rstest]
@@ -311,52 +313,57 @@ mod tests {
     #[case(SeqNum::new(8).unwrap(), SeqNum::new(4).unwrap())]
     #[case(SeqNum::new(9).unwrap(), SeqNum::new(8).unwrap())]
     #[case(SeqNum::new(10).unwrap(), SeqNum::new(9).unwrap())]
-    fn gets_expected_skiplink(
+    #[tokio::test]
+    async fn gets_expected_skiplink(
         key_pair: KeyPair,
         #[case] seq_num: SeqNum,
         #[case] expected_seq_num: SeqNum,
-        #[from(test_db)]
+        #[from(test_db_config)]
         #[with(10, 1, 1)]
-        runner: TestDatabaseRunner,
+        config: PopulateDatabaseConfig,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
-            let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+        let store = MemoryStore::default();
+        let _ = populate_store(&store, &config).await;
 
-            let skiplink_entry =
-                get_expected_skiplink(&db.store, &author, &LogId::default(), &seq_num)
-                    .await
-                    .unwrap();
+        let author = Author::from(key_pair.public_key());
 
-            assert_eq!(skiplink_entry.seq_num(), expected_seq_num)
-        })
+        let skiplink_entry = get_expected_skiplink(&store, &author, &LogId::default(), &seq_num)
+            .await
+            .unwrap();
+
+        assert_eq!(skiplink_entry.seq_num(), &expected_seq_num)
     }
 
     #[rstest]
     #[should_panic(expected = "Document is deleted")]
-    fn identifies_deleted_document(
-        #[from(test_db)]
+    #[tokio::test]
+    async fn identifies_deleted_document(
+        #[from(test_db_config)]
         #[with(3, 1, 1, true)]
-        runner: TestDatabaseRunner,
+        config: PopulateDatabaseConfig,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
-            let document_id = db.test_data.documents.first().unwrap();
-            ensure_document_not_deleted(&db.store, document_id)
-                .await
-                .unwrap();
-        })
+        let store = MemoryStore::default();
+        let (_, documents) = populate_store(&store, &config).await;
+
+        let document_id = documents.first().unwrap();
+        ensure_document_not_deleted(&store, document_id)
+            .await
+            .unwrap();
     }
 
     #[rstest]
-    fn identifies_not_deleted_document(
-        #[from(test_db)]
+    #[tokio::test]
+    async fn identifies_not_deleted_document(
+        #[from(test_db_config)]
         #[with(3, 1, 1, false)]
-        runner: TestDatabaseRunner,
+        config: PopulateDatabaseConfig,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
-            let document_id = db.test_data.documents.first().unwrap();
-            assert!(ensure_document_not_deleted(&db.store, document_id)
-                .await
-                .is_ok());
-        })
+        let store = MemoryStore::default();
+        let (_, documents) = populate_store(&store, &config).await;
+
+        let document_id = documents.first().unwrap();
+        assert!(ensure_document_not_deleted(&store, document_id)
+            .await
+            .is_ok());
     }
 }

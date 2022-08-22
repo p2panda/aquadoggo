@@ -6,12 +6,12 @@ use async_trait::async_trait;
 use futures::future::try_join_all;
 use p2panda_rs::document::{Document, DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::schema::SchemaId;
+use p2panda_rs::storage_provider::error::DocumentStorageError;
+use p2panda_rs::storage_provider::traits::DocumentStore;
 use sqlx::{query, query_as};
 
-use crate::db::errors::DocumentStorageError;
 use crate::db::models::document::DocumentViewFieldRow;
 use crate::db::provider::SqlStorage;
-use crate::db::traits::DocumentStore;
 use crate::db::utils::parse_document_view_field_rows;
 
 #[async_trait]
@@ -316,100 +316,67 @@ impl DocumentStore for SqlStorage {
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryFrom;
-    use std::str::FromStr;
-
     use p2panda_rs::document::{
-        DocumentBuilder, DocumentViewFields, DocumentViewId, DocumentViewValue,
+        Document, DocumentBuilder, DocumentId, DocumentViewFields, DocumentViewId,
     };
-    use p2panda_rs::entry::{LogId, SeqNum};
-    use p2panda_rs::identity::Author;
-    use p2panda_rs::operation::{AsOperation, Operation, OperationId, OperationValue};
-    use p2panda_rs::schema::SchemaId;
-    use p2panda_rs::storage_provider::traits::{AsStorageEntry, EntryStore, OperationStore};
-    use p2panda_rs::test_utils::constants::SCHEMA_ID;
+    use p2panda_rs::operation::traits::AsOperation;
+    use p2panda_rs::operation::{Operation, OperationId};
+    use p2panda_rs::storage_provider::traits::StorageProvider;
+    use p2panda_rs::test_utils::constants::{self};
     use p2panda_rs::test_utils::fixtures::{
         operation, random_document_view_id, random_operation_id,
     };
     use rstest::rstest;
 
     use crate::db::stores::document::{DocumentStore, DocumentView};
-    use crate::db::stores::entry::StorageEntry;
-    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+    use crate::db::stores::test_utils::{doggo_schema, test_db, TestDatabase, TestDatabaseRunner};
 
-    fn entries_to_document_views(entries: &[StorageEntry]) -> Vec<DocumentView> {
-        let mut document_views = Vec::new();
-        let mut current_document_view_fields = DocumentViewFields::new();
+    async fn build_document<S: StorageProvider>(store: &S, document_id: &DocumentId) -> Document {
+        // We retrieve the operations.
+        let document_operations = store
+            .get_operations_by_document_id(document_id)
+            .await
+            .expect("Get operations");
 
-        for entry in entries {
-            let operation_id: OperationId = entry.hash().into();
-
-            for (name, value) in entry.operation().fields().unwrap().iter() {
-                if entry.operation().is_delete() {
-                    continue;
-                } else {
-                    current_document_view_fields
-                        .insert(name, DocumentViewValue::new(&operation_id, value));
-                }
-            }
-
-            let document_view_fields = DocumentViewFields::new_from_operation_fields(
-                &operation_id,
-                &entry.operation().fields().unwrap(),
-            );
-
-            let document_view =
-                DocumentView::new(&operation_id.clone().into(), &document_view_fields);
-
-            document_views.push(document_view)
-        }
-
-        document_views
+        // Then we construct the document.
+        DocumentBuilder::new(document_operations)
+            .build()
+            .expect("Build the document")
     }
 
     #[rstest]
-    fn inserts_gets_one_document_view(
+    fn insert_and_get_one_document_view(
         #[from(test_db)]
         #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let author =
-                Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
+            // Operations for this document id exist in the database.
+            let document_id = db.test_data.documents[0].clone();
 
-            // Get one entry from the pre-polulated db
-            let entry = db
-                .store
-                .get_entry_at_seq_num(&author, &LogId::default(), &SeqNum::new(1).unwrap())
-                .await
-                .unwrap()
-                .unwrap();
+            // Get the operations and build the document.
+            let document = build_document(&db.store, &document_id).await;
 
-            // Construct a `DocumentView`
-            let operation_id: OperationId = entry.hash().into();
-            let document_view_id: DocumentViewId = operation_id.clone().into();
-            let document_view = DocumentView::new(
-                &document_view_id,
-                &DocumentViewFields::new_from_operation_fields(
-                    &operation_id,
-                    &entry.operation().fields().unwrap(),
-                ),
-            );
+            // Get it's document view and insert it in the database.
+            let document_view = document.view().expect("Get document view");
 
-            // Insert into db
+            // Insert the view into the store.
             let result = db
                 .store
-                .insert_document_view(&document_view, &SchemaId::from_str(SCHEMA_ID).unwrap())
+                .insert_document_view(document_view, document.schema())
                 .await;
-
             assert!(result.is_ok());
 
+            // We should be able to retrieve the document view now by it's view_id.
             let retrieved_document_view = db
                 .store
-                .get_document_view_by_id(&document_view_id)
+                .get_document_view_by_id(document_view.id())
                 .await
                 .unwrap()
                 .unwrap();
+
+            // The retrieved view should the expected fields.
+            assert_eq!(retrieved_document_view.len(), 9);
 
             for key in [
                 "username",
@@ -436,70 +403,16 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
+            // We try to retrieve a document view by it's id but no view
+            // with that id exists.
             let view_does_not_exist = db
                 .store
                 .get_document_view_by_id(&random_document_view_id)
                 .await
                 .unwrap();
 
+            // The return result should contain a none value.
             assert!(view_does_not_exist.is_none());
-        });
-    }
-
-    #[rstest]
-    fn inserts_gets_many_document_views(
-        #[from(test_db)]
-        #[with(10, 1, 1, false, SCHEMA_ID.parse().unwrap(), vec![("username", OperationValue::Text("panda".into()))], vec![("username", OperationValue::Text("PANDA".into()))])]
-        runner: TestDatabaseRunner,
-    ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            let author =
-                Author::try_from(db.test_data.key_pairs[0].public_key().to_owned()).unwrap();
-            let schema_id = SchemaId::from_str(SCHEMA_ID).unwrap();
-
-            let log_id = LogId::default();
-            let seq_num = SeqNum::default();
-
-            // Get 10 entries from the pre-populated test db
-            let entries = db
-                .store
-                .get_paginated_log_entries(&author, &log_id, &seq_num, 10)
-                .await
-                .unwrap();
-
-            // Parse them into document views
-            let document_views = entries_to_document_views(&entries);
-
-            // Insert each of these views into the db
-            for document_view in document_views.clone() {
-                db.store
-                    .insert_document_view(&document_view, &schema_id)
-                    .await
-                    .unwrap();
-            }
-
-            // Retrieve them again and assert they are the same as the inserted ones
-            for (count, entry) in entries.iter().enumerate() {
-                let result = db.store.get_document_view_by_id(&entry.hash().into()).await;
-
-                assert!(result.is_ok());
-
-                let document_view = result.unwrap().unwrap();
-
-                // The update operation should be included in the view correctly, we check that here.
-                let expected_username = if count == 0 {
-                    DocumentViewValue::new(
-                        &entry.hash().into(),
-                        &OperationValue::Text("panda".to_string()),
-                    )
-                } else {
-                    DocumentViewValue::new(
-                        &entry.hash().into(),
-                        &OperationValue::Text("PANDA".to_string()),
-                    )
-                };
-                assert_eq!(document_view.get("username").unwrap(), &expected_username);
-            }
         });
     }
 
@@ -511,6 +424,7 @@ mod tests {
         operation: Operation,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
+            // Construct a document view from an operation which is not in the database.
             let document_view = DocumentView::new(
                 &document_view_id,
                 &DocumentViewFields::new_from_operation_fields(
@@ -519,9 +433,11 @@ mod tests {
                 ),
             );
 
+            // Inserting the view should fail as it must relate to an
+            // operation which is already in the database.
             let result = db
                 .store
-                .insert_document_view(&document_view, &SchemaId::from_str(SCHEMA_ID).unwrap())
+                .insert_document_view(&document_view, constants::schema().id())
                 .await;
 
             assert!(result.is_err());
@@ -529,81 +445,44 @@ mod tests {
     }
 
     #[rstest]
-    fn inserts_gets_documents(
+    fn inserts_gets_document(
         #[from(test_db)]
         #[with(1, 1, 1)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
+            // Operations for this document id exist in the database.
             let document_id = db.test_data.documents[0].clone();
+            // Build the document and view.
+            let document = build_document(&db.store, &document_id).await;
+            let expected_document_view = document.view().expect("Get document view");
 
-            let document_operations = db
-                .store
-                .get_operations_by_document_id(&document_id)
-                .await
-                .unwrap();
-
-            let document = DocumentBuilder::new(document_operations).build().unwrap();
-
+            // The document is successfully inserted into the database, this
+            // relies on the operations already being present and would fail
+            // if they were not.
             let result = db.store.insert_document(&document).await;
-
             assert!(result.is_ok());
 
-            let document_view = db
-                .store
-                .get_document_view_by_id(document.view_id())
-                .await
-                .unwrap()
-                .unwrap();
-
-            let expected_document_view = document.view().unwrap();
-
-            for key in [
-                "username",
-                "age",
-                "height",
-                "is_admin",
-                "profile_picture",
-                "many_profile_pictures",
-                "special_profile_picture",
-                "many_special_profile_pictures",
-                "another_relation_field",
-            ] {
-                assert!(document_view.get(key).is_some());
-                assert_eq!(document_view.get(key), expected_document_view.get(key));
-            }
-        });
-    }
-
-    #[rstest]
-    fn gets_document_by_id(
-        #[from(test_db)]
-        #[with(1, 1, 1)]
-        runner: TestDatabaseRunner,
-    ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            let document_id = db.test_data.documents[0].clone();
-
-            let document_operations = db
-                .store
-                .get_operations_by_document_id(&document_id)
-                .await
-                .unwrap();
-
-            let document = DocumentBuilder::new(document_operations).build().unwrap();
-
-            let result = db.store.insert_document(&document).await;
-
-            assert!(result.is_ok());
-
-            let document_view = db
+            // We can retrieve the most recent document view for this document by it's id.
+            let most_recent_document_view = db
                 .store
                 .get_document_by_id(document.id())
                 .await
                 .unwrap()
                 .unwrap();
 
-            let expected_document_view = document.view().unwrap();
+            // We can retrieve a specific document view for this document by it's view_id.
+            // In this case, that should be the same as the view retrieved above.
+            let specific_document_view = db
+                .store
+                .get_document_view_by_id(document.view_id())
+                .await
+                .unwrap()
+                .unwrap();
+
+            // The retrieved views should both have 9 fields.
+            assert_eq!(most_recent_document_view.len(), 9);
+            assert_eq!(specific_document_view.len(), 9);
 
             for key in [
                 "username",
@@ -616,8 +495,18 @@ mod tests {
                 "many_special_profile_pictures",
                 "another_relation_field",
             ] {
-                assert!(document_view.get(key).is_some());
-                assert_eq!(document_view.get(key), expected_document_view.get(key));
+                // The values contained in both retrieved document views
+                // should match the expected ones.
+                assert!(most_recent_document_view.get(key).is_some());
+                assert_eq!(
+                    most_recent_document_view.get(key),
+                    expected_document_view.get(key)
+                );
+                assert!(specific_document_view.get(key).is_some());
+                assert_eq!(
+                    specific_document_view.get(key),
+                    expected_document_view.get(key)
+                );
             }
         });
     }
@@ -629,22 +518,29 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
+            // Operations for this document id exist in the database.
             let document_id = db.test_data.documents[0].clone();
 
-            let document_operations = db
-                .store
-                .get_operations_by_document_id(&document_id)
-                .await
-                .unwrap();
+            // Get the operations and build the document.
+            let document = build_document(&db.store, &document_id).await;
+            // Get the view id.
+            let view_id = document.view_id();
 
-            let document = DocumentBuilder::new(document_operations).build().unwrap();
+            // As it has been deleted, there should be no view.
+            assert!(document.view().is_none());
 
+            // Here we insert the document. This action also sets it's most recent view.
             let result = db.store.insert_document(&document).await;
-
             assert!(result.is_ok());
 
+            // We retrieve the most recent view for this document by it's document id,
+            // but as the document is deleted, we should get a none value back.
             let document_view = db.store.get_document_by_id(document.id()).await.unwrap();
+            assert!(document_view.is_none());
 
+            // We also try to retrieve the specific document view by it's view id.
+            // This should also return none as it is deleted.
+            let document_view = db.store.get_document_view_by_id(view_id).await.unwrap();
             assert!(document_view.is_none());
         });
     }
@@ -656,26 +552,20 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
+            // Operations for this document id exist in the database.
             let document_id = db.test_data.documents[0].clone();
 
-            let document_operations = db
-                .store
-                .get_operations_by_document_id(&document_id)
-                .await
-                .unwrap();
-
-            let document = DocumentBuilder::new(document_operations).build().unwrap();
+            // Get the operations and build the document.
+            let document = build_document(&db.store, &document_id).await;
 
             let result = db.store.insert_document(&document).await;
-
             assert!(result.is_ok());
 
             let document_views = db
                 .store
-                .get_documents_by_schema(&SCHEMA_ID.parse().unwrap())
+                .get_documents_by_schema(constants::schema().id())
                 .await
                 .unwrap();
-
             assert!(document_views.is_empty());
         });
     }
@@ -687,30 +577,51 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
+            // Operations for this document id exist in the database.
             let document_id = db.test_data.documents[0].clone();
 
-            let document_operations = db
-                .store
-                .get_operations_by_document_id(&document_id)
-                .await
-                .unwrap();
+            // Get the operations and build the document.
+            let document = build_document(&db.store, &document_id).await;
+            // Get the oredered operations.
+            let sorted_operations = document.operations();
 
-            let document = DocumentBuilder::new(document_operations).build().unwrap();
-
+            // We want to test that a document is updated.
             let mut current_operations = Vec::new();
-
-            for operation in document.operations() {
-                // For each operation in the db we insert a document, cumulatively adding the next operation
-                // each time. this should perform an "INSERT" first in the documents table, followed by 9 "UPDATES".
+            for operation in sorted_operations {
+                // For each operation in the db we insert a document, cumulatively adding the next
+                // operation each time. this should perform an "INSERT" first in the documents
+                // table, followed by 9 "UPDATES".
                 current_operations.push(operation.clone());
+
+                // We build each document.
                 let document = DocumentBuilder::new(current_operations.clone())
                     .build()
-                    .unwrap();
-                let result = db.store.insert_document(&document).await;
-                assert!(result.is_ok());
+                    .expect("Build document");
 
-                let document_view = db.store.get_document_by_id(document.id()).await.unwrap();
-                assert!(document_view.is_some());
+                // Insert it to the database, this should also update it's view.
+                db.store
+                    .insert_document(&document)
+                    .await
+                    .expect("Insert document");
+
+                // We can retrieve the document's latest view by it's document id.
+                let latest_document_view = db
+                    .store
+                    .get_document_by_id(document.id())
+                    .await
+                    .expect("Get document view");
+
+                // And also retrieve the latest document view directly by it's document view id.
+                let specific_document_view = db
+                    .store
+                    .get_document_view_by_id(document.view_id())
+                    .await
+                    .expect("Get document view");
+
+                // The views should equal the current view of the document we inserted.
+                // This includes the value and the view id.
+                assert_eq!(document.view(), latest_document_view.as_ref());
+                assert_eq!(document.view(), specific_document_view.as_ref());
             }
         })
     }
@@ -718,27 +629,29 @@ mod tests {
     #[rstest]
     fn gets_documents_by_schema(
         #[from(test_db)]
-        #[with(10, 2, 1, false, SCHEMA_ID.parse().unwrap())]
+        #[with(2, 10, 1, false)]
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let schema_id = SchemaId::from_str(SCHEMA_ID).unwrap();
-
+            // Insert two documents which have the same schema.
             for document_id in &db.test_data.documents {
-                let document_operations = db
-                    .store
-                    .get_operations_by_document_id(document_id)
+                // Get the operations and build the document.
+                let document = build_document(&db.store, document_id).await;
+                db.store
+                    .insert_document(&document)
                     .await
-                    .unwrap();
-
-                let document = DocumentBuilder::new(document_operations).build().unwrap();
-
-                db.store.insert_document(&document).await.unwrap();
+                    .expect("Insert document");
             }
 
-            let schema_documents = db.store.get_documents_by_schema(&schema_id).await.unwrap();
+            // Retrieve these documents by their schema id.
+            let schema_documents = db
+                .store
+                .get_documents_by_schema(doggo_schema().id())
+                .await
+                .expect("Get document by schema");
 
-            assert_eq!(schema_documents.len(), 2);
+            // There should be two.
+            assert_eq!(schema_documents.len(), 10);
         });
     }
 }

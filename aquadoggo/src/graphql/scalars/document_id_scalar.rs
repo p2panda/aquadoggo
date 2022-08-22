@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::fmt::Display;
+use std::str::FromStr;
 
 use async_graphql::{InputValueError, InputValueResult, Scalar, ScalarType, Value};
 use p2panda_rs::document::DocumentId;
-use serde::{Deserialize, Serialize};
 
 /// Id of a p2panda document.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DocumentIdScalar(DocumentId);
 
 #[Scalar(name = "DocumentId")]
@@ -15,7 +15,7 @@ impl ScalarType for DocumentIdScalar {
     fn parse(value: Value) -> InputValueResult<Self> {
         match &value {
             Value::String(str_value) => {
-                let document_id = str_value.as_str().parse::<DocumentId>()?;
+                let document_id = DocumentId::from_str(str_value)?;
                 Ok(DocumentIdScalar(document_id))
             }
             _ => Err(InputValueError::expected_type(value)),

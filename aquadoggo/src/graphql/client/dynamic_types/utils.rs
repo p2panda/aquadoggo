@@ -10,8 +10,8 @@ use p2panda_rs::schema::FieldType;
 pub fn graphql_typename(operation_field_type: &FieldType) -> String {
     match operation_field_type {
         // Scalars
-        FieldType::Bool => "Boolean".to_string(),
-        FieldType::Int => "Int".to_string(),
+        FieldType::Boolean => "Boolean".to_string(),
+        FieldType::Integer => "Int".to_string(),
         FieldType::Float => "Float".to_string(),
         FieldType::String => "String".to_string(),
 
