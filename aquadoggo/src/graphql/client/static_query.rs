@@ -7,7 +7,7 @@ use p2panda_rs::identity::Author;
 
 use crate::db::provider::SqlStorage;
 use crate::domain::next_args;
-use crate::graphql::client::NextEntryArguments;
+use crate::graphql::client::NextArguments;
 use crate::graphql::scalars;
 
 /// GraphQL queries for the Client API.
@@ -17,7 +17,7 @@ pub struct StaticQuery;
 #[Object]
 impl StaticQuery {
     /// Return required arguments for publishing the next entry.
-    async fn next_entry_args(
+    async fn next_args(
         &self,
         ctx: &Context<'_>,
         #[graphql(
@@ -27,7 +27,7 @@ impl StaticQuery {
         )]
         public_key: scalars::PublicKeyScalar,
         #[graphql(
-            name = "documentViewId",
+            name = "viewId",
             desc = "Document the entry's UPDATE or DELETE operation is referring to, \
             can be left empty when it is a CREATE operation"
         )]
@@ -40,7 +40,7 @@ impl StaticQuery {
             can be left empty when it is a CREATE operation"
         )]
         _document_id: Option<scalars::DocumentIdScalar>,
-    ) -> Result<NextEntryArguments> {
+    ) -> Result<NextArguments> {
         // Access the store from context.
         let store = ctx.data::<SqlStorage>()?;
 
@@ -48,7 +48,7 @@ impl StaticQuery {
         let public_key: Author = public_key.into();
         let document_view_id = document_view_id.map(|val| DocumentViewId::from(&val));
 
-        // Calculate next entry args.
+        // Calculate next entry's arguments.
         next_args(store, &public_key, document_view_id.as_ref()).await
     }
 }
@@ -64,7 +64,7 @@ mod tests {
     use crate::test_helpers::graphql_test_client;
 
     #[rstest]
-    fn next_entry_args_valid_query(#[from(test_db)] runner: TestDatabaseRunner) {
+    fn next_args_valid_query(#[from(test_db)] runner: TestDatabaseRunner) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
             let client = graphql_test_client(&db).await;
             // Selected fields need to be alphabetically sorted because that's what the `json`
@@ -73,7 +73,7 @@ mod tests {
                 .post("/graphql")
                 .json(&json!({
                     "query": r#"{
-                        nextEntryArgs(
+                        nextArgs(
                             publicKey: "8b52ae153142288402382fd6d9619e018978e015e6bc372b1b0c7bd40c6a240a"
                         ) {
                             logId,
@@ -91,7 +91,7 @@ mod tests {
             assert_eq!(
                 received_entry_args.data,
                 value!({
-                    "nextEntryArgs": {
+                    "nextArgs": {
                         "logId": "0",
                         "seqNum": "1",
                         "backlink": null,
@@ -102,7 +102,7 @@ mod tests {
         })
     }
     #[rstest]
-    fn next_entry_args_valid_query_with_document_id(
+    fn next_args_valid_query_with_document_id(
         #[with(1, 1, 1)]
         #[from(test_db)]
         runner: TestDatabaseRunner,
@@ -119,18 +119,17 @@ mod tests {
                 .post("/graphql")
                 .json(&json!({
                     "query":
-                        format!(
-                            "{{
-                        nextEntryArgs(
-                            publicKey: \"{}\",
-                            documentViewId: \"{}\"
-                        ) {{
-                            logId,
-                            seqNum,
-                            backlink,
-                            skiplink
-                        }}
-                    }}",
+                        format!("{{
+                            nextArgs(
+                                publicKey: \"{}\",
+                                viewId: \"{}\"
+                            ) {{
+                                logId,
+                                seqNum,
+                                backlink,
+                                skiplink
+                            }}
+                        }}",
                             author.as_str(),
                             document_id.as_str()
                         )
@@ -144,7 +143,7 @@ mod tests {
             assert_eq!(
                 received_entry_args.data,
                 value!({
-                    "nextEntryArgs": {
+                    "nextArgs": {
                         "logId": "0",
                         "seqNum": "2",
                         "backlink": "00203c56166a80316aec6b629814ffbafb6bf54d9e30093e122b3cb0f7220e82f15d",
@@ -156,14 +155,14 @@ mod tests {
     }
 
     #[rstest]
-    fn next_entry_args_error_response(#[from(test_db)] runner: TestDatabaseRunner) {
+    fn next_args_error_response(#[from(test_db)] runner: TestDatabaseRunner) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
             let client = graphql_test_client(&db).await;
             let response = client
                 .post("/graphql")
                 .json(&json!({
                     "query": r#"{
-                    nextEntryArgs(publicKey: "nope") {
+                    nextArgs(publicKey: "nope") {
                         logId
                     }
                 }"#,

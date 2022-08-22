@@ -19,7 +19,7 @@ use p2panda_rs::schema::Schema;
 use p2panda_rs::storage_provider::traits::{AsStorageLog, StorageProvider};
 use p2panda_rs::Human;
 
-use crate::graphql::client::NextEntryArguments;
+use crate::graphql::client::NextArguments;
 use crate::validation::{
     ensure_document_not_deleted, get_expected_skiplink, increment_seq_num, is_next_seq_num,
     next_log_id, verify_log_id,
@@ -62,9 +62,9 @@ pub async fn next_args<S: StorageProvider>(
     store: &S,
     public_key: &Author,
     document_view_id: Option<&DocumentViewId>,
-) -> Result<NextEntryArguments> {
+) -> Result<NextArguments> {
     // Init the next args with base default values.
-    let mut next_args = NextEntryArguments {
+    let mut next_args = NextArguments {
         backlink: None,
         skiplink: None,
         seq_num: SeqNum::default().into(),
@@ -209,7 +209,7 @@ pub async fn publish<S: StorageProvider>(
     encoded_entry: &EncodedEntry,
     plain_operation: &PlainOperation,
     encoded_operation: &EncodedOperation,
-) -> Result<NextEntryArguments> {
+) -> Result<NextArguments> {
     //////////////////
     // DECODE ENTRY //
     //////////////////
@@ -314,7 +314,7 @@ pub async fn publish<S: StorageProvider>(
     }
     .map(|entry| entry.hash());
 
-    let next_args = NextEntryArguments {
+    let next_args = NextArguments {
         log_id: (*log_id).into(),
         seq_num: next_seq_num.into(),
         backlink: backlink.map(|hash| hash.into()),
@@ -411,7 +411,7 @@ mod tests {
     };
     use rstest::rstest;
 
-    use crate::graphql::client::NextEntryArguments;
+    use crate::graphql::client::NextArguments;
 
     use super::{get_checked_document_id_for_view_id, next_args, publish};
 
@@ -873,7 +873,7 @@ mod tests {
                 .map(|entry| entry.hash()),
             None => None,
         };
-        let expected_next_args = NextEntryArguments {
+        let expected_next_args = NextArguments {
             log_id: expected_log_id.into(),
             seq_num: expected_seq_num.into(),
             backlink: expected_backlink.map(|hash| hash.into()),
@@ -900,7 +900,7 @@ mod tests {
         let result = next_args(&store, &public_key, None).await;
         assert!(result.is_ok());
         assert_eq!(
-            NextEntryArguments {
+            NextArguments {
                 backlink: None,
                 skiplink: None,
                 log_id: LogId::new(1).into(),

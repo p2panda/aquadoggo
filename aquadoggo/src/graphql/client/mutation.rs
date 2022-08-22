@@ -11,7 +11,7 @@ use p2panda_rs::operation::{EncodedOperation, OperationId};
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::provider::SqlStorage;
 use crate::domain::publish;
-use crate::graphql::client::NextEntryArguments;
+use crate::graphql::client::NextArguments;
 use crate::graphql::scalars;
 use crate::schema::SchemaProvider;
 
@@ -21,10 +21,10 @@ pub struct ClientMutationRoot;
 
 #[Object]
 impl ClientMutationRoot {
-    /// Publish an entry using parameters obtained through `nextEntryArgs` query.
+    /// Publish an entry using parameters obtained through `nextArgs` query.
     ///
     /// Returns arguments for publishing the next entry in the same log.
-    async fn publish_entry(
+    async fn publish(
         &self,
         ctx: &Context<'_>,
         #[graphql(name = "entry", desc = "Signed and encoded entry to publish")]
@@ -34,7 +34,7 @@ impl ClientMutationRoot {
             desc = "p2panda operation representing the entry payload."
         )]
         operation: scalars::EncodedOperationScalar,
-    ) -> Result<NextEntryArguments> {
+    ) -> Result<NextArguments> {
         let store = ctx.data::<SqlStorage>()?;
         let tx = ctx.data::<ServiceSender>()?;
         let schema_provider = ctx.data::<SchemaProvider>()?;
@@ -129,9 +129,9 @@ mod tests {
         .unwrap()
     }
 
-    const PUBLISH_ENTRY_QUERY: &str = r#"
-        mutation TestPublishEntry($entry: String!, $operation: String!) {
-            publishEntry(entry: $entry, operation: $operation) {
+    const PUBLISH_QUERY: &str = r#"
+        mutation TestPublish($entry: String!, $operation: String!) {
+            publish(entry: $entry, operation: $operation) {
                 logId,
                 seqNum,
                 backlink,
@@ -184,7 +184,7 @@ mod tests {
         Lazy::new(|| serialize_value(cbor!([1, 2, test_schema().id().to_string(),])));
 
     #[fixture]
-    fn publish_entry_request(
+    fn publish_request(
         #[default(&EncodedEntry::from_bytes(&ENTRY_ENCODED).to_string())] entry_encoded: &str,
         #[default(&EncodedOperation::from_bytes(&OPERATION_ENCODED).to_string())] encoded_operation: &str,
     ) -> Request {
@@ -194,7 +194,7 @@ mod tests {
             "operation": encoded_operation,
         }));
 
-        Request::new(PUBLISH_ENTRY_QUERY).variables(parameters)
+        Request::new(PUBLISH_QUERY).variables(parameters)
     }
 
     #[rstest]
@@ -202,19 +202,19 @@ mod tests {
         #[from(test_db)]
         #[with(0, 0, 0, false, test_schema())]
         runner: TestDatabaseRunner,
-        publish_entry_request: Request,
+        publish_request: Request,
     ) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
             let (tx, _rx) = broadcast::channel(120);
             let manager = GraphQLSchemaManager::new(db.store, tx, db.context.schema_provider.clone()).await;
             let context = HttpServiceContext::new(manager);
 
-            let response = context.schema.execute(publish_entry_request).await;
+            let response = context.schema.execute(publish_request).await;
 
             assert_eq!(
                 response.data,
                 value!({
-                    "publishEntry": {
+                    "publish": {
                         "logId": "0",
                         "seqNum": "2",
                         "backlink": "0020dda3b3977477e4c621ce124903a736e54b139afcb033e99677a6c8470b26514c",
@@ -230,7 +230,7 @@ mod tests {
         #[from(test_db)]
         #[with(0, 0, 0, false, test_schema())]
         runner: TestDatabaseRunner,
-        publish_entry_request: Request,
+        publish_request: Request,
     ) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
             let (tx, mut rx) = broadcast::channel(120);
@@ -238,7 +238,7 @@ mod tests {
                 GraphQLSchemaManager::new(db.store, tx, db.context.schema_provider.clone()).await;
             let context = HttpServiceContext::new(manager);
 
-            context.schema.execute(publish_entry_request).await;
+            context.schema.execute(publish_request).await;
 
             // Find out hash of test entry to determine operation id
             let entry_encoded = EncodedEntry::from_bytes(&ENTRY_ENCODED);
@@ -257,7 +257,7 @@ mod tests {
         #[from(test_db)]
         #[with(0, 0, 0, false, test_schema())]
         runner: TestDatabaseRunner,
-        publish_entry_request: Request,
+        publish_request: Request,
     ) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
             // Init the test client.
@@ -267,8 +267,8 @@ mod tests {
             let response = client
                 .post("/graphql")
                 .json(&json!({
-                  "query": publish_entry_request.query,
-                  "variables": publish_entry_request.variables
+                  "query": publish_request.query,
+                  "variables": publish_request.variables
                 }
                 ))
                 .send()
@@ -278,7 +278,7 @@ mod tests {
                 response.json::<serde_json::Value>().await,
                 json!({
                     "data": {
-                        "publishEntry": {
+                        "publish": {
                             "logId": "0",
                             "seqNum": "2",
                             "backlink": "0020dda3b3977477e4c621ce124903a736e54b139afcb033e99677a6c8470b26514c",
@@ -482,14 +482,14 @@ mod tests {
             let client = graphql_test_client(&db).await;
 
             // Prepare the GQL publish request,
-            let publish_entry_request = publish_entry_request(&entry_encoded, &encoded_operation);
+            let publish_request = publish_request(&entry_encoded, &encoded_operation);
 
             // Send the publish request.
             let response = client
                 .post("/graphql")
                 .json(&json!({
-                  "query": publish_entry_request.query,
-                  "variables": publish_entry_request.variables
+                  "query": publish_request.query,
+                  "variables": publish_request.variables
                 }
                 ))
                 .send()
@@ -614,13 +614,13 @@ mod tests {
             // Init the test client.
             let client = graphql_test_client(&db).await;
 
-            let publish_entry_request = publish_entry_request(&entry_encoded, &encoded_operation);
+            let publish_request = publish_request(&entry_encoded, &encoded_operation);
 
             let response = client
                 .post("/graphql")
                 .json(&json!({
-                  "query": publish_entry_request.query,
-                  "variables": publish_entry_request.variables
+                  "query": publish_request.query,
+                  "variables": publish_request.variables
                 }
                 ))
                 .send()
@@ -703,17 +703,15 @@ mod tests {
                     }
 
                     // Prepare a publish entry request for each entry.
-                    let publish_entry_request = publish_entry_request(
-                        &entry_encoded.to_string(),
-                        &encoded_operation.to_string(),
-                    );
+                    let publish_request =
+                        publish_request(&entry_encoded.to_string(), &encoded_operation.to_string());
 
                     // Publish the entry.
                     let result = client
                         .post("/graphql")
                         .json(&json!({
-                              "query": publish_entry_request.query,
-                              "variables": publish_entry_request.variables
+                              "query": publish_request.query,
+                              "variables": publish_request.variables
                             }
                         ))
                         .send()
@@ -734,8 +732,7 @@ mod tests {
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
             // Init the test client.
-                        let client = graphql_test_client(&db).await;
-
+            let client = graphql_test_client(&db).await;
 
             // Get the one entry from the store.
             let entries = db
@@ -747,7 +744,7 @@ mod tests {
             let encoded_entry: EncodedEntry = entry.to_owned().into();
 
             // Prepare a publish entry request for the entry.
-            let publish_entry_request = publish_entry_request(
+            let publish_request = publish_request(
                 &encoded_entry.to_string(),
                 &entry.payload().unwrap().to_string(),
             );
@@ -756,8 +753,8 @@ mod tests {
             let response = client
                 .post("/graphql")
                 .json(&json!({
-                  "query": publish_entry_request.query,
-                  "variables": publish_entry_request.variables
+                  "query": publish_request.query,
+                  "variables": publish_request.variables
                 }
                 ))
                 .send()
@@ -782,7 +779,7 @@ mod tests {
             let client = graphql_test_client(&db).await;
 
             // Prepare a publish entry request for the entry.
-            let publish_entry_request = publish_entry_request(
+            let publish_entry = publish_request(
                 &entry_with_unsupported_schema.to_string(),
                 &operation_with_unsupported_schema.to_string(),
             );
@@ -791,8 +788,8 @@ mod tests {
             let response = client
                 .post("/graphql")
                 .json(&json!({
-                  "query": publish_entry_request.query,
-                  "variables": publish_entry_request.variables
+                  "query": publish_entry.query,
+                  "variables": publish_entry.variables
                 }
                 ))
                 .send()
