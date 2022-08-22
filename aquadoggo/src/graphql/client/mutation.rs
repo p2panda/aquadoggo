@@ -1,16 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! Mutation root.
+use anyhow::anyhow;
 use async_graphql::{Context, Object, Result};
-use p2panda_rs::entry::{decode_entry, EntrySigned};
-use p2panda_rs::operation::{Operation, OperationEncoded, OperationId};
-use p2panda_rs::Validate;
+use p2panda_rs::entry::traits::AsEncodedEntry;
+use p2panda_rs::entry::EncodedEntry;
+use p2panda_rs::operation::decode::decode_operation;
+use p2panda_rs::operation::traits::Schematic;
+use p2panda_rs::operation::{EncodedOperation, OperationId};
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::provider::SqlStorage;
 use crate::domain::publish;
 use crate::graphql::client::NextArguments;
 use crate::graphql::scalars;
+use crate::schema::SchemaProvider;
 
 /// GraphQL queries for the Client API.
 #[derive(Default, Debug, Copy, Clone)]
@@ -25,7 +28,7 @@ impl ClientMutationRoot {
         &self,
         ctx: &Context<'_>,
         #[graphql(name = "entry", desc = "Signed and encoded entry to publish")]
-        entry: scalars::EntrySignedScalar,
+        entry: scalars::EncodedEntryScalar,
         #[graphql(
             name = "operation",
             desc = "p2panda operation representing the entry payload."
@@ -34,42 +37,30 @@ impl ClientMutationRoot {
     ) -> Result<NextArguments> {
         let store = ctx.data::<SqlStorage>()?;
         let tx = ctx.data::<ServiceSender>()?;
+        let schema_provider = ctx.data::<SchemaProvider>()?;
 
-        let entry_signed: EntrySigned = entry.into();
-        let operation_encoded: OperationEncoded = operation.into();
+        let encoded_entry: EncodedEntry = entry.into();
+        let encoded_operation: EncodedOperation = operation.into();
 
-        /////////////////////////////////////////////////////
-        // VALIDATE ENTRY AND OPERATION INTERNAL INTEGRITY //
-        /////////////////////////////////////////////////////
+        let operation = decode_operation(&encoded_operation)?;
 
-        //@TODO: This pre-publishing validation needs to be reviewed in detail. Some problems come up here
-        // because we are not verifying the encoded operations against cddl yet. We should consider the
-        // role and expectations of `VerifiedOperation` and `StorageEntry` as well (they perform validation
-        // themselves bt are only constructed _after_ all other validation has taken place). Lot's to be
-        // improved here in general I think. Nice to see it as a very seperate step before `publish` i think.
-
-        // Validate the encoded entry
-        entry_signed.validate()?;
-
-        // Validate the encoded operation
-        operation_encoded.validate()?;
-
-        // Decode the entry with it's operation.
-        //
-        // @TODO: Without this `publish` fails
-        decode_entry(&entry_signed, Some(&operation_encoded))?;
-
-        // Also need to validate the decoded operation to catch internally invalid operations
-        //
-        // @TODO: Without this `publish` fails
-        let operation = Operation::from(&operation_encoded);
-        operation.validate()?;
+        let schema = schema_provider
+            .get(operation.schema_id())
+            .await
+            .ok_or_else(|| anyhow!("Schema not found"))?;
 
         /////////////////////////////////////
         // PUBLISH THE ENTRY AND OPERATION //
         /////////////////////////////////////
 
-        let next_args = publish(store, &entry_signed, &operation_encoded).await?;
+        let next_args = publish(
+            store,
+            &schema,
+            &encoded_entry,
+            &operation,
+            &encoded_operation,
+        )
+        .await?;
 
         ////////////////////////////////////////
         // SEND THE OPERATION TO MATERIALIZER //
@@ -78,7 +69,7 @@ impl ClientMutationRoot {
         // Send new operation on service communication bus, this will arrive eventually at
         // the materializer service
 
-        let operation_id: OperationId = entry_signed.hash().into();
+        let operation_id: OperationId = encoded_entry.hash().into();
 
         if tx.send(ServiceMessage::NewOperation(operation_id)).is_err() {
             // Silently fail here as we don't mind if there are no subscribers. We have
@@ -91,39 +82,51 @@ impl ClientMutationRoot {
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryFrom;
+    use std::str::FromStr;
 
     use async_graphql::{value, Request, Variables};
     use ciborium::cbor;
-    use ciborium::value::Value;
     use once_cell::sync::Lazy;
     use p2panda_rs::document::{DocumentId, DocumentViewId};
-    use p2panda_rs::entry::{sign_and_encode, Entry, EntrySigned, LogId, SeqNum};
+    use p2panda_rs::entry::encode::sign_and_encode_entry;
+    use p2panda_rs::entry::traits::AsEncodedEntry;
+    use p2panda_rs::entry::EncodedEntry;
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{Author, KeyPair};
-    use p2panda_rs::operation::{Operation, OperationEncoded, OperationValue};
-    use p2panda_rs::storage_provider::traits::EntryStore;
-    use p2panda_rs::test_utils::constants::{HASH, PRIVATE_KEY, SCHEMA_ID};
+    use p2panda_rs::operation::encode::encode_operation;
+    use p2panda_rs::operation::{EncodedOperation, OperationValue};
+    use p2panda_rs::schema::{FieldType, Schema, SchemaId};
+    use p2panda_rs::serde::serialize_value;
+    use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
+    use p2panda_rs::test_utils::constants::{HASH, PRIVATE_KEY};
     use p2panda_rs::test_utils::fixtures::{
-        create_operation, delete_operation, entry_signed_encoded, entry_signed_encoded_unvalidated,
-        key_pair, operation, operation_encoded, operation_fields, random_hash, update_operation,
+        create_operation, delete_operation, encoded_entry, encoded_operation,
+        entry_signed_encoded_unvalidated, key_pair, operation_fields, random_hash,
+        update_operation,
     };
     use rstest::{fixture, rstest};
     use serde_json::json;
     use tokio::sync::broadcast;
 
     use crate::bus::ServiceMessage;
-    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+    use crate::db::stores::test_utils::{
+        doggo_fields, doggo_schema, test_db, TestDatabase, TestDatabaseRunner,
+    };
     use crate::domain::next_args;
     use crate::graphql::GraphQLSchemaManager;
-    use crate::http::{build_server, HttpServiceContext};
-    use crate::schema::SchemaProvider;
-    use crate::test_helpers::TestClient;
+    use crate::http::HttpServiceContext;
+    use crate::test_helpers::graphql_test_client;
 
-    fn to_hex(value: Value) -> String {
-        let mut cbor_bytes = Vec::new();
-        ciborium::ser::into_writer(&value, &mut cbor_bytes).unwrap();
-        hex::encode(cbor_bytes)
+    fn test_schema() -> Schema {
+        Schema::new(
+            &SchemaId::from_str(
+                "message_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b",
+            )
+            .unwrap(),
+            "My test message schema",
+            vec![("message", FieldType::String)],
+        )
+        .unwrap()
     }
 
     const PUBLISH_QUERY: &str = r#"
@@ -136,101 +139,74 @@ mod tests {
             }
         }"#;
 
-    pub static ENTRY_ENCODED: Lazy<String> = Lazy::new(|| {
-        entry_signed_encoded(
-            Entry::new(
-                &LogId::default(),
-                Some(&Operation::from(
-                    &OperationEncoded::new(&OPERATION_ENCODED).unwrap(),
-                )),
-                None,
-                None,
-                &SeqNum::default(),
-            )
-            .unwrap(),
+    pub static ENTRY_ENCODED: Lazy<Vec<u8>> = Lazy::new(|| {
+        encoded_entry(
+            1,
+            0,
+            None,
+            None,
+            EncodedOperation::from_bytes(&OPERATION_ENCODED),
             key_pair(PRIVATE_KEY),
         )
-        .as_str()
-        .to_string()
+        .into_bytes()
     });
 
-    pub static OPERATION_ENCODED: Lazy<String> = Lazy::new(|| {
-        to_hex(cbor!({
-        "action" => "create",
-        "schema" => "chat_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b",
-        "version" => 1,
-        "fields" => {
-          "message" => {
-            "type" => "str",
-            "value" => "Ohh, my first message!"
-          }
-        }
-      }).unwrap())
+    pub static OPERATION_ENCODED: Lazy<Vec<u8>> = Lazy::new(|| {
+        serialize_value(cbor!([
+            1, 0, "message_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b",
+            {
+                "message" => "Ohh, my first message!",
+            },
+        ]))
     });
 
-    pub static CREATE_OPERATION_WITH_PREVIOUS_OPS: Lazy<String> = Lazy::new(|| {
-        to_hex(cbor!({
-            "action" => "create",
-            "schema" => "chat_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b",
-            "version" => 1,
-            "previous_operations" => [
-              "002065f74f6fd81eb1bae19eb0d8dce145faa6a56d7b4076d7fba4385410609b2bae"
+    pub static CREATE_OPERATION_WITH_PREVIOUS_OPS: Lazy<Vec<u8>> = Lazy::new(|| {
+        serialize_value(cbor!([
+            1, 0, "message_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b", [
+                "002065f74f6fd81eb1bae19eb0d8dce145faa6a56d7b4076d7fba4385410609b2bae"
             ],
-            "fields" => {
-              "message" => {
-                "type" => "str",
-                "value" => "Which I now update."
-              }
-            }
-        })
-        .unwrap())
+            {
+                "message" => "Which I now update.",
+            },
+        ]))
     });
 
-    pub static UPDATE_OPERATION_NO_PREVIOUS_OPS: Lazy<String> = Lazy::new(|| {
-        to_hex(cbor!({
-            "action" => "update",
-            "schema" => "chat_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b",
-            "version" => 1,
-            "fields" => {
-              "message" => {
-                "type" => "str",
-                "value" => "Ohh, my first message!"
-              }
-            }
-        }).unwrap())
+    pub static UPDATE_OPERATION_NO_PREVIOUS_OPS: Lazy<Vec<u8>> = Lazy::new(|| {
+        serialize_value(cbor!([
+            1, 1, "message_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b",
+            {
+                "message" => "Ohh, my first message!",
+            },
+        ]))
     });
 
-    pub static DELETE_OPERATION_NO_PREVIOUS_OPS: Lazy<String> = Lazy::new(|| {
-        to_hex(
-        cbor!({
-          "action" => "delete",
-          "schema" => "chat_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b",
-          "version" => 1
-        })
-        .unwrap(),
-    )
-    });
+    pub static DELETE_OPERATION_NO_PREVIOUS_OPS: Lazy<Vec<u8>> =
+        Lazy::new(|| serialize_value(cbor!([1, 2, test_schema().id().to_string(),])));
 
     #[fixture]
     fn publish_request(
-        #[default(&ENTRY_ENCODED)] entry_encoded: &str,
-        #[default(&OPERATION_ENCODED)] operation_encoded: &str,
+        #[default(&EncodedEntry::from_bytes(&ENTRY_ENCODED).to_string())] entry_encoded: &str,
+        #[default(&EncodedOperation::from_bytes(&OPERATION_ENCODED).to_string())] encoded_operation: &str,
     ) -> Request {
         // Prepare GraphQL mutation publishing an entry
         let parameters = Variables::from_value(value!({
             "entry": entry_encoded,
-            "operation": operation_encoded,
+            "operation": encoded_operation,
         }));
 
         Request::new(PUBLISH_QUERY).variables(parameters)
     }
 
     #[rstest]
-    fn publish(#[from(test_db)] runner: TestDatabaseRunner, publish_request: Request) {
+    fn publish_entry(
+        #[from(test_db)]
+        #[with(0, 0, 0, false, test_schema())]
+        runner: TestDatabaseRunner,
+        publish_request: Request,
+    ) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
-            let (tx, _rx) = broadcast::channel(16);
-            let schema_provider = SchemaProvider::default();
-            let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
+            let (tx, _rx) = broadcast::channel(120);
+            let manager = GraphQLSchemaManager::new(db.store, tx, db.context.schema_provider.clone()).await;
             let context = HttpServiceContext::new(manager);
 
             let response = context.schema.execute(publish_request).await;
@@ -241,7 +217,7 @@ mod tests {
                     "publish": {
                         "logId": "0",
                         "seqNum": "2",
-                        "backlink": "0020c096422b3c865e5b85ec67a82d5c1d19de43d57c4a3d902ea62b90d96ad32fda",
+                        "backlink": "0020dda3b3977477e4c621ce124903a736e54b139afcb033e99677a6c8470b26514c",
                         "skiplink": null,
                     }
                 })
@@ -251,19 +227,21 @@ mod tests {
 
     #[rstest]
     fn sends_message_on_communication_bus(
-        #[from(test_db)] runner: TestDatabaseRunner,
+        #[from(test_db)]
+        #[with(0, 0, 0, false, test_schema())]
+        runner: TestDatabaseRunner,
         publish_request: Request,
     ) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
-            let (tx, mut rx) = broadcast::channel(16);
-            let schema_provider = SchemaProvider::default();
-            let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
+            let (tx, mut rx) = broadcast::channel(120);
+            let manager =
+                GraphQLSchemaManager::new(db.store, tx, db.context.schema_provider.clone()).await;
             let context = HttpServiceContext::new(manager);
 
             context.schema.execute(publish_request).await;
 
             // Find out hash of test entry to determine operation id
-            let entry_encoded = EntrySigned::new(&ENTRY_ENCODED).unwrap();
+            let entry_encoded = EncodedEntry::from_bytes(&ENTRY_ENCODED);
 
             // Expect receiver to receive sent message
             let message = rx.recv().await.unwrap();
@@ -275,36 +253,16 @@ mod tests {
     }
 
     #[rstest]
-    fn publish_error_handling(#[from(test_db)] runner: TestDatabaseRunner) {
+    fn post_gql_mutation(
+        #[from(test_db)]
+        #[with(0, 0, 0, false, test_schema())]
+        runner: TestDatabaseRunner,
+        publish_request: Request,
+    ) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
-            let (tx, _rx) = broadcast::channel(16);
-            let schema_provider = SchemaProvider::default();
-            let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
-            let context = HttpServiceContext::new(manager);
+            // Init the test client.
+            let client = graphql_test_client(&db).await;
 
-            let parameters = Variables::from_value(value!({
-                "entry": ENTRY_ENCODED.to_string(),
-                "operation": "".to_string()
-            }));
-            let request = Request::new(PUBLISH_QUERY).variables(parameters);
-            let response = context.schema.execute(request).await;
-
-            assert!(response.is_err());
-            assert_eq!(
-                "operation needs to match payload hash of encoded entry".to_string(),
-                response.errors[0].to_string()
-            );
-        });
-    }
-
-    #[rstest]
-    fn post_gql_mutation(#[from(test_db)] runner: TestDatabaseRunner, publish_request: Request) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
-            let (tx, _rx) = broadcast::channel(16);
-            let schema_provider = SchemaProvider::default();
-            let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
-            let context = HttpServiceContext::new(manager);
-            let client = TestClient::new(build_server(context));
 
             let response = client
                 .post("/graphql")
@@ -323,7 +281,7 @@ mod tests {
                         "publish": {
                             "logId": "0",
                             "seqNum": "2",
-                            "backlink": "0020c096422b3c865e5b85ec67a82d5c1d19de43d57c4a3d902ea62b90d96ad32fda",
+                            "backlink": "0020dda3b3977477e4c621ce124903a736e54b139afcb033e99677a6c8470b26514c",
                             "skiplink": null
                         }
                     }
@@ -333,58 +291,58 @@ mod tests {
     }
 
     #[rstest]
-    #[case::no_entry(
-        "",
-        "",
-        "Failed to parse \"EntrySignedScalar\": Bytes to decode had length of 0"
-    )]
     #[case::invalid_entry_bytes(
         "AB01",
-        "",
-        "Failed to parse \"EntrySignedScalar\": Could not decode author public key from bytes"
+        &OPERATION_ENCODED,
+        "Could not decode author public key from bytes"
     )]
     #[case::invalid_entry_hex_encoding(
         "-/74='4,.=4-=235m-0   34.6-3",
         &OPERATION_ENCODED,
-        "Failed to parse \"EntrySignedScalar\": invalid hex encoding in entry"
+        "Failed to parse \"EncodedEntry\": invalid hex encoding in entry"
+    )]
+    #[case::no_entry(
+        "",
+        &OPERATION_ENCODED,
+        "Bytes to decode had length of 0"
     )]
     #[case::no_operation(
-        &ENTRY_ENCODED,
-        "",
-        "operation needs to match payload hash of encoded entry"
+        &EncodedEntry::from_bytes(&ENTRY_ENCODED).to_string(),
+        "".as_bytes(),
+        "cbor decoder failed failed to fill whole buffer"
     )]
     #[case::invalid_operation_bytes(
-        &ENTRY_ENCODED,
-        "AB01",
-        "operation needs to match payload hash of encoded entry"
+        &EncodedEntry::from_bytes(&ENTRY_ENCODED).to_string(),
+        "AB01".as_bytes(),
+        "invalid type: bytes, expected array"
     )]
     #[case::invalid_operation_hex_encoding(
-        &ENTRY_ENCODED,
-        "0-25.-%5930n3544[{{{   @@@",
-        "Failed to parse \"EncodedOperationScalar\": invalid hex encoding in operation"
+        &EncodedEntry::from_bytes(&ENTRY_ENCODED).to_string(),
+        "0-25.-%5930n3544[{{{   @@@".as_bytes(),
+        "invalid type: integer `-17`, expected array"
     )]
     #[case::operation_does_not_match(
-        &ENTRY_ENCODED,
-        &{operation_encoded(
+        &EncodedEntry::from_bytes(&ENTRY_ENCODED).to_string(),
+        &{encoded_operation(
             Some(
                 operation_fields(
-                    vec![("silly", OperationValue::Text("Sausage".to_string()))]
+                    vec![("message", OperationValue::String("Mwahaha!".to_string()))]
                 )
             ),
             None,
-            None
-        ).as_str().to_owned()},
+            test_schema().id().to_owned()
+        ).into_bytes()},
         "operation needs to match payload hash of encoded entry"
     )]
     #[case::valid_entry_with_extra_hex_char_at_end(
-        &{ENTRY_ENCODED.to_string() + "A"},
+        &{EncodedEntry::from_bytes(&ENTRY_ENCODED).to_string() + "A"},
         &OPERATION_ENCODED,
-        "Failed to parse \"EntrySignedScalar\": invalid hex encoding in entry"
+        "Failed to parse \"EncodedEntry\": invalid hex encoding in entry"
     )]
     #[case::valid_entry_with_extra_hex_char_at_start(
-        &{"A".to_string() + &ENTRY_ENCODED},
+        &{"A".to_string() + &EncodedEntry::from_bytes(&ENTRY_ENCODED).to_string()},
         &OPERATION_ENCODED,
-        "Failed to parse \"EntrySignedScalar\": invalid hex encoding in entry"
+        "Failed to parse \"EncodedEntry\": invalid hex encoding in entry"
     )]
     #[case::should_not_have_skiplink(
         &entry_signed_encoded_unvalidated(
@@ -392,11 +350,11 @@ mod tests {
             0,
             None,
             Some(random_hash()),
-            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
+            Some(EncodedOperation::from_bytes(&OPERATION_ENCODED)),
             key_pair(PRIVATE_KEY)
-        ),
+        ).to_string(),
         &OPERATION_ENCODED,
-        "Failed to parse \"EntrySignedScalar\": Could not decode payload hash DecodeError"
+        "Could not decode payload hash DecodeError"
     )]
     #[case::should_not_have_backlink(
         &entry_signed_encoded_unvalidated(
@@ -404,11 +362,11 @@ mod tests {
             0,
             Some(random_hash()),
             None,
-            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
+            Some(EncodedOperation::from_bytes(&OPERATION_ENCODED)),
             key_pair(PRIVATE_KEY)
-        ),
+        ).to_string(),
         &OPERATION_ENCODED,
-        "Failed to parse \"EntrySignedScalar\": Could not decode payload hash DecodeError"
+        "Could not decode payload hash DecodeError"
     )]
     #[case::should_not_have_backlink_or_skiplink(
         &entry_signed_encoded_unvalidated(
@@ -416,11 +374,11 @@ mod tests {
             0,
             Some(HASH.parse().unwrap()),
             Some(HASH.parse().unwrap()),
-            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())) ,
+            Some(EncodedOperation::from_bytes(&OPERATION_ENCODED)) ,
             key_pair(PRIVATE_KEY)
-        ),
+        ).to_string(),
         &OPERATION_ENCODED,
-        "Failed to parse \"EntrySignedScalar\": Could not decode payload hash DecodeError"
+        "Could not decode payload hash DecodeError"
     )]
     #[case::missing_backlink(
         &entry_signed_encoded_unvalidated(
@@ -428,11 +386,11 @@ mod tests {
             0,
             None,
             None,
-            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
+            Some(EncodedOperation::from_bytes(&OPERATION_ENCODED)),
             key_pair(PRIVATE_KEY)
-        ),
+        ).to_string(),
         &OPERATION_ENCODED,
-        "Failed to parse \"EntrySignedScalar\": Could not decode backlink yamf hash: DecodeError"
+        "Could not decode backlink yamf hash: DecodeError"
     )]
     #[case::missing_skiplink(
         &entry_signed_encoded_unvalidated(
@@ -440,11 +398,11 @@ mod tests {
             0,
             Some(random_hash()),
             None,
-            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
+            Some(EncodedOperation::from_bytes(&OPERATION_ENCODED)),
             key_pair(PRIVATE_KEY)
-        ),
+        ).to_string(),
         &OPERATION_ENCODED,
-        "Failed to parse \"EntrySignedScalar\": Could not decode backlink yamf hash: DecodeError"
+        "Could not decode backlink yamf hash: DecodeError"
     )]
     #[case::should_not_include_skiplink(
         &entry_signed_encoded_unvalidated(
@@ -452,11 +410,11 @@ mod tests {
             0,
             Some(HASH.parse().unwrap()),
             Some(HASH.parse().unwrap()),
-            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
+            Some(EncodedOperation::from_bytes(&OPERATION_ENCODED)),
             key_pair(PRIVATE_KEY)
-        ),
+        ).to_string(),
         &OPERATION_ENCODED,
-        "Failed to parse \"EntrySignedScalar\": Could not decode payload hash DecodeError"
+        "Could not decode payload hash DecodeError"
     )]
     #[case::payload_hash_and_size_missing(
         &entry_signed_encoded_unvalidated(
@@ -466,9 +424,9 @@ mod tests {
             Some(HASH.parse().unwrap()),
             None,
             key_pair(PRIVATE_KEY)
-        ),
+        ).to_string(),
         &OPERATION_ENCODED,
-        "Failed to parse \"EntrySignedScalar\": Could not decode payload hash DecodeError"
+        "Could not decode payload hash DecodeError"
     )]
     #[case::create_operation_with_previous_operations(
         &entry_signed_encoded_unvalidated(
@@ -476,11 +434,11 @@ mod tests {
             0,
             None,
             None,
-            Some(Operation::from(&OperationEncoded::new(&CREATE_OPERATION_WITH_PREVIOUS_OPS).unwrap())),
+            Some(EncodedOperation::from_bytes(&CREATE_OPERATION_WITH_PREVIOUS_OPS)),
             key_pair(PRIVATE_KEY)
-        ),
+        ).to_string(),
         &CREATE_OPERATION_WITH_PREVIOUS_OPS,
-        "previous_operations field should be empty"
+        "invalid type: sequence, expected map"
     )]
     #[case::update_operation_no_previous_operations(
         &entry_signed_encoded_unvalidated(
@@ -488,11 +446,11 @@ mod tests {
             0,
             None,
             None,
-            Some(Operation::from(&OperationEncoded::new(&UPDATE_OPERATION_NO_PREVIOUS_OPS).unwrap())),
+            Some(EncodedOperation::from_bytes(&UPDATE_OPERATION_NO_PREVIOUS_OPS)),
             key_pair(PRIVATE_KEY)
-        ),
+        ).to_string(),
         &UPDATE_OPERATION_NO_PREVIOUS_OPS,
-        "previous_operations field can not be empty"
+        "invalid type: map, expected array"
     )]
     #[case::delete_operation_no_previous_operations(
         &entry_signed_encoded_unvalidated(
@@ -500,31 +458,33 @@ mod tests {
             0,
             None,
             None,
-            Some(Operation::from(&OperationEncoded::new(&DELETE_OPERATION_NO_PREVIOUS_OPS).unwrap())),
+            Some(EncodedOperation::from_bytes(&DELETE_OPERATION_NO_PREVIOUS_OPS)),
             key_pair(PRIVATE_KEY)
-        ),
+        ).to_string(),
         &DELETE_OPERATION_NO_PREVIOUS_OPS,
-        "previous_operations field can not be empty"
+        "missing previous_operations for this operation action"
     )]
     fn validates_encoded_entry_and_operation_integrity(
         #[case] entry_encoded: &str,
-        #[case] operation_encoded: &str,
+        #[case] encoded_operation: &[u8],
         #[case] expected_error_message: &str,
-        #[from(test_db)] runner: TestDatabaseRunner,
+        #[from(test_db)]
+        #[with(0, 0, 0, false, test_schema())]
+        runner: TestDatabaseRunner,
     ) {
+        // Encode the entry and operation as string values.
         let entry_encoded = entry_encoded.to_string();
-        let operation_encoded = operation_encoded.to_string();
+        let encoded_operation = hex::encode(encoded_operation);
         let expected_error_message = expected_error_message.to_string();
 
         runner.with_db_teardown(move |db: TestDatabase| async move {
-            let (tx, _rx) = broadcast::channel(16);
-            let schema_provider = SchemaProvider::default();
-            let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
-            let context = HttpServiceContext::new(manager);
-            let client = TestClient::new(build_server(context));
+            // Init the test client.
+            let client = graphql_test_client(&db).await;
 
-            let publish_request = publish_request(&entry_encoded, &operation_encoded);
+            // Prepare the GQL publish request,
+            let publish_request = publish_request(&entry_encoded, &encoded_operation);
 
+            // Send the publish request.
             let response = client
                 .post("/graphql")
                 .json(&json!({
@@ -535,6 +495,7 @@ mod tests {
                 .send()
                 .await;
 
+            // Parse the response and check any errors match the expected ones.
             let response = response.json::<serde_json::Value>().await;
             for error in response.get("errors").unwrap().as_array().unwrap() {
                 assert_eq!(
@@ -551,10 +512,10 @@ mod tests {
             8,
             1,
             Some(HASH.parse().unwrap()),
-            Some(Hash::new_from_bytes(vec![2, 3, 4]).unwrap()),
-            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
+            Some(Hash::new_from_bytes(&vec![2, 3, 4])),
+            Some(EncodedOperation::from_bytes(&OPERATION_ENCODED)),
             key_pair(PRIVATE_KEY)
-        ),
+        ).to_string(),
         &OPERATION_ENCODED,
         "Entry's claimed seq num of 8 does not match expected seq num of 1 for given author and log"
     )]
@@ -564,11 +525,11 @@ mod tests {
             0,
             Some(random_hash()),
             None,
-            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
+            Some(EncodedOperation::from_bytes(&OPERATION_ENCODED)),
             key_pair(PRIVATE_KEY)
-        ),
+        ).to_string(),
         &OPERATION_ENCODED,
-        "The backlink hash encoded in the entry does not match the lipmaa entry provided" //Think this error message is wrong
+        "claimed hash does not match backlink entry"
     )]
     #[case::not_the_next_seq_num(
         &entry_signed_encoded_unvalidated(
@@ -576,9 +537,9 @@ mod tests {
             0,
             Some(random_hash()),
             None,
-            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
+            Some(EncodedOperation::from_bytes(&OPERATION_ENCODED)),
             key_pair(PRIVATE_KEY)
-        ),
+        ).to_string(),
         &OPERATION_ENCODED,
         "Entry's claimed seq num of 14 does not match expected seq num of 11 for given author and log"
     )]
@@ -588,9 +549,9 @@ mod tests {
             0,
             Some(random_hash()),
             None,
-            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
+            Some(EncodedOperation::from_bytes(&OPERATION_ENCODED)),
             key_pair(PRIVATE_KEY)
-        ),
+        ).to_string(),
         &OPERATION_ENCODED,
         "Entry's claimed seq num of 6 does not match expected seq num of 11 for given author and log"
     )]
@@ -601,27 +562,27 @@ mod tests {
             None,
             None,
             Some(
-                operation(
+                encoded_operation(
                     Some(
                         operation_fields(
-                            vec![("silly", OperationValue::Text("Sausage".to_string()))]
+                            vec![("message", OperationValue::String("Sausage".to_string()))]
                         )
                     ),
                     Some(HASH.parse().unwrap()),
-                    None
+                    test_schema().id().to_owned()
                 )
             ),
             key_pair(PRIVATE_KEY)
-        ),
-        &{operation_encoded(
+        ).to_string(),
+        &{encoded_operation(
                 Some(
                     operation_fields(
-                        vec![("silly", OperationValue::Text("Sausage".to_string()))]
+                        vec![("message", OperationValue::String("Sausage".to_string()))]
                     )
                 ),
                 Some(HASH.parse().unwrap()),
-                None
-            ).as_str().to_owned()
+                test_schema().id().to_owned()
+            ).into_bytes()
         },
         "<Operation 496543> not found, could not determine document id"
     )]
@@ -631,32 +592,29 @@ mod tests {
             2,
             None,
             None,
-            Some(Operation::from(&OperationEncoded::new(&OPERATION_ENCODED).unwrap())),
+            Some(EncodedOperation::from_bytes(&OPERATION_ENCODED)),
             key_pair(PRIVATE_KEY)
-        ),
+        ).to_string(),
         &OPERATION_ENCODED,
         "Entry's claimed log id of 2 does not match expected next log id of 1 for given author"
     )]
     fn validation_of_entry_and_operation_values(
         #[case] entry_encoded: &str,
-        #[case] operation_encoded: &str,
+        #[case] encoded_operation: &[u8],
         #[case] expected_error_message: &str,
         #[from(test_db)]
-        #[with(10, 1, 1)]
+        #[with(10, 1, 1, false, test_schema(), vec![("message", OperationValue::String("Hello!".to_string()))], vec![("message", OperationValue::String("Hello!".to_string()))])]
         runner: TestDatabaseRunner,
     ) {
         let entry_encoded = entry_encoded.to_string();
-        let operation_encoded = operation_encoded.to_string();
+        let encoded_operation = hex::encode(encoded_operation.to_owned());
         let expected_error_message = expected_error_message.to_string();
 
         runner.with_db_teardown(move |db: TestDatabase| async move {
-            let (tx, _rx) = broadcast::channel(16);
-            let schema_provider = SchemaProvider::default();
-            let manager = GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
-            let context = HttpServiceContext::new(manager);
-            let client = TestClient::new(build_server(context));
+            // Init the test client.
+            let client = graphql_test_client(&db).await;
 
-            let publish_request = publish_request(&entry_encoded, &operation_encoded);
+            let publish_request = publish_request(&entry_encoded, &encoded_operation);
 
             let response = client
                 .post("/graphql")
@@ -679,58 +637,74 @@ mod tests {
     }
 
     #[rstest]
-    fn publish_many_entries(#[from(test_db)] runner: TestDatabaseRunner) {
+    fn publish_many_entries(
+        #[from(test_db)]
+        #[with(0, 0, 0, false, doggo_schema())]
+        runner: TestDatabaseRunner,
+    ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
+            // Init the test client.
+            let client = graphql_test_client(&db).await;
+
+            // Two key pairs representing two different authors
             let key_pairs = vec![KeyPair::new(), KeyPair::new()];
+            // Each will publish 13 entries (unlucky for some!).
             let num_of_entries = 13;
 
-            let (tx, _rx) = broadcast::channel(16);
-            let schema_provider = SchemaProvider::default();
-            let manager = GraphQLSchemaManager::new(db.store.clone(), tx, schema_provider).await;
-            let context = HttpServiceContext::new(manager);
-            let client = TestClient::new(build_server(context));
-
+            // Iterate over each key pair.
             for key_pair in &key_pairs {
                 let mut document_id: Option<DocumentId> = None;
-                let author = Author::try_from(key_pair.public_key().to_owned()).unwrap();
+                let author = Author::from(key_pair.public_key());
+
+                // Iterate of the number of entries we want to publish.
                 for index in 0..num_of_entries {
+                    // Derive the document_view_id from the document id.
                     let document_view_id: Option<DocumentViewId> =
                         document_id.clone().map(|id| id.as_str().parse().unwrap());
 
-                    let next_args = next_args(&db.store, &author, document_view_id.as_ref())
+                    // Get the next entry args for the document view id and author.
+                    let next_entry_args = next_args(&db.store, &author, document_view_id.as_ref())
                         .await
                         .unwrap();
 
+                    // Construct a CREATE, UPDATE or DELETE operation based on the iterator index.
                     let operation = if index == 0 {
-                        create_operation(&[("name", OperationValue::Text("Panda".to_string()))])
+                        create_operation(doggo_fields(), doggo_schema().id().to_owned())
                     } else if index == (num_of_entries - 1) {
-                        delete_operation(&next_args.backlink.clone().unwrap().into())
+                        delete_operation(
+                            next_entry_args.backlink.clone().unwrap().into(),
+                            doggo_schema().id().to_owned(),
+                        )
                     } else {
                         update_operation(
-                            &[("name", OperationValue::Text("🐼".to_string()))],
-                            &next_args.backlink.clone().unwrap().into(),
+                            doggo_fields(),
+                            next_entry_args.backlink.clone().unwrap().into(),
+                            doggo_schema().id().to_owned(),
                         )
                     };
 
-                    let entry = Entry::new(
-                        &next_args.log_id.into(),
-                        Some(&operation),
-                        next_args.skiplink.map(Hash::from).as_ref(),
-                        next_args.backlink.map(Hash::from).as_ref(),
-                        &next_args.seq_num.into(),
-                    )
-                    .unwrap();
+                    // Encode the operation.
+                    let encoded_operation = encode_operation(&operation).expect("Encode operation");
 
-                    let entry_encoded = sign_and_encode(&entry, key_pair).unwrap();
-                    let operation_encoded = OperationEncoded::try_from(&operation).unwrap();
+                    // Encode the entry.
+                    let entry_encoded = sign_and_encode_entry(
+                        &next_entry_args.log_id.into(),
+                        &next_entry_args.seq_num.into(),
+                        next_entry_args.skiplink.map(Hash::from).as_ref(),
+                        next_entry_args.backlink.map(Hash::from).as_ref(),
+                        &encoded_operation,
+                        key_pair,
+                    )
+                    .expect("Encode entry");
 
                     if index == 0 {
+                        // Set the document id based on the first entry in this log (index == 0)
                         document_id = Some(entry_encoded.hash().into());
                     }
 
                     // Prepare a publish entry request for each entry.
                     let publish_request =
-                        publish_request(entry_encoded.as_str(), operation_encoded.as_str());
+                        publish_request(&entry_encoded.to_string(), &encoded_operation.to_string());
 
                     // Publish the entry.
                     let result = client
@@ -743,6 +717,7 @@ mod tests {
                         .send()
                         .await;
 
+                    // Every publihsh request should succeed.
                     assert!(result.status().is_success())
                 }
             }
@@ -752,29 +727,26 @@ mod tests {
     #[rstest]
     fn duplicate_publishing_of_entries(
         #[from(test_db)]
-        #[with(1, 1, 1, false, SCHEMA_ID.parse().unwrap())]
+        #[with(1, 1, 1, false, doggo_schema())]
         runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|populated_db: TestDatabase| async move {
-            let (tx, _rx) = broadcast::channel(16);
-            let schema_provider = SchemaProvider::default();
-            let manager =
-                GraphQLSchemaManager::new(populated_db.store.clone(), tx, schema_provider).await;
-            let context = HttpServiceContext::new(manager);
-            let client = TestClient::new(build_server(context));
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            // Init the test client.
+            let client = graphql_test_client(&db).await;
 
             // Get the one entry from the store.
-            let entries = populated_db
+            let entries = db
                 .store
-                .get_entries_by_schema(&SCHEMA_ID.parse().unwrap())
+                .get_entries_by_schema(doggo_schema().id())
                 .await
                 .unwrap();
             let entry = entries.first().unwrap();
+            let encoded_entry: EncodedEntry = entry.to_owned().into();
 
             // Prepare a publish entry request for the entry.
             let publish_request = publish_request(
-                entry.entry_signed().as_str(),
-                entry.operation_encoded().unwrap().as_str(),
+                &encoded_entry.to_string(),
+                &entry.payload().unwrap().to_string(),
             );
 
             // Publish the entry and parse response.
@@ -792,6 +764,41 @@ mod tests {
 
             for error in response.get("errors").unwrap().as_array().unwrap() {
                 assert_eq!(error.get("message").unwrap(), "Entry's claimed seq num of 1 does not match expected seq num of 2 for given author and log")
+            }
+        });
+    }
+
+    #[rstest]
+    fn publish_unsupported_schema(
+        #[from(encoded_entry)] entry_with_unsupported_schema: EncodedEntry,
+        #[from(encoded_operation)] operation_with_unsupported_schema: EncodedOperation,
+        #[from(test_db)] runner: TestDatabaseRunner,
+    ) {
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            // Init the test client.
+            let client = graphql_test_client(&db).await;
+
+            // Prepare a publish entry request for the entry.
+            let publish_entry = publish_request(
+                &entry_with_unsupported_schema.to_string(),
+                &operation_with_unsupported_schema.to_string(),
+            );
+
+            // Publish the entry and parse response.
+            let response = client
+                .post("/graphql")
+                .json(&json!({
+                  "query": publish_entry.query,
+                  "variables": publish_entry.variables
+                }
+                ))
+                .send()
+                .await;
+
+            let response = response.json::<serde_json::Value>().await;
+
+            for error in response.get("errors").unwrap().as_array().unwrap() {
+                assert_eq!(error.get("message").unwrap(), "Schema not found")
             }
         });
     }

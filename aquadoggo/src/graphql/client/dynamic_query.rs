@@ -12,10 +12,10 @@ use log::{debug, error, info};
 use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
+use p2panda_rs::storage_provider::traits::DocumentStore;
 use p2panda_rs::Human;
 
 use crate::db::provider::SqlStorage;
-use crate::db::traits::DocumentStore;
 use crate::graphql::client::dynamic_types;
 use crate::graphql::client::dynamic_types::DocumentMeta;
 use crate::graphql::client::utils::validate_view_matches_schema;
@@ -241,22 +241,47 @@ impl DynamicQuery {
         let mut document_fields = IndexMap::new();
 
         for field in selected_fields {
-            // Assemble selected metadata values.
-            if field.name() == dynamic_types::document::META_FIELD {
-                document_fields.insert(
-                    Name::new(field.alias().unwrap_or_else(|| field.name())),
-                    DocumentMeta::resolve(field, None, Some(view.id())),
-                );
-            }
+            // Name with which this field appears in the response
+            let response_key = Name::new(field.alias().unwrap_or_else(|| field.name()));
 
-            // Assemble selected document field values.
-            if field.name() == dynamic_types::document::FIELDS_FIELD {
-                let subselection = field.selection_set().collect();
-                document_fields.insert(
-                    Name::new(field.alias().unwrap_or_else(|| field.name())),
-                    self.document_fields_response(view.clone(), ctx, subselection)
-                        .await?,
-                );
+            match field.name() {
+                "__typename" => {
+                    let store = ctx.data_unchecked::<SqlStorage>();
+                    let schema_id = store
+                        .get_schema_by_document_view(view.id())
+                        .await
+                        .map_err(|err| ServerError::new(err.to_string(), None))?
+                        .unwrap()
+                        .to_string();
+                    document_fields.insert(response_key, Value::String(schema_id));
+                }
+                dynamic_types::document::META_FIELD => {
+                    document_fields.insert(
+                        response_key,
+                        DocumentMeta::resolve(field, None, Some(view.id()))?,
+                    );
+                }
+                dynamic_types::document::FIELDS_FIELD => {
+                    let subselection = field.selection_set().collect();
+                    document_fields.insert(
+                        response_key,
+                        self.document_fields_response(view.clone(), ctx, subselection)
+                            .await?,
+                    );
+                }
+                _ => {
+                    let store = ctx.data_unchecked::<SqlStorage>();
+                    let schema_id = store
+                        .get_schema_by_document_view(view.id())
+                        .await
+                        .map_err(|err| ServerError::new(err.to_string(), None))?
+                        .unwrap()
+                        .to_string();
+                    Err(ServerError::new(
+                        format!("Field '{}' does not exist on {}", field.name(), schema_id,),
+                        None,
+                    ))?
+                }
             }
         }
 
@@ -287,6 +312,21 @@ impl DynamicQuery {
         // Construct GraphQL value for every field of the given view that has been selected.
         let mut view_fields = IndexMap::new();
         for selected_field in selected_fields {
+            // Name with which this field appears in the response
+            let response_key = Name::new(
+                selected_field
+                    .alias()
+                    .unwrap_or_else(|| selected_field.name()),
+            );
+
+            // Handle `__typename` field and continue to next selection.
+            if selected_field.name() == "__typename" {
+                let type_name = dynamic_types::document_fields::type_name(&schema);
+                view_fields.insert(response_key, Value::String(type_name));
+                continue;
+            }
+
+            // Handle document fields.
             if !schema.fields().contains_key(selected_field.name()) {
                 return Err(ServerError::new(
                     format!(
@@ -318,14 +358,24 @@ impl DynamicQuery {
 
                 // Recurse into view lists.
                 OperationValue::RelationList(rel) => {
-                    let queries = rel.clone().into_iter().map(|doc_id| {
-                        self.get_by_document_id(doc_id, ctx, next_selection.clone(), None)
+                    let queries = rel.iter().map(|doc_id| {
+                        self.get_by_document_id(
+                            doc_id.to_owned(),
+                            ctx,
+                            next_selection.clone(),
+                            None,
+                        )
                     });
                     Value::List(future::try_join_all(queries).await?)
                 }
                 OperationValue::PinnedRelationList(rel) => {
-                    let queries = rel.clone().into_iter().map(|view_id| {
-                        self.get_by_document_view_id(view_id, ctx, next_selection.clone(), None)
+                    let queries = rel.iter().map(|view_id| {
+                        self.get_by_document_view_id(
+                            view_id.to_owned(),
+                            ctx,
+                            next_selection.clone(),
+                            None,
+                        )
                     });
                     Value::List(future::try_join_all(queries).await?)
                 }
@@ -333,14 +383,7 @@ impl DynamicQuery {
                 // Convert all simple fields to scalar values.
                 _ => gql_scalar(document_view_value.value()),
             };
-            view_fields.insert(
-                Name::new(
-                    selected_field
-                        .alias()
-                        .unwrap_or_else(|| selected_field.name()),
-                ),
-                value,
-            );
+            view_fields.insert(response_key, value);
         }
         Ok(Value::Object(view_fields))
     }
@@ -354,7 +397,7 @@ fn gql_scalar(operation_value: &OperationValue) -> Value {
         OperationValue::Boolean(value) => value.to_owned().into(),
         OperationValue::Integer(value) => value.to_owned().into(),
         OperationValue::Float(value) => value.to_owned().into(),
-        OperationValue::Text(value) => value.to_owned().into(),
+        OperationValue::String(value) => value.to_owned().into(),
         // only use for scalars
         _ => panic!("can only return scalar values"),
     }
@@ -383,7 +426,7 @@ mod test {
 
             // Add schema to node.
             let schema = db
-                .add_schema("schema_name", vec![("bool", FieldType::Bool)], &key_pair)
+                .add_schema("schema_name", vec![("bool", FieldType::Boolean)], &key_pair)
                 .await;
 
             // Publish document on node.
@@ -449,12 +492,12 @@ mod test {
     #[case::malformed_document_id(
         "id: \"verboten\"",
         Value::Null,
-        vec!["Failed to parse \"DocumentIdScalar\": invalid hex encoding in hash string".to_string()]
+        vec!["Failed to parse \"DocumentId\": invalid hex encoding in hash string".to_string()]
     )]
     #[case::malformed_view_id(
         "viewId: \"verboten\"",
         Value::Null,
-        vec!["Failed to parse \"DocumentViewIdScalar\": invalid hex encoding in hash string".to_string()]
+        vec!["Failed to parse \"DocumentViewId\": invalid hex encoding in hash string".to_string()]
     )]
     #[case::missing_parameters(
         "id: null",
@@ -513,7 +556,7 @@ mod test {
 
             // Add schema to node.
             let schema = db
-                .add_schema("schema_name", vec![("bool", FieldType::Bool)], &key_pair)
+                .add_schema("schema_name", vec![("bool", FieldType::Boolean)], &key_pair)
                 .await;
 
             // Publish document on node.
@@ -547,6 +590,68 @@ mod test {
 
             let expected_data = value!({
                 "collection": value!([{ "fields": { "bool": true, } }]),
+            });
+            assert_eq!(response.data, expected_data, "{:#?}", response.errors);
+        });
+    }
+
+    #[rstest]
+    fn type_name(#[from(test_db)] runner: TestDatabaseRunner) {
+        // Test availability of `__typename` on all objects.
+
+        runner.with_db_teardown(&|mut db: TestDatabase| async move {
+            let key_pair = random_key_pair();
+
+            // Add schema to node.
+            let schema = db
+                .add_schema("schema_name", vec![("bool", FieldType::Boolean)], &key_pair)
+                .await;
+
+            // Publish document on node.
+            let view_id = db
+                .add_document(
+                    &schema.id(),
+                    vec![("bool", true.into())].try_into().unwrap(),
+                    &key_pair,
+                )
+                .await;
+
+            // Configure and send test query.
+            let client = graphql_test_client(&db).await;
+            let query = format!(
+                r#"{{
+                single: {type_name}(id: "{view_id}") {{
+                    __typename,
+                    meta {{ __typename }}
+                    fields {{ __typename }}
+                }},
+                collection: all_{type_name} {{
+                    __typename,
+                }},
+            }}"#,
+                type_name = schema.id(),
+                view_id = view_id,
+            );
+
+            let response = client
+                .post("/graphql")
+                .json(&json!({
+                    "query": query,
+                }))
+                .send()
+                .await;
+
+            let response: Response = response.json().await;
+
+            let expected_data = value!({
+                "single": {
+                    "__typename": schema.id(),
+                    "meta": { "__typename": "DocumentMeta" },
+                    "fields": { "__typename": format!("{}Fields", schema.id()), }
+                },
+                "collection": [{
+                    "__typename": schema.id()
+                }]
             });
             assert_eq!(response.data, expected_data, "{:#?}", response.errors);
         });
