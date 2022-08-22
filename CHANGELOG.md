@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Detach test helpers from test storage provider implementation [#237](https://github.com/p2panda/aquadoggo/pull/237)
 - Remove `Scalar` suffix from scalar types in GraphQL schema [#231](https://github.com/p2panda/aquadoggo/pull/231)
 - Implement new API for untagged operations [#245](https://github.com/p2panda/aquadoggo/pull/235)
-- Use `DocumentStore` trait from `p2panda_rs`[#249](https://github.com/p2panda/aquadoggo/pull/249)
+- Use `DocumentStore` trait from `p2panda_rs` [#249](https://github.com/p2panda/aquadoggo/pull/249)
 
 ### Fixed
 
