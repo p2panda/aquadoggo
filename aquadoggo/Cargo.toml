@@ -56,6 +56,7 @@ tokio = { version = "^1.19.2", features = [
 tower-http = { version = "^0.3.4", default-features = false, features = [
     "cors",
 ] }
+http = "^0.2.8"
 triggered = "^0.1.2"
 
 [dev-dependencies]

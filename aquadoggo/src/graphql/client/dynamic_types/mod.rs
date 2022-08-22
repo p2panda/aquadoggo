@@ -5,7 +5,7 @@
 //! All dynamic type definitions are inserted from the `OutputType` implementation in the
 //! [`dynamic_query_output`] module.
 pub(crate) mod document;
-mod document_fields;
+pub(crate) mod document_fields;
 pub(crate) mod document_meta;
 pub(crate) mod dynamic_query_output;
 #[cfg(test)]
