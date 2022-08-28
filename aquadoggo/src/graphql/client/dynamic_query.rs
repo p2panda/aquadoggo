@@ -240,6 +240,13 @@ impl DynamicQuery {
     ) -> ServerResult<Value> {
         let mut document_fields = IndexMap::new();
 
+        let store = ctx.data_unchecked::<SqlStorage>();
+        let one_operation = view.id().clone().into_iter().next().unwrap();
+        let document_id = store
+            .get_document_by_operation_id(&one_operation)
+            .await
+            .expect("Get document id by operation id");
+
         for field in selected_fields {
             // Name with which this field appears in the response
             let response_key = Name::new(field.alias().unwrap_or_else(|| field.name()));
@@ -258,7 +265,8 @@ impl DynamicQuery {
                 dynamic_types::document::META_FIELD => {
                     document_fields.insert(
                         response_key,
-                        DocumentMeta::resolve(field, None, Some(view.id()))?,
+                        DocumentMeta::resolve(ctx, field, document_id.as_ref(), Some(view.id()))
+                            .await?,
                     );
                 }
                 dynamic_types::document::FIELDS_FIELD => {

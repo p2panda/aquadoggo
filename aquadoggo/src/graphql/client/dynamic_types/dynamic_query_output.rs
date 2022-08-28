@@ -16,6 +16,7 @@ use p2panda_rs::schema::Schema;
 
 use crate::graphql::client::dynamic_types::utils::{metafield, metaobject};
 use crate::graphql::client::dynamic_types::{Document, DocumentMeta};
+use crate::graphql::client::static_types::{AuthoredOperation, AuthoredOperationList};
 use crate::graphql::client::DynamicQuery;
 use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
 use crate::schema::load_static_schemas;
@@ -25,6 +26,9 @@ pub const DOCUMENT_ID_ARGUMENT: &str = "id";
 
 /// Name of the field argument for requesting a document view id.
 pub const VIEW_ID_ARGUMENT: &str = "viewId";
+
+/// Name of the field for accessing the document's operations.
+pub const OPERATIONS_FIELD: &str = "operations";
 
 #[async_trait::async_trait]
 impl OutputType for DynamicQuery {
