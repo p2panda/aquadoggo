@@ -3,5 +3,5 @@
 mod authored_operation;
 mod next_arguments;
 
-pub use authored_operation::{AuthoredOperation, AuthoredOperationList};
+pub use authored_operation::OperationMeta;
 pub use next_arguments::NextArguments;

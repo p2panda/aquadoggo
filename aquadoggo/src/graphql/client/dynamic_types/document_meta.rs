@@ -9,8 +9,8 @@ use p2panda_rs::storage_provider::traits::OperationStore;
 
 use crate::db::provider::SqlStorage;
 use crate::graphql::client::dynamic_types::utils::{metafield, metaobject};
-use crate::graphql::client::static_types::{AuthoredOperation, AuthoredOperationList};
-use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar, OperationIdScalar};
+use crate::graphql::client::static_types::OperationMeta;
+use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
 
 /// Name of the field for accessing the document's id.
 pub const DOCUMENT_ID_FIELD: &str = "documentId";
@@ -44,7 +44,7 @@ impl DocumentMeta {
 
         // Manually register scalar type in registry because it's not used in the static api.
         DocumentViewIdScalar::create_type_info(registry);
-        AuthoredOperation::create_type_info(registry);
+        OperationMeta::create_type_info(registry);
 
         fields.insert(
             VIEW_ID_FIELD.to_string(),
@@ -59,8 +59,8 @@ impl DocumentMeta {
             OPERATIONS_FIELD.to_string(),
             metafield(
                 OPERATIONS_FIELD,
-                Some("An operation contained in this document."),
-                &*AuthoredOperation::type_name(),
+                Some("The operations contained in this document."),
+                &*OperationMeta::type_name(),
             ),
         );
 
@@ -126,12 +126,9 @@ impl DocumentMeta {
                     .expect("Get operations for requested document")
                     .into_iter()
                     .map(|op| {
-                        let authored_op: AuthoredOperation = op.into();
+                        let authored_op: OperationMeta = op.into();
                         let mut index_map = IndexMap::new();
-                        index_map.insert(
-                            Name::new("operationId"),
-                            authored_op.operation_id.to_value(),
-                        );
+                        index_map.insert(Name::new("id"), authored_op.id.to_value());
                         index_map.insert(Name::new("publicKey"), authored_op.public_key.to_value());
                         if let Some(previous) = authored_op.previous {
                             index_map.insert(Name::new("previous"), previous.to_value());
