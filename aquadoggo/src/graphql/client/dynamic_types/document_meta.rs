@@ -43,7 +43,7 @@ impl DocumentMeta {
         );
 
         // Manually register scalar type in registry because it's not used in the static api.
-        DocumentViewIdScalar::create_type_info(registry);
+        DocumentIdScalar::create_type_info(registry);
         OperationMeta::create_type_info(registry);
 
         fields.insert(
@@ -108,6 +108,33 @@ impl DocumentMeta {
                         meta_fields.insert(response_key, Value::String(view_id.to_string()));
                     }
                 }
+                OPERATIONS_FIELD => {
+                    if let Some(document_id) = document_id {
+                        let store = ctx.data_unchecked::<SqlStorage>();
+                        let operations = store
+                            .get_operations_by_document_id(document_id)
+                            .await
+                            .expect("Get operations for requested document")
+                            .into_iter()
+                            .map(|op| {
+                                let authored_op = OperationMeta::from(op);
+                                let mut index_map = IndexMap::new();
+                                index_map.insert(Name::new("id"), authored_op.id.to_value());
+                                index_map.insert(
+                                    Name::new("publicKey"),
+                                    authored_op.public_key.to_value(),
+                                );
+                                if let Some(previous) = authored_op.previous {
+                                    index_map.insert(Name::new("previous"), previous.to_value());
+                                }
+                                Value::Object(index_map)
+                            })
+                            .collect();
+
+                        meta_fields.insert(Name::new(OPERATIONS_FIELD), Value::List(operations));
+                    }
+                }
+
                 _ => Err(ServerError::new(
                     format!(
                         "Field '{}' does not exist on {}",
@@ -116,28 +143,6 @@ impl DocumentMeta {
                     ),
                     None,
                 ))?,
-            }
-
-            if meta_field.name() == OPERATIONS_FIELD && document_id.is_some() {
-                let store = ctx.data_unchecked::<SqlStorage>();
-                let operations = store
-                    .get_operations_by_document_id(document_id.unwrap())
-                    .await
-                    .expect("Get operations for requested document")
-                    .into_iter()
-                    .map(|op| {
-                        let authored_op: OperationMeta = op.into();
-                        let mut index_map = IndexMap::new();
-                        index_map.insert(Name::new("id"), authored_op.id.to_value());
-                        index_map.insert(Name::new("publicKey"), authored_op.public_key.to_value());
-                        if let Some(previous) = authored_op.previous {
-                            index_map.insert(Name::new("previous"), previous.to_value());
-                        }
-                        Value::Object(index_map)
-                    })
-                    .collect();
-
-                meta_fields.insert(Name::new(OPERATIONS_FIELD), Value::List(operations));
             }
         }
         Ok(Value::Object(meta_fields))

@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_graphql::SimpleObject;
-use p2panda_rs::operation::{AsOperation, AsVerifiedOperation, VerifiedOperation};
-use serde::{Deserialize, Serialize};
+use p2panda_rs::operation::traits::{AsOperation, AsVerifiedOperation};
 
 use crate::graphql::scalars;
 
 /// Metadata of a published operation.
-#[derive(SimpleObject, Serialize, Deserialize, Debug, Eq, PartialEq)]
+#[derive(SimpleObject, Debug, Eq, PartialEq)]
 pub struct OperationMeta {
     /// Public key of the key pair which published this entry.
     #[graphql(name = "publicKey")]
@@ -22,11 +21,11 @@ pub struct OperationMeta {
     pub previous: Option<scalars::DocumentViewIdScalar>,
 }
 
-impl From<VerifiedOperation> for OperationMeta {
-    fn from(op: VerifiedOperation) -> Self {
+impl<T: AsVerifiedOperation> From<T> for OperationMeta {
+    fn from(op: T) -> Self {
         OperationMeta {
             public_key: op.public_key().clone().into(),
-            id: op.operation_id().into(),
+            id: op.id().into(),
             previous: op
                 .previous_operations()
                 .as_ref()
