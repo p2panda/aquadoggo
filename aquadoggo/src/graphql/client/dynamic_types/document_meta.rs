@@ -117,14 +117,14 @@ impl DocumentMeta {
                             .expect("Get operations for requested document")
                             .into_iter()
                             .map(|op| {
-                                let authored_op = OperationMeta::from(op);
+                                let operation_meta = OperationMeta::from(op);
                                 let mut index_map = IndexMap::new();
-                                index_map.insert(Name::new("id"), authored_op.id.to_value());
+                                index_map.insert(Name::new("id"), operation_meta.id.to_value());
                                 index_map.insert(
                                     Name::new("publicKey"),
-                                    authored_op.public_key.to_value(),
+                                    operation_meta.public_key.to_value(),
                                 );
-                                if let Some(previous) = authored_op.previous {
+                                if let Some(previous) = operation_meta.previous {
                                     index_map.insert(Name::new("previous"), previous.to_value());
                                 }
                                 Value::Object(index_map)

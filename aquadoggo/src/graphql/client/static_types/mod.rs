@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-mod authored_operation;
 mod next_arguments;
+mod operation_meta;
 
-pub use authored_operation::OperationMeta;
 pub use next_arguments::NextArguments;
+pub use operation_meta::OperationMeta;
