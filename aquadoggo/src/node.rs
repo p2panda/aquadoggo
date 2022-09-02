@@ -14,6 +14,9 @@ use crate::materializer::materializer_service;
 use crate::replication::replication_service;
 use crate::schema::SchemaProvider;
 
+/// Capacity of the internal broadcast channel used to communicate between services.
+const SERVICE_BUS_CAPACITY: usize = 512_000;
+
 /// Makes sure database is created and migrated before returning connection pool.
 async fn initialize_db(config: &Configuration) -> Result<Pool> {
     // Find SSL certificate locations on the system for OpenSSL for TLS
@@ -57,7 +60,8 @@ impl Node {
 
         // Create service manager with shared data between services.
         let context = Context::new(store, config, schemas);
-        let mut manager = ServiceManager::<Context, ServiceMessage>::new(1024, context);
+        let mut manager =
+            ServiceManager::<Context, ServiceMessage>::new(SERVICE_BUS_CAPACITY, context);
 
         // Start materializer service.
         if manager
