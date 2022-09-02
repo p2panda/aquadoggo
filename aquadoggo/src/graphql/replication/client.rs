@@ -53,13 +53,7 @@ pub async fn entries_newer_than_seq_num(
         log_id.as_u64(),
         public_key.as_str(),
         latest_seq_num
-            .map(|num| {
-                if num == &SeqNum::default() {
-                    "null".into()
-                } else {
-                    format!("\"{}\"", num.as_u64())
-                }
-            })
+            .map(|num| { format!("\"{}\"", num.as_u64()) })
             .unwrap_or_else(|| "null".into()),
     );
 
