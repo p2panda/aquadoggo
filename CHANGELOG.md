@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Resolve implicit `__typename` field on dynamically generated GraphQL objects [#236](https://github.com/p2panda/aquadoggo/pull/236)
 - Allow `Content-Type` header [#236](https://github.com/p2panda/aquadoggo/pull/236)
 - Do not forget to register `DocumentIdScalar` [#252](https://github.com/p2panda/aquadoggo/pull/252)
+- Load `DocumentId` to be able to resolve it in meta field query [#258](https://github.com/p2panda/aquadoggo/pull/258)
 
 ## [0.3.0]
 

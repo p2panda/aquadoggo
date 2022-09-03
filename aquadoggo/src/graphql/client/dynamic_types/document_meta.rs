@@ -25,6 +25,11 @@ impl DocumentMeta {
 
     /// Generate an object type for generic metadata and register it in a GraphQL schema registry.
     pub fn register_type(registry: &mut async_graphql::registry::Registry) {
+        // Important!
+        //
+        // Manually register scalar type in registry because it's not used in the static api.
+        DocumentIdScalar::create_type_info(registry);
+
         let mut fields = IndexMap::new();
 
         fields.insert(
@@ -35,9 +40,6 @@ impl DocumentMeta {
                 &*DocumentIdScalar::type_name(),
             ),
         );
-
-        // Manually register scalar type in registry because it's not used in the static api.
-        DocumentIdScalar::create_type_info(registry);
 
         fields.insert(
             VIEW_ID_FIELD.to_string(),

@@ -12,7 +12,7 @@ use log::{debug, error, info};
 use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::storage_provider::traits::DocumentStore;
+use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
 use p2panda_rs::Human;
 
 use crate::db::provider::SqlStorage;
@@ -53,6 +53,7 @@ impl ContainerType for DynamicQuery {
                 }
             }
         }
+
         // Continue by trying to parse it as a schema and, if that's successful, checking whether
         // this schema is available in the schema provider. If both are successfull, continue by
         // resolving this query as a query for a single document.
@@ -143,6 +144,7 @@ impl DynamicQuery {
             let selected_fields = ctx.field().selection_set().collect();
             self.document_response(view, ctx, selected_fields).await
         });
+
         Ok(Some(Value::List(
             future::try_join_all(documents_graphql_values).await?,
         )))
@@ -256,9 +258,15 @@ impl DynamicQuery {
                     document_fields.insert(response_key, Value::String(schema_id));
                 }
                 dynamic_types::document::META_FIELD => {
+                    let store = ctx.data_unchecked::<SqlStorage>();
+                    let document_id = store
+                        .get_document_by_operation_id(view.id().graph_tips().first().unwrap())
+                        .await
+                        .map_err(|err| ServerError::new(err.to_string(), None))?
+                        .unwrap();
                     document_fields.insert(
                         response_key,
-                        DocumentMeta::resolve(field, None, Some(view.id()))?,
+                        DocumentMeta::resolve(field, Some(&document_id), Some(view.id()))?,
                     );
                 }
                 dynamic_types::document::FIELDS_FIELD => {
