@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use log::{debug, info, warn};
 use p2panda_rs::schema::{Schema, SchemaId, SYSTEM_SCHEMAS};
+use p2panda_rs::Human;
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 use tokio::sync::Mutex;
 
@@ -69,7 +70,7 @@ impl SchemaProvider {
     ///
     /// Returns `true` if a schema was updated and `false` if it was inserted.
     pub async fn update(&self, schema: Schema) -> bool {
-        info!("Updating {}", schema);
+        info!("Updating {}", schema.id().display());
         let mut schemas = self.schemas.lock().await;
         let is_update = schemas
             .insert(schema.id().clone(), schema.clone())
