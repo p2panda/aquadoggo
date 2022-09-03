@@ -40,13 +40,17 @@ OPTIONS:
 
 **Example:**
 
-```
+```bash
+# For all debug logs from `aquadoggo` and external crates
 RUST_LOG=debug DATABASE_URL=postgres://postgres:postgres@localhost:5432/db ./aquadoggo
+
+# For compact info logs, only directly coming from `aquadoggo`
+RUST_LOG=aquadoggo=info DATABASE_URL=postgres://postgres:postgres@localhost:5432/db ./aquadoggo
 ```
 
 ## Development
 
-```
+```bash
 cargo run
 cargo test
 cargo build

@@ -4,6 +4,7 @@ use log::{debug, info};
 use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
 use p2panda_rs::operation::traits::AsVerifiedOperation;
 use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore, StorageProvider};
+use p2panda_rs::Human;
 
 use crate::context::Context;
 use crate::materializer::worker::{Task, TaskError, TaskResult};
@@ -176,10 +177,23 @@ async fn reduce_document<O: AsVerifiedOperation>(
 
             // If the document was deleted, then we return nothing
             if document.is_deleted() {
+                info!(
+                    "Deleted {} final view {}",
+                    document.display(),
+                    document.view_id().display()
+                );
                 return Ok(None);
             }
 
-            info!("Stored {} latest view {}", document, document.view_id());
+            if document.is_edited() {
+                info!(
+                    "Updated {} latest view {}",
+                    document.display(),
+                    document.view_id().display()
+                );
+            } else {
+                info!("Created {}", document.display(),);
+            }
 
             // Return the new document_view id to be used in the resulting dependency task
             Ok(Some(document.view_id().to_owned()))
