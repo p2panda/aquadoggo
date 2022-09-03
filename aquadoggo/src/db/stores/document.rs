@@ -155,6 +155,14 @@ impl DocumentStore for SqlStorage {
     /// existed and is updated. If they are not needed for anything else they can be garbage
     /// collected.
     async fn insert_document(&self, document: &Document) -> Result<(), DocumentStorageError> {
+        // Start a transaction, any db insertions after this point, and before the `commit()`
+        // will be rolled back in the event of an error.
+        let transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+
         // Insert document view into the db
         let document_insertion_result = query(
             "
@@ -193,6 +201,12 @@ impl DocumentStore for SqlStorage {
             self.insert_document_view(&document_view, document.schema())
                 .await?;
         };
+
+        // Commit the transaction.
+        transaction
+            .commit()
+            .await
+            .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
 
         Ok(())
     }
