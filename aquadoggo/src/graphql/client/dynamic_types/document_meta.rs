@@ -4,7 +4,7 @@ use async_graphql::indexmap::IndexMap;
 use async_graphql::{
     Context, Name, OutputType, ScalarType, SelectionField, ServerError, ServerResult, Value,
 };
-use p2panda_rs::document::{DocumentId, DocumentViewId};
+use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
 use p2panda_rs::storage_provider::traits::OperationStore;
 
 use crate::db::provider::SqlStorage;
@@ -113,13 +113,24 @@ impl DocumentMeta {
                 OPERATIONS_FIELD => {
                     if let Some(document_id) = document_id {
                         let store = ctx.data_unchecked::<SqlStorage>();
+
+                        // Get the operations.
                         let operations = store
                             .get_operations_by_document_id(document_id)
                             .await
-                            .expect("Get operations for requested document")
-                            .into_iter()
+                            .expect("Get operations for requested document");
+
+                        // Build the document to a specific view if view_id passed.
+                        let document = DocumentBuilder::new(operations)
+                            .build_to_view_id(view_id.cloned())
+                            .expect("Build document to view");
+
+                        // Convert remaining operations to their scalar types.
+                        let operations = document
+                            .operations()
+                            .iter()
                             .map(|op| {
-                                let operation_meta = OperationMeta::from(op);
+                                let operation_meta = OperationMeta::from(op.clone());
                                 let mut index_map = IndexMap::new();
                                 index_map.insert(Name::new("id"), operation_meta.id.to_value());
                                 index_map.insert(
