@@ -98,23 +98,25 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::{key_pair, random_document_view_id};
     use rstest::rstest;
 
-    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+    use crate::db::stores::test_utils::{
+        add_document, add_schema, test_db, TestDatabase, TestDatabaseRunner,
+    };
 
     use super::SchemaStore;
 
     #[rstest]
     fn get_schema(key_pair: KeyPair, #[from(test_db)] runner: TestDatabaseRunner) {
         runner.with_db_teardown(move |mut db: TestDatabase| async move {
-            let schema = db
-                .add_schema(
-                    "test_schema",
-                    vec![
-                        ("description", FieldType::String),
-                        ("profile_name", FieldType::String),
-                    ],
-                    &key_pair,
-                )
-                .await;
+            let schema = add_schema(
+                &mut db,
+                "test_schema",
+                vec![
+                    ("description", FieldType::String),
+                    ("profile_name", FieldType::String),
+                ],
+                &key_pair,
+            )
+            .await;
 
             let document_view_id = match schema.id() {
                 SchemaId::Application(_, view_id) => view_id,
@@ -136,7 +138,8 @@ mod tests {
     fn get_all_schema(key_pair: KeyPair, #[from(test_db)] runner: TestDatabaseRunner) {
         runner.with_db_teardown(move |mut db: TestDatabase| async move {
             for i in 0..5 {
-                db.add_schema(
+                add_schema(
+                    &mut db,
                     &format!("test_schema_{}", i),
                     vec![
                         ("description", FieldType::String),
@@ -156,17 +159,17 @@ mod tests {
     fn schema_fields_do_not_exist(#[from(test_db)] runner: TestDatabaseRunner, key_pair: KeyPair) {
         runner.with_db_teardown(|mut db: TestDatabase| async move {
             // Create a schema definition but no schema field definitions
-            let document_view_id = db
-                .add_document(
-                    &SchemaId::SchemaDefinition(1),
-                    vec![
-                        ("name", "test_schema".into()),
-                        ("description", "My schema without fields".into()),
-                        ("fields", vec![random_document_view_id()].into()),
-                    ],
-                    &key_pair,
-                )
-                .await;
+            let document_view_id = add_document(
+                &mut db,
+                &SchemaId::SchemaDefinition(1),
+                vec![
+                    ("name", "test_schema".into()),
+                    ("description", "My schema without fields".into()),
+                    ("fields", vec![random_document_view_id()].into()),
+                ],
+                &key_pair,
+            )
+            .await;
 
             // Retrieve the schema by it's document view id. We unwrap here as we expect an `Ok`
             // result for the succeeding db query, even though the schema could not be built.

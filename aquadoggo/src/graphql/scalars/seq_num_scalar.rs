@@ -5,7 +5,7 @@ use std::fmt::Display;
 use std::str::FromStr;
 
 use anyhow::Result;
-use async_graphql::scalar;
+use async_graphql::{InputValueError, Scalar, ScalarType, Value};
 use p2panda_rs::entry::error::SeqNumError;
 use p2panda_rs::entry::SeqNum;
 use serde::{Deserialize, Serialize};
@@ -19,15 +19,25 @@ impl SeqNumScalar {
     pub fn as_u64(&self) -> u64 {
         self.0.as_u64()
     }
+}
 
-    /// Convert sequence number to string.
-    #[allow(clippy::inherent_to_string_shadow_display)]
-    pub fn to_string(self) -> String {
-        self.as_u64().to_string()
+#[Scalar(name = "SeqNum")]
+impl ScalarType for SeqNumScalar {
+    fn parse(value: Value) -> Result<Self, InputValueError<Self>> {
+        match &value {
+            Value::String(str_value) => {
+                let seq_num = SeqNum::from_str(str_value)?;
+                Ok(SeqNumScalar(seq_num))
+            }
+            _ => Err(InputValueError::expected_type(value)),
+        }
+    }
+
+    fn to_value(&self) -> Value {
+        Value::String(self.0.as_u64().to_string())
     }
 }
 
-/// Convert from p2panda types to GraphQL scalars and back.
 impl From<SeqNum> for SeqNumScalar {
     fn from(seq_num: SeqNum) -> Self {
         Self(seq_num)
@@ -40,7 +50,6 @@ impl From<SeqNumScalar> for SeqNum {
     }
 }
 
-/// Convert from strings to sequence number.
 impl FromStr for SeqNumScalar {
     type Err = SeqNumError;
 
@@ -90,10 +99,9 @@ impl Display for SeqNumScalar {
     }
 }
 
-scalar!(SeqNumScalar);
-
 #[cfg(test)]
 mod tests {
+    use async_graphql::InputType;
     use p2panda_rs::entry::SeqNum;
     use serde::{Deserialize, Serialize};
 
@@ -113,5 +121,21 @@ mod tests {
         let serialised = serde_json::to_string(&val).unwrap();
         assert_eq!(serialised, "{\"seq_num\":\"1\"}".to_string());
         assert_eq!(val, serde_json::from_str(&serialised).unwrap());
+    }
+
+    #[test]
+    fn scalar_type() {
+        // Convert to gql value
+        let value = SeqNum::default();
+        let scalar_value: SeqNumScalar = value.into();
+        let gql_value: async_graphql::Value = scalar_value.to_value();
+
+        // Convert back
+        let converted_value = SeqNumScalar::parse(Some(gql_value)).unwrap().into();
+        assert_eq!(value, converted_value);
+
+        // Convert invalid type
+        let invalid_conversion = SeqNumScalar::parse(Some(async_graphql::Value::Boolean(true)));
+        assert!(invalid_conversion.is_err())
     }
 }

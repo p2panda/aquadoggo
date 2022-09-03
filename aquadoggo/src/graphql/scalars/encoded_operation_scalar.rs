@@ -1,19 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use anyhow::anyhow;
 use async_graphql::{InputValueError, InputValueResult, Scalar, ScalarType, Value};
 use p2panda_rs::operation::EncodedOperation;
 use serde::{Deserialize, Serialize};
 
 /// Entry payload and p2panda operation, CBOR bytes encoded as a hexadecimal string.
-#[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 pub struct EncodedOperationScalar(EncodedOperation);
 
-#[Scalar]
+#[Scalar(name = "EncodedOperation")]
 impl ScalarType for EncodedOperationScalar {
     fn parse(value: Value) -> InputValueResult<Self> {
         match &value {
             Value::String(str_value) => {
-                let bytes = hex::decode(str_value)?;
+                let bytes = hex::decode(str_value)
+                    .map_err(|_| anyhow!("invalid hex encoding in operation"))?;
                 Ok(EncodedOperationScalar(EncodedOperation::from_bytes(&bytes)))
             }
             _ => Err(InputValueError::expected_type(value)),

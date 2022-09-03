@@ -236,7 +236,7 @@ async fn publish(client: &Client, key_pair: &KeyPair, operation: &Operation) -> 
     // This is a plain old GraphQL query string.
     let query_str = format!(
         "mutation TestPublishEntry {{
-            publishEntry(entry: \"{encoded_entry}\", operation: \"{encoded_operation}\") {{
+            publish(entry: \"{encoded_entry}\", operation: \"{encoded_operation}\") {{
                 logId,
                 seqNum,
                 backlink,
@@ -327,9 +327,9 @@ async fn next_args(
 ) -> (LogId, SeqNum, Option<Hash>, Option<Hash>) {
     let args = match view_id {
         Some(id) => {
-            format!("nextEntryArgs(publicKey: \"{author}\", documentViewId: \"{id}\")")
+            format!("nextArgs(publicKey: \"{author}\", viewId: \"{id}\")")
         }
-        None => format!("nextEntryArgs(publicKey: \"{author}\")"),
+        None => format!("nextArgs(publicKey: \"{author}\")"),
     };
 
     let query_str = format!(
@@ -345,7 +345,7 @@ async fn next_args(
     );
 
     let response = post(client, &query_str).await;
-    parse_next_args_response(response, "nextEntryArgs").await
+    parse_next_args_response(response, "nextArgs").await
 }
 
 /// Query a materialised document.

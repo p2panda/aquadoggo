@@ -190,7 +190,9 @@ mod tests {
     };
     use rstest::rstest;
 
-    use crate::db::stores::test_utils::{doggo_schema, test_db, TestDatabase, TestDatabaseRunner};
+    use crate::db::stores::test_utils::{
+        add_document, add_schema, doggo_schema, test_db, TestDatabase, TestDatabaseRunner,
+    };
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
 
@@ -395,43 +397,43 @@ mod tests {
 
             let document_view_id_of_child = document_view_of_child.id();
 
-            let schema = db
-                .add_schema(
-                    "test_schema",
-                    vec![
-                        (
-                            "pinned_relation_to_existing_document",
-                            FieldType::PinnedRelation(doggo_schema().id().to_owned()),
-                        ),
-                        (
-                            "pinned_relation_to_not_existing_document",
-                            FieldType::PinnedRelation(doggo_schema().id().to_owned()),
-                        ),
-                    ],
-                    &key_pair,
-                )
-                .await;
+            let schema = add_schema(
+                &mut db,
+                "test_schema",
+                vec![
+                    (
+                        "pinned_relation_to_existing_document",
+                        FieldType::PinnedRelation(doggo_schema().id().to_owned()),
+                    ),
+                    (
+                        "pinned_relation_to_not_existing_document",
+                        FieldType::PinnedRelation(doggo_schema().id().to_owned()),
+                    ),
+                ],
+                &key_pair,
+            )
+            .await;
 
-            let document_view_id = db
-                .add_document(
-                    schema.id(),
-                    vec![
-                        (
-                            "pinned_relation_to_existing_document",
-                            OperationValue::PinnedRelation(PinnedRelation::new(
-                                document_view_id_of_child.clone(),
-                            )),
-                        ),
-                        (
-                            "pinned_relation_to_not_existing_document",
-                            OperationValue::PinnedRelation(PinnedRelation::new(
-                                random_document_view_id(),
-                            )),
-                        ),
-                    ],
-                    &key_pair,
-                )
-                .await;
+            let document_view_id = add_document(
+                &mut db,
+                schema.id(),
+                vec![
+                    (
+                        "pinned_relation_to_existing_document",
+                        OperationValue::PinnedRelation(PinnedRelation::new(
+                            document_view_id_of_child.clone(),
+                        )),
+                    ),
+                    (
+                        "pinned_relation_to_not_existing_document",
+                        OperationValue::PinnedRelation(PinnedRelation::new(
+                            random_document_view_id(),
+                        )),
+                    ),
+                ],
+                &key_pair,
+            )
+            .await;
 
             // The new document should now dispatch one dependency task for the child relation which
             // has not been materialised yet.

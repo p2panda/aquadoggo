@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_graphql::indexmap::IndexMap;
-use async_graphql::{Name, OutputType, ScalarType, SelectionField, Value};
+use async_graphql::{
+    Name, OutputType, ScalarType, SelectionField, ServerError, ServerResult, Value,
+};
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 
 use crate::graphql::client::dynamic_types::utils::{metafield, metaobject};
@@ -23,6 +25,11 @@ impl DocumentMeta {
 
     /// Generate an object type for generic metadata and register it in a GraphQL schema registry.
     pub fn register_type(registry: &mut async_graphql::registry::Registry) {
+        // Important!
+        //
+        // Manually register scalar type in registry because it's not used in the static api.
+        DocumentIdScalar::create_type_info(registry);
+
         let mut fields = IndexMap::new();
 
         fields.insert(
@@ -33,9 +40,6 @@ impl DocumentMeta {
                 &*DocumentIdScalar::type_name(),
             ),
         );
-
-        // Manually register scalar type in registry because it's not used in the static api.
-        DocumentViewIdScalar::create_type_info(registry);
 
         fields.insert(
             VIEW_ID_FIELD.to_string(),
@@ -65,24 +69,40 @@ impl DocumentMeta {
         root_field: SelectionField,
         document_id: Option<&DocumentId>,
         view_id: Option<&DocumentViewId>,
-    ) -> Value {
-        let mut meta_fields = IndexMap::new();
+    ) -> ServerResult<Value> {
+        let mut meta_fields = IndexMap::<Name, Value>::new();
 
         for meta_field in root_field.selection_set() {
-            if meta_field.name() == DOCUMENT_ID_FIELD && document_id.is_some() {
-                meta_fields.insert(
-                    Name::new(DOCUMENT_ID_FIELD),
-                    DocumentIdScalar::from(document_id.unwrap()).to_value(),
-                );
-            }
+            let response_key = Name::new(meta_field.alias().unwrap_or_else(|| meta_field.name()));
 
-            if meta_field.name() == VIEW_ID_FIELD && view_id.is_some() {
-                meta_fields.insert(
-                    Name::new(VIEW_ID_FIELD),
-                    Value::String(view_id.unwrap().to_string()),
-                );
+            match meta_field.name() {
+                "__typename" => {
+                    meta_fields.insert(
+                        response_key,
+                        Value::String(DocumentMeta::type_name().to_string()),
+                    );
+                }
+                DOCUMENT_ID_FIELD => {
+                    if let Some(document_id) = document_id {
+                        meta_fields
+                            .insert(response_key, DocumentIdScalar::from(document_id).to_value());
+                    }
+                }
+                VIEW_ID_FIELD => {
+                    if let Some(view_id) = view_id {
+                        meta_fields.insert(response_key, Value::String(view_id.to_string()));
+                    }
+                }
+                _ => Err(ServerError::new(
+                    format!(
+                        "Field '{}' does not exist on {}",
+                        meta_field.name(),
+                        Self::type_name(),
+                    ),
+                    None,
+                ))?,
             }
         }
-        Value::Object(meta_fields)
+        Ok(Value::Object(meta_fields))
     }
 }

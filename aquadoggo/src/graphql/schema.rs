@@ -142,7 +142,7 @@ impl GraphQLSchemaManager {
         let shared = self.shared.clone();
         let schemas = self.schemas.clone();
 
-        info!("Subscribing Graphql manager to schema provider");
+        info!("Subscribing GraphQL manager to schema provider");
         let mut on_schema_added = shared.schema_provider.on_schema_added();
 
         // Create the new GraphQL based on the current state of known p2panda application schemas
@@ -207,7 +207,7 @@ mod test {
     use rstest::rstest;
     use serde_json::{json, Value};
 
-    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+    use crate::db::stores::test_utils::{add_schema, test_db, TestDatabase, TestDatabaseRunner};
     use crate::test_helpers::graphql_test_client;
 
     #[rstest]
@@ -250,13 +250,13 @@ mod test {
             );
 
             // Add schema to node.
-            let schema = db
-                .add_schema(
-                    "schema_name",
-                    vec![("bool_field", FieldType::Boolean)],
-                    &key_pair,
-                )
-                .await;
+            let schema = add_schema(
+                &mut db,
+                "schema_name",
+                vec![("bool_field", FieldType::Boolean)],
+                &key_pair,
+            )
+            .await;
 
             assert_eq!(
                 schema.id().to_string(),

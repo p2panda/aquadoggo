@@ -7,6 +7,7 @@ use axum::extract::Extension;
 use axum::http::Method;
 use axum::routing::get;
 use axum::Router;
+use http::header::CONTENT_TYPE;
 use log::{debug, warn};
 use tower_http::cors::{Any, CorsLayer};
 
@@ -24,6 +25,7 @@ pub fn build_server(http_context: HttpServiceContext) -> Router {
     // Configure CORS middleware
     let cors = CorsLayer::new()
         .allow_methods(vec![Method::GET, Method::POST, Method::OPTIONS])
+        .allow_headers([CONTENT_TYPE])
         .allow_credentials(false)
         .allow_origin(Any);
 

@@ -5,6 +5,11 @@ use p2panda_rs::schema::Schema;
 
 use crate::graphql::client::dynamic_types::utils::{graphql_typename, metafield, metaobject};
 
+/// Returns the GraphQL type name of the document fields object for a given schema.
+pub fn type_name(schema: &Schema) -> String {
+    format!("{}Fields", schema.id())
+}
+
 /// Represents fields for documents of a specific schema in the GraphQL client API.
 pub struct DocumentFields(&'static Schema);
 
@@ -16,7 +21,7 @@ impl DocumentFields {
 
     /// Returns the type name, formatted like `<SchemaId>Fields`.
     pub fn type_name(&self) -> String {
-        format!("{}Fields", self.0.id())
+        type_name(self.0)
     }
 
     /// Generate an object type and register it in a GraphQL schema registry.
