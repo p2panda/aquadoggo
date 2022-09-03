@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Schema task and schema provider that update when new schema views are materialised [#166](https://github.com/p2panda/aquadoggo/pull/166) 🥞
 - Service ready signal [#218](https://github.com/p2panda/aquadoggo/pull/218)
 - Validate operations against their claimed schema [#245](https://github.com/p2panda/aquadoggo/pull/235)
+- `operations` field on `DocumentMeta` GraphQL type [#255](https://github.com/p2panda/aquadoggo/pull/255)
 
 ### Changed
 
