@@ -262,6 +262,12 @@ fn metadata_type(#[from(test_db)] runner: TestDatabaseRunner) {
                     "type": {
                         "name": "DocumentViewId"
                     }
+                },
+                {
+                    "name": "operations",
+                    "type": {
+                        "name": "OperationMeta"
+                    }
                 }]
             }
         });

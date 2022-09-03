@@ -35,7 +35,7 @@ pub async fn entries_newer_than_seq_num(
                 entriesNewerThanSeqNum(
                     logId: "{}",
                     publicKey: "{}",
-                    seqNum: {}
+                    seqNum: {},
                 ) {{
                     edges {{
                         cursor
@@ -53,7 +53,7 @@ pub async fn entries_newer_than_seq_num(
         log_id.as_u64(),
         public_key.as_str(),
         latest_seq_num
-            .map(|num| num.as_u64().to_string())
+            .map(|num| { format!("\"{}\"", num.as_u64()) })
             .unwrap_or_else(|| "null".into()),
     );
 

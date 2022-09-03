@@ -53,6 +53,7 @@ impl ContainerType for DynamicQuery {
                 }
             }
         }
+
         // Continue by trying to parse it as a schema and, if that's successful, checking whether
         // this schema is available in the schema provider. If both are successfull, continue by
         // resolving this query as a query for a single document.
@@ -140,17 +141,11 @@ impl DynamicQuery {
 
         // Assemble views async
         let documents_graphql_values = documents.into_iter().map(|view| async move {
-            // Get the document id for this document view.
-            let document_id = store
-                .get_document_by_operation_id(view.id().iter().next().unwrap())
-                .await
-                .expect("Get document id for view");
-
             let selected_fields = ctx.field().selection_set().collect();
 
-            self.document_response(document_id, view, ctx, selected_fields)
-                .await
+            self.document_response(ctx, view, selected_fields).await
         });
+
         Ok(Some(Value::List(
             future::try_join_all(documents_graphql_values).await?,
         )))
@@ -188,8 +183,7 @@ impl DynamicQuery {
                     .await?;
                 }
 
-                self.document_response(Some(document_id), view, ctx, selected_fields)
-                    .await
+                self.document_response(ctx, view, selected_fields).await
             }
             None => {
                 error!("No view found for document {}", document_id.as_str());
@@ -231,14 +225,8 @@ impl DynamicQuery {
                     )
                     .await?;
                 }
-                // Get the document id for this document view.
-                let document_id = store
-                    .get_document_by_operation_id(view.id().iter().next().unwrap())
-                    .await
-                    .expect("Get document id for view");
 
-                self.document_response(document_id, view, ctx, selected_fields)
-                    .await
+                self.document_response(ctx, view, selected_fields).await
             }
             None => Ok(Value::Null),
         }
@@ -250,14 +238,11 @@ impl DynamicQuery {
     #[async_recursion]
     async fn document_response(
         &self,
-        document_id: Option<DocumentId>,
-        view: DocumentView,
         ctx: &Context<'_>,
+        view: DocumentView,
         selected_fields: Vec<SelectionField<'async_recursion>>,
     ) -> ServerResult<Value> {
         let mut document_fields = IndexMap::new();
-
-        let store = ctx.data_unchecked::<SqlStorage>();
 
         for field in selected_fields {
             // Name with which this field appears in the response
@@ -275,9 +260,15 @@ impl DynamicQuery {
                     document_fields.insert(response_key, Value::String(schema_id));
                 }
                 dynamic_types::document::META_FIELD => {
+                    let store = ctx.data_unchecked::<SqlStorage>();
+                    let document_id = store
+                        .get_document_by_operation_id(view.id().graph_tips().first().unwrap())
+                        .await
+                        .map_err(|err| ServerError::new(err.to_string(), None))?
+                        .unwrap();
                     document_fields.insert(
                         response_key,
-                        DocumentMeta::resolve(ctx, field, document_id.as_ref(), Some(view.id()))
+                        DocumentMeta::resolve(ctx, field, Some(&document_id), Some(view.id()))
                             .await?,
                     );
                 }
