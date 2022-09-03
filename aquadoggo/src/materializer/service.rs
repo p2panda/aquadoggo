@@ -16,7 +16,7 @@ use crate::materializer::TaskInput;
 ///
 /// This gives an upper bound to maximum status messages and incoming tasks being moved into worker
 /// queues the channels can handle at once.
-const CHANNEL_CAPACITY: usize = 1024;
+const CHANNEL_CAPACITY: usize = 512_000;
 
 /// The materializer service waits for incoming new operations to transform them into actual useful
 /// application- and system data, like document views or schemas.

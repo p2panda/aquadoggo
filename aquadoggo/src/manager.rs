@@ -140,7 +140,7 @@ where
     /// which get broadcasted across all services.
     pub fn new(capacity: usize, context: D) -> Self {
         let (tx, _) = broadcast::channel(capacity);
-        let (shutdown_signal, _) = broadcast::channel(120);
+        let (shutdown_signal, _) = broadcast::channel(128);
         let (exit_signal, exit_handle) = triggered::trigger();
 
         Self {
