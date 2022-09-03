@@ -420,7 +420,11 @@ mod test {
 
     use async_graphql::{value, Response, Value};
     use p2panda_rs::document::DocumentId;
+    use p2panda_rs::entry::traits::AsEncodedEntry;
+    use p2panda_rs::identity::Author;
+    use p2panda_rs::operation::{OperationAction, OperationBuilder, OperationId, OperationValue};
     use p2panda_rs::schema::FieldType;
+    use p2panda_rs::test_utils::db::test_db::send_to_store;
     use p2panda_rs::test_utils::fixtures::random_key_pair;
     use rstest::rstest;
     use serde_json::json;
@@ -428,6 +432,8 @@ mod test {
     use crate::db::stores::test_utils::{
         add_document, add_schema, test_db, TestDatabase, TestDatabaseRunner,
     };
+    use crate::materializer::tasks::reduce_task;
+    use crate::materializer::TaskInput;
     use crate::test_helpers::graphql_test_client;
 
     #[rstest]
@@ -486,6 +492,130 @@ mod test {
             let expected_data = value!({
                 "byViewId": value!({ "fields": { "bool": true, } }),
                 "byDocumentId": value!({ "fields": { "bool": true, } }),
+            });
+            assert_eq!(response.data, expected_data, "{:#?}", response.errors);
+        });
+    }
+
+    #[rstest]
+    fn single_query_for_meta_data(#[from(test_db)] runner: TestDatabaseRunner) {
+        // Test single query parameter variations.
+
+        runner.with_db_teardown(&|mut db: TestDatabase| async move {
+            let key_pair = random_key_pair();
+            let public_key = Author::from(key_pair.public_key());
+
+            // Add schema to node.
+            let schema = add_schema(
+                &mut db,
+                "schema_name",
+                vec![("bool", FieldType::Boolean)],
+                &key_pair,
+            )
+            .await;
+
+            // Publish document on node.
+            let view_id = add_document(
+                &mut db,
+                schema.id(),
+                vec![("bool", true.into())].try_into().unwrap(),
+                &key_pair,
+            )
+            .await;
+
+            let operation_one_id = view_id.iter().next().unwrap();
+            let document_id = DocumentId::from(operation_one_id.as_hash().to_owned());
+
+            let update = OperationBuilder::new(schema.id())
+                .action(OperationAction::Update)
+                .fields(&[("bool", OperationValue::Boolean(false))])
+                .previous_operations(&view_id)
+                .build()
+                .unwrap();
+
+            let (encoded_entry, _) = send_to_store(&db.store, &update, &schema, &key_pair)
+                .await
+                .expect("Publish entry and operation");
+
+            let operation_two_id: OperationId = encoded_entry.hash().into();
+
+            let input = TaskInput::new(Some(document_id.clone()), None);
+            let _ = reduce_task(db.context.clone(), input.clone())
+                .await
+                .expect("Reduce document");
+
+            // Wait for document to materialise.
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+            // Configure and send test query.
+            let client = graphql_test_client(&db).await;
+            let query = format!(
+                r#"{{
+                byViewId: {type_name}(viewId: "{view_id}") {{
+                    meta {{ 
+                        documentId,
+                        viewId,
+                        operations {{
+                            id,
+                            publicKey,
+                            previous
+                        }}
+                     }}
+                }},
+                byDocumentId: {type_name}(id: "{document_id}") {{
+                    meta {{ 
+                        documentId,
+                        viewId,
+                        operations {{
+                            id,
+                            publicKey,
+                            previous
+                        }}
+                     }}
+                }}
+            }}"#,
+                type_name = schema.id().to_string(),
+                view_id = view_id,
+                document_id = document_id
+            );
+
+            let response = client
+                .post("/graphql")
+                .json(&json!({
+                    "query": query,
+                }))
+                .send()
+                .await;
+
+            let response: Response = response.json().await;
+
+            let expected_data = value!({
+                "byViewId": value!({ "meta": {
+                    "documentId": document_id,
+                    "viewId": view_id.to_string(),
+                    "operations": [
+                        {
+                            "id": operation_one_id,
+                            "publicKey": public_key,
+                        }
+                    ]
+                } }),
+                "byDocumentId": value!({ "meta": {
+                    "documentId": document_id,
+                    "viewId": operation_two_id,
+                    "operations": [
+                        {
+                            "id": operation_one_id,
+                            "publicKey": public_key,
+                        },
+                        {
+                            "id": operation_two_id,
+                            "publicKey": public_key,
+                            "previous": operation_one_id
+                        }
+
+                    ]
+                } }),
             });
             assert_eq!(response.data, expected_data, "{:#?}", response.errors);
         });

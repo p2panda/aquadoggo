@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_graphql::SimpleObject;
-use p2panda_rs::operation::traits::{AsOperation, AsVerifiedOperation};
+use p2panda_rs::operation::traits::AsVerifiedOperation;
 
 use crate::graphql::scalars;
 
