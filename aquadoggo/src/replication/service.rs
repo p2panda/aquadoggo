@@ -16,6 +16,7 @@ use crate::db::stores::StorageEntry;
 use crate::domain::publish;
 use crate::manager::{ServiceReadySender, Shutdown};
 use crate::replication::replicate_authors::replicate_authors;
+use crate::replication::replicate_schemas::replicate_schemas;
 
 /// Replication service polling other nodes frequently to ask them about new entries from a defined
 /// set of authors and log ids.
@@ -41,9 +42,9 @@ pub async fn replication_service(
 
             // Ask every remote peer about latest entries of log ids and authors
             for remote_peer in remote_peers.clone().iter() {
-                // if let Some(schemas) = replicate_by_schema.clone() {
-                //     replicate_schemas(schemas, &context, remote_peer, &tx).await;
-                // }
+                if let Some(schemas) = replicate_by_schema.clone() {
+                    replicate_schemas(schemas, &context, remote_peer, &tx).await;
+                }
 
                 if let Some(authors) = replicate_by_author.clone() {
                     replicate_authors(authors, &context, remote_peer, &tx).await;
@@ -344,10 +345,8 @@ mod tests {
                 panic!("Service dropped");
             }
 
-            // Our test database helper already populated the database for us. We retreive the
-            // public keys here of the authors who created these test data entries
-            let public_key = billie_db.test_data.documents.first().unwrap();
-
+            // Our test database helper already populated the database for us. We query the schema
+            // of the created entries.
             let endpoint: String = "http://localhost:3022/graphql".into();
 
             let schema_config =

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 /// Generic pagination response of GraphQL connection API.
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Paginated<T, C> {
+pub struct  Paginated<T, C> {
     pub edges: Vec<PaginatedEdges<T, C>>,
     pub page_info: PaginatedInfo,
 }
