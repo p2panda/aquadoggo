@@ -47,13 +47,13 @@ pub async fn replication_service(
             // Ask every remote peer about latest entries of log ids and authors
             for remote_peer in remote_peers.clone().iter() {
                 for public_key_to_replicate in public_keys_to_replicate.clone().iter() {
-                    let public_key = public_key_to_replicate.public_key().clone();
+                    let public_key = public_key_to_replicate.public_key();
                     let log_ids = public_key_to_replicate.log_ids().clone();
 
                     for log_id in log_ids {
                         // Get the latest sequence number we have for this log and public key
                         let latest_seq_num =
-                            get_latest_seq_num(&context, &log_id, &public_key).await;
+                            get_latest_seq_num(&context, &log_id, public_key).await;
                         debug!(
                             "Latest entry sequence number of {} and {}: {:?}",
                             log_id.as_u64(),
@@ -65,7 +65,7 @@ pub async fn replication_service(
                         let response = client::entries_newer_than_seq_num(
                             remote_peer,
                             &log_id,
-                            &public_key,
+                            public_key,
                             latest_seq_num.as_ref(),
                         )
                         .await;
@@ -254,7 +254,6 @@ mod tests {
     use std::convert::TryInto;
     use std::time::Duration;
 
-    use p2panda_rs::identity::PublicKey;
     use p2panda_rs::storage_provider::traits::EntryStore;
     use p2panda_rs::test_utils::db::test_db::{populate_store, PopulateDatabaseConfig};
     use rstest::rstest;
@@ -327,16 +326,15 @@ mod tests {
             // Our test database helper already populated the database for us. We retreive the
             // public keys here of the authors who created these test data entries
             let public_key = key_pairs.first().unwrap().public_key();
-
-            let public_key = PublicKey::from(public_key);
             let log_ids: Vec<u64> = vec![0];
-            let author_str: String = public_key.to_string().into();
             let endpoint: String = "http://localhost:3022/graphql".into();
 
             // Construct database and context for Ada
             let config_ada = Configuration {
                 replication: ReplicationConfiguration {
-                    public_keys_to_replicate: vec![(author_str, log_ids).try_into().unwrap()],
+                    public_keys_to_replicate: vec![(public_key.to_string(), log_ids)
+                        .try_into()
+                        .unwrap()],
                     remote_peers: vec![endpoint],
                     ..ReplicationConfiguration::default()
                 },

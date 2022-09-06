@@ -7,7 +7,7 @@ use async_graphql::{InputValueError, Scalar, ScalarType, Value};
 use p2panda_rs::identity::PublicKey;
 
 /// Public key that signed the entry.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Copy)]
 pub struct PublicKeyScalar(PublicKey);
 
 #[Scalar(name = "PublicKey")]

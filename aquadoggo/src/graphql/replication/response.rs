@@ -94,7 +94,6 @@ mod tests {
     use bamboo_rs_core_ed25519_yasmf::verify_batch;
     use p2panda_rs::entry::traits::AsEncodedEntry;
     use p2panda_rs::entry::LogId;
-    use p2panda_rs::identity::PublicKey;
     use p2panda_rs::storage_provider::traits::EntryStore;
     use rstest::rstest;
 

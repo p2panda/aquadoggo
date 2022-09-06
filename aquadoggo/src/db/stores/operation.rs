@@ -502,7 +502,7 @@ mod tests {
 
             let operations_by_document_id = db
                 .store
-                .get_operations_by_document_id(&document_id)
+                .get_operations_by_document_id(document_id)
                 .await
                 .expect("Get operations by their document id");
 

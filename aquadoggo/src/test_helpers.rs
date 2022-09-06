@@ -49,7 +49,7 @@ impl Default for TestConfiguration {
     }
 }
 
-pub static TEST_CONFIG: Lazy<TestConfiguration> = Lazy::new(|| TestConfiguration::new());
+pub static TEST_CONFIG: Lazy<TestConfiguration> = Lazy::new(TestConfiguration::new);
 
 pub struct TestClient {
     client: reqwest::Client,
@@ -170,14 +170,12 @@ impl TestResponse {
 
 // Helper method to give us a shutdown future which will never resolve
 pub fn shutdown_handle() -> JoinHandle<()> {
-    let shutdown = task::spawn(async {
+    task::spawn(async {
         loop {
             // Do this forever ..
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
-    });
-
-    shutdown
+    })
 }
 
 /// Create test database.

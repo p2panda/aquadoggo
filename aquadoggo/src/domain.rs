@@ -670,9 +670,9 @@ mod tests {
             .build()
             .unwrap();
 
-        // The existing_author who will publish the next entry.
-        let author_to_publish = PublicKey::from(key_pair.public_key());
-        let next_args = next_args(&store, &author_to_publish, document.as_ref())
+        // The next arges for a author who will publish the next entry based on
+        // the passed key pair for this test run.
+        let next_args = next_args(&store, &key_pair.public_key(), document.as_ref())
             .await
             .unwrap();
 
@@ -770,7 +770,7 @@ mod tests {
         let (key_pairs, _) = populate_store(&store, &config).await;
 
         let public_key_with_removed_operations = key_pairs[0].public_key();
-        let public_key_making_request = PublicKey::from(key_pair.public_key());
+        let public_key_making_request = key_pair.public_key();
 
         // Map the passed &[LogIdAndSeqNum] into a DocumentViewId containing the claimed operations.
         let document_view_id: Vec<OperationId> = document_view_id
@@ -975,7 +975,7 @@ mod tests {
 
         let document_id = documents.first().unwrap();
         let document_view_id: DocumentViewId = document_id.as_str().parse().unwrap();
-        let author_performing_update = PublicKey::from(key_pair.public_key());
+        let author_performing_update = key_pair.public_key();
 
         let update_operation = OperationBuilder::new(schema.id())
             .action(OperationAction::Update)
@@ -1087,7 +1087,7 @@ mod tests {
         .unwrap();
 
         // If it didn't error the request succeeded, we check a new log was stored.
-        let public_key = PublicKey::from(key_pair.public_key());
+        let public_key = key_pair.public_key();
         let document_id = encoded_entry.hash().into();
 
         let retrieved_log_id = store
@@ -1120,7 +1120,7 @@ mod tests {
 
         let document_id = documents.first().unwrap();
         let document_view_id: DocumentViewId = document_id.as_str().parse().unwrap();
-        let author_performing_update = PublicKey::from(key_pair.public_key());
+        let author_performing_update = key_pair.public_key();
 
         let delete_operation = OperationBuilder::new(schema.id())
             .action(OperationAction::Delete)
@@ -1176,7 +1176,7 @@ mod tests {
 
         let document_id = documents.first().unwrap();
         let document_view_id: DocumentViewId = document_id.as_str().parse().unwrap();
-        let public_key = PublicKey::from(key_pair.public_key());
+        let public_key = key_pair.public_key();
 
         let result = next_args(&store, &public_key, Some(&document_view_id)).await;
 
@@ -1193,7 +1193,7 @@ mod tests {
 
         let num_of_entries = 13;
         let mut document_id: Option<DocumentId> = None;
-        let public_key = PublicKey::from(key_pair.public_key());
+        let public_key = key_pair.public_key();
 
         for index in 0..num_of_entries {
             let document_view_id: Option<DocumentViewId> =
@@ -1267,7 +1267,7 @@ mod tests {
         let store = MemoryStore::default();
         let _ = populate_store(&store, &config).await;
 
-        let public_key = PublicKey::from(key_pair.public_key());
+        let public_key = key_pair.public_key();
 
         let entry_two = store
             .get_entry_at_seq_num(&public_key, &LogId::default(), &SeqNum::new(2).unwrap())
@@ -1311,7 +1311,7 @@ mod tests {
         let store = MemoryStore::default();
         let _ = populate_store(&store, &config).await;
 
-        let public_key = PublicKey::from(key_pair.public_key());
+        let public_key = key_pair.public_key();
 
         // Get the latest entry, we will use it's operation in all other entries (doesn't matter if it's a duplicate, just need the previous
         // operations to exist).

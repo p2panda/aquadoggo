@@ -41,7 +41,7 @@ impl AsStorageLog for StorageLog {
     }
 
     fn public_key(&self) -> PublicKey {
-        self.public_key.clone()
+        self.public_key
     }
 
     fn id(&self) -> LogId {

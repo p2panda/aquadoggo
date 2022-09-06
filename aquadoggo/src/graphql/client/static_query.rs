@@ -48,7 +48,6 @@ impl StaticQuery {
 #[cfg(test)]
 mod tests {
     use async_graphql::{value, Response};
-    use p2panda_rs::identity::PublicKey;
     use rstest::rstest;
     use serde_json::json;
 
@@ -122,7 +121,7 @@ mod tests {
                                 skiplink
                             }}
                         }}",
-                            public_key.to_string(),
+                            public_key,
                             document_id.as_str()
                         )
                 }))

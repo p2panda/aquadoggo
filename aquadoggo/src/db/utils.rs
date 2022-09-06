@@ -167,7 +167,7 @@ pub fn parse_operation_rows(
         schema_id,
         previous: operation.previous(),
         fields: operation.fields(),
-        public_key: public_key,
+        public_key,
     };
 
     Some(operation)

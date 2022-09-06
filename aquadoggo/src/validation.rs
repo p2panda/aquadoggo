@@ -171,7 +171,7 @@ mod tests {
     use p2panda_rs::document::DocumentId;
     use p2panda_rs::entry::traits::AsEntry;
     use p2panda_rs::entry::{LogId, SeqNum};
-    use p2panda_rs::identity::{KeyPair, PublicKey};
+    use p2panda_rs::identity::KeyPair;
     use p2panda_rs::test_utils::constants::PRIVATE_KEY;
     use p2panda_rs::test_utils::db::test_db::{
         populate_store, test_db_config, PopulateDatabaseConfig,
@@ -263,11 +263,14 @@ mod tests {
         // Unwrap the passed document id or select the first valid one from the database.
         let document_id = document_id.unwrap_or_else(|| documents.first().unwrap().to_owned());
 
-        let public_key = PublicKey::from(key_pair.public_key());
-
-        verify_log_id(&store, &public_key, &claimed_log_id, &document_id)
-            .await
-            .unwrap();
+        verify_log_id(
+            &store,
+            &key_pair.public_key(),
+            &claimed_log_id,
+            &document_id,
+        )
+        .await
+        .unwrap();
     }
 
     #[rstest]
@@ -294,9 +297,7 @@ mod tests {
         let store = MemoryStore::default();
         let _ = populate_store(&store, &config).await;
 
-        let public_key = PublicKey::from(key_pair.public_key());
-
-        get_expected_skiplink(&store, &public_key, &log_id, &seq_num)
+        get_expected_skiplink(&store, &key_pair.public_key(), &log_id, &seq_num)
             .await
             .unwrap();
     }
@@ -325,10 +326,8 @@ mod tests {
         let store = MemoryStore::default();
         let _ = populate_store(&store, &config).await;
 
-        let public_key = PublicKey::from(key_pair.public_key());
-
         let skiplink_entry =
-            get_expected_skiplink(&store, &public_key, &LogId::default(), &seq_num)
+            get_expected_skiplink(&store, &key_pair.public_key(), &LogId::default(), &seq_num)
                 .await
                 .unwrap();
 

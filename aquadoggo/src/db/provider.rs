@@ -129,10 +129,7 @@ mod tests {
                 _ => panic!("Invalid schema id"),
             };
 
-            let result = db
-                .store
-                .get_schema_by_document_view(&document_view_id)
-                .await;
+            let result = db.store.get_schema_by_document_view(document_view_id).await;
 
             assert!(result.is_ok());
             // This is the schema name of the schema document we published.

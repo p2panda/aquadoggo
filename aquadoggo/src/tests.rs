@@ -206,12 +206,7 @@ async fn publish(client: &Client, key_pair: &KeyPair, operation: &Operation) -> 
     // In order to compose an entry with the correct values, we need to ask our node for them,
     // that's what this method does.
 
-    let next_args = next_args(
-        client,
-        &PublicKey::from(key_pair.public_key()),
-        operation.previous(),
-    )
-    .await;
+    let next_args = next_args(client, &key_pair.public_key(), operation.previous()).await;
 
     // Encoding data.
     //
@@ -220,7 +215,7 @@ async fn publish(client: &Client, key_pair: &KeyPair, operation: &Operation) -> 
     //
     // A LOT more could be said here, please check the specification for much more detail.
 
-    let encoded_operation = encode_operation(&operation).expect("Encode operation");
+    let encoded_operation = encode_operation(operation).expect("Encode operation");
     let (log_id, seq_num, backlink, skiplink) = next_args;
 
     let encoded_entry = sign_and_encode_entry(

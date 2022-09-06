@@ -413,8 +413,6 @@ fn gql_scalar(operation_value: &OperationValue) -> Value {
 
 #[cfg(test)]
 mod test {
-    use std::convert::TryInto;
-
     use async_graphql::{value, Response, Value};
     use p2panda_rs::document::DocumentId;
     use p2panda_rs::schema::FieldType;
@@ -444,13 +442,8 @@ mod test {
             .await;
 
             // Publish document on node.
-            let view_id = add_document(
-                &mut db,
-                schema.id(),
-                vec![("bool", true.into())].try_into().unwrap(),
-                &key_pair,
-            )
-            .await;
+            let view_id =
+                add_document(&mut db, schema.id(), vec![("bool", true.into())], &key_pair).await;
             let document_id =
                 DocumentId::from(view_id.graph_tips().first().unwrap().as_hash().to_owned());
 
@@ -578,13 +571,7 @@ mod test {
             .await;
 
             // Publish document on node.
-            add_document(
-                &mut db,
-                schema.id(),
-                vec![("bool", true.into())].try_into().unwrap(),
-                &key_pair,
-            )
-            .await;
+            add_document(&mut db, schema.id(), vec![("bool", true.into())], &key_pair).await;
 
             // Configure and send test query.
             let client = graphql_test_client(&db).await;
@@ -634,7 +621,7 @@ mod test {
             let view_id = add_document(
                 &mut db,
                 &schema.id(),
-                vec![("bool", true.into())].try_into().unwrap(),
+                vec![("bool", true.into())],
                 &key_pair,
             )
             .await;
