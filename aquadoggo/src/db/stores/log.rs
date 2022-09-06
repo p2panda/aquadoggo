@@ -3,7 +3,7 @@
 use async_trait::async_trait;
 use p2panda_rs::document::DocumentId;
 use p2panda_rs::entry::LogId;
-use p2panda_rs::identity::Author;
+use p2panda_rs::identity::PublicKey;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::error::LogStorageError;
 use p2panda_rs::storage_provider::traits::{AsStorageLog, LogStore};
@@ -11,7 +11,7 @@ use sqlx::{query, query_scalar};
 
 use crate::db::provider::SqlStorage;
 
-/// Tracks the assigment of an author's logs to documents and records their schema.
+/// Tracks the assigment of an public_key's logs to documents and records their schema.
 ///
 /// This serves as an indexing layer on top of the lower-level bamboo entries. The node updates
 /// this data according to what it sees in the newly incoming entries.
@@ -19,7 +19,7 @@ use crate::db::provider::SqlStorage;
 /// `StorageLog` implements the trait `AsStorageLog` which is required when defining a `LogStore`.
 #[derive(Debug)]
 pub struct StorageLog {
-    author: Author,
+    public_key: PublicKey,
     log_id: LogId,
     document_id: DocumentId,
     schema_id: SchemaId,
@@ -27,21 +27,21 @@ pub struct StorageLog {
 
 impl AsStorageLog for StorageLog {
     fn new(
-        author: &Author,
+        public_key: &PublicKey,
         schema_id: &SchemaId,
         document_id: &DocumentId,
         log_id: &LogId,
     ) -> Self {
         Self {
-            author: author.to_owned(),
+            public_key: public_key.to_owned(),
             log_id: log_id.to_owned(),
             document_id: document_id.to_owned(),
             schema_id: schema_id.to_owned(),
         }
     }
 
-    fn author(&self) -> Author {
-        self.author.clone()
+    fn public_key(&self) -> PublicKey {
+        self.public_key.clone()
     }
 
     fn id(&self) -> LogId {
@@ -71,7 +71,7 @@ impl LogStore<StorageLog> for SqlStorage {
             "
             INSERT INTO
                 logs (
-                    author,
+                    public_key,
                     log_id,
                     document,
                     schema
@@ -80,7 +80,7 @@ impl LogStore<StorageLog> for SqlStorage {
                 ($1, $2, $3, $4)
             ",
         )
-        .bind(log.author().as_str())
+        .bind(log.public_key().to_string())
         .bind(log.id().as_u64().to_string())
         .bind(log.document_id().as_str())
         .bind(log.schema_id().to_string())
@@ -95,7 +95,7 @@ impl LogStore<StorageLog> for SqlStorage {
     /// Get a log from storage
     async fn get(
         &self,
-        author: &Author,
+        public_key: &PublicKey,
         document_id: &DocumentId,
     ) -> Result<Option<LogId>, LogStorageError> {
         let result: Option<String> = query_scalar(
@@ -105,11 +105,11 @@ impl LogStore<StorageLog> for SqlStorage {
             FROM
                 logs
             WHERE
-                author = $1
+                public_key = $1
                 AND document = $2
             ",
         )
-        .bind(author.as_str())
+        .bind(public_key.to_string())
         .bind(document_id.as_str())
         .fetch_optional(&self.pool)
         .await
@@ -124,12 +124,12 @@ impl LogStore<StorageLog> for SqlStorage {
         Ok(log_id)
     }
 
-    /// Determines the next unused log_id of an author.
+    /// Determines the next unused log_id of an public_key.
     ///
     /// @TODO: This will be deprecated as functionality is replaced by
     /// `latest_log_id + validated next log id methods.
-    async fn next_log_id(&self, author: &Author) -> Result<LogId, LogStorageError> {
-        // Get all log ids from this author
+    async fn next_log_id(&self, public_key: &PublicKey) -> Result<LogId, LogStorageError> {
+        // Get all log ids from this public_key
         let mut result: Vec<String> = query_scalar(
             "
             SELECT
@@ -137,10 +137,10 @@ impl LogStore<StorageLog> for SqlStorage {
             FROM
                 logs
             WHERE
-                author = $1
+                public_key = $1
             ",
         )
-        .bind(author.as_str())
+        .bind(public_key.to_string())
         .fetch_all(&self.pool)
         .await
         .map_err(|e| LogStorageError::Custom(e.to_string()))?;
@@ -181,12 +181,15 @@ impl LogStore<StorageLog> for SqlStorage {
         Ok(next_log_id)
     }
 
-    /// Determines the latest `LogId` of an author.
+    /// Determines the latest `LogId` of an public_key.
     ///
-    /// Returns either the highest known `LogId` for an author or `None` if no logs are known from
-    /// the passed author.
-    async fn latest_log_id(&self, author: &Author) -> Result<Option<LogId>, LogStorageError> {
-        // Get all log ids from this author
+    /// Returns either the highest known `LogId` for an public_key or `None` if no logs are known from
+    /// the passed public_key.
+    async fn latest_log_id(
+        &self,
+        public_key: &PublicKey,
+    ) -> Result<Option<LogId>, LogStorageError> {
+        // Get all log ids from this public_key
         let result: Option<String> = query_scalar(
             "
             SELECT
@@ -194,12 +197,12 @@ impl LogStore<StorageLog> for SqlStorage {
             FROM
                 logs
             WHERE
-                author = $1
+                public_key = $1
             ORDER BY
                 CAST(log_id AS NUMERIC) DESC LIMIT 1
             ",
         )
-        .bind(author.as_str())
+        .bind(public_key.to_string())
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| LogStorageError::Custom(e.to_string()))?;
@@ -220,7 +223,7 @@ mod tests {
     use p2panda_rs::entry::decode::decode_entry;
     use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
     use p2panda_rs::entry::{EncodedEntry, LogId};
-    use p2panda_rs::identity::Author;
+    use p2panda_rs::identity::PublicKey;
     use p2panda_rs::operation::OperationId;
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::storage_provider::traits::{
@@ -236,35 +239,40 @@ mod tests {
 
     #[rstest]
     fn prevent_duplicate_log_ids(
-        #[from(public_key)] author: Author,
+        #[from(public_key)] public_key: PublicKey,
         #[from(schema_id)] schema_id: SchemaId,
         #[from(random_document_id)] document: DocumentId,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            let log = StorageLog::new(&author, &schema_id, &document.clone(), &LogId::default());
+        runner.with_db_teardown(move |db: TestDatabase| async move {
+            let log = StorageLog::new(
+                &public_key,
+                &schema_id,
+                &document.clone(),
+                &LogId::default(),
+            );
             assert!(db.store.insert_log(log).await.is_ok());
 
-            let log = StorageLog::new(&author, &schema_id, &document, &LogId::default());
+            let log = StorageLog::new(&public_key, &schema_id, &document, &LogId::default());
             assert!(db.store.insert_log(log).await.is_err());
         });
     }
 
     #[rstest]
     fn with_multi_hash_schema_id(
-        #[from(public_key)] author: Author,
+        #[from(public_key)] public_key: PublicKey,
         #[from(random_operation_id)] operation_id_1: OperationId,
         #[from(random_operation_id)] operation_id_2: OperationId,
         #[from(random_document_id)] document: DocumentId,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
             let schema = SchemaId::new_application(
                 "venue",
                 &DocumentViewId::new(&[operation_id_1, operation_id_2]),
             );
 
-            let log = StorageLog::new(&author, &schema, &document, &LogId::default());
+            let log = StorageLog::new(&public_key, &schema, &document, &LogId::default());
 
             assert!(db.store.insert_log(log).await.is_ok());
         });
@@ -272,21 +280,21 @@ mod tests {
 
     #[rstest]
     fn latest_log_id(
-        #[from(public_key)] author: Author,
+        #[from(public_key)] public_key: PublicKey,
         #[from(schema_id)] schema_id: SchemaId,
         #[from(test_db)] runner: TestDatabaseRunner,
         #[from(random_document_id)] document_id: DocumentId,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            let log_id = db.store.latest_log_id(&author).await.unwrap();
+        runner.with_db_teardown(move |db: TestDatabase| async move {
+            let log_id = db.store.latest_log_id(&public_key).await.unwrap();
 
             assert_eq!(log_id, None);
 
             for n in 0..12 {
-                let log = StorageLog::new(&author, &schema_id, &document_id, &LogId::new(n));
+                let log = StorageLog::new(&public_key, &schema_id, &document_id, &LogId::new(n));
                 db.store.insert_log(log).await.unwrap();
 
-                let log_id = db.store.latest_log_id(&author).await.unwrap();
+                let log_id = db.store.latest_log_id(&public_key).await.unwrap();
                 assert_eq!(Some(LogId::new(n)), log_id);
             }
         });
@@ -298,7 +306,7 @@ mod tests {
         #[from(encoded_entry)] encoded_entry: EncodedEntry,
         #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
             // Expect database to return nothing yet
             assert_eq!(
                 db.store
@@ -309,7 +317,7 @@ mod tests {
             );
 
             let entry = decode_entry(&encoded_entry).unwrap();
-            let author = entry.public_key();
+            let public_key = entry.public_key();
             // Store entry in database
             assert!(db
                 .store
@@ -318,7 +326,7 @@ mod tests {
                 .is_ok());
 
             let log = StorageLog::new(
-                author,
+                public_key,
                 &schema_id,
                 &encoded_entry.hash().into(),
                 &LogId::default(),
@@ -341,7 +349,7 @@ mod tests {
 
     #[rstest]
     fn log_ids(
-        #[from(public_key)] author: Author,
+        #[from(public_key)] public_key: PublicKey,
         #[from(test_db)] runner: TestDatabaseRunner,
         #[from(schema_id)] schema_id: SchemaId,
         #[from(random_document_id)] document_first: DocumentId,
@@ -349,32 +357,33 @@ mod tests {
         #[from(random_document_id)] document_third: DocumentId,
         #[from(random_document_id)] document_forth: DocumentId,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        runner.with_db_teardown(move |db: TestDatabase| async move {
             // Register two log ids at the beginning
-            let log_1 = StorageLog::new(&author, &schema_id, &document_first, &LogId::default());
-            let log_2 = StorageLog::new(&author, &schema_id, &document_second, &LogId::new(1));
+            let log_1 =
+                StorageLog::new(&public_key, &schema_id, &document_first, &LogId::default());
+            let log_2 = StorageLog::new(&public_key, &schema_id, &document_second, &LogId::new(1));
 
             db.store.insert_log(log_1).await.unwrap();
             db.store.insert_log(log_2).await.unwrap();
 
             // Find next free log id and register it
-            let log_id = db.store.next_log_id(&author).await.unwrap();
+            let log_id = db.store.next_log_id(&public_key).await.unwrap();
             assert_eq!(log_id, LogId::new(2));
 
-            let log_3 = StorageLog::new(&author, &schema_id, &document_third, &log_id);
+            let log_3 = StorageLog::new(&public_key, &schema_id, &document_third, &log_id);
 
             db.store.insert_log(log_3).await.unwrap();
 
             // Find next free log id and register it
-            let log_id = db.store.next_log_id(&author).await.unwrap();
+            let log_id = db.store.next_log_id(&public_key).await.unwrap();
             assert_eq!(log_id, LogId::new(3));
 
-            let log_4 = StorageLog::new(&author, &schema_id, &document_forth, &log_id);
+            let log_4 = StorageLog::new(&public_key, &schema_id, &document_forth, &log_id);
 
             db.store.insert_log(log_4).await.unwrap();
 
             // Find next free log id
-            let log_id = db.store.next_log_id(&author).await.unwrap();
+            let log_id = db.store.next_log_id(&public_key).await.unwrap();
             assert_eq!(log_id, LogId::new(4));
         });
     }

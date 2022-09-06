@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use p2panda_rs::document::{DocumentId, DocumentViewFields, DocumentViewId, DocumentViewValue};
-use p2panda_rs::identity::Author;
+use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::traits::AsOperation;
 use p2panda_rs::operation::{
     OperationAction, OperationBuilder, OperationId, OperationValue, PinnedRelation,
@@ -31,7 +31,7 @@ pub fn parse_operation_rows(
 
     // Unwrapping as we assume values coming from the db are valid
     let schema_id: SchemaId = first_row.schema_id.parse().unwrap();
-    let author = Author::new(&first_row.author).unwrap();
+    let public_key = PublicKey::new(&first_row.public_key).unwrap();
     let operation_id = first_row.operation_id.parse().unwrap();
 
     let mut relation_lists: BTreeMap<String, Vec<DocumentId>> = BTreeMap::new();
@@ -137,8 +137,8 @@ pub fn parse_operation_rows(
     }
 
     let operation_builder = OperationBuilder::new(&schema_id);
-    let previous_operations = first_row.previous_operations.clone();
-    let previous_operations = previous_operations.map(|previous| previous.parse().unwrap());
+    let previous = first_row.previous.clone();
+    let previous = previous.map(|previous| previous.parse().unwrap());
     let fields: Vec<(&str, OperationValue)> = operation_fields
         .iter()
         .map(|(name, value)| (name.as_str(), value.to_owned()))
@@ -149,11 +149,11 @@ pub fn parse_operation_rows(
         "update" => operation_builder
             .action(OperationAction::Update)
             .fields(fields.as_slice())
-            .previous_operations(previous_operations.as_ref().unwrap())
+            .previous(previous.as_ref().unwrap())
             .build(),
         "delete" => operation_builder
             .action(OperationAction::Delete)
-            .previous_operations(previous_operations.as_ref().unwrap())
+            .previous(previous.as_ref().unwrap())
             .build(),
         _ => panic!("Operation which was not CREATE, UPDATE or DELETE found."),
     }
@@ -165,9 +165,9 @@ pub fn parse_operation_rows(
         version: operation.version(),
         action: operation.action(),
         schema_id,
-        previous_operations: operation.previous_operations(),
+        previous: operation.previous(),
         fields: operation.fields(),
-        public_key: author,
+        public_key: public_key,
     };
 
     Some(operation)
@@ -363,7 +363,7 @@ mod tests {
     fn parses_operation_rows() {
         let operation_rows = vec![
             OperationFieldsJoinedRow {
-                author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
+                public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
                     .to_string(),
                 document_id: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
                     .to_string(),
@@ -374,13 +374,13 @@ mod tests {
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
-                previous_operations: None,
+                previous: None,
                 name: Some("age".to_string()),
                 field_type: Some("int".to_string()),
                 value: Some("28".to_string()),
             },
             OperationFieldsJoinedRow {
-                author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
+                public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
                     .to_string(),
                 document_id: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
                     .to_string(),
@@ -391,13 +391,13 @@ mod tests {
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
-                previous_operations: None,
+                previous: None,
                 name: Some("height".to_string()),
                 field_type: Some("float".to_string()),
                 value: Some("3.5".to_string()),
             },
             OperationFieldsJoinedRow {
-                author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
+                public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
                     .to_string(),
                 document_id: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
                     .to_string(),
@@ -408,13 +408,13 @@ mod tests {
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
-                previous_operations: None,
+                previous: None,
                 name: Some("is_admin".to_string()),
                 field_type: Some("bool".to_string()),
                 value: Some("false".to_string()),
             },
             OperationFieldsJoinedRow {
-                author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
+                public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
                     .to_string(),
                 document_id: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
                     .to_string(),
@@ -425,7 +425,7 @@ mod tests {
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
-                previous_operations: None,
+                previous: None,
                 name: Some("many_profile_pictures".to_string()),
                 field_type: Some("relation_list".to_string()),
                 value: Some(
@@ -434,7 +434,7 @@ mod tests {
                 ),
             },
             OperationFieldsJoinedRow {
-                author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
+                public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
                     .to_string(),
                 document_id: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
                     .to_string(),
@@ -445,7 +445,7 @@ mod tests {
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
-                previous_operations: None,
+                previous: None,
                 name: Some("many_profile_pictures".to_string()),
                 field_type: Some("relation_list".to_string()),
                 value: Some(
@@ -454,7 +454,7 @@ mod tests {
                 ),
             },
             OperationFieldsJoinedRow {
-                author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
+                public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
                     .to_string(),
                 document_id: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
                     .to_string(),
@@ -465,7 +465,7 @@ mod tests {
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
-                previous_operations: None,
+                previous: None,
                 name: Some("many_special_profile_pictures".to_string()),
                 field_type: Some("pinned_relation_list".to_string()),
                 value: Some(
@@ -474,7 +474,7 @@ mod tests {
                 ),
             },
             OperationFieldsJoinedRow {
-                author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
+                public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
                     .to_string(),
                 document_id: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
                     .to_string(),
@@ -485,7 +485,7 @@ mod tests {
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
-                previous_operations: None,
+                previous: None,
                 name: Some("many_special_profile_pictures".to_string()),
                 field_type: Some("pinned_relation_list".to_string()),
                 value: Some(
@@ -494,7 +494,7 @@ mod tests {
                 ),
             },
             OperationFieldsJoinedRow {
-                author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
+                public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
                     .to_string(),
                 document_id: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
                     .to_string(),
@@ -505,7 +505,7 @@ mod tests {
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
-                previous_operations: None,
+                previous: None,
                 name: Some("many_special_dog_pictures".to_string()),
                 field_type: Some("pinned_relation_list".to_string()),
                 value: Some(
@@ -514,7 +514,7 @@ mod tests {
                 ),
             },
             OperationFieldsJoinedRow {
-                author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
+                public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
                     .to_string(),
                 document_id: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
                     .to_string(),
@@ -525,7 +525,7 @@ mod tests {
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
-                previous_operations: None,
+                previous: None,
                 name: Some("many_special_dog_pictures".to_string()),
                 field_type: Some("pinned_relation_list".to_string()),
                 value: Some(
@@ -534,7 +534,7 @@ mod tests {
                 ),
             },
             OperationFieldsJoinedRow {
-                author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
+                public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
                     .to_string(),
                 document_id: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
                     .to_string(),
@@ -545,7 +545,7 @@ mod tests {
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
-                previous_operations: None,
+                previous: None,
                 name: Some("profile_picture".to_string()),
                 field_type: Some("relation".to_string()),
                 value: Some(
@@ -554,7 +554,7 @@ mod tests {
                 ),
             },
             OperationFieldsJoinedRow {
-                author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
+                public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
                     .to_string(),
                 document_id: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
                     .to_string(),
@@ -565,7 +565,7 @@ mod tests {
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
-                previous_operations: None,
+                previous: None,
                 name: Some("special_profile_picture".to_string()),
                 field_type: Some("pinned_relation".to_string()),
                 value: Some(
@@ -574,7 +574,7 @@ mod tests {
                 ),
             },
             OperationFieldsJoinedRow {
-                author: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
+                public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
                     .to_string(),
                 document_id: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
                     .to_string(),
@@ -585,7 +585,7 @@ mod tests {
                 schema_id:
                     "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
                         .to_string(),
-                previous_operations: None,
+                previous: None,
                 name: Some("username".to_string()),
                 field_type: Some("str".to_string()),
                 value: Some("bubu".to_string()),

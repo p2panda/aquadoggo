@@ -4,18 +4,18 @@ use std::fmt::Display;
 use std::str::FromStr;
 
 use async_graphql::{InputValueError, Scalar, ScalarType, Value};
-use p2panda_rs::identity::Author;
+use p2panda_rs::identity::PublicKey;
 
 /// Public key that signed the entry.
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct PublicKeyScalar(Author);
+pub struct PublicKeyScalar(PublicKey);
 
 #[Scalar(name = "PublicKey")]
 impl ScalarType for PublicKeyScalar {
     fn parse(value: Value) -> async_graphql::InputValueResult<Self> {
         match &value {
             Value::String(str_value) => {
-                let panda_value = Author::from_str(str_value)?;
+                let panda_value = PublicKey::from_str(str_value)?;
                 Ok(PublicKeyScalar(panda_value))
             }
             _ => Err(InputValueError::expected_type(value)),
@@ -23,18 +23,18 @@ impl ScalarType for PublicKeyScalar {
     }
 
     fn to_value(&self) -> Value {
-        Value::String(self.0.as_str().to_string())
+        Value::String(self.0.to_string())
     }
 }
 
-impl From<Author> for PublicKeyScalar {
-    fn from(author: Author) -> Self {
-        Self(author)
+impl From<PublicKey> for PublicKeyScalar {
+    fn from(public_key: PublicKey) -> Self {
+        Self(public_key)
     }
 }
 
-impl From<PublicKeyScalar> for Author {
-    fn from(public_key: PublicKeyScalar) -> Author {
+impl From<PublicKeyScalar> for PublicKey {
+    fn from(public_key: PublicKeyScalar) -> PublicKey {
         public_key.0
     }
 }

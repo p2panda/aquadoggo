@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use async_trait::async_trait;
 use futures::future::try_join_all;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
-use p2panda_rs::identity::Author;
+use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::traits::{AsOperation, AsVerifiedOperation};
 use p2panda_rs::operation::{
     OperationAction, OperationFields, OperationId, OperationVersion, VerifiedOperation,
@@ -33,13 +33,13 @@ pub struct StorageOperation {
     pub(crate) schema_id: SchemaId,
 
     /// Previous operations field.
-    pub(crate) previous_operations: Option<DocumentViewId>,
+    pub(crate) previous: Option<DocumentViewId>,
 
     /// Operation fields.
     pub(crate) fields: Option<OperationFields>,
 
     /// The public key of the key pair used to publish this operation.
-    pub(crate) public_key: Author,
+    pub(crate) public_key: PublicKey,
 }
 
 impl AsVerifiedOperation for StorageOperation {
@@ -49,7 +49,7 @@ impl AsVerifiedOperation for StorageOperation {
     }
 
     /// Returns the public key of the author of this operation.
-    fn public_key(&self) -> &Author {
+    fn public_key(&self) -> &PublicKey {
         &self.public_key
     }
 }
@@ -76,8 +76,8 @@ impl AsOperation for StorageOperation {
     }
 
     /// Returns vector of this operation's previous operation ids.
-    fn previous_operations(&self) -> Option<DocumentViewId> {
-        self.previous_operations.clone()
+    fn previous(&self) -> Option<DocumentViewId> {
+        self.previous.clone()
     }
 }
 
@@ -121,14 +121,14 @@ impl OperationStore<StorageOperation> for SqlStorage {
 
     /// Insert an operation into storage.
     ///
-    /// This requires a DoggoOperation to be composed elsewhere, it contains an `Author`,
+    /// This requires a DoggoOperation to be composed elsewhere, it contains an `PublicKey`,
     /// `DocumentId`, `OperationId` and the actual `Operation` we want to store.
     ///
     /// Returns a result containing `true` when one insertion occured, and false when no insertions
     /// occured. Errors when a fatal storage error occurs.
     ///
     /// In aquadoggo we store an operation in the database in three different tables: `operations`,
-    /// `previous_operations` and `operation_fields`. This means that this method actually makes 3
+    /// `previous` and `operation_fields`. This means that this method actually makes 3
     /// different sets of insertions.
     async fn insert_operation(
         &self,
@@ -149,25 +149,25 @@ impl OperationStore<StorageOperation> for SqlStorage {
             "
             INSERT INTO
                 operations_v1 (
-                    author,
+                    public_key,
                     document_id,
                     operation_id,
                     action,
                     schema_id,
-                    previous_operations
+                    previous
                 )
             VALUES
                 ($1, $2, $3, $4, $5, $6)
             ",
         )
-        .bind(operation.public_key().as_str())
+        .bind(operation.public_key().to_string())
         .bind(document_id.as_str())
         .bind(operation.id().as_str())
         .bind(operation.action().as_str())
         .bind(operation.schema_id().to_string())
         .bind(
             operation
-                .previous_operations()
+                .previous()
                 .map(|document_view_id| document_view_id.to_string()),
         )
         .execute(&self.pool)
@@ -255,12 +255,12 @@ impl OperationStore<StorageOperation> for SqlStorage {
         let operation_rows = query_as::<_, OperationFieldsJoinedRow>(
             "
             SELECT
-                operations_v1.author,
+                operations_v1.public_key,
                 operations_v1.document_id,
                 operations_v1.operation_id,
                 operations_v1.action,
                 operations_v1.schema_id,
-                operations_v1.previous_operations,
+                operations_v1.previous,
                 operation_fields_v1.name,
                 operation_fields_v1.field_type,
                 operation_fields_v1.value,
@@ -293,12 +293,12 @@ impl OperationStore<StorageOperation> for SqlStorage {
         let operation_rows = query_as::<_, OperationFieldsJoinedRow>(
             "
             SELECT
-                operations_v1.author,
+                operations_v1.public_key,
                 operations_v1.document_id,
                 operations_v1.operation_id,
                 operations_v1.action,
                 operations_v1.schema_id,
-                operations_v1.previous_operations,
+                operations_v1.previous,
                 operation_fields_v1.name,
                 operation_fields_v1.field_type,
                 operation_fields_v1.value,

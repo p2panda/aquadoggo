@@ -10,7 +10,7 @@ use sqlx::FromRow;
 #[derive(FromRow, Debug, Clone, PartialEq, Eq)]
 pub struct EntryRow {
     /// Public key of the author.
-    pub author: String,
+    pub public_key: String,
 
     /// Actual Bamboo entry data.
     pub entry_bytes: String,

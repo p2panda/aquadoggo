@@ -10,7 +10,7 @@ use sqlx::FromRow;
 #[derive(FromRow, Debug, Clone)]
 pub struct LogRow {
     /// Public key of the author.
-    pub author: String,
+    pub public_key: String,
 
     /// Log id used for this document.
     pub log_id: String,

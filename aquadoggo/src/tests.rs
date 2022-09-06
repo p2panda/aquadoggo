@@ -10,7 +10,7 @@ use p2panda_rs::entry::encode::sign_and_encode_entry;
 use p2panda_rs::entry::traits::AsEncodedEntry;
 use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::hash::Hash;
-use p2panda_rs::identity::{Author, KeyPair};
+use p2panda_rs::identity::{KeyPair, PublicKey};
 use p2panda_rs::operation::encode::encode_operation;
 use p2panda_rs::operation::traits::Actionable;
 use p2panda_rs::operation::{Operation, OperationAction, OperationBuilder};
@@ -143,13 +143,13 @@ async fn e2e() {
     // the field they want to update.
     //
     // In order to update the correct document, they include the current document view id in the
-    // `previous_operations` for this operation. This means this operation will be applied at the
+    // `previous` for this operation. This means this operation will be applied at the
     // correct point in the document.
 
     let panda_cafe_operation = OperationBuilder::new(&cafe_schema_id)
         .action(OperationAction::Update)
         .fields(&[("name", "Panda Cafe!".into())])
-        .previous_operations(&panda_cafe_view_id)
+        .previous(&panda_cafe_view_id)
         .build()
         .unwrap();
 
@@ -199,7 +199,7 @@ async fn publish(client: &Client, key_pair: &KeyPair, operation: &Operation) -> 
     // Composing an entry.
     //
     // Every entry contains a `log_id` and `seq_num`. Both these u64 values must be strictly
-    // monotonically incrementing per author. Entries and operations which are part of the same
+    // monotonically incrementing per public_key. Entries and operations which are part of the same
     // document live on the same log and the seq number increases. When new documents are created,
     // the log id increments and the sequence number starts from 0.
     //
@@ -208,8 +208,8 @@ async fn publish(client: &Client, key_pair: &KeyPair, operation: &Operation) -> 
 
     let next_args = next_args(
         client,
-        &Author::from(key_pair.public_key()),
-        operation.previous_operations(),
+        &PublicKey::from(key_pair.public_key()),
+        operation.previous(),
     )
     .await;
 
@@ -319,17 +319,17 @@ async fn create_schema(
     SchemaId::Application(name.to_string(), schema_definition_id)
 }
 
-/// Get the next args for an `author` and `document`.
+/// Get the next args for a `public_key` and `document`.
 async fn next_args(
     client: &Client,
-    author: &Author,
+    public_key: &PublicKey,
     view_id: Option<&DocumentViewId>,
 ) -> (LogId, SeqNum, Option<Hash>, Option<Hash>) {
     let args = match view_id {
         Some(id) => {
-            format!("nextArgs(publicKey: \"{author}\", viewId: \"{id}\")")
+            format!("nextArgs(publicKey: \"{public_key}\", viewId: \"{id}\")")
         }
-        None => format!("nextArgs(publicKey: \"{author}\")"),
+        None => format!("nextArgs(publicKey: \"{public_key}\")"),
     };
 
     let query_str = format!(

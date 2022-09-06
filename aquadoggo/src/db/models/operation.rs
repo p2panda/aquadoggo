@@ -5,8 +5,8 @@ use sqlx::FromRow;
 /// A struct representing a single operation row as it is inserted in the database.
 #[derive(FromRow, Debug)]
 pub struct OperationRow {
-    /// The author of this operation.
-    pub author: String,
+    /// The public key of the author of this operation.
+    pub public_key: String,
 
     /// The id of the document this operation is part of.
     pub document_id: String,
@@ -24,7 +24,7 @@ pub struct OperationRow {
 
     /// The previous operations of this operation concatenated into string format with `_`
     /// separator.
-    pub previous_operations: Option<String>,
+    pub previous: Option<String>,
 }
 
 /// A struct representing a single operation field row as it is inserted in the database.
@@ -53,7 +53,7 @@ pub struct OperationFieldRow {
 #[derive(FromRow, Debug, Clone)]
 pub struct OperationFieldsJoinedRow {
     /// The author of this operation.
-    pub author: String,
+    pub public_key: String,
 
     /// The id of the document this operation is part of.
     pub document_id: String,
@@ -69,7 +69,7 @@ pub struct OperationFieldsJoinedRow {
 
     /// The previous operations of this operation concatenated into string format with `_`
     /// separator.
-    pub previous_operations: Option<String>,
+    pub previous: Option<String>,
 
     /// The name of this field.
     ///

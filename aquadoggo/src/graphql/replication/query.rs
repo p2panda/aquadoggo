@@ -158,7 +158,7 @@ impl CursorType for scalars::SeqNumScalar {
 mod tests {
     use async_graphql::{EmptyMutation, EmptySubscription, Request, Schema};
     use p2panda_rs::hash::Hash;
-    use p2panda_rs::identity::Author;
+    use p2panda_rs::identity::PublicKey;
     use p2panda_rs::test_utils::db::test_db::{populate_store, PopulateDatabaseConfig};
     use p2panda_rs::test_utils::fixtures::random_hash;
     use rstest::rstest;
@@ -247,7 +247,7 @@ mod tests {
 
             // The test runner creates a test entry for us, we can retreive the public key from the
             // author
-            let public_key: Author = db.test_data.key_pairs.first().unwrap().public_key().into();
+            let public_key: PublicKey = db.test_data.key_pairs.first().unwrap().public_key();
 
             // Construct the query
             let gql_query = format!(
@@ -261,7 +261,7 @@ mod tests {
                 "#,
                 0,
                 1,
-                public_key.as_str()
+                public_key.to_string()
             );
 
             // Make the query
@@ -325,7 +325,7 @@ mod tests {
                 &PopulateDatabaseConfig {
                     no_of_entries: entries_in_log,
                     no_of_logs: 1,
-                    no_of_authors: 1,
+                    no_of_public_keys: 1,
                     ..Default::default()
                 },
             )
@@ -341,8 +341,8 @@ mod tests {
             let public_key: String = {
                 let key_from_db = key_pairs.first().unwrap().public_key();
 
-                let author = Author::from(key_from_db);
-                author.as_str().into()
+                let public_key = PublicKey::from(key_from_db);
+                public_key.to_string().into()
             };
 
             // Test data has been written to first log

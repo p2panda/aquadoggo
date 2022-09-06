@@ -1,7 +1,7 @@
 -- SPDX-License-Identifier: AGPL-3.0-or-later
 
 CREATE TABLE IF NOT EXISTS entries (
-    author            TEXT      NOT NULL,
+    public_key        TEXT      NOT NULL,
     entry_bytes       TEXT      NOT NULL,
     entry_hash        TEXT      NOT NULL UNIQUE,
     -- Store u64 integer as character string
@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS entries (
     payload_hash      TEXT      NOT NULL,
     -- Store u64 integer as character string
     seq_num           TEXT      NOT NULL,
-    PRIMARY KEY (author, log_id, seq_num)
+    PRIMARY KEY (public_key, log_id, seq_num)
 );
 
 -- Create an index for sorting by sequence number
