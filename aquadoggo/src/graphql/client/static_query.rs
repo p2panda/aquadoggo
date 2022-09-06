@@ -3,7 +3,7 @@
 //! Static fields of the client api.
 use async_graphql::{Context, Object, Result};
 use p2panda_rs::document::DocumentViewId;
-use p2panda_rs::identity::Author;
+use p2panda_rs::identity::PublicKey;
 
 use crate::db::provider::SqlStorage;
 use crate::domain::next_args;
@@ -37,7 +37,7 @@ impl StaticQuery {
         let store = ctx.data::<SqlStorage>()?;
 
         // Convert and validate passed parameters.
-        let public_key: Author = public_key.into();
+        let public_key: PublicKey = public_key.into();
         let document_view_id = document_view_id.map(|val| DocumentViewId::from(&val));
 
         // Calculate next entry's arguments.
@@ -48,7 +48,6 @@ impl StaticQuery {
 #[cfg(test)]
 mod tests {
     use async_graphql::{value, Response};
-    use p2panda_rs::identity::Author;
     use rstest::rstest;
     use serde_json::json;
 
@@ -102,8 +101,8 @@ mod tests {
         runner.with_db_teardown(move |db: TestDatabase| async move {
             let client = graphql_test_client(&db).await;
             let document_id = db.test_data.documents.get(0).unwrap();
-            let author =
-                Author::from(db.test_data.key_pairs[0].public_key());
+            let public_key =
+                db.test_data.key_pairs[0].public_key();
 
             // Selected fields need to be alphabetically sorted because that's what the `json`
             // macro that is used in the assert below produces.
@@ -122,7 +121,7 @@ mod tests {
                                 skiplink
                             }}
                         }}",
-                            author.as_str(),
+                            public_key,
                             document_id.as_str()
                         )
                 }))
@@ -165,7 +164,7 @@ mod tests {
             let response: Response = response.json().await;
             assert_eq!(
                 response.errors[0].message,
-                "Failed to parse \"PublicKey\": invalid hex encoding in author string"
+                "Failed to parse \"PublicKey\": invalid hex encoding in public key string"
             )
         })
     }

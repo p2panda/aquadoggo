@@ -36,7 +36,7 @@ impl StorageProvider for SqlStorage {
     /// Returns the related document for any entry.
     ///
     /// Every entry is part of a document and, through that, associated with a specific log id used
-    /// by this document and author. This method returns that document id by looking up the log
+    /// by this document and public_key. This method returns that document id by looking up the log
     /// that the entry was stored in.
     async fn get_document_by_entry(&self, entry_hash: &Hash) -> Result<Option<DocumentId>> {
         let result: Option<String> = query_scalar(
@@ -47,7 +47,7 @@ impl StorageProvider for SqlStorage {
                 logs
             INNER JOIN entries
                 ON (logs.log_id = entries.log_id
-                    AND logs.author = entries.author)
+                    AND logs.public_key = entries.public_key)
             WHERE
                 entries.entry_hash = $1
             ",
@@ -129,10 +129,7 @@ mod tests {
                 _ => panic!("Invalid schema id"),
             };
 
-            let result = db
-                .store
-                .get_schema_by_document_view(&document_view_id)
-                .await;
+            let result = db.store.get_schema_by_document_view(document_view_id).await;
 
             assert!(result.is_ok());
             // This is the schema name of the schema document we published.

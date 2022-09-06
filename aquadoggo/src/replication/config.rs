@@ -4,7 +4,7 @@ use std::convert::TryFrom;
 
 use anyhow::{Error, Result};
 use p2panda_rs::entry::LogId;
-use p2panda_rs::identity::Author;
+use p2panda_rs::identity::PublicKey;
 use serde::Deserialize;
 
 /// Configuration for the replication service.
@@ -17,8 +17,8 @@ pub struct ReplicationConfiguration {
     /// The addresses of remote peers to replicate from.
     pub remote_peers: Vec<String>,
 
-    /// The authors to replicate and their log ids.
-    pub authors_to_replicate: Vec<AuthorToReplicate>,
+    /// The public_keys to replicate and their log ids.
+    pub public_keys_to_replicate: Vec<PublicKeyToReplicate>,
 }
 
 impl Default for ReplicationConfiguration {
@@ -26,34 +26,34 @@ impl Default for ReplicationConfiguration {
         Self {
             connection_interval_seconds: 30,
             remote_peers: Vec::new(),
-            authors_to_replicate: Vec::new(),
+            public_keys_to_replicate: Vec::new(),
         }
     }
 }
 
-/// Intermediate data type to configure which log ids of what authors should be replicated.
+/// Intermediate data type to configure which log ids of what public keys should be replicated.
 #[derive(Debug, Clone, Deserialize)]
-pub struct AuthorToReplicate(Author, Vec<LogId>);
+pub struct PublicKeyToReplicate(PublicKey, Vec<LogId>);
 
-impl AuthorToReplicate {
-    /// Returns author to be replicated.
-    pub fn author(&self) -> &Author {
+impl PublicKeyToReplicate {
+    /// Returns public key to be replicated.
+    pub fn public_key(&self) -> &PublicKey {
         &self.0
     }
 
-    /// Returns log ids from author.
+    /// Returns log ids from this public key.
     pub fn log_ids(&self) -> &Vec<LogId> {
         &self.1
     }
 }
 
-impl TryFrom<(String, Vec<u64>)> for AuthorToReplicate {
+impl TryFrom<(String, Vec<u64>)> for PublicKeyToReplicate {
     type Error = Error;
 
     fn try_from(value: (String, Vec<u64>)) -> Result<Self, Self::Error> {
-        let author = Author::new(&value.0)?;
+        let public_key = PublicKey::new(&value.0)?;
         let log_ids = value.1.into_iter().map(LogId::new).collect();
 
-        Ok(Self(author, log_ids))
+        Ok(Self(public_key, log_ids))
     }
 }

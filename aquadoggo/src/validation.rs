@@ -3,7 +3,7 @@
 use anyhow::{anyhow, ensure, Result};
 use p2panda_rs::document::DocumentId;
 use p2panda_rs::entry::{LogId, SeqNum};
-use p2panda_rs::identity::Author;
+use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::traits::AsOperation;
 use p2panda_rs::storage_provider::traits::StorageProvider;
 use p2panda_rs::Human;
@@ -27,7 +27,7 @@ pub fn is_next_seq_num(latest_seq_num: Option<&SeqNum>, claimed_seq_num: &SeqNum
     ensure!(
         expected_seq_num == *claimed_seq_num,
         anyhow!(
-            "Entry's claimed seq num of {} does not match expected seq num of {} for given author and log",
+            "Entry's claimed seq num of {} does not match expected seq num of {} for given public key and log",
             claimed_seq_num.as_u64(),
             expected_seq_num.as_u64()
         )
@@ -35,43 +35,43 @@ pub fn is_next_seq_num(latest_seq_num: Option<&SeqNum>, claimed_seq_num: &SeqNum
     Ok(())
 }
 
-/// Verify that a log id is correctly chosen for a pair of author and document id.
+/// Verify that a log id is correctly chosen for a pair of public key and document id.
 ///
-/// This method handles both the case where the claimed log id already exists for this author
+/// This method handles both the case where the claimed log id already exists for this public key
 /// and where it is a new log.
 ///
 /// The following steps are taken:
 /// - Retrieve the stored log id for the document id
 ///   - If found, ensure it matches the claimed log id
-///   - If not found retrieve the next available log id for this author and ensure that matches
+///   - If not found retrieve the next available log id for this public key and ensure that matches
 pub async fn verify_log_id<S: StorageProvider>(
     store: &S,
-    author: &Author,
+    public_key: &PublicKey,
     claimed_log_id: &LogId,
     document_id: &DocumentId,
 ) -> Result<()> {
     // Check if there is a log id registered for this document and public key already in the store.
-    match store.get(author, document_id).await? {
+    match store.get(public_key, document_id).await? {
         Some(expected_log_id) => {
             // If there is, check it matches the log id encoded in the entry.
             ensure!(
                 *claimed_log_id == expected_log_id,
                 anyhow!(
-                    "Entry's claimed log id of {} does not match existing log id of {} for given author and document",
+                    "Entry's claimed log id of {} does not match existing log id of {} for given public key and document",
                     claimed_log_id.as_u64(),
                     expected_log_id.as_u64()
                 )
             );
         }
         None => {
-            // If there isn't, check that the next log id for this author matches the one encoded in
+            // If there isn't, check that the next log id for this public key matches the one encoded in
             // the entry.
-            let expected_log_id = next_log_id(store, author).await?;
+            let expected_log_id = next_log_id(store, public_key).await?;
 
             ensure!(
                 *claimed_log_id == expected_log_id,
                 anyhow!(
-                    "Entry's claimed log id of {} does not match expected next log id of {} for given author",
+                    "Entry's claimed log id of {} does not match expected next log id of {} for given public key",
                     claimed_log_id.as_u64(),
                     expected_log_id.as_u64()
                 )
@@ -81,9 +81,9 @@ pub async fn verify_log_id<S: StorageProvider>(
     Ok(())
 }
 
-/// Get the entry that _should_ be the skiplink target for the given author, log id and seq num.
+/// Get the entry that _should_ be the skiplink target for the given public key, log id and seq num.
 ///
-/// This method determines the expected skiplink given an author, log id and sequence number. It
+/// This method determines the expected skiplink given an public key, log id and sequence number. It
 /// _does not_ verify that this matches the skiplink encoded on any entry.
 ///
 /// An error is returned if:
@@ -91,7 +91,7 @@ pub async fn verify_log_id<S: StorageProvider>(
 /// - the expected skiplink target could not be found in the database.
 pub async fn get_expected_skiplink<S: StorageProvider>(
     store: &S,
-    author: &Author,
+    public_key: &PublicKey,
     log_id: &LogId,
     seq_num: &SeqNum,
 ) -> Result<S::Entry> {
@@ -104,14 +104,14 @@ pub async fn get_expected_skiplink<S: StorageProvider>(
     let skiplink_seq_num = seq_num.skiplink_seq_num().unwrap();
 
     let skiplink_entry = store
-        .get_entry_at_seq_num(author, log_id, &skiplink_seq_num)
+        .get_entry_at_seq_num(public_key, log_id, &skiplink_seq_num)
         .await?;
 
     match skiplink_entry {
         Some(entry) => Ok(entry),
         None => Err(anyhow!(
             "Expected skiplink target not found in store: {}, log id {}, seq num {}",
-            author.display(),
+            public_key.display(),
             log_id.as_u64(),
             skiplink_seq_num.as_u64()
         )),
@@ -136,13 +136,13 @@ pub async fn ensure_document_not_deleted<S: StorageProvider>(
     Ok(())
 }
 
-/// Retrieve the next log id for a given author.
+/// Retrieve the next log id for a given public_key.
 ///
 /// Takes the following steps:
-/// - retrieve the latest log id for the given author
+/// - retrieve the latest log id for the given public key
 /// - safely increment it by 1
-pub async fn next_log_id<S: StorageProvider>(store: &S, author: &Author) -> Result<LogId> {
-    let latest_log_id = store.latest_log_id(author).await?;
+pub async fn next_log_id<S: StorageProvider>(store: &S, public_key: &PublicKey) -> Result<LogId> {
+    let latest_log_id = store.latest_log_id(public_key).await?;
 
     match latest_log_id {
         Some(mut log_id) => increment_log_id(&mut log_id),
@@ -171,7 +171,7 @@ mod tests {
     use p2panda_rs::document::DocumentId;
     use p2panda_rs::entry::traits::AsEntry;
     use p2panda_rs::entry::{LogId, SeqNum};
-    use p2panda_rs::identity::{Author, KeyPair};
+    use p2panda_rs::identity::KeyPair;
     use p2panda_rs::test_utils::constants::PRIVATE_KEY;
     use p2panda_rs::test_utils::db::test_db::{
         populate_store, test_db_config, PopulateDatabaseConfig,
@@ -207,17 +207,17 @@ mod tests {
     #[rstest]
     #[case::valid_seq_num(Some(SeqNum::new(2).unwrap()), SeqNum::new(3).unwrap())]
     #[should_panic(
-        expected = "Entry's claimed seq num of 2 does not match expected seq num of 3 for given author and log"
+        expected = "Entry's claimed seq num of 2 does not match expected seq num of 3 for given public key and log"
     )]
     #[case::seq_num_already_used(Some(SeqNum::new(2).unwrap()),SeqNum::new(2).unwrap())]
     #[should_panic(
-        expected = "Entry's claimed seq num of 4 does not match expected seq num of 3 for given author and log"
+        expected = "Entry's claimed seq num of 4 does not match expected seq num of 3 for given public key and log"
     )]
     #[case::seq_num_too_high(Some(SeqNum::new(2).unwrap()),SeqNum::new(4).unwrap())]
     #[should_panic(expected = "Max sequence number reached")]
     #[case::seq_num_too_high(Some(SeqNum::new(u64::MAX).unwrap()),SeqNum::new(4).unwrap())]
     #[should_panic(
-        expected = "Entry's claimed seq num of 3 does not match expected seq num of 1 for given author and log"
+        expected = "Entry's claimed seq num of 3 does not match expected seq num of 1 for given public key and log"
     )]
     #[case::no_seq_num(None, SeqNum::new(3).unwrap())]
     fn verifies_seq_num(#[case] latest_seq_num: Option<SeqNum>, #[case] claimed_seq_num: SeqNum) {
@@ -227,25 +227,25 @@ mod tests {
     #[rstest]
     #[case::existing_document(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::default(), None)]
     #[case::new_document(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(2), Some(random_document_id()))]
-    #[case::existing_document_new_author(KeyPair::new(), LogId::new(0), None)]
+    #[case::existing_document_new_public_key(KeyPair::new(), LogId::new(0), None)]
     #[should_panic(
-        expected = "Entry's claimed log id of 1 does not match existing log id of 0 for given author and document"
+        expected = "Entry's claimed log id of 1 does not match existing log id of 0 for given public key and document"
     )]
     #[case::already_occupied_log_id_for_existing_document(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(1), None)]
     #[should_panic(
-        expected = "Entry's claimed log id of 2 does not match existing log id of 0 for given author and document"
+        expected = "Entry's claimed log id of 2 does not match existing log id of 0 for given public key and document"
     )]
     #[case::new_log_id_for_existing_document(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(2), None)]
     #[should_panic(
-        expected = "Entry's claimed log id of 1 does not match expected next log id of 0 for given author"
+        expected = "Entry's claimed log id of 1 does not match expected next log id of 0 for given public key"
     )]
-    #[case::new_author_not_next_log_id(KeyPair::new(), LogId::new(1), None)]
+    #[case::new_public_key_not_next_log_id(KeyPair::new(), LogId::new(1), None)]
     #[should_panic(
-        expected = "Entry's claimed log id of 0 does not match expected next log id of 2 for given author"
+        expected = "Entry's claimed log id of 0 does not match expected next log id of 2 for given public key"
     )]
     #[case::new_document_occupied_log_id(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(0), Some(random_document_id()))]
     #[should_panic(
-        expected = "Entry's claimed log id of 3 does not match expected next log id of 2 for given author"
+        expected = "Entry's claimed log id of 3 does not match expected next log id of 2 for given public key"
     )]
     #[case::new_document_not_next_log_id(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(3), Some(random_document_id()))]
     #[tokio::test]
@@ -263,22 +263,25 @@ mod tests {
         // Unwrap the passed document id or select the first valid one from the database.
         let document_id = document_id.unwrap_or_else(|| documents.first().unwrap().to_owned());
 
-        let author = Author::from(key_pair.public_key());
-
-        verify_log_id(&store, &author, &claimed_log_id, &document_id)
-            .await
-            .unwrap();
+        verify_log_id(
+            &store,
+            &key_pair.public_key(),
+            &claimed_log_id,
+            &document_id,
+        )
+        .await
+        .unwrap();
     }
 
     #[rstest]
     #[case::expected_skiplink_is_in_store_and_is_same_as_backlink(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::default(), SeqNum::new(4).unwrap())]
     #[should_panic(
-        expected = "Expected skiplink target not found in store: <Author 53fc96>, log id 0, seq num 19"
+        expected = "Expected skiplink target not found in store: <PublicKey 53fc96>, log id 0, seq num 19"
     )]
     #[case::skiplink_not_in_store(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::default(), SeqNum::new(20).unwrap())]
     #[should_panic(expected = "Expected skiplink target not found in store")]
-    #[case::author_does_not_exist(KeyPair::new(), LogId::default(), SeqNum::new(5).unwrap())]
-    #[should_panic(expected = "<Author 53fc96>, log id 4, seq num 6")]
+    #[case::public_key_does_not_exist(KeyPair::new(), LogId::default(), SeqNum::new(5).unwrap())]
+    #[should_panic(expected = "<PublicKey 53fc96>, log id 4, seq num 6")]
     #[case::log_id_is_wrong(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(4), SeqNum::new(7).unwrap())]
     #[should_panic(expected = "Entry with seq num 1 can not have skiplink")]
     #[case::seq_num_is_one(KeyPair::from_private_key_str(PRIVATE_KEY).unwrap(), LogId::new(0), SeqNum::new(1).unwrap())]
@@ -294,9 +297,7 @@ mod tests {
         let store = MemoryStore::default();
         let _ = populate_store(&store, &config).await;
 
-        let author = Author::from(key_pair.public_key());
-
-        get_expected_skiplink(&store, &author, &log_id, &seq_num)
+        get_expected_skiplink(&store, &key_pair.public_key(), &log_id, &seq_num)
             .await
             .unwrap();
     }
@@ -325,11 +326,10 @@ mod tests {
         let store = MemoryStore::default();
         let _ = populate_store(&store, &config).await;
 
-        let author = Author::from(key_pair.public_key());
-
-        let skiplink_entry = get_expected_skiplink(&store, &author, &LogId::default(), &seq_num)
-            .await
-            .unwrap();
+        let skiplink_entry =
+            get_expected_skiplink(&store, &key_pair.public_key(), &LogId::default(), &seq_num)
+                .await
+                .unwrap();
 
         assert_eq!(skiplink_entry.seq_num(), &expected_seq_num)
     }

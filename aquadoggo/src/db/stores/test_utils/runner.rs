@@ -166,10 +166,10 @@ impl TestDatabaseManager {
 pub fn test_db(
     // Number of entries per log/document
     #[default(0)] no_of_entries: usize,
-    // Number of logs for each author
+    // Number of logs for each public key
     #[default(0)] no_of_logs: usize,
     // Number of authors, each with logs populated as defined above
-    #[default(0)] no_of_authors: usize,
+    #[default(0)] no_of_public_keys: usize,
     // A boolean flag for wether all logs should contain a delete operation
     #[default(false)] with_delete: bool,
     // The schema used for all operations in the db
@@ -182,7 +182,7 @@ pub fn test_db(
     let config = PopulateDatabaseConfig {
         no_of_entries,
         no_of_logs,
-        no_of_authors,
+        no_of_public_keys,
         with_delete,
         schema,
         create_operation_fields,

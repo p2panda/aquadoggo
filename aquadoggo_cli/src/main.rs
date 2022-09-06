@@ -46,7 +46,7 @@ struct Opt {
     /// - "123abc" with log_ids 1, 2, 345
     /// - "456def" with log_ids 6 7
     #[structopt(short = "A", parse(try_from_str = parse_key_val), number_of_values = 1)]
-    authors_to_replicate: Vec<(String, Vec<u64>)>,
+    public_keys_to_replicate: Vec<(String, Vec<u64>)>,
 }
 
 impl TryFrom<Opt> for Configuration {
@@ -55,15 +55,15 @@ impl TryFrom<Opt> for Configuration {
     fn try_from(opt: Opt) -> Result<Self, Self::Error> {
         let mut config = Configuration::new(opt.data_dir)?;
 
-        let authors_to_replicate = opt
-            .authors_to_replicate
+        let public_keys_to_replicate = opt
+            .public_keys_to_replicate
             .into_iter()
             .map(|elem| elem.try_into())
             .collect::<Result<_>>()?;
 
         config.replication = ReplicationConfiguration {
             remote_peers: opt.remote_node_addresses,
-            authors_to_replicate,
+            public_keys_to_replicate,
             ..ReplicationConfiguration::default()
         };
 

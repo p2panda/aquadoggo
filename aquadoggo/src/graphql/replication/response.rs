@@ -73,7 +73,7 @@ impl TryFrom<EncodedEntryAndOperation> for StorageEntry {
         let entry = decode_entry(&encoded_entry.clone().into())?;
 
         let storage_entry = StorageEntry {
-            author: entry.public_key().to_owned(),
+            public_key: entry.public_key().to_owned(),
             log_id: entry.log_id().to_owned(),
             seq_num: entry.seq_num().to_owned(),
             skiplink: entry.skiplink().cloned(),
@@ -94,7 +94,6 @@ mod tests {
     use bamboo_rs_core_ed25519_yasmf::verify_batch;
     use p2panda_rs::entry::traits::AsEncodedEntry;
     use p2panda_rs::entry::LogId;
-    use p2panda_rs::identity::Author;
     use p2panda_rs::storage_provider::traits::EntryStore;
     use rstest::rstest;
 
@@ -114,11 +113,11 @@ mod tests {
                 .finish();
 
             // Retreive last entry of author from test database
-            let author: Author = db.test_data.key_pairs.first().unwrap().public_key().into();
+            let public_key = db.test_data.key_pairs.first().unwrap().public_key();
 
             let latest_entry_hash = db
                 .store
-                .get_latest_entry(&author, &LogId::default())
+                .get_latest_entry(&public_key, &LogId::default())
                 .await
                 .unwrap()
                 .unwrap()

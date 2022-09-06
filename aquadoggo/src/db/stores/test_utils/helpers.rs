@@ -149,7 +149,7 @@ pub async fn add_schema(
         let (entry_signed, _) = send_to_store(
             &test_db.store,
             &create_field_op,
-            &Schema::get_system(SchemaId::SchemaFieldDefinition(1)).unwrap(),
+            Schema::get_system(SchemaId::SchemaFieldDefinition(1)).unwrap(),
             key_pair,
         )
         .await
@@ -167,7 +167,7 @@ pub async fn add_schema(
     let (entry_signed, _) = send_to_store(
         &test_db.store,
         &create_schema_op,
-        &Schema::get_system(SchemaId::SchemaDefinition(1)).unwrap(),
+        Schema::get_system(SchemaId::SchemaDefinition(1)).unwrap(),
         key_pair,
     )
     .await

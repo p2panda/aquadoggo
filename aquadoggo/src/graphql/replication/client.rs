@@ -5,7 +5,7 @@ use std::convert::TryInto;
 use anyhow::{anyhow, Result};
 use gql_client::Client;
 use p2panda_rs::entry::{LogId, SeqNum};
-use p2panda_rs::identity::Author;
+use p2panda_rs::identity::PublicKey;
 use serde::{Deserialize, Serialize};
 
 use crate::db::stores::StorageEntry;
@@ -24,7 +24,7 @@ struct Response {
 pub async fn entries_newer_than_seq_num(
     endpoint: &str,
     log_id: &LogId,
-    public_key: &Author,
+    public_key: &PublicKey,
     latest_seq_num: Option<&SeqNum>,
 ) -> Result<Vec<StorageEntry>> {
     // @TODO: Currently this method does not use pagination, you will need to call this multiple
@@ -51,7 +51,7 @@ pub async fn entries_newer_than_seq_num(
             }}
         "#,
         log_id.as_u64(),
-        public_key.as_str(),
+        public_key,
         latest_seq_num
             .map(|num| { format!("\"{}\"", num.as_u64()) })
             .unwrap_or_else(|| "null".into()),

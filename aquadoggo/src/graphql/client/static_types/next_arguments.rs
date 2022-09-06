@@ -4,7 +4,7 @@ use async_graphql::SimpleObject;
 
 use crate::graphql::scalars;
 
-/// Arguments required to sign and encode the next entry for an author.
+/// Arguments required to sign and encode the next entry for an public_key.
 #[derive(SimpleObject, Debug, Eq, PartialEq)]
 pub struct NextArguments {
     /// Log id of the entry.

@@ -6,7 +6,7 @@ use p2panda_rs::entry::decode::decode_entry;
 use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
 use p2panda_rs::entry::{EncodedEntry, Entry, LogId, SeqNum, Signature};
 use p2panda_rs::hash::Hash;
-use p2panda_rs::identity::Author;
+use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::EncodedOperation;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::error::EntryStorageError;
@@ -24,8 +24,8 @@ use crate::db::provider::SqlStorage;
 /// `EntryStore`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct StorageEntry {
-    /// Author of this entry.
-    pub(crate) author: Author,
+    /// PublicKey of this entry.
+    pub(crate) public_key: PublicKey,
 
     /// Used log for this entry.
     pub(crate) log_id: LogId,
@@ -63,8 +63,8 @@ impl EntryWithOperation for StorageEntry {
 
 impl AsEntry for StorageEntry {
     /// Returns public key of entry.
-    fn public_key(&self) -> &Author {
-        &self.author
+    fn public_key(&self) -> &PublicKey {
+        &self.public_key
     }
 
     /// Returns log id of entry.
@@ -131,7 +131,7 @@ impl From<EntryRow> for StorageEntry {
         );
         let entry = decode_entry(&encoded_entry).expect("Decoding encoded entry from database");
         StorageEntry {
-            author: entry.public_key().to_owned(),
+            public_key: entry.public_key().to_owned(),
             log_id: entry.log_id().to_owned(),
             seq_num: entry.seq_num().to_owned(),
             skiplink: entry.skiplink().cloned(),
@@ -171,7 +171,7 @@ impl EntryStore<StorageEntry> for SqlStorage {
             "
             INSERT INTO
                 entries (
-                    author,
+                    public_key,
                     entry_bytes,
                     entry_hash,
                     log_id,
@@ -183,7 +183,7 @@ impl EntryStore<StorageEntry> for SqlStorage {
                 ($1, $2, $3, $4, $5, $6, $7)
             ",
         )
-        .bind(entry.public_key().as_str())
+        .bind(entry.public_key().to_string())
         .bind(encoded_entry.into_hex())
         .bind(encoded_entry.hash().as_str())
         .bind(entry.log_id().as_u64().to_string())
@@ -216,7 +216,7 @@ impl EntryStore<StorageEntry> for SqlStorage {
         let entry_row = query_as::<_, EntryRow>(
             "
             SELECT
-                author,
+                public_key,
                 entry_bytes,
                 entry_hash,
                 log_id,
@@ -237,21 +237,21 @@ impl EntryStore<StorageEntry> for SqlStorage {
         Ok(entry_row.map(|row| row.into()))
     }
 
-    /// Get an entry at a sequence position within an author's log.
+    /// Get an entry at a sequence position within the log of a public key.
     ///
     /// Returns a result containing the entry wrapped in an option if it was found successfully.
     /// Returns None if the entry was not found in storage. Errors when a fatal storage error
     /// occured.
     async fn get_entry_at_seq_num(
         &self,
-        author: &Author,
+        public_key: &PublicKey,
         log_id: &LogId,
         seq_num: &SeqNum,
     ) -> Result<Option<StorageEntry>, EntryStorageError> {
         let entry_row = query_as::<_, EntryRow>(
             "
             SELECT
-                author,
+                public_key,
                 entry_bytes,
                 entry_hash,
                 log_id,
@@ -261,12 +261,12 @@ impl EntryStore<StorageEntry> for SqlStorage {
             FROM
                 entries
             WHERE
-                author = $1
+                public_key = $1
                 AND log_id = $2
                 AND seq_num = $3
             ",
         )
-        .bind(author.as_str())
+        .bind(public_key.to_string())
         .bind(log_id.as_u64().to_string())
         .bind(seq_num.as_u64().to_string())
         .fetch_optional(&self.pool)
@@ -276,20 +276,20 @@ impl EntryStore<StorageEntry> for SqlStorage {
         Ok(entry_row.map(|row| row.into()))
     }
 
-    /// Get the latest entry of an author's log.
+    /// Get the latest entry in the log of a public key.
     ///
     /// Returns a result containing the latest log entry wrapped in an option if an entry was
-    /// found. Returns None if the specified author and log could not be found in storage. Errors
+    /// found. Returns None if the specified public key and log could not be found in storage. Errors
     /// when a fatal storage error occured.
     async fn get_latest_entry(
         &self,
-        author: &Author,
+        public_key: &PublicKey,
         log_id: &LogId,
     ) -> Result<Option<StorageEntry>, EntryStorageError> {
         let entry_row = query_as::<_, EntryRow>(
             "
             SELECT
-                author,
+                public_key,
                 entry_bytes,
                 entry_hash,
                 log_id,
@@ -299,7 +299,7 @@ impl EntryStore<StorageEntry> for SqlStorage {
             FROM
                 entries
             WHERE
-                author = $1
+                public_key = $1
                 AND log_id = $2
             ORDER BY
                 CAST(seq_num AS NUMERIC) DESC
@@ -307,7 +307,7 @@ impl EntryStore<StorageEntry> for SqlStorage {
                 1
             ",
         )
-        .bind(author.as_str())
+        .bind(public_key.to_string())
         .bind(log_id.as_u64().to_string())
         .fetch_optional(&self.pool)
         .await
@@ -328,7 +328,7 @@ impl EntryStore<StorageEntry> for SqlStorage {
         let entries = query_as::<_, EntryRow>(
             "
             SELECT
-                entries.author,
+                entries.public_key,
                 entries.entry_bytes,
                 entries.entry_hash,
                 entries.log_id,
@@ -339,7 +339,7 @@ impl EntryStore<StorageEntry> for SqlStorage {
                 entries
             INNER JOIN logs
                 ON (entries.log_id = logs.log_id
-                    AND entries.author = logs.author)
+                    AND entries.public_key = logs.public_key)
             WHERE
                 logs.schema = $1
             ",
@@ -359,7 +359,7 @@ impl EntryStore<StorageEntry> for SqlStorage {
     /// node, then an empty vector is returned.
     async fn get_paginated_log_entries(
         &self,
-        author: &Author,
+        public_key: &PublicKey,
         log_id: &LogId,
         seq_num: &SeqNum,
         max_number_of_entries: usize,
@@ -368,7 +368,7 @@ impl EntryStore<StorageEntry> for SqlStorage {
         let entries = query_as::<_, EntryRow>(
             "
             SELECT
-                author,
+                public_key,
                 entry_bytes,
                 entry_hash,
                 log_id,
@@ -378,14 +378,14 @@ impl EntryStore<StorageEntry> for SqlStorage {
             FROM
                 entries
             WHERE
-                author = $1
+                public_key = $1
                 AND log_id = $2
                 AND CAST(seq_num AS NUMERIC) BETWEEN CAST($3 AS NUMERIC) and CAST($4 AS NUMERIC)
             ORDER BY
                 CAST(seq_num AS NUMERIC)
             ",
         )
-        .bind(author.as_str())
+        .bind(public_key.to_string())
         .bind(log_id.as_u64().to_string())
         .bind(seq_num.as_u64().to_string())
         .bind((max_seq_num as u64).to_string())
@@ -406,7 +406,7 @@ impl EntryStore<StorageEntry> for SqlStorage {
     /// stored, then the pool may be incomplete.
     async fn get_certificate_pool(
         &self,
-        author: &Author,
+        public_key: &PublicKey,
         log_id: &LogId,
         initial_seq_num: &SeqNum,
     ) -> Result<Vec<StorageEntry>, EntryStorageError> {
@@ -420,7 +420,7 @@ impl EntryStore<StorageEntry> for SqlStorage {
         // doesn't support binding list arguments for IN queries.
         let sql_str = format!(
             "SELECT
-                author,
+                public_key,
                 entry_bytes,
                 entry_hash,
                 log_id,
@@ -430,7 +430,7 @@ impl EntryStore<StorageEntry> for SqlStorage {
             FROM
                 entries
             WHERE
-                author = $1
+                public_key = $1
                 AND log_id = $2
                 AND CAST(seq_num AS NUMERIC) IN ({})
             ORDER BY
@@ -440,7 +440,7 @@ impl EntryStore<StorageEntry> for SqlStorage {
         );
 
         let entries = query_as::<_, EntryRow>(sql_str.as_str())
-            .bind(author.as_str())
+            .bind(public_key.to_string())
             .bind(log_id.as_u64().to_string())
             .fetch_all(&self.pool)
             .await
@@ -455,7 +455,7 @@ mod tests {
     use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
     use p2panda_rs::entry::{EncodedEntry, Entry, LogId, SeqNum};
     use p2panda_rs::hash::Hash;
-    use p2panda_rs::identity::{Author, KeyPair};
+    use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::EncodedOperation;
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
@@ -519,13 +519,13 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            // This author published the entries in the database
-            let author = Author::from(db.test_data.key_pairs[0].public_key());
+            // The public key of the author who published the entries in the database
+            let public_key = db.test_data.key_pairs[0].public_key();
 
             // We get back the first entry.
             let first_entry = db
                 .store
-                .get_entry_at_seq_num(&author, &LogId::default(), &SeqNum::new(1).unwrap())
+                .get_entry_at_seq_num(&public_key, &LogId::default(), &SeqNum::new(1).unwrap())
                 .await
                 .expect("Get entry")
                 .unwrap();
@@ -552,36 +552,36 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            // This author published the entries in the database
-            let author_in_db = Author::from(db.test_data.key_pairs[0].public_key());
-            // This author did not.
-            let author_not_in_db = Author::from(KeyPair::new().public_key());
+            // The public key of the author who published the entries in the database
+            let public_key_in_db = db.test_data.key_pairs[0].public_key();
+            // There are no entries assigned to this public key.
+            let public_key_not_in_db = KeyPair::new().public_key();
             let log_id = LogId::default();
 
-            // We expect no latest entry for an author who did not
+            // We expect no latest entry by a public key who did not
             // publish to this store at this log yet.
             let latest_entry = db
                 .store
-                .get_latest_entry(&author_not_in_db, &log_id)
+                .get_latest_entry(&public_key_not_in_db, &log_id)
                 .await
-                .expect("Get latest entry for author and log id");
+                .expect("Get latest entry for public key and log id");
             assert!(latest_entry.is_none());
 
-            // We expect the latest entry for the requested author and log.
+            // We expect the latest entry for the requested public key and log.
             let latest_entry = db
                 .store
-                .get_latest_entry(&author_in_db, &log_id)
+                .get_latest_entry(&public_key_in_db, &log_id)
                 .await
-                .expect("Get latest entry for author and log id");
+                .expect("Get latest entry for public key and log id");
             assert_eq!(latest_entry.unwrap().seq_num(), &SeqNum::new(20).unwrap());
 
-            // If we request for an existing author but a non-existant log, then we again
+            // If we request for an existing public key but a non-existant log, then we again
             // expect no latest entry.
             let latest_entry = db
                 .store
-                .get_latest_entry(&author_in_db, &LogId::new(1))
+                .get_latest_entry(&public_key_in_db, &LogId::new(1))
                 .await
-                .expect("Get latest entry for author and log id");
+                .expect("Get latest entry for public key and log id");
             assert!(latest_entry.is_none());
         });
     }
@@ -631,42 +631,42 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            // This author published the entries to the database
-            let author = Author::from(db.test_data.key_pairs[0].public_key());
+            // The public key of the author who published the entries to the database
+            let public_key = db.test_data.key_pairs[0].public_key();
             let log_id = LogId::default();
 
-            // We should be able to get each entry by it's author, log_id and seq_num.
+            // We should be able to get each entry by it's public_key, log_id and seq_num.
             for seq_num in 1..10 {
                 let seq_num = SeqNum::new(seq_num).unwrap();
 
                 // We expect the retrieved entry to match the values we requested.
                 let entry = db
                     .store
-                    .get_entry_at_seq_num(&author, &LogId::default(), &seq_num)
+                    .get_entry_at_seq_num(&public_key, &LogId::default(), &seq_num)
                     .await
                     .expect("Get entry from store")
                     .expect("Optimistically unwrap entry");
 
                 assert_eq!(entry.seq_num(), &seq_num);
                 assert_eq!(entry.log_id(), &log_id);
-                assert_eq!(entry.public_key(), &author);
+                assert_eq!(entry.public_key(), &public_key);
             }
 
             // We expect a request to an empty log to return no entries.
             let wrong_log = LogId::new(2);
             let entry = db
                 .store
-                .get_entry_at_seq_num(&author, &wrong_log, &SeqNum::new(1).unwrap())
+                .get_entry_at_seq_num(&public_key, &wrong_log, &SeqNum::new(1).unwrap())
                 .await
                 .expect("Get entry from store");
             assert!(entry.is_none());
 
-            // We expect a request to the wrong author to return no entries.
-            let author_not_in_db = Author::from(KeyPair::new().public_key());
+            // We expect a request to the wrong public key to return no entries.
+            let public_key_not_in_db = KeyPair::new().public_key();
             let entry = db
                 .store
                 .get_entry_at_seq_num(
-                    &author_not_in_db,
+                    &public_key_not_in_db,
                     &LogId::default(),
                     &SeqNum::new(1).unwrap(),
                 )
@@ -679,7 +679,11 @@ mod tests {
             let seq_num_not_in_log = SeqNum::new(1000).unwrap();
             let entry = db
                 .store
-                .get_entry_at_seq_num(&author_not_in_db, &LogId::default(), &seq_num_not_in_log)
+                .get_entry_at_seq_num(
+                    &public_key_not_in_db,
+                    &LogId::default(),
+                    &seq_num_not_in_log,
+                )
                 .await
                 .expect("Get entry from store");
             assert!(entry.is_none());
@@ -693,7 +697,7 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            let author = Author::from(db.test_data.key_pairs[0].public_key());
+            let public_key = db.test_data.key_pairs[0].public_key();
 
             // We pick a few entries from the ones in the db to retrieve.
             for seq_num in [1, 11, 18] {
@@ -701,7 +705,7 @@ mod tests {
                 // We get them by their sequence number first.
                 let entry = db
                     .store
-                    .get_entry_at_seq_num(&author, &LogId::default(), &seq_num)
+                    .get_entry_at_seq_num(&public_key, &LogId::default(), &seq_num)
                     .await
                     .unwrap()
                     .unwrap();
@@ -749,15 +753,15 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
-            // This author published the entries in the db.
-            let author = Author::from(db.test_data.key_pairs[0].public_key());
+            // The public key of the author who published the entries in the db.
+            let public_key = db.test_data.key_pairs[0].public_key();
 
             // Get paginated entries, starting with the one at seq num defined by `from` and
             // continuing for `num_of_entries` or the end of the log is reached.
             let entries = db
                 .store
                 .get_paginated_log_entries(
-                    &author,
+                    &public_key,
                     &LogId::default(),
                     &SeqNum::new(from).unwrap(),
                     num_of_entries as usize,
@@ -787,13 +791,13 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
-            // This author has published to the test database.
-            let author = Author::from(db.test_data.key_pairs[0].public_key());
+            // An author with this public key has published to the test database.
+            let public_key = db.test_data.key_pairs[0].public_key();
 
-            // Get the certificate pool for a specified author, log and seq num.
+            // Get the certificate pool for a specified public_key, log and seq num.
             let entries = db
                 .store
-                .get_certificate_pool(&author, &LogId::default(), &SeqNum::new(20).unwrap())
+                .get_certificate_pool(&public_key, &LogId::default(), &SeqNum::new(20).unwrap())
                 .await
                 .unwrap();
 

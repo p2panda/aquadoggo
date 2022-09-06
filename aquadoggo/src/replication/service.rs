@@ -10,7 +10,7 @@ use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
 use p2panda_rs::entry::EncodedEntry;
 use p2panda_rs::entry::LogId;
 use p2panda_rs::entry::SeqNum;
-use p2panda_rs::identity::Author;
+use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::decode::decode_operation;
 use p2panda_rs::operation::traits::Schematic;
 use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
@@ -34,7 +34,7 @@ pub async fn replication_service(
     // Prepare replication configuration
     let config = &context.config.replication;
     let connection_interval = Duration::from_secs(config.connection_interval_seconds);
-    let authors_to_replicate = Arc::new(config.authors_to_replicate.clone());
+    let public_keys_to_replicate = Arc::new(config.public_keys_to_replicate.clone());
     let remote_peers = Arc::new(config.remote_peers.clone());
 
     // Start replication service
@@ -46,17 +46,18 @@ pub async fn replication_service(
 
             // Ask every remote peer about latest entries of log ids and authors
             for remote_peer in remote_peers.clone().iter() {
-                for author_to_replicate in authors_to_replicate.clone().iter() {
-                    let author = author_to_replicate.author().clone();
-                    let log_ids = author_to_replicate.log_ids().clone();
+                for public_key_to_replicate in public_keys_to_replicate.clone().iter() {
+                    let public_key = public_key_to_replicate.public_key();
+                    let log_ids = public_key_to_replicate.log_ids().clone();
 
                     for log_id in log_ids {
-                        // Get the latest sequence number we have for this log and author
-                        let latest_seq_num = get_latest_seq_num(&context, &log_id, &author).await;
+                        // Get the latest sequence number we have for this log and public key
+                        let latest_seq_num =
+                            get_latest_seq_num(&context, &log_id, public_key).await;
                         debug!(
                             "Latest entry sequence number of {} and {}: {:?}",
                             log_id.as_u64(),
-                            author,
+                            public_key,
                             latest_seq_num
                         );
 
@@ -64,7 +65,7 @@ pub async fn replication_service(
                         let response = client::entries_newer_than_seq_num(
                             remote_peer,
                             &log_id,
-                            &author,
+                            public_key,
                             latest_seq_num.as_ref(),
                         )
                         .await;
@@ -233,11 +234,15 @@ fn send_new_entry_service_message(tx: ServiceSender, entry: &StorageEntry) {
     }
 }
 
-/// Helper method to get the latest sequence number of a log and author.
-async fn get_latest_seq_num(context: &Context, log_id: &LogId, author: &Author) -> Option<SeqNum> {
+/// Helper method to get the latest sequence number of a log and public_key.
+async fn get_latest_seq_num(
+    context: &Context,
+    log_id: &LogId,
+    public_key: &PublicKey,
+) -> Option<SeqNum> {
     context
         .store
-        .get_latest_entry(author, log_id)
+        .get_latest_entry(public_key, log_id)
         .await
         .ok()
         .flatten()
@@ -249,7 +254,6 @@ mod tests {
     use std::convert::TryInto;
     use std::time::Duration;
 
-    use p2panda_rs::identity::Author;
     use p2panda_rs::storage_provider::traits::EntryStore;
     use p2panda_rs::test_utils::db::test_db::{populate_store, PopulateDatabaseConfig};
     use rstest::rstest;
@@ -287,7 +291,7 @@ mod tests {
             let populate_db_config = PopulateDatabaseConfig {
                 no_of_entries: 1,
                 no_of_logs: 1,
-                no_of_authors: 1,
+                no_of_public_keys: 1,
                 with_delete: false,
                 schema: doggo_schema(),
                 create_operation_fields: doggo_fields(),
@@ -322,16 +326,15 @@ mod tests {
             // Our test database helper already populated the database for us. We retreive the
             // public keys here of the authors who created these test data entries
             let public_key = key_pairs.first().unwrap().public_key();
-
-            let author = Author::from(public_key);
             let log_ids: Vec<u64> = vec![0];
-            let author_str: String = author.as_str().into();
             let endpoint: String = "http://localhost:3022/graphql".into();
 
             // Construct database and context for Ada
             let config_ada = Configuration {
                 replication: ReplicationConfiguration {
-                    authors_to_replicate: vec![(author_str, log_ids).try_into().unwrap()],
+                    public_keys_to_replicate: vec![(public_key.to_string(), log_ids)
+                        .try_into()
+                        .unwrap()],
                     remote_peers: vec![endpoint],
                     ..ReplicationConfiguration::default()
                 },

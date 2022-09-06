@@ -58,7 +58,7 @@ impl ReplicationRoot {
         let store = ctx.data::<SqlStorage>()?;
 
         let result = store
-            .get_entry_at_seq_num(&public_key.clone().into(), &log_id.into(), &seq_num.into())
+            .get_entry_at_seq_num(&public_key.into(), &log_id.into(), &seq_num.into())
             .await?;
 
         match result {
@@ -158,7 +158,6 @@ impl CursorType for scalars::SeqNumScalar {
 mod tests {
     use async_graphql::{EmptyMutation, EmptySubscription, Request, Schema};
     use p2panda_rs::hash::Hash;
-    use p2panda_rs::identity::Author;
     use p2panda_rs::test_utils::db::test_db::{populate_store, PopulateDatabaseConfig};
     use p2panda_rs::test_utils::fixtures::random_hash;
     use rstest::rstest;
@@ -247,7 +246,7 @@ mod tests {
 
             // The test runner creates a test entry for us, we can retreive the public key from the
             // author
-            let public_key: Author = db.test_data.key_pairs.first().unwrap().public_key().into();
+            let public_key = db.test_data.key_pairs.first().unwrap().public_key();
 
             // Construct the query
             let gql_query = format!(
@@ -259,9 +258,7 @@ mod tests {
                         }}
                     }}
                 "#,
-                0,
-                1,
-                public_key.as_str()
+                0, 1, public_key
             );
 
             // Make the query
@@ -325,7 +322,7 @@ mod tests {
                 &PopulateDatabaseConfig {
                     no_of_entries: entries_in_log,
                     no_of_logs: 1,
-                    no_of_authors: 1,
+                    no_of_public_keys: 1,
                     ..Default::default()
                 },
             )
@@ -338,12 +335,7 @@ mod tests {
                 .finish();
 
             // Get public key from author of generated test data
-            let public_key: String = {
-                let key_from_db = key_pairs.first().unwrap().public_key();
-
-                let author = Author::from(key_from_db);
-                author.as_str().into()
-            };
+            let public_key = key_pairs.first().unwrap().public_key();
 
             // Test data has been written to first log
             let log_id = 0u64;

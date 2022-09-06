@@ -92,7 +92,7 @@ mod tests {
     use p2panda_rs::entry::traits::AsEncodedEntry;
     use p2panda_rs::entry::EncodedEntry;
     use p2panda_rs::hash::Hash;
-    use p2panda_rs::identity::{Author, KeyPair};
+    use p2panda_rs::identity::{KeyPair, PublicKey};
     use p2panda_rs::operation::encode::encode_operation;
     use p2panda_rs::operation::{EncodedOperation, OperationValue};
     use p2panda_rs::schema::{FieldType, Schema, SchemaId};
@@ -462,7 +462,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &DELETE_OPERATION_NO_PREVIOUS_OPS,
-        "missing previous_operations for this operation action"
+        "missing previous for this operation action"
     )]
     fn validates_encoded_entry_and_operation_integrity(
         #[case] entry_encoded: &str,
@@ -517,7 +517,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &OPERATION_ENCODED,
-        "Entry's claimed seq num of 8 does not match expected seq num of 1 for given author and log"
+        "Entry's claimed seq num of 8 does not match expected seq num of 1 for given public key and log"
     )]
     #[case::backlink_not_in_db(
         &entry_signed_encoded_unvalidated(
@@ -541,7 +541,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &OPERATION_ENCODED,
-        "Entry's claimed seq num of 14 does not match expected seq num of 11 for given author and log"
+        "Entry's claimed seq num of 14 does not match expected seq num of 11 for given public key and log"
     )]
     #[case::occupied_seq_num(
         &entry_signed_encoded_unvalidated(
@@ -553,7 +553,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &OPERATION_ENCODED,
-        "Entry's claimed seq num of 6 does not match expected seq num of 11 for given author and log"
+        "Entry's claimed seq num of 6 does not match expected seq num of 11 for given public key and log"
     )]
     #[case::previous_operations_not_in_db(
         &entry_signed_encoded_unvalidated(
@@ -596,7 +596,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &OPERATION_ENCODED,
-        "Entry's claimed log id of 2 does not match expected next log id of 1 for given author"
+        "Entry's claimed log id of 2 does not match expected next log id of 1 for given public key"
     )]
     fn validation_of_entry_and_operation_values(
         #[case] entry_encoded: &str,
@@ -654,7 +654,7 @@ mod tests {
             // Iterate over each key pair.
             for key_pair in &key_pairs {
                 let mut document_id: Option<DocumentId> = None;
-                let author = Author::from(key_pair.public_key());
+                let public_key = PublicKey::from(key_pair.public_key());
 
                 // Iterate of the number of entries we want to publish.
                 for index in 0..num_of_entries {
@@ -662,10 +662,11 @@ mod tests {
                     let document_view_id: Option<DocumentViewId> =
                         document_id.clone().map(|id| id.as_str().parse().unwrap());
 
-                    // Get the next entry args for the document view id and author.
-                    let next_entry_args = next_args(&db.store, &author, document_view_id.as_ref())
-                        .await
-                        .unwrap();
+                    // Get the next entry args for the document view id and public_key.
+                    let next_entry_args =
+                        next_args(&db.store, &public_key, document_view_id.as_ref())
+                            .await
+                            .unwrap();
 
                     // Construct a CREATE, UPDATE or DELETE operation based on the iterator index.
                     let operation = if index == 0 {
@@ -763,7 +764,7 @@ mod tests {
             let response = response.json::<serde_json::Value>().await;
 
             for error in response.get("errors").unwrap().as_array().unwrap() {
-                assert_eq!(error.get("message").unwrap(), "Entry's claimed seq num of 1 does not match expected seq num of 2 for given author and log")
+                assert_eq!(error.get("message").unwrap(), "Entry's claimed seq num of 1 does not match expected seq num of 2 for given public key and log")
             }
         });
     }
