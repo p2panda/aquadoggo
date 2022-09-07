@@ -53,7 +53,7 @@ a security audit.
 
 [`command line application`]: /aquadoggo_cli
 [`library`]: /aquadoggo
-[`p2panda`]: https://github.com/p2panda/handbook
+[`p2panda`]: https://p2panda.org/
 
 ## Features
 
