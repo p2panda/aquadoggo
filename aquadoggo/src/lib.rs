@@ -1,6 +1,36 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 //! # aquadoggo
+//!
+//! Configurable node server implementation for the [`p2panda`] network.
+//!
+//! [`p2panda`]: https://p2panda.org
+//!
+//! ## Features
+//!
+//! - Awaits signed operations from clients via GraphQL.
+//! - Verifies the consistency, format and signature of operations and rejects invalid ones.
+//! - Stores operations of the network in an SQL database of your choice (SQLite, PostgreSQL).
+//! - Materializes views on top of the known data.
+//! - Answers filterable and paginated data queries via GraphQL.
+//! - Discovers other nodes in local network and internet.
+//! - Replicates data with other nodes.
+//!
+//! ## Example
+//!
+//! Embed the node server in your Rust application or web container like [`Tauri`]:
+//!
+//! ```rust,no_run
+//! # #[tokio::main]
+//! # async fn main() {
+//! use aquadoggo::{Configuration, Node};
+//!
+//! let config = Configuration::default();
+//! let node = Node::start(config).await;
+//! # }
+//! ```
+//!
+//! [`Tauri`]: https://tauri.studio
 #![warn(
     missing_copy_implementations,
     missing_debug_implementations,
