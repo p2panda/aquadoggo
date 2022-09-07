@@ -83,10 +83,8 @@ You can also run the node server simply as a [command line application][`command
 ## Installation
 
 ```sh
-$ cargo add aquadoggo
+cargo add aquadoggo
 ```
-
-[`cargo-edit`]: https://github.com/killercup/cargo-edit
 
 ## License
 
