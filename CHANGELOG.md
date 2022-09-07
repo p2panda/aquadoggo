@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Increase broadcast channel sizes [#257](https://github.com/p2panda/aquadoggo/pull/257)
 - Use transaction in `insert_document()` [#259](https://github.com/p2panda/aquadoggo/pull/259)
 - Use `Human` display strings in info logging [#251](https://github.com/p2panda/aquadoggo/pull/251)
+- Implement `p2panda-rs` API changes for `PublicKey` and `previous()` [#262](https://github.com/p2panda/aquadoggo/pull/262)
 
 ### Fixed
 
