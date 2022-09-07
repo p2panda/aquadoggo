@@ -1,7 +1,7 @@
-FROM ekidd/rust-musl-builder:latest AS BUILDER
+FROM clux/muslrust:stable AS BUILDER
 
-# Add source code with right permissions
-ADD --chown=rust:rust . ./
+# Add source code
+ADD . ./
 
 # Build our application
 RUN cargo build --release
@@ -10,6 +10,7 @@ RUN cargo build --release
 FROM alpine:latest
 RUN apk --no-cache add ca-certificates
 COPY --from=BUILDER \
-            /home/rust/src/target/x86_64-unknown-linux-musl/release/aquadoggo \
-            /usr/local/bin/
+    /volume/target/x86_64-unknown-linux-musl/release/aquadoggo \
+    /usr/local/bin/
+
 CMD /usr/local/bin/aquadoggo
