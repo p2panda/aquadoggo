@@ -41,6 +41,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix pagination during replication [#199](https://github.com/p2panda/aquadoggo/pull/256)
 - Load `DocumentId` to be able to resolve it in meta field query [#258](https://github.com/p2panda/aquadoggo/pull/258)
 
+### Mushroom Time
+
+- Write a lib-level doc string [#263](https://github.com/p2panda/aquadoggo/pull/263)
+
 ## [0.3.0]
 
 Released on 2022-07-01: :package: [`crate`](https://crates.io/crates/aquadoggo/0.3.0)
