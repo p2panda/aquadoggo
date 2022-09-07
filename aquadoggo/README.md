@@ -45,7 +45,7 @@
 
 Configurable node server implementation for the [`p2panda`] network which can be embedded inside your Rust program.
 
-[`p2panda`]: https://github.com/p2panda/handbook
+[`p2panda`]: https://p2panda.org
 
 ## Features
 
