@@ -43,17 +43,17 @@
 
 <br/>
 
-Configurable node server implementation for the [`p2panda`] network running as a 
+Configurable node server implementation for the [`p2panda`] network running as a
 [`command line application`] or embedded via the [`library`] inside your Rust program.
 
-> The core p2panda [specification](https://p2panda.org/specification/) is in a 
-stable state but still under review so please be prepared for breaking API 
-changes until we reach `v1.0`. Currently no p2panda implementation has recieved 
-a security audit.
+> The core p2panda [`specification`] is fully functional but still under review so
+> please be prepared for breaking API changes until we reach v1.0. Currently no
+> p2panda implementation has recieved a security audit.
 
 [`command line application`]: /aquadoggo_cli
 [`library`]: /aquadoggo
 [`p2panda`]: https://p2panda.org/
+[`specification`]: https://p2panda.org/specification
 
 ## Features
 
@@ -99,4 +99,6 @@ GNU Affero General Public License v3.0 [`AGPL-3.0-or-later`](LICENSE)
 <img src="https://raw.githubusercontent.com/p2panda/.github/main/assets/ngi-logo.png" width="auto" height="80px"><br />
 <img src="https://raw.githubusercontent.com/p2panda/.github/main/assets/eu-flag-logo.png" width="auto" height="80px">
 
-*This project has received funding from the European Union’s Horizon 2020 research and innovation programme within the framework of the NGI-POINTER Project funded under grant agreement No 871528*
+*This project has received funding from the European Union’s Horizon 2020
+research and innovation programme within the framework of the NGI-POINTER
+Project funded under grant agreement No 871528*

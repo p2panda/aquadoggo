@@ -11,6 +11,10 @@
   <a href="https://github.com/p2panda/aquadoggo/actions">
     <img src="https://img.shields.io/github/workflow/status/p2panda/aquadoggo/tests?style=flat-square" alt="CI Status" />
   </a>
+  <!-- Codecov report -->
+  <a href="https://app.codecov.io/gh/p2panda/aquadoggo/">
+    <img src="https://img.shields.io/codecov/c/gh/p2panda/aquadoggo?style=flat-square" alt="Codecov Report" />
+  </a>
   <!-- Crates version -->
   <a href="https://crates.io/crates/aquadoggo">
     <img src="https://img.shields.io/crates/v/aquadoggo.svg?style=flat-square" alt="Crates.io version" />
@@ -39,14 +43,15 @@
 
 <br/>
 
-Configurable node server implementation for the [`p2panda`] network which can be embedded inside your Rust program.
+Configurable node server implementation for the [`p2panda`] network which can
+be embedded inside your Rust program.
 
-> The core p2panda [specification](https://p2panda.org/specification/) is in a 
-stable state but still under review so please be prepared for breaking API 
-changes until we reach `v1.0`. Currently no p2panda implementation has recieved 
-a security audit.
+> The core p2panda [`specification`] is fully functional but still under review so
+> please be prepared for breaking API changes until we reach v1.0. Currently no
+> p2panda implementation has recieved a security audit.
 
 [`p2panda`]: https://p2panda.org
+[`specification`]: https://p2panda.org/specification
 
 ## Features
 
@@ -75,7 +80,7 @@ let node = Node::start(config).await;
 
 With [`cargo-edit`](https://github.com/killercup/cargo-edit) installed run:
 
-```sh
+```bash
 $ cargo add aquadoggo
 ```
 
@@ -90,4 +95,6 @@ GNU Affero General Public License v3.0 [`AGPL-3.0-or-later`](LICENSE)
 <img src="https://raw.githubusercontent.com/p2panda/.github/main/assets/ngi-logo.png" width="auto" height="80px"><br />
 <img src="https://raw.githubusercontent.com/p2panda/.github/main/assets/eu-flag-logo.png" width="auto" height="80px">
 
-*This project has received funding from the European Union’s Horizon 2020 research and innovation programme within the framework of the NGI-POINTER Project funded under grant agreement No 871528*
+*This project has received funding from the European Union’s Horizon 2020
+research and innovation programme within the framework of the NGI-POINTER
+Project funded under grant agreement No 871528*
