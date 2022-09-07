@@ -76,21 +76,7 @@ let config = Configuration::default();
 let node = Node::start(config).await;
 ```
 
-You can also run the node server simply as a [command line application][`command line application`]:
-
-```
-$ aquadoggo --help
-
-USAGE:
-    aquadoggo [OPTIONS]
-
-FLAGS:
-    -h, --help       Prints help information
-    -V, --version    Prints version information
-
-OPTIONS:
-    -d, --data-dir <data-dir>    Path to data folder, $HOME/.local/share/aquadoggo by default on Linux
-```
+You can also run the node server simply as a [command line application][`command line application`].
 
 [`Tauri`]: https://tauri.studio
 
