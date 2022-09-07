@@ -43,7 +43,13 @@
 
 <br/>
 
-Configurable node server implementation for the [`p2panda`] network running as a [`command line application`] or embedded via the [`library`] inside your Rust program.
+Configurable node server implementation for the [`p2panda`] network running as a 
+[`command line application`] or embedded via the [`library`] inside your Rust program.
+
+> The core p2panda [specification](https://p2panda.org/specification/) is in a 
+stable state but still under review so please be prepared for breaking API 
+changes until we reach `v1.0`. Currently no p2panda implementation has recieved 
+a security audit.
 
 [`command line application`]: /aquadoggo_cli
 [`library`]: /aquadoggo
