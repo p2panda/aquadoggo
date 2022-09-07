@@ -76,7 +76,15 @@ let config = Configuration::default();
 let node = Node::start(config).await;
 ```
 
-You can also run the node server simply as a [command line application][`command line application`].
+You can also run the node server simply as a [command line application][`command line application`]:
+
+```bash
+# Compile and run local node at http://localhost:2020/graphql
+cargo run
+
+# Enable logging
+RUST_LOG=aquadoggo=info cargo run
+```
 
 [`Tauri`]: https://tauri.studio
 

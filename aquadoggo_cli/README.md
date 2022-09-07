@@ -5,9 +5,6 @@ Node server with GraphQL API for the p2panda network.
 ## Usage
 
 ```
-USAGE:
-    aquadoggo [OPTIONS]
-
 FLAGS:
     -h, --help
             Prints help information
@@ -42,10 +39,10 @@ OPTIONS:
 
 ```bash
 # For all debug logs from `aquadoggo` and external crates
-RUST_LOG=debug DATABASE_URL=postgres://postgres:postgres@localhost:5432/db ./aquadoggo
+RUST_LOG=debug DATABASE_URL=postgres://postgres:postgres@localhost:5432/db cargo run
 
 # For compact info logs, only directly coming from `aquadoggo`
-RUST_LOG=aquadoggo=info DATABASE_URL=postgres://postgres:postgres@localhost:5432/db ./aquadoggo
+RUST_LOG=aquadoggo=info DATABASE_URL=postgres://postgres:postgres@localhost:5432/db cargo run
 ```
 
 ## Development
