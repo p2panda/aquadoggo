@@ -24,7 +24,7 @@
 <div align="center">
   <h3>
     <a href="https://docs.rs/aquadoggo">
-      API
+      Docs
     </a>
     <span> | </span>
     <a href="https://github.com/p2panda/aquadoggo/releases">
