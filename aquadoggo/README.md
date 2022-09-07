@@ -19,10 +19,6 @@
 
 <div align="center">
   <h3>
-    <a href="#installation">
-      Installation
-    </a>
-    <span> | </span>
     <a href="https://docs.rs/aquadoggo">
       Docs
     </a>
