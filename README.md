@@ -86,6 +86,12 @@ cargo run
 RUST_LOG=aquadoggo=info cargo run
 ```
 
+.. or run it inside a [Docker](https://hub.docker.com/r/p2panda/aquadoggo) container:
+
+```bash
+docker run -p 2020:2020 -e RUST_LOG=aquadoggo=info p2panda/aquadoggo
+```
+
 [`Tauri`]: https://tauri.studio
 
 ## Installation
