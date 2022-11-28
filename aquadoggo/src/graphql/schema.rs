@@ -149,6 +149,8 @@ impl GraphQLSchemaManager {
         async fn rebuild(shared: GraphQLSharedData, schemas: GraphQLSchemas) {
             let schema = build_schema_with_workaround(shared).await;
             schemas.lock().await.push(schema);
+            let check_schema: Vec<Vec<String>> = schemas.lock().await.to_vec().iter().map(|schema| schema.names()).collect();
+            debug!("{:#?}", check_schema);
         }
 
         // Always build a schema right at the beginning as we don't have one yet
