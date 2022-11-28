@@ -5,9 +5,9 @@ use std::sync::Arc;
 
 use async_graphql::{EmptySubscription, MergedObject, Request, Response, Schema};
 use log::{debug, info};
-use p2panda_rs::Human;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::DocumentStore;
+use p2panda_rs::Human;
 use tokio::sync::Mutex;
 
 use crate::bus::ServiceSender;
@@ -67,12 +67,14 @@ async fn build_schema_with_workaround(shared: GraphQLSharedData) -> RootSchema {
     // Store all application schemas from database into static in-memory storage
     let all_schemas = shared.schema_provider.all().await;
 
-    debug!("SCHEMA FROM PROVIDER");
-    debug!("{:#?}", all_schemas);
-
-    let schema_from_store = shared.store.get_documents_by_schema(&SchemaId::SchemaDefinition(1)).await.unwrap();
-    debug!("SCHEMA FROM STORE");
-    debug!("{:#?}", schema_from_store);
+    debug!("SCHEMA FROM PROVIDER:");
+    debug!(
+        "{:#?}",
+        all_schemas
+            .iter()
+            .map(|schema| schema.id().display())
+            .collect::<Vec<String>>()
+    );
 
     save_static_schemas(&all_schemas);
 
@@ -159,8 +161,23 @@ impl GraphQLSchemaManager {
         async fn rebuild(shared: GraphQLSharedData, schemas: GraphQLSchemas) {
             let schema = build_schema_with_workaround(shared).await;
             schemas.lock().await.push(schema);
-            let check_schema: Vec<Vec<String>> = schemas.lock().await.to_vec().iter().map(|schema| schema.names()).collect();
-            debug!("{:#?}", check_schema);
+
+            let schema_names: Vec<Vec<String>> = schemas
+                .lock()
+                .await
+                .to_vec()
+                .iter()
+                .map(|schema| {
+                    schema
+                        .names()
+                        .into_iter()
+                        .filter(|str| str.len() > 58)
+                        .collect()
+                })
+                .collect();
+
+            debug!("SCHEMA IN GRAPHQL ROOT:");
+            debug!("{:#?}", schema_names);
         }
 
         // Always build a schema right at the beginning as we don't have one yet

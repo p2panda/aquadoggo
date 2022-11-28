@@ -34,8 +34,9 @@
 //!    ourselves.
 use std::sync::Mutex;
 
+use log::debug;
 use once_cell::sync::Lazy;
-use p2panda_rs::schema::Schema;
+use p2panda_rs::{schema::Schema, Human};
 
 /// Global schema provider containing all application and system schemas which will be used to
 /// build the next GraphQL schema.
@@ -53,6 +54,9 @@ pub fn save_static_schemas(data: &[Schema]) {
 
     schemas.clear();
     schemas.append(&mut data.to_vec());
+
+    debug!("SCHEMA SAVED TO STATIC SCHEMA:");
+    debug!("{:#?}", schemas.iter().map(|schema|schema.id().display()).collect::<Vec<String>>());
 }
 
 /// Reads the current schemas of the global schema provider and returns the result in a 'static
@@ -71,6 +75,9 @@ pub fn load_static_schemas() -> &'static Vec<Schema> {
         .lock()
         .expect("Could not acquire mutex lock for static schema provider")
         .to_vec();
+
+    debug!("SCHEMA LOADED FROM STATIC SCHEMA:");
+    debug!("{:#?}", data.iter().map(|schema|schema.id().display()).collect::<Vec<String>>());
 
     Box::leak(Box::new(data))
 }
