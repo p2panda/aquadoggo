@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 //! Build and manage a GraphQL schema including dynamic parts of the schema.
+use core::time;
 use std::sync::Arc;
+use std::thread;
 
 use async_graphql::{EmptySubscription, MergedObject, Request, Response, Schema};
 use log::{debug, info};

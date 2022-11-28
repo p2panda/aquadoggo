@@ -213,9 +213,6 @@ mod tests {
             tx.send(crate::bus::ServiceMessage::NewOperation(first_operation_id))
                 .unwrap();
 
-            // Wait a little bit for work being done ..
-            tokio::time::sleep(Duration::from_millis(100)).await;
-
             // Make sure the service did not crash and is still running
             assert_eq!(handle.is_finished(), false);
 
@@ -281,10 +278,6 @@ mod tests {
             if rx_ready.await.is_err() {
                 panic!("Service dropped");
             }
-
-            // Wait for service to be done .. it should materialize the document since it was waiting
-            // as a "pending" task in the database
-            tokio::time::sleep(Duration::from_millis(200)).await;
 
             // Make sure the service did not crash and is still running
             assert_eq!(handle.is_finished(), false);
@@ -352,9 +345,6 @@ mod tests {
             ))
             .unwrap();
 
-            // Wait a little bit for work being done ..
-            tokio::time::sleep(Duration::from_millis(100)).await;
-
             // Then straight away publish an UPDATE on this document and send it over the bus too.
             let (entry_encoded, _) = send_to_store(
                 &db.store,
@@ -381,9 +371,6 @@ mod tests {
                 entry_encoded.hash().into(),
             ))
             .unwrap();
-
-            // Wait a little bit for work being done ..
-            tokio::time::sleep(Duration::from_millis(100)).await;
 
             // Make sure the service did not crash and is still running
             assert_eq!(handle.is_finished(), false);
@@ -455,9 +442,6 @@ mod tests {
                 p2panda_rs::entry::traits::AsEncodedEntry::hash(&entry_encoded).into(),
             ))
             .unwrap();
-
-            // Wait a little bit for work being done ..
-            tokio::time::sleep(Duration::from_millis(200)).await;
 
             // Make sure the service did not crash and is still running
             assert_eq!(handle.is_finished(), false);
