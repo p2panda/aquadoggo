@@ -419,6 +419,7 @@ mod test {
     use p2panda_rs::test_utils::fixtures::random_key_pair;
     use rstest::rstest;
     use serde_json::json;
+    use serial_test::serial;
 
     use crate::db::stores::test_utils::{
         add_document, add_schema, test_db, TestDatabase, TestDatabaseRunner,
@@ -426,6 +427,7 @@ mod test {
     use crate::test_helpers::graphql_test_client;
 
     #[rstest]
+    #[serial]
     fn single_query(#[from(test_db)] runner: TestDatabaseRunner) {
         // Test single query parameter variations.
 
@@ -482,6 +484,7 @@ mod test {
     }
 
     #[rstest]
+    #[serial]
     #[case::unknown_document_id(
         "id: \"00208f7492d6eb01360a886dac93da88982029484d8c04a0bd2ac0607101b80a6634\"",
         value!({
@@ -555,6 +558,7 @@ mod test {
     }
 
     #[rstest]
+    #[serial]
     fn collection_query(#[from(test_db)] runner: TestDatabaseRunner) {
         // Test collection query parameter variations.
 
@@ -602,6 +606,7 @@ mod test {
     }
 
     #[rstest]
+    #[serial]
     fn type_name(#[from(test_db)] runner: TestDatabaseRunner) {
         // Test availability of `__typename` on all objects.
 
