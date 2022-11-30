@@ -115,7 +115,7 @@ pub struct GraphQLSchemaManager {
     shared: GraphQLSharedData,
 
     /// Service status messaging channel
-    tx_status: ServiceStatusSender<ServiceStatusMessage>
+    tx_status: ServiceStatusSender<ServiceStatusMessage>,
 }
 
 impl GraphQLSchemaManager {
@@ -134,7 +134,11 @@ impl GraphQLSchemaManager {
         };
 
         // Create manager instance and spawn internal watch task
-        let manager = Self { schemas, shared, tx_status };
+        let manager = Self {
+            schemas,
+            shared,
+            tx_status,
+        };
         manager.spawn_schema_added_task().await;
 
         manager

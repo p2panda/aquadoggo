@@ -16,7 +16,7 @@ use crate::context::Context;
 use crate::graphql::GraphQLSchemaManager;
 use crate::http::api::{handle_graphql_playground, handle_graphql_query};
 use crate::http::context::HttpServiceContext;
-use crate::manager::{ServiceReadySender, Shutdown, ServiceStatusSender};
+use crate::manager::{ServiceReadySender, ServiceStatusSender, Shutdown};
 use crate::node::ServiceStatusMessage;
 
 const GRAPHQL_ROUTE: &str = "/graphql";
@@ -54,8 +54,13 @@ pub async fn http_service(
     let http_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), http_port);
 
     // Prepare GraphQL manager executing incoming GraphQL queries via HTTP
-    let graphql_schema_manager =
-        GraphQLSchemaManager::new(context.store.clone(), tx, tx_status, context.schema_provider.clone()).await;
+    let graphql_schema_manager = GraphQLSchemaManager::new(
+        context.store.clone(),
+        tx,
+        tx_status,
+        context.schema_provider.clone(),
+    )
+    .await;
 
     // Introduce a new context for all HTTP routes
     let http_context = HttpServiceContext::new(graphql_schema_manager);

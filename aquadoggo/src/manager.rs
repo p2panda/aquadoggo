@@ -4,8 +4,8 @@ use std::future::Future;
 
 use anyhow::Result;
 use log::{error, info};
-use tokio::sync::broadcast::Receiver;
 use tokio::sync::broadcast::error::RecvError;
+use tokio::sync::broadcast::Receiver;
 use tokio::sync::{broadcast, oneshot};
 use tokio::task;
 use tokio::task::JoinHandle;

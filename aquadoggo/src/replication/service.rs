@@ -21,7 +21,7 @@ use crate::context::Context;
 use crate::db::stores::StorageEntry;
 use crate::domain::publish;
 use crate::graphql::replication::client;
-use crate::manager::{ServiceReadySender, Shutdown, ServiceStatusSender};
+use crate::manager::{ServiceReadySender, ServiceStatusSender, Shutdown};
 use crate::node::ServiceStatusMessage;
 
 /// Replication service polling other nodes frequently to ask them about new entries from a defined
@@ -317,9 +317,15 @@ mod tests {
             let (tx_status, _) = broadcast::channel(1024);
 
             let http_server_billie = task::spawn(async {
-                http_service(context_billie, shutdown_billie, tx_billie, tx_ready, tx_status)
-                    .await
-                    .unwrap();
+                http_service(
+                    context_billie,
+                    shutdown_billie,
+                    tx_billie,
+                    tx_ready,
+                    tx_status,
+                )
+                .await
+                .unwrap();
             });
 
             if rx_ready.await.is_err() {
