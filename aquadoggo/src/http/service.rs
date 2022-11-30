@@ -16,7 +16,8 @@ use crate::context::Context;
 use crate::graphql::GraphQLSchemaManager;
 use crate::http::api::{handle_graphql_playground, handle_graphql_query};
 use crate::http::context::HttpServiceContext;
-use crate::manager::{ServiceReadySender, Shutdown};
+use crate::manager::{ServiceReadySender, Shutdown, ServiceStatusSender};
+use crate::node::ServiceStatusMessage;
 
 const GRAPHQL_ROUTE: &str = "/graphql";
 
@@ -47,13 +48,14 @@ pub async fn http_service(
     signal: Shutdown,
     tx: ServiceSender,
     tx_ready: ServiceReadySender,
+    tx_status: ServiceStatusSender<ServiceStatusMessage>,
 ) -> Result<()> {
     let http_port = context.config.http_port;
     let http_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), http_port);
 
     // Prepare GraphQL manager executing incoming GraphQL queries via HTTP
     let graphql_schema_manager =
-        GraphQLSchemaManager::new(context.store.clone(), tx, context.schema_provider.clone()).await;
+        GraphQLSchemaManager::new(context.store.clone(), tx, tx_status, context.schema_provider.clone()).await;
 
     // Introduce a new context for all HTTP routes
     let http_context = HttpServiceContext::new(graphql_schema_manager);
@@ -91,9 +93,10 @@ mod tests {
     fn graphql_endpoint(#[from(test_db)] runner: TestDatabaseRunner) {
         runner.with_db_teardown(|db: TestDatabase| async move {
             let (tx, _) = broadcast::channel(120);
+            let (tx_status, _) = broadcast::channel(120);
             let schema_provider = SchemaProvider::default();
             let graphql_schema_manager =
-                GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
+                GraphQLSchemaManager::new(db.store, tx, tx_status, schema_provider).await;
             let context = HttpServiceContext::new(graphql_schema_manager);
             let client = TestClient::new(build_server(context));
 

@@ -7,6 +7,7 @@ use p2panda_rs::entry::EncodedEntry;
 use p2panda_rs::operation::decode::decode_operation;
 use p2panda_rs::operation::traits::Schematic;
 use p2panda_rs::operation::{EncodedOperation, OperationId};
+use p2panda_rs::Human;
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::provider::SqlStorage;
@@ -47,7 +48,7 @@ impl ClientMutationRoot {
         let schema = schema_provider
             .get(operation.schema_id())
             .await
-            .ok_or_else(|| anyhow!("Schema not found"))?;
+            .ok_or_else(|| anyhow!("Schema {} not found", operation.schema_id().display()))?;
 
         /////////////////////////////////////
         // PUBLISH THE ENTRY AND OPERATION //
@@ -206,7 +207,8 @@ mod tests {
     ) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
             let (tx, _rx) = broadcast::channel(120);
-            let manager = GraphQLSchemaManager::new(db.store, tx, db.context.schema_provider.clone()).await;
+            let (tx_status, _rx) = broadcast::channel(120);
+            let manager = GraphQLSchemaManager::new(db.store, tx, tx_status, db.context.schema_provider.clone()).await;
             let context = HttpServiceContext::new(manager);
 
             let response = context.schema.execute(publish_request).await;
@@ -234,8 +236,14 @@ mod tests {
     ) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
             let (tx, mut rx) = broadcast::channel(120);
-            let manager =
-                GraphQLSchemaManager::new(db.store, tx, db.context.schema_provider.clone()).await;
+            let (tx_status, _rx) = broadcast::channel(120);
+            let manager = GraphQLSchemaManager::new(
+                db.store,
+                tx,
+                tx_status,
+                db.context.schema_provider.clone(),
+            )
+            .await;
             let context = HttpServiceContext::new(manager);
 
             context.schema.execute(publish_request).await;
@@ -799,7 +807,10 @@ mod tests {
             let response = response.json::<serde_json::Value>().await;
 
             for error in response.get("errors").unwrap().as_array().unwrap() {
-                assert_eq!(error.get("message").unwrap(), "Schema not found")
+                assert_eq!(
+                    error.get("message").unwrap(),
+                    "Schema venue 8fc78b not found"
+                )
             }
         });
     }

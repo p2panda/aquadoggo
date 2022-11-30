@@ -5,8 +5,6 @@ use std::sync::Arc;
 
 use async_graphql::{EmptySubscription, MergedObject, Request, Response, Schema};
 use log::{debug, info};
-use p2panda_rs::schema::SchemaId;
-use p2panda_rs::storage_provider::traits::DocumentStore;
 use p2panda_rs::Human;
 use tokio::sync::Mutex;
 
@@ -14,6 +12,8 @@ use crate::bus::ServiceSender;
 use crate::db::provider::SqlStorage;
 use crate::graphql::client::{ClientMutationRoot, ClientRoot};
 use crate::graphql::replication::ReplicationRoot;
+use crate::manager::ServiceStatusSender;
+use crate::node::ServiceStatusMessage;
 use crate::schema::{save_static_schemas, SchemaProvider};
 
 /// All of the GraphQL query sub modules merged into one top level root.
@@ -123,6 +123,9 @@ pub struct GraphQLSchemaManager {
 
     /// Commonly shared types for GraphQL schemas.
     shared: GraphQLSharedData,
+
+    /// Service status messaging channel
+    tx_status: ServiceStatusSender<ServiceStatusMessage>
 }
 
 impl GraphQLSchemaManager {
@@ -130,6 +133,7 @@ impl GraphQLSchemaManager {
     pub async fn new(
         store: SqlStorage,
         tx: ServiceSender,
+        tx_status: ServiceStatusSender<ServiceStatusMessage>,
         schema_provider: SchemaProvider,
     ) -> Self {
         let schemas = Arc::new(Mutex::new(Vec::new()));
@@ -140,7 +144,7 @@ impl GraphQLSchemaManager {
         };
 
         // Create manager instance and spawn internal watch task
-        let manager = Self { schemas, shared };
+        let manager = Self { schemas, shared, tx_status };
         manager.spawn_schema_added_task().await;
 
         manager
@@ -171,7 +175,6 @@ impl GraphQLSchemaManager {
                     schema
                         .names()
                         .into_iter()
-                        .filter(|str| str.len() > 58)
                         .collect()
                 })
                 .collect();
@@ -184,6 +187,8 @@ impl GraphQLSchemaManager {
         rebuild(shared.clone(), schemas.clone()).await;
         debug!("Finished building initial GraphQL schema");
 
+        let tx_status = self.tx_status.clone();
+
         // Spawn a task which reacts to newly registered p2panda schemas
         tokio::task::spawn(async move {
             loop {
@@ -194,6 +199,7 @@ impl GraphQLSchemaManager {
                             schema_id.display()
                         );
                         rebuild(shared.clone(), schemas.clone()).await;
+                        let _ = tx_status.send(ServiceStatusMessage::GraphQLSchemaBuilt);
                     }
                     Err(err) => {
                         panic!("Failed receiving schema updates: {}", err)

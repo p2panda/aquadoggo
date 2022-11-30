@@ -21,7 +21,8 @@ use crate::context::Context;
 use crate::db::stores::StorageEntry;
 use crate::domain::publish;
 use crate::graphql::replication::client;
-use crate::manager::{ServiceReadySender, Shutdown};
+use crate::manager::{ServiceReadySender, Shutdown, ServiceStatusSender};
+use crate::node::ServiceStatusMessage;
 
 /// Replication service polling other nodes frequently to ask them about new entries from a defined
 /// set of authors and log ids.
@@ -30,6 +31,7 @@ pub async fn replication_service(
     shutdown: Shutdown,
     tx: ServiceSender,
     tx_ready: ServiceReadySender,
+    _tx_status: ServiceStatusSender<ServiceStatusMessage>,
 ) -> Result<()> {
     // Prepare replication configuration
     let config = &context.config.replication;
@@ -312,9 +314,10 @@ mod tests {
                 billie_db.context.schema_provider.clone(),
             );
             let (tx_ready, rx_ready) = oneshot::channel::<()>();
+            let (tx_status, _) = broadcast::channel(1024);
 
             let http_server_billie = task::spawn(async {
-                http_service(context_billie, shutdown_billie, tx_billie, tx_ready)
+                http_service(context_billie, shutdown_billie, tx_billie, tx_ready, tx_status)
                     .await
                     .unwrap();
             });
@@ -351,10 +354,11 @@ mod tests {
             let tx_ada = tx.clone();
             let shutdown_ada = shutdown_handle();
             let (tx_ready, rx_ready) = oneshot::channel::<()>();
+            let (tx_status, _) = broadcast::channel(1024);
 
             // Ada starts replication service to get data from Billies GraphQL API
             let replication_service_ada = task::spawn(async {
-                replication_service(context_ada, shutdown_ada, tx_ada, tx_ready)
+                replication_service(context_ada, shutdown_ada, tx_ada, tx_ready, tx_status)
                     .await
                     .unwrap();
             });

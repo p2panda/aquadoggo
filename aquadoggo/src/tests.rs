@@ -2,7 +2,6 @@
 
 //! E2E test and mini-tutorial for aquadoggo.
 use std::str::FromStr;
-use std::time::Duration;
 
 use async_graphql::Response as GqlResponse;
 use p2panda_rs::document::DocumentViewId;
@@ -18,6 +17,8 @@ use p2panda_rs::schema::{FieldType, Schema, SchemaId};
 use reqwest::Client;
 use serde_json::{json, Map, Value};
 
+use crate::materializer::TaskStatus;
+use crate::node::ServiceStatusMessage;
 use crate::{Configuration, Node};
 
 #[tokio::test]
@@ -100,8 +101,14 @@ async fn e2e() {
     // You know where to go if you want to know more. In a nutshell: This is publishing data on the
     // network announcing a new schema for nodes to pick up.
 
-    let cafe_schema_id =
-        create_schema(&client, "cafe", "A cafe", vec![("name", FieldType::String)]).await;
+    let cafe_schema_id = create_schema(
+        &aquadoggo,
+        &client,
+        "cafe",
+        "A cafe",
+        vec![("name", FieldType::String)],
+    )
+    .await;
 
     // Create a new document.
     //
@@ -133,7 +140,7 @@ async fn e2e() {
     // be used as a general id for this document, often you will use this id when you just want the
     // most current state of the document.
 
-    let panda_cafe_view_id = publish(&client, &panda, &panda_cafe_operation).await;
+    let panda_cafe_view_id = publish(&aquadoggo, &client, &panda, &panda_cafe_operation).await;
     let _panda_cafe_id = panda_cafe_view_id.clone();
 
     // Update a document.
@@ -153,7 +160,7 @@ async fn e2e() {
         .build()
         .unwrap();
 
-    let panda_cafe_view_id = publish(&client, &panda, &panda_cafe_operation).await;
+    let panda_cafe_view_id = publish(&aquadoggo, &client, &panda, &panda_cafe_operation).await;
 
     // Materialisation.
     //
@@ -184,7 +191,12 @@ async fn e2e() {
 }
 
 /// Publish an entry and it's operation to a node.
-async fn publish(client: &Client, key_pair: &KeyPair, operation: &Operation) -> DocumentViewId {
+async fn publish(
+    node: &Node,
+    client: &Client,
+    key_pair: &KeyPair,
+    operation: &Operation,
+) -> DocumentViewId {
     // Publishing operations.
     //
     // There are a few important topics we've glossed over so far. These are "entries" and "logs".
@@ -240,14 +252,24 @@ async fn publish(client: &Client, key_pair: &KeyPair, operation: &Operation) -> 
         }}"
     );
 
+    // Get receiver for the node service status channel.
+    let mut rx = node.subscribe();
+
     // Which we post to the node.
     let _ = post(client, &query_str).await;
+
+    // Wait for the document to be materialised.
+    while !matches!(
+        rx.recv().await.unwrap(),
+        ServiceStatusMessage::Materialiser(TaskStatus::Completed(task)) if task.worker_name() == "reduce"
+    ) {}
 
     encoded_entry.hash().into()
 }
 
 /// Create a schema.
 async fn create_schema(
+    node: &Node,
     client: &Client,
     name: &str,
     description: &str,
@@ -291,7 +313,7 @@ async fn create_schema(
 
     for (key, field_type) in fields {
         let create_field_operation = Schema::create_field(key, field_type);
-        let field_id = publish(client, &shirokuma, &create_field_operation).await;
+        let field_id = publish(node, client, &shirokuma, &create_field_operation).await;
         fields_ids.push(field_id);
     }
 
@@ -305,8 +327,17 @@ async fn create_schema(
     // data following this schema. It can also be used to query all data from a specific schema, or
     // even set the rules for replication.
 
+    // Get receiver for the node service status channel.
+    let mut rx = node.subscribe();
+
     let create_schema_operation = Schema::create(name, description, fields_ids);
-    let schema_definition_id = publish(client, &shirokuma, &create_schema_operation).await;
+    let schema_definition_id = publish(node, client, &shirokuma, &create_schema_operation).await;
+
+    // Wait for the new schema to be materialised and loaded into the GraphQL server.
+    while !matches!(
+        rx.recv().await.unwrap(),
+        ServiceStatusMessage::GraphQLSchemaBuilt
+    ) {}
 
     SchemaId::Application(name.to_string(), schema_definition_id)
 }

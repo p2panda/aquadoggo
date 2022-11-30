@@ -4,6 +4,7 @@ use std::future::Future;
 
 use anyhow::Result;
 use log::{error, info};
+use tokio::sync::broadcast::Receiver;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::{broadcast, oneshot};
 use tokio::task;
@@ -13,7 +14,8 @@ use triggered::{Listener, Trigger};
 /// Sends messages through the communication bus between services.
 pub type Sender<T> = broadcast::Sender<T>;
 
-// pub type ServiceReady = oneshot::channel<()>;
+/// Sends status messages from the service.
+pub type ServiceStatusSender<T> = broadcast::Sender<T>;
 
 // Receives ready signal from services once they are ready to handle messages on the communication bus.
 pub type ServiceReadyReceiver = oneshot::Receiver<()>;
@@ -30,10 +32,11 @@ pub type Shutdown = JoinHandle<()>;
 /// It is also using the `async_trait` macro as a trick to avoid a more ugly trait signature as
 /// working with generic, static, pinned and boxed async functions can look quite messy.
 #[async_trait::async_trait]
-pub trait Service<D, M>
+pub trait Service<D, M, S>
 where
     D: Clone + Send + Sync + 'static,
     M: Clone + Send + Sync + 'static,
+    S: Clone + Send + Sync + 'static,
 {
     async fn call(
         &self,
@@ -41,21 +44,24 @@ where
         shutdown: Shutdown,
         tx: Sender<M>,
         tx_ready: ServiceReadySender,
+        tx_status: ServiceStatusSender<S>,
     ) -> Result<()>;
 }
 
 /// Implements our `Service` trait for a generic async function.
 #[async_trait::async_trait]
-impl<FN, F, D, M> Service<D, M> for FN
+impl<FN, F, D, M, S> Service<D, M, S> for FN
 where
     // Function accepting a context and our communication channels, returning a future.
-    FN: Fn(D, Shutdown, Sender<M>, ServiceReadySender) -> F + Sync,
+    FN: Fn(D, Shutdown, Sender<M>, ServiceReadySender, ServiceStatusSender<S>) -> F + Sync,
     // A future
     F: Future<Output = Result<()>> + Send + 'static,
     // Generic context type.
     D: Clone + Send + Sync + 'static,
     // Generic message type for the communication bus.
     M: Clone + Send + Sync + 'static,
+    // Generic message type for the status channel.
+    S: Clone + Send + Sync + 'static,
 {
     /// Internal method which calls our generic async function, passing in the context and channels
     /// for communication.
@@ -68,8 +74,9 @@ where
         shutdown: Shutdown,
         tx: Sender<M>,
         tx_ready: ServiceReadySender,
+        tx_status: ServiceStatusSender<S>,
     ) -> Result<()> {
-        (self)(context, shutdown, tx, tx_ready).await
+        (self)(context, shutdown, tx, tx_ready, tx_status).await
     }
 }
 
@@ -99,16 +106,20 @@ impl Drop for Signal {
 /// Stopped services (because of a panic, error or successful return) will send an exit signal which
 /// can be subscribed to via the `on_exit` method. Usually stopped services indicate system failure
 /// and it is recommended to stop the application when this events occurs.
-pub struct ServiceManager<D, M>
+pub struct ServiceManager<D, M, S>
 where
     D: Clone + Send + Sync + 'static,
     M: Clone + Send + Sync + 'static,
+    S: Clone + Send + Sync + 'static,
 {
     /// Shared, thread-safe context between services.
     context: D,
 
     /// Sender of our communication bus.
     tx: Sender<M>,
+
+    /// Sender of our status channel.
+    tx_status: Sender<S>,
 
     /// Sender of exit signal.
     ///
@@ -129,10 +140,11 @@ where
     shutdown_signal: broadcast::Sender<bool>,
 }
 
-impl<D, M> ServiceManager<D, M>
+impl<D, M, S> ServiceManager<D, M, S>
 where
     D: Clone + Send + Sync + 'static,
     M: Clone + Send + Sync + 'static,
+    S: Clone + Send + Sync + 'static,
 {
     /// Returns a new instance of a service manager.
     ///
@@ -140,12 +152,14 @@ where
     /// which get broadcasted across all services.
     pub fn new(capacity: usize, context: D) -> Self {
         let (tx, _) = broadcast::channel(capacity);
+        let (tx_status, _) = broadcast::channel(capacity);
         let (shutdown_signal, _) = broadcast::channel(128);
         let (exit_signal, exit_handle) = triggered::trigger();
 
         Self {
             context,
             tx,
+            tx_status,
             exit_signal: Signal(exit_signal),
             exit_handle,
             shutdown_signal,
@@ -156,13 +170,16 @@ where
     ///
     /// Errors returned and panics by the service will send an exit signal which can be subscribed
     /// to via the `on_exit` method.
-    pub fn add<F: Service<D, M> + Send + Sync + 'static>(
+    pub fn add<F: Service<D, M, S> + Send + Sync + 'static>(
         &mut self,
         name: &'static str,
         service: F,
     ) -> ServiceReadyReceiver {
         // Sender for communication bus
         let tx = self.tx.clone();
+
+        // Sender for status channel
+        let tx_status = self.tx_status.clone();
 
         // Sender and receiver for shutdown channel
         let shutdown_tx = self.shutdown_signal.clone();
@@ -187,7 +204,7 @@ where
             info!("Start {} service", name);
 
             // Run the service!
-            let handle = service.call(context, signal, tx, tx_ready).await;
+            let handle = service.call(context, signal, tx, tx_ready, tx_status).await;
 
             // Drop the shutdown sender of this service when we're done, this signals the shutdown
             // process that this service has finally stopped
@@ -211,6 +228,11 @@ where
     /// Future which resolves as soon as a service returned an error, panicked or stopped.
     pub async fn on_exit(&self) {
         self.exit_handle.clone().await;
+    }
+
+    /// Acquire receiver for the service status channel.
+    pub fn subscribe(&self) -> Receiver<S> {
+        self.tx_status.subscribe()
     }
 
     /// Informs all services about graceful shutdown and waits for them until they all stopped.
@@ -248,9 +270,9 @@ mod tests {
 
     #[tokio::test]
     async fn service_manager() {
-        let mut manager = ServiceManager::<usize, usize>::new(120, 0);
+        let mut manager = ServiceManager::<usize, usize, usize>::new(120, 0);
 
-        manager.add("test", |_, signal: Shutdown, _, _| async {
+        manager.add("test", |_, signal: Shutdown, _, _, _| async {
             let work = tokio::task::spawn(async {
                 loop {
                     // Doing some very important work here ..
@@ -281,13 +303,13 @@ mod tests {
         // Counter which is shared between services
         let counter: Counter = Arc::new(AtomicUsize::new(0));
 
-        let mut manager = ServiceManager::<Counter, Message>::new(120, counter.clone());
+        let mut manager = ServiceManager::<Counter, Message, Message>::new(120, counter.clone());
 
         // Create five services waiting for message
         for _ in 0..5 {
             manager.add(
                 "rx",
-                |data: Counter, _, tx: Sender<Message>, _| async move {
+                |data: Counter, _, tx: Sender<Message>, _, _| async move {
                     let mut rx = tx.subscribe();
                     let message = rx.recv().await.unwrap();
 
@@ -302,7 +324,7 @@ mod tests {
         }
 
         // Create another service sending message over communication bus
-        manager.add("tx", |_, _, tx: Sender<Message>, _| async move {
+        manager.add("tx", |_, _, tx: Sender<Message>, _, _| async move {
             tx.send(Message::Hello).unwrap();
             Ok(())
         });
@@ -316,11 +338,11 @@ mod tests {
     #[tokio::test]
     async fn on_exit() {
         let counter: Counter = Arc::new(AtomicUsize::new(0));
-        let mut manager = ServiceManager::<Counter, usize>::new(120, counter.clone());
+        let mut manager = ServiceManager::<Counter, usize, usize>::new(120, counter.clone());
 
         manager.add(
             "one",
-            |counter: Counter, signal: Shutdown, _, _| async move {
+            |counter: Counter, signal: Shutdown, _, _, _| async move {
                 let counter_clone = counter.clone();
 
                 let work = tokio::task::spawn(async move {
@@ -343,7 +365,7 @@ mod tests {
             },
         );
 
-        manager.add("two", |_, _, _, _| async move {
+        manager.add("two", |_, _, _, _, _| async move {
             // Wait a little bit for the first task to do its work
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
             panic!("This went wrong");
@@ -361,11 +383,11 @@ mod tests {
 
     #[tokio::test]
     async fn ready_signal() {
-        let mut manager = ServiceManager::<usize, usize>::new(120, 0);
+        let mut manager = ServiceManager::<usize, usize, usize>::new(120, 0);
 
         let service_ready = manager.add(
             "ready_signal",
-            |_, _, _, tx_ready: ServiceReadySender| async {
+            |_, _, _, tx_ready: ServiceReadySender, _| async {
                 // Send a message to indicate that this service is ready for some WORK!
                 tx_ready.send(()).unwrap();
                 Ok(())
@@ -378,11 +400,11 @@ mod tests {
 
     #[tokio::test]
     async fn ready_signal_error() {
-        let mut manager = ServiceManager::<usize, usize>::new(120, 0);
+        let mut manager = ServiceManager::<usize, usize, usize>::new(120, 0);
 
         let service_ready = manager.add(
             "ready_signal",
-            |_, _, _, _tx_ready: ServiceReadySender| async {
+            |_, _, _, _tx_ready: ServiceReadySender, _| async {
                 // This service doesn't indicate that it's ready!
                 Ok(())
             },

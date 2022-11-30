@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use anyhow::Result;
+use tokio::sync::broadcast::Receiver;
 
 use crate::bus::ServiceMessage;
 use crate::config::Configuration;
@@ -10,9 +11,17 @@ use crate::db::traits::SchemaStore;
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
 use crate::http::http_service;
 use crate::manager::ServiceManager;
-use crate::materializer::materializer_service;
+use crate::materializer::{materializer_service, TaskInput, TaskStatus};
 use crate::replication::replication_service;
 use crate::schema::SchemaProvider;
+
+/// Messages sent on the service status channel.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum ServiceStatusMessage {
+    GraphQLSchemaBuilt,
+    Materialiser(TaskStatus<TaskInput>),
+    _Replication,
+}
 
 /// Capacity of the internal broadcast channel used to communicate between services.
 const SERVICE_BUS_CAPACITY: usize = 512_000;
@@ -42,7 +51,7 @@ async fn initialize_db(config: &Configuration) -> Result<Pool> {
 #[allow(missing_debug_implementations)]
 pub struct Node {
     pool: Pool,
-    manager: ServiceManager<Context, ServiceMessage>,
+    manager: ServiceManager<Context, ServiceMessage, ServiceStatusMessage>,
 }
 
 impl Node {
@@ -60,8 +69,10 @@ impl Node {
 
         // Create service manager with shared data between services.
         let context = Context::new(store, config, schemas);
-        let mut manager =
-            ServiceManager::<Context, ServiceMessage>::new(SERVICE_BUS_CAPACITY, context);
+        let mut manager = ServiceManager::<Context, ServiceMessage, ServiceStatusMessage>::new(
+            SERVICE_BUS_CAPACITY,
+            context,
+        );
 
         // Start materializer service.
         if manager
@@ -94,6 +105,11 @@ impl Node {
     /// went wrong.
     pub async fn on_exit(&self) {
         self.manager.on_exit().await;
+    }
+
+    /// Acquire receiver for the service status channel.
+    pub fn subscribe(&self) -> Receiver<ServiceStatusMessage> {
+        self.manager.subscribe()
     }
 
     /// Close all running concurrent tasks and wait until they are fully shut down.

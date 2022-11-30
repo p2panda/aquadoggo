@@ -7,4 +7,4 @@ mod worker;
 
 pub use input::TaskInput;
 pub use service::materializer_service;
-pub use worker::Task;
+pub use worker::{Task, TaskStatus};

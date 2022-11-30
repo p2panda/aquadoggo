@@ -7,10 +7,11 @@ use tokio::task;
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
-use crate::manager::{ServiceReadySender, Shutdown};
+use crate::manager::{ServiceReadySender, ServiceStatusSender, Shutdown};
 use crate::materializer::tasks::{dependency_task, reduce_task, schema_task};
 use crate::materializer::worker::{Factory, Task, TaskStatus};
 use crate::materializer::TaskInput;
+use crate::node::ServiceStatusMessage;
 
 /// Capacity of the internal broadcast channels used inside the worker factory.
 ///
@@ -29,6 +30,7 @@ pub async fn materializer_service(
     shutdown: Shutdown,
     tx: ServiceSender,
     tx_ready: ServiceReadySender,
+    tx_status: ServiceStatusSender<ServiceStatusMessage>,
 ) -> Result<()> {
     // Create worker factory with task queue
     let pool_size = context.config.worker_pool_size as usize;
@@ -56,12 +58,22 @@ pub async fn materializer_service(
                         .insert_task(&task)
                         .await
                         .expect("Failed inserting pending task into database");
+
+                    // Send message on the service status channel
+                    let _ = tx_status.send(ServiceStatusMessage::Materialiser(
+                        TaskStatus::Pending(task),
+                    ));
                 }
                 Ok(TaskStatus::Completed(task)) => {
                     store
                         .remove_task(&task)
                         .await
                         .expect("Failed removing completed task from database");
+
+                    // Send message on the service status channel
+                    let _ = tx_status.send(ServiceStatusMessage::Materialiser(
+                        TaskStatus::Completed(task),
+                    ));
                 }
                 Err(err) => {
                     panic!("Failed receiving task status updates: {}", err)
@@ -154,7 +166,8 @@ mod tests {
     use crate::db::stores::test_utils::{
         doggo_fields, doggo_schema, test_db, TestDatabase, TestDatabaseRunner,
     };
-    use crate::materializer::{Task, TaskInput};
+    use crate::materializer::{Task, TaskInput, TaskStatus};
+    use crate::node::ServiceStatusMessage;
     use crate::schema::SchemaProvider;
     use crate::Configuration;
 
@@ -195,12 +208,13 @@ mod tests {
                 }
             });
             let (tx, _) = broadcast::channel(1024);
+            let (tx_status, mut rx_status) = broadcast::channel(1024);
             let (tx_ready, rx_ready) = oneshot::channel::<()>();
 
             // Start materializer service
             let tx_clone = tx.clone();
             let handle = tokio::spawn(async move {
-                materializer_service(context, shutdown, tx_clone, tx_ready)
+                materializer_service(context, shutdown, tx_clone, tx_ready, tx_status)
                     .await
                     .unwrap();
             });
@@ -212,6 +226,12 @@ mod tests {
             // Send a message over the bus which kicks in materialization
             tx.send(crate::bus::ServiceMessage::NewOperation(first_operation_id))
                 .unwrap();
+
+            // Wait for the document to be materialised.
+            while !matches!(
+                rx_status.recv().await.unwrap(),
+                ServiceStatusMessage::Materialiser(TaskStatus::Completed(_))
+            ) {}
 
             // Make sure the service did not crash and is still running
             assert_eq!(handle.is_finished(), false);
@@ -265,12 +285,13 @@ mod tests {
                 }
             });
             let (tx, _) = broadcast::channel(1024);
+            let (tx_status, mut rx_status) = broadcast::channel(1024);
             let (tx_ready, rx_ready) = oneshot::channel::<()>();
 
             // Start materializer service
             let tx_clone = tx.clone();
             let handle = tokio::spawn(async move {
-                materializer_service(context, shutdown, tx_clone, tx_ready)
+                materializer_service(context, shutdown, tx_clone, tx_ready, tx_status)
                     .await
                     .unwrap();
             });
@@ -278,6 +299,12 @@ mod tests {
             if rx_ready.await.is_err() {
                 panic!("Service dropped");
             }
+
+            // Wait for the document to be materialised.
+            while !matches!(
+                rx_status.recv().await.unwrap(),
+                ServiceStatusMessage::Materialiser(TaskStatus::Completed(_))
+            ) {}
 
             // Make sure the service did not crash and is still running
             assert_eq!(handle.is_finished(), false);
@@ -325,12 +352,13 @@ mod tests {
                 }
             });
             let (tx, _) = broadcast::channel(1024);
+            let (tx_status, mut rx_status) = broadcast::channel(1024);
             let (tx_ready, rx_ready) = oneshot::channel::<()>();
 
             // Start materializer service
             let tx_clone = tx.clone();
             let handle = tokio::spawn(async move {
-                materializer_service(context, shutdown, tx_clone, tx_ready)
+                materializer_service(context, shutdown, tx_clone, tx_ready, tx_status)
                     .await
                     .unwrap();
             });
@@ -344,6 +372,12 @@ mod tests {
                 first_operation_id.clone(),
             ))
             .unwrap();
+
+            // Wait for the document to be materialised.
+            while !matches!(
+                rx_status.recv().await.unwrap(),
+                ServiceStatusMessage::Materialiser(TaskStatus::Completed(_))
+            ) {}
 
             // Then straight away publish an UPDATE on this document and send it over the bus too.
             let (entry_encoded, _) = send_to_store(
@@ -371,6 +405,16 @@ mod tests {
                 entry_encoded.hash().into(),
             ))
             .unwrap();
+
+            // Wait for the document to be materialised.
+            while !matches!(
+                // A "dependency" task gets completed first so we add a condition to
+                // the match
+                rx_status.recv().await.unwrap(),
+                ServiceStatusMessage::Materialiser(
+                    TaskStatus::Completed(task)
+                ) if task.worker_name() == "reduce"
+            ) {}
 
             // Make sure the service did not crash and is still running
             assert_eq!(handle.is_finished(), false);
@@ -419,10 +463,11 @@ mod tests {
 
             // Start materializer service
             let tx_clone = tx.clone();
+            let (tx_status, mut rx_status) = broadcast::channel(1024);
             let (tx_ready, rx_ready) = oneshot::channel::<()>();
 
             let handle = tokio::spawn(async move {
-                materializer_service(context, shutdown, tx_clone, tx_ready)
+                materializer_service(context, shutdown, tx_clone, tx_ready, tx_status)
                     .await
                     .unwrap();
             });
@@ -442,6 +487,12 @@ mod tests {
                 p2panda_rs::entry::traits::AsEncodedEntry::hash(&entry_encoded).into(),
             ))
             .unwrap();
+
+            // Wait for the document to be materialised.
+            while !matches!(
+                rx_status.recv().await.unwrap(),
+                ServiceStatusMessage::Materialiser(TaskStatus::Completed(_))
+            ) {}
 
             // Make sure the service did not crash and is still running
             assert_eq!(handle.is_finished(), false);
