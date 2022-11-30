@@ -66,16 +66,6 @@ pub fn build_root_schema(
 async fn build_schema_with_workaround(shared: GraphQLSharedData) -> RootSchema {
     // Store all application schemas from database into static in-memory storage
     let all_schemas = shared.schema_provider.all().await;
-
-    debug!("SCHEMA FROM PROVIDER:");
-    debug!(
-        "{:#?}",
-        all_schemas
-            .iter()
-            .map(|schema| schema.id().display())
-            .collect::<Vec<String>>()
-    );
-
     save_static_schemas(&all_schemas);
 
     // Build the actual GraphQL root schema, this will internally read the created JSON file and
@@ -165,22 +155,6 @@ impl GraphQLSchemaManager {
         async fn rebuild(shared: GraphQLSharedData, schemas: GraphQLSchemas) {
             let schema = build_schema_with_workaround(shared).await;
             schemas.lock().await.push(schema);
-
-            let schema_names: Vec<Vec<String>> = schemas
-                .lock()
-                .await
-                .to_vec()
-                .iter()
-                .map(|schema| {
-                    schema
-                        .names()
-                        .into_iter()
-                        .collect()
-                })
-                .collect();
-
-            debug!("SCHEMA IN GRAPHQL ROOT:");
-            debug!("{:#?}", schema_names);
         }
 
         // Always build a schema right at the beginning as we don't have one yet
