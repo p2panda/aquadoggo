@@ -34,9 +34,8 @@
 //!    ourselves.
 use std::sync::Mutex;
 
-use log::debug;
 use once_cell::sync::Lazy;
-use p2panda_rs::{schema::Schema, Human};
+use p2panda_rs::schema::Schema;
 
 /// Global schema provider containing all application and system schemas which will be used to
 /// build the next GraphQL schema.
