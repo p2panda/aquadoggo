@@ -17,8 +17,8 @@ use p2panda_rs::schema::{FieldType, Schema, SchemaId};
 use reqwest::Client;
 use serde_json::{json, Map, Value};
 
-use crate::materializer::TaskStatus;
 use crate::bus::ServiceStatusMessage;
+use crate::materializer::TaskStatus;
 use crate::{Configuration, Node};
 
 #[tokio::test]
@@ -259,10 +259,7 @@ async fn publish(
     let _ = post(client, &query_str).await;
 
     // Wait for the document to be materialised.
-    while !matches!(
-        rx.recv().await.unwrap(),
-        ServiceStatusMessage::Materializer(TaskStatus::Completed(task)) if task.worker_name() == "reduce"
-    ) {}
+    let _ = rx.recv().await;
 
     encoded_entry.hash().into()
 }
@@ -334,10 +331,11 @@ async fn create_schema(
     let schema_definition_id = publish(node, client, &shirokuma, &create_schema_operation).await;
 
     // Wait for the new schema to be materialised and loaded into the GraphQL server.
-    while !matches!(
-        rx.recv().await.unwrap(),
-        ServiceStatusMessage::GraphQLSchemaBuilt
-    ) {}
+    loop {
+        if rx.recv().await.unwrap() == ServiceStatusMessage::GraphQLSchemaBuilt {
+            break;
+        }
+    }
 
     SchemaId::Application(name.to_string(), schema_definition_id)
 }

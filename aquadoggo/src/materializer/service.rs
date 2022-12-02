@@ -5,13 +5,13 @@ use log::{debug, warn};
 use p2panda_rs::storage_provider::traits::OperationStore;
 use tokio::task;
 
+use crate::bus::ServiceStatusMessage;
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
 use crate::manager::{ServiceReadySender, ServiceStatusSender, Shutdown};
 use crate::materializer::tasks::{dependency_task, reduce_task, schema_task};
 use crate::materializer::worker::{Factory, Task, TaskStatus};
 use crate::materializer::TaskInput;
-use crate::bus::ServiceStatusMessage;
 
 /// Capacity of the internal broadcast channels used inside the worker factory.
 ///
@@ -58,11 +58,6 @@ pub async fn materializer_service(
                         .insert_task(&task)
                         .await
                         .expect("Failed inserting pending task into database");
-
-                    // Send message on the service status channel
-                    let _ = tx_status.send(ServiceStatusMessage::Materializer(
-                        TaskStatus::Pending(task),
-                    ));
                 }
                 Ok(TaskStatus::Completed(task)) => {
                     store
@@ -71,9 +66,7 @@ pub async fn materializer_service(
                         .expect("Failed removing completed task from database");
 
                     // Send message on the service status channel
-                    let _ = tx_status.send(ServiceStatusMessage::Materializer(
-                        TaskStatus::Completed(task),
-                    ));
+                    let _ = tx_status.send(ServiceStatusMessage::MaterializerTaskComplete(task));
                 }
                 Err(err) => {
                     panic!("Failed receiving task status updates: {}", err)
@@ -160,14 +153,14 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::{key_pair, operation, operation_fields, schema};
     use rstest::rstest;
     use tokio::sync::{broadcast, oneshot};
-    use tokio::task;
+    use tokio::{select, task};
 
+    use crate::bus::ServiceStatusMessage;
     use crate::context::Context;
     use crate::db::stores::test_utils::{
         doggo_fields, doggo_schema, test_db, TestDatabase, TestDatabaseRunner,
     };
     use crate::materializer::{Task, TaskInput, TaskStatus};
-    use crate::bus::ServiceStatusMessage;
     use crate::schema::SchemaProvider;
     use crate::Configuration;
 
@@ -228,10 +221,7 @@ mod tests {
                 .unwrap();
 
             // Wait for the document to be materialised.
-            while !matches!(
-                rx_status.recv().await.unwrap(),
-                ServiceStatusMessage::Materializer(TaskStatus::Completed(_))
-            ) {}
+            let _ = rx_status.recv().await;
 
             // Make sure the service did not crash and is still running
             assert_eq!(handle.is_finished(), false);
@@ -301,10 +291,7 @@ mod tests {
             }
 
             // Wait for the document to be materialised.
-            while !matches!(
-                rx_status.recv().await.unwrap(),
-                ServiceStatusMessage::Materializer(TaskStatus::Completed(_))
-            ) {}
+            let _ = rx_status.recv().await;
 
             // Make sure the service did not crash and is still running
             assert_eq!(handle.is_finished(), false);
@@ -374,10 +361,7 @@ mod tests {
             .unwrap();
 
             // Wait for the document to be materialised.
-            while !matches!(
-                rx_status.recv().await.unwrap(),
-                ServiceStatusMessage::Materializer(TaskStatus::Completed(_))
-            ) {}
+            let _ = rx_status.recv().await;
 
             // Then straight away publish an UPDATE on this document and send it over the bus too.
             let (entry_encoded, _) = send_to_store(
@@ -407,14 +391,8 @@ mod tests {
             .unwrap();
 
             // Wait for the document to be materialised.
-            while !matches!(
-                // A "dependency" task gets completed first so we add a condition to
-                // the match
-                rx_status.recv().await.unwrap(),
-                ServiceStatusMessage::Materializer(
-                    TaskStatus::Completed(task)
-                ) if task.worker_name() == "reduce"
-            ) {}
+            let _dependency_task_compete = rx_status.recv().await;
+            let _reduce_task_compete = rx_status.recv().await;
 
             // Make sure the service did not crash and is still running
             assert_eq!(handle.is_finished(), false);
@@ -489,10 +467,8 @@ mod tests {
             .unwrap();
 
             // Wait for the document to be materialised.
-            while !matches!(
-                rx_status.recv().await.unwrap(),
-                ServiceStatusMessage::Materializer(TaskStatus::Completed(_))
-            ) {}
+            let msg = rx_status.recv().await;
+            assert!(matches!(msg.unwrap(), ServiceStatusMessage::MaterializerTaskComplete(_)));
 
             // Make sure the service did not crash and is still running
             assert_eq!(handle.is_finished(), false);
@@ -505,6 +481,89 @@ mod tests {
                 .unwrap()
                 .expect("We expect that the document is `Some`");
             assert_eq!(document.id(), &entry_encoded.hash().into());
+        });
+    }
+
+    #[rstest]
+    fn receive_status_messages(
+        #[from(test_db)]
+        #[with(1, 1, 1, false, schema(vec![("name".to_string(), FieldType::String)], SCHEMA_ID.parse().unwrap(), "A test schema"), vec![("name", OperationValue::String("panda".into()))])]
+        runner: TestDatabaseRunner,
+    ) {
+        // Prepare database which inserts data for one document
+        runner.with_db_teardown(|db: TestDatabase| async move {
+            // Identify document and operation which was inserted for testing
+            let document_id = db.test_data.documents.first().unwrap();
+
+            // We can infer the id of the first operation from the document id
+            let first_operation_id: OperationId = document_id.to_string().parse().unwrap();
+
+            // We expect that the database does not contain any materialized document yet
+            assert!(db
+                .store
+                .get_document_by_id(document_id)
+                .await
+                .unwrap()
+                .is_none());
+
+            // Prepare arguments for service
+            let context = Context::new(
+                db.store.clone(),
+                Configuration::default(),
+                SchemaProvider::default(),
+            );
+            let shutdown = task::spawn(async {
+                loop {
+                    // Do this forever .. this means that the shutdown handler will never resolve
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                }
+            });
+            let (tx, _) = broadcast::channel(1024);
+            let (tx_status, mut rx_status) = broadcast::channel(1024);
+            let (tx_ready, rx_ready) = oneshot::channel::<()>();
+
+            // Start materializer service
+            let tx_clone = tx.clone();
+            let handle = tokio::spawn(async move {
+                materializer_service(context, shutdown, tx_clone, tx_ready, tx_status)
+                    .await
+                    .unwrap();
+            });
+
+            if rx_ready.await.is_err() {
+                panic!("Service dropped");
+            }
+
+            // Send a message over the bus which kicks in materialization
+            tx.send(crate::bus::ServiceMessage::NewOperation(
+                first_operation_id.clone(),
+            ))
+            .unwrap();
+
+            let task_1 = Task::new("reduce", TaskInput::new(Some(document_id).cloned(), None));
+            let task_2 = Task::new(
+                "dependency",
+                TaskInput::new(None, Some(first_operation_id.into())),
+            );
+            assert_eq!(
+                rx_status.recv().await.unwrap(),
+                ServiceStatusMessage::MaterializerTaskComplete(task_1)
+            );
+            assert_eq!(
+                rx_status.recv().await.unwrap(),
+                ServiceStatusMessage::MaterializerTaskComplete(task_2)
+            );
+
+            // // Wait for the document to be materialised.
+            // loop {
+            //     let msg = rx_status.recv().await.unwrap();
+            //     if let ServiceStatusMessage::Materializer(TaskStatus::Completed(task)) = msg {
+            //         break task;
+            //     }
+            // };
+
+            // Make sure the service did not crash and is still running
+            assert_eq!(handle.is_finished(), false);
         });
     }
 }

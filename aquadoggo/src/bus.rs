@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::operation::OperationId;
 
 use crate::manager::Sender;
-use crate::materializer::{TaskStatus, TaskInput};
+use crate::materializer::{TaskStatus, TaskInput, Task};
 
 /// Sender for cross-service communication bus.
 pub type ServiceSender = Sender<ServiceMessage>;
@@ -22,7 +23,7 @@ pub enum ServiceStatusMessage {
     /// built or re-built due to a new schema being materialized.
     GraphQLSchemaBuilt,
 
-    /// Message from the materializer service containing the status of newly completed
-    /// or queud tasks.
-    Materializer(TaskStatus<TaskInput>),
+    /// Message from the materializer service containing the status of newly
+    /// completed tasks.
+    MaterializerTaskComplete(Task<TaskInput>),
 }
