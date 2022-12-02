@@ -219,11 +219,13 @@ mod test {
     use p2panda_rs::test_utils::fixtures::key_pair;
     use rstest::rstest;
     use serde_json::{json, Value};
+    use serial_test::serial;
 
     use crate::db::stores::test_utils::{add_schema, test_db, TestDatabase, TestDatabaseRunner};
     use crate::test_helpers::graphql_test_client;
 
     #[rstest]
+    #[serial]
     fn schema_updates(#[from(test_db)] runner: TestDatabaseRunner) {
         runner.with_db_teardown(move |mut db: TestDatabase| async move {
             // Create test client in the beginning so it is initialised with just the system

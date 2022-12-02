@@ -9,6 +9,7 @@ use p2panda_rs::schema::FieldType;
 use p2panda_rs::test_utils::fixtures::random_key_pair;
 use rstest::rstest;
 use serde_json::json;
+use serial_test::serial;
 
 use crate::db::stores::test_utils::{
     add_document, add_schema, test_db, TestDatabase, TestDatabaseRunner,
@@ -18,6 +19,7 @@ use crate::test_helpers::graphql_test_client;
 // Test querying application documents with scalar fields (no relations) by document id and by view
 // id.
 #[rstest]
+#[serial]
 fn scalar_fields(#[from(test_db)] runner: TestDatabaseRunner) {
     runner.with_db_teardown(&|mut db: TestDatabase| async move {
         let key_pair = random_key_pair();
@@ -91,6 +93,7 @@ fn scalar_fields(#[from(test_db)] runner: TestDatabaseRunner) {
 // Test querying application documents across a parent-child relation using different kinds of
 // relation fields.
 #[rstest]
+#[serial]
 fn relation_fields(#[from(test_db)] runner: TestDatabaseRunner) {
     runner.with_db_teardown(&|mut db: TestDatabase| async move {
         let key_pair = random_key_pair();

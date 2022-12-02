@@ -50,11 +50,13 @@ mod tests {
     use async_graphql::{value, Response};
     use rstest::rstest;
     use serde_json::json;
+    use serial_test::serial;
 
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
     use crate::test_helpers::graphql_test_client;
 
     #[rstest]
+    #[serial]
     fn next_args_valid_query(#[from(test_db)] runner: TestDatabaseRunner) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
             let client = graphql_test_client(&db).await;
@@ -93,6 +95,7 @@ mod tests {
         })
     }
     #[rstest]
+    #[serial]
     fn next_args_valid_query_with_document_id(
         #[with(1, 1, 1)]
         #[from(test_db)]
@@ -146,6 +149,7 @@ mod tests {
     }
 
     #[rstest]
+    #[serial]
     fn next_args_error_response(#[from(test_db)] runner: TestDatabaseRunner) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
             let client = graphql_test_client(&db).await;

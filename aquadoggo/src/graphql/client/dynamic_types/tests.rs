@@ -6,11 +6,13 @@ use p2panda_rs::schema::{FieldType, SchemaId, SYSTEM_SCHEMAS};
 use p2panda_rs::test_utils::fixtures::random_key_pair;
 use rstest::rstest;
 use serde_json::json;
+use serial_test::serial;
 
 use crate::db::stores::test_utils::{add_schema, test_db, TestDatabase, TestDatabaseRunner};
 use crate::test_helpers::graphql_test_client;
 
 #[rstest]
+#[serial]
 #[case(SYSTEM_SCHEMAS[0].id().to_string(), SYSTEM_SCHEMAS[0].description().to_string())]
 #[case(SYSTEM_SCHEMAS[1].id().to_string(), SYSTEM_SCHEMAS[1].description().to_string())]
 fn system_schema_container_type(
@@ -71,6 +73,7 @@ fn system_schema_container_type(
 }
 
 #[rstest]
+#[serial]
 fn application_schema_container_type(#[from(test_db)] runner: TestDatabaseRunner) {
     runner.with_db_teardown(move |mut db: TestDatabase| async move {
         let key_pair = random_key_pair();
@@ -137,6 +140,7 @@ fn application_schema_container_type(#[from(test_db)] runner: TestDatabaseRunner
 }
 
 #[rstest]
+#[serial]
 fn application_schema_fields_type(#[from(test_db)] runner: TestDatabaseRunner) {
     runner.with_db_teardown(move |mut db: TestDatabase| async move {
         let key_pair = random_key_pair();
@@ -220,6 +224,7 @@ fn application_schema_fields_type(#[from(test_db)] runner: TestDatabaseRunner) {
 }
 
 #[rstest]
+#[serial]
 fn metadata_type(#[from(test_db)] runner: TestDatabaseRunner) {
     runner.with_db_teardown(move |db: TestDatabase| async move {
         let client = graphql_test_client(&db).await;

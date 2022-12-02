@@ -107,6 +107,7 @@ mod tests {
     };
     use rstest::{fixture, rstest};
     use serde_json::json;
+    use serial_test::serial;
     use tokio::sync::broadcast;
 
     use crate::bus::ServiceMessage;
@@ -199,6 +200,7 @@ mod tests {
     }
 
     #[rstest]
+    #[serial]
     fn publish_entry(
         #[from(test_db)]
         #[with(0, 0, 0, false, test_schema())]
@@ -228,6 +230,7 @@ mod tests {
     }
 
     #[rstest]
+    #[serial]
     fn sends_message_on_communication_bus(
         #[from(test_db)]
         #[with(0, 0, 0, false, test_schema())]
@@ -261,6 +264,7 @@ mod tests {
     }
 
     #[rstest]
+    #[serial]
     fn post_gql_mutation(
         #[from(test_db)]
         #[with(0, 0, 0, false, test_schema())]
@@ -299,6 +303,7 @@ mod tests {
     }
 
     #[rstest]
+    #[serial]
     #[case::invalid_entry_bytes(
         "AB01",
         &OPERATION_ENCODED,
@@ -515,6 +520,7 @@ mod tests {
     }
 
     #[rstest]
+    #[serial]
     #[case::backlink_and_skiplink_not_in_db(
         &entry_signed_encoded_unvalidated(
             8,
@@ -645,6 +651,7 @@ mod tests {
     }
 
     #[rstest]
+    #[serial]
     fn publish_many_entries(
         #[from(test_db)]
         #[with(0, 0, 0, false, doggo_schema())]
@@ -734,6 +741,7 @@ mod tests {
     }
 
     #[rstest]
+    #[serial]
     fn duplicate_publishing_of_entries(
         #[from(test_db)]
         #[with(1, 1, 1, false, doggo_schema())]
@@ -778,6 +786,7 @@ mod tests {
     }
 
     #[rstest]
+    #[serial]
     fn publish_unsupported_schema(
         #[from(encoded_entry)] entry_with_unsupported_schema: EncodedEntry,
         #[from(encoded_operation)] operation_with_unsupported_schema: EncodedOperation,
