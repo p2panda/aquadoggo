@@ -13,7 +13,7 @@ use crate::db::provider::SqlStorage;
 use crate::graphql::client::{ClientMutationRoot, ClientRoot};
 use crate::graphql::replication::ReplicationRoot;
 use crate::manager::ServiceStatusSender;
-use crate::node::ServiceStatusMessage;
+use crate::bus::ServiceStatusMessage;
 use crate::schema::{save_static_schemas, SchemaProvider};
 
 /// All of the GraphQL query sub modules merged into one top level root.

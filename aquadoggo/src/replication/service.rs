@@ -22,7 +22,7 @@ use crate::db::stores::StorageEntry;
 use crate::domain::publish;
 use crate::graphql::replication::client;
 use crate::manager::{ServiceReadySender, ServiceStatusSender, Shutdown};
-use crate::node::ServiceStatusMessage;
+use crate::bus::ServiceStatusMessage;
 
 /// Replication service polling other nodes frequently to ask them about new entries from a defined
 /// set of authors and log ids.

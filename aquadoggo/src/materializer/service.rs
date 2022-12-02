@@ -11,7 +11,7 @@ use crate::manager::{ServiceReadySender, ServiceStatusSender, Shutdown};
 use crate::materializer::tasks::{dependency_task, reduce_task, schema_task};
 use crate::materializer::worker::{Factory, Task, TaskStatus};
 use crate::materializer::TaskInput;
-use crate::node::ServiceStatusMessage;
+use crate::bus::ServiceStatusMessage;
 
 /// Capacity of the internal broadcast channels used inside the worker factory.
 ///
@@ -167,7 +167,7 @@ mod tests {
         doggo_fields, doggo_schema, test_db, TestDatabase, TestDatabaseRunner,
     };
     use crate::materializer::{Task, TaskInput, TaskStatus};
-    use crate::node::ServiceStatusMessage;
+    use crate::bus::ServiceStatusMessage;
     use crate::schema::SchemaProvider;
     use crate::Configuration;
 

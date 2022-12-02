@@ -18,7 +18,7 @@ use reqwest::Client;
 use serde_json::{json, Map, Value};
 
 use crate::materializer::TaskStatus;
-use crate::node::ServiceStatusMessage;
+use crate::bus::ServiceStatusMessage;
 use crate::{Configuration, Node};
 
 #[tokio::test]

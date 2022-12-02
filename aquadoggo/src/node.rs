@@ -3,7 +3,7 @@
 use anyhow::Result;
 use tokio::sync::broadcast::Receiver;
 
-use crate::bus::ServiceMessage;
+use crate::bus::{ServiceMessage, ServiceStatusMessage};
 use crate::config::Configuration;
 use crate::context::Context;
 use crate::db::provider::SqlStorage;
@@ -14,18 +14,6 @@ use crate::manager::ServiceManager;
 use crate::materializer::{materializer_service, TaskInput, TaskStatus};
 use crate::replication::replication_service;
 use crate::schema::SchemaProvider;
-
-/// Messages sent on the service status channel.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum ServiceStatusMessage {
-    /// Message from the http service announcing the GraphQL Schema has been
-    /// built or re-built due to a new schema being materialized.
-    GraphQLSchemaBuilt,
-
-    /// Message from the materializer service containing the status of newly completed
-    /// or queud tasks.
-    Materialiser(TaskStatus<TaskInput>),
-}
 
 /// Capacity of the internal broadcast channel used to communicate between services.
 const SERVICE_BUS_CAPACITY: usize = 512_000;
