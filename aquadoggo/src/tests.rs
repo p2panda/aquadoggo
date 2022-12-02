@@ -16,12 +16,13 @@ use p2panda_rs::operation::{Operation, OperationAction, OperationBuilder};
 use p2panda_rs::schema::{FieldType, Schema, SchemaId};
 use reqwest::Client;
 use serde_json::{json, Map, Value};
+use serial_test::serial;
 
 use crate::bus::ServiceStatusMessage;
-use crate::materializer::TaskStatus;
 use crate::{Configuration, Node};
 
 #[tokio::test]
+#[serial]
 async fn e2e() {
     // This is an aquadoggo E2E test.
     //
