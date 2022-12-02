@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::operation::OperationId;
 
 use crate::manager::Sender;
-use crate::materializer::{TaskStatus, TaskInput, Task};
+use crate::materializer::{TaskInput, Task};
 
 /// Sender for cross-service communication bus.
 pub type ServiceSender = Sender<ServiceMessage>;
