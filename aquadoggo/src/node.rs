@@ -18,9 +18,13 @@ use crate::schema::SchemaProvider;
 /// Messages sent on the service status channel.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ServiceStatusMessage {
+    /// Message from the http service announcing the GraphQL Schema has been
+    /// built or re-built due to a new schema being materialized.
     GraphQLSchemaBuilt,
+
+    /// Message from the materializer service containing the status of newly completed
+    /// or queud tasks.
     Materialiser(TaskStatus<TaskInput>),
-    _Replication,
 }
 
 /// Capacity of the internal broadcast channel used to communicate between services.
