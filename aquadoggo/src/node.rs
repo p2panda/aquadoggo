@@ -72,7 +72,7 @@ impl Node {
             .await
             .is_err()
         {
-            panic!("Failed starting materialiser service");
+            panic!("Failed starting materializer service");
         }
         // Start replication service
         if manager

@@ -261,7 +261,7 @@ async fn publish(
     // Wait for the document to be materialised.
     while !matches!(
         rx.recv().await.unwrap(),
-        ServiceStatusMessage::Materialiser(TaskStatus::Completed(task)) if task.worker_name() == "reduce"
+        ServiceStatusMessage::Materializer(TaskStatus::Completed(task)) if task.worker_name() == "reduce"
     ) {}
 
     encoded_entry.hash().into()

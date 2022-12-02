@@ -24,5 +24,5 @@ pub enum ServiceStatusMessage {
 
     /// Message from the materializer service containing the status of newly completed
     /// or queud tasks.
-    Materialiser(TaskStatus<TaskInput>),
+    Materializer(TaskStatus<TaskInput>),
 }

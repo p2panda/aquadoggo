@@ -60,7 +60,7 @@ pub async fn materializer_service(
                         .expect("Failed inserting pending task into database");
 
                     // Send message on the service status channel
-                    let _ = tx_status.send(ServiceStatusMessage::Materialiser(
+                    let _ = tx_status.send(ServiceStatusMessage::Materializer(
                         TaskStatus::Pending(task),
                     ));
                 }
@@ -71,7 +71,7 @@ pub async fn materializer_service(
                         .expect("Failed removing completed task from database");
 
                     // Send message on the service status channel
-                    let _ = tx_status.send(ServiceStatusMessage::Materialiser(
+                    let _ = tx_status.send(ServiceStatusMessage::Materializer(
                         TaskStatus::Completed(task),
                     ));
                 }
@@ -127,9 +127,9 @@ pub async fn materializer_service(
         }
     });
 
-    debug!("Materialiser service is ready");
+    debug!("Materializer service is ready");
     if tx_ready.send(()).is_err() {
-        warn!("No subscriber informed about materialiser service being ready");
+        warn!("No subscriber informed about materializer service being ready");
     };
 
     // Wait until we received the application shutdown signal or handle closed
@@ -230,7 +230,7 @@ mod tests {
             // Wait for the document to be materialised.
             while !matches!(
                 rx_status.recv().await.unwrap(),
-                ServiceStatusMessage::Materialiser(TaskStatus::Completed(_))
+                ServiceStatusMessage::Materializer(TaskStatus::Completed(_))
             ) {}
 
             // Make sure the service did not crash and is still running
@@ -303,7 +303,7 @@ mod tests {
             // Wait for the document to be materialised.
             while !matches!(
                 rx_status.recv().await.unwrap(),
-                ServiceStatusMessage::Materialiser(TaskStatus::Completed(_))
+                ServiceStatusMessage::Materializer(TaskStatus::Completed(_))
             ) {}
 
             // Make sure the service did not crash and is still running
@@ -376,7 +376,7 @@ mod tests {
             // Wait for the document to be materialised.
             while !matches!(
                 rx_status.recv().await.unwrap(),
-                ServiceStatusMessage::Materialiser(TaskStatus::Completed(_))
+                ServiceStatusMessage::Materializer(TaskStatus::Completed(_))
             ) {}
 
             // Then straight away publish an UPDATE on this document and send it over the bus too.
@@ -411,7 +411,7 @@ mod tests {
                 // A "dependency" task gets completed first so we add a condition to
                 // the match
                 rx_status.recv().await.unwrap(),
-                ServiceStatusMessage::Materialiser(
+                ServiceStatusMessage::Materializer(
                     TaskStatus::Completed(task)
                 ) if task.worker_name() == "reduce"
             ) {}
@@ -491,7 +491,7 @@ mod tests {
             // Wait for the document to be materialised.
             while !matches!(
                 rx_status.recv().await.unwrap(),
-                ServiceStatusMessage::Materialiser(TaskStatus::Completed(_))
+                ServiceStatusMessage::Materializer(TaskStatus::Completed(_))
             ) {}
 
             // Make sure the service did not crash and is still running
