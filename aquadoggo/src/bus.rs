@@ -3,7 +3,7 @@
 use p2panda_rs::operation::OperationId;
 
 use crate::manager::Sender;
-use crate::materializer::{TaskInput, Task};
+use crate::materializer::{Task, TaskInput};
 
 /// Sender for cross-service communication bus.
 pub type ServiceSender = Sender<ServiceMessage>;

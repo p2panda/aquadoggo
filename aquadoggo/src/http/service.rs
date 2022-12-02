@@ -12,12 +12,12 @@ use log::{debug, warn};
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::bus::ServiceSender;
+use crate::bus::ServiceStatusMessage;
 use crate::context::Context;
 use crate::graphql::GraphQLSchemaManager;
 use crate::http::api::{handle_graphql_playground, handle_graphql_query};
 use crate::http::context::HttpServiceContext;
 use crate::manager::{ServiceReadySender, ServiceStatusSender, Shutdown};
-use crate::bus::ServiceStatusMessage;
 
 const GRAPHQL_ROUTE: &str = "/graphql";
 

@@ -468,7 +468,10 @@ mod tests {
 
             // Wait for the document to be materialised.
             let msg = rx_status.recv().await;
-            assert!(matches!(msg.unwrap(), ServiceStatusMessage::MaterializerTaskComplete(_)));
+            assert!(matches!(
+                msg.unwrap(),
+                ServiceStatusMessage::MaterializerTaskComplete(_)
+            ));
 
             // Make sure the service did not crash and is still running
             assert_eq!(handle.is_finished(), false);

@@ -16,13 +16,13 @@ use p2panda_rs::operation::traits::Schematic;
 use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
 use tokio::task;
 
+use crate::bus::ServiceStatusMessage;
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
 use crate::db::stores::StorageEntry;
 use crate::domain::publish;
 use crate::graphql::replication::client;
 use crate::manager::{ServiceReadySender, ServiceStatusSender, Shutdown};
-use crate::bus::ServiceStatusMessage;
 
 /// Replication service polling other nodes frequently to ask them about new entries from a defined
 /// set of authors and log ids.
