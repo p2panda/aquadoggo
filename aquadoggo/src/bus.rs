@@ -22,7 +22,6 @@ pub enum ServiceStatusMessage {
     /// built or re-built due to a new schema being materialized.
     GraphQLSchemaBuilt,
 
-    /// Message from the materializer service containing the status of newly
-    /// completed tasks.
+    /// Message from the materializer service containing a newly completed tasks.
     MaterializerTaskComplete(Task<TaskInput>),
 }
