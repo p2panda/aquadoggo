@@ -557,14 +557,6 @@ mod tests {
                 ServiceStatusMessage::MaterializerTaskComplete(task_2)
             );
 
-            // // Wait for the document to be materialised.
-            // loop {
-            //     let msg = rx_status.recv().await.unwrap();
-            //     if let ServiceStatusMessage::Materializer(TaskStatus::Completed(task)) = msg {
-            //         break task;
-            //     }
-            // };
-
             // Make sure the service did not crash and is still running
             assert_eq!(handle.is_finished(), false);
         });

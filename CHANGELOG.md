@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Fix polution of mutably shared schema store during testing [#266](https://github.com/p2panda/aquadoggo/pull/266) 
+- Fix pollution of mutably shared schema store during testing [#266](https://github.com/p2panda/aquadoggo/pull/266) 
 
 ## [0.4.0]
 
