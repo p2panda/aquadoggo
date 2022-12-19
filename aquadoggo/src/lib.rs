@@ -51,6 +51,7 @@ mod domain;
 mod errors;
 mod graphql;
 mod http;
+mod libp2p;
 mod manager;
 mod materializer;
 mod node;
