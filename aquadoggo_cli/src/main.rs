@@ -35,6 +35,10 @@ struct Opt {
     #[structopt(short, long, parse(from_os_str))]
     data_dir: Option<std::path::PathBuf>,
 
+    /// Port for the http server, 2020 by default.
+    #[structopt(short = "P", long)]
+    http_port: Option<u16>,
+
     /// URLs of remote nodes to replicate with.
     #[structopt(short, long)]
     remote_node_addresses: Vec<String>,
@@ -54,6 +58,7 @@ impl TryFrom<Opt> for Configuration {
 
     fn try_from(opt: Opt) -> Result<Self, Self::Error> {
         let mut config = Configuration::new(opt.data_dir)?;
+        config.http_port = opt.http_port.unwrap_or(2020);
 
         let public_keys_to_replicate = opt
             .public_keys_to_replicate
