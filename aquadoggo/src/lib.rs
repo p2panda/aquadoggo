@@ -50,6 +50,7 @@ mod db;
 mod domain;
 mod graphql;
 mod http;
+mod libp2p;
 mod manager;
 mod materializer;
 mod node;
