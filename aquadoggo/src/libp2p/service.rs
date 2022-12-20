@@ -2,21 +2,13 @@
 
 use anyhow::Result;
 use futures::StreamExt;
-use libp2p::{
-    core::upgrade,
-    floodsub::{self, Floodsub, FloodsubEvent},
-    identity,
-    mdns::{self, Config},
-    mplex, noise,
-    swarm::{NetworkBehaviour, Swarm, SwarmEvent},
-    tcp, Multiaddr, PeerId, Transport,
-};
+use libp2p::core::upgrade;
+use libp2p::floodsub::{self, Floodsub, FloodsubEvent};
+use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p::{identity, mdns, mplex, noise, tcp, Multiaddr, PeerId, Transport};
 use log::{debug, info, warn};
-use std::{error::Error, time::Duration};
-use tokio::{
-    io::{self, AsyncBufReadExt},
-    task,
-};
+use std::time::Duration;
+use tokio::task;
 
 use crate::bus::ServiceSender;
 use crate::context::Context;
@@ -29,7 +21,7 @@ pub async fn libp2p_service(
     tx_ready: ServiceReadySender,
 ) -> Result<()> {
     // Subscribe to communication bus
-    let mut rx = tx.subscribe();
+    let mut _rx = tx.subscribe();
 
     // Create a random PeerId
     let id_keys = identity::Keypair::generate_ed25519();
@@ -156,8 +148,6 @@ pub async fn libp2p_service(
     tokio::select! {
         _ = handle => (),
         _ = shutdown => {
-            // @TODO: Wait until all pending tasks have been completed during graceful shutdown.
-            // Related issue: https://github.com/p2panda/aquadoggo/issues/164
         },
     }
 
