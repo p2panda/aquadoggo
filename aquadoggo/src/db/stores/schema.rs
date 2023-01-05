@@ -6,7 +6,6 @@ use async_trait::async_trait;
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::schema::system::{SchemaFieldView, SchemaView};
 use p2panda_rs::schema::{Schema, SchemaId};
-use p2panda_rs::storage_provider::traits::DocumentStore;
 
 use crate::db::errors::SchemaStoreError;
 use crate::db::provider::SqlStorage;
@@ -61,14 +60,14 @@ impl SchemaStore for SqlStorage {
     /// Silently ignores incomplete or broken schema definitions.
     async fn get_all_schema(&self) -> Result<Vec<Schema>, SchemaStoreError> {
         let schema_views: Vec<SchemaView> = self
-            .get_documents_by_schema(&SchemaId::new("schema_definition_v1")?)
+            .get_latest_document_views_by_schema(&SchemaId::new("schema_definition_v1")?)
             .await?
             .into_iter()
             .filter_map(|view| SchemaView::try_from(view).ok())
             .collect();
 
         let schema_field_views: Vec<SchemaFieldView> = self
-            .get_documents_by_schema(&SchemaId::new("schema_field_definition_v1")?)
+            .get_latest_document_views_by_schema(&SchemaId::new("schema_field_definition_v1")?)
             .await?
             .into_iter()
             .filter_map(|view| SchemaFieldView::try_from(view).ok())

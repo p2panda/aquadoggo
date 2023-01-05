@@ -255,7 +255,7 @@ mod tests {
     use std::time::Duration;
 
     use p2panda_rs::storage_provider::traits::EntryStore;
-    use p2panda_rs::test_utils::db::test_db::{populate_store, PopulateDatabaseConfig};
+    use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
     use rstest::rstest;
     use tokio::sync::{broadcast, oneshot};
     use tokio::task;
@@ -288,7 +288,7 @@ mod tests {
                 .schema_provider
                 .update(doggo_schema())
                 .await;
-            let populate_db_config = PopulateDatabaseConfig {
+            let populate_db_config = PopulateStoreConfig {
                 no_of_entries: 1,
                 no_of_logs: 1,
                 no_of_public_keys: 1,

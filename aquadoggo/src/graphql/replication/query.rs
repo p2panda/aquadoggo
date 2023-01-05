@@ -34,7 +34,7 @@ impl ReplicationRoot {
         hash: scalars::EntryHashScalar,
     ) -> Result<EncodedEntryAndOperation> {
         let store = ctx.data::<SqlStorage>()?;
-        let result = store.get_entry_by_hash(&hash.clone().into()).await?;
+        let result = store.get_entry(&hash.clone().into()).await?;
 
         match result {
             Some(inner) => Ok(EncodedEntryAndOperation::from(inner)),
@@ -158,7 +158,7 @@ impl CursorType for scalars::SeqNumScalar {
 mod tests {
     use async_graphql::{EmptyMutation, EmptySubscription, Request, Schema};
     use p2panda_rs::hash::Hash;
-    use p2panda_rs::test_utils::db::test_db::{populate_store, PopulateDatabaseConfig};
+    use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
     use p2panda_rs::test_utils::fixtures::random_hash;
     use rstest::rstest;
 
@@ -319,7 +319,7 @@ mod tests {
 
             let (key_pairs, _) = populate_store(
                 &billie_db.store,
-                &PopulateDatabaseConfig {
+                &PopulateStoreConfig {
                     no_of_entries: entries_in_log,
                     no_of_logs: 1,
                     no_of_public_keys: 1,

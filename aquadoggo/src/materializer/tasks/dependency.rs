@@ -3,7 +3,6 @@
 use log::debug;
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::storage_provider::traits::DocumentStore;
 
 use crate::context::Context;
 use crate::materializer::worker::{Task, TaskError, TaskResult};
@@ -176,18 +175,18 @@ mod tests {
     use p2panda_rs::document::{DocumentId, DocumentViewId};
     use p2panda_rs::entry::traits::AsEncodedEntry;
     use p2panda_rs::identity::KeyPair;
-    use p2panda_rs::operation::traits::AsVerifiedOperation;
     use p2panda_rs::operation::{
         Operation, OperationBuilder, OperationValue, PinnedRelation, PinnedRelationList, Relation,
-        RelationList,
+        RelationList, OperationId
     };
     use p2panda_rs::schema::{FieldType, Schema, SchemaId};
-    use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
+    use p2panda_rs::storage_provider::traits::OperationStore;
     use p2panda_rs::test_utils::constants;
-    use p2panda_rs::test_utils::db::test_db::send_to_store;
     use p2panda_rs::test_utils::fixtures::{
         key_pair, random_document_id, random_document_view_id, schema, schema_fields,
     };
+    use p2panda_rs::test_utils::memory_store::helpers::send_to_store;
+    use p2panda_rs::WithId;
     use rstest::rstest;
 
     use crate::db::stores::test_utils::{
@@ -351,7 +350,7 @@ mod tests {
             for document_id in &db.test_data.documents {
                 let document_view = db
                     .store
-                    .get_document_by_id(document_id)
+                    .get_latest_document_view(document_id)
                     .await
                     .unwrap()
                     .unwrap();
@@ -390,7 +389,7 @@ mod tests {
             // so should dispatch a reduce task for each one.
             let document_view_of_child = db
                 .store
-                .get_document_by_id(&document_id)
+                .get_latest_document_view(&document_id)
                 .await
                 .unwrap()
                 .unwrap();
@@ -521,8 +520,8 @@ mod tests {
                 .await
                 .unwrap();
 
-            let document_view_id: DocumentViewId = document_operations[1].id().clone().into();
-
+            let document_view_id: DocumentViewId = WithId::<OperationId>::id(&document_operations[1]).clone().into();
+            
             let input = TaskInput::new(None, Some(document_view_id.clone()));
 
             let result = dependency_task(db.context.clone(), input).await;

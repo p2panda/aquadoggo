@@ -156,7 +156,9 @@ impl From<EntryRow> for StorageEntry {
 /// required `EntryWithOperation` trait. An intermediary struct `EntryRow` is also used when retrieving
 /// an entry from the database.
 #[async_trait]
-impl EntryStore<StorageEntry> for SqlStorage {
+impl EntryStore for SqlStorage {
+    type Entry = StorageEntry;
+
     /// Insert an entry into storage.
     ///
     /// Returns an error if the insertion doesn't result in exactly one
@@ -209,7 +211,7 @@ impl EntryStore<StorageEntry> for SqlStorage {
     /// Returns a result containing the entry wrapped in an option if it was found successfully.
     /// Returns `None` if the entry was not found in storage. Errors when a fatal storage error
     /// occured.
-    async fn get_entry_by_hash(
+    async fn get_entry(
         &self,
         hash: &Hash,
     ) -> Result<Option<StorageEntry>, EntryStorageError> {
@@ -482,7 +484,7 @@ mod tests {
             // Retrieve the entry again by it's hash.
             let retrieved_entry = db
                 .store
-                .get_entry_by_hash(&encoded_entry.hash())
+                .get_entry(&encoded_entry.hash())
                 .await
                 .expect("Get entry")
                 .expect("Unwrap entry");
@@ -691,7 +693,7 @@ mod tests {
     }
 
     #[rstest]
-    fn get_entry_by_hash(
+    fn get_entry(
         #[from(test_db)]
         #[with(20, 1, 1)]
         runner: TestDatabaseRunner,
@@ -714,7 +716,7 @@ mod tests {
                 let entry_hash = entry.hash();
                 let entry_by_hash = db
                     .store
-                    .get_entry_by_hash(&entry_hash)
+                    .get_entry(&entry_hash)
                     .await
                     .unwrap()
                     .unwrap();
@@ -728,7 +730,7 @@ mod tests {
             let entry_hash_not_in_db = random_hash();
             let entry = db
                 .store
-                .get_entry_by_hash(&entry_hash_not_in_db)
+                .get_entry(&entry_hash_not_in_db)
                 .await
                 .unwrap();
             assert!(entry.is_none());

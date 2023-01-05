@@ -12,7 +12,7 @@ use log::{debug, error, info};
 use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
+use p2panda_rs::storage_provider::traits::OperationStore;
 use p2panda_rs::Human;
 
 use crate::db::provider::SqlStorage;
@@ -135,7 +135,7 @@ impl DynamicQuery {
 
         // Retrieve all documents for schema from storage.
         let documents = store
-            .get_documents_by_schema(schema_id)
+            .get_latest_document_views_by_schema(schema_id)
             .await
             .map_err(|err| ServerError::new(err.to_string(), None))?;
 
@@ -168,7 +168,7 @@ impl DynamicQuery {
         debug!("Fetching {} from store", document_id.display());
 
         let store = ctx.data_unchecked::<SqlStorage>();
-        let view = store.get_document_by_id(&document_id).await.unwrap();
+        let view = store.get_latest_document_view(&document_id).await.unwrap();
         match view {
             Some(view) => {
                 // Validate the document's schema if the `validate_schema` argument is set.
@@ -260,7 +260,7 @@ impl DynamicQuery {
                 dynamic_types::document::META_FIELD => {
                     let store = ctx.data_unchecked::<SqlStorage>();
                     let document_id = store
-                        .get_document_by_operation_id(view.id().graph_tips().first().unwrap())
+                        .get_document_id_by_operation_id(view.id().graph_tips().first().unwrap())
                         .await
                         .map_err(|err| ServerError::new(err.to_string(), None))?
                         .unwrap();

@@ -33,6 +33,7 @@ pub fn parse_operation_rows(
     let schema_id: SchemaId = first_row.schema_id.parse().unwrap();
     let public_key = PublicKey::new(&first_row.public_key).unwrap();
     let operation_id = first_row.operation_id.parse().unwrap();
+    let document_id = first_row.document_id.parse().unwrap();
 
     let mut relation_lists: BTreeMap<String, Vec<DocumentId>> = BTreeMap::new();
     let mut pinned_relation_lists: BTreeMap<String, Vec<DocumentViewId>> = BTreeMap::new();
@@ -161,6 +162,7 @@ pub fn parse_operation_rows(
     .unwrap();
 
     let operation = StorageOperation {
+        document_id,
         id: operation_id,
         version: operation.version(),
         action: operation.action(),

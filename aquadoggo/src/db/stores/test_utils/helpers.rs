@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::convert::TryFrom;
+
 use log::{debug, info};
-use p2panda_rs::document::{DocumentId, DocumentViewId};
+use p2panda_rs::document::{Document, DocumentId, DocumentViewId};
 use p2panda_rs::entry::traits::AsEncodedEntry;
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::KeyPair;
@@ -9,9 +11,10 @@ use p2panda_rs::operation::{
     OperationBuilder, OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList,
 };
 use p2panda_rs::schema::{FieldType, Schema, SchemaId};
+use p2panda_rs::storage_provider::traits::OperationStore;
 use p2panda_rs::test_utils::constants;
-use p2panda_rs::test_utils::db::test_db::send_to_store;
 use p2panda_rs::test_utils::fixtures::{schema, schema_fields};
+use p2panda_rs::test_utils::memory_store::helpers::send_to_store;
 
 use crate::db::stores::test_utils::TestDatabase;
 use crate::materializer::tasks::{dependency_task, reduce_task, schema_task};
@@ -86,6 +89,18 @@ pub fn doggo_fields() -> Vec<(&'static str, OperationValue)> {
             ])),
         ),
     ]
+}
+
+/// Build a document from it's stored operations specified by it's document id.
+pub async fn build_document<S: OperationStore>(store: &S, document_id: &DocumentId) -> Document {
+    // We retrieve the operations.
+    let document_operations = store
+        .get_operations_by_document_id(document_id)
+        .await
+        .expect("Get operations");
+
+    // Then we construct the document.
+    Document::try_from(&document_operations).expect("Build the document")
 }
 
 /// Publish a document and materialise it in a given `TestDatabase`.

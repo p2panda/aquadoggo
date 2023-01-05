@@ -4,7 +4,6 @@ use log::debug;
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::storage_provider::traits::DocumentStore;
 
 use crate::context::Context;
 use crate::db::traits::SchemaStore;
@@ -85,7 +84,7 @@ async fn get_related_schema_definitions(
     // Retrieve all schema definition documents from the store
     let schema_definitions = context
         .store
-        .get_documents_by_schema(&SchemaId::SchemaDefinition(1))
+        .get_latest_document_views_by_schema(&SchemaId::SchemaDefinition(1))
         .await
         .map_err(|err| TaskError::Critical(err.to_string()))
         .unwrap();
@@ -124,8 +123,7 @@ mod tests {
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::{OperationBuilder, OperationValue, PinnedRelationList};
     use p2panda_rs::schema::{FieldType, Schema, SchemaId};
-    use p2panda_rs::storage_provider::traits::DocumentStore;
-    use p2panda_rs::test_utils::db::test_db::send_to_store;
+    use p2panda_rs::test_utils::memory_store::helpers::send_to_store;
     use rstest::rstest;
 
     use crate::context::Context;
@@ -163,7 +161,7 @@ mod tests {
         reduce_task(context.clone(), input).await.unwrap();
         let field_view_id = db
             .store
-            .get_document_by_id(&field_definition_id)
+            .get_latest_document_view(&field_definition_id)
             .await
             .unwrap()
             .unwrap()
@@ -204,7 +202,7 @@ mod tests {
         reduce_task(context.clone(), input).await.unwrap();
         let definition_view_id = db
             .store
-            .get_document_by_id(&schema_definition_id)
+            .get_latest_document_view(&schema_definition_id)
             .await
             .unwrap()
             .unwrap()

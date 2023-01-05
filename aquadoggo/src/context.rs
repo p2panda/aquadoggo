@@ -3,7 +3,7 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
-use p2panda_rs::storage_provider::traits::StorageProvider;
+use p2panda_rs::storage_provider::traits::{EntryStore, OperationStore, LogStore, DocumentStore};
 
 use crate::config::Configuration;
 use crate::db::provider::SqlStorage;
@@ -11,7 +11,7 @@ use crate::schema::SchemaProvider;
 
 /// Inner data shared across all services.
 #[derive(Debug)]
-pub struct Data<S: StorageProvider> {
+pub struct Data<S: EntryStore + OperationStore + LogStore + DocumentStore> {
     /// Node configuration.
     pub config: Configuration,
 
@@ -22,7 +22,7 @@ pub struct Data<S: StorageProvider> {
     pub schema_provider: SchemaProvider,
 }
 
-impl<S: StorageProvider> Data<S> {
+impl<S: EntryStore + OperationStore + LogStore + DocumentStore> Data<S> {
     pub fn new(store: S, config: Configuration, schema_provider: SchemaProvider) -> Self {
         Self {
             config,
@@ -34,22 +34,22 @@ impl<S: StorageProvider> Data<S> {
 
 /// Data shared across all services.
 #[derive(Debug)]
-pub struct Context<S: StorageProvider = SqlStorage>(pub Arc<Data<S>>);
+pub struct Context<S: EntryStore + OperationStore + LogStore + DocumentStore = SqlStorage>(pub Arc<Data<S>>);
 
-impl<S: StorageProvider> Context<S> {
+impl<S: EntryStore + OperationStore + LogStore + DocumentStore> Context<S> {
     /// Returns a new instance of `Context`.
     pub fn new(store: S, config: Configuration, schema_provider: SchemaProvider) -> Self {
         Self(Arc::new(Data::new(store, config, schema_provider)))
     }
 }
 
-impl<S: StorageProvider> Clone for Context<S> {
+impl<S: EntryStore + OperationStore + LogStore + DocumentStore> Clone for Context<S> {
     fn clone(&self) -> Self {
         Self(self.0.clone())
     }
 }
 
-impl<S: StorageProvider> Deref for Context<S> {
+impl<S: EntryStore + OperationStore + LogStore + DocumentStore> Deref for Context<S> {
     type Target = Data<S>;
 
     fn deref(&self) -> &Self::Target {

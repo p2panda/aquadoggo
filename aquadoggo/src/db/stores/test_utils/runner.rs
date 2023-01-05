@@ -6,7 +6,7 @@ use std::sync::Arc;
 use futures::Future;
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::Schema;
-use p2panda_rs::test_utils::db::test_db::{populate_store, PopulateDatabaseConfig};
+use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
 use rstest::fixture;
 use tokio::runtime::Builder;
 use tokio::sync::Mutex;
@@ -59,7 +59,7 @@ where
 // We may still want to keep this "single database" runner injected through `rstest` but in any
 // case probably best to consider that in a different PR.
 pub struct TestDatabaseRunner {
-    config: PopulateDatabaseConfig,
+    config: PopulateStoreConfig,
 }
 
 impl TestDatabaseRunner {
@@ -179,7 +179,7 @@ pub fn test_db(
     // The fields used for every UPDATE operation
     #[default(doggo_fields())] update_operation_fields: Vec<(&'static str, OperationValue)>,
 ) -> TestDatabaseRunner {
-    let config = PopulateDatabaseConfig {
+    let config = PopulateStoreConfig {
         no_of_entries,
         no_of_logs,
         no_of_public_keys,

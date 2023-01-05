@@ -2,7 +2,6 @@
 
 use std::collections::BTreeMap;
 
-use async_trait::async_trait;
 use futures::future::try_join_all;
 use p2panda_rs::document::{Document, DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::schema::SchemaId;
@@ -14,8 +13,9 @@ use crate::db::models::document::DocumentViewFieldRow;
 use crate::db::provider::SqlStorage;
 use crate::db::utils::parse_document_view_field_rows;
 
-#[async_trait]
-impl DocumentStore for SqlStorage {
+impl DocumentStore for SqlStorage {}
+
+impl SqlStorage {
     /// Insert a document_view into the db.
     ///
     /// Internally, this method performs two different operations:
@@ -23,7 +23,7 @@ impl DocumentStore for SqlStorage {
     /// - insert a row for the document_view itself
     ///
     /// If either of these operations fail and error is returned.
-    async fn insert_document_view(
+    pub async fn insert_document_view(
         &self,
         document_view: &DocumentView,
         schema_id: &SchemaId,
@@ -103,7 +103,7 @@ impl DocumentStore for SqlStorage {
     /// and then from these constructs the document view itself.
     ///
     /// An error is returned if any of the above steps fail or a fatal database error occured.
-    async fn get_document_view_by_id(
+    pub async fn get_document_view_by_id(
         &self,
         id: &DocumentViewId,
     ) -> Result<Option<DocumentView>, DocumentStorageError> {
@@ -154,7 +154,7 @@ impl DocumentStore for SqlStorage {
     /// Note: "out-of-date" document views will remain in storage when a document already
     /// existed and is updated. If they are not needed for anything else they can be garbage
     /// collected.
-    async fn insert_document(&self, document: &Document) -> Result<(), DocumentStorageError> {
+    pub async fn insert_document(&self, document: &Document) -> Result<(), DocumentStorageError> {
         // Start a transaction, any db insertions after this point, and before the `commit()`
         // will be rolled back in the event of an error.
         let transaction = self
@@ -216,7 +216,7 @@ impl DocumentStore for SqlStorage {
     /// Retrieve the current document view for a specified document. If the document
     /// has been deleted then None is returned. An error is returned is a fatal database
     /// error occurs.
-    async fn get_document_by_id(
+    pub async fn get_latest_document_view(
         &self,
         id: &DocumentId,
     ) -> Result<Option<DocumentView>, DocumentStorageError> {
@@ -268,7 +268,7 @@ impl DocumentStore for SqlStorage {
     /// Retrieve the latest document view for all documents which follow the specified schema.
     ///
     /// An error is returned is a fatal database error occurs.
-    async fn get_documents_by_schema(
+    pub async fn get_latest_document_views_by_schema(
         &self,
         schema_id: &SchemaId,
     ) -> Result<Vec<DocumentView>, DocumentStorageError> {
@@ -330,33 +330,19 @@ impl DocumentStore for SqlStorage {
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::document::{
-        Document, DocumentBuilder, DocumentId, DocumentViewFields, DocumentViewId,
-    };
+    use p2panda_rs::document::{DocumentBuilder, DocumentViewFields, DocumentViewId};
     use p2panda_rs::operation::traits::AsOperation;
     use p2panda_rs::operation::{Operation, OperationId};
-    use p2panda_rs::storage_provider::traits::StorageProvider;
     use p2panda_rs::test_utils::constants::{self};
     use p2panda_rs::test_utils::fixtures::{
         operation, random_document_view_id, random_operation_id,
     };
     use rstest::rstest;
 
-    use crate::db::stores::document::{DocumentStore, DocumentView};
-    use crate::db::stores::test_utils::{doggo_schema, test_db, TestDatabase, TestDatabaseRunner};
-
-    async fn build_document<S: StorageProvider>(store: &S, document_id: &DocumentId) -> Document {
-        // We retrieve the operations.
-        let document_operations = store
-            .get_operations_by_document_id(document_id)
-            .await
-            .expect("Get operations");
-
-        // Then we construct the document.
-        DocumentBuilder::new(document_operations)
-            .build()
-            .expect("Build the document")
-    }
+    use crate::db::stores::document::DocumentView;
+    use crate::db::stores::test_utils::{
+        build_document, doggo_schema, test_db, TestDatabase, TestDatabaseRunner,
+    };
 
     #[rstest]
     fn insert_and_get_one_document_view(
@@ -480,7 +466,7 @@ mod tests {
             // We can retrieve the most recent document view for this document by it's id.
             let most_recent_document_view = db
                 .store
-                .get_document_by_id(document.id())
+                .get_latest_document_view(document.id())
                 .await
                 .unwrap()
                 .unwrap();
@@ -549,7 +535,11 @@ mod tests {
 
             // We retrieve the most recent view for this document by it's document id,
             // but as the document is deleted, we should get a none value back.
-            let document_view = db.store.get_document_by_id(document.id()).await.unwrap();
+            let document_view = db
+                .store
+                .get_latest_document_view(document.id())
+                .await
+                .unwrap();
             assert!(document_view.is_none());
 
             // We also try to retrieve the specific document view by it's view id.
@@ -577,7 +567,7 @@ mod tests {
 
             let document_views = db
                 .store
-                .get_documents_by_schema(constants::schema().id())
+                .get_latest_document_views_by_schema(constants::schema().id())
                 .await
                 .unwrap();
             assert!(document_views.is_empty());
@@ -621,7 +611,7 @@ mod tests {
                 // We can retrieve the document's latest view by it's document id.
                 let latest_document_view = db
                     .store
-                    .get_document_by_id(document.id())
+                    .get_latest_document_view(document.id())
                     .await
                     .expect("Get document view");
 
@@ -660,7 +650,7 @@ mod tests {
             // Retrieve these documents by their schema id.
             let schema_documents = db
                 .store
-                .get_documents_by_schema(doggo_schema().id())
+                .get_latest_document_views_by_schema(doggo_schema().id())
                 .await
                 .expect("Get document by schema");
 

@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::convert::TryFrom;
+
 use log::{debug, info};
-use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
-use p2panda_rs::operation::traits::AsVerifiedOperation;
-use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore, StorageProvider};
-use p2panda_rs::Human;
+use p2panda_rs::document::{Document, DocumentBuilder, DocumentId, DocumentViewId};
+use p2panda_rs::operation::traits::{AsOperation, WithPublicKey};
+use p2panda_rs::operation::OperationId;
+use p2panda_rs::storage_provider::traits::{DocumentStore, EntryStore, LogStore, OperationStore};
+use p2panda_rs::{Human, WithId};
 
 use crate::context::Context;
 use crate::materializer::worker::{Task, TaskError, TaskResult};
@@ -51,9 +54,9 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
     let document_view_id = match &input.document_view_id {
         // If this task was passed a document_view_id as input then we want to build to document
         // only to the requested view
-        Some(view_id) => reduce_document_view(&context, view_id, operations).await?,
+        Some(view_id) => reduce_document_view(&context, view_id, &operations).await?,
         // If no document_view_id was passed, this is a document_id reduce task.
-        None => reduce_document(&context, operations).await?,
+        None => reduce_document(&context, &operations).await?,
     };
 
     // Dispatch a "dependency" task if we created a new document view
@@ -78,7 +81,7 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
 /// If the task input is invalid (both document_id and document_view_id missing or given) we
 /// critically fail the task at this point. If only a document_view_id was passed we retrieve the
 /// document_id as it is needed later.
-async fn resolve_document_id<S: StorageProvider>(
+async fn resolve_document_id<S: EntryStore + OperationStore + LogStore + DocumentStore>(
     context: &Context<S>,
     input: &TaskInput,
 ) -> Result<Option<DocumentId>, TaskError> {
@@ -96,7 +99,7 @@ async fn resolve_document_id<S: StorageProvider>(
 
             context
                 .store
-                .get_document_by_operation_id(operation_id)
+                .get_document_id_by_operation_id(operation_id)
                 .await
                 .map_err(|err| TaskError::Critical(err.to_string()))
         }
@@ -110,14 +113,13 @@ async fn resolve_document_id<S: StorageProvider>(
 ///
 /// It returns `None` if either that document view reached "deleted" status or we don't have enough
 /// operations to materialise.
-async fn reduce_document_view<O: AsVerifiedOperation>(
+async fn reduce_document_view<O: AsOperation + WithId<OperationId> + WithPublicKey>(
     context: &Context,
     document_view_id: &DocumentViewId,
-    operations: Vec<O>,
+    operations: &Vec<O>,
 ) -> Result<Option<DocumentViewId>, TaskError> {
-    let document = match DocumentBuilder::new(operations)
-        .build_to_view_id(Some(document_view_id.to_owned()))
-    {
+    let document_builder: DocumentBuilder = operations.into();
+    let document = match document_builder.build_to_view_id(Some(document_view_id.to_owned())) {
         Ok(document) => {
             // If the document was deleted, then we return nothing
             debug!(
@@ -161,11 +163,11 @@ async fn reduce_document_view<O: AsVerifiedOperation>(
 ///
 /// It returns `None` if either that document view reached "deleted" status or we don't have enough
 /// operations to materialise.
-async fn reduce_document<O: AsVerifiedOperation>(
+async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
     context: &Context,
-    operations: Vec<O>,
+    operations: &Vec<O>,
 ) -> Result<Option<DocumentViewId>, TaskError> {
-    match DocumentBuilder::new(operations).build() {
+    match Document::try_from(operations) {
         Ok(document) => {
             // Insert this document into storage. If it already existed, this will update it's
             // current view
@@ -209,16 +211,17 @@ async fn reduce_document<O: AsVerifiedOperation>(
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
-    use p2panda_rs::operation::traits::AsVerifiedOperation;
+    use std::convert::TryFrom;
+
+    use p2panda_rs::document::{Document, DocumentId, DocumentViewId};
     use p2panda_rs::operation::OperationValue;
     use p2panda_rs::schema::Schema;
-    use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
+    use p2panda_rs::storage_provider::traits::OperationStore;
     use p2panda_rs::test_utils::constants;
-    use p2panda_rs::test_utils::db::test_db::send_to_store;
     use p2panda_rs::test_utils::fixtures::{
         operation, operation_fields, random_document_id, random_document_view_id, schema,
     };
+    use p2panda_rs::test_utils::memory_store::helpers::send_to_store;
     use rstest::rstest;
 
     use crate::db::stores::test_utils::{
@@ -248,7 +251,11 @@ mod tests {
             }
 
             for document_id in &db.test_data.documents {
-                let document_view = db.store.get_document_by_id(document_id).await.unwrap();
+                let document_view = db
+                    .store
+                    .get_latest_document_view(document_id)
+                    .await
+                    .unwrap();
 
                 assert_eq!(
                     document_view.unwrap().get("username").unwrap().value(),
@@ -305,7 +312,11 @@ mod tests {
             assert!(reduce_task(db.context.clone(), input).await.is_ok());
 
             // The new view should exist and the document should refer to it.
-            let document_view = db.store.get_document_by_id(&document_id).await.unwrap();
+            let document_view = db
+                .store
+                .get_latest_document_view(document_id)
+                .await
+                .unwrap();
             assert_eq!(
                 document_view.unwrap().get("username").unwrap().value(),
                 &OperationValue::String("meeeeeee".to_string())
@@ -326,15 +337,11 @@ mod tests {
                 .await
                 .unwrap();
 
-            let document = DocumentBuilder::new(document_operations).build().unwrap();
+            let document = Document::try_from(&document_operations).unwrap();
             let mut sorted_document_operations = document.operations().clone();
 
-            let document_view_id: DocumentViewId = sorted_document_operations
-                .pop()
-                .unwrap()
-                .id()
-                .clone()
-                .into();
+            let document_view_id: DocumentViewId =
+                sorted_document_operations.pop().unwrap().0.into();
 
             let input = TaskInput::new(None, Some(document_view_id.clone()));
 
@@ -352,12 +359,8 @@ mod tests {
             );
 
             // We didn't reduce this document_view_id so it shouldn't exist in the db.
-            let document_view_id: DocumentViewId = sorted_document_operations
-                .pop()
-                .unwrap()
-                .id()
-                .clone()
-                .into();
+            let document_view_id: DocumentViewId =
+                sorted_document_operations.pop().unwrap().0.into();
 
             let document_view = db
                 .store
@@ -383,7 +386,11 @@ mod tests {
             }
 
             for document_id in &db.test_data.documents {
-                let document_view = db.store.get_document_by_id(document_id).await.unwrap();
+                let document_view = db
+                    .store
+                    .get_latest_document_view(document_id)
+                    .await
+                    .unwrap();
                 assert!(document_view.is_none())
             }
 
@@ -393,7 +400,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            let document = DocumentBuilder::new(document_operations).build().unwrap();
+            let document = Document::try_from(&document_operations).unwrap();
 
             let input = TaskInput::new(None, Some(document.view_id().clone()));
             let tasks = reduce_task(db.context.clone(), input).await.unwrap();
