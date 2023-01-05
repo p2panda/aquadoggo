@@ -6,7 +6,6 @@ use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
 
 use crate::context::Context;
-use crate::db::traits::SchemaStore;
 use crate::materializer::worker::{TaskError, TaskResult};
 use crate::materializer::TaskInput;
 

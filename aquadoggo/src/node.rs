@@ -6,7 +6,6 @@ use crate::bus::ServiceMessage;
 use crate::config::Configuration;
 use crate::context::Context;
 use crate::db::provider::SqlStorage;
-use crate::db::traits::SchemaStore;
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
 use crate::http::http_service;
 use crate::manager::ServiceManager;

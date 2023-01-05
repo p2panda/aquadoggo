@@ -2,7 +2,7 @@
 
 use p2panda_rs::schema::error::{SchemaError, SchemaIdError};
 use p2panda_rs::schema::system::SystemSchemaError;
-use p2panda_rs::storage_provider::error::DocumentStorageError;
+use p2panda_rs::storage_provider::error::{DocumentStorageError, OperationStorageError};
 
 /// `SQLStorage` errors.
 #[derive(thiserror::Error, Debug)]
@@ -37,4 +37,8 @@ pub enum SchemaStoreError {
     /// Error returned from `DocumentStore` methods.
     #[error(transparent)]
     DocumentStorageError(#[from] DocumentStorageError),
+
+    /// Error returned from `OperationStore` methods.
+    #[error(transparent)]
+    OperationStorageError(#[from] OperationStorageError),
 }
