@@ -9,6 +9,7 @@ pub mod errors;
 pub mod models;
 pub mod sql_store;
 pub mod stores;
+pub mod types;
 pub mod utils;
 
 /// Re-export of generic connection pool type.

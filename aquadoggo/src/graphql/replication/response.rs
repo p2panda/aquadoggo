@@ -11,7 +11,7 @@ use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
 use serde::{Deserialize, Serialize};
 
 use crate::db::sql_store::SqlStore;
-use crate::db::stores::StorageEntry;
+use crate::db::types::StorageEntry;
 use crate::graphql::scalars;
 
 /// Encoded and signed entry with its regarding encoded operation payload.

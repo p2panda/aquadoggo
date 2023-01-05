@@ -13,7 +13,7 @@ use p2panda_rs::schema::SchemaId;
 
 use crate::db::models::document::DocumentViewFieldRow;
 use crate::db::models::OperationFieldsJoinedRow;
-use crate::db::stores::StorageOperation;
+use crate::db::types::StorageOperation;
 
 /// Takes a vector of `OperationFieldsJoinedRow` and parses them into an `VerifiedOperation`
 /// struct.

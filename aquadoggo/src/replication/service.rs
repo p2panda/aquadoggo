@@ -18,7 +18,7 @@ use tokio::task;
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
-use crate::db::stores::StorageEntry;
+use crate::db::types::StorageEntry;
 use crate::domain::publish;
 use crate::graphql::replication::client;
 use crate::manager::{ServiceReadySender, Shutdown};
