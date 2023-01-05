@@ -9,7 +9,7 @@ use p2panda_rs::storage_provider::error::DocumentStorageError;
 use p2panda_rs::storage_provider::traits::DocumentStore;
 use sqlx::{query, query_as};
 
-use crate::db::models::document::DocumentViewFieldRow;
+use crate::db::models::DocumentViewFieldRow;
 use crate::db::sql_store::SqlStore;
 use crate::db::utils::parse_document_view_field_rows;
 

@@ -11,7 +11,7 @@ use p2panda_rs::operation::{
 };
 use p2panda_rs::schema::SchemaId;
 
-use crate::db::models::document::DocumentViewFieldRow;
+use crate::db::models::DocumentViewFieldRow;
 use crate::db::models::OperationFieldsJoinedRow;
 use crate::db::types::StorageOperation;
 
@@ -357,7 +357,7 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::{create_operation, schema_id};
     use rstest::rstest;
 
-    use crate::db::models::{document::DocumentViewFieldRow, OperationFieldsJoinedRow};
+    use crate::db::models::{DocumentViewFieldRow, OperationFieldsJoinedRow};
 
     use super::{parse_document_view_field_rows, parse_operation_rows, parse_value_to_string_vec};
 
