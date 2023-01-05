@@ -7,7 +7,7 @@ use p2panda_rs::entry::traits::AsEntry;
 use p2panda_rs::entry::SeqNum;
 use p2panda_rs::storage_provider::traits::EntryStore;
 
-use crate::db::provider::SqlStorage;
+use crate::db::sql_store::SqlStore;
 use crate::graphql::replication::response::EncodedEntryAndOperation;
 use crate::graphql::scalars;
 
@@ -33,7 +33,7 @@ impl ReplicationRoot {
         ctx: &Context<'a>,
         hash: scalars::EntryHashScalar,
     ) -> Result<EncodedEntryAndOperation> {
-        let store = ctx.data::<SqlStorage>()?;
+        let store = ctx.data::<SqlStore>()?;
         let result = store.get_entry(&hash.clone().into()).await?;
 
         match result {
@@ -55,7 +55,7 @@ impl ReplicationRoot {
         #[graphql(name = "publicKey", desc = "Public key of the entry author")]
         public_key: scalars::PublicKeyScalar,
     ) -> Result<EncodedEntryAndOperation> {
-        let store = ctx.data::<SqlStorage>()?;
+        let store = ctx.data::<SqlStore>()?;
 
         let result = store
             .get_entry_at_seq_num(&public_key.into(), &log_id.into(), &seq_num.into())
@@ -86,7 +86,7 @@ impl ReplicationRoot {
         first: Option<i32>,
         after: Option<String>,
     ) -> Result<ConnectionResult> {
-        let store = ctx.data::<SqlStorage>()?;
+        let store = ctx.data::<SqlStore>()?;
 
         query(
             after,

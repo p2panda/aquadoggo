@@ -9,7 +9,7 @@ use p2panda_rs::storage_provider::error::LogStorageError;
 use p2panda_rs::storage_provider::traits::LogStore;
 use sqlx::{query, query_scalar};
 
-use crate::db::provider::SqlStorage;
+use crate::db::sql_store::SqlStore;
 
 /// Implementation of `LogStore` trait which is required when constructing a
 /// `StorageProvider`.
@@ -18,7 +18,7 @@ use crate::db::provider::SqlStorage;
 /// implements the required `AsStorageLog` trait. An intermediary struct `LogRow`
 /// is also used when retrieving a log from the database.
 #[async_trait]
-impl LogStore for SqlStorage {
+impl LogStore for SqlStore {
     /// Insert a log into storage.
     async fn insert_log(
         &self,

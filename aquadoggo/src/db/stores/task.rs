@@ -4,15 +4,15 @@ use anyhow::Result;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use sqlx::{query, query_as};
 
-use crate::db::errors::SqlStorageError;
+use crate::db::errors::SqlStoreError;
 use crate::db::models::TaskRow;
-use crate::db::provider::SqlStorage;
+use crate::db::sql_store::SqlStore;
 use crate::materializer::{Task, TaskInput};
 
 /// Methods to interact with the `tasks` table in the database.
-impl SqlStorage {
+impl SqlStore {
     /// Inserts a "pending" task into the database.
-    pub async fn insert_task(&self, task: &Task<TaskInput>) -> Result<(), SqlStorageError> {
+    pub async fn insert_task(&self, task: &Task<TaskInput>) -> Result<(), SqlStoreError> {
         // Convert task input to correct database types
         let task_input = task.input();
         let document_id = task_input.document_id.as_ref().map(|id| id.as_str());
@@ -40,13 +40,13 @@ impl SqlStorage {
         .bind(document_view_id)
         .execute(&self.pool)
         .await
-        .map_err(|err| SqlStorageError::Transaction(err.to_string()))?;
+        .map_err(|err| SqlStoreError::Transaction(err.to_string()))?;
 
         Ok(())
     }
 
     /// Removes a "pending" task from the database.
-    pub async fn remove_task(&self, task: &Task<TaskInput>) -> Result<(), SqlStorageError> {
+    pub async fn remove_task(&self, task: &Task<TaskInput>) -> Result<(), SqlStoreError> {
         // Convert task input to correct database types
         let task_input = task.input();
         let document_id = task_input.document_id.as_ref().map(|id| id.as_str());
@@ -73,17 +73,17 @@ impl SqlStorage {
         .bind(document_view_id)
         .execute(&self.pool)
         .await
-        .map_err(|err| SqlStorageError::Transaction(err.to_string()))?;
+        .map_err(|err| SqlStoreError::Transaction(err.to_string()))?;
 
         if result.rows_affected() != 1 {
-            Err(SqlStorageError::Deletion("tasks".into()))
+            Err(SqlStoreError::Deletion("tasks".into()))
         } else {
             Ok(())
         }
     }
 
     /// Returns "pending" tasks of the materialization service worker.
-    pub async fn get_tasks(&self) -> Result<Vec<Task<TaskInput>>, SqlStorageError> {
+    pub async fn get_tasks(&self) -> Result<Vec<Task<TaskInput>>, SqlStoreError> {
         let task_rows = query_as::<_, TaskRow>(
             "
             SELECT
@@ -96,7 +96,7 @@ impl SqlStorage {
         )
         .fetch_all(&self.pool)
         .await
-        .map_err(|err| SqlStorageError::Transaction(err.to_string()))?;
+        .map_err(|err| SqlStoreError::Transaction(err.to_string()))?;
 
         // Convert database rows into correct p2panda types
         let mut tasks: Vec<Task<TaskInput>> = Vec::new();

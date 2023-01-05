@@ -5,19 +5,19 @@ use p2panda_rs::identity::KeyPair;
 
 use crate::config::Configuration;
 use crate::context::Context;
-use crate::db::provider::SqlStorage;
+use crate::db::sql_store::SqlStore;
 use crate::schema::SchemaProvider;
 
 /// Container for `SqlStore` with access to the document ids and key_pairs used in the
 /// pre-populated database for testing.
 pub struct TestDatabase {
-    pub context: Context<SqlStorage>,
-    pub store: SqlStorage,
+    pub context: Context<SqlStore>,
+    pub store: SqlStore,
     pub test_data: TestData,
 }
 
 impl TestDatabase {
-    pub fn new(store: SqlStorage) -> Self {
+    pub fn new(store: SqlStore) -> Self {
         // Initialise context for store.
         let context = Context::new(
             store.clone(),

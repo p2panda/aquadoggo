@@ -6,7 +6,7 @@ use p2panda_rs::storage_provider::error::{DocumentStorageError, OperationStorage
 
 /// `SQLStorage` errors.
 #[derive(thiserror::Error, Debug)]
-pub enum SqlStorageError {
+pub enum SqlStoreError {
     #[error("SQL query failed: {0}")]
     Transaction(String),
 

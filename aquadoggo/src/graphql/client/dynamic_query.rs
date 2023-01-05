@@ -15,7 +15,7 @@ use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::OperationStore;
 use p2panda_rs::Human;
 
-use crate::db::provider::SqlStorage;
+use crate::db::sql_store::SqlStore;
 use crate::graphql::client::dynamic_types;
 use crate::graphql::client::dynamic_types::DocumentMeta;
 use crate::graphql::client::utils::validate_view_matches_schema;
@@ -131,7 +131,7 @@ impl DynamicQuery {
     ) -> ServerResult<Option<Value>> {
         info!("Handling collection query for {}", schema_id.display());
 
-        let store = ctx.data_unchecked::<SqlStorage>();
+        let store = ctx.data_unchecked::<SqlStore>();
 
         // Retrieve all documents for schema from storage.
         let documents = store
@@ -167,7 +167,7 @@ impl DynamicQuery {
     ) -> ServerResult<Value> {
         debug!("Fetching {} from store", document_id.display());
 
-        let store = ctx.data_unchecked::<SqlStorage>();
+        let store = ctx.data_unchecked::<SqlStore>();
         let view = store.get_latest_document_view(&document_id).await.unwrap();
         match view {
             Some(view) => {
@@ -207,7 +207,7 @@ impl DynamicQuery {
     ) -> ServerResult<Value> {
         debug!("Fetching {} from store", document_view_id.display());
 
-        let store = ctx.data_unchecked::<SqlStorage>();
+        let store = ctx.data_unchecked::<SqlStore>();
         let view = store
             .get_document_view_by_id(&document_view_id)
             .await
@@ -248,7 +248,7 @@ impl DynamicQuery {
 
             match field.name() {
                 "__typename" => {
-                    let store = ctx.data_unchecked::<SqlStorage>();
+                    let store = ctx.data_unchecked::<SqlStore>();
                     let schema_id = store
                         .get_schema_by_document_view(view.id())
                         .await
@@ -258,7 +258,7 @@ impl DynamicQuery {
                     document_fields.insert(response_key, Value::String(schema_id));
                 }
                 dynamic_types::document::META_FIELD => {
-                    let store = ctx.data_unchecked::<SqlStorage>();
+                    let store = ctx.data_unchecked::<SqlStore>();
                     let document_id = store
                         .get_document_id_by_operation_id(view.id().graph_tips().first().unwrap())
                         .await
@@ -278,7 +278,7 @@ impl DynamicQuery {
                     );
                 }
                 _ => {
-                    let store = ctx.data_unchecked::<SqlStorage>();
+                    let store = ctx.data_unchecked::<SqlStore>();
                     let schema_id = store
                         .get_schema_by_document_view(view.id())
                         .await
@@ -306,7 +306,7 @@ impl DynamicQuery {
         ctx: &Context<'_>,
         selected_fields: Vec<SelectionField<'async_recursion>>,
     ) -> ServerResult<Value> {
-        let store = ctx.data_unchecked::<SqlStorage>();
+        let store = ctx.data_unchecked::<SqlStore>();
         let schema_id = store
             .get_schema_by_document_view(view.id())
             .await

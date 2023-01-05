@@ -9,9 +9,9 @@ use p2panda_rs::storage_provider::error::OperationStorageError;
 use sqlx::query_scalar;
 
 use crate::db::errors::SchemaStoreError;
-use crate::db::provider::SqlStorage;
+use crate::db::sql_store::SqlStore;
 
-impl SqlStorage {
+impl SqlStore {
     /// Get a Schema from the database by it's document view id.
     ///
     /// Internally, this method performs three steps:

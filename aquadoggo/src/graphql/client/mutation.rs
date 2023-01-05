@@ -9,7 +9,7 @@ use p2panda_rs::operation::traits::Schematic;
 use p2panda_rs::operation::{EncodedOperation, OperationId};
 
 use crate::bus::{ServiceMessage, ServiceSender};
-use crate::db::provider::SqlStorage;
+use crate::db::sql_store::SqlStore;
 use crate::domain::publish;
 use crate::graphql::client::NextArguments;
 use crate::graphql::scalars;
@@ -35,7 +35,7 @@ impl ClientMutationRoot {
         )]
         operation: scalars::EncodedOperationScalar,
     ) -> Result<NextArguments> {
-        let store = ctx.data::<SqlStorage>()?;
+        let store = ctx.data::<SqlStore>()?;
         let tx = ctx.data::<ServiceSender>()?;
         let schema_provider = ctx.data::<SchemaProvider>()?;
 

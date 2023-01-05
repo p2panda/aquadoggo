@@ -5,7 +5,7 @@ use async_graphql::{Context, Object, Result};
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::identity::PublicKey;
 
-use crate::db::provider::SqlStorage;
+use crate::db::sql_store::SqlStore;
 use crate::domain::next_args;
 use crate::graphql::client::NextArguments;
 use crate::graphql::scalars;
@@ -34,7 +34,7 @@ impl StaticQuery {
         document_view_id: Option<scalars::DocumentViewIdScalar>,
     ) -> Result<NextArguments> {
         // Access the store from context.
-        let store = ctx.data::<SqlStorage>()?;
+        let store = ctx.data::<SqlStore>()?;
 
         // Convert and validate passed parameters.
         let public_key: PublicKey = public_key.into();

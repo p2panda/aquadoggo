@@ -6,7 +6,7 @@ use std::sync::Arc;
 use p2panda_rs::storage_provider::traits::{EntryStore, OperationStore, LogStore, DocumentStore};
 
 use crate::config::Configuration;
-use crate::db::provider::SqlStorage;
+use crate::db::sql_store::SqlStore;
 use crate::schema::SchemaProvider;
 
 /// Inner data shared across all services.
@@ -34,7 +34,7 @@ impl<S: EntryStore + OperationStore + LogStore + DocumentStore> Data<S> {
 
 /// Data shared across all services.
 #[derive(Debug)]
-pub struct Context<S: EntryStore + OperationStore + LogStore + DocumentStore = SqlStorage>(pub Arc<Data<S>>);
+pub struct Context<S: EntryStore + OperationStore + LogStore + DocumentStore = SqlStore>(pub Arc<Data<S>>);
 
 impl<S: EntryStore + OperationStore + LogStore + DocumentStore> Context<S> {
     /// Returns a new instance of `Context`.

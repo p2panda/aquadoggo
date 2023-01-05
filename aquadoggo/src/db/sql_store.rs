@@ -4,12 +4,12 @@ use crate::db::Pool;
 
 /// Sql based storage that implements `StorageProvider`.
 #[derive(Clone, Debug)]
-pub struct SqlStorage {
+pub struct SqlStore {
     pub(crate) pool: Pool,
 }
 
-impl SqlStorage {
-    /// Create a new `SqlStorage` using the provided db `Pool`.
+impl SqlStore {
+    /// Create a new `SqlStore` using the provided db `Pool`.
     pub fn new(pool: Pool) -> Self {
         Self { pool }
     }

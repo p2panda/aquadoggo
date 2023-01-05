@@ -9,7 +9,7 @@ use p2panda_rs::Human;
 use tokio::sync::Mutex;
 
 use crate::bus::ServiceSender;
-use crate::db::provider::SqlStorage;
+use crate::db::sql_store::SqlStore;
 use crate::graphql::client::{ClientMutationRoot, ClientRoot};
 use crate::graphql::replication::ReplicationRoot;
 use crate::schema::{save_static_schemas, SchemaProvider};
@@ -30,7 +30,7 @@ pub type RootSchema = Schema<QueryRoot, MutationRoot, EmptySubscription>;
 /// Builds the root schema that can handle all GraphQL requests from clients (Client API) or other
 /// nodes (Node API).
 pub fn build_root_schema(
-    store: SqlStorage,
+    store: SqlStore,
     tx: ServiceSender,
     schema_provider: SchemaProvider,
 ) -> RootSchema {
@@ -78,7 +78,7 @@ type GraphQLSchemas = Arc<Mutex<Vec<RootSchema>>>;
 #[derive(Clone, Debug)]
 pub struct GraphQLSharedData {
     /// Database interface.
-    store: SqlStorage,
+    store: SqlStore,
 
     /// Communication bus interface to send messages to other services.
     tx: ServiceSender,
@@ -116,7 +116,7 @@ pub struct GraphQLSchemaManager {
 impl GraphQLSchemaManager {
     /// Returns a new instance of `GraphQLSchemaManager`.
     pub async fn new(
-        store: SqlStorage,
+        store: SqlStore,
         tx: ServiceSender,
         schema_provider: SchemaProvider,
     ) -> Self {

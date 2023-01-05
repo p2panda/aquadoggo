@@ -10,7 +10,7 @@ use p2panda_rs::entry::EncodedEntry;
 use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
 use serde::{Deserialize, Serialize};
 
-use crate::db::provider::SqlStorage;
+use crate::db::sql_store::SqlStore;
 use crate::db::stores::StorageEntry;
 use crate::graphql::scalars;
 
@@ -32,7 +32,7 @@ impl EncodedEntryAndOperation {
         &self,
         ctx: &Context<'a>,
     ) -> async_graphql::Result<Vec<scalars::EncodedEntryScalar>> {
-        let store = ctx.data::<SqlStorage>()?;
+        let store = ctx.data::<SqlStore>()?;
 
         // Decode entry
         let entry_encoded: EncodedEntry = self.entry.clone().into();

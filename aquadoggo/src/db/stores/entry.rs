@@ -14,7 +14,7 @@ use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
 use sqlx::{query, query_as};
 
 use crate::db::models::EntryRow;
-use crate::db::provider::SqlStorage;
+use crate::db::sql_store::SqlStore;
 
 /// A signed entry and it's encoded operation. Entries are the lowest level data type on the
 /// p2panda network, they are signed by authors and form bamboo append only logs. The operation is
@@ -156,7 +156,7 @@ impl From<EntryRow> for StorageEntry {
 /// required `EntryWithOperation` trait. An intermediary struct `EntryRow` is also used when retrieving
 /// an entry from the database.
 #[async_trait]
-impl EntryStore for SqlStorage {
+impl EntryStore for SqlStore {
     type Entry = StorageEntry;
 
     /// Insert an entry into storage.

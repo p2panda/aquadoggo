@@ -17,7 +17,7 @@ use p2panda_rs::WithId;
 use sqlx::{query, query_as, query_scalar};
 
 use crate::db::models::OperationFieldsJoinedRow;
-use crate::db::provider::SqlStorage;
+use crate::db::sql_store::SqlStore;
 use crate::db::utils::{parse_operation_rows, parse_value_to_string_vec};
 
 pub struct StorageOperation {
@@ -105,7 +105,7 @@ impl AsOperation for StorageOperation {
 /// used in conjunction with the `sqlx` library to coerce raw values into structs when querying the
 /// database.
 #[async_trait]
-impl OperationStore for SqlStorage {
+impl OperationStore for SqlStore {
     type Operation = StorageOperation;
 
     /// Get the id of the document an operation is part of.

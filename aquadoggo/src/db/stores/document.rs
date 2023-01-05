@@ -10,12 +10,12 @@ use p2panda_rs::storage_provider::traits::DocumentStore;
 use sqlx::{query, query_as};
 
 use crate::db::models::document::DocumentViewFieldRow;
-use crate::db::provider::SqlStorage;
+use crate::db::sql_store::SqlStore;
 use crate::db::utils::parse_document_view_field_rows;
 
-impl DocumentStore for SqlStorage {}
+impl DocumentStore for SqlStore {}
 
-impl SqlStorage {
+impl SqlStore {
     /// Insert a document_view into the db.
     ///
     /// Internally, this method performs two different operations:

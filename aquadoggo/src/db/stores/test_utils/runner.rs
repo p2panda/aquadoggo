@@ -13,7 +13,7 @@ use tokio::sync::Mutex;
 
 use crate::config::Configuration;
 use crate::context::Context;
-use crate::db::provider::SqlStorage;
+use crate::db::sql_store::SqlStore;
 use crate::db::stores::test_utils::{TestData, TestDatabase};
 use crate::db::Pool;
 use crate::schema::SchemaProvider;
@@ -79,7 +79,7 @@ impl TestDatabaseRunner {
         runtime.block_on(async {
             // Initialise store
             let pool = initialize_db().await;
-            let store = SqlStorage::new(pool);
+            let store = SqlStore::new(pool);
 
             // Populate the store and construct test data
             let (key_pairs, documents) = populate_store(&store, &self.config).await;
@@ -144,7 +144,7 @@ impl TestDatabaseManager {
         let pool = initialize_db_with_url(url).await;
 
         // Initialise test store using pool.
-        let store = SqlStorage::new(pool.clone());
+        let store = SqlStore::new(pool.clone());
 
         let test_db = TestDatabase::new(store.clone());
 
