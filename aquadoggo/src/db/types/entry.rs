@@ -134,7 +134,6 @@ impl From<EntryRow> for StorageEntry {
             payload_hash: entry.payload_hash().to_owned(),
             signature: entry.signature().to_owned(),
             encoded_entry,
-            // We unwrap now as all entries currently contain a payload.
             payload: entry_row.payload_bytes.map(|payload| {
                 EncodedOperation::from_bytes(
                     &hex::decode(payload).expect("Decode entry payload from database"),
