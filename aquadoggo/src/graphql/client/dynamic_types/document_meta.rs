@@ -37,7 +37,7 @@ impl DocumentMeta {
             metafield(
                 DOCUMENT_ID_FIELD,
                 Some("The document id of this response object."),
-                &*DocumentIdScalar::type_name(),
+                &DocumentIdScalar::type_name(),
             ),
         );
 
@@ -46,7 +46,7 @@ impl DocumentMeta {
             metafield(
                 VIEW_ID_FIELD,
                 Some("The specific document view id contained in this response object."),
-                &*DocumentViewIdScalar::type_name(),
+                &DocumentViewIdScalar::type_name(),
             ),
         );
 
