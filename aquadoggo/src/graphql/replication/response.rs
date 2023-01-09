@@ -7,7 +7,7 @@ use async_graphql::{ComplexObject, Context, SimpleObject};
 use p2panda_rs::entry::decode::decode_entry;
 use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
 use p2panda_rs::entry::EncodedEntry;
-use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
+use p2panda_rs::storage_provider::traits::EntryStore;
 use serde::{Deserialize, Serialize};
 
 use crate::db::sql_store::SqlStore;

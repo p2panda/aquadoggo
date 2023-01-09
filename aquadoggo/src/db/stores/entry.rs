@@ -18,9 +18,8 @@ use crate::db::types::StorageEntry;
 
 /// Implementation of `EntryStore` trait which is required when constructing a `StorageProvider`.
 ///
-/// Handles storage and retrieval of entries in the form of`StorageEntry` which implements the
-/// required `EntryWithOperation` trait. An intermediary struct `EntryRow` is also used when retrieving
-/// an entry from the database.
+/// Handles storage and retrieval of entries in the form of `StorageEntry`. An intermediary struct
+/// `EntryRow` is used when retrieving an entry from the database.
 #[async_trait]
 impl EntryStore for SqlStore {
     type Entry = StorageEntry;
@@ -323,7 +322,7 @@ mod tests {
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::EncodedOperation;
     use p2panda_rs::schema::SchemaId;
-    use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
+    use p2panda_rs::storage_provider::traits::EntryStore;
     use p2panda_rs::test_utils::fixtures::{encoded_entry, encoded_operation, entry, random_hash};
     use rstest::rstest;
 

@@ -15,7 +15,7 @@ use p2panda_rs::operation::traits::AsOperation;
 use p2panda_rs::operation::validate::validate_operation_with_entry;
 use p2panda_rs::operation::{EncodedOperation, OperationAction};
 use p2panda_rs::schema::Schema;
-use p2panda_rs::storage_provider::traits::{EntryStore, OperationStore, LogStore};
+use p2panda_rs::storage_provider::traits::{EntryStore, LogStore, OperationStore};
 use p2panda_rs::Human;
 
 use crate::graphql::client::NextArguments;
@@ -325,7 +325,9 @@ pub async fn publish<S: EntryStore + OperationStore + LogStore>(
 
     // If the entries' seq num is 1 we insert a new log here.
     if entry.seq_num().is_first() {
-        store.insert_log(log_id, public_key, &operation.schema_id(), &document_id).await?;
+        store
+            .insert_log(log_id, public_key, &operation.schema_id(), &document_id)
+            .await?;
     }
 
     ///////////////////////////////
@@ -338,7 +340,9 @@ pub async fn publish<S: EntryStore + OperationStore + LogStore>(
         .await?;
 
     // Insert the operation into the store.
-    store.insert_operation(&operation_id, public_key, &operation, &document_id).await?;
+    store
+        .insert_operation(&operation_id, public_key, &operation, &document_id)
+        .await?;
 
     Ok(next_args)
 }
@@ -396,7 +400,7 @@ mod tests {
         Operation, OperationAction, OperationBuilder, OperationId, OperationValue,
     };
     use p2panda_rs::schema::{FieldType, Schema};
-    use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation, LogStore};
+    use p2panda_rs::storage_provider::traits::{EntryStore, LogStore};
     use p2panda_rs::test_utils::constants::{test_fields, PRIVATE_KEY};
     use p2panda_rs::test_utils::fixtures::{
         create_operation, delete_operation, key_pair, operation, populate_store_config, public_key,
@@ -556,13 +560,13 @@ mod tests {
         remove_entries(&store, &public_key, entries_to_remove);
 
         // Publish the latest entry again and see what happens.
-        let operation = next_entry.payload().unwrap();
+        let operation = next_entry.payload.unwrap();
         let result = publish(
             &store,
             &schema,
             &next_entry.encoded_entry,
-            &decode_operation(operation).unwrap(),
-            operation,
+            &decode_operation(&operation).unwrap(),
+            &operation,
         )
         .await;
 
@@ -1278,12 +1282,12 @@ mod tests {
             &SeqNum::new(u64::MAX).unwrap(),
             Some(&random_hash()),
             Some(&random_hash()),
-            entry_two.payload().unwrap(),
+            entry_two.payload.as_ref().unwrap(),
             &key_pair,
         )
         .unwrap();
 
-        let entry = StorageEntry::new(&encoded_entry, entry_two.payload());
+        let entry = StorageEntry::new(&encoded_entry, entry_two.payload.as_ref());
 
         store
             .entries
@@ -1326,12 +1330,12 @@ mod tests {
             &SeqNum::new(18446744073709551611).unwrap(),
             Some(&random_hash()),
             Some(&random_hash()),
-            entry_two.payload().unwrap(),
+            entry_two.payload.as_ref().unwrap(),
             &key_pair,
         )
         .unwrap();
 
-        let skiplink = StorageEntry::new(&encoded_entry, entry_two.payload());
+        let skiplink = StorageEntry::new(&encoded_entry, entry_two.payload.as_ref());
         store
             .entries
             .lock()
@@ -1344,12 +1348,12 @@ mod tests {
             &SeqNum::new(u64::MAX - 1).unwrap(),
             None,
             Some(&random_hash()),
-            entry_two.payload().unwrap(),
+            entry_two.payload.as_ref().unwrap(),
             &key_pair,
         )
         .unwrap();
 
-        let backlink = StorageEntry::new(&encoded_entry, entry_two.payload());
+        let backlink = StorageEntry::new(&encoded_entry, entry_two.payload.as_ref());
         store
             .entries
             .lock()
@@ -1362,13 +1366,13 @@ mod tests {
             &SeqNum::new(u64::MAX).unwrap(),
             Some(&skiplink.hash()),
             Some(&backlink.hash()),
-            entry_two.payload().unwrap(),
+            entry_two.payload.as_ref().unwrap(),
             &key_pair,
         )
         .unwrap();
 
         // Publish the MAX_SEQ_NUM entry
-        let operation = entry_two.payload().unwrap();
+        let operation = &entry_two.payload.unwrap();
         let result = publish(
             &store,
             &schema,
@@ -1379,10 +1383,7 @@ mod tests {
         .await;
 
         // try and get the MAX_SEQ_NUM entry again (it shouldn't be there)
-        let entry_at_max_seq_num = store
-            .get_entry(&encoded_entry.hash())
-            .await
-            .unwrap();
+        let entry_at_max_seq_num = store.get_entry(&encoded_entry.hash()).await.unwrap();
 
         // We expect the entry we published not to have been stored in the db
         assert!(entry_at_max_seq_num.is_none());

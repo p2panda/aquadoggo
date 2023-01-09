@@ -6,16 +6,12 @@ use p2panda_rs::entry::{EncodedEntry, LogId, SeqNum, Signature};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::EncodedOperation;
-use p2panda_rs::storage_provider::traits::EntryWithOperation;
 
 use crate::db::models::EntryRow;
 
 /// A signed entry and it's encoded operation. Entries are the lowest level data type on the
 /// p2panda network, they are signed by authors and form bamboo append only logs. The operation is
 /// an entries' payload, it contains the data mutations which authors publish.
-///
-/// This struct implements the `EntryWithOperation` trait which is required when constructing the
-/// `EntryStore`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct StorageEntry {
     /// PublicKey of this entry.
@@ -49,8 +45,8 @@ pub struct StorageEntry {
     pub(crate) payload: Option<EncodedOperation>,
 }
 
-impl EntryWithOperation for StorageEntry {
-    fn payload(&self) -> Option<&EncodedOperation> {
+impl StorageEntry {
+    pub fn payload(&self) -> Option<&EncodedOperation> {
         self.payload.as_ref()
     }
 }

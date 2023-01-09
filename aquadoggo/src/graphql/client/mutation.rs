@@ -97,7 +97,7 @@ mod tests {
     use p2panda_rs::operation::{EncodedOperation, OperationValue};
     use p2panda_rs::schema::{FieldType, Schema, SchemaId};
     use p2panda_rs::serde::serialize_value;
-    use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
+    use p2panda_rs::storage_provider::traits::EntryStore;
     use p2panda_rs::test_utils::constants::{HASH, PRIVATE_KEY};
     use p2panda_rs::test_utils::fixtures::{
         create_operation, delete_operation, encoded_entry, encoded_operation,

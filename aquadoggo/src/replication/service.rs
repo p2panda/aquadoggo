@@ -12,7 +12,7 @@ use p2panda_rs::entry::SeqNum;
 use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::decode::decode_operation;
 use p2panda_rs::operation::traits::Schematic;
-use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
+use p2panda_rs::storage_provider::traits::EntryStore;
 use tokio::task;
 
 use crate::bus::{ServiceMessage, ServiceSender};
