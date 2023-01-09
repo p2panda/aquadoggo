@@ -70,7 +70,7 @@ impl TryFrom<EncodedEntryAndOperation> for StorageEntry {
             .operation
             .ok_or_else(|| anyhow!("Storage entry requires operation to be given"))?;
         let encoded_entry = encoded.entry;
-        let entry = decode_entry(&encoded_entry.clone().into())?;
+        let entry = decode_entry(&EncodedEntry::from(encoded_entry.clone()))?;
 
         let storage_entry = StorageEntry {
             public_key: entry.public_key().to_owned(),

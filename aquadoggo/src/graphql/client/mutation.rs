@@ -742,11 +742,10 @@ mod tests {
                 .await
                 .unwrap();
             let entry = entries.first().unwrap();
-            let encoded_entry: EncodedEntry = entry.to_owned().into();
 
             // Prepare a publish entry request for the entry.
             let publish_request = publish_request(
-                &encoded_entry.to_string(),
+                &entry.encoded_entry.to_string(),
                 &entry.payload().unwrap().to_string(),
             );
 

@@ -8,8 +8,7 @@ use bamboo_rs_core_ed25519_yasmf::entry::is_lipmaa_required;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::entry::decode::decode_entry;
 use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
-use p2panda_rs::entry::{EncodedEntry, Entry, LogId, SeqNum};
-use p2panda_rs::hash::Hash;
+use p2panda_rs::entry::{EncodedEntry, LogId, SeqNum};
 use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::plain::PlainOperation;
 use p2panda_rs::operation::traits::AsOperation;
@@ -238,14 +237,14 @@ pub async fn publish<S: EntryStore + OperationStore + LogStore>(
         None => None,
     };
 
-    let skiplink_params: Option<(Entry, Hash)> = skiplink.map(|entry| {
+    let skiplink_params = skiplink.map(|entry| {
         let hash = entry.hash();
-        (entry.into(), hash)
+        (entry, hash)
     });
 
-    let backlink_params: Option<(Entry, Hash)> = backlink.map(|entry| {
+    let backlink_params = backlink.map(|entry| {
         let hash = entry.hash();
-        (entry.into(), hash)
+        (entry, hash)
     });
 
     // Perform validation of the entry and it's operation.
@@ -561,7 +560,7 @@ mod tests {
         let result = publish(
             &store,
             &schema,
-            &next_entry.clone().into(),
+            &next_entry.encoded_entry,
             &decode_operation(operation).unwrap(),
             operation,
         )

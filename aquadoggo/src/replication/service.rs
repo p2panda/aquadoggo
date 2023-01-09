@@ -7,7 +7,6 @@ use anyhow::{anyhow, Result};
 use bamboo_rs_core_ed25519_yasmf::verify::verify_batch;
 use log::{debug, error, trace, warn};
 use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
-use p2panda_rs::entry::EncodedEntry;
 use p2panda_rs::entry::LogId;
 use p2panda_rs::entry::SeqNum;
 use p2panda_rs::identity::PublicKey;
@@ -168,7 +167,6 @@ async fn insert_new_entries(
         // modular set of methods which can definitely be used here more cleanly. For now, we do it
         // this way.
 
-        let encoded_entry: EncodedEntry = entry.clone().into();
         let encoded_operation = entry
             .payload()
             .expect("All stored entries contain an operation");
@@ -184,7 +182,7 @@ async fn insert_new_entries(
         publish(
             &context.0.store,
             &schema,
-            &encoded_entry,
+            &entry.encoded_entry,
             &operation,
             encoded_operation,
         )

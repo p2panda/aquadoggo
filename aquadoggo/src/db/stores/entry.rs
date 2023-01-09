@@ -13,8 +13,8 @@ use p2panda_rs::storage_provider::traits::EntryStore;
 use sqlx::{query, query_as};
 
 use crate::db::models::EntryRow;
-use crate::db::types::StorageEntry;
 use crate::db::sql_store::SqlStore;
+use crate::db::types::StorageEntry;
 
 /// Implementation of `EntryStore` trait which is required when constructing a `StorageProvider`.
 ///
@@ -77,10 +77,7 @@ impl EntryStore for SqlStore {
     /// Returns a result containing the entry wrapped in an option if it was found successfully.
     /// Returns `None` if the entry was not found in storage. Errors when a fatal storage error
     /// occured.
-    async fn get_entry(
-        &self,
-        hash: &Hash,
-    ) -> Result<Option<StorageEntry>, EntryStorageError> {
+    async fn get_entry(&self, hash: &Hash) -> Result<Option<StorageEntry>, EntryStorageError> {
         let entry_row = query_as::<_, EntryRow>(
             "
             SELECT
@@ -321,7 +318,7 @@ impl EntryStore for SqlStore {
 #[cfg(test)]
 mod tests {
     use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
-    use p2panda_rs::entry::{EncodedEntry, Entry, LogId, SeqNum};
+    use p2panda_rs::entry::{EncodedEntry, Entry, EntryBuilder, LogId, SeqNum};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::EncodedOperation;
@@ -369,14 +366,7 @@ mod tests {
                 encoded_operation,
                 retrieved_entry.payload().unwrap().to_owned()
             );
-
-            // Convert the retrieved entry back into the types we inserted.
-            let retreved_entry: Entry = retrieved_entry.clone().into();
-            let retreved_encoded_entry: EncodedEntry = retrieved_entry.into();
-
-            // The types should match.
-            assert_eq!(retreved_entry, entry);
-            assert_eq!(retreved_encoded_entry, encoded_entry);
+            assert_eq!(retrieved_entry.encoded_entry, encoded_entry);
         });
     }
 
@@ -388,25 +378,30 @@ mod tests {
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
             // The public key of the author who published the entries in the database
-            let public_key = db.test_data.key_pairs[0].public_key();
+            let key_pair = &db.test_data.key_pairs[0];
 
             // We get back the first entry.
             let first_entry = db
                 .store
-                .get_entry_at_seq_num(&public_key, &LogId::default(), &SeqNum::new(1).unwrap())
+                .get_entry_at_seq_num(
+                    &key_pair.public_key(),
+                    &LogId::default(),
+                    &SeqNum::new(1).unwrap(),
+                )
                 .await
                 .expect("Get entry")
+                .unwrap();
+
+            // Construct a new entry from it with the same values.
+            let entry = EntryBuilder::new()
+                .sign(first_entry.payload().unwrap(), key_pair)
                 .unwrap();
 
             // We try to publish it again which should error as entry hashes
             // have a unique constraint.
             let result = db
                 .store
-                .insert_entry(
-                    &first_entry.clone().into(),
-                    &first_entry.clone().into(),
-                    first_entry.payload(),
-                )
+                .insert_entry(&entry, &first_entry.encoded_entry, first_entry.payload())
                 .await;
 
             assert!(result.is_err());
@@ -580,12 +575,7 @@ mod tests {
 
                 // The we retrieve them by their hash.
                 let entry_hash = entry.hash();
-                let entry_by_hash = db
-                    .store
-                    .get_entry(&entry_hash)
-                    .await
-                    .unwrap()
-                    .unwrap();
+                let entry_by_hash = db.store.get_entry(&entry_hash).await.unwrap().unwrap();
 
                 // The entries should match.
                 assert_eq!(entry, entry_by_hash)
@@ -594,11 +584,7 @@ mod tests {
             // If we try to retrieve with a hash of an entry not in the db then
             // we should get none back.
             let entry_hash_not_in_db = random_hash();
-            let entry = db
-                .store
-                .get_entry(&entry_hash_not_in_db)
-                .await
-                .unwrap();
+            let entry = db.store.get_entry(&entry_hash_not_in_db).await.unwrap();
             assert!(entry.is_none());
         });
     }
