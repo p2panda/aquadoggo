@@ -9,7 +9,7 @@
 <div align="center">
   <!-- CI status -->
   <a href="https://github.com/p2panda/aquadoggo/actions">
-    <img src="https://img.shields.io/github/workflow/status/p2panda/aquadoggo/tests?style=flat-square" alt="CI Status" />
+    <img src="https://img.shields.io/github/actions/workflow/status/p2panda/aquadoggo/tests.yml?branch=main&style=flat-square" alt="CI Status" />
   </a>
   <!-- Codecov report -->
   <a href="https://app.codecov.io/gh/p2panda/aquadoggo/">
