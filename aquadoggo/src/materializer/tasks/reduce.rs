@@ -3,6 +3,7 @@
 use std::convert::TryFrom;
 
 use log::{debug, info};
+use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::{Document, DocumentBuilder, DocumentId, DocumentViewId};
 use p2panda_rs::operation::traits::{AsOperation, WithPublicKey};
 use p2panda_rs::operation::OperationId;
@@ -148,11 +149,15 @@ async fn reduce_document_view<O: AsOperation + WithId<OperationId> + WithPublicK
     // Insert the new document view into the database
     context
         .store
-        .insert_document_view(document.view().unwrap(), document.schema())
+        .insert_document_view(
+            &document.view().unwrap(),
+            document.id(),
+            document.schema_id(),
+        )
         .await
         .map_err(|err| TaskError::Critical(err.to_string()))?;
 
-    info!("Stored {} view {}", document, document.view_id());
+    info!("Stored {} document view {}", document, document.view_id());
 
     // Return the new view id to be used in the resulting dependency task
     Ok(Some(document.view_id().to_owned()))
@@ -213,10 +218,12 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
 mod tests {
     use std::convert::TryFrom;
 
-    use p2panda_rs::document::{Document, DocumentId, DocumentViewId};
+    use p2panda_rs::document::materialization::build_graph;
+    use p2panda_rs::document::traits::AsDocument;
+    use p2panda_rs::document::{Document, DocumentBuilder, DocumentId, DocumentViewId};
     use p2panda_rs::operation::OperationValue;
     use p2panda_rs::schema::Schema;
-    use p2panda_rs::storage_provider::traits::OperationStore;
+    use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
     use p2panda_rs::test_utils::constants;
     use p2panda_rs::test_utils::fixtures::{
         operation, operation_fields, random_document_id, random_document_view_id, schema,
@@ -251,14 +258,10 @@ mod tests {
             }
 
             for document_id in &db.test_data.documents {
-                let document_view = db
-                    .store
-                    .get_latest_document_view(document_id)
-                    .await
-                    .unwrap();
+                let document = db.store.get_document(document_id).await.unwrap();
 
                 assert_eq!(
-                    document_view.unwrap().get("username").unwrap().value(),
+                    document.unwrap().get("username").unwrap(),
                     &OperationValue::String("PANDA".to_string())
                 )
             }
@@ -312,13 +315,9 @@ mod tests {
             assert!(reduce_task(db.context.clone(), input).await.is_ok());
 
             // The new view should exist and the document should refer to it.
-            let document_view = db
-                .store
-                .get_latest_document_view(document_id)
-                .await
-                .unwrap();
+            let document = db.store.get_document(document_id).await.unwrap();
             assert_eq!(
-                document_view.unwrap().get("username").unwrap().value(),
+                document.unwrap().get("username").unwrap(),
                 &OperationValue::String("meeeeeee".to_string())
             )
         })
@@ -331,44 +330,71 @@ mod tests {
         runner: TestDatabaseRunner,
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
+            // The document id for a document who's operations are in the database but it hasn't been
+            // materialised yet.
+            let document_id = &db.test_data.documents[0];
+
+            // Get the operations.
             let document_operations = db
                 .store
-                .get_operations_by_document_id(&db.test_data.documents[0])
+                .get_operations_by_document_id(document_id)
                 .await
                 .unwrap();
 
-            let document = Document::try_from(&document_operations).unwrap();
-            let mut sorted_document_operations = document.operations().clone();
+            // Sort the operations into their ready for reducing order.
+            let document_builder = DocumentBuilder::from(&document_operations);
+            let sorted_document_operations = build_graph(&document_builder.operations())
+                .unwrap()
+                .sort()
+                .unwrap()
+                .sorted();
 
-            let document_view_id: DocumentViewId =
-                sorted_document_operations.pop().unwrap().0.into();
-
-            let input = TaskInput::new(None, Some(document_view_id.clone()));
-
+            // Reduce document to it's current view and insert into database.
+            let input = TaskInput::new(Some(document_id.clone()), None);
             assert!(reduce_task(db.context.clone(), input).await.is_ok());
 
-            let document_view = db
+            // We should be able to query this specific view now and receive the expected state.
+            let document_view_id: DocumentViewId =
+                sorted_document_operations.get(1).unwrap().clone().0.into();
+            let document = db
                 .store
-                .get_document_view_by_id(&document_view_id)
+                .get_document_by_view_id(&document_view_id)
                 .await
                 .unwrap();
 
             assert_eq!(
-                document_view.unwrap().get("username").unwrap().value(),
+                document.unwrap().get("username").unwrap(),
                 &OperationValue::String("PANDA".to_string())
             );
 
-            // We didn't reduce this document_view_id so it shouldn't exist in the db.
+            // We didn't reduce this document_view so it shouldn't exist in the db.
             let document_view_id: DocumentViewId =
-                sorted_document_operations.pop().unwrap().0.into();
+                sorted_document_operations.get(0).unwrap().clone().0.into();
 
-            let document_view = db
+            let document = db
                 .store
-                .get_document_view_by_id(&document_view_id)
+                .get_document_by_view_id(&document_view_id)
                 .await
                 .unwrap();
 
-            assert!(document_view.is_none());
+            assert!(document.is_none());
+
+            // But now if we do request an earlier view is materialised for this document...
+            let input = TaskInput::new(None, Some(document_view_id.clone()));
+            assert!(reduce_task(db.context.clone(), input).await.is_ok());
+
+            // Then we should now be able to query it and revieve the expected value.
+            let document = db
+                .store
+                .get_document_by_view_id(&document_view_id)
+                .await
+                .unwrap();
+
+            assert!(document.is_some());
+            assert_eq!(
+                document.unwrap().get("username").unwrap(),
+                &OperationValue::String("bubu".to_string())
+            );
         });
     }
 
@@ -386,12 +412,8 @@ mod tests {
             }
 
             for document_id in &db.test_data.documents {
-                let document_view = db
-                    .store
-                    .get_latest_document_view(document_id)
-                    .await
-                    .unwrap();
-                assert!(document_view.is_none())
+                let document = db.store.get_document(document_id).await.unwrap();
+                assert!(document.is_none())
             }
 
             let document_operations = db

@@ -138,13 +138,15 @@ pub async fn materializer_service(
 mod tests {
     use std::time::Duration;
 
+    use p2panda_rs::document::traits::AsDocument;
     use p2panda_rs::entry::traits::AsEncodedEntry;
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::{Operation, OperationId, OperationValue};
     use p2panda_rs::schema::FieldType;
+    use p2panda_rs::storage_provider::traits::DocumentStore;
     use p2panda_rs::test_utils::constants::SCHEMA_ID;
-    use p2panda_rs::test_utils::memory_store::helpers::send_to_store;
     use p2panda_rs::test_utils::fixtures::{key_pair, operation, operation_fields, schema};
+    use p2panda_rs::test_utils::memory_store::helpers::send_to_store;
     use rstest::rstest;
     use tokio::sync::{broadcast, oneshot};
     use tokio::task;
@@ -174,12 +176,7 @@ mod tests {
             let first_operation_id: OperationId = document_id.to_string().parse().unwrap();
 
             // We expect that the database does not contain any materialized document yet
-            assert!(db
-                .store
-                .get_latest_document_view(document_id)
-                .await
-                .unwrap()
-                .is_none());
+            assert!(db.store.get_document(document_id).await.unwrap().is_none());
 
             // Prepare arguments for service
             let context = Context::new(
@@ -221,13 +218,13 @@ mod tests {
             // Check database for materialized documents
             let document = db
                 .store
-                .get_latest_document_view(document_id)
+                .get_document(document_id)
                 .await
                 .unwrap()
                 .expect("We expect that the document is `Some`");
             assert_eq!(document.id().to_string(), document_id.to_string());
             assert_eq!(
-                document.fields().get("name").unwrap().value().to_owned(),
+                document.get("name").unwrap().to_owned(),
                 OperationValue::String("panda".into())
             );
         });
@@ -291,13 +288,13 @@ mod tests {
             // Check database for materialized documents
             let document = db
                 .store
-                .get_latest_document_view(document_id)
+                .get_document(document_id)
                 .await
                 .unwrap()
                 .expect("We expect that the document is `Some`");
             assert_eq!(document.id().to_string(), document_id.to_string());
             assert_eq!(
-                document.fields().get("name").unwrap().value().to_owned(),
+                document.get("name").unwrap().to_owned(),
                 OperationValue::String("panda".into())
             );
         });
@@ -390,13 +387,14 @@ mod tests {
             // Check database for materialized documents
             let document = db
                 .store
-                .get_latest_document_view(document_id)
+                .get_document(document_id)
                 .await
                 .unwrap()
                 .expect("We expect that the document is `Some`");
-            assert_eq!(document.id(), &entry_encoded.hash().into());
+
+            assert_eq!(document.id(), document_id);
             assert_eq!(
-                document.fields().get("name").unwrap().value().to_owned(),
+                document.get("name").unwrap().to_owned(),
                 OperationValue::String("panda123".into())
             );
         });
@@ -464,7 +462,7 @@ mod tests {
             // Check database for materialized documents
             let document = db
                 .store
-                .get_latest_document_view(&entry_encoded.hash().into())
+                .get_document(&entry_encoded.hash().into())
                 .await
                 .unwrap()
                 .expect("We expect that the document is `Some`");

@@ -158,8 +158,8 @@ impl CursorType for scalars::SeqNumScalar {
 mod tests {
     use async_graphql::{EmptyMutation, EmptySubscription, Request, Schema};
     use p2panda_rs::hash::Hash;
-    use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
     use p2panda_rs::test_utils::fixtures::random_hash;
+    use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
     use rstest::rstest;
 
     use crate::db::stores::test_utils::{

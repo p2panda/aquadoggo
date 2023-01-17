@@ -9,10 +9,11 @@ use async_recursion::async_recursion;
 use async_trait::async_trait;
 use futures::future;
 use log::{debug, error, info};
+use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::storage_provider::traits::OperationStore;
+use p2panda_rs::storage_provider::traits::DocumentStore;
 use p2panda_rs::Human;
 
 use crate::db::sql_store::SqlStore;
@@ -135,14 +136,26 @@ impl DynamicQuery {
 
         // Retrieve all documents for schema from storage.
         let documents = store
-            .get_latest_document_views_by_schema(schema_id)
+            .get_documents_by_schema(schema_id)
             .await
             .map_err(|err| ServerError::new(err.to_string(), None))?;
 
         // Assemble views async
-        let documents_graphql_values = documents.into_iter().map(|view| async move {
+        let documents_graphql_values = documents.into_iter().map(|document| async move {
             let selected_fields = ctx.field().selection_set().collect();
-            self.document_response(view, ctx, selected_fields).await
+            match document.view() {
+                Some(view) => {
+                    self.document_response(
+                        document.id(),
+                        &view,
+                        document.schema_id(),
+                        ctx,
+                        selected_fields,
+                    )
+                    .await
+                }
+                None => Ok(Value::Null),
+            }
         });
 
         Ok(Some(Value::List(
@@ -168,13 +181,13 @@ impl DynamicQuery {
         debug!("Fetching {} from store", document_id.display());
 
         let store = ctx.data_unchecked::<SqlStore>();
-        let view = store.get_latest_document_view(&document_id).await.unwrap();
-        match view {
-            Some(view) => {
+        let document = store.get_document(&document_id).await.unwrap();
+        match document {
+            Some(document) => {
                 // Validate the document's schema if the `validate_schema` argument is set.
                 if let Some(expected_schema_id) = validate_schema {
                     validate_view_matches_schema(
-                        view.id(),
+                        document.view_id(),
                         expected_schema_id,
                         store,
                         Some(ctx.item.pos),
@@ -182,7 +195,15 @@ impl DynamicQuery {
                     .await?;
                 }
 
-                self.document_response(view, ctx, selected_fields).await
+                // We can unwrap the document view here as documents returned from this store method all contain views.
+                self.document_response(
+                    document.id(),
+                    &document.view().unwrap(),
+                    document.schema_id(),
+                    ctx,
+                    selected_fields,
+                )
+                .await
             }
             None => {
                 error!("No view found for document {}", document_id.as_str());
@@ -191,7 +212,7 @@ impl DynamicQuery {
         }
     }
 
-    /// Fetches the given document view id from the store and returns it as a GraphQL value.
+    /// Fetches a document from the store by view id and returns it as a GraphQL value.
     ///
     /// Recurses into relations when those are selected in `selected_fields`.
     ///
@@ -208,23 +229,32 @@ impl DynamicQuery {
         debug!("Fetching {} from store", document_view_id.display());
 
         let store = ctx.data_unchecked::<SqlStore>();
-        let view = store
-            .get_document_view_by_id(&document_view_id)
+        let document = store
+            .get_document_by_view_id(&document_view_id)
             .await
+            // @TODO: Not sure why it's ok to unwrap here, needs checking and comment adding.
             .unwrap();
-        match view {
-            Some(view) => {
+        match document {
+            Some(document) => {
                 // Validate the document's schema if the `validate_schema` argument is set.
                 if let Some(expected_schema_id) = validate_schema {
                     validate_view_matches_schema(
-                        view.id(),
+                        document.view_id(),
                         expected_schema_id,
                         store,
                         Some(ctx.item.pos),
                     )
                     .await?;
                 }
-                self.document_response(view, ctx, selected_fields).await
+                // We can unwrap the document view here as documents returned from this store method all contain views.
+                self.document_response(
+                    document.id(),
+                    &document.view().unwrap(),
+                    document.schema_id(),
+                    ctx,
+                    selected_fields,
+                )
+                .await
             }
             None => Ok(Value::Null),
         }
@@ -236,7 +266,9 @@ impl DynamicQuery {
     #[async_recursion]
     async fn document_response(
         &self,
-        view: DocumentView,
+        document_id: &DocumentId,
+        document_view: &DocumentView,
+        schema_id: &SchemaId,
         ctx: &Context<'_>,
         selected_fields: Vec<SelectionField<'async_recursion>>,
     ) -> ServerResult<Value> {
@@ -248,48 +280,30 @@ impl DynamicQuery {
 
             match field.name() {
                 "__typename" => {
-                    let store = ctx.data_unchecked::<SqlStore>();
-                    let schema_id = store
-                        .get_schema_by_document_view(view.id())
-                        .await
-                        .map_err(|err| ServerError::new(err.to_string(), None))?
-                        .unwrap()
-                        .to_string();
-                    document_fields.insert(response_key, Value::String(schema_id));
+                    document_fields.insert(response_key, Value::String(schema_id.to_string()));
                 }
                 dynamic_types::document::META_FIELD => {
-                    let store = ctx.data_unchecked::<SqlStore>();
-                    let document_id = store
-                        .get_document_id_by_operation_id(view.id().graph_tips().first().unwrap())
-                        .await
-                        .map_err(|err| ServerError::new(err.to_string(), None))?
-                        .unwrap();
                     document_fields.insert(
                         response_key,
-                        DocumentMeta::resolve(field, Some(&document_id), Some(view.id()))?,
+                        DocumentMeta::resolve(field, Some(&document_id), Some(document_view.id()))?,
                     );
                 }
                 dynamic_types::document::FIELDS_FIELD => {
                     let subselection = field.selection_set().collect();
                     document_fields.insert(
                         response_key,
-                        self.document_fields_response(view.clone(), ctx, subselection)
+                        self.document_fields_response(document_view, schema_id, ctx, subselection)
                             .await?,
                     );
                 }
-                _ => {
-                    let store = ctx.data_unchecked::<SqlStore>();
-                    let schema_id = store
-                        .get_schema_by_document_view(view.id())
-                        .await
-                        .map_err(|err| ServerError::new(err.to_string(), None))?
-                        .unwrap()
-                        .to_string();
-                    Err(ServerError::new(
-                        format!("Field '{}' does not exist on {}", field.name(), schema_id,),
-                        None,
-                    ))?
-                }
+                _ => Err(ServerError::new(
+                    format!(
+                        "Field '{}' does not exist on {}",
+                        field.name(),
+                        schema_id.to_string()
+                    ),
+                    None,
+                ))?,
             }
         }
 
@@ -302,17 +316,11 @@ impl DynamicQuery {
     #[async_recursion]
     async fn document_fields_response(
         &self,
-        view: DocumentView,
+        document_view: &DocumentView,
+        schema_id: &SchemaId,
         ctx: &Context<'_>,
         selected_fields: Vec<SelectionField<'async_recursion>>,
     ) -> ServerResult<Value> {
-        let store = ctx.data_unchecked::<SqlStore>();
-        let schema_id = store
-            .get_schema_by_document_view(view.id())
-            .await
-            .map_err(|err| ServerError::new(err.to_string(), None))?
-            .unwrap();
-
         let schema_provider = ctx.data_unchecked::<SchemaProvider>();
         // Unwrap because this schema id comes from the store.
         let schema = schema_provider.get(&schema_id).await.unwrap();
@@ -347,7 +355,7 @@ impl DynamicQuery {
             }
             // Retrieve the current field's value from the document view. Unwrap because we have
             // checked that this field exists on the schema.
-            let document_view_value = view.get(selected_field.name()).unwrap();
+            let document_view_value = document_view.get(selected_field.name()).unwrap();
 
             // Collect any further fields that have been selected on the current field.
             let next_selection: Vec<SelectionField<'async_recursion>> =

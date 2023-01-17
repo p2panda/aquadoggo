@@ -2,10 +2,12 @@
 
 use std::convert::{TryFrom, TryInto};
 
+use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::schema::system::{SchemaFieldView, SchemaView};
 use p2panda_rs::schema::{Schema, SchemaId};
 use p2panda_rs::storage_provider::error::OperationStorageError;
+use p2panda_rs::storage_provider::traits::DocumentStore;
 use sqlx::query_scalar;
 
 use crate::db::errors::SchemaStoreError;
@@ -26,8 +28,10 @@ impl SqlStore {
         id: &DocumentViewId,
     ) -> Result<Option<Schema>, SchemaStoreError> {
         // Fetch the document view for the schema
-        let schema_view: SchemaView = match self.get_document_view_by_id(id).await? {
-            Some(document_view) => document_view.try_into()?,
+        let schema_view: SchemaView = match self.get_document_by_view_id(id).await? {
+            // We can unwrap the document view here as documents returned from this store method
+            // all contain views.
+            Some(document) => document.view().unwrap().try_into()?,
             None => return Ok(None),
         };
 
@@ -36,8 +40,10 @@ impl SqlStore {
         for field_id in schema_view.fields().iter() {
             // Fetch schema field document views
             let scheme_field_view: SchemaFieldView =
-                match self.get_document_view_by_id(field_id).await? {
-                    Some(document_view) => document_view.try_into()?,
+                match self.get_document_by_view_id(field_id).await? {
+                    // We can unwrap the document view here as documents returned from this store
+                    // method all contain views.
+                    Some(document) => document.view().unwrap().try_into()?,
                     None => return Ok(None),
                 };
 
@@ -59,17 +65,19 @@ impl SqlStore {
     /// Silently ignores incomplete or broken schema definitions.
     pub async fn get_all_schema(&self) -> Result<Vec<Schema>, SchemaStoreError> {
         let schema_views: Vec<SchemaView> = self
-            .get_latest_document_views_by_schema(&SchemaId::new("schema_definition_v1")?)
+            .get_documents_by_schema(&SchemaId::new("schema_definition_v1")?)
             .await?
             .into_iter()
-            .filter_map(|view| SchemaView::try_from(view).ok())
+            // We can unwrap the document view here as documents returned from this store method all contain views.
+            .filter_map(|document| SchemaView::try_from(document.view().unwrap()).ok())
             .collect();
 
         let schema_field_views: Vec<SchemaFieldView> = self
-            .get_latest_document_views_by_schema(&SchemaId::new("schema_field_definition_v1")?)
+            .get_documents_by_schema(&SchemaId::new("schema_field_definition_v1")?)
             .await?
             .into_iter()
-            .filter_map(|view| SchemaFieldView::try_from(view).ok())
+            // We can unwrap the document view here as documents returned from this store method all contain views.
+            .filter_map(|document| SchemaFieldView::try_from(document.view().unwrap()).ok())
             .collect();
 
         let mut all_schema = vec![];

@@ -5,7 +5,7 @@ use p2panda_rs::document::DocumentId;
 use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::traits::AsOperation;
-use p2panda_rs::storage_provider::traits::{EntryStore, OperationStore, LogStore};
+use p2panda_rs::storage_provider::traits::{EntryStore, LogStore, OperationStore};
 use p2panda_rs::Human;
 
 /// Verify that a claimed seq num is the next sequence number following the latest.
@@ -173,11 +173,9 @@ mod tests {
     use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::test_utils::constants::PRIVATE_KEY;
-    use p2panda_rs::test_utils::memory_store::helpers::{
-        populate_store, PopulateStoreConfig,
-    };
+    use p2panda_rs::test_utils::fixtures::{key_pair, populate_store_config, random_document_id};
+    use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
     use p2panda_rs::test_utils::memory_store::MemoryStore;
-    use p2panda_rs::test_utils::fixtures::{key_pair, random_document_id, populate_store_config};
     use rstest::rstest;
 
     use super::{

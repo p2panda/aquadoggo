@@ -115,11 +115,7 @@ pub struct GraphQLSchemaManager {
 
 impl GraphQLSchemaManager {
     /// Returns a new instance of `GraphQLSchemaManager`.
-    pub async fn new(
-        store: SqlStore,
-        tx: ServiceSender,
-        schema_provider: SchemaProvider,
-    ) -> Self {
+    pub async fn new(store: SqlStore, tx: ServiceSender, schema_provider: SchemaProvider) -> Self {
         let schemas = Arc::new(Mutex::new(Vec::new()));
         let shared = GraphQLSharedData {
             store,

@@ -566,17 +566,6 @@ mod tests {
                 .build_to_view_id(Some(update_operation.into()))
                 .unwrap();
 
-            // Inserting a view into the store when the document doesn't exist should fail.
-            let result = db
-                .store
-                .insert_document_view(
-                    &document_at_view_1.view().unwrap(),
-                    document_at_view_1.id(),
-                    document_at_view_1.schema_id(),
-                )
-                .await;
-            assert!(result.is_err());
-
             // Insert the document into the store
             let result = db.store.insert_document(&document_at_view_2).await;
             assert!(result.is_ok());
