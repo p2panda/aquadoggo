@@ -7,7 +7,7 @@ mod operation;
 mod task;
 
 pub use self::log::LogRow;
+pub use document::{DocumentRow, DocumentViewFieldRow};
 pub use entry::EntryRow;
 pub use operation::{OperationFieldsJoinedRow, OperationRow};
 pub use task::TaskRow;
-pub use document::DocumentViewFieldRow;
