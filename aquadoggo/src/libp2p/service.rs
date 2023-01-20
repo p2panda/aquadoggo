@@ -121,25 +121,38 @@ pub async fn libp2p_service(
                                 mdns::Event::Discovered(list) => {
                                     for (peer, _) in list {
                                         swarm.behaviour_mut().floodsub.add_node_to_partial_view(peer);
+                                        info!("Peer discovered {peer:?}");
                                     };
                                 }
                                 mdns::Event::Expired(list) => {
                                     for (peer, _) in list {
                                         if !swarm.behaviour().mdns.has_node(&peer) {
                                             swarm.behaviour_mut().floodsub.remove_node_from_partial_view(&peer);
+                                            info!("Peer expired {peer:?}");
                                         }
                                     }
                                 }
                             }
-                        }
-                        _ => {}
+                        },
+                        SwarmEvent::Behaviour(MyBehaviourEvent::Floodsub(FloodsubEvent::Unsubscribed { peer_id, topic })) => info!("Unsubscribed: {peer_id:?} topic: {topic:?}"),
+                        SwarmEvent::Behaviour(MyBehaviourEvent::Floodsub(FloodsubEvent::Subscribed { peer_id, topic })) => info!("Subscribed: {peer_id:?} topic: {topic:?}"),
+                        SwarmEvent::ConnectionEstablished { peer_id, endpoint, num_established, concurrent_dial_errors } => info!("ConnectionEstablished: {peer_id:?}"),
+                        SwarmEvent::ConnectionClosed { peer_id, endpoint, num_established, cause } => info!("ConnectionClosed: {peer_id:?}"),
+                        SwarmEvent::IncomingConnection { local_addr, send_back_addr } => info!("IncomingConnection: {local_addr:?}"),
+                        SwarmEvent::IncomingConnectionError { local_addr, send_back_addr, error } => info!("IncomingConnectionError: {local_addr:?}"),
+                        SwarmEvent::OutgoingConnectionError { peer_id, error } => info!("OutgoingConnectionError: {peer_id:?}"),
+                        SwarmEvent::BannedPeer { peer_id, endpoint } => info!("BannedPeer: {peer_id:?}"),
+                        SwarmEvent::ExpiredListenAddr { listener_id, address } => info!("ExpiredListenAddr: {listener_id:?}"),
+                        SwarmEvent::ListenerClosed { listener_id, addresses, reason } => info!("ListenerClosed: {listener_id:?}"),
+                        SwarmEvent::ListenerError { listener_id, error } => info!("ListenerError: {listener_id:?}"),
+                        SwarmEvent::Dialing(peer_id) => info!("Dialing: {peer_id:?}"),
                     }
                 }
             }
         }
     });
 
-    debug!("libp2p service is ready");
+    info!("libp2p service is ready");
     if tx_ready.send(()).is_err() {
         warn!("No subscriber informed about libp2p service being ready");
     };
