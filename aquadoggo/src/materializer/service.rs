@@ -153,14 +153,14 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::{key_pair, operation, operation_fields, schema};
     use rstest::rstest;
     use tokio::sync::{broadcast, oneshot};
-    use tokio::{select, task};
+    use tokio::task;
 
     use crate::bus::ServiceStatusMessage;
     use crate::context::Context;
     use crate::db::stores::test_utils::{
         doggo_fields, doggo_schema, test_db, TestDatabase, TestDatabaseRunner,
     };
-    use crate::materializer::{Task, TaskInput, TaskStatus};
+    use crate::materializer::{Task, TaskInput};
     use crate::schema::SchemaProvider;
     use crate::Configuration;
 
