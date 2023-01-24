@@ -22,9 +22,9 @@ use serial_test::serial;
 use crate::{Configuration, Node};
 
 #[tokio::test]
-// Note: This and more tests in this file use the underlying static schema provider which is a
-// static mutable data store, accessible across all test runner threads in parallel mode. To
-// prevent overwriting data across threads we have to run this test in serial.
+// Note: This test uses the underlying static schema provider which is a static mutable data store,
+// accessible across all test runner threads in parallel mode. To prevent overwriting data across
+// threads we have to run this test in serial.
 //
 // Read more: https://users.rust-lang.org/t/static-mutables-in-tests/49321
 #[serial]
