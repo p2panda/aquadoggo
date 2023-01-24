@@ -336,7 +336,7 @@ mod tests {
     use p2panda_rs::operation::traits::AsOperation;
     use p2panda_rs::operation::{Operation, OperationId};
     use p2panda_rs::storage_provider::traits::StorageProvider;
-    use p2panda_rs::test_utils::constants::{self};
+    use p2panda_rs::test_utils::constants;
     use p2panda_rs::test_utils::fixtures::{
         operation, random_document_view_id, random_operation_id,
     };
