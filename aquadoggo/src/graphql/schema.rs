@@ -206,11 +206,18 @@ mod test {
     use p2panda_rs::test_utils::fixtures::key_pair;
     use rstest::rstest;
     use serde_json::{json, Value};
+    use serial_test::serial;
 
     use crate::db::stores::test_utils::{add_schema, test_db, TestDatabase, TestDatabaseRunner};
     use crate::test_helpers::graphql_test_client;
 
     #[rstest]
+    // Note: This and more tests in this file use the underlying static schema provider which is a
+    // static mutable data store, accessible across all test runner threads in parallel mode. To
+    // prevent overwriting data across threads we have to run this test in serial.
+    //
+    // Read more: https://users.rust-lang.org/t/static-mutables-in-tests/49321
+    #[serial]
     fn schema_updates(#[from(test_db)] runner: TestDatabaseRunner) {
         runner.with_db_teardown(move |mut db: TestDatabase| async move {
             // Create test client in the beginning so it is initialised with just the system
