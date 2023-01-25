@@ -106,6 +106,7 @@ mod tests {
     };
     use rstest::{fixture, rstest};
     use serde_json::json;
+    use serial_test::serial;
     use tokio::sync::broadcast;
 
     use crate::bus::ServiceMessage;
@@ -198,6 +199,12 @@ mod tests {
     }
 
     #[rstest]
+    // Note: This and more tests in this file use the underlying static schema provider which is a
+    // static mutable data store, accessible across all test runner threads in parallel mode. To
+    // prevent overwriting data across threads we have to run this test in serial.
+    //
+    // Read more: https://users.rust-lang.org/t/static-mutables-in-tests/49321
+    #[serial]
     fn publish_entry(
         #[from(test_db)]
         #[with(0, 0, 0, false, test_schema())]
@@ -226,6 +233,7 @@ mod tests {
     }
 
     #[rstest]
+    #[serial] // See note above on why we execute this test in series
     fn sends_message_on_communication_bus(
         #[from(test_db)]
         #[with(0, 0, 0, false, test_schema())]
@@ -253,6 +261,7 @@ mod tests {
     }
 
     #[rstest]
+    #[serial] // See note above on why we execute this test in series
     fn post_gql_mutation(
         #[from(test_db)]
         #[with(0, 0, 0, false, test_schema())]
@@ -291,6 +300,7 @@ mod tests {
     }
 
     #[rstest]
+    #[serial] // See note above on why we execute this test in series
     #[case::invalid_entry_bytes(
         "AB01",
         &OPERATION_ENCODED,
@@ -507,6 +517,7 @@ mod tests {
     }
 
     #[rstest]
+    #[serial] // See note above on why we execute this test in series
     #[case::backlink_and_skiplink_not_in_db(
         &entry_signed_encoded_unvalidated(
             8,
@@ -637,6 +648,7 @@ mod tests {
     }
 
     #[rstest]
+    #[serial] // See note above on why we execute this test in series
     fn publish_many_entries(
         #[from(test_db)]
         #[with(0, 0, 0, false, doggo_schema())]
@@ -726,6 +738,7 @@ mod tests {
     }
 
     #[rstest]
+    #[serial] // See note above on why we execute this test in series
     fn duplicate_publishing_of_entries(
         #[from(test_db)]
         #[with(1, 1, 1, false, doggo_schema())]
@@ -770,6 +783,7 @@ mod tests {
     }
 
     #[rstest]
+    #[serial] // See note above on why we execute this test in series
     fn publish_unsupported_schema(
         #[from(encoded_entry)] entry_with_unsupported_schema: EncodedEntry,
         #[from(encoded_operation)] operation_with_unsupported_schema: EncodedOperation,
