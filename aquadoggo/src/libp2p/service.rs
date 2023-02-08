@@ -3,17 +3,31 @@
 use anyhow::Result;
 use futures::StreamExt;
 use libp2p::core::muxing::StreamMuxerBox;
-use libp2p::quic;
+use libp2p::core::transport::Boxed;
 use libp2p::{identity, PeerId, Transport};
+use libp2p::{quic, Multiaddr};
 use log::{info, warn};
-use tokio::task;
+use tokio::task::{self, JoinHandle};
 
 use crate::bus::ServiceSender;
 use crate::context::Context;
 use crate::manager::{ServiceReadySender, Shutdown};
 
+/// Testing out using quic transport from libp2p.
+/// 
+/// This service can run as either a listener or a dialer.
+/// 
+/// First run as a listener like so:
+/// 
+/// `RUST_LOG=debug cargo run`
+/// 
+/// Then run as a dialer which attempts to dial the above listener:
+/// 
+/// `RUST_LOG=debug cargo run -- --http-port 2021 --remote-node-addresses "/ip4/127.0.0.1/udp/12345/quic-v1"`
+/// 
+/// Actually, nothing happens right now.... not sure why yet ;-p
 pub async fn libp2p_service(
-    _context: Context,
+    context: Context,
     shutdown: Shutdown,
     tx: ServiceSender,
     tx_ready: ServiceReadySender,
@@ -23,29 +37,50 @@ pub async fn libp2p_service(
 
     // Create a random PeerId
     let keypair = identity::Keypair::generate_ed25519();
-    let peer_id = PeerId::from(keypair.public());
-    info!("Local peer id: {peer_id:?}");
+    info!("Peer id: {:?}", PeerId::from(keypair.public()));
 
-    // Create a quic transport.
-    let quic_config = quic::Config::new(&keypair);
-    let mut quic_transport = quic::tokio::Transport::new(quic_config)
-        // Not sure why we need to do this convertion to a StreamMuxerBox here, but I found that
-        // it's necessary. Maybe it's because quic handles multiplexing for us already.
-        .map(|(p, c), _| (p, StreamMuxerBox::new(c)))
-        .boxed();
+    // Init quic transport
+    let quic_transport = create_quic_transport(keypair);
 
-    // The address we will listen on.
-    let addr = "/ip4/127.0.0.1/udp/12345/quic-v1"
-        .parse()
-        .expect("address should be valid");
+    // If a remote peer multiaddress is given using the `--remote-node-addresses` flag then dial
+    // it otherwise start listening for connections.  
+    let handle = match context.config.replication.remote_peers.get(0) {
+        Some(peer) => {
+            let addr: Multiaddr = peer.parse().expect("address should be valid");
+            dial(&addr, quic_transport)
+        }
+        None => {
+            let addr: Multiaddr = "/ip4/127.0.0.1/udp/12345/quic-v1"
+                .parse()
+                .expect("address should be valid");
+            listen(&addr, quic_transport)
+        }
+    };
 
+    info!("libp2p service is ready");
+    if tx_ready.send(()).is_err() {
+        warn!("No subscriber informed about libp2p service being ready");
+    };
+
+    // Wait until we received the application shutdown signal or handle closed
+    tokio::select! {
+        _ = handle => (),
+        _ = shutdown => {
+        },
+    }
+
+    Ok(())
+}
+
+fn listen(addr: &Multiaddr, mut transport: Boxed<(PeerId, StreamMuxerBox)>) -> JoinHandle<()> {
     // Start listening.
-    quic_transport.listen_on(addr).expect("listen error.");
+    transport.listen_on(addr.clone()).expect("listen error.");
+    info!("Listening for connections....");
 
     // In a seperate thread we will log stream events.
-    let handle = task::spawn(async move {
+    task::spawn(async move {
         loop {
-            match quic_transport.next().await.unwrap() {
+            match transport.next().await.unwrap() {
                 libp2p::core::transport::TransportEvent::NewAddress {
                     listener_id,
                     listen_addr,
@@ -72,19 +107,29 @@ pub async fn libp2p_service(
                 }
             }
         }
-    });
+    })
+}
 
-    info!("libp2p service is ready");
-    if tx_ready.send(()).is_err() {
-        warn!("No subscriber informed about libp2p service being ready");
-    };
+fn dial(addr: &Multiaddr, mut transport: Boxed<(PeerId, StreamMuxerBox)>) -> JoinHandle<()> {
+    let addr = addr.clone();
+    task::spawn(async move {
+        info!("Dialing listener...");
+        // Dial the listener from a new quic transport.
+        let (peer_id, _connection) = transport
+            .dial(addr)
+            .expect("Can dial peer")
+            .await
+            .expect("Connection ok");
+        info!("Connected to: {peer_id:?}");
+    })
+}
 
-    // Wait until we received the application shutdown signal or handle closed
-    tokio::select! {
-        _ = handle => (),
-        _ = shutdown => {
-        },
-    }
-
-    Ok(())
+fn create_quic_transport(keypair: identity::Keypair) -> Boxed<(PeerId, StreamMuxerBox)> {
+    // Create a quic transport.
+    let quic_config = quic::Config::new(&keypair);
+    quic::tokio::Transport::new(quic_config)
+        // Not sure why we need to do this conversion to a StreamMuxerBox here, but I found that
+        // it's necessary. Maybe it's because quic handles multiplexing for us already.
+        .map(|(p, c), _| (p, StreamMuxerBox::new(c)))
+        .boxed()
 }
