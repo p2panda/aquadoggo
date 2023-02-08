@@ -42,7 +42,7 @@
     unused_import_braces,
     unused_qualifications
 )]
-
+#![allow(clippy::uninlined_format_args)]
 mod bus;
 mod config;
 mod context;
