@@ -2,7 +2,7 @@
 
 use crate::db::Pool;
 
-/// Sql based storage that implements `StorageProvider`.
+/// SQL based persistent storage that implements `EntryStore`, `OperationStore`, `LogStore` and `DocumentStore`.
 #[derive(Clone, Debug)]
 pub struct SqlStore {
     pub(crate) pool: Pool,
