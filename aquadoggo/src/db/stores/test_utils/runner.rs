@@ -6,16 +6,16 @@ use std::sync::Arc;
 use futures::Future;
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::Schema;
-use p2panda_rs::test_utils::db::test_db::{populate_store, PopulateDatabaseConfig};
+use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
 use rstest::fixture;
 use tokio::runtime::Builder;
 use tokio::sync::Mutex;
 
 use crate::config::Configuration;
 use crate::context::Context;
-use crate::db::provider::SqlStorage;
 use crate::db::stores::test_utils::{TestData, TestDatabase};
 use crate::db::Pool;
+use crate::db::SqlStore;
 use crate::schema::SchemaProvider;
 use crate::test_helpers::{initialize_db, initialize_db_with_url};
 
@@ -59,7 +59,7 @@ where
 // We may still want to keep this "single database" runner injected through `rstest` but in any
 // case probably best to consider that in a different PR.
 pub struct TestDatabaseRunner {
-    config: PopulateDatabaseConfig,
+    config: PopulateStoreConfig,
 }
 
 impl TestDatabaseRunner {
@@ -79,7 +79,7 @@ impl TestDatabaseRunner {
         runtime.block_on(async {
             // Initialise store
             let pool = initialize_db().await;
-            let store = SqlStorage::new(pool);
+            let store = SqlStore::new(pool);
 
             // Populate the store and construct test data
             let (key_pairs, documents) = populate_store(&store, &self.config).await;
@@ -144,7 +144,7 @@ impl TestDatabaseManager {
         let pool = initialize_db_with_url(url).await;
 
         // Initialise test store using pool.
-        let store = SqlStorage::new(pool.clone());
+        let store = SqlStore::new(pool.clone());
 
         let test_db = TestDatabase::new(store.clone());
 
@@ -179,7 +179,7 @@ pub fn test_db(
     // The fields used for every UPDATE operation
     #[default(doggo_fields())] update_operation_fields: Vec<(&'static str, OperationValue)>,
 ) -> TestDatabaseRunner {
-    let config = PopulateDatabaseConfig {
+    let config = PopulateStoreConfig {
         no_of_entries,
         no_of_logs,
         no_of_public_keys,

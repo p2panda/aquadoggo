@@ -9,7 +9,7 @@ use p2panda_rs::operation::traits::Schematic;
 use p2panda_rs::operation::{EncodedOperation, OperationId};
 
 use crate::bus::{ServiceMessage, ServiceSender};
-use crate::db::provider::SqlStorage;
+use crate::db::SqlStore;
 use crate::domain::publish;
 use crate::graphql::client::NextArguments;
 use crate::graphql::scalars;
@@ -35,7 +35,7 @@ impl ClientMutationRoot {
         )]
         operation: scalars::EncodedOperationScalar,
     ) -> Result<NextArguments> {
-        let store = ctx.data::<SqlStorage>()?;
+        let store = ctx.data::<SqlStore>()?;
         let tx = ctx.data::<ServiceSender>()?;
         let schema_provider = ctx.data::<SchemaProvider>()?;
 
@@ -97,7 +97,7 @@ mod tests {
     use p2panda_rs::operation::{EncodedOperation, OperationValue};
     use p2panda_rs::schema::{FieldType, Schema, SchemaId};
     use p2panda_rs::serde::serialize_value;
-    use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
+    use p2panda_rs::storage_provider::traits::EntryStore;
     use p2panda_rs::test_utils::constants::{HASH, PRIVATE_KEY};
     use p2panda_rs::test_utils::fixtures::{
         create_operation, delete_operation, encoded_entry, encoded_operation,
@@ -755,11 +755,10 @@ mod tests {
                 .await
                 .unwrap();
             let entry = entries.first().unwrap();
-            let encoded_entry: EncodedEntry = entry.to_owned().into();
 
             // Prepare a publish entry request for the entry.
             let publish_request = publish_request(
-                &encoded_entry.to_string(),
+                &entry.encoded_entry.to_string(),
                 &entry.payload().unwrap().to_string(),
             );
 

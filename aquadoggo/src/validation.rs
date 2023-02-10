@@ -5,7 +5,7 @@ use p2panda_rs::document::DocumentId;
 use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::traits::AsOperation;
-use p2panda_rs::storage_provider::traits::StorageProvider;
+use p2panda_rs::storage_provider::traits::{EntryStore, LogStore, OperationStore};
 use p2panda_rs::Human;
 
 /// Verify that a claimed seq num is the next sequence number following the latest.
@@ -44,14 +44,14 @@ pub fn is_next_seq_num(latest_seq_num: Option<&SeqNum>, claimed_seq_num: &SeqNum
 /// - Retrieve the stored log id for the document id
 ///   - If found, ensure it matches the claimed log id
 ///   - If not found retrieve the next available log id for this public key and ensure that matches
-pub async fn verify_log_id<S: StorageProvider>(
+pub async fn verify_log_id<S: LogStore>(
     store: &S,
     public_key: &PublicKey,
     claimed_log_id: &LogId,
     document_id: &DocumentId,
 ) -> Result<()> {
     // Check if there is a log id registered for this document and public key already in the store.
-    match store.get(public_key, document_id).await? {
+    match store.get_log_id(public_key, document_id).await? {
         Some(expected_log_id) => {
             // If there is, check it matches the log id encoded in the entry.
             ensure!(
@@ -89,7 +89,7 @@ pub async fn verify_log_id<S: StorageProvider>(
 /// An error is returned if:
 /// - seq num 1 was passed in, which can not have a skiplink
 /// - the expected skiplink target could not be found in the database.
-pub async fn get_expected_skiplink<S: StorageProvider>(
+pub async fn get_expected_skiplink<S: EntryStore>(
     store: &S,
     public_key: &PublicKey,
     log_id: &LogId,
@@ -123,7 +123,7 @@ pub async fn get_expected_skiplink<S: StorageProvider>(
 /// Takes the following steps:
 /// - retrieve all operations for the given document id
 /// - ensure none of them contain a DELETE action
-pub async fn ensure_document_not_deleted<S: StorageProvider>(
+pub async fn ensure_document_not_deleted<S: OperationStore>(
     store: &S,
     document_id: &DocumentId,
 ) -> Result<()> {
@@ -141,7 +141,7 @@ pub async fn ensure_document_not_deleted<S: StorageProvider>(
 /// Takes the following steps:
 /// - retrieve the latest log id for the given public key
 /// - safely increment it by 1
-pub async fn next_log_id<S: StorageProvider>(store: &S, public_key: &PublicKey) -> Result<LogId> {
+pub async fn next_log_id<S: LogStore>(store: &S, public_key: &PublicKey) -> Result<LogId> {
     let latest_log_id = store.latest_log_id(public_key).await?;
 
     match latest_log_id {
@@ -173,11 +173,9 @@ mod tests {
     use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::test_utils::constants::PRIVATE_KEY;
-    use p2panda_rs::test_utils::db::test_db::{
-        populate_store, test_db_config, PopulateDatabaseConfig,
-    };
-    use p2panda_rs::test_utils::db::MemoryStore;
-    use p2panda_rs::test_utils::fixtures::{key_pair, random_document_id};
+    use p2panda_rs::test_utils::fixtures::{key_pair, populate_store_config, random_document_id};
+    use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
+    use p2panda_rs::test_utils::memory_store::MemoryStore;
     use rstest::rstest;
 
     use super::{
@@ -253,9 +251,9 @@ mod tests {
         #[case] key_pair: KeyPair,
         #[case] claimed_log_id: LogId,
         #[case] document_id: Option<DocumentId>,
-        #[from(test_db_config)]
+        #[from(populate_store_config)]
         #[with(2, 2, 1)]
-        config: PopulateDatabaseConfig,
+        config: PopulateStoreConfig,
     ) {
         let store = MemoryStore::default();
         let (_, documents) = populate_store(&store, &config).await;
@@ -290,9 +288,9 @@ mod tests {
         #[case] key_pair: KeyPair,
         #[case] log_id: LogId,
         #[case] seq_num: SeqNum,
-        #[from(test_db_config)]
+        #[from(populate_store_config)]
         #[with(7, 1, 1)]
-        config: PopulateDatabaseConfig,
+        config: PopulateStoreConfig,
     ) {
         let store = MemoryStore::default();
         let _ = populate_store(&store, &config).await;
@@ -319,9 +317,9 @@ mod tests {
         key_pair: KeyPair,
         #[case] seq_num: SeqNum,
         #[case] expected_seq_num: SeqNum,
-        #[from(test_db_config)]
+        #[from(populate_store_config)]
         #[with(10, 1, 1)]
-        config: PopulateDatabaseConfig,
+        config: PopulateStoreConfig,
     ) {
         let store = MemoryStore::default();
         let _ = populate_store(&store, &config).await;
@@ -338,9 +336,9 @@ mod tests {
     #[should_panic(expected = "Document is deleted")]
     #[tokio::test]
     async fn identifies_deleted_document(
-        #[from(test_db_config)]
+        #[from(populate_store_config)]
         #[with(3, 1, 1, true)]
-        config: PopulateDatabaseConfig,
+        config: PopulateStoreConfig,
     ) {
         let store = MemoryStore::default();
         let (_, documents) = populate_store(&store, &config).await;
@@ -354,9 +352,9 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn identifies_not_deleted_document(
-        #[from(test_db_config)]
+        #[from(populate_store_config)]
         #[with(3, 1, 1, false)]
-        config: PopulateDatabaseConfig,
+        config: PopulateStoreConfig,
     ) {
         let store = MemoryStore::default();
         let (_, documents) = populate_store(&store, &config).await;

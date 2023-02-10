@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use log::debug;
+use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::DocumentStore;
@@ -25,11 +26,11 @@ use crate::materializer::TaskInput;
 pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
     debug!("Working on {}", input);
 
-    // Here we retrive the document view by document view id.
-    let document_view = match &input.document_view_id {
+    // Here we retrieve the document by document view id.
+    let document = match &input.document_view_id {
         Some(view_id) => context
             .store
-            .get_document_view_by_id(view_id)
+            .get_document_by_view_id(view_id)
             .await
             .map_err(|err| {
                 TaskError::Critical(err.to_string())
@@ -39,23 +40,27 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
         None => Err(TaskError::Critical("Missing document_view_id in task input".into())),
     }?;
 
-    let document_view = match document_view {
-        Some(document_view) => {
+    let document = match document {
+        Some(document) => {
             debug!(
-                "Document view retrieved from storage with id: {}",
-                document_view.id()
+                "Document retrieved from storage with view id: {}",
+                document.view_id()
             );
-            Ok(document_view)
+            Ok(document)
         }
-        // If no document view for the id passed into this task could be retrieved then this
-        // document has been deleted or the document view id was invalid. As "dependency" tasks
-        // are only dispatched after a successful "reduce" task, neither `None` case should
+        // If no document with the view for the id passed into this task could be retrieved then
+        // this document has been deleted or the document view does not exist. As "dependency"
+        // tasks are only dispatched after a successful "reduce" task, neither `None` case should
         // happen, so this is a critical error.
         None => Err(TaskError::Critical(format!(
-            "Expected document view {} not found in store",
+            "Expected document with view {} not found in store",
             &input.document_view_id.unwrap()
         ))),
     }?;
+
+    // We can unwrap the view here as only documents with views (meaning they are not deleted) are
+    // returned from the store method above.
+    let document_view = document.view().unwrap();
 
     let mut next_tasks = Vec::new();
 
@@ -106,18 +111,6 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
     // dependencies have been reduced.
     let all_dependencies_met = !next_tasks.iter().any(|task| task.is_some());
     if all_dependencies_met {
-        let task_input_schema = context
-            .store
-            .get_schema_by_document_view(document_view.id())
-            .await
-            .map_err(|err| TaskError::Critical(err.to_string()))?
-            .ok_or_else(|| {
-                TaskError::Failure(format!(
-                    "{} was deleted while processing task",
-                    document_view
-                ))
-            })?;
-
         // Helper that returns a schema task for the current task input.
         let schema_task = || {
             Some(Task::new(
@@ -126,7 +119,7 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
             ))
         };
 
-        match task_input_schema {
+        match document.schema_id() {
             // Start `schema` task when a schema (field) definition view is completed with
             // dependencies
             SchemaId::SchemaDefinition(_) => next_tasks.push(schema_task()),
@@ -153,7 +146,7 @@ async fn construct_relation_task(
 
     match context
         .store
-        .get_document_view_by_id(&document_view_id)
+        .get_document_by_view_id(&document_view_id)
         .await
         .map_err(|err| TaskError::Critical(err.to_string()))?
     {
@@ -173,21 +166,22 @@ async fn construct_relation_task(
 
 #[cfg(test)]
 mod tests {
+    use p2panda_rs::document::traits::AsDocument;
     use p2panda_rs::document::{DocumentId, DocumentViewId};
     use p2panda_rs::entry::traits::AsEncodedEntry;
     use p2panda_rs::identity::KeyPair;
-    use p2panda_rs::operation::traits::AsVerifiedOperation;
     use p2panda_rs::operation::{
-        Operation, OperationBuilder, OperationValue, PinnedRelation, PinnedRelationList, Relation,
-        RelationList,
+        Operation, OperationBuilder, OperationId, OperationValue, PinnedRelation,
+        PinnedRelationList, Relation, RelationList,
     };
     use p2panda_rs::schema::{FieldType, Schema, SchemaId};
     use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
     use p2panda_rs::test_utils::constants;
-    use p2panda_rs::test_utils::db::test_db::send_to_store;
     use p2panda_rs::test_utils::fixtures::{
         key_pair, random_document_id, random_document_view_id, schema, schema_fields,
     };
+    use p2panda_rs::test_utils::memory_store::helpers::send_to_store;
+    use p2panda_rs::WithId;
     use rstest::rstest;
 
     use crate::db::stores::test_utils::{
@@ -349,14 +343,9 @@ mod tests {
             }
 
             for document_id in &db.test_data.documents {
-                let document_view = db
-                    .store
-                    .get_document_by_id(document_id)
-                    .await
-                    .unwrap()
-                    .unwrap();
+                let document = db.store.get_document(document_id).await.unwrap().unwrap();
 
-                let input = TaskInput::new(None, Some(document_view.id().clone()));
+                let input = TaskInput::new(None, Some(document.view_id().clone()));
 
                 let reduce_tasks = dependency_task(db.context.clone(), input)
                     .await
@@ -388,14 +377,9 @@ mod tests {
             // Here we have one materialised document, (we are calling it a child as we will
             // shortly be publishing parents) it contains relations which are not materialised yet
             // so should dispatch a reduce task for each one.
-            let document_view_of_child = db
-                .store
-                .get_document_by_id(&document_id)
-                .await
-                .unwrap()
-                .unwrap();
+            let child_document = db.store.get_document(&document_id).await.unwrap().unwrap();
 
-            let document_view_id_of_child = document_view_of_child.id();
+            let document_view_id_of_child = child_document.view_id();
 
             let schema = add_schema(
                 &mut db,
@@ -521,7 +505,10 @@ mod tests {
                 .await
                 .unwrap();
 
-            let document_view_id: DocumentViewId = document_operations[1].id().clone().into();
+            let document_view_id: DocumentViewId =
+                WithId::<OperationId>::id(&document_operations[1])
+                    .clone()
+                    .into();
 
             let input = TaskInput::new(None, Some(document_view_id.clone()));
 
@@ -638,13 +625,14 @@ mod tests {
             .unwrap();
 
             // Materialise the schema definition.
-            let document_view_id: DocumentViewId = entry_signed.hash().into();
-            let input = TaskInput::new(None, Some(document_view_id.clone()));
+            let document_id: DocumentId = entry_signed.hash().into();
+            let input = TaskInput::new(Some(document_id.clone()), None);
             reduce_task(db.context.clone(), input.clone())
                 .await
                 .unwrap();
 
             // Dispatch a dependency task for the schema definition.
+            let document_view_id: DocumentViewId = entry_signed.hash().into();
             let input = TaskInput::new(None, Some(document_view_id));
             let tasks = dependency_task(db.context.clone(), input)
                 .await

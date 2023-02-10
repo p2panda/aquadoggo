@@ -7,11 +7,11 @@ use async_graphql::{ComplexObject, Context, SimpleObject};
 use p2panda_rs::entry::decode::decode_entry;
 use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
 use p2panda_rs::entry::EncodedEntry;
-use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
+use p2panda_rs::storage_provider::traits::EntryStore;
 use serde::{Deserialize, Serialize};
 
-use crate::db::provider::SqlStorage;
-use crate::db::stores::StorageEntry;
+use crate::db::types::StorageEntry;
+use crate::db::SqlStore;
 use crate::graphql::scalars;
 
 /// Encoded and signed entry with its regarding encoded operation payload.
@@ -32,7 +32,7 @@ impl EncodedEntryAndOperation {
         &self,
         ctx: &Context<'a>,
     ) -> async_graphql::Result<Vec<scalars::EncodedEntryScalar>> {
-        let store = ctx.data::<SqlStorage>()?;
+        let store = ctx.data::<SqlStore>()?;
 
         // Decode entry
         let entry_encoded: EncodedEntry = self.entry.clone().into();
@@ -70,7 +70,7 @@ impl TryFrom<EncodedEntryAndOperation> for StorageEntry {
             .operation
             .ok_or_else(|| anyhow!("Storage entry requires operation to be given"))?;
         let encoded_entry = encoded.entry;
-        let entry = decode_entry(&encoded_entry.clone().into())?;
+        let entry = decode_entry(&EncodedEntry::from(encoded_entry.clone()))?;
 
         let storage_entry = StorageEntry {
             public_key: entry.public_key().to_owned(),

@@ -7,18 +7,17 @@ use anyhow::{anyhow, Result};
 use bamboo_rs_core_ed25519_yasmf::verify::verify_batch;
 use log::{debug, error, trace, warn};
 use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
-use p2panda_rs::entry::EncodedEntry;
 use p2panda_rs::entry::LogId;
 use p2panda_rs::entry::SeqNum;
 use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::decode::decode_operation;
 use p2panda_rs::operation::traits::Schematic;
-use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
+use p2panda_rs::storage_provider::traits::EntryStore;
 use tokio::task;
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
-use crate::db::stores::StorageEntry;
+use crate::db::types::StorageEntry;
 use crate::domain::publish;
 use crate::graphql::replication::client;
 use crate::manager::{ServiceReadySender, Shutdown};
@@ -168,7 +167,6 @@ async fn insert_new_entries(
         // modular set of methods which can definitely be used here more cleanly. For now, we do it
         // this way.
 
-        let encoded_entry: EncodedEntry = entry.clone().into();
         let encoded_operation = entry
             .payload()
             .expect("All stored entries contain an operation");
@@ -184,7 +182,7 @@ async fn insert_new_entries(
         publish(
             &context.0.store,
             &schema,
-            &encoded_entry,
+            &entry.encoded_entry,
             &operation,
             encoded_operation,
         )
@@ -255,7 +253,7 @@ mod tests {
     use std::time::Duration;
 
     use p2panda_rs::storage_provider::traits::EntryStore;
-    use p2panda_rs::test_utils::db::test_db::{populate_store, PopulateDatabaseConfig};
+    use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
     use rstest::rstest;
     use tokio::sync::{broadcast, oneshot};
     use tokio::task;
@@ -288,7 +286,7 @@ mod tests {
                 .schema_provider
                 .update(doggo_schema())
                 .await;
-            let populate_db_config = PopulateDatabaseConfig {
+            let populate_db_config = PopulateStoreConfig {
                 no_of_entries: 1,
                 no_of_logs: 1,
                 no_of_public_keys: 1,

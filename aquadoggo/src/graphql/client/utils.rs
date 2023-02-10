@@ -4,7 +4,7 @@ use async_graphql::{Pos, ServerError, ServerResult};
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::schema::SchemaId;
 
-use crate::db::provider::SqlStorage;
+use crate::db::SqlStore;
 
 /// Validate that the given view matches the given schema.
 ///
@@ -12,7 +12,7 @@ use crate::db::provider::SqlStorage;
 pub async fn validate_view_matches_schema(
     document_view_id: &DocumentViewId,
     schema_id: &SchemaId,
-    store: &SqlStorage,
+    store: &SqlStore,
     pos: Option<Pos>,
 ) -> ServerResult<()> {
     let document_schema_id = store

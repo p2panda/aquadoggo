@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use log::debug;
+use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::DocumentStore;
 
 use crate::context::Context;
-use crate::db::traits::SchemaStore;
 use crate::materializer::worker::{TaskError, TaskResult};
 use crate::materializer::TaskInput;
 
@@ -93,14 +93,16 @@ async fn get_related_schema_definitions(
     // Collect all schema definitions that use the targeted field definition
     let mut related_schema_definitions = vec![];
     for schema in schema_definitions {
-        let fields_value = schema.fields().get("fields").unwrap().value();
+        // We can unwrap the value here as all documents returned from the storage method above
+        // have a current view (they are not deleted).
+        let fields_value = schema.get("fields").unwrap();
 
         if let OperationValue::PinnedRelationList(fields) = fields_value {
             if fields
                 .iter()
                 .any(|field_view_id| field_view_id == target_field_definition)
             {
-                related_schema_definitions.push(schema.id().clone())
+                related_schema_definitions.push(schema.view_id().clone())
             } else {
                 continue;
             }
@@ -119,13 +121,14 @@ async fn get_related_schema_definitions(
 #[cfg(test)]
 mod tests {
     use log::debug;
+    use p2panda_rs::document::traits::AsDocument;
     use p2panda_rs::document::{DocumentId, DocumentViewId};
     use p2panda_rs::entry::traits::AsEncodedEntry;
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::{OperationBuilder, OperationValue, PinnedRelationList};
     use p2panda_rs::schema::{FieldType, Schema, SchemaId};
     use p2panda_rs::storage_provider::traits::DocumentStore;
-    use p2panda_rs::test_utils::db::test_db::send_to_store;
+    use p2panda_rs::test_utils::memory_store::helpers::send_to_store;
     use rstest::rstest;
 
     use crate::context::Context;
@@ -163,11 +166,11 @@ mod tests {
         reduce_task(context.clone(), input).await.unwrap();
         let field_view_id = db
             .store
-            .get_document_by_id(&field_definition_id)
+            .get_document(&field_definition_id)
             .await
             .unwrap()
             .unwrap()
-            .id()
+            .view_id()
             .to_owned();
         debug!("Created field definition {}", &field_view_id);
 
@@ -204,11 +207,11 @@ mod tests {
         reduce_task(context.clone(), input).await.unwrap();
         let definition_view_id = db
             .store
-            .get_document_by_id(&schema_definition_id)
+            .get_document(&schema_definition_id)
             .await
             .unwrap()
             .unwrap()
-            .id()
+            .view_id()
             .to_owned();
         debug!("Created schema definition {}", definition_view_id);
 

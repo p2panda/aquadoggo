@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+//! Utility methods for parsing database rows into p2panda data types.
 use std::collections::BTreeMap;
 
 use p2panda_rs::document::{DocumentId, DocumentViewFields, DocumentViewId, DocumentViewValue};
@@ -11,9 +12,9 @@ use p2panda_rs::operation::{
 };
 use p2panda_rs::schema::SchemaId;
 
-use crate::db::models::document::DocumentViewFieldRow;
+use crate::db::models::DocumentViewFieldRow;
 use crate::db::models::OperationFieldsJoinedRow;
-use crate::db::stores::StorageOperation;
+use crate::db::types::StorageOperation;
 
 /// Takes a vector of `OperationFieldsJoinedRow` and parses them into an `VerifiedOperation`
 /// struct.
@@ -33,6 +34,7 @@ pub fn parse_operation_rows(
     let schema_id: SchemaId = first_row.schema_id.parse().unwrap();
     let public_key = PublicKey::new(&first_row.public_key).unwrap();
     let operation_id = first_row.operation_id.parse().unwrap();
+    let document_id = first_row.document_id.parse().unwrap();
 
     let mut relation_lists: BTreeMap<String, Vec<DocumentId>> = BTreeMap::new();
     let mut pinned_relation_lists: BTreeMap<String, Vec<DocumentViewId>> = BTreeMap::new();
@@ -161,6 +163,7 @@ pub fn parse_operation_rows(
     .unwrap();
 
     let operation = StorageOperation {
+        document_id,
         id: operation_id,
         version: operation.version(),
         action: operation.action(),
@@ -355,7 +358,7 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::{create_operation, schema_id};
     use rstest::rstest;
 
-    use crate::db::models::{document::DocumentViewFieldRow, OperationFieldsJoinedRow};
+    use crate::db::models::{DocumentViewFieldRow, OperationFieldsJoinedRow};
 
     use super::{parse_document_view_field_rows, parse_operation_rows, parse_value_to_string_vec};
 

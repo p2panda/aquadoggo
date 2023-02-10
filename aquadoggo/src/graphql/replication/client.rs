@@ -8,7 +8,7 @@ use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::identity::PublicKey;
 use serde::{Deserialize, Serialize};
 
-use crate::db::stores::StorageEntry;
+use crate::db::types::StorageEntry;
 use crate::graphql::pagination::Paginated;
 use crate::graphql::replication::response::EncodedEntryAndOperation;
 use crate::graphql::scalars;

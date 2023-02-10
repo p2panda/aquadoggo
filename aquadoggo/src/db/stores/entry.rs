@@ -2,161 +2,28 @@
 
 use async_trait::async_trait;
 use lipmaa_link::get_lipmaa_links_back_to;
-use p2panda_rs::entry::decode::decode_entry;
 use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
-use p2panda_rs::entry::{EncodedEntry, Entry, LogId, SeqNum, Signature};
+use p2panda_rs::entry::{EncodedEntry, Entry, LogId, SeqNum};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::EncodedOperation;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::error::EntryStorageError;
-use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
+use p2panda_rs::storage_provider::traits::EntryStore;
 use sqlx::{query, query_as};
 
 use crate::db::models::EntryRow;
-use crate::db::provider::SqlStorage;
-
-/// A signed entry and it's encoded operation. Entries are the lowest level data type on the
-/// p2panda network, they are signed by authors and form bamboo append only logs. The operation is
-/// an entries' payload, it contains the data mutations which authors publish.
-///
-/// This struct implements the `EntryWithOperation` trait which is required when constructing the
-/// `EntryStore`.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct StorageEntry {
-    /// PublicKey of this entry.
-    pub(crate) public_key: PublicKey,
-
-    /// Used log for this entry.
-    pub(crate) log_id: LogId,
-
-    /// Sequence number of this entry.
-    pub(crate) seq_num: SeqNum,
-
-    /// Hash of skiplink Bamboo entry.
-    pub(crate) skiplink: Option<Hash>,
-
-    /// Hash of previous Bamboo entry.
-    pub(crate) backlink: Option<Hash>,
-
-    /// Byte size of payload.
-    pub(crate) payload_size: u64,
-
-    /// Hash of payload.
-    pub(crate) payload_hash: Hash,
-
-    /// Ed25519 signature of entry.
-    pub(crate) signature: Signature,
-
-    /// Encoded entry bytes.
-    pub(crate) encoded_entry: EncodedEntry,
-
-    /// Encoded entry bytes.
-    pub(crate) payload: Option<EncodedOperation>,
-}
-
-impl EntryWithOperation for StorageEntry {
-    fn payload(&self) -> Option<&EncodedOperation> {
-        self.payload.as_ref()
-    }
-}
-
-impl AsEntry for StorageEntry {
-    /// Returns public key of entry.
-    fn public_key(&self) -> &PublicKey {
-        &self.public_key
-    }
-
-    /// Returns log id of entry.
-    fn log_id(&self) -> &LogId {
-        &self.log_id
-    }
-
-    /// Returns sequence number of entry.
-    fn seq_num(&self) -> &SeqNum {
-        &self.seq_num
-    }
-
-    /// Returns hash of skiplink entry when given.
-    fn skiplink(&self) -> Option<&Hash> {
-        self.skiplink.as_ref()
-    }
-
-    /// Returns hash of backlink entry when given.
-    fn backlink(&self) -> Option<&Hash> {
-        self.backlink.as_ref()
-    }
-
-    /// Returns payload size of operation.
-    fn payload_size(&self) -> u64 {
-        self.payload_size
-    }
-
-    /// Returns payload hash of operation.
-    fn payload_hash(&self) -> &Hash {
-        &self.payload_hash
-    }
-
-    /// Returns signature of entry.
-    fn signature(&self) -> &Signature {
-        &self.signature
-    }
-}
-
-impl AsEncodedEntry for StorageEntry {
-    /// Generates and returns hash of encoded entry.
-    fn hash(&self) -> Hash {
-        self.encoded_entry.hash()
-    }
-
-    /// Returns entry as bytes.
-    fn into_bytes(&self) -> Vec<u8> {
-        self.encoded_entry.into_bytes()
-    }
-
-    /// Returns payload size (number of bytes) of total encoded entry.
-    fn size(&self) -> u64 {
-        self.encoded_entry.size()
-    }
-}
-
-/// `From` implementation for converting an `EntryRow` into a `StorageEntry`. This is needed when
-/// retrieving entries from the database. The `sqlx` crate coerces returned entry rows into
-/// `EntryRow` but we want them as `StorageEntry` which contains typed values.
-impl From<EntryRow> for StorageEntry {
-    fn from(entry_row: EntryRow) -> Self {
-        let encoded_entry = EncodedEntry::from_bytes(
-            &hex::decode(entry_row.entry_bytes)
-                .expect("Decode entry hex entry bytes from database"),
-        );
-        let entry = decode_entry(&encoded_entry).expect("Decoding encoded entry from database");
-        StorageEntry {
-            public_key: entry.public_key().to_owned(),
-            log_id: entry.log_id().to_owned(),
-            seq_num: entry.seq_num().to_owned(),
-            skiplink: entry.skiplink().cloned(),
-            backlink: entry.backlink().cloned(),
-            payload_size: entry.payload_size(),
-            payload_hash: entry.payload_hash().to_owned(),
-            signature: entry.signature().to_owned(),
-            encoded_entry,
-            // We unwrap now as all entries currently contain a payload.
-            payload: entry_row.payload_bytes.map(|payload| {
-                EncodedOperation::from_bytes(
-                    &hex::decode(payload).expect("Decode entry payload from database"),
-                )
-            }),
-        }
-    }
-}
+use crate::db::types::StorageEntry;
+use crate::db::SqlStore;
 
 /// Implementation of `EntryStore` trait which is required when constructing a `StorageProvider`.
 ///
-/// Handles storage and retrieval of entries in the form of`StorageEntry` which implements the
-/// required `EntryWithOperation` trait. An intermediary struct `EntryRow` is also used when retrieving
-/// an entry from the database.
+/// Handles storage and retrieval of entries in the form of `StorageEntry`. An intermediary struct
+/// `EntryRow` is used when retrieving an entry from the database.
 #[async_trait]
-impl EntryStore<StorageEntry> for SqlStorage {
+impl EntryStore for SqlStore {
+    type Entry = StorageEntry;
+
     /// Insert an entry into storage.
     ///
     /// Returns an error if the insertion doesn't result in exactly one
@@ -209,10 +76,7 @@ impl EntryStore<StorageEntry> for SqlStorage {
     /// Returns a result containing the entry wrapped in an option if it was found successfully.
     /// Returns `None` if the entry was not found in storage. Errors when a fatal storage error
     /// occured.
-    async fn get_entry_by_hash(
-        &self,
-        hash: &Hash,
-    ) -> Result<Option<StorageEntry>, EntryStorageError> {
+    async fn get_entry(&self, hash: &Hash) -> Result<Option<StorageEntry>, EntryStorageError> {
         let entry_row = query_as::<_, EntryRow>(
             "
             SELECT
@@ -453,12 +317,12 @@ impl EntryStore<StorageEntry> for SqlStorage {
 #[cfg(test)]
 mod tests {
     use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
-    use p2panda_rs::entry::{EncodedEntry, Entry, LogId, SeqNum};
+    use p2panda_rs::entry::{EncodedEntry, Entry, EntryBuilder, LogId, SeqNum};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::EncodedOperation;
     use p2panda_rs::schema::SchemaId;
-    use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
+    use p2panda_rs::storage_provider::traits::EntryStore;
     use p2panda_rs::test_utils::fixtures::{encoded_entry, encoded_operation, entry, random_hash};
     use rstest::rstest;
 
@@ -482,7 +346,7 @@ mod tests {
             // Retrieve the entry again by it's hash.
             let retrieved_entry = db
                 .store
-                .get_entry_by_hash(&encoded_entry.hash())
+                .get_entry(&encoded_entry.hash())
                 .await
                 .expect("Get entry")
                 .expect("Unwrap entry");
@@ -501,14 +365,7 @@ mod tests {
                 encoded_operation,
                 retrieved_entry.payload().unwrap().to_owned()
             );
-
-            // Convert the retrieved entry back into the types we inserted.
-            let retreved_entry: Entry = retrieved_entry.clone().into();
-            let retreved_encoded_entry: EncodedEntry = retrieved_entry.into();
-
-            // The types should match.
-            assert_eq!(retreved_entry, entry);
-            assert_eq!(retreved_encoded_entry, encoded_entry);
+            assert_eq!(retrieved_entry.encoded_entry, encoded_entry);
         });
     }
 
@@ -520,25 +377,30 @@ mod tests {
     ) {
         runner.with_db_teardown(|db: TestDatabase| async move {
             // The public key of the author who published the entries in the database
-            let public_key = db.test_data.key_pairs[0].public_key();
+            let key_pair = &db.test_data.key_pairs[0];
 
             // We get back the first entry.
             let first_entry = db
                 .store
-                .get_entry_at_seq_num(&public_key, &LogId::default(), &SeqNum::new(1).unwrap())
+                .get_entry_at_seq_num(
+                    &key_pair.public_key(),
+                    &LogId::default(),
+                    &SeqNum::new(1).unwrap(),
+                )
                 .await
                 .expect("Get entry")
+                .unwrap();
+
+            // Construct a new entry from it with the same values.
+            let entry = EntryBuilder::new()
+                .sign(first_entry.payload().unwrap(), key_pair)
                 .unwrap();
 
             // We try to publish it again which should error as entry hashes
             // have a unique constraint.
             let result = db
                 .store
-                .insert_entry(
-                    &first_entry.clone().into(),
-                    &first_entry.clone().into(),
-                    first_entry.payload(),
-                )
+                .insert_entry(&entry, &first_entry.encoded_entry, first_entry.payload())
                 .await;
 
             assert!(result.is_err());
@@ -691,7 +553,7 @@ mod tests {
     }
 
     #[rstest]
-    fn get_entry_by_hash(
+    fn get_entry(
         #[from(test_db)]
         #[with(20, 1, 1)]
         runner: TestDatabaseRunner,
@@ -712,12 +574,7 @@ mod tests {
 
                 // The we retrieve them by their hash.
                 let entry_hash = entry.hash();
-                let entry_by_hash = db
-                    .store
-                    .get_entry_by_hash(&entry_hash)
-                    .await
-                    .unwrap()
-                    .unwrap();
+                let entry_by_hash = db.store.get_entry(&entry_hash).await.unwrap().unwrap();
 
                 // The entries should match.
                 assert_eq!(entry, entry_by_hash)
@@ -726,11 +583,7 @@ mod tests {
             // If we try to retrieve with a hash of an entry not in the db then
             // we should get none back.
             let entry_hash_not_in_db = random_hash();
-            let entry = db
-                .store
-                .get_entry_by_hash(&entry_hash_not_in_db)
-                .await
-                .unwrap();
+            let entry = db.store.get_entry(&entry_hash_not_in_db).await.unwrap();
             assert!(entry.is_none());
         });
     }
