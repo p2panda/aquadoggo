@@ -151,21 +151,21 @@ impl DocumentStore for SqlStore {
 
         // Get a row for the document matching to the found document id.
         let document_row = query_as::<_, DocumentRow>(
-            "
-                SELECT
-                    documents.document_id,
-                    documents.document_view_id,
-                    documents.schema_id,
-                    operations_v1.public_key,
-                    documents.is_deleted
-                FROM
-                    documents
-                LEFT JOIN operations_v1
-                    ON
-                        operations_v1.operation_id = $1    
-                WHERE
-                    documents.document_id = $1 AND documents.is_deleted = false
-                ",
+        "
+            SELECT
+                documents.document_id,
+                documents.document_view_id,
+                documents.schema_id,
+                operations_v1.public_key,
+                documents.is_deleted
+            FROM
+                documents
+            LEFT JOIN operations_v1
+                ON
+                    operations_v1.operation_id = $1    
+            WHERE
+                documents.document_id = $1 AND documents.is_deleted = false
+            ",
         )
         .bind(document_id.to_string())
         .fetch_optional(&self.pool)
@@ -275,14 +275,14 @@ impl SqlStore {
     /// This method inserts or updates a row in the documents table and then inserts the documents
     /// current view and field values into the `document_views` and `document_view_fields` tables
     /// respectively.
-    /// 
+    ///
     /// If the document already existed in the store then it's current view and view id will be
     /// updated with those contained on the passed document.
-    /// 
+    ///
     /// If any of the operations fail all insertions are rolled back.
     ///
     /// An error is returned in the case of a fatal database error.
-    /// 
+    ///
     /// Note: "out-of-date" document views will remain in storage when a document already existed
     /// and is updated. If they are not needed for anything else they can be garbage collected.
     pub async fn insert_document(&self, document: &Document) -> Result<(), DocumentStorageError> {
@@ -317,7 +317,7 @@ impl SqlStore {
     /// This method performs one insertion in the `document_views` table and at least one in the
     /// `document_view_fields` table. If either of these operations fail then all insertions are
     /// rolled back.
-    /// 
+    ///
     /// An error is returned in the case of a fatal storage error.
     pub async fn insert_document_view(
         &self,
@@ -382,25 +382,25 @@ async fn get_document_view_field_rows(
     // consistently ordering list items.
     query_as::<_, DocumentViewFieldRow>(
         "
-    SELECT
-        document_view_fields.document_view_id,
-        document_view_fields.operation_id,
-        document_view_fields.name,
-        operation_fields_v1.list_index,
-        operation_fields_v1.field_type,
-        operation_fields_v1.value
-    FROM
-        document_view_fields
-    LEFT JOIN operation_fields_v1
-        ON
-            document_view_fields.operation_id = operation_fields_v1.operation_id
-        AND
-            document_view_fields.name = operation_fields_v1.name
-    WHERE
-        document_view_fields.document_view_id = $1
-    ORDER BY
-        operation_fields_v1.list_index ASC
-    ",
+        SELECT
+            document_view_fields.document_view_id,
+            document_view_fields.operation_id,
+            document_view_fields.name,
+            operation_fields_v1.list_index,
+            operation_fields_v1.field_type,
+            operation_fields_v1.value
+        FROM
+            document_view_fields
+        LEFT JOIN operation_fields_v1
+            ON
+                document_view_fields.operation_id = operation_fields_v1.operation_id
+            AND
+                document_view_fields.name = operation_fields_v1.name
+        WHERE
+            document_view_fields.document_view_id = $1
+        ORDER BY
+            operation_fields_v1.list_index ASC
+        ",
     )
     .bind(id.to_string())
     .fetch_all(pool)
@@ -416,16 +416,16 @@ async fn insert_document_fields(
     // Insert document view field relations into the db
     try_join_all(document_view.iter().map(|(name, value)| {
         query(
-            "
-                        INSERT INTO
-                            document_view_fields (
-                                document_view_id,
-                                operation_id,
-                                name
-                            )
-                        VALUES
-                            ($1, $2, $3)
-                        ",
+        "
+            INSERT INTO
+                document_view_fields (
+                    document_view_id,
+                    operation_id,
+                    name
+                )
+            VALUES
+                ($1, $2, $3)
+            ",
         )
         .bind(document_view.id().to_string())
         .bind(value.id().as_str().to_owned())
@@ -444,16 +444,16 @@ async fn insert_document_view(
     schema_id: &SchemaId,
 ) -> Result<AnyQueryResult, DocumentStorageError> {
     query(
-        "
-            INSERT INTO
-                document_views (
-                    document_view_id,
-                    document_id,
-                    schema_id
-                )
-            VALUES
-                ($1, $2, $3)
-            ",
+    "
+        INSERT INTO
+            document_views (
+                document_view_id,
+                document_id,
+                schema_id
+            )
+        VALUES
+            ($1, $2, $3)
+        ",
     )
     .bind(document_view.id().to_string())
     .bind(document_id.to_string())
@@ -468,20 +468,20 @@ async fn insert_document_view(
 async fn insert_document(pool: &Pool, document: &Document) -> Result<(), DocumentStorageError> {
     // Insert or update the document to the `documents` table.
     query(
-        "
-                INSERT INTO
-                    documents (
-                        document_id,
-                        document_view_id,
-                        is_deleted,
-                        schema_id
-                    )
-                VALUES
-                    ($1, $2, $3, $4)
-                ON CONFLICT(document_id) DO UPDATE SET
-                    document_view_id = $2,
-                    is_deleted = $3
-                ",
+    "
+        INSERT INTO
+            documents (
+                document_id,
+                document_view_id,
+                is_deleted,
+                schema_id
+            )
+        VALUES
+            ($1, $2, $3, $4)
+        ON CONFLICT(document_id) DO UPDATE SET
+            document_view_id = $2,
+            is_deleted = $3
+        ",
     )
     .bind(document.id().as_str())
     .bind(document.view_id().to_string())
