@@ -50,11 +50,18 @@ mod tests {
     use async_graphql::{value, Response};
     use rstest::rstest;
     use serde_json::json;
+    use serial_test::serial;
 
     use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
     use crate::test_helpers::graphql_test_client;
 
     #[rstest]
+    // Note: This and more tests in this file use the underlying static schema provider which is a
+    // static mutable data store, accessible across all test runner threads in parallel mode. To
+    // prevent overwriting data across threads we have to run this test in serial.
+    //
+    // Read more: https://users.rust-lang.org/t/static-mutables-in-tests/49321
+    #[serial]
     fn next_args_valid_query(#[from(test_db)] runner: TestDatabaseRunner) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
             let client = graphql_test_client(&db).await;
@@ -92,7 +99,9 @@ mod tests {
             );
         })
     }
+
     #[rstest]
+    #[serial] // See note above on why we execute this test in series
     fn next_args_valid_query_with_document_id(
         #[with(1, 1, 1)]
         #[from(test_db)]
@@ -146,6 +155,7 @@ mod tests {
     }
 
     #[rstest]
+    #[serial] // See note above on why we execute this test in series
     fn next_args_error_response(#[from(test_db)] runner: TestDatabaseRunner) {
         runner.with_db_teardown(move |db: TestDatabase| async move {
             let client = graphql_test_client(&db).await;

@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Implement API changes to p2panda-rs storage traits [#268](https://github.com/p2panda/aquadoggo/pull/268)
 
+### Fixed
+
+- Fix race-condition of mutably shared static schema store during testing [#269](https://github.com/p2panda/aquadoggo/pull/269)
+
 ## [0.4.0]
 
 ### Added
