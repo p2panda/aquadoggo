@@ -11,7 +11,10 @@ use crate::schema::SchemaProvider;
 
 /// Inner data shared across all services.
 #[derive(Debug)]
-pub struct Data<S: EntryStore + OperationStore + LogStore + DocumentStore> {
+pub struct Data<S>
+where
+    S: EntryStore + OperationStore + LogStore + DocumentStore,
+{
     /// Node configuration.
     pub config: Configuration,
 
@@ -22,7 +25,10 @@ pub struct Data<S: EntryStore + OperationStore + LogStore + DocumentStore> {
     pub schema_provider: SchemaProvider,
 }
 
-impl<S: EntryStore + OperationStore + LogStore + DocumentStore> Data<S> {
+impl<S> Data<S>
+where
+    S: EntryStore + OperationStore + LogStore + DocumentStore,
+{
     pub fn new(store: S, config: Configuration, schema_provider: SchemaProvider) -> Self {
         Self {
             config,
@@ -38,20 +44,29 @@ pub struct Context<S: EntryStore + OperationStore + LogStore + DocumentStore = S
     pub Arc<Data<S>>,
 );
 
-impl<S: EntryStore + OperationStore + LogStore + DocumentStore> Context<S> {
+impl<S> Context<S>
+where
+    S: EntryStore + OperationStore + LogStore + DocumentStore,
+{
     /// Returns a new instance of `Context`.
     pub fn new(store: S, config: Configuration, schema_provider: SchemaProvider) -> Self {
         Self(Arc::new(Data::new(store, config, schema_provider)))
     }
 }
 
-impl<S: EntryStore + OperationStore + LogStore + DocumentStore> Clone for Context<S> {
+impl<S> Clone for Context<S>
+where
+    S: EntryStore + OperationStore + LogStore + DocumentStore,
+{
     fn clone(&self) -> Self {
         Self(self.0.clone())
     }
 }
 
-impl<S: EntryStore + OperationStore + LogStore + DocumentStore> Deref for Context<S> {
+impl<S> Deref for Context<S>
+where
+    S: EntryStore + OperationStore + LogStore + DocumentStore,
+{
     type Target = Data<S>;
 
     fn deref(&self) -> &Self::Target {
