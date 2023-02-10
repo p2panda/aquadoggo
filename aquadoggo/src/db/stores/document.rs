@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! This module implements `DocumentStore` on `SqlStore` as well as addational insertion methods
+//! This module implements `DocumentStore` on `SqlStore` as well as aditional insertion methods
 //! specific to the `aquadoggo` storage patterns. The resulting interface offers all storage
 //! methods used for persisting and retrieving materialised documents.
 //!
@@ -312,6 +312,7 @@ impl SqlStore {
             }
         }
     }
+    
     /// Insert a document view into the database.
     ///
     /// This method performs one insertion in the `document_views` table and at least one in the
