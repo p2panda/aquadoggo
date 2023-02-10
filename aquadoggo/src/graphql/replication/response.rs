@@ -10,8 +10,8 @@ use p2panda_rs::entry::EncodedEntry;
 use p2panda_rs::storage_provider::traits::EntryStore;
 use serde::{Deserialize, Serialize};
 
-use crate::db::SqlStore;
 use crate::db::types::StorageEntry;
+use crate::db::SqlStore;
 use crate::graphql::scalars;
 
 /// Encoded and signed entry with its regarding encoded operation payload.
