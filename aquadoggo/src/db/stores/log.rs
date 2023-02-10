@@ -9,7 +9,7 @@ use p2panda_rs::storage_provider::error::LogStorageError;
 use p2panda_rs::storage_provider::traits::LogStore;
 use sqlx::{query, query_scalar};
 
-use crate::db::sql_store::SqlStore;
+use crate::db::SqlStore;
 
 /// Implementation of `LogStore` trait which is required when constructing a
 /// `StorageProvider`.

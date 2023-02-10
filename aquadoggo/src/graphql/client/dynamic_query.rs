@@ -16,7 +16,7 @@ use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::DocumentStore;
 use p2panda_rs::Human;
 
-use crate::db::sql_store::SqlStore;
+use crate::db::SqlStore;
 use crate::graphql::client::dynamic_types;
 use crate::graphql::client::dynamic_types::DocumentMeta;
 use crate::graphql::client::utils::validate_view_matches_schema;

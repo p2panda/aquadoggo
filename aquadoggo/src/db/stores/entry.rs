@@ -13,7 +13,7 @@ use p2panda_rs::storage_provider::traits::EntryStore;
 use sqlx::{query, query_as};
 
 use crate::db::models::EntryRow;
-use crate::db::sql_store::SqlStore;
+use crate::db::SqlStore;
 use crate::db::types::StorageEntry;
 
 /// Implementation of `EntryStore` trait which is required when constructing a `StorageProvider`.

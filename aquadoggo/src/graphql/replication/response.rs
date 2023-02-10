@@ -10,7 +10,7 @@ use p2panda_rs::entry::EncodedEntry;
 use p2panda_rs::storage_provider::traits::EntryStore;
 use serde::{Deserialize, Serialize};
 
-use crate::db::sql_store::SqlStore;
+use crate::db::SqlStore;
 use crate::db::types::StorageEntry;
 use crate::graphql::scalars;
 

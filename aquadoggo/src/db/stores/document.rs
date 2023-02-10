@@ -39,11 +39,11 @@ use p2panda_rs::storage_provider::traits::DocumentStore;
 use sqlx::any::AnyQueryResult;
 use sqlx::{query, query_as, query_scalar};
 
+use crate::db::models::utils::parse_document_view_field_rows;
 use crate::db::models::{DocumentRow, DocumentViewFieldRow};
-use crate::db::sql_store::SqlStore;
 use crate::db::types::StorageDocument;
-use crate::db::utils::parse_document_view_field_rows;
 use crate::db::Pool;
+use crate::db::SqlStore;
 
 /// Implementation of
 #[async_trait]
@@ -151,7 +151,7 @@ impl DocumentStore for SqlStore {
 
         // Get a row for the document matching to the found document id.
         let document_row = query_as::<_, DocumentRow>(
-        "
+            "
             SELECT
                 documents.document_id,
                 documents.document_view_id,
@@ -312,7 +312,7 @@ impl SqlStore {
             }
         }
     }
-    
+
     /// Insert a document view into the database.
     ///
     /// This method performs one insertion in the `document_views` table and at least one in the
@@ -417,7 +417,7 @@ async fn insert_document_fields(
     // Insert document view field relations into the db
     try_join_all(document_view.iter().map(|(name, value)| {
         query(
-        "
+            "
             INSERT INTO
                 document_view_fields (
                     document_view_id,
@@ -445,7 +445,7 @@ async fn insert_document_view(
     schema_id: &SchemaId,
 ) -> Result<AnyQueryResult, DocumentStorageError> {
     query(
-    "
+        "
         INSERT INTO
             document_views (
                 document_view_id,
@@ -469,7 +469,7 @@ async fn insert_document_view(
 async fn insert_document(pool: &Pool, document: &Document) -> Result<(), DocumentStorageError> {
     // Insert or update the document to the `documents` table.
     query(
-    "
+        "
         INSERT INTO
             documents (
                 document_id,

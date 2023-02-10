@@ -9,7 +9,7 @@ use p2panda_rs::Human;
 use tokio::sync::Mutex;
 
 use crate::bus::ServiceSender;
-use crate::db::sql_store::SqlStore;
+use crate::db::SqlStore;
 use crate::graphql::client::{ClientMutationRoot, ClientRoot};
 use crate::graphql::replication::ReplicationRoot;
 use crate::schema::{save_static_schemas, SchemaProvider};

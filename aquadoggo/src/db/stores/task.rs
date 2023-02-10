@@ -6,7 +6,7 @@ use sqlx::{query, query_as};
 
 use crate::db::errors::SqlStoreError;
 use crate::db::models::TaskRow;
-use crate::db::sql_store::SqlStore;
+use crate::db::SqlStore;
 use crate::materializer::{Task, TaskInput};
 
 /// Methods to interact with the `tasks` table in the database.

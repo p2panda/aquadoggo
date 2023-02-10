@@ -5,7 +5,7 @@ use async_graphql::{Context, Object, Result};
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::identity::PublicKey;
 
-use crate::db::sql_store::SqlStore;
+use crate::db::SqlStore;
 use crate::domain::next_args;
 use crate::graphql::client::NextArguments;
 use crate::graphql::scalars;

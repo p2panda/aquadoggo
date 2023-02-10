@@ -11,10 +11,21 @@ use sqlx::migrate::MigrateDatabase;
 
 pub mod errors;
 pub mod models;
-pub mod sql_store;
 pub mod stores;
 pub mod types;
-pub mod utils;
+
+/// SQL based persistent storage that implements `EntryStore`, `OperationStore`, `LogStore` and `DocumentStore`.
+#[derive(Clone, Debug)]
+pub struct SqlStore {
+    pub(crate) pool: Pool,
+}
+
+impl SqlStore {
+    /// Create a new `SqlStore` using the provided db `Pool`.
+    pub fn new(pool: Pool) -> Self {
+        Self { pool }
+    }
+}
 
 /// Re-export of generic connection pool type.
 pub type Pool = AnyPool;

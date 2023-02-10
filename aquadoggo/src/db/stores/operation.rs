@@ -14,9 +14,9 @@ use p2panda_rs::storage_provider::traits::OperationStore;
 use sqlx::{query, query_as, query_scalar};
 
 use crate::db::models::OperationFieldsJoinedRow;
-use crate::db::sql_store::SqlStore;
+use crate::db::SqlStore;
 use crate::db::types::StorageOperation;
-use crate::db::utils::{parse_operation_rows, parse_value_to_string_vec};
+use crate::db::models::utils::{parse_operation_rows, parse_value_to_string_vec};
 
 /// Implementation of `OperationStore` trait which is required when constructing a
 /// `StorageProvider`.

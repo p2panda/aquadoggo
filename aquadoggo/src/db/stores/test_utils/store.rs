@@ -5,7 +5,7 @@ use p2panda_rs::identity::KeyPair;
 
 use crate::config::Configuration;
 use crate::context::Context;
-use crate::db::sql_store::SqlStore;
+use crate::db::SqlStore;
 use crate::schema::SchemaProvider;
 
 /// Container for `SqlStore` with access to the document ids and key_pairs used in the

@@ -6,7 +6,7 @@ use std::sync::Arc;
 use p2panda_rs::storage_provider::traits::{DocumentStore, EntryStore, LogStore, OperationStore};
 
 use crate::config::Configuration;
-use crate::db::sql_store::SqlStore;
+use crate::db::SqlStore;
 use crate::schema::SchemaProvider;
 
 /// Inner data shared across all services.

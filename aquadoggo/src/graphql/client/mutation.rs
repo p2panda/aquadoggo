@@ -9,7 +9,7 @@ use p2panda_rs::operation::traits::Schematic;
 use p2panda_rs::operation::{EncodedOperation, OperationId};
 
 use crate::bus::{ServiceMessage, ServiceSender};
-use crate::db::sql_store::SqlStore;
+use crate::db::SqlStore;
 use crate::domain::publish;
 use crate::graphql::client::NextArguments;
 use crate::graphql::scalars;

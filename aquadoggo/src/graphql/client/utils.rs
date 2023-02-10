@@ -4,7 +4,7 @@ use async_graphql::{Pos, ServerError, ServerResult};
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::schema::SchemaId;
 
-use crate::db::sql_store::SqlStore;
+use crate::db::SqlStore;
 
 /// Validate that the given view matches the given schema.
 ///

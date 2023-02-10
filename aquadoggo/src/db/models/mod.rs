@@ -7,6 +7,7 @@ mod entry;
 mod log;
 mod operation;
 mod task;
+pub mod utils;
 
 pub use self::log::LogRow;
 pub use document::{DocumentRow, DocumentViewFieldRow};

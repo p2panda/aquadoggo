@@ -7,7 +7,7 @@ use p2panda_rs::entry::traits::AsEntry;
 use p2panda_rs::entry::SeqNum;
 use p2panda_rs::storage_provider::traits::EntryStore;
 
-use crate::db::sql_store::SqlStore;
+use crate::db::SqlStore;
 use crate::graphql::replication::response::EncodedEntryAndOperation;
 use crate::graphql::scalars;
 

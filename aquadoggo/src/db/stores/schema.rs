@@ -11,7 +11,7 @@ use p2panda_rs::storage_provider::traits::DocumentStore;
 use sqlx::query_scalar;
 
 use crate::db::errors::SchemaStoreError;
-use crate::db::sql_store::SqlStore;
+use crate::db::SqlStore;
 
 impl SqlStore {
     /// Get a Schema from the database by it's document view id.
