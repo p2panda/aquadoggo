@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+//! Structs representing rows in SQL tables. Needed when coercing results returned from a 
+//! query using the `sqlx` library.
 mod document;
 mod entry;
 mod log;

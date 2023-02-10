@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+//! Persistent storage for an `aquadoggo` node supporting both Postgres and SQLite databases.
+//! 
+//! The main interface is [`SqlStore`] which offers an interface onto the database by implementing
+//! the storage traits defined in `p2panda-rs` as well as some implementation specific features.  
 use anyhow::{Error, Result};
 use sqlx::any::{Any, AnyPool, AnyPoolOptions};
 use sqlx::migrate;
