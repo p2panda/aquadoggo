@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- Implement API changes to p2panda-rs storage traits [#268](https://github.com/p2panda/aquadoggo/pull/268)
+- Implement API changes to p2panda-rs storage traits, new and breaking db migration [#268](https://github.com/p2panda/aquadoggo/pull/268)
 
 ### Fixed
 
