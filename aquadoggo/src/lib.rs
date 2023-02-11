@@ -57,7 +57,7 @@ mod node;
 mod replication;
 mod schema;
 #[cfg(test)]
-mod test_helpers;
+mod test_utils;
 #[cfg(test)]
 mod tests;
 mod validation;

@@ -79,11 +79,11 @@ mod tests {
     use serde_json::json;
     use tokio::sync::broadcast;
 
-    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
     use crate::graphql::GraphQLSchemaManager;
     use crate::http::context::HttpServiceContext;
     use crate::schema::SchemaProvider;
-    use crate::test_helpers::TestClient;
+    use crate::test_utils::TestClient;
+    use crate::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
     use super::build_server;
 

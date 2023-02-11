@@ -110,13 +110,13 @@ mod tests {
     use tokio::sync::broadcast;
 
     use crate::bus::ServiceMessage;
-    use crate::db::stores::test_utils::{
-        doggo_fields, doggo_schema, test_db, TestDatabase, TestDatabaseRunner,
-    };
     use crate::domain::next_args;
     use crate::graphql::GraphQLSchemaManager;
     use crate::http::HttpServiceContext;
-    use crate::test_helpers::graphql_test_client;
+    use crate::test_utils::graphql_test_client;
+    use crate::test_utils::{
+        doggo_fields, doggo_schema, test_db, TestDatabase, TestDatabaseRunner,
+    };
 
     fn test_schema() -> Schema {
         Schema::new(

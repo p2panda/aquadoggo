@@ -133,7 +133,7 @@ mod tests {
     };
     use rstest::rstest;
 
-    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+    use crate::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
     #[rstest]
     fn prevent_duplicate_log_ids(

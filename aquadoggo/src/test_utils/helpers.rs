@@ -16,9 +16,9 @@ use p2panda_rs::test_utils::constants;
 use p2panda_rs::test_utils::fixtures::{schema, schema_fields};
 use p2panda_rs::test_utils::memory_store::helpers::send_to_store;
 
-use crate::db::stores::test_utils::TestDatabase;
 use crate::materializer::tasks::{dependency_task, reduce_task, schema_task};
 use crate::materializer::TaskInput;
+use crate::test_utils::TestDatabase;
 
 fn doggo_schema_id() -> SchemaId {
     SchemaId::new_application("doggo_schema", &constants::HASH.to_owned().parse().unwrap())

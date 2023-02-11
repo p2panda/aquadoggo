@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::convert::TryFrom;
-use std::fmt::Debug;
 use std::net::{SocketAddr, TcpListener};
 use std::time::Duration;
 
@@ -10,46 +9,14 @@ use axum::BoxError;
 use http::header::{HeaderName, HeaderValue};
 use http::{Request, StatusCode};
 use hyper::{Body, Server};
-use once_cell::sync::Lazy;
-use serde::Deserialize;
-use sqlx::migrate::MigrateDatabase;
-use sqlx::Any;
 use tokio::sync::broadcast;
 use tokio::task::{self, JoinHandle};
 use tower::make::Shared;
 use tower_service::Service;
 
-use crate::db::stores::test_utils::TestDatabase;
-use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
 use crate::graphql::GraphQLSchemaManager;
 use crate::http::{build_server, HttpServiceContext};
-
-/// Configuration used in test helper methods.
-#[derive(Deserialize, Debug)]
-#[serde(default)]
-pub struct TestConfiguration {
-    /// Database url (sqlite or postgres)
-    pub database_url: String,
-}
-
-impl TestConfiguration {
-    /// Create a new configuration object for test environments.
-    pub fn new() -> Self {
-        envy::from_env::<TestConfiguration>()
-            .expect("Could not read environment variables for test configuration")
-    }
-}
-
-impl Default for TestConfiguration {
-    fn default() -> Self {
-        Self {
-            /// SQLite database stored in memory.
-            database_url: "sqlite::memory:".into(),
-        }
-    }
-}
-
-pub static TEST_CONFIG: Lazy<TestConfiguration> = Lazy::new(TestConfiguration::new);
+use crate::test_utils::TestDatabase;
 
 pub struct TestClient {
     client: reqwest::Client,
@@ -176,34 +143,4 @@ pub fn shutdown_handle() -> JoinHandle<()> {
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
     })
-}
-
-/// Create test database.
-pub async fn initialize_db() -> Pool {
-    initialize_db_with_url(&TEST_CONFIG.database_url).await
-}
-
-/// Create test database.
-pub async fn initialize_db_with_url(url: &str) -> Pool {
-    // Reset database first
-    drop_database().await;
-    create_database(url).await.unwrap();
-
-    // Create connection pool and run all migrations
-    let pool = connection_pool(url, 25).await.unwrap();
-    if run_pending_migrations(&pool).await.is_err() {
-        pool.close().await;
-    }
-
-    pool
-}
-
-// Delete test database
-pub async fn drop_database() {
-    if Any::database_exists(&TEST_CONFIG.database_url)
-        .await
-        .unwrap()
-    {
-        Any::drop_database(&TEST_CONFIG.database_url).await.unwrap();
-    }
 }

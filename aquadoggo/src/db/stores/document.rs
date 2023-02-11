@@ -523,7 +523,7 @@ mod tests {
     use rstest::rstest;
 
     use crate::db::stores::document::DocumentView;
-    use crate::db::stores::test_utils::{
+    use crate::test_utils::{
         build_document, doggo_schema, test_db, TestDatabase, TestDatabaseRunner,
     };
 

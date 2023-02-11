@@ -326,7 +326,7 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::{encoded_entry, encoded_operation, entry, random_hash};
     use rstest::rstest;
 
-    use crate::db::stores::test_utils::{doggo_schema, test_db, TestDatabase, TestDatabaseRunner};
+    use crate::test_utils::{doggo_schema, test_db, TestDatabase, TestDatabaseRunner};
 
     #[rstest]
     fn insert_entry(
