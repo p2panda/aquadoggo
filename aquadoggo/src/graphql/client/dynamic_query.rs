@@ -285,7 +285,7 @@ impl DynamicQuery {
                 dynamic_types::document::META_FIELD => {
                     document_fields.insert(
                         response_key,
-                        DocumentMeta::resolve(field, Some(&document_id), Some(document_view.id()))?,
+                        DocumentMeta::resolve(field, Some(document_id), Some(document_view.id()))?,
                     );
                 }
                 dynamic_types::document::FIELDS_FIELD => {
@@ -297,11 +297,7 @@ impl DynamicQuery {
                     );
                 }
                 _ => Err(ServerError::new(
-                    format!(
-                        "Field '{}' does not exist on {}",
-                        field.name(),
-                        schema_id.to_string()
-                    ),
+                    format!("Field '{}' does not exist on {}", field.name(), schema_id),
                     None,
                 ))?,
             }
@@ -323,7 +319,7 @@ impl DynamicQuery {
     ) -> ServerResult<Value> {
         let schema_provider = ctx.data_unchecked::<SchemaProvider>();
         // Unwrap because this schema id comes from the store.
-        let schema = schema_provider.get(&schema_id).await.unwrap();
+        let schema = schema_provider.get(schema_id).await.unwrap();
 
         // Construct GraphQL value for every field of the given view that has been selected.
         let mut view_fields = IndexMap::new();

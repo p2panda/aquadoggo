@@ -178,7 +178,7 @@ impl DocumentStore for SqlStore {
         // We now want to retrieve the view (current key-value map) for this document, as we
         // already filtered out deleted documents in the query above we can expect all documents
         // we handle here to have an associated view in the database.
-        let document_view_field_rows = get_document_view_field_rows(&self.pool, &id).await?;
+        let document_view_field_rows = get_document_view_field_rows(&self.pool, id).await?;
         // this method assumes all values coming from the db are already validated and so
         // unwraps where errors might occur.
         let document_view_fields = Some(parse_document_view_field_rows(document_view_field_rows));
@@ -348,7 +348,7 @@ impl SqlStore {
 
         // Insert the document view fields into the `document_view_fields` table. Rollback
         // insertions if an error occurs.
-        match insert_document_fields(&self.pool, &document_view).await {
+        match insert_document_fields(&self.pool, document_view).await {
             Ok(_) => (),
             Err(err) => {
                 transaction
