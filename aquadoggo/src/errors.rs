@@ -5,7 +5,8 @@ use p2panda_rs::schema::SchemaId;
 use thiserror::Error;
 
 /// A result type used in aquadoggo modules.
-pub type Result<T> = anyhow::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+// TODO: either we should actually use this error or remove it.
+// pub type Result<T> = anyhow::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 /// Errors returned by schema service.
 #[derive(Error, Debug)]
