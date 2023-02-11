@@ -259,7 +259,7 @@ mod tests {
     use tokio::task;
 
     use crate::context::Context;
-    use crate::db::stores::test_utils::{
+    use crate::test_utils::{
         doggo_fields, doggo_schema, with_db_manager_teardown, TestDatabaseManager,
     };
     use crate::http::http_service;

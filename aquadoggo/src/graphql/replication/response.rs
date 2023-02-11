@@ -97,7 +97,7 @@ mod tests {
     use p2panda_rs::storage_provider::traits::EntryStore;
     use rstest::rstest;
 
-    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+    use crate::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
     use crate::graphql::replication::ReplicationRoot;
 
     #[rstest]

@@ -13,7 +13,7 @@ use tokio::sync::Mutex;
 
 use crate::config::Configuration;
 use crate::context::Context;
-use crate::db::stores::test_utils::{TestData, TestDatabase};
+use crate::test_utils::{TestData, TestDatabase};
 use crate::db::Pool;
 use crate::db::SqlStore;
 use crate::schema::SchemaProvider;

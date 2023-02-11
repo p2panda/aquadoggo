@@ -353,7 +353,7 @@ mod tests {
     use p2panda_rs::WithId;
     use rstest::rstest;
 
-    use crate::db::stores::test_utils::{doggo_fields, test_db, TestDatabase, TestDatabaseRunner};
+    use crate::test_utils::{doggo_fields, test_db, TestDatabase, TestDatabaseRunner};
 
     #[rstest]
     #[case::create_operation(operation_with_schema(

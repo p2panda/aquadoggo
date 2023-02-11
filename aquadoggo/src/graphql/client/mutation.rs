@@ -110,7 +110,7 @@ mod tests {
     use tokio::sync::broadcast;
 
     use crate::bus::ServiceMessage;
-    use crate::db::stores::test_utils::{
+    use crate::test_utils::{
         doggo_fields, doggo_schema, test_db, TestDatabase, TestDatabaseRunner,
     };
     use crate::domain::next_args;

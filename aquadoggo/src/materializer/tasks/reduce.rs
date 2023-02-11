@@ -231,7 +231,7 @@ mod tests {
     use p2panda_rs::test_utils::memory_store::helpers::send_to_store;
     use rstest::rstest;
 
-    use crate::db::stores::test_utils::{
+    use crate::test_utils::{
         doggo_fields, doggo_schema, test_db, TestDatabase, TestDatabaseRunner,
     };
     use crate::materializer::tasks::reduce_task;

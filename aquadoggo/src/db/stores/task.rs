@@ -128,7 +128,7 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::{document_id, document_view_id};
     use rstest::rstest;
 
-    use crate::db::stores::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+    use crate::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
     use crate::materializer::{Task, TaskInput};
 
     #[rstest]

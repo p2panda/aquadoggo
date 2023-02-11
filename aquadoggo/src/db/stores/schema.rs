@@ -131,7 +131,7 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::{key_pair, random_document_view_id};
     use rstest::rstest;
 
-    use crate::db::stores::test_utils::{
+    use crate::test_utils::{
         add_document, add_schema, test_db, TestDatabase, TestDatabaseRunner,
     };
 

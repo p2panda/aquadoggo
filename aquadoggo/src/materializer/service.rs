@@ -152,7 +152,7 @@ mod tests {
     use tokio::task;
 
     use crate::context::Context;
-    use crate::db::stores::test_utils::{
+    use crate::test_utils::{
         doggo_fields, doggo_schema, test_db, TestDatabase, TestDatabaseRunner,
     };
     use crate::materializer::{Task, TaskInput};

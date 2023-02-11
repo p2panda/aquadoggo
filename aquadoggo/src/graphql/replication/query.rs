@@ -162,7 +162,7 @@ mod tests {
     use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
     use rstest::rstest;
 
-    use crate::db::stores::test_utils::{
+    use crate::test_utils::{
         test_db, with_db_manager_teardown, TestDatabase, TestDatabaseManager, TestDatabaseRunner,
     };
 

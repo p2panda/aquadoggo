@@ -425,7 +425,7 @@ mod test {
     use serde_json::json;
     use serial_test::serial;
 
-    use crate::db::stores::test_utils::{
+    use crate::test_utils::{
         add_document, add_schema, test_db, TestDatabase, TestDatabaseRunner,
     };
     use crate::test_utils::graphql_test_client;
