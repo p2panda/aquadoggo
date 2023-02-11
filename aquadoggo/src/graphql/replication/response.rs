@@ -97,8 +97,8 @@ mod tests {
     use p2panda_rs::storage_provider::traits::EntryStore;
     use rstest::rstest;
 
-    use crate::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
     use crate::graphql::replication::ReplicationRoot;
+    use crate::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
     #[rstest]
     fn validate_with_certificate_pool(

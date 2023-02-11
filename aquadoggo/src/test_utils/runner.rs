@@ -13,11 +13,11 @@ use tokio::sync::Mutex;
 
 use crate::config::Configuration;
 use crate::context::Context;
-use crate::test_utils::{TestData, TestDatabase};
 use crate::db::Pool;
 use crate::db::SqlStore;
 use crate::schema::SchemaProvider;
 use crate::test_utils::{initialize_db, initialize_db_with_url};
+use crate::test_utils::{TestData, TestDatabase};
 
 use super::{doggo_fields, doggo_schema};
 

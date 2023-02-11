@@ -132,9 +132,9 @@ mod tests {
     use rstest::rstest;
 
     use crate::context::Context;
-    use crate::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
+    use crate::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
     use super::schema_task;
 

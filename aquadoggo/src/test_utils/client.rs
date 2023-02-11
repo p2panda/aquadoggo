@@ -14,9 +14,9 @@ use tokio::task::{self, JoinHandle};
 use tower::make::Shared;
 use tower_service::Service;
 
-use crate::test_utils::TestDatabase;
 use crate::graphql::GraphQLSchemaManager;
 use crate::http::{build_server, HttpServiceContext};
+use crate::test_utils::TestDatabase;
 
 pub struct TestClient {
     client: reqwest::Client,

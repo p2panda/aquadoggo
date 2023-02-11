@@ -41,8 +41,8 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::random_key_pair;
     use rstest::rstest;
 
-    use crate::test_utils::{add_document, test_db, TestDatabase, TestDatabaseRunner};
     use crate::graphql::client::utils::validate_view_matches_schema;
+    use crate::test_utils::{add_document, test_db, TestDatabase, TestDatabaseRunner};
 
     #[rstest]
     fn test_validate_view_matches_schema(#[from(test_db)] runner: TestDatabaseRunner) {

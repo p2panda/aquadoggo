@@ -184,11 +184,11 @@ mod tests {
     use p2panda_rs::WithId;
     use rstest::rstest;
 
+    use crate::materializer::tasks::reduce_task;
+    use crate::materializer::TaskInput;
     use crate::test_utils::{
         add_document, add_schema, doggo_schema, test_db, TestDatabase, TestDatabaseRunner,
     };
-    use crate::materializer::tasks::reduce_task;
-    use crate::materializer::TaskInput;
 
     use super::dependency_task;
 

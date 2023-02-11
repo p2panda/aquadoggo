@@ -128,8 +128,8 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::{document_id, document_view_id};
     use rstest::rstest;
 
-    use crate::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
     use crate::materializer::{Task, TaskInput};
+    use crate::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
     #[rstest]
     fn insert_get_remove_tasks(

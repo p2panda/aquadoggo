@@ -259,12 +259,12 @@ mod tests {
     use tokio::task;
 
     use crate::context::Context;
-    use crate::test_utils::{
-        doggo_fields, doggo_schema, with_db_manager_teardown, TestDatabaseManager,
-    };
     use crate::http::http_service;
     use crate::replication::ReplicationConfiguration;
     use crate::test_utils::shutdown_handle;
+    use crate::test_utils::{
+        doggo_fields, doggo_schema, with_db_manager_teardown, TestDatabaseManager,
+    };
     use crate::Configuration;
 
     use super::replication_service;

@@ -231,11 +231,11 @@ mod tests {
     use p2panda_rs::test_utils::memory_store::helpers::send_to_store;
     use rstest::rstest;
 
+    use crate::materializer::tasks::reduce_task;
+    use crate::materializer::TaskInput;
     use crate::test_utils::{
         doggo_fields, doggo_schema, test_db, TestDatabase, TestDatabaseRunner,
     };
-    use crate::materializer::tasks::reduce_task;
-    use crate::materializer::TaskInput;
 
     #[rstest]
     fn reduces_documents(

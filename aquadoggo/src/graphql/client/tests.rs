@@ -11,10 +11,8 @@ use rstest::rstest;
 use serde_json::json;
 use serial_test::serial;
 
-use crate::test_utils::{
-    add_document, add_schema, test_db, TestDatabase, TestDatabaseRunner,
-};
 use crate::test_utils::graphql_test_client;
+use crate::test_utils::{add_document, add_schema, test_db, TestDatabase, TestDatabaseRunner};
 
 // Test querying application documents with scalar fields (no relations) by document id and by view
 // id.

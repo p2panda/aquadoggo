@@ -131,9 +131,7 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::{key_pair, random_document_view_id};
     use rstest::rstest;
 
-    use crate::test_utils::{
-        add_document, add_schema, test_db, TestDatabase, TestDatabaseRunner,
-    };
+    use crate::test_utils::{add_document, add_schema, test_db, TestDatabase, TestDatabaseRunner};
 
     #[rstest]
     fn get_schema(key_pair: KeyPair, #[from(test_db)] runner: TestDatabaseRunner) {
