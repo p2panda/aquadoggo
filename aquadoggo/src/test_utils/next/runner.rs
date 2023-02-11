@@ -10,7 +10,7 @@ use tokio::sync::Mutex;
 use crate::db::Pool;
 use crate::db::SqlStore;
 use crate::test_utils::initialize_db_with_url;
-use crate::test_utils::TestNode;
+use crate::test_utils::next::TestNode;
 
 #[async_trait::async_trait]
 pub trait AsyncTestFn {
@@ -73,7 +73,7 @@ impl TestNodeManager {
 ///
 /// Takes an (async) test function as an argument and passes over the `TestNodeManager`
 /// instance which can be used to build databases from inside the tests.
-pub fn with_db_manager_teardown<F: AsyncTestFnWithManager + Send + Sync + 'static>(test: F) {
+pub fn test_runner<F: AsyncTestFnWithManager + Send + Sync + 'static>(test: F) {
     let runtime = Builder::new_current_thread()
         .worker_threads(1)
         .enable_all()
@@ -82,17 +82,17 @@ pub fn with_db_manager_teardown<F: AsyncTestFnWithManager + Send + Sync + 'stati
         .expect("Could not build tokio Runtime for test");
 
     // Instantiate the database manager
-    let db_manager = TestNodeManager::new();
+    let node_manager = TestNodeManager::new();
 
     // Get a handle onto it's collection of pools
-    let pools = db_manager.pools.clone();
+    let pools = node_manager.pools.clone();
 
     runtime.block_on(async {
         // Spawn the test in a separate task to make sure we have control over the possible
         // panics which might happen inside of it
         let handle = tokio::task::spawn(async move {
             // Execute the actual test
-            test.call(db_manager).await;
+            test.call(node_manager).await;
         });
 
         // Get a handle of the task so we can use it later

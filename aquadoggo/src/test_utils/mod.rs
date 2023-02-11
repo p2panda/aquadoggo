@@ -5,6 +5,7 @@ mod config;
 mod db;
 mod helpers;
 mod runner;
+mod next;
 
 pub use client::{graphql_test_client, shutdown_handle, TestClient};
 pub use config::{TestConfiguration, TEST_CONFIG};
