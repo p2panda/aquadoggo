@@ -116,7 +116,7 @@ mod tests {
     use crate::domain::next_args;
     use crate::graphql::GraphQLSchemaManager;
     use crate::http::HttpServiceContext;
-    use crate::test_helpers::graphql_test_client;
+    use crate::test_utils::graphql_test_client;
 
     fn test_schema() -> Schema {
         Schema::new(

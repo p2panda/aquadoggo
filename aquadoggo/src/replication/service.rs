@@ -264,7 +264,7 @@ mod tests {
     };
     use crate::http::http_service;
     use crate::replication::ReplicationConfiguration;
-    use crate::test_helpers::shutdown_handle;
+    use crate::test_utils::shutdown_handle;
     use crate::Configuration;
 
     use super::replication_service;
