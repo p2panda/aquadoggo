@@ -104,7 +104,7 @@ mod tests {
         entry_signed_encoded_unvalidated, key_pair, operation_fields, random_hash,
         update_operation,
     };
-    use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
+    use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
     use rstest::{fixture, rstest};
     use serde_json::json;
     use serial_test::serial;
@@ -115,8 +115,8 @@ mod tests {
     use crate::graphql::GraphQLSchemaManager;
     use crate::http::HttpServiceContext;
     use crate::test_utils::next::{
-        doggo_fields, doggo_schema, graphql_test_client, populate_store_config, test_runner,
-        TestNode,
+        doggo_fields, doggo_schema, graphql_test_client, populate_and_materialize,
+        populate_store_config, test_runner, TestNode,
     };
 
     // Schema used in some of the tests in this module, it only has one field so it's easy to
@@ -220,9 +220,10 @@ mod tests {
         config: PopulateStoreConfig,
         publish_request: Request,
     ) {
-        test_runner(|node: TestNode| async move {
+        test_runner(|mut node: TestNode| async move {
             // Adds the test_schema to the store and schema provider.
-            populate_store(&node.context.store, &config).await;
+            populate_and_materialize(&mut node, &config).await;
+
             let (tx, _rx) = broadcast::channel(120);
             let manager = GraphQLSchemaManager::new(
                 node.context.store.clone(),
@@ -256,9 +257,9 @@ mod tests {
         config: PopulateStoreConfig,
         publish_request: Request,
     ) {
-        test_runner(|node: TestNode| async move {
+        test_runner(|mut node: TestNode| async move {
             // Adds the test_schema to the store and schema provider.
-            populate_store(&node.context.store, &config).await;
+            populate_and_materialize(&mut node, &config).await;
             let (tx, mut rx) = broadcast::channel(120);
             let manager = GraphQLSchemaManager::new(
                 node.context.store.clone(),
@@ -290,9 +291,9 @@ mod tests {
         config: PopulateStoreConfig,
         publish_request: Request,
     ) {
-        test_runner(|node: TestNode| async move {
+        test_runner(|mut node: TestNode| async move {
             // Adds the test_schema to the store and schema provider.
-            populate_store(&node.context.store, &config).await;
+            populate_and_materialize(&mut node, &config).await;
 
             // Init the test client.
             let client = graphql_test_client(&node).await;
@@ -515,9 +516,9 @@ mod tests {
         let encoded_operation = hex::encode(encoded_operation);
         let expected_error_message = expected_error_message.to_string();
 
-        test_runner(|node: TestNode| async move {
+        test_runner(|mut node: TestNode| async move {
             // Adds the test_schema to the store and schema provider.
-            populate_store(&node.context.store, &config).await;
+            populate_and_materialize(&mut node, &config).await;
 
             // Init the test client.
             let client = graphql_test_client(&node).await;
@@ -656,9 +657,9 @@ mod tests {
         let encoded_operation = hex::encode(encoded_operation.to_owned());
         let expected_error_message = expected_error_message.to_string();
 
-        test_runner(|node: TestNode| async move {
+        test_runner(|mut node: TestNode| async move {
             // Populates the node with entries, operations and schemas.
-            populate_store(&node.context.store, &config).await;
+            populate_and_materialize(&mut node, &config).await;
 
             // Init the test client.
             let client = graphql_test_client(&node).await;
@@ -692,9 +693,9 @@ mod tests {
         #[with(0, 0, 0, false, doggo_schema())]
         config: PopulateStoreConfig,
     ) {
-        test_runner(|node: TestNode| async move {
+        test_runner(|mut node: TestNode| async move {
             // Adds the test_schema to the store and schema provider.
-            populate_store(&node.context.store, &config).await;
+            populate_and_materialize(&mut node, &config).await;
 
             // Init the test client.
             let client = graphql_test_client(&node).await;
@@ -771,7 +772,7 @@ mod tests {
                         .send()
                         .await;
 
-                    // Every publihsh request should succeed.
+                    // Every publish request should succeed.
                     assert!(result.status().is_success())
                 }
             }
@@ -785,9 +786,9 @@ mod tests {
         #[with(1, 1, 1, false, doggo_schema())]
         config: PopulateStoreConfig,
     ) {
-        test_runner(|node: TestNode| async move {
+        test_runner(|mut node: TestNode| async move {
             // Populates the node with entries, operations and schemas.
-            populate_store(&node.context.store, &config).await;
+            populate_and_materialize(&mut node, &config).await;
 
             // Init the test client.
             let client = graphql_test_client(&node).await;
