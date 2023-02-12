@@ -418,15 +418,18 @@ fn gql_scalar(operation_value: &OperationValue) -> Value {
 #[cfg(test)]
 mod test {
     use async_graphql::{value, Response, Value};
-    use p2panda_rs::document::DocumentId;
+    use p2panda_rs::document::traits::AsDocument;
+    use p2panda_rs::identity::KeyPair;
     use p2panda_rs::schema::FieldType;
+    use p2panda_rs::storage_provider::traits::DocumentStore;
     use p2panda_rs::test_utils::fixtures::random_key_pair;
     use rstest::rstest;
     use serde_json::json;
     use serial_test::serial;
 
-    use crate::test_utils::graphql_test_client;
-    use crate::test_utils::{add_document, add_schema, test_db, TestDatabase, TestDatabaseRunner};
+    use crate::test_utils::next::{
+        add_document, add_schema, graphql_test_client, test_runner, TestNode,
+    };
 
     #[rstest]
     // Note: This and more tests in this file use the underlying static schema provider which is a
@@ -435,15 +438,13 @@ mod test {
     //
     // Read more: https://users.rust-lang.org/t/static-mutables-in-tests/49321
     #[serial]
-    fn single_query(#[from(test_db)] runner: TestDatabaseRunner) {
+    fn single_query(#[from(random_key_pair)] key_pair: KeyPair) {
         // Test single query parameter variations.
 
-        runner.with_db_teardown(&|mut db: TestDatabase| async move {
-            let key_pair = random_key_pair();
-
+        test_runner(move |mut node: TestNode| async move {
             // Add schema to node.
             let schema = add_schema(
-                &mut db,
+                &mut node,
                 "schema_name",
                 vec![("bool", FieldType::Boolean)],
                 &key_pair,
@@ -451,13 +452,27 @@ mod test {
             .await;
 
             // Publish document on node.
-            let view_id =
-                add_document(&mut db, schema.id(), vec![("bool", true.into())], &key_pair).await;
-            let document_id =
-                DocumentId::from(view_id.graph_tips().first().unwrap().as_hash().to_owned());
+            let view_id = add_document(
+                &mut node,
+                schema.id(),
+                vec![("bool", true.into())],
+                &key_pair,
+            )
+            .await;
+
+            // Get the materialised document.
+            let document = node
+                .context
+                .store
+                .get_document_by_view_id(&view_id)
+                .await
+                .expect("Query succeeds")
+                .expect("There to be a document");
+
+            let document_id = document.id();
 
             // Configure and send test query.
-            let client = graphql_test_client(&db).await;
+            let client = graphql_test_client(&node).await;
             let query = format!(
                 r#"{{
                 byViewId: {type_name}(viewId: "{view_id}") {{
@@ -522,16 +537,14 @@ mod test {
         vec!["Must provide either `id` or `viewId` argument".to_string()]
     )]
     fn single_query_error_handling(
-        #[from(test_db)] runner: TestDatabaseRunner,
         #[case] params: String,
         #[case] expected_value: Value,
         #[case] expected_errors: Vec<String>,
     ) {
         // Test single query parameter variations.
-
-        runner.with_db_teardown(move |db: TestDatabase| async move {
+        test_runner(move |mut node: TestNode| async move {
             // Configure and send test query.
-            let client = graphql_test_client(&db).await;
+            let client = graphql_test_client(&node).await;
             let query = format!(
                 r#"{{
                 view: schema_definition_v1({params}) {{
@@ -566,15 +579,13 @@ mod test {
 
     #[rstest]
     #[serial] // See note above on why we execute this test in series
-    fn collection_query(#[from(test_db)] runner: TestDatabaseRunner) {
+    fn collection_query(#[from(random_key_pair)] key_pair: KeyPair) {
         // Test collection query parameter variations.
-
-        runner.with_db_teardown(&|mut db: TestDatabase| async move {
-            let key_pair = random_key_pair();
+        test_runner(move |mut node: TestNode| async move {
 
             // Add schema to node.
             let schema = add_schema(
-                &mut db,
+                &mut node,
                 "schema_name",
                 vec![("bool", FieldType::Boolean)],
                 &key_pair,
@@ -582,10 +593,16 @@ mod test {
             .await;
 
             // Publish document on node.
-            add_document(&mut db, schema.id(), vec![("bool", true.into())], &key_pair).await;
+            add_document(
+                &mut node,
+                schema.id(),
+                vec![("bool", true.into())],
+                &key_pair,
+            )
+            .await;
 
             // Configure and send test query.
-            let client = graphql_test_client(&db).await;
+            let client = graphql_test_client(&node).await;
             let query = format!(
                 r#"{{
                 collection: all_{type_name} {{
@@ -614,15 +631,14 @@ mod test {
 
     #[rstest]
     #[serial] // See note above on why we execute this test in series
-    fn type_name(#[from(test_db)] runner: TestDatabaseRunner) {
+    fn type_name(#[from(random_key_pair)] key_pair: KeyPair) {
         // Test availability of `__typename` on all objects.
-
-        runner.with_db_teardown(&|mut db: TestDatabase| async move {
+        test_runner(move |mut node: TestNode| async move {
             let key_pair = random_key_pair();
 
             // Add schema to node.
             let schema = add_schema(
-                &mut db,
+                &mut node,
                 "schema_name",
                 vec![("bool", FieldType::Boolean)],
                 &key_pair,
@@ -631,7 +647,7 @@ mod test {
 
             // Publish document on node.
             let view_id = add_document(
-                &mut db,
+                &mut node,
                 &schema.id(),
                 vec![("bool", true.into())],
                 &key_pair,
@@ -639,7 +655,7 @@ mod test {
             .await;
 
             // Configure and send test query.
-            let client = graphql_test_client(&db).await;
+            let client = graphql_test_client(&node).await;
             let query = format!(
                 r#"{{
                 single: {type_name}(id: "{view_id}") {{
