@@ -70,8 +70,8 @@ pub fn populate_store_config(
 }
 
 /// Populate the store of a `TestNode` with entries and operations according to the passed config
-/// and materialise the resulting documents. Additionally inserts the relevant schema into the
-/// store and schema provider.
+/// and materialise the resulting documents. Additionally adds the relevant schema to the
+/// schema provider.
 ///
 /// Returns the key pairs of authors who published to the node and id's for all documents that
 /// were materialised.
@@ -79,36 +79,30 @@ pub async fn populate_and_materialize(
     node: &mut TestNode,
     config: &PopulateStoreConfig,
 ) -> (Vec<KeyPair>, Vec<DocumentId>) {
+
+    // Populate the store based with entries and operations based on the passed config.
     let (key_pairs, document_ids) = populate_store(&node.context.store, config).await;
 
-    let schema_name = config.schema.name();
-    let schema_fields: Vec<(&str, FieldType)> = config
-        .schema
-        .fields()
-        .iter()
-        .map(|(name, field)| (name.as_str(), field.clone()))
-        .collect();
-
-    add_schema(
-        node,
-        schema_name,
-        schema_fields,
-        &random_key_pair(), // We use a random key pair to avoid confusion in tests reguarding expect existing logs/entries for a given author.
-    )
-    .await;
-
+    // Add the passed schema to the schema store.
+    //
+    // Note: The entries and operations which would normally exist for this schema will NOT be
+    // present in the store, however the node will behave as expect as we directly inserted it
+    // into the schema provider.
     node.context
         .schema_provider
         .update(config.schema.clone())
         .await;
 
+    // Iterate over document id's and materialize into the store.
     for document_id in document_ids.clone() {
+        // Create reduce task input.
         let input = TaskInput::new(Some(document_id), None);
+        // Run reduce task and collect returned dependency tasks.
         let dependency_tasks = reduce_task(node.context.clone(), input.clone())
             .await
             .expect("Reduce document");
 
-        // Run dependency tasks
+        // Run dependency tasks.
         if let Some(tasks) = dependency_tasks {
             for task in tasks {
                 dependency_task(node.context.clone(), task.input().to_owned())
