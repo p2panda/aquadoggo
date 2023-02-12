@@ -129,15 +129,19 @@ mod tests {
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::schema::{FieldType, SchemaId};
     use p2panda_rs::test_utils::fixtures::{key_pair, random_document_view_id};
+    use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
     use rstest::rstest;
 
-    use crate::test_utils::{add_document, add_schema, test_db, TestDatabase, TestDatabaseRunner};
+    use crate::test_utils::next::{
+        add_document, add_schema, populate_and_materialize, populate_store_config, test_runner,
+        TestNode,
+    };
 
     #[rstest]
-    fn get_schema(key_pair: KeyPair, #[from(test_db)] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(move |mut db: TestDatabase| async move {
+    fn get_schema(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
             let schema = add_schema(
-                &mut db,
+                &mut node,
                 "test_schema",
                 vec![
                     ("description", FieldType::String),
@@ -152,7 +156,8 @@ mod tests {
                 _ => panic!("Invalid schema id"),
             };
 
-            let result = db
+            let result = node
+                .context
                 .store
                 .get_schema_by_id(document_view_id)
                 .await
@@ -164,11 +169,11 @@ mod tests {
     }
 
     #[rstest]
-    fn get_all_schema(key_pair: KeyPair, #[from(test_db)] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(move |mut db: TestDatabase| async move {
+    fn get_all_schema(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
             for i in 0..5 {
                 add_schema(
-                    &mut db,
+                    &mut node,
                     &format!("test_schema_{}", i),
                     vec![
                         ("description", FieldType::String),
@@ -179,17 +184,17 @@ mod tests {
                 .await;
             }
 
-            let schemas = db.store.get_all_schema().await;
+            let schemas = node.context.store.get_all_schema().await;
             assert_eq!(schemas.unwrap().len(), 5);
         });
     }
 
     #[rstest]
-    fn schema_fields_do_not_exist(#[from(test_db)] runner: TestDatabaseRunner, key_pair: KeyPair) {
-        runner.with_db_teardown(|mut db: TestDatabase| async move {
+    fn schema_fields_do_not_exist(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
             // Create a schema definition but no schema field definitions
             let document_view_id = add_document(
-                &mut db,
+                &mut node,
                 &SchemaId::SchemaDefinition(1),
                 vec![
                     ("name", "test_schema".into()),
@@ -202,7 +207,12 @@ mod tests {
 
             // Retrieve the schema by it's document view id. We unwrap here as we expect an `Ok`
             // result for the succeeding db query, even though the schema could not be built.
-            let schema = db.store.get_schema_by_id(&document_view_id).await.unwrap();
+            let schema = node
+                .context
+                .store
+                .get_schema_by_id(&document_view_id)
+                .await
+                .unwrap();
 
             // We receive nothing as the fields are missing for this schema
             assert!(schema.is_none());
@@ -210,15 +220,10 @@ mod tests {
     }
 
     #[rstest]
-    fn test_get_schema_for_view(
-        key_pair: KeyPair,
-        #[from(test_db)]
-        #[with(1, 1, 1)]
-        runner: TestDatabaseRunner,
-    ) {
-        runner.with_db_teardown(|mut db: TestDatabase| async move {
+    fn test_get_schema_for_view(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
             let schema = add_schema(
-                &mut db,
+                &mut node,
                 "venue",
                 vec![
                     ("description", FieldType::String),
@@ -233,7 +238,11 @@ mod tests {
                 _ => panic!("Invalid schema id"),
             };
 
-            let result = db.store.get_schema_by_document_view(document_view_id).await;
+            let result = node
+                .context
+                .store
+                .get_schema_by_document_view(document_view_id)
+                .await;
 
             assert!(result.is_ok());
             // This is the schema name of the schema document we published.
@@ -244,12 +253,16 @@ mod tests {
     #[rstest]
     fn test_get_schema_for_missing_view(
         random_document_view_id: DocumentViewId,
-        #[from(test_db)]
-        #[with(1, 1, 1)]
-        runner: TestDatabaseRunner,
+        #[from(populate_store_config)]
+        #[with(2, 10, 1)]
+        config: PopulateStoreConfig,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            let result = db
+        test_runner(|mut node: TestNode| async move {
+            // Populate the store and materialize all documents.
+            populate_and_materialize(&mut node, &config).await;
+
+            let result = node
+                .context
                 .store
                 .get_schema_by_document_view(&random_document_view_id)
                 .await;
