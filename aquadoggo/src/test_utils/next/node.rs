@@ -6,6 +6,7 @@ use p2panda_rs::entry::traits::AsEncodedEntry;
 use p2panda_rs::identity::KeyPair;
 use p2panda_rs::operation::{OperationBuilder, OperationValue};
 use p2panda_rs::schema::{FieldType, Schema, SchemaId};
+use p2panda_rs::test_utils::fixtures::random_key_pair;
 use p2panda_rs::test_utils::memory_store::helpers::{
     populate_store, send_to_store, PopulateStoreConfig,
 };
@@ -17,7 +18,7 @@ use crate::db::SqlStore;
 use crate::materializer::tasks::{dependency_task, reduce_task, schema_task};
 use crate::materializer::TaskInput;
 use crate::schema::SchemaProvider;
-use crate::test_utils::next::{doggo_schema, doggo_fields};
+use crate::test_utils::next::{doggo_fields, doggo_schema};
 
 /// Container for `SqlStore` with access to the document ids and key_pairs used in the
 /// pre-populated database for testing.
@@ -28,11 +29,7 @@ pub struct TestNode {
 impl TestNode {
     pub fn new(store: SqlStore) -> Self {
         // Initialise context for store.
-        let context = Context::new(
-            store,
-            Configuration::default(),
-            SchemaProvider::default(),
-        );
+        let context = Context::new(store, Configuration::default(), SchemaProvider::default());
 
         // Initialise finished test database.
         TestNode { context }
@@ -73,8 +70,9 @@ pub fn populate_store_config(
 }
 
 /// Populate the store of a `TestNode` with entries and operations according to the passed config
-/// and materialise the resulting documents.
-/// 
+/// and materialise the resulting documents. Additionally inserts the relevant schema into the
+/// store and schema provider.
+///
 /// Returns the key pairs of authors who published to the node and id's for all documents that
 /// were materialised.
 pub async fn populate_and_materialize(
@@ -95,9 +93,7 @@ pub async fn populate_and_materialize(
         node,
         schema_name,
         schema_fields,
-        key_pairs
-            .get(0)
-            .expect("There should be at least one key pair"),
+        &random_key_pair(), // We use a random key pair to avoid confusion in tests reguarding expect existing logs/entries for a given author.
     )
     .await;
 
