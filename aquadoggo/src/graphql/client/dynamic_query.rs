@@ -542,7 +542,7 @@ mod test {
         #[case] expected_errors: Vec<String>,
     ) {
         // Test single query parameter variations.
-        test_runner(move |mut node: TestNode| async move {
+        test_runner(move |node: TestNode| async move {
             // Configure and send test query.
             let client = graphql_test_client(&node).await;
             let query = format!(
@@ -634,8 +634,6 @@ mod test {
     fn type_name(#[from(random_key_pair)] key_pair: KeyPair) {
         // Test availability of `__typename` on all objects.
         test_runner(move |mut node: TestNode| async move {
-            let key_pair = random_key_pair();
-
             // Add schema to node.
             let schema = add_schema(
                 &mut node,
