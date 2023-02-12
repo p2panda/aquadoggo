@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use log::{info, debug};
+use log::{debug, info};
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::entry::traits::AsEncodedEntry;
 use p2panda_rs::identity::KeyPair;
-use p2panda_rs::operation::{OperationValue, OperationBuilder};
+use p2panda_rs::operation::{OperationBuilder, OperationValue};
 use p2panda_rs::schema::{FieldType, Schema, SchemaId};
-use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig, send_to_store};
+use p2panda_rs::test_utils::memory_store::helpers::{
+    populate_store, send_to_store, PopulateStoreConfig,
+};
+use rstest::fixture;
 
 use crate::config::Configuration;
 use crate::context::Context;
@@ -14,33 +17,68 @@ use crate::db::SqlStore;
 use crate::materializer::tasks::{dependency_task, reduce_task, schema_task};
 use crate::materializer::TaskInput;
 use crate::schema::SchemaProvider;
+use crate::test_utils::next::{doggo_schema, doggo_fields};
 
 /// Container for `SqlStore` with access to the document ids and key_pairs used in the
 /// pre-populated database for testing.
 pub struct TestNode {
     pub context: Context<SqlStore>,
-    pub store: SqlStore,
 }
 
 impl TestNode {
     pub fn new(store: SqlStore) -> Self {
         // Initialise context for store.
         let context = Context::new(
-            store.clone(),
+            store,
             Configuration::default(),
             SchemaProvider::default(),
         );
 
         // Initialise finished test database.
-        TestNode { context, store }
+        TestNode { context }
     }
 }
 
+/// Fixture for constructing a `PopulateStoreConfig` with default values for aquadoggo tests.
+///
+/// Passed parameters define what the database should contain. The first entry in each log contains
+/// a valid CREATE operation following entries contain duplicate UPDATE operations. If the
+/// with_delete flag is set to true the last entry in all logs contain be a DELETE operation.
+#[fixture]
+pub fn populate_store_config(
+    // Number of entries per log/document
+    #[default(0)] no_of_entries: usize,
+    // Number of logs for each public key
+    #[default(0)] no_of_logs: usize,
+    // Number of authors, each with logs populated as defined above
+    #[default(0)] no_of_public_keys: usize,
+    // A boolean flag for wether all logs should contain a delete operation
+    #[default(false)] with_delete: bool,
+    // The schema used for all operations in the db
+    #[default(doggo_schema())] schema: Schema,
+    // The fields used for every CREATE operation
+    #[default(doggo_fields())] create_operation_fields: Vec<(&'static str, OperationValue)>,
+    // The fields used for every UPDATE operation
+    #[default(doggo_fields())] update_operation_fields: Vec<(&'static str, OperationValue)>,
+) -> PopulateStoreConfig {
+    PopulateStoreConfig {
+        no_of_entries,
+        no_of_logs,
+        no_of_public_keys,
+        with_delete,
+        schema,
+        create_operation_fields,
+        update_operation_fields,
+    }
+}
+
+/// Populate the store of a `TestNode` with entries and operations according to the passed config
+/// and materialise the resulting documents.
 pub async fn populate_and_materialize(
     node: &mut TestNode,
     config: &PopulateStoreConfig,
 ) -> (Vec<KeyPair>, Vec<DocumentId>) {
-    let (key_pairs, document_ids) = populate_store(&node.store, config).await;
+    let (key_pairs, document_ids) = populate_store(&node.context.store, config).await;
 
     let schema_name = config.schema.name();
     let schema_fields: Vec<(&str, FieldType)> = config
@@ -83,7 +121,6 @@ pub async fn populate_and_materialize(
     (key_pairs, document_ids)
 }
 
-
 /// Publish a document and materialise it in a given `TestNode`.
 ///
 /// Also runs dependency task for document.
@@ -109,7 +146,7 @@ pub async fn add_document(
         .build()
         .expect("Build operation");
 
-    let (entry_signed, _) = send_to_store(&node.store, &create_op, &schema, key_pair)
+    let (entry_signed, _) = send_to_store(&node.context.store, &create_op, &schema, key_pair)
         .await
         .expect("Publish CREATE operation");
 
@@ -143,7 +180,7 @@ pub async fn add_schema(
     for field in fields {
         let create_field_op = Schema::create_field(field.0, field.1.clone());
         let (entry_signed, _) = send_to_store(
-            &node.store,
+            &node.context.store,
             &create_field_op,
             Schema::get_system(SchemaId::SchemaFieldDefinition(1)).unwrap(),
             key_pair,
@@ -161,7 +198,7 @@ pub async fn add_schema(
     // Build and reduce schema definition
     let create_schema_op = Schema::create(name, "test schema description", field_ids);
     let (entry_signed, _) = send_to_store(
-        &node.store,
+        &node.context.store,
         &create_schema_op,
         Schema::get_system(SchemaId::SchemaDefinition(1)).unwrap(),
         key_pair,
@@ -184,8 +221,7 @@ pub async fn add_schema(
     let schema_id = SchemaId::Application(name.to_string(), view_id);
 
     debug!("Done building {}", schema_id);
-    node
-        .context
+    node.context
         .schema_provider
         .get(&schema_id)
         .await
