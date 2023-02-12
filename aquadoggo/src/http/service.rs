@@ -75,25 +75,24 @@ pub async fn http_service(
 
 #[cfg(test)]
 mod tests {
-    use rstest::rstest;
     use serde_json::json;
     use tokio::sync::broadcast;
 
     use crate::graphql::GraphQLSchemaManager;
     use crate::http::context::HttpServiceContext;
     use crate::schema::SchemaProvider;
+    use crate::test_utils::next::{test_runner, TestNode};
     use crate::test_utils::TestClient;
-    use crate::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
     use super::build_server;
 
-    #[rstest]
-    fn graphql_endpoint(#[from(test_db)] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+    #[test]
+    fn graphql_endpoint() {
+        test_runner(|node: TestNode| async move {
             let (tx, _) = broadcast::channel(120);
             let schema_provider = SchemaProvider::default();
             let graphql_schema_manager =
-                GraphQLSchemaManager::new(db.store, tx, schema_provider).await;
+                GraphQLSchemaManager::new(node.context.store.clone(), tx, schema_provider).await;
             let context = HttpServiceContext::new(graphql_schema_manager);
             let client = TestClient::new(build_server(context));
 
