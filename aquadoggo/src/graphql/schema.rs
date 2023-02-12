@@ -204,8 +204,7 @@ mod test {
     use serde_json::{json, Value};
     use serial_test::serial;
 
-    use crate::test_utils::graphql_test_client;
-    use crate::test_utils::{add_schema, test_db, TestDatabase, TestDatabaseRunner};
+    use crate::test_utils::next::{add_schema, graphql_test_client, test_runner, TestNode};
 
     #[rstest]
     // Note: This test uses the underlying static schema provider which is a static mutable data
@@ -214,12 +213,12 @@ mod test {
     //
     // Read more: https://users.rust-lang.org/t/static-mutables-in-tests/49321
     #[serial]
-    fn schema_updates(#[from(test_db)] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(move |mut db: TestDatabase| async move {
+    fn schema_updates() {
+        test_runner(|mut node: TestNode| async move {
             // Create test client in the beginning so it is initialised with just the system
             // schemas. Then we create a new application schema to test that the graphql schema
             // is updated and we can query the changed schema.
-            let client = graphql_test_client(&db).await;
+            let client = graphql_test_client(&node).await;
 
             // This test uses a fixed private key to allow us to anticipate the schema typename.
             let key_pair = key_pair(PRIVATE_KEY);
@@ -254,7 +253,7 @@ mod test {
 
             // Add schema to node.
             let schema = add_schema(
-                &mut db,
+                &mut node,
                 "schema_name",
                 vec![("bool_field", FieldType::Boolean)],
                 &key_pair,
