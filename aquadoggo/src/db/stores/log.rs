@@ -133,22 +133,23 @@ mod tests {
     };
     use rstest::rstest;
 
-    use crate::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+    use crate::test_utils::next::{test_runner, TestNode};
 
     #[rstest]
     fn prevent_duplicate_log_ids(
         #[from(public_key)] public_key: PublicKey,
         #[from(schema_id)] schema_id: SchemaId,
         #[from(random_document_id)] document: DocumentId,
-        #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
-            assert!(db
+        test_runner(move |node: TestNode| async move {
+            assert!(node
+                .context
                 .store
                 .insert_log(&LogId::default(), &public_key, &schema_id, &document)
                 .await
                 .is_ok());
-            assert!(db
+            assert!(node
+                .context
                 .store
                 .insert_log(&LogId::default(), &public_key, &schema_id, &document)
                 .await
@@ -162,15 +163,15 @@ mod tests {
         #[from(random_operation_id)] operation_id_1: OperationId,
         #[from(random_operation_id)] operation_id_2: OperationId,
         #[from(random_document_id)] document: DocumentId,
-        #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
+        test_runner(move |node: TestNode| async move {
             let schema = SchemaId::new_application(
                 "venue",
                 &DocumentViewId::new(&[operation_id_1, operation_id_2]),
             );
 
-            assert!(db
+            assert!(node
+                .context
                 .store
                 .insert_log(&LogId::default(), &public_key, &schema, &document)
                 .await
@@ -182,15 +183,15 @@ mod tests {
     fn latest_log_id(
         #[from(public_key)] public_key: PublicKey,
         #[from(schema_id)] schema_id: SchemaId,
-        #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
-            let log_id = db.store.latest_log_id(&public_key).await.unwrap();
+        test_runner(move |node: TestNode| async move {
+            let log_id = node.context.store.latest_log_id(&public_key).await.unwrap();
 
             assert_eq!(log_id, None);
 
             for n in 0..12 {
-                db.store
+                node.context
+                    .store
                     .insert_log(
                         &LogId::new(n),
                         &public_key,
@@ -200,7 +201,7 @@ mod tests {
                     .await
                     .unwrap();
 
-                let log_id = db.store.latest_log_id(&public_key).await.unwrap();
+                let log_id = node.context.store.latest_log_id(&public_key).await.unwrap();
                 assert_eq!(Some(LogId::new(n)), log_id);
             }
         });
