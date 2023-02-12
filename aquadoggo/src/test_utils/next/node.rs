@@ -74,6 +74,9 @@ pub fn populate_store_config(
 
 /// Populate the store of a `TestNode` with entries and operations according to the passed config
 /// and materialise the resulting documents.
+/// 
+/// Returns the key pairs of authors who published to the node and id's for all documents that
+/// were materialised.
 pub async fn populate_and_materialize(
     node: &mut TestNode,
     config: &PopulateStoreConfig,
