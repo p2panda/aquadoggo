@@ -334,13 +334,13 @@ mod tests {
                 },
                 ..Configuration::default()
             };
-            let ada_db = manager.create("sqlite::memory:").await;
-            ada_db.context.schema_provider.update(doggo_schema()).await;
+            let ada = manager.create("sqlite::memory:").await;
+            ada.context.schema_provider.update(doggo_schema()).await;
             let context_ada = Context::new(
-                ada_db.store.clone(),
+                ada.context.store.clone(),
                 config_ada,
                 // We want ada to have the same schema in her schema provider as billie.
-                ada_db.context.schema_provider.clone(),
+                ada.context.schema_provider.clone(),
             );
             let tx_ada = tx.clone();
             let shutdown_ada = shutdown_handle();
@@ -365,7 +365,7 @@ mod tests {
             assert!(!replication_service_ada.is_finished());
 
             // Check the entry arrived into Ada's database
-            let entries = ada_db
+            let entries = ada
                 .store
                 .get_entries_by_schema(doggo_schema().id())
                 .await
