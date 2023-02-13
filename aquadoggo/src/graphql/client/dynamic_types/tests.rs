@@ -8,7 +8,7 @@ use rstest::rstest;
 use serde_json::json;
 use serial_test::serial;
 
-use crate::test_utils::next::{graphql_test_client, add_schema, TestNode, test_runner};
+use crate::test_utils::{graphql_test_client, add_schema, TestNode, test_runner};
 
 #[rstest]
 // Note: This and more tests in this file use the underlying static schema provider which is a

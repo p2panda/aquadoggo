@@ -204,7 +204,7 @@ mod test {
     use serde_json::{json, Value};
     use serial_test::serial;
 
-    use crate::test_utils::next::{add_schema, graphql_test_client, test_runner, TestNode};
+    use crate::test_utils::{add_schema, graphql_test_client, test_runner, TestNode};
 
     #[rstest]
     // Note: This test uses the underlying static schema provider which is a static mutable data

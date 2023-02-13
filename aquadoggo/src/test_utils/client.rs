@@ -16,7 +16,7 @@ use tower_service::Service;
 
 use crate::graphql::GraphQLSchemaManager;
 use crate::http::{build_server, HttpServiceContext};
-use crate::test_utils::TestDatabase;
+use crate::test_utils::TestNode;
 
 pub struct TestClient {
     client: reqwest::Client,
@@ -67,10 +67,10 @@ impl TestClient {
 }
 
 /// Configures a test client that can be used for GraphQL testing.
-pub async fn graphql_test_client(db: &TestDatabase) -> TestClient {
+pub async fn graphql_test_client(node: &TestNode) -> TestClient {
     let (tx, _) = broadcast::channel(120);
     let manager =
-        GraphQLSchemaManager::new(db.store.clone(), tx, db.context.schema_provider.clone()).await;
+        GraphQLSchemaManager::new(node.context.store.clone(), tx, node.context.schema_provider.clone()).await;
     let http_context = HttpServiceContext::new(manager);
     TestClient::new(build_server(http_context))
 }

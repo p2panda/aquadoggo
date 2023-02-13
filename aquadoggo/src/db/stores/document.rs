@@ -525,7 +525,7 @@ mod tests {
     use rstest::rstest;
 
     use crate::db::stores::document::DocumentView;
-    use crate::test_utils::next::{
+    use crate::test_utils::{
         build_document, populate_and_materialize, populate_store_config, test_runner, TestNode,
     };
 

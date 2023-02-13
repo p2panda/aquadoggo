@@ -187,7 +187,7 @@ mod tests {
 
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
-    use crate::test_utils::next::{
+    use crate::test_utils::{
         add_document, add_schema, doggo_schema, populate_store_config, schema_from_fields,
         test_runner, TestNode,
     };

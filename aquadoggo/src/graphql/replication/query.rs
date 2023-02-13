@@ -165,7 +165,7 @@ mod tests {
     use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
     use rstest::rstest;
 
-    use crate::test_utils::next::{
+    use crate::test_utils::{
         populate_store_config, test_runner, test_runner_with_manager, TestNode, TestNodeManager,
     };
 

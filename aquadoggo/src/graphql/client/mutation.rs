@@ -114,7 +114,7 @@ mod tests {
     use crate::domain::next_args;
     use crate::graphql::GraphQLSchemaManager;
     use crate::http::HttpServiceContext;
-    use crate::test_utils::next::{
+    use crate::test_utils::{
         doggo_fields, doggo_schema, graphql_test_client, populate_and_materialize,
         populate_store_config, test_runner, TestNode,
     };

@@ -127,7 +127,7 @@ mod tests {
     use rstest::rstest;
 
     use crate::materializer::TaskInput;
-    use crate::test_utils::next::{add_document, test_runner, TestNode};
+    use crate::test_utils::{add_document, test_runner, TestNode};
 
     use super::schema_task;
 

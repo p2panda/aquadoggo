@@ -156,7 +156,7 @@ mod tests {
     use crate::context::Context;
     use crate::materializer::{Task, TaskInput};
     use crate::schema::SchemaProvider;
-    use crate::test_utils::next::{
+    use crate::test_utils::{
         doggo_fields, doggo_schema, populate_store_config, test_runner, TestNode,
     };
     use crate::Configuration;

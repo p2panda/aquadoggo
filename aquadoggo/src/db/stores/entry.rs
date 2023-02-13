@@ -327,7 +327,7 @@ mod tests {
     use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
     use rstest::rstest;
 
-    use crate::test_utils::next::{populate_store_config, test_runner, TestNode};
+    use crate::test_utils::{populate_store_config, test_runner, TestNode};
 
     #[rstest]
     fn insert_entry(

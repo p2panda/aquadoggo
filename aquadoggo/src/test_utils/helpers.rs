@@ -2,23 +2,15 @@
 
 use std::convert::TryFrom;
 
-use log::{debug, info};
-use p2panda_rs::document::{Document, DocumentId, DocumentViewId};
-use p2panda_rs::entry::traits::AsEncodedEntry;
+use p2panda_rs::document::{Document, DocumentId};
 use p2panda_rs::hash::Hash;
-use p2panda_rs::identity::KeyPair;
 use p2panda_rs::operation::{
-    OperationBuilder, OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList,
+    OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList,
 };
-use p2panda_rs::schema::{FieldType, Schema, SchemaId};
+use p2panda_rs::schema::{Schema, SchemaId};
 use p2panda_rs::storage_provider::traits::OperationStore;
 use p2panda_rs::test_utils::constants;
 use p2panda_rs::test_utils::fixtures::{schema, schema_fields};
-use p2panda_rs::test_utils::memory_store::helpers::send_to_store;
-
-use crate::materializer::tasks::{dependency_task, reduce_task, schema_task};
-use crate::materializer::TaskInput;
-use crate::test_utils::TestDatabase;
 
 fn doggo_schema_id() -> SchemaId {
     SchemaId::new_application("doggo_schema", &constants::HASH.to_owned().parse().unwrap())
@@ -103,110 +95,10 @@ pub async fn build_document<S: OperationStore>(store: &S, document_id: &Document
     Document::try_from(&document_operations).expect("Build the document")
 }
 
-/// Publish a document and materialise it in a given `TestDatabase`.
-///
-/// Also runs dependency task for document.
-pub async fn add_document(
-    test_db: &mut TestDatabase,
-    schema_id: &SchemaId,
-    fields: Vec<(&str, OperationValue)>,
-    key_pair: &KeyPair,
-) -> DocumentViewId {
-    info!("Creating document for {}", schema_id);
-
-    // Get requested schema from store.
-    let schema = test_db
-        .context
-        .schema_provider
-        .get(schema_id)
-        .await
-        .expect("Schema not found");
-
-    // Build, publish and reduce create operation for document.
-    let create_op = OperationBuilder::new(schema.id())
-        .fields(&fields)
-        .build()
-        .expect("Build operation");
-
-    let (entry_signed, _) = send_to_store(&test_db.store, &create_op, &schema, key_pair)
-        .await
-        .expect("Publish CREATE operation");
-
-    let input = TaskInput::new(Some(DocumentId::from(entry_signed.hash())), None);
-    let dependency_tasks = reduce_task(test_db.context.clone(), input.clone())
-        .await
-        .expect("Reduce document");
-
-    // Run dependency tasks
-    if let Some(tasks) = dependency_tasks {
-        for task in tasks {
-            dependency_task(test_db.context.clone(), task.input().to_owned())
-                .await
-                .expect("Run dependency task");
-        }
-    }
-    DocumentViewId::from(entry_signed.hash())
-}
-
-/// Publish a schema and materialise it in a given `TestDatabase`.
-pub async fn add_schema(
-    test_db: &mut TestDatabase,
-    name: &str,
-    fields: Vec<(&str, FieldType)>,
-    key_pair: &KeyPair,
-) -> Schema {
-    info!("Creating schema {}", name);
-    let mut field_ids = Vec::new();
-
-    // Build and reduce schema field definitions
-    for field in fields {
-        let create_field_op = Schema::create_field(field.0, field.1.clone());
-        let (entry_signed, _) = send_to_store(
-            &test_db.store,
-            &create_field_op,
-            Schema::get_system(SchemaId::SchemaFieldDefinition(1)).unwrap(),
-            key_pair,
-        )
-        .await
-        .expect("Publish schema fields");
-
-        let input = TaskInput::new(Some(DocumentId::from(entry_signed.hash())), None);
-        reduce_task(test_db.context.clone(), input).await.unwrap();
-
-        info!("Added field '{}' ({})", field.0, field.1);
-        field_ids.push(DocumentViewId::from(entry_signed.hash()));
-    }
-
-    // Build and reduce schema definition
-    let create_schema_op = Schema::create(name, "test schema description", field_ids);
-    let (entry_signed, _) = send_to_store(
-        &test_db.store,
-        &create_schema_op,
-        Schema::get_system(SchemaId::SchemaDefinition(1)).unwrap(),
-        key_pair,
+pub fn schema_from_fields(fields: Vec<(&str, OperationValue)>) -> Schema {
+    schema(
+        schema_fields(fields, constants::SCHEMA_ID.parse().unwrap()),
+        constants::SCHEMA_ID.parse().unwrap(),
+        "A doggo schema for testing",
     )
-    .await
-    .expect("Publish schema");
-
-    let input = TaskInput::new(Some(DocumentId::from(entry_signed.hash())), None);
-    reduce_task(test_db.context.clone(), input.clone())
-        .await
-        .expect("Reduce schema document");
-
-    // Run schema task for this spec
-    let input = TaskInput::new(None, Some(DocumentViewId::from(entry_signed.hash())));
-    schema_task(test_db.context.clone(), input)
-        .await
-        .expect("Run schema task");
-
-    let view_id = DocumentViewId::from(entry_signed.hash());
-    let schema_id = SchemaId::Application(name.to_string(), view_id);
-
-    debug!("Done building {}", schema_id);
-    test_db
-        .context
-        .schema_provider
-        .get(&schema_id)
-        .await
-        .expect("Failed adding schema to provider.")
 }

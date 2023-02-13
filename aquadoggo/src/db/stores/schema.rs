@@ -132,7 +132,7 @@ mod tests {
     use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
     use rstest::rstest;
 
-    use crate::test_utils::next::{
+    use crate::test_utils::{
         add_document, add_schema, populate_and_materialize, populate_store_config, test_runner,
         TestNode,
     };

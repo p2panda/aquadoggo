@@ -133,7 +133,7 @@ mod tests {
     };
     use rstest::rstest;
 
-    use crate::test_utils::next::{test_runner, TestNode};
+    use crate::test_utils::{test_runner, TestNode};
 
     #[rstest]
     fn prevent_duplicate_log_ids(

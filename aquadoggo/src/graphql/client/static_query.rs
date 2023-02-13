@@ -53,7 +53,7 @@ mod tests {
     use serde_json::json;
     use serial_test::serial;
 
-    use crate::test_utils::next::{
+    use crate::test_utils::{
         graphql_test_client, populate_and_materialize, populate_store_config, test_runner, TestNode,
     };
 

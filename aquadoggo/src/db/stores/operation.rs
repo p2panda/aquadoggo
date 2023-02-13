@@ -354,7 +354,7 @@ mod tests {
     use p2panda_rs::WithId;
     use rstest::rstest;
 
-    use crate::test_utils::next::{populate_store_config, test_runner, TestNode, doggo_fields};
+    use crate::test_utils::{populate_store_config, test_runner, TestNode, doggo_fields};
 
     #[rstest]
     #[case::create_operation(operation_with_schema(

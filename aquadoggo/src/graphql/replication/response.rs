@@ -99,7 +99,7 @@ mod tests {
     use rstest::rstest;
 
     use crate::graphql::replication::ReplicationRoot;
-    use crate::test_utils::next::{populate_store_config, test_runner, TestNode};
+    use crate::test_utils::{populate_store_config, test_runner, TestNode};
 
     #[rstest]
     fn validate_with_certificate_pool(

@@ -18,7 +18,7 @@ use crate::db::SqlStore;
 use crate::materializer::tasks::{dependency_task, reduce_task, schema_task};
 use crate::materializer::TaskInput;
 use crate::schema::SchemaProvider;
-use crate::test_utils::next::{doggo_fields, doggo_schema};
+use crate::test_utils::{doggo_fields, doggo_schema};
 
 /// Container for `SqlStore` with access to the document ids and key_pairs used in the
 /// pre-populated database for testing.

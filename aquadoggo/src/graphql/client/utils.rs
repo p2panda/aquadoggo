@@ -42,7 +42,7 @@ mod tests {
     use rstest::rstest;
 
     use crate::graphql::client::utils::validate_view_matches_schema;
-    use crate::test_utils::next::{add_document, test_runner, TestNode};
+    use crate::test_utils::{add_document, test_runner, TestNode};
 
     #[rstest]
     fn test_validate_view_matches_schema() {
