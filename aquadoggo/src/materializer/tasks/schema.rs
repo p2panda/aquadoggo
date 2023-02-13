@@ -120,23 +120,14 @@ async fn get_related_schema_definitions(
 
 #[cfg(test)]
 mod tests {
-    use log::debug;
-    use p2panda_rs::document::traits::AsDocument;
-    use p2panda_rs::document::{DocumentId, DocumentViewId};
-    use p2panda_rs::entry::traits::AsEncodedEntry;
     use p2panda_rs::identity::KeyPair;
-    use p2panda_rs::operation::{OperationBuilder, OperationValue, PinnedRelationList};
-    use p2panda_rs::schema::{FieldType, Schema, SchemaId};
-    use p2panda_rs::storage_provider::traits::DocumentStore;
+    use p2panda_rs::operation::{OperationValue, PinnedRelationList};
+    use p2panda_rs::schema::{FieldType, SchemaId};
     use p2panda_rs::test_utils::fixtures::key_pair;
-    use p2panda_rs::test_utils::memory_store::helpers::send_to_store;
     use rstest::rstest;
 
-    use crate::context::Context;
-    use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
     use crate::test_utils::next::{add_document, test_runner, TestNode};
-    use crate::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
     use super::schema_task;
 

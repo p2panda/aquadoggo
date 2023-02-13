@@ -4,31 +4,27 @@
 use std::convert::TryInto;
 
 use async_graphql::{value, Response};
-use p2panda_rs::{document::DocumentId, test_utils::memory_store::helpers::PopulateStoreConfig};
 use p2panda_rs::schema::FieldType;
 use p2panda_rs::test_utils::fixtures::random_key_pair;
+use p2panda_rs::{document::DocumentId, test_utils::memory_store::helpers::PopulateStoreConfig};
 use rstest::rstest;
 use serde_json::json;
 use serial_test::serial;
 
 use crate::test_utils::next::{
-    add_document, add_schema, graphql_test_client, test_runner, TestNode, populate_store_config,
+    add_document, add_schema, graphql_test_client, populate_store_config, test_runner, TestNode,
 };
 
 // Test querying application documents with scalar fields (no relations) by document id and by view
 // id.
-#[rstest]
+#[test]
 // Note: This and more tests in this file use the underlying static schema provider which is a
 // static mutable data store, accessible across all test runner threads in parallel mode. To
 // prevent overwriting data across threads we have to run this test in serial.
 //
 // Read more: https://users.rust-lang.org/t/static-mutables-in-tests/49321
 #[serial]
-fn scalar_fields(
-    #[from(populate_store_config)]
-    #[with(1, 1, 1, false)]
-    config: PopulateStoreConfig,
-) {
+fn scalar_fields() {
     test_runner(|mut node: TestNode| async move {
         let key_pair = random_key_pair();
 
