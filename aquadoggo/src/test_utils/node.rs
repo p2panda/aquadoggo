@@ -6,7 +6,6 @@ use p2panda_rs::entry::traits::AsEncodedEntry;
 use p2panda_rs::identity::KeyPair;
 use p2panda_rs::operation::{OperationBuilder, OperationValue};
 use p2panda_rs::schema::{FieldType, Schema, SchemaId};
-use p2panda_rs::test_utils::fixtures::random_key_pair;
 use p2panda_rs::test_utils::memory_store::helpers::{
     populate_store, send_to_store, PopulateStoreConfig,
 };
@@ -20,41 +19,56 @@ use crate::materializer::TaskInput;
 use crate::schema::SchemaProvider;
 use crate::test_utils::{doggo_fields, doggo_schema};
 
-/// Container for `SqlStore` with access to the document ids and key_pairs used in the
-/// pre-populated database for testing.
+/// Test node which contains a context with an [`SqlStore`].
+///
+/// Is created through `test_runner` for tests which only require one node, or `TestNodeManager`
+/// via `test_runner_with_manager` for constructing multiple nodes in a single test. Both
+/// construction methods handle safe closing of database pool connections and handles any errors
+/// occurring in the tests.
 pub struct TestNode {
     pub context: Context<SqlStore>,
 }
 
 impl TestNode {
     pub fn new(store: SqlStore) -> Self {
-        // Initialise context for store.
-        let context = Context::new(store, Configuration::default(), SchemaProvider::default());
-
-        // Initialise finished test database.
-        TestNode { context }
+        TestNode {
+            context: Context::new(store, Configuration::default(), SchemaProvider::default()),
+        }
     }
 }
 
 /// Fixture for constructing a `PopulateStoreConfig` with default values for aquadoggo tests.
 ///
-/// Passed parameters define what the database should contain. The first entry in each log contains
-/// a valid CREATE operation following entries contain duplicate UPDATE operations. If the
-/// with_delete flag is set to true the last entry in all logs contain be a DELETE operation.
+/// Is passed to `p2panda_rs::test_utils::populate_store` or
+/// `crate::test_utils::populate_and_materialize` to populate a store or node with the specified
+/// values.
+///
+/// Passed parameters define what the we want the store to contain. The first entry in each log
+/// contains a valid CREATE operation following entries contain UPDATE operations. If the
+/// with_delete flag is set to true the last entry in all logs will contain a DELETE operation.
+///
+/// When using the above methods, each inserted log will contain operations from a single document.
+/// When materialized a document will be created for each log.
 #[fixture]
 pub fn populate_store_config(
     // Number of entries per log/document
     #[default(0)] no_of_entries: usize,
+
     // Number of logs for each public key
     #[default(0)] no_of_logs: usize,
+
     // Number of authors, each with logs populated as defined above
     #[default(0)] no_of_public_keys: usize,
+
     // A boolean flag for wether all logs should contain a delete operation
     #[default(false)] with_delete: bool,
+
     // The schema used for all operations in the db
     #[default(doggo_schema())] schema: Schema,
+
     // The fields used for every CREATE operation
     #[default(doggo_fields())] create_operation_fields: Vec<(&'static str, OperationValue)>,
+
     // The fields used for every UPDATE operation
     #[default(doggo_fields())] update_operation_fields: Vec<(&'static str, OperationValue)>,
 ) -> PopulateStoreConfig {
@@ -79,7 +93,6 @@ pub async fn populate_and_materialize(
     node: &mut TestNode,
     config: &PopulateStoreConfig,
 ) -> (Vec<KeyPair>, Vec<DocumentId>) {
-
     // Populate the store based with entries and operations based on the passed config.
     let (key_pairs, document_ids) = populate_store(&node.context.store, config).await;
 
@@ -117,6 +130,8 @@ pub async fn populate_and_materialize(
 /// Publish a document and materialise it in a given `TestNode`.
 ///
 /// Also runs dependency task for document.
+/// 
+/// Returns the document view id for the created document.
 pub async fn add_document(
     node: &mut TestNode,
     schema_id: &SchemaId,
@@ -159,7 +174,7 @@ pub async fn add_document(
     DocumentViewId::from(entry_signed.hash())
 }
 
-/// Publish a schema and materialise it in a given `TestNode`.
+/// Publish a schema, materialise it in a given `TestNode` and at to the `SchemaProvider`.
 pub async fn add_schema(
     node: &mut TestNode,
     name: &str,

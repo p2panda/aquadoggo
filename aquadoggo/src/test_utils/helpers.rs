@@ -12,10 +12,12 @@ use p2panda_rs::storage_provider::traits::OperationStore;
 use p2panda_rs::test_utils::constants;
 use p2panda_rs::test_utils::fixtures::{schema, schema_fields};
 
+/// Schema id used in aquadoggo tests.
 fn doggo_schema_id() -> SchemaId {
     SchemaId::new_application("doggo_schema", &constants::HASH.to_owned().parse().unwrap())
 }
 
+/// Schema used in aquadoggo tests.
 pub fn doggo_schema() -> Schema {
     schema(
         schema_fields(doggo_fields(), doggo_schema_id()),
@@ -24,7 +26,7 @@ pub fn doggo_schema() -> Schema {
     )
 }
 
-/// A complex set of fields which can be used in aquadoggo tests.
+/// A complex set of fields which are used in aquadoggo tests.
 pub fn doggo_fields() -> Vec<(&'static str, OperationValue)> {
     vec![
         ("username", OperationValue::String("bubu".to_owned())),
@@ -95,6 +97,7 @@ pub async fn build_document<S: OperationStore>(store: &S, document_id: &Document
     Document::try_from(&document_operations).expect("Build the document")
 }
 
+/// Helper for constructing a schema from a vec of field values.
 pub fn schema_from_fields(fields: Vec<(&str, OperationValue)>) -> Schema {
     schema(
         schema_fields(fields, constants::SCHEMA_ID.parse().unwrap()),

@@ -18,6 +18,7 @@ use crate::graphql::GraphQLSchemaManager;
 use crate::http::{build_server, HttpServiceContext};
 use crate::test_utils::TestNode;
 
+/// GraphQL client which can be used for querying a node in tests.
 pub struct TestClient {
     client: reqwest::Client,
     addr: SocketAddr,

@@ -128,7 +128,7 @@ pub fn test_runner<F: AsyncTestFn + Send + Sync + 'static>(test: F) {
 /// have their pool connections closed automatically when the test succeeds or fails.
 ///
 /// Takes an (async) test function as an argument and passes over the `TestNodeManager`
-/// instance which can be used to build databases from inside the tests.
+/// instance which can be used to build nodes with databases from inside the tests.
 pub fn test_runner_with_manager<F: AsyncTestFnWithManager + Send + Sync + 'static>(test: F) {
     let runtime = Builder::new_current_thread()
         .worker_threads(1)
