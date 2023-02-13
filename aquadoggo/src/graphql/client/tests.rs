@@ -4,16 +4,14 @@
 use std::convert::TryInto;
 
 use async_graphql::{value, Response};
+use p2panda_rs::document::DocumentId;
 use p2panda_rs::schema::FieldType;
 use p2panda_rs::test_utils::fixtures::random_key_pair;
-use p2panda_rs::{document::DocumentId, test_utils::memory_store::helpers::PopulateStoreConfig};
 use rstest::rstest;
 use serde_json::json;
 use serial_test::serial;
 
-use crate::test_utils::{
-    add_document, add_schema, graphql_test_client, populate_store_config, test_runner, TestNode,
-};
+use crate::test_utils::{add_document, add_schema, graphql_test_client, test_runner, TestNode};
 
 // Test querying application documents with scalar fields (no relations) by document id and by view
 // id.
