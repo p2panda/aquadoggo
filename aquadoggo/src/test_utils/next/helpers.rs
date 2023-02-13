@@ -94,3 +94,11 @@ pub async fn build_document<S: OperationStore>(store: &S, document_id: &Document
     // Then we construct the document.
     Document::try_from(&document_operations).expect("Build the document")
 }
+
+pub fn schema_from_fields(fields: Vec<(&str, OperationValue)>) -> Schema {
+    schema(
+        schema_fields(fields, constants::SCHEMA_ID.parse().unwrap()),
+        constants::SCHEMA_ID.parse().unwrap(),
+        "A doggo schema for testing",
+    )
+}
