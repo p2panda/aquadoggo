@@ -174,7 +174,7 @@ pub async fn add_document(
     DocumentViewId::from(entry_signed.hash())
 }
 
-/// Publish a schema, materialise it in a given `TestNode` and at to the `SchemaProvider`.
+/// Publish a schema, materialise it in a given `TestNode` and add it to the `SchemaProvider`.
 pub async fn add_schema(
     node: &mut TestNode,
     name: &str,
