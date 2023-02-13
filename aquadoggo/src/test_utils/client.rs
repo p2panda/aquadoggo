@@ -70,8 +70,12 @@ impl TestClient {
 /// Configures a test client that can be used for GraphQL testing.
 pub async fn graphql_test_client(node: &TestNode) -> TestClient {
     let (tx, _) = broadcast::channel(120);
-    let manager =
-        GraphQLSchemaManager::new(node.context.store.clone(), tx, node.context.schema_provider.clone()).await;
+    let manager = GraphQLSchemaManager::new(
+        node.context.store.clone(),
+        tx,
+        node.context.schema_provider.clone(),
+    )
+    .await;
     let http_context = HttpServiceContext::new(manager);
     TestClient::new(build_server(http_context))
 }

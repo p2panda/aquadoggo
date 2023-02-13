@@ -130,7 +130,7 @@ pub async fn populate_and_materialize(
 /// Publish a document and materialise it in a given `TestNode`.
 ///
 /// Also runs dependency task for document.
-/// 
+///
 /// Returns the document view id for the created document.
 pub async fn add_document(
     node: &mut TestNode,

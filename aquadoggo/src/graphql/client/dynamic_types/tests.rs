@@ -8,7 +8,7 @@ use rstest::rstest;
 use serde_json::json;
 use serial_test::serial;
 
-use crate::test_utils::{graphql_test_client, add_schema, TestNode, test_runner};
+use crate::test_utils::{add_schema, graphql_test_client, test_runner, TestNode};
 
 #[rstest]
 // Note: This and more tests in this file use the underlying static schema provider which is a
@@ -19,10 +19,7 @@ use crate::test_utils::{graphql_test_client, add_schema, TestNode, test_runner};
 #[serial]
 #[case(SYSTEM_SCHEMAS[0].id().to_string(), SYSTEM_SCHEMAS[0].description().to_string())]
 #[case(SYSTEM_SCHEMAS[1].id().to_string(), SYSTEM_SCHEMAS[1].description().to_string())]
-fn system_schema_container_type(
-    #[case] type_name: String,
-    #[case] type_description: String,
-) {
+fn system_schema_container_type(#[case] type_name: String, #[case] type_description: String) {
     test_runner(move |node: TestNode| async move {
         let client = graphql_test_client(&node).await;
         let response = client

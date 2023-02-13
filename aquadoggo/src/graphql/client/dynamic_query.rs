@@ -427,9 +427,7 @@ mod test {
     use serde_json::json;
     use serial_test::serial;
 
-    use crate::test_utils::{
-        add_document, add_schema, graphql_test_client, test_runner, TestNode,
-    };
+    use crate::test_utils::{add_document, add_schema, graphql_test_client, test_runner, TestNode};
 
     #[rstest]
     // Note: This and more tests in this file use the underlying static schema provider which is a
@@ -582,7 +580,6 @@ mod test {
     fn collection_query(#[from(random_key_pair)] key_pair: KeyPair) {
         // Test collection query parameter variations.
         test_runner(move |mut node: TestNode| async move {
-
             // Add schema to node.
             let schema = add_schema(
                 &mut node,

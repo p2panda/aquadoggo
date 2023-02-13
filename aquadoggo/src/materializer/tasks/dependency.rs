@@ -176,9 +176,7 @@ mod tests {
     };
     use p2panda_rs::schema::{FieldType, Schema, SchemaId};
     use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
-    use p2panda_rs::test_utils::fixtures::{
-        key_pair, random_document_id, random_document_view_id,
-    };
+    use p2panda_rs::test_utils::fixtures::{key_pair, random_document_id, random_document_view_id};
     use p2panda_rs::test_utils::memory_store::helpers::{
         populate_store, send_to_store, PopulateStoreConfig,
     };

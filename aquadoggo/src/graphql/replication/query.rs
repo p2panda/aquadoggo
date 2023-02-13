@@ -227,9 +227,7 @@ mod tests {
     }
 
     #[rstest]
-    fn entry_by_hash_not_found(
-        #[from(random_hash)] random_hash: Hash,
-    ) {
+    fn entry_by_hash_not_found(#[from(random_hash)] random_hash: Hash) {
         test_runner(|node: TestNode| async move {
             let replication_root = ReplicationRoot::default();
             let schema = Schema::build(replication_root, EmptyMutation, EmptySubscription)
@@ -274,7 +272,9 @@ mod tests {
                         }}
                     }}
                 "#,
-                0, 1, key_pair.public_key().to_string()
+                0,
+                1,
+                key_pair.public_key().to_string()
             );
 
             // Make the query

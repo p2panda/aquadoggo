@@ -81,8 +81,8 @@ mod tests {
     use crate::graphql::GraphQLSchemaManager;
     use crate::http::context::HttpServiceContext;
     use crate::schema::SchemaProvider;
-    use crate::test_utils::{test_runner, TestNode};
     use crate::test_utils::TestClient;
+    use crate::test_utils::{test_runner, TestNode};
 
     use super::build_server;
 

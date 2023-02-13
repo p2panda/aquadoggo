@@ -517,8 +517,7 @@ mod tests {
     use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
     use p2panda_rs::test_utils::constants;
     use p2panda_rs::test_utils::fixtures::{
-        operation, random_document_id, random_document_view_id,
-        random_operation_id,
+        operation, random_document_id, random_document_view_id, random_operation_id,
     };
     use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
     use p2panda_rs::WithId;
