@@ -128,121 +128,72 @@ mod tests {
     use p2panda_rs::operation::{OperationBuilder, OperationValue, PinnedRelationList};
     use p2panda_rs::schema::{FieldType, Schema, SchemaId};
     use p2panda_rs::storage_provider::traits::DocumentStore;
+    use p2panda_rs::test_utils::fixtures::key_pair;
     use p2panda_rs::test_utils::memory_store::helpers::send_to_store;
     use rstest::rstest;
 
     use crate::context::Context;
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
+    use crate::test_utils::next::{add_document, test_runner, TestNode};
     use crate::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
 
     use super::schema_task;
 
-    /// Insert a test schema definition and schema field definition and run reduce tasks for both.
-    async fn create_schema_documents(
-        context: &Context,
-        db: &TestDatabase,
-    ) -> (DocumentViewId, DocumentViewId) {
-        // Create field definition
-        let create_field_definition = OperationBuilder::new(&SchemaId::SchemaFieldDefinition(1))
-            .fields(&[
-                ("name", OperationValue::String("field_name".to_string())),
-                ("type", FieldType::String.into()),
-            ])
-            .build()
-            .unwrap();
-
-        let (entry_signed, _) = send_to_store(
-            &db.store,
-            &create_field_definition,
-            Schema::get_system(SchemaId::SchemaFieldDefinition(1)).unwrap(),
-            &KeyPair::new(),
-        )
-        .await
-        .unwrap();
-        let field_definition_id: DocumentId = entry_signed.hash().into();
-
-        let input = TaskInput::new(Some(field_definition_id.clone()), None);
-        reduce_task(context.clone(), input).await.unwrap();
-        let field_view_id = db
-            .store
-            .get_document(&field_definition_id)
-            .await
-            .unwrap()
-            .unwrap()
-            .view_id()
-            .to_owned();
-        debug!("Created field definition {}", &field_view_id);
-
-        // Create schema definition
-        let create_schema_definition = OperationBuilder::new(&SchemaId::SchemaDefinition(1))
-            .fields(&[
-                ("name", OperationValue::String("schema_name".to_string())),
-                (
-                    "description",
-                    OperationValue::String("description".to_string()),
-                ),
-                (
-                    "fields",
-                    OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
-                        field_view_id.clone(),
-                    ])),
-                ),
-            ])
-            .build()
-            .unwrap();
-
-        let (entry_signed, _) = send_to_store(
-            &db.store,
-            &create_schema_definition,
-            Schema::get_system(SchemaId::SchemaDefinition(1)).unwrap(),
-            &KeyPair::new(),
-        )
-        .await
-        .unwrap();
-
-        let schema_definition_id: DocumentId = entry_signed.hash().into();
-
-        let input = TaskInput::new(Some(schema_definition_id.clone()), None);
-        reduce_task(context.clone(), input).await.unwrap();
-        let definition_view_id = db
-            .store
-            .get_document(&schema_definition_id)
-            .await
-            .unwrap()
-            .unwrap()
-            .view_id()
-            .to_owned();
-        debug!("Created schema definition {}", definition_view_id);
-
-        (definition_view_id, field_view_id)
-    }
-
     #[rstest]
-    fn assembles_schema(
-        #[from(test_db)]
-        #[with(1, 1)]
-        runner: TestDatabaseRunner,
-    ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            // Prepare schema definition and schema field definition
-            let (definition_view_id, field_view_id) =
-                create_schema_documents(&db.context, &db).await;
+    fn assembles_schema(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            // Publish the schema fields document.
+            //
+            // This also runs a reduce and dependency task, materializing the document into the store.
+            let field_view_id = add_document(
+                &mut node,
+                &SchemaId::SchemaFieldDefinition(1),
+                vec![
+                    ("name", OperationValue::String("field_name".to_string())),
+                    ("type", FieldType::String.into()),
+                ],
+                &key_pair,
+            )
+            .await;
 
-            // Start a task with each as input
-            let input = TaskInput::new(None, Some(definition_view_id.clone()));
-            assert!(schema_task(db.context.clone(), input).await.is_ok());
+            // Publish the schema definition document.
+            //
+            // This also runs a reduce and dependency task, materializing the document into the store.
+            let schema_view_id = add_document(
+                &mut node,
+                &SchemaId::SchemaDefinition(1),
+                vec![
+                    ("name", OperationValue::String("schema_name".to_string())),
+                    (
+                        "description",
+                        OperationValue::String("description".to_string()),
+                    ),
+                    (
+                        "fields",
+                        OperationValue::PinnedRelationList(PinnedRelationList::new(vec![
+                            field_view_id.clone(),
+                        ])),
+                    ),
+                ],
+                &key_pair,
+            )
+            .await;
+
+            // Run a schema task with each as input
+            let input = TaskInput::new(None, Some(schema_view_id.clone()));
+            assert!(schema_task(node.context.clone(), input).await.is_ok());
 
             let input = TaskInput::new(None, Some(field_view_id));
-            assert!(schema_task(db.context.clone(), input).await.is_ok());
+            assert!(schema_task(node.context.clone(), input).await.is_ok());
 
             // The new schema should be available on storage provider.
-            let schema = db
+            let schema = node
                 .context
                 .schema_provider
                 .get(&SchemaId::Application(
                     "schema_name".to_string(),
-                    definition_view_id.clone(),
+                    schema_view_id.clone(),
                 ))
                 .await;
             assert!(schema.is_some());
