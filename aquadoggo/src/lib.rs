@@ -48,7 +48,6 @@ mod config;
 mod context;
 mod db;
 mod domain;
-mod errors;
 mod graphql;
 mod http;
 mod manager;
