@@ -291,7 +291,7 @@ mod tests {
                 create_operation_fields: doggo_fields(),
                 update_operation_fields: doggo_fields(),
             };
-            let (key_pairs, _) = populate_store(&billie.store, &populate_db_config).await;
+            let (key_pairs, _) = populate_store(&billie.context.store, &populate_db_config).await;
 
             // Launch HTTP service of Billie
             let (tx, _rx) = broadcast::channel(120);
@@ -366,6 +366,7 @@ mod tests {
 
             // Check the entry arrived into Ada's database
             let entries = ada
+                .context
                 .store
                 .get_entries_by_schema(doggo_schema().id())
                 .await
