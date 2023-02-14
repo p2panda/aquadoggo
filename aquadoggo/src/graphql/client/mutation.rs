@@ -104,6 +104,7 @@ mod tests {
         entry_signed_encoded_unvalidated, key_pair, operation_fields, random_hash,
         update_operation,
     };
+    use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
     use rstest::{fixture, rstest};
     use serde_json::json;
     use serial_test::serial;
@@ -113,11 +114,13 @@ mod tests {
     use crate::domain::next_args;
     use crate::graphql::GraphQLSchemaManager;
     use crate::http::HttpServiceContext;
-    use crate::test_utils::graphql_test_client;
     use crate::test_utils::{
-        doggo_fields, doggo_schema, test_db, TestDatabase, TestDatabaseRunner,
+        doggo_fields, doggo_schema, graphql_test_client, populate_and_materialize,
+        populate_store_config, test_runner, TestNode,
     };
 
+    // Schema used in some of the tests in this module, it only has one field so it's easy to
+    // documents for it.
     fn test_schema() -> Schema {
         Schema::new(
             &SchemaId::from_str(
@@ -130,6 +133,7 @@ mod tests {
         .unwrap()
     }
 
+    // Query string for a publish request.
     const PUBLISH_QUERY: &str = r#"
         mutation TestPublish($entry: String!, $operation: String!) {
             publish(entry: $entry, operation: $operation) {
@@ -140,6 +144,7 @@ mod tests {
             }
         }"#;
 
+    // Encoded entry bytes used in tests below.
     pub static ENTRY_ENCODED: Lazy<Vec<u8>> = Lazy::new(|| {
         encoded_entry(
             1,
@@ -152,6 +157,7 @@ mod tests {
         .into_bytes()
     });
 
+    // Encoded CREATE operation.
     pub static OPERATION_ENCODED: Lazy<Vec<u8>> = Lazy::new(|| {
         serialize_value(cbor!([
             1, 0, "message_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b",
@@ -161,6 +167,7 @@ mod tests {
         ]))
     });
 
+    // Encoded CREATE operation which incorrectly includes a previous field.
     pub static CREATE_OPERATION_WITH_PREVIOUS_OPS: Lazy<Vec<u8>> = Lazy::new(|| {
         serialize_value(cbor!([
             1, 0, "message_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b", [
@@ -172,6 +179,7 @@ mod tests {
         ]))
     });
 
+    // Encoded UPDATE operation which incorrectly doesn't include a previous field.
     pub static UPDATE_OPERATION_NO_PREVIOUS_OPS: Lazy<Vec<u8>> = Lazy::new(|| {
         serialize_value(cbor!([
             1, 1, "message_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b",
@@ -181,6 +189,7 @@ mod tests {
         ]))
     });
 
+    // Encoded DELETE operation which incorrectly doesn't include a previous field.
     pub static DELETE_OPERATION_NO_PREVIOUS_OPS: Lazy<Vec<u8>> =
         Lazy::new(|| serialize_value(cbor!([1, 2, test_schema().id().to_string(),])));
 
@@ -206,14 +215,22 @@ mod tests {
     // Read more: https://users.rust-lang.org/t/static-mutables-in-tests/49321
     #[serial]
     fn publish_entry(
-        #[from(test_db)]
+        #[from(populate_store_config)]
         #[with(0, 0, 0, false, test_schema())]
-        runner: TestDatabaseRunner,
+        config: PopulateStoreConfig,
         publish_request: Request,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
+        test_runner(|mut node: TestNode| async move {
+            // Adds the test_schema to the store and schema provider.
+            populate_and_materialize(&mut node, &config).await;
+
             let (tx, _rx) = broadcast::channel(120);
-            let manager = GraphQLSchemaManager::new(db.store, tx, db.context.schema_provider.clone()).await;
+            let manager = GraphQLSchemaManager::new(
+                node.context.store.clone(),
+                tx,
+                node.context.schema_provider.clone(),
+            )
+            .await;
             let context = HttpServiceContext::new(manager);
 
             let response = context.schema.execute(publish_request).await;
@@ -235,15 +252,21 @@ mod tests {
     #[rstest]
     #[serial] // See note above on why we execute this test in series
     fn sends_message_on_communication_bus(
-        #[from(test_db)]
+        #[from(populate_store_config)]
         #[with(0, 0, 0, false, test_schema())]
-        runner: TestDatabaseRunner,
+        config: PopulateStoreConfig,
         publish_request: Request,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
+        test_runner(|mut node: TestNode| async move {
+            // Adds the test_schema to the store and schema provider.
+            populate_and_materialize(&mut node, &config).await;
             let (tx, mut rx) = broadcast::channel(120);
-            let manager =
-                GraphQLSchemaManager::new(db.store, tx, db.context.schema_provider.clone()).await;
+            let manager = GraphQLSchemaManager::new(
+                node.context.store.clone(),
+                tx,
+                node.context.schema_provider.clone(),
+            )
+            .await;
             let context = HttpServiceContext::new(manager);
 
             context.schema.execute(publish_request).await;
@@ -263,15 +286,17 @@ mod tests {
     #[rstest]
     #[serial] // See note above on why we execute this test in series
     fn post_gql_mutation(
-        #[from(test_db)]
+        #[from(populate_store_config)]
         #[with(0, 0, 0, false, test_schema())]
-        runner: TestDatabaseRunner,
+        config: PopulateStoreConfig,
         publish_request: Request,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
-            // Init the test client.
-            let client = graphql_test_client(&db).await;
+        test_runner(|mut node: TestNode| async move {
+            // Adds the test_schema to the store and schema provider.
+            populate_and_materialize(&mut node, &config).await;
 
+            // Init the test client.
+            let client = graphql_test_client(&node).await;
 
             let response = client
                 .post("/graphql")
@@ -478,18 +503,25 @@ mod tests {
         #[case] entry_encoded: &str,
         #[case] encoded_operation: &[u8],
         #[case] expected_error_message: &str,
-        #[from(test_db)]
+        #[from(populate_store_config)]
         #[with(0, 0, 0, false, test_schema())]
-        runner: TestDatabaseRunner,
+        config: PopulateStoreConfig,
     ) {
+        // Test that encoded entries and operations are correctly validated when passed into
+        // qraphql publish endpoint. This is a public facing method so we should expect any
+        // junk data to arrive.
+
         // Encode the entry and operation as string values.
         let entry_encoded = entry_encoded.to_string();
         let encoded_operation = hex::encode(encoded_operation);
         let expected_error_message = expected_error_message.to_string();
 
-        runner.with_db_teardown(move |db: TestDatabase| async move {
+        test_runner(|mut node: TestNode| async move {
+            // Adds the test_schema to the store and schema provider.
+            populate_and_materialize(&mut node, &config).await;
+
             // Init the test client.
-            let client = graphql_test_client(&db).await;
+            let client = graphql_test_client(&node).await;
 
             // Prepare the GQL publish request,
             let publish_request = publish_request(&entry_encoded, &encoded_operation);
@@ -613,17 +645,24 @@ mod tests {
         #[case] entry_encoded: &str,
         #[case] encoded_operation: &[u8],
         #[case] expected_error_message: &str,
-        #[from(test_db)]
+        #[from(populate_store_config)]
         #[with(10, 1, 1, false, test_schema(), vec![("message", OperationValue::String("Hello!".to_string()))], vec![("message", OperationValue::String("Hello!".to_string()))])]
-        runner: TestDatabaseRunner,
+        config: PopulateStoreConfig,
     ) {
+        // Test that entries and operations passed into the qraphql publish endpoint adhere to the
+        // p2panda specification in relation to each other and values stored in the target node's database. This is a
+        // public facing method so we should expect any junk data to arrive.
+
         let entry_encoded = entry_encoded.to_string();
         let encoded_operation = hex::encode(encoded_operation.to_owned());
         let expected_error_message = expected_error_message.to_string();
 
-        runner.with_db_teardown(move |db: TestDatabase| async move {
+        test_runner(|mut node: TestNode| async move {
+            // Populates the node with entries, operations and schemas.
+            populate_and_materialize(&mut node, &config).await;
+
             // Init the test client.
-            let client = graphql_test_client(&db).await;
+            let client = graphql_test_client(&node).await;
 
             let publish_request = publish_request(&entry_encoded, &encoded_operation);
 
@@ -650,13 +689,16 @@ mod tests {
     #[rstest]
     #[serial] // See note above on why we execute this test in series
     fn publish_many_entries(
-        #[from(test_db)]
+        #[from(populate_store_config)]
         #[with(0, 0, 0, false, doggo_schema())]
-        runner: TestDatabaseRunner,
+        config: PopulateStoreConfig,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        test_runner(|mut node: TestNode| async move {
+            // Adds the test_schema to the store and schema provider.
+            populate_and_materialize(&mut node, &config).await;
+
             // Init the test client.
-            let client = graphql_test_client(&db).await;
+            let client = graphql_test_client(&node).await;
 
             // Two key pairs representing two different authors
             let key_pairs = vec![KeyPair::new(), KeyPair::new()];
@@ -676,7 +718,7 @@ mod tests {
 
                     // Get the next entry args for the document view id and public_key.
                     let next_entry_args =
-                        next_args(&db.store, &public_key, document_view_id.as_ref())
+                        next_args(&node.context.store, &public_key, document_view_id.as_ref())
                             .await
                             .unwrap();
 
@@ -730,7 +772,7 @@ mod tests {
                         .send()
                         .await;
 
-                    // Every publihsh request should succeed.
+                    // Every publish request should succeed.
                     assert!(result.status().is_success())
                 }
             }
@@ -740,16 +782,20 @@ mod tests {
     #[rstest]
     #[serial] // See note above on why we execute this test in series
     fn duplicate_publishing_of_entries(
-        #[from(test_db)]
+        #[from(populate_store_config)]
         #[with(1, 1, 1, false, doggo_schema())]
-        runner: TestDatabaseRunner,
+        config: PopulateStoreConfig,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        test_runner(|mut node: TestNode| async move {
+            // Populates the node with entries, operations and schemas.
+            populate_and_materialize(&mut node, &config).await;
+
             // Init the test client.
-            let client = graphql_test_client(&db).await;
+            let client = graphql_test_client(&node).await;
 
             // Get the one entry from the store.
-            let entries = db
+            let entries = node
+                .context
                 .store
                 .get_entries_by_schema(doggo_schema().id())
                 .await
@@ -786,11 +832,10 @@ mod tests {
     fn publish_unsupported_schema(
         #[from(encoded_entry)] entry_with_unsupported_schema: EncodedEntry,
         #[from(encoded_operation)] operation_with_unsupported_schema: EncodedOperation,
-        #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        test_runner(|node: TestNode| async move {
             // Init the test client.
-            let client = graphql_test_client(&db).await;
+            let client = graphql_test_client(&node).await;
 
             // Prepare a publish entry request for the entry.
             let publish_entry = publish_request(

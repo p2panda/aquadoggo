@@ -95,29 +95,33 @@ mod tests {
     use p2panda_rs::entry::traits::AsEncodedEntry;
     use p2panda_rs::entry::LogId;
     use p2panda_rs::storage_provider::traits::EntryStore;
+    use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
     use rstest::rstest;
 
     use crate::graphql::replication::ReplicationRoot;
-    use crate::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+    use crate::test_utils::{populate_store_config, test_runner, TestNode};
 
     #[rstest]
     fn validate_with_certificate_pool(
-        #[from(test_db)]
+        #[from(populate_store_config)]
         #[with(13, 1, 1)]
-        runner: TestDatabaseRunner,
+        config: PopulateStoreConfig,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        test_runner(|node: TestNode| async move {
+            // Populate the store with some entries and operations.
+            let (key_pairs, _) = populate_store(&node.context.store, &config).await;
+            // The key pair used when populating the store.
+            let key_pair = key_pairs.get(0).expect("Should be one key pair");
+
             let replication_root = ReplicationRoot::default();
             let schema = Schema::build(replication_root, EmptyMutation, EmptySubscription)
-                .data(db.store.clone())
+                .data(node.context.store.clone())
                 .finish();
 
-            // Retreive last entry of author from test database
-            let public_key = db.test_data.key_pairs.first().unwrap().public_key();
-
-            let latest_entry_hash = db
+            let latest_entry_hash = node
+                .context
                 .store
-                .get_latest_entry(&public_key, &LogId::default())
+                .get_latest_entry(&key_pair.public_key(), &LogId::default())
                 .await
                 .unwrap()
                 .unwrap()

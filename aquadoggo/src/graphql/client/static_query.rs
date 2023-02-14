@@ -48,12 +48,14 @@ impl StaticQuery {
 #[cfg(test)]
 mod tests {
     use async_graphql::{value, Response};
+    use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
     use rstest::rstest;
     use serde_json::json;
     use serial_test::serial;
 
-    use crate::test_utils::graphql_test_client;
-    use crate::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+    use crate::test_utils::{
+        graphql_test_client, populate_and_materialize, populate_store_config, test_runner, TestNode,
+    };
 
     #[rstest]
     // Note: This and more tests in this file use the underlying static schema provider which is a
@@ -62,9 +64,9 @@ mod tests {
     //
     // Read more: https://users.rust-lang.org/t/static-mutables-in-tests/49321
     #[serial]
-    fn next_args_valid_query(#[from(test_db)] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
-            let client = graphql_test_client(&db).await;
+    fn next_args_valid_query() {
+        test_runner(|node: TestNode| async move {
+            let client = graphql_test_client(&node).await;
             // Selected fields need to be alphabetically sorted because that's what the `json`
             // macro that is used in the assert below produces.
             let received_entry_args = client
@@ -103,15 +105,20 @@ mod tests {
     #[rstest]
     #[serial] // See note above on why we execute this test in series
     fn next_args_valid_query_with_document_id(
+        #[from(populate_store_config)]
         #[with(1, 1, 1)]
-        #[from(test_db)]
-        runner: TestDatabaseRunner,
+        config: PopulateStoreConfig,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
-            let client = graphql_test_client(&db).await;
-            let document_id = db.test_data.documents.get(0).unwrap();
-            let public_key =
-                db.test_data.key_pairs[0].public_key();
+        test_runner(|mut node: TestNode| async move {
+            // Populates the store and materialises documents and schema.
+            let (key_pairs, document_ids) = populate_and_materialize(&mut node, &config).await;
+
+            let client = graphql_test_client(&node).await;
+            let document_id = document_ids.get(0).expect("There should be a document id");
+            let public_key = key_pairs
+                .get(0)
+                .expect("There should be a key pair")
+                .public_key();
 
             // Selected fields need to be alphabetically sorted because that's what the `json`
             // macro that is used in the assert below produces.
@@ -119,7 +126,8 @@ mod tests {
                 .post("/graphql")
                 .json(&json!({
                     "query":
-                        format!("{{
+                        format!(
+                            "{{
                             nextArgs(
                                 publicKey: \"{}\",
                                 viewId: \"{}\"
@@ -156,9 +164,9 @@ mod tests {
 
     #[rstest]
     #[serial] // See note above on why we execute this test in series
-    fn next_args_error_response(#[from(test_db)] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
-            let client = graphql_test_client(&db).await;
+    fn next_args_error_response() {
+        test_runner(|node: TestNode| async move {
+            let client = graphql_test_client(&node).await;
             let response = client
                 .post("/graphql")
                 .json(&json!({

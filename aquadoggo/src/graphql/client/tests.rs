@@ -11,25 +11,24 @@ use rstest::rstest;
 use serde_json::json;
 use serial_test::serial;
 
-use crate::test_utils::graphql_test_client;
-use crate::test_utils::{add_document, add_schema, test_db, TestDatabase, TestDatabaseRunner};
+use crate::test_utils::{add_document, add_schema, graphql_test_client, test_runner, TestNode};
 
 // Test querying application documents with scalar fields (no relations) by document id and by view
 // id.
-#[rstest]
+#[test]
 // Note: This and more tests in this file use the underlying static schema provider which is a
 // static mutable data store, accessible across all test runner threads in parallel mode. To
 // prevent overwriting data across threads we have to run this test in serial.
 //
 // Read more: https://users.rust-lang.org/t/static-mutables-in-tests/49321
 #[serial]
-fn scalar_fields(#[from(test_db)] runner: TestDatabaseRunner) {
-    runner.with_db_teardown(&|mut db: TestDatabase| async move {
+fn scalar_fields() {
+    test_runner(|mut node: TestNode| async move {
         let key_pair = random_key_pair();
 
         // Add schema to node.
         let schema = add_schema(
-            &mut db,
+            &mut node,
             "schema_name",
             vec![
                 ("bool", FieldType::Boolean),
@@ -50,10 +49,10 @@ fn scalar_fields(#[from(test_db)] runner: TestDatabaseRunner) {
         ]
         .try_into()
         .unwrap();
-        let view_id = add_document(&mut db, schema.id(), doc_fields, &key_pair).await;
+        let view_id = add_document(&mut node, schema.id(), doc_fields, &key_pair).await;
 
         // Configure and send test query.
-        let client = graphql_test_client(&db).await;
+        let client = graphql_test_client(&node).await;
         let query = format!(
             r#"{{
                 scalarDoc: {type_name}(viewId: "{view_id}") {{
@@ -97,13 +96,13 @@ fn scalar_fields(#[from(test_db)] runner: TestDatabaseRunner) {
 // relation fields.
 #[rstest]
 #[serial] // See note above on why we execute this test in series
-fn relation_fields(#[from(test_db)] runner: TestDatabaseRunner) {
-    runner.with_db_teardown(&|mut db: TestDatabase| async move {
+fn relation_fields() {
+    test_runner(|mut node: TestNode| async move {
         let key_pair = random_key_pair();
 
         // Add schemas to node.
         let child_schema = add_schema(
-            &mut db,
+            &mut node,
             "child",
             vec![("it_works", FieldType::Boolean)],
             &key_pair,
@@ -111,7 +110,7 @@ fn relation_fields(#[from(test_db)] runner: TestDatabaseRunner) {
         .await;
 
         let parent_schema = add_schema(
-            &mut db,
+            &mut node,
             "parent",
             vec![
                 (
@@ -137,7 +136,7 @@ fn relation_fields(#[from(test_db)] runner: TestDatabaseRunner) {
 
         // Publish child document on node.
         let child_view_id = add_document(
-            &mut db,
+            &mut node,
             child_schema.id(),
             vec![("it_works", true.into())].try_into().unwrap(),
             &key_pair,
@@ -155,10 +154,10 @@ fn relation_fields(#[from(test_db)] runner: TestDatabaseRunner) {
         ];
 
         let parent_view_id =
-            add_document(&mut db, parent_schema.id(), parent_fields, &key_pair).await;
+            add_document(&mut node, parent_schema.id(), parent_fields, &key_pair).await;
 
         // Configure and send test query.
-        let client = graphql_test_client(&db).await;
+        let client = graphql_test_client(&node).await;
         let query = format!(
             r#"{{
                 result: {}(viewId: "{}") {{

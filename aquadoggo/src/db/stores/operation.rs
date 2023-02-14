@@ -350,10 +350,11 @@ mod tests {
         document_id, operation, operation_id, operation_with_schema, public_key,
         random_document_view_id, random_operation_id, random_previous_operations, schema_id,
     };
+    use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
     use p2panda_rs::WithId;
     use rstest::rstest;
 
-    use crate::test_utils::{doggo_fields, test_db, TestDatabase, TestDatabaseRunner};
+    use crate::test_utils::{doggo_fields, populate_store_config, test_runner, TestNode};
 
     #[rstest]
     #[case::create_operation(operation_with_schema(
@@ -380,18 +381,19 @@ mod tests {
         operation_id: OperationId,
         public_key: PublicKey,
         document_id: DocumentId,
-        #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
+        test_runner(move |node: TestNode| async move {
             // Insert the doggo operation into the db, returns Ok(true) when succesful.
-            let result = db
+            let result = node
+                .context
                 .store
                 .insert_operation(&operation_id, &public_key, &operation, &document_id)
                 .await;
             assert!(result.is_ok());
 
             // Request the previously inserted operation by it's id.
-            let returned_operation = db
+            let returned_operation = node
+                .context
                 .store
                 .get_operation(&operation_id)
                 .await
@@ -413,15 +415,16 @@ mod tests {
         operation_id: OperationId,
         public_key: PublicKey,
         document_id: DocumentId,
-        #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
-            db.store
+        test_runner(move |node: TestNode| async move {
+            node.context
+                .store
                 .insert_operation(&operation_id, &public_key, &operation, &document_id)
                 .await
                 .unwrap();
 
-            assert!(db
+            assert!(node
+                .context
                 .store
                 .insert_operation(&operation_id, &public_key, &operation, &document_id)
                 .await
@@ -436,12 +439,12 @@ mod tests {
         public_key: PublicKey,
         document_id: DocumentId,
         schema_id: SchemaId,
-        #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
+        test_runner(move |node: TestNode| async move {
             // Getting a document by operation id which isn't stored in the database
             // should return none.
-            assert!(db
+            assert!(node
+                .context
                 .store
                 .get_document_id_by_operation_id(&operation_id)
                 .await
@@ -449,14 +452,16 @@ mod tests {
                 .is_none());
 
             // Now we insert the operation.
-            db.store
+            node.context
+                .store
                 .insert_operation(&operation_id, &public_key, &operation, &document_id)
                 .await
                 .unwrap();
 
             // The same request should return the expected document id.
             assert_eq!(
-                db.store
+                node.context
+                    .store
                     .get_document_id_by_operation_id(&operation_id)
                     .await
                     .expect("Get document id by operation id")
@@ -474,7 +479,8 @@ mod tests {
 
             let update_operation_id = random_operation_id();
 
-            db.store
+            node.context
+                .store
                 .insert_operation(
                     &update_operation_id,
                     &public_key,
@@ -486,7 +492,8 @@ mod tests {
 
             // Getting the document by the id of the new update document should also work.
             assert_eq!(
-                db.store
+                node.context
+                    .store
                     .get_document_id_by_operation_id(&update_operation_id)
                     .await
                     .expect("Get document id by operation id")
@@ -498,22 +505,24 @@ mod tests {
 
     #[rstest]
     fn get_operations_by_document_id(
-        #[from(test_db)]
-        #[with(5, 1, 1)]
-        runner: TestDatabaseRunner,
+        #[from(populate_store_config)]
+        #[with(10, 1, 1)]
+        config: PopulateStoreConfig,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            // This is the document id of the document in the test store.
-            let document_id = db.test_data.documents.first().unwrap();
+        test_runner(|node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (_, document_ids) = populate_store(&node.context.store, &config).await;
+            let document_id = document_ids.get(0).expect("At least one document id");
 
-            let operations_by_document_id = db
+            let operations_by_document_id = node
+                .context
                 .store
                 .get_operations_by_document_id(document_id)
                 .await
                 .expect("Get operations by their document id");
 
             // We expect the number of operations returned to match the expected number.
-            assert_eq!(operations_by_document_id.len(), 5)
+            assert_eq!(operations_by_document_id.len(), 10)
         });
     }
 }

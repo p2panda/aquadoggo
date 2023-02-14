@@ -129,51 +129,48 @@ mod tests {
     use rstest::rstest;
 
     use crate::materializer::{Task, TaskInput};
-    use crate::test_utils::{test_db, TestDatabase, TestDatabaseRunner};
+    use crate::test_utils::{test_runner, TestNode};
 
     #[rstest]
-    fn insert_get_remove_tasks(
-        document_view_id: DocumentViewId,
-        #[from(test_db)] runner: TestDatabaseRunner,
-    ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+    fn insert_get_remove_tasks(document_view_id: DocumentViewId) {
+        test_runner(|node: TestNode| async move {
             // Prepare test data
             let task = Task::new("reduce", TaskInput::new(None, Some(document_view_id)));
 
             // Insert task
-            let result = db.store.insert_task(&task).await;
+            let result = node.context.store.insert_task(&task).await;
             assert!(result.is_ok(), "{:?}", result);
 
             // Check if task exists in database
-            let result = db.store.get_tasks().await;
+            let result = node.context.store.get_tasks().await;
             assert_eq!(result.unwrap(), vec![task.clone()]);
 
             // Remove task
-            let result = db.store.remove_task(&task).await;
+            let result = node.context.store.remove_task(&task).await;
             assert!(result.is_ok(), "{:?}", result);
 
             // Check if all tasks got removed
-            let result = db.store.get_tasks().await;
+            let result = node.context.store.get_tasks().await;
             assert_eq!(result.unwrap(), vec![]);
         });
     }
 
     #[rstest]
-    fn avoid_duplicates(document_id: DocumentId, #[from(test_db)] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+    fn avoid_duplicates(document_id: DocumentId) {
+        test_runner(|node: TestNode| async move {
             // Prepare test data
             let task = Task::new("reduce", TaskInput::new(Some(document_id), None));
 
             // Insert task
-            let result = db.store.insert_task(&task).await;
+            let result = node.context.store.insert_task(&task).await;
             assert!(result.is_ok(), "{:?}", result);
 
             // Insert the same thing again, it should silently fail
-            let result = db.store.insert_task(&task).await;
+            let result = node.context.store.insert_task(&task).await;
             assert!(result.is_ok(), "{:?}", result);
 
             // Check for duplicates
-            let result = db.store.get_tasks().await;
+            let result = node.context.store.get_tasks().await;
             assert_eq!(result.unwrap().len(), 1);
         });
     }

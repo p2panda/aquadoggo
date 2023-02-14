@@ -8,8 +8,7 @@ use rstest::rstest;
 use serde_json::json;
 use serial_test::serial;
 
-use crate::test_utils::graphql_test_client;
-use crate::test_utils::{add_schema, test_db, TestDatabase, TestDatabaseRunner};
+use crate::test_utils::{add_schema, graphql_test_client, test_runner, TestNode};
 
 #[rstest]
 // Note: This and more tests in this file use the underlying static schema provider which is a
@@ -20,13 +19,9 @@ use crate::test_utils::{add_schema, test_db, TestDatabase, TestDatabaseRunner};
 #[serial]
 #[case(SYSTEM_SCHEMAS[0].id().to_string(), SYSTEM_SCHEMAS[0].description().to_string())]
 #[case(SYSTEM_SCHEMAS[1].id().to_string(), SYSTEM_SCHEMAS[1].description().to_string())]
-fn system_schema_container_type(
-    #[from(test_db)] runner: TestDatabaseRunner,
-    #[case] type_name: String,
-    #[case] type_description: String,
-) {
-    runner.with_db_teardown(move |db: TestDatabase| async move {
-        let client = graphql_test_client(&db).await;
+fn system_schema_container_type(#[case] type_name: String, #[case] type_description: String) {
+    test_runner(move |node: TestNode| async move {
+        let client = graphql_test_client(&node).await;
         let response = client
             .post("/graphql")
             .json(&json!({
@@ -77,15 +72,14 @@ fn system_schema_container_type(
     });
 }
 
-#[rstest]
 #[serial] // See note above on why we execute this test in series
-fn application_schema_container_type(#[from(test_db)] runner: TestDatabaseRunner) {
-    runner.with_db_teardown(move |mut db: TestDatabase| async move {
+fn application_schema_container_type() {
+    test_runner(|mut node: TestNode| async move {
         let key_pair = random_key_pair();
 
         // Add schema to test database.
         let schema = add_schema(
-            &mut db,
+            &mut node,
             "schema_name",
             vec![("bool_field", FieldType::Boolean)],
             &key_pair,
@@ -94,7 +88,7 @@ fn application_schema_container_type(#[from(test_db)] runner: TestDatabaseRunner
 
         let type_name = schema.id().to_string();
 
-        let client = graphql_test_client(&db).await;
+        let client = graphql_test_client(&node).await;
         let response = client
             .post("/graphql")
             .json(&json!({
@@ -144,15 +138,14 @@ fn application_schema_container_type(#[from(test_db)] runner: TestDatabaseRunner
     });
 }
 
-#[rstest]
 #[serial] // See note above on why we execute this test in series
-fn application_schema_fields_type(#[from(test_db)] runner: TestDatabaseRunner) {
-    runner.with_db_teardown(move |mut db: TestDatabase| async move {
+fn application_schema_fields_type() {
+    test_runner(move |mut node: TestNode| async move {
         let key_pair = random_key_pair();
 
         // Add schema to node.
         let schema = add_schema(
-            &mut db,
+            &mut node,
             "schema_name",
             vec![
                 // scalar field
@@ -174,7 +167,7 @@ fn application_schema_fields_type(#[from(test_db)] runner: TestDatabaseRunner) {
 
         let type_name = schema.id().to_string();
 
-        let client = graphql_test_client(&db).await;
+        let client = graphql_test_client(&node).await;
         let response = client
             .post("/graphql")
             .json(&json!({
@@ -228,11 +221,10 @@ fn application_schema_fields_type(#[from(test_db)] runner: TestDatabaseRunner) {
     });
 }
 
-#[rstest]
 #[serial] // See note above on why we execute this test in series
-fn metadata_type(#[from(test_db)] runner: TestDatabaseRunner) {
-    runner.with_db_teardown(move |db: TestDatabase| async move {
-        let client = graphql_test_client(&db).await;
+fn metadata_type() {
+    test_runner(move |node: TestNode| async move {
+        let client = graphql_test_client(&node).await;
         let response = client
             .post("/graphql")
             .json(&json!({

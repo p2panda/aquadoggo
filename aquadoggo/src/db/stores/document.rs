@@ -519,32 +519,43 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::{
         operation, random_document_id, random_document_view_id, random_operation_id,
     };
+    use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
     use p2panda_rs::WithId;
     use rstest::rstest;
 
     use crate::db::stores::document::DocumentView;
     use crate::test_utils::{
-        build_document, doggo_schema, test_db, TestDatabase, TestDatabaseRunner,
+        build_document, populate_and_materialize, populate_store_config, test_runner, TestNode,
     };
 
     #[rstest]
     fn insert_and_get_one_document_view(
-        #[from(test_db)]
+        #[from(populate_store_config)]
         #[with(2, 1, 1)]
-        runner: TestDatabaseRunner,
+        config: PopulateStoreConfig,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            // Operations for this document id exist in the database.
-            let document_id = db.test_data.documents[0].clone();
+        test_runner(|node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (_, document_ids) = populate_store(&node.context.store, &config).await;
+            let document_id = document_ids.get(0).expect("At least one document id");
 
             // Get the operations and build the document.
-            let operations = db
+            let operations = node
+                .context
                 .store
                 .get_operations_by_document_id(&document_id)
                 .await
                 .unwrap();
-            let document_builder = DocumentBuilder::from(&operations);
 
+            // Build the document from the operations.
+            let document_builder = DocumentBuilder::from(&operations);
+            let document = document_builder.build().unwrap();
+
+            // Insert the document into the store
+            let result = node.context.store.insert_document(&document).await;
+            assert!(result.is_ok());
+
+            // Find the "CREATE" operation and get it's id.
             let create_operation = WithId::<OperationId>::id(
                 operations
                     .iter()
@@ -552,27 +563,15 @@ mod tests {
                     .unwrap(),
             )
             .to_owned();
-            let update_operation = WithId::<OperationId>::id(
-                operations
-                    .iter()
-                    .find(|operation| operation.is_update())
-                    .unwrap(),
-            )
-            .to_owned();
 
+            // Build the document with just the first operation.
             let document_at_view_1 = document_builder
                 .build_to_view_id(Some(create_operation.into()))
                 .unwrap();
-            let document_at_view_2 = document_builder
-                .build_to_view_id(Some(update_operation.into()))
-                .unwrap();
 
-            // Insert the document into the store
-            let result = db.store.insert_document(&document_at_view_2).await;
-            assert!(result.is_ok());
-
-            // Insert it's other view into the store (now this works as the document exists)
-            let result = db
+            // Insert it into the store as well.
+            let result = node
+                .context
                 .store
                 .insert_document_view(
                     &document_at_view_1.view().unwrap(),
@@ -583,69 +582,58 @@ mod tests {
             assert!(result.is_ok());
 
             // We should be able to retrieve the document at either of it's views now.
-            let retrieved_document_at_view_1 = db
+
+            // Here we request the document with it's initial state.
+            let retrieved_document = node
+                .context
                 .store
                 .get_document_by_view_id(document_at_view_1.view_id())
                 .await
                 .unwrap()
                 .unwrap();
 
-            let retrieved_document_at_view_2 = db
+            // The retrieved document views should match the inserted one.
+            assert_eq!(retrieved_document.id(), document_at_view_1.id());
+            assert_eq!(retrieved_document.view_id(), document_at_view_1.view_id());
+            assert_eq!(retrieved_document.fields(), document_at_view_1.fields());
+
+            // Here we request it at it's current state.
+            let retrieved_document = node
+                .context
                 .store
-                .get_document_by_view_id(document_at_view_2.view_id())
+                .get_document_by_view_id(document.view_id())
                 .await
                 .unwrap()
                 .unwrap();
 
-            for (name, _) in document_at_view_1.fields().unwrap().iter() {
-                println!("{name}");
-                assert_eq!(
-                    document_at_view_1.get(name),
-                    retrieved_document_at_view_1.get(name)
-                )
-            }
+            // The retrieved document views should match the inserted one.
+            assert_eq!(retrieved_document.id(), document.id());
+            assert_eq!(retrieved_document.view_id(), document.view_id());
+            assert_eq!(retrieved_document.fields(), document.fields());
 
-            // The retrieved document views should match the inserted ones.
-            assert_eq!(retrieved_document_at_view_1.id(), document_at_view_1.id());
-            assert_eq!(
-                retrieved_document_at_view_1.view_id(),
-                document_at_view_1.view_id()
-            );
-            assert_eq!(
-                retrieved_document_at_view_1.fields(),
-                document_at_view_1.fields()
-            );
-            assert_eq!(retrieved_document_at_view_2.id(), document_at_view_2.id());
-            assert_eq!(
-                retrieved_document_at_view_2.view_id(),
-                document_at_view_2.view_id()
-            );
-            assert_eq!(
-                retrieved_document_at_view_2.fields(),
-                document_at_view_2.fields()
-            );
+            // If we retrieve the document by it's id, we expect the current state.
+            let retrieved_document = node
+                .context
+                .store
+                .get_document(&document_id)
+                .await
+                .unwrap()
+                .unwrap();
 
-            // If we retrieve the document by it's id, we expect the view inserted with the document
-            // itself.
-            let document = db.store.get_document(&document_id).await.unwrap().unwrap();
-
-            assert_eq!(document.id(), document_at_view_2.id());
-            assert_eq!(document.view_id(), document_at_view_2.view_id());
-            assert_eq!(document.fields(), document_at_view_2.fields());
+            // The retrieved document views should match the inserted one.
+            assert_eq!(retrieved_document.id(), document.id());
+            assert_eq!(retrieved_document.view_id(), document.view_id());
+            assert_eq!(retrieved_document.fields(), document.fields());
         });
     }
 
     #[rstest]
-    fn document_view_does_not_exist(
-        random_document_view_id: DocumentViewId,
-        #[from(test_db)]
-        #[with(1, 1, 1)]
-        runner: TestDatabaseRunner,
-    ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+    fn document_view_does_not_exist(random_document_view_id: DocumentViewId) {
+        test_runner(|node: TestNode| async move {
             // We try to retrieve a document view by it's id but no view
             // with that id exists.
-            let view_does_not_exist = db
+            let view_does_not_exist = node
+                .context
                 .store
                 .get_document_by_view_id(&random_document_view_id)
                 .await
@@ -661,10 +649,9 @@ mod tests {
         #[from(random_operation_id)] operation_id: OperationId,
         #[from(random_document_id)] document_id: DocumentId,
         #[from(random_document_view_id)] document_view_id: DocumentViewId,
-        #[from(test_db)] runner: TestDatabaseRunner,
         operation: Operation,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        test_runner(|node: TestNode| async move {
             // Construct a document view from an operation which is not in the database.
             let document_view = DocumentView::new(
                 &document_view_id,
@@ -676,7 +663,8 @@ mod tests {
 
             // Inserting the view should fail as it must relate to an
             // operation which is already in the database.
-            let result = db
+            let result = node
+                .context
                 .store
                 .insert_document_view(&document_view, &document_id, constants::schema().id())
                 .await;
@@ -687,28 +675,37 @@ mod tests {
 
     #[rstest]
     fn inserts_gets_document(
-        #[from(test_db)]
+        #[from(populate_store_config)]
         #[with(1, 1, 1)]
-        runner: TestDatabaseRunner,
+        config: PopulateStoreConfig,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            // Operations for this document id exist in the database.
-            let document_id = db.test_data.documents[0].clone();
-            // Build the document and view.
-            let document = build_document(&db.store, &document_id).await;
+        test_runner(|node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (_, document_ids) = populate_store(&node.context.store, &config).await;
+            let document_id = document_ids.get(0).expect("At least one document id");
+
+            // Build the document.
+            let document = build_document(&node.context.store, &document_id).await;
 
             // The document is successfully inserted into the database, this
             // relies on the operations already being present and would fail
             // if they were not.
-            let result = db.store.insert_document(&document).await;
+            let result = node.context.store.insert_document(&document).await;
             assert!(result.is_ok());
 
             // We can retrieve the most recent document view for this document by it's id.
-            let retrieved_document = db.store.get_document(document.id()).await.unwrap().unwrap();
+            let retrieved_document = node
+                .context
+                .store
+                .get_document(document.id())
+                .await
+                .unwrap()
+                .unwrap();
 
             // We can retrieve a specific document view for this document by it's view_id.
             // In this case, that should be the same as the view retrieved above.
-            let specific_document = db
+            let specific_document = node
+                .context
                 .store
                 .get_document_by_view_id(document.view_id())
                 .await
@@ -738,16 +735,17 @@ mod tests {
 
     #[rstest]
     fn no_view_when_document_deleted(
-        #[from(test_db)]
+        #[from(populate_store_config)]
         #[with(10, 1, 1, true)]
-        runner: TestDatabaseRunner,
+        config: PopulateStoreConfig,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            // Operations for this document id exist in the database.
-            let document_id = db.test_data.documents[0].clone();
+        test_runner(|node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (_, document_ids) = populate_store(&node.context.store, &config).await;
+            let document_id = document_ids.get(0).expect("At least one document id");
 
             // Get the operations and build the document.
-            let document = build_document(&db.store, &document_id).await;
+            let document = build_document(&node.context.store, &document_id).await;
             // Get the view id.
             let view_id = document.view_id();
 
@@ -755,38 +753,52 @@ mod tests {
             assert!(document.view().is_none());
 
             // Here we insert the document. This action also sets it's most recent view.
-            let result = db.store.insert_document(&document).await;
+            let result = node.context.store.insert_document(&document).await;
             assert!(result.is_ok());
 
             // We retrieve the most recent view for this document by it's document id,
             // but as the document is deleted, we should get a none value back.
-            let document = db.store.get_document(document.id()).await.unwrap();
+            let document = node
+                .context
+                .store
+                .get_document(document.id())
+                .await
+                .unwrap();
             assert!(document.is_none());
 
             // We also try to retrieve the specific document view by it's view id.
             // This should also return none as it is deleted.
-            let document = db.store.get_document_by_view_id(view_id).await.unwrap();
+            let document = node
+                .context
+                .store
+                .get_document_by_view_id(view_id)
+                .await
+                .unwrap();
             assert!(document.is_none());
         });
     }
 
     #[rstest]
     fn get_documents_by_schema_deleted_document(
-        #[from(test_db)]
+        #[from(populate_store_config)]
         #[with(10, 1, 1, true)]
-        runner: TestDatabaseRunner,
+        config: PopulateStoreConfig,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            // Operations for this document id exist in the database.
-            let document_id = db.test_data.documents[0].clone();
+        test_runner(|node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (_, document_ids) = populate_store(&node.context.store, &config).await;
+            let document_id = document_ids.get(0).expect("At least one document id");
 
             // Get the operations and build the document.
-            let document = build_document(&db.store, &document_id).await;
+            let document = build_document(&node.context.store, &document_id).await;
 
-            let result = db.store.insert_document(&document).await;
+            // Insert the document, this is possible even though it has been deleted.
+            let result = node.context.store.insert_document(&document).await;
             assert!(result.is_ok());
 
-            let document_views = db
+            // When we try to retrieve it by schema id we should NOT get it back.
+            let document_views = node
+                .context
                 .store
                 .get_documents_by_schema(constants::schema().id())
                 .await
@@ -797,16 +809,18 @@ mod tests {
 
     #[rstest]
     fn updates_a_document(
-        #[from(test_db)]
+        #[from(populate_store_config)]
         #[with(10, 1, 1)]
-        runner: TestDatabaseRunner,
+        config: PopulateStoreConfig,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            // Operations for this document id exist in the database.
-            let document_id = db.test_data.documents[0].clone();
+        test_runner(|node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (_, document_ids) = populate_store(&node.context.store, &config).await;
+            let document_id = document_ids.get(0).expect("At least one document id");
 
             // Get the operations for this document and sort them into linear order.
-            let operations = db
+            let operations = node
+                .context
                 .store
                 .get_operations_by_document_id(&document_id)
                 .await
@@ -832,21 +846,24 @@ mod tests {
                     .expect("Build document");
 
                 // Insert it to the database, this should also update it's view.
-                db.store
+                node.context
+                    .store
                     .insert_document(&document)
                     .await
                     .expect("Insert document");
 
-                // We can retrieve the document's latest view by it's document id.
-                let retrieved_document = db
+                // We can retrieve the document by it's document id.
+                let retrieved_document = node
+                    .context
                     .store
                     .get_document(document.id())
                     .await
                     .expect("Get document")
                     .expect("Unwrap document");
 
-                // And also retrieve the latest document view directly by it's document view id.
-                let specific_document = db
+                // And also directly by it's document view id.
+                let specific_document = node
+                    .context
                     .store
                     .get_document_by_view_id(document.view_id())
                     .await
@@ -871,29 +888,23 @@ mod tests {
 
     #[rstest]
     fn gets_documents_by_schema(
-        #[from(test_db)]
-        #[with(2, 10, 1, false)]
-        runner: TestDatabaseRunner,
+        #[from(populate_store_config)]
+        #[with(2, 10, 1)]
+        config: PopulateStoreConfig,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            // Insert two documents which have the same schema.
-            for document_id in &db.test_data.documents {
-                // Get the operations and build the document.
-                let document = build_document(&db.store, document_id).await;
-                db.store
-                    .insert_document(&document)
-                    .await
-                    .expect("Insert document");
-            }
+        test_runner(|mut node: TestNode| async move {
+            // Populate the store and materialize all documents.
+            populate_and_materialize(&mut node, &config).await;
 
             // Retrieve these documents by their schema id.
-            let schema_documents = db
+            let schema_documents = node
+                .context
                 .store
-                .get_documents_by_schema(doggo_schema().id())
+                .get_documents_by_schema(config.schema.id())
                 .await
                 .expect("Get document by schema");
 
-            // There should be two.
+            // There should be ten.
             assert_eq!(schema_documents.len(), 10);
         });
     }
