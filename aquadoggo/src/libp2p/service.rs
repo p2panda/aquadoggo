@@ -16,46 +16,14 @@ use crate::bus::ServiceSender;
 use crate::context::Context;
 use crate::manager::{ServiceReadySender, Shutdown};
 
-// NOTE: Bootstrap nodes may or may not be necessary for aquadoggo (discussions ongoing).
-// It could be useful to expose this as an optional feature.
-/// Default bootstrap nodes.
-///
-/// Based on <https://github.com/ipfs/go-ipfs-config/blob/master/bootstrap_peers.go#L17>.
-pub const DEFAULT_BOOTSTRAP: &[&str] = &[
-    "/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
-    "/dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
-    "/dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
-    "/dnsaddr/bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
-    "/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ", // mars.i.ipfs.io
-];
-
-// NOTE: Not all of these config options will necessarily be exposed.
 /// Libp2p config for the node.
-#[derive(PartialEq, Eq, Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Libp2pConfig {
     /// Local address.
     pub listening_multiaddr: Multiaddr,
 
-    /// Bootstrap peer list.
-    pub bootstrap_peers: Vec<Multiaddr>,
-
     /// Mdns discovery enabled.
     pub mdns: bool,
-
-    /// Kademlia discovery enabled.
-    pub kademlia: bool,
-
-    /// Autonat holepunching enabled.
-    pub autonat: bool,
-
-    /// Relay server enabled.
-    pub relay_server: bool,
-
-    /// Relay client enabled.
-    pub relay_client: bool,
-
-    /// Gossipsub enabled.
-    pub gossipsub: bool,
 
     /// Maximum outgoing connections.
     pub max_connections_out: u32,
@@ -94,27 +62,12 @@ pub struct Libp2pConfig {
     pub dial_concurrency_factor: u8,
 }
 
-// NOTE: See https://github.com/n0-computer/iroh/blob/a0db8600dc3be14463713ea1d3aa9c5fdd7ae171/iroh-share/src/p2p_node.rs#L151
-// for example settings and
-// https://github.com/n0-computer/iroh/blob/a0db8600dc3be14463713ea1d3aa9c5fdd7ae171/iroh-p2p/src/config.rs
-// for example default config settings.
 impl Default for Libp2pConfig {
     fn default() -> Self {
-        let bootstrap_peers = DEFAULT_BOOTSTRAP
-            .iter()
-            .map(|node| node.parse().unwrap())
-            .collect();
-
         Self {
             // Listen on 127.0.0.1 and a random, OS-assigned port
             listening_multiaddr: "/ip4/127.0.0.1/udp/0/quic-v1".parse().unwrap(),
-            bootstrap_peers,
             mdns: false,
-            kademlia: false,
-            autonat: false,
-            relay_server: false,
-            relay_client: false,
-            gossipsub: false,
             max_connections_pending_out: 8,
             max_connections_pending_in: 8,
             max_connections_in: 16,
