@@ -2,6 +2,7 @@
 
 use anyhow::anyhow;
 use async_graphql::{Context, Object, Result};
+use p2panda_rs::api::publish;
 use p2panda_rs::entry::traits::AsEncodedEntry;
 use p2panda_rs::entry::EncodedEntry;
 use p2panda_rs::operation::decode::decode_operation;
@@ -10,7 +11,6 @@ use p2panda_rs::operation::{EncodedOperation, OperationId};
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::SqlStore;
-use crate::domain::publish;
 use crate::graphql::client::NextArguments;
 use crate::graphql::scalars;
 use crate::schema::SchemaProvider;
@@ -53,7 +53,7 @@ impl ClientMutationRoot {
         // PUBLISH THE ENTRY AND OPERATION //
         /////////////////////////////////////
 
-        let next_args = publish(
+        let (backlink, skiplink, seq_num, log_id) = publish(
             store,
             &schema,
             &encoded_entry,
@@ -76,7 +76,12 @@ impl ClientMutationRoot {
             // tests in other places to check if messages arrive.
         }
 
-        Ok(next_args)
+        Ok(NextArguments {
+            log_id: log_id.into(),
+            seq_num: seq_num.into(),
+            backlink: backlink.map(|hash| hash.into()),
+            skiplink: skiplink.map(|hash| hash.into()),
+        })
     }
 }
 
@@ -87,6 +92,7 @@ mod tests {
     use async_graphql::{value, Request, Variables};
     use ciborium::cbor;
     use once_cell::sync::Lazy;
+    use p2panda_rs::api::next_args;
     use p2panda_rs::document::{DocumentId, DocumentViewId};
     use p2panda_rs::entry::encode::sign_and_encode_entry;
     use p2panda_rs::entry::traits::AsEncodedEntry;
@@ -111,7 +117,6 @@ mod tests {
     use tokio::sync::broadcast;
 
     use crate::bus::ServiceMessage;
-    use crate::domain::next_args;
     use crate::graphql::GraphQLSchemaManager;
     use crate::http::HttpServiceContext;
     use crate::test_utils::{
@@ -627,7 +632,7 @@ mod tests {
                 test_schema().id().to_owned()
             ).into_bytes()
         },
-        "<Operation 496543> not found, could not determine document id"
+        "Operation 0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543 not found, could not determine document id"
     )]
     #[case::claimed_log_id_does_not_match_expected(
         &entry_signed_encoded_unvalidated(
@@ -717,7 +722,7 @@ mod tests {
                         document_id.clone().map(|id| id.as_str().parse().unwrap());
 
                     // Get the next entry args for the document view id and public_key.
-                    let next_entry_args =
+                    let (backlink, skiplink, seq_num, log_id) =
                         next_args(&node.context.store, &public_key, document_view_id.as_ref())
                             .await
                             .unwrap();
@@ -727,13 +732,13 @@ mod tests {
                         create_operation(doggo_fields(), doggo_schema().id().to_owned())
                     } else if index == (num_of_entries - 1) {
                         delete_operation(
-                            next_entry_args.backlink.clone().unwrap().into(),
+                            backlink.clone().unwrap().into(),
                             doggo_schema().id().to_owned(),
                         )
                     } else {
                         update_operation(
                             doggo_fields(),
-                            next_entry_args.backlink.clone().unwrap().into(),
+                            backlink.clone().unwrap().into(),
                             doggo_schema().id().to_owned(),
                         )
                     };
@@ -743,10 +748,10 @@ mod tests {
 
                     // Encode the entry.
                     let entry_encoded = sign_and_encode_entry(
-                        &next_entry_args.log_id.into(),
-                        &next_entry_args.seq_num.into(),
-                        next_entry_args.skiplink.map(Hash::from).as_ref(),
-                        next_entry_args.backlink.map(Hash::from).as_ref(),
+                        &log_id,
+                        &seq_num,
+                        skiplink.as_ref(),
+                        backlink.as_ref(),
                         &encoded_operation,
                         key_pair,
                     )

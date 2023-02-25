@@ -13,12 +13,12 @@ use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::decode::decode_operation;
 use p2panda_rs::operation::traits::Schematic;
 use p2panda_rs::storage_provider::traits::EntryStore;
+use p2panda_rs::api::publish;
 use tokio::task;
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
 use crate::db::types::StorageEntry;
-use crate::domain::publish;
 use crate::graphql::replication::client;
 use crate::manager::{ServiceReadySender, Shutdown};
 
