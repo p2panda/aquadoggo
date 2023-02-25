@@ -6,6 +6,7 @@ use std::time::Duration;
 use anyhow::{anyhow, Result};
 use bamboo_rs_core_ed25519_yasmf::verify::verify_batch;
 use log::{debug, error, trace, warn};
+use p2panda_rs::api::publish;
 use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
 use p2panda_rs::entry::LogId;
 use p2panda_rs::entry::SeqNum;
@@ -13,7 +14,6 @@ use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::decode::decode_operation;
 use p2panda_rs::operation::traits::Schematic;
 use p2panda_rs::storage_provider::traits::EntryStore;
-use p2panda_rs::api::publish;
 use tokio::task;
 
 use crate::bus::{ServiceMessage, ServiceSender};
