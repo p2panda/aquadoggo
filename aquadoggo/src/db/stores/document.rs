@@ -31,7 +31,7 @@
 //! explicitly wish to keep.
 use async_trait::async_trait;
 use p2panda_rs::document::traits::AsDocument;
-use p2panda_rs::document::{Document, DocumentId, DocumentView, DocumentViewId};
+use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::error::DocumentStorageError;
 use p2panda_rs::storage_provider::traits::DocumentStore;
