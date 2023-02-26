@@ -284,7 +284,10 @@ impl SqlStore {
     ///
     /// Note: "out-of-date" document views will remain in storage when a document already existed
     /// and is updated. If they are not needed for anything else they can be garbage collected.
-    pub async fn insert_document(&self, document: &Document) -> Result<(), DocumentStorageError> {
+    pub async fn insert_document(
+        &self,
+        document: &impl AsDocument,
+    ) -> Result<(), DocumentStorageError> {
         // Start a transaction, any db insertions after this point, and before the `commit()`
         // can be rolled back in the event of an error.
         let mut tx = self
@@ -473,7 +476,7 @@ async fn insert_document_view(
 // `documents`, `document_views` and `document_view_fields` tables.
 async fn insert_document(
     tx: &mut Transaction<'_, Any>,
-    document: &Document,
+    document: &impl AsDocument,
 ) -> Result<(), DocumentStorageError> {
     // Insert or update the document to the `documents` table.
     query(

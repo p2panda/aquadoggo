@@ -2,11 +2,14 @@
 
 use anyhow::Result;
 use log::{debug, warn};
-use p2panda_rs::storage_provider::traits::OperationStore;
+use p2panda_rs::document::traits::AsDocument;
+use p2panda_rs::operation::OperationId;
+use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
 use tokio::task;
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
+use crate::db::types::StorageDocument;
 use crate::manager::{ServiceReadySender, Shutdown};
 use crate::materializer::tasks::{dependency_task, reduce_task, schema_task};
 use crate::materializer::worker::{Factory, Task, TaskStatus};
@@ -75,7 +78,7 @@ pub async fn materializer_service(
         .store
         .get_tasks()
         .await
-        .expect("Failed retreiving pending tasks from database");
+        .expect("Failed retrieving pending tasks from database");
 
     debug!("Dispatch {} pending tasks from last runtime", tasks.len());
 
@@ -96,13 +99,46 @@ pub async fn materializer_service(
                 .await
                 .unwrap_or_else(|_| {
                     panic!(
-                        "Failed database query when retreiving document for operation_id {}",
+                        "Failed database query when retrieving document id by operation_id {}",
                         operation_id
                     )
                 }) {
                 Some(document_id) => {
-                    // Dispatch "reduce" task which will materialize the regarding document
-                    factory.queue(Task::new("reduce", TaskInput::new(Some(document_id), None)));
+                    // Get the document by it's document id.
+                    let document = context
+                        .store
+                        .get_document(&document_id)
+                        .await
+                        .unwrap_or_else(|_| {
+                            panic!(
+                                "Failed database query when retrieving document {}",
+                                document_id
+                            )
+                        });
+
+                    // Attempt a quick commit of the document.
+                    //
+                    // This succeeds if the operation passed on the bus refers to the documents'
+                    // current view in it's previous field.
+                    let mut quick_commit_success = false;
+                    if let Some(mut document) = document {
+                        quick_commit_success =
+                            quick_commit(&context, &mut document, &operation_id).await;
+
+                        // If the commit succeeded and the document isn't now deleted dispatch "dependency" task for the documents new view.
+                        if quick_commit_success && !document.is_deleted() {
+                            factory.queue(Task::new(
+                                "dependency",
+                                TaskInput::new(None, Some(document.view_id().to_owned())),
+                            ))
+                        };
+                    };
+
+                    if !quick_commit_success {
+                        // The quick commit failed.
+                        // Dispatch "reduce" task which will materialize the regarding document.
+                        factory.queue(Task::new("reduce", TaskInput::new(Some(document_id), None)))
+                    }
                 }
                 None => {
                     // Panic when we couldn't find the regarding document in the database. We can
@@ -132,6 +168,43 @@ pub async fn materializer_service(
     }
 
     Ok(())
+}
+
+async fn quick_commit(
+    context: &Context,
+    document: &mut StorageDocument,
+    operation_id: &OperationId,
+) -> bool {
+    let operation = context
+        .store
+        .get_operation(&operation_id)
+        .await
+        .unwrap_or_else(|_| {
+            panic!(
+                "Failed database query when retrieving operation {}",
+                operation_id
+            )
+        })
+        // An operation should exist for every operation id passed on the bus
+        .unwrap();
+
+    match document.commit(&operation) {
+        Ok(_) => {
+            context
+                .store
+                .insert_document(document)
+                .await
+                .unwrap_or_else(|_| {
+                    panic!(
+                        "Failed inserting document view {} into database",
+                        document.view_id()
+                    )
+                });
+            debug!("Incrementally updated document {}", document.view_id());
+            true
+        }
+        Err(_) => false,
+    }
 }
 
 #[cfg(test)]
