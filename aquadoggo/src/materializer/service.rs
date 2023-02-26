@@ -177,7 +177,7 @@ async fn quick_commit(
 ) -> bool {
     let operation = context
         .store
-        .get_operation(&operation_id)
+        .get_operation(operation_id)
         .await
         .unwrap_or_else(|_| {
             panic!(
