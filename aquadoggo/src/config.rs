@@ -7,6 +7,7 @@ use anyhow::Result;
 use directories::ProjectDirs;
 use serde::Deserialize;
 
+use crate::libp2p::Libp2pConfiguration;
 use crate::replication::ReplicationConfiguration;
 
 /// Data directory name.
@@ -38,11 +39,14 @@ pub struct Configuration {
     /// RPC API HTTP server port.
     pub http_port: u16,
 
-    /// Materializer worker pool size.
-    pub worker_pool_size: u32,
+    /// Libp2p configuration.
+    pub libp2p: Libp2pConfiguration,
 
     /// Replication configuration.
     pub replication: ReplicationConfiguration,
+
+    /// Materializer worker pool size.
+    pub worker_pool_size: u32,
 }
 
 impl Default for Configuration {
@@ -52,8 +56,9 @@ impl Default for Configuration {
             database_url: None,
             database_max_connections: 32,
             http_port: 2020,
-            worker_pool_size: 16,
+            libp2p: Libp2pConfiguration::default(),
             replication: ReplicationConfiguration::default(),
+            worker_pool_size: 16,
         }
     }
 }
