@@ -6,6 +6,7 @@ use anyhow::Result;
 use futures::StreamExt;
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::ping::Event;
+use libp2p::swarm::behaviour::toggle::Toggle;
 use libp2p::swarm::{keep_alive, ConnectionLimits, NetworkBehaviour, SwarmBuilder, SwarmEvent};
 use libp2p::{identity, mdns, ping, quic, Multiaddr, PeerId, Transport};
 use log::{info, warn};
@@ -14,6 +15,45 @@ use crate::bus::ServiceSender;
 use crate::context::Context;
 use crate::libp2p::Libp2pConfiguration;
 use crate::manager::{ServiceReadySender, Shutdown};
+
+/// Our network behaviour.
+///
+/// For illustrative purposes, this includes the [`KeepAlive`](behaviour::KeepAlive) behaviour so
+/// a continuous sequence of pings can be observed.
+#[derive(NetworkBehaviour)]
+struct Behaviour {
+    // TODO: remove this behaviour once we're past the experimental phase
+    keep_alive: keep_alive::Behaviour,
+    /// Automatically discover peers on the local network.
+    mdns: Toggle<mdns::tokio::Behaviour>,
+    /// Respond to inbound pings and periodically send outbound ping on every established
+    /// connection.
+    ping: Toggle<ping::Behaviour>,
+}
+
+impl Behaviour {
+    fn new(context: &Context) -> Result<Self> {
+        // Create an mDNS behaviour with default configuration if the mDNS flag is set
+        let mdns = if context.config.libp2p.mdns {
+            Some(mdns::Behaviour::new(Default::default())?)
+        } else {
+            None
+        };
+
+        // Create a ping behaviour with default configuration if the ping flag is set
+        let ping = if context.config.libp2p.mdns {
+            Some(ping::Behaviour::default())
+        } else {
+            None
+        };
+
+        Ok(Self {
+            keep_alive: keep_alive::Behaviour::default(),
+            mdns: mdns.into(), // Convert the `Option` into a `Toggle`
+            ping: ping.into(),
+        })
+    }
+}
 
 /// Libp2p service that configures and deploys a swarm over QUIC transports.
 ///
@@ -45,8 +85,7 @@ pub async fn libp2p_service(
     let quic_config = quic::Config::new(&keypair);
     // QUIC provides transport, security, and multiplexing in a single protocol
     let quic_transport = quic::tokio::Transport::new(quic_config)
-        // Not sure why we need to do this conversion to a StreamMuxerBox here, but I found that
-        // it's necessary. Maybe it's because quic handles multiplexing for us already.
+        // Perform conversion to a StreamMuxerBox (QUIC handles multiplexing)
         .map(|(p, c), _| (p, StreamMuxerBox::new(c)))
         .boxed();
 
@@ -61,17 +100,10 @@ pub async fn libp2p_service(
         .with_max_established_incoming(Some(libp2p_config.max_connections_in))
         .with_max_established_per_peer(Some(libp2p_config.max_connections_per_peer));
 
-    // Create an mDNS behaviour with default configuration
-    let mdns_behaviour = mdns::Behaviour::new(Default::default())?;
-
     // Instantiate the custom network behaviour with defaults
-    let behaviour = Behaviour {
-        keep_alive: keep_alive::Behaviour::default(),
-        ping: ping::Behaviour::default(),
-        mdns: mdns_behaviour,
-    };
+    let behaviour = Behaviour::new(&context)?;
 
-    // Initialise a swarm with QUIC transports, our behaviour (`keep_alive` and `ping`) defined below
+    // Initialise a swarm with QUIC transports, our composed network behaviour
     // and the default configuration parameters
     let mut swarm = SwarmBuilder::with_tokio_executor(quic_transport, behaviour, peer_id)
         .connection_limits(connection_limits)
@@ -180,15 +212,4 @@ pub async fn libp2p_service(
     }
 
     Ok(())
-}
-
-/// Our network behaviour.
-///
-/// For illustrative purposes, this includes the [`KeepAlive`](behaviour::KeepAlive) behaviour so
-/// a continuous sequence of pings can be observed.
-#[derive(NetworkBehaviour)]
-struct Behaviour {
-    keep_alive: keep_alive::Behaviour,
-    ping: ping::Behaviour,
-    mdns: mdns::tokio::Behaviour,
 }
