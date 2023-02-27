@@ -7,8 +7,7 @@ use futures::StreamExt;
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::ping::Event;
 use libp2p::swarm::{keep_alive, ConnectionLimits, NetworkBehaviour, SwarmBuilder, SwarmEvent};
-use libp2p::{identity, PeerId, Transport};
-use libp2p::{ping, quic, Multiaddr};
+use libp2p::{identity, mdns, ping, quic, Multiaddr, PeerId, Transport};
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
 
@@ -126,16 +125,25 @@ pub async fn libp2p_service(
         .with_max_established_incoming(Some(libp2p_config.max_connections_in))
         .with_max_established_per_peer(Some(libp2p_config.max_connections_per_peer));
 
+    // Create an mDNS behaviour with default configuration
+    let mdns_behaviour = mdns::Behaviour::new(Default::default())?;
+
+    // Instantiate the custom network behaviour with defaults
+    let behaviour = Behaviour {
+        keep_alive: keep_alive::Behaviour::default(),
+        ping: ping::Behaviour::default(),
+        mdns: mdns_behaviour,
+    };
+
     // Initialise a swarm with QUIC transports, our behaviour (`keep_alive` and `ping`) defined below
     // and the default configuration parameters
-    let mut swarm =
-        SwarmBuilder::with_tokio_executor(quic_transport, Behaviour::default(), peer_id)
-            .connection_limits(connection_limits)
-            // This method expects a NonZeroU8 as input, hence the try_into conversion
-            .dial_concurrency_factor(libp2p_config.dial_concurrency_factor.try_into()?)
-            .connection_event_buffer_size(libp2p_config.connection_event_buffer_size)
-            .notify_handler_buffer_size(libp2p_config.notify_handler_buffer_size.try_into()?)
-            .build();
+    let mut swarm = SwarmBuilder::with_tokio_executor(quic_transport, behaviour, peer_id)
+        .connection_limits(connection_limits)
+        // This method expects a NonZeroU8 as input, hence the try_into conversion
+        .dial_concurrency_factor(libp2p_config.dial_concurrency_factor.try_into()?)
+        .connection_event_buffer_size(libp2p_config.connection_event_buffer_size)
+        .notify_handler_buffer_size(libp2p_config.notify_handler_buffer_size.try_into()?)
+        .build();
 
     // Tell the swarm to listen on the default multiaddress
     swarm.listen_on(libp2p_config.listening_multiaddr)?;
@@ -151,18 +159,26 @@ pub async fn libp2p_service(
     let handle = tokio::spawn(async move {
         loop {
             match swarm.select_next_some().await {
-                SwarmEvent::NewListenAddr {
-                    address,
-                    listener_id,
-                } => {
-                    info!("Listening on {address:?} {listener_id:?}");
-                }
-                SwarmEvent::ConnectionEstablished {
+                SwarmEvent::BannedPeer {
                     peer_id,
-                    endpoint,
-                    num_established,
-                    ..
-                } => info!("ConnectionEstablished: {peer_id:?} {endpoint:?} {num_established}"),
+                    endpoint: _,
+                } => info!("BannedPeer: {peer_id:?}"),
+                SwarmEvent::Behaviour(BehaviourEvent::KeepAlive(_)) => info!("Keep alive"),
+                SwarmEvent::Behaviour(BehaviourEvent::Mdns(event)) => match event {
+                    mdns::Event::Discovered(list) => {
+                        for (peer, _multiaddr) in list {
+                            info!("mDNS discovered a new peer: {peer:?}");
+                        }
+                    }
+                    mdns::Event::Expired(list) => {
+                        for (peer, _multiaddr) in list {
+                            info!("mDNS peer has expired: {peer:?}");
+                        }
+                    }
+                },
+                SwarmEvent::Behaviour(BehaviourEvent::Ping(Event { peer, result: _ })) => {
+                    info!("Ping from: {peer:?}")
+                }
                 SwarmEvent::ConnectionClosed {
                     peer_id,
                     endpoint,
@@ -171,6 +187,19 @@ pub async fn libp2p_service(
                 } => {
                     info!("ConnectionClosed: {peer_id:?} {endpoint:?} {num_established} {cause:?}")
                 }
+                SwarmEvent::ConnectionEstablished {
+                    peer_id,
+                    endpoint,
+                    num_established,
+                    ..
+                } => info!("ConnectionEstablished: {peer_id:?} {endpoint:?} {num_established}"),
+
+                SwarmEvent::Dialing(peer_id) => info!("Dialing: {peer_id:?}"),
+                SwarmEvent::ExpiredListenAddr {
+                    listener_id,
+                    address,
+                } => info!("ExpiredListenAddr: {listener_id:?} {address:?}"),
+
                 SwarmEvent::IncomingConnection {
                     local_addr,
                     send_back_addr,
@@ -180,17 +209,6 @@ pub async fn libp2p_service(
                     send_back_addr,
                     error,
                 } => info!("IncomingConnectionError: {local_addr:?} {send_back_addr:?} {error:?}"),
-                SwarmEvent::OutgoingConnectionError { peer_id, error } => {
-                    info!("OutgoingConnectionError: {peer_id:?} {error:?}")
-                }
-                SwarmEvent::BannedPeer {
-                    peer_id,
-                    endpoint: _,
-                } => info!("BannedPeer: {peer_id:?}"),
-                SwarmEvent::ExpiredListenAddr {
-                    listener_id,
-                    address,
-                } => info!("ExpiredListenAddr: {listener_id:?} {address:?}"),
                 SwarmEvent::ListenerClosed {
                     listener_id,
                     addresses,
@@ -199,10 +217,14 @@ pub async fn libp2p_service(
                 SwarmEvent::ListenerError { listener_id, error } => {
                     info!("ListenerError: {listener_id:?} {error:?}")
                 }
-                SwarmEvent::Dialing(peer_id) => info!("Dialing: {peer_id:?}"),
-                SwarmEvent::Behaviour(BehaviourEvent::KeepAlive(_)) => info!("Keep alive"),
-                SwarmEvent::Behaviour(BehaviourEvent::Ping(Event { peer, result: _ })) => {
-                    info!("Ping from: {peer:?}")
+                SwarmEvent::NewListenAddr {
+                    address,
+                    listener_id,
+                } => {
+                    info!("Listening on {address:?} {listener_id:?}");
+                }
+                SwarmEvent::OutgoingConnectionError { peer_id, error } => {
+                    info!("OutgoingConnectionError: {peer_id:?} {error:?}")
                 }
             };
         }
@@ -228,8 +250,9 @@ pub async fn libp2p_service(
 ///
 /// For illustrative purposes, this includes the [`KeepAlive`](behaviour::KeepAlive) behaviour so
 /// a continuous sequence of pings can be observed.
-#[derive(NetworkBehaviour, Default)]
+#[derive(NetworkBehaviour)]
 struct Behaviour {
     keep_alive: keep_alive::Behaviour,
     ping: ping::Behaviour,
+    mdns: mdns::tokio::Behaviour,
 }
