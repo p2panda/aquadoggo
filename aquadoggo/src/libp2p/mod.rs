@@ -3,4 +3,5 @@
 mod config;
 mod service;
 
+pub use config::Libp2pConfiguration;
 pub use service::libp2p_service;

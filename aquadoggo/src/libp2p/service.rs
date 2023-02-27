@@ -12,7 +12,7 @@ use log::{info, warn};
 
 use crate::bus::ServiceSender;
 use crate::context::Context;
-use crate::libp2p::config::Libp2pConfiguration;
+use crate::libp2p::Libp2pConfiguration;
 use crate::manager::{ServiceReadySender, Shutdown};
 
 /// Libp2p service that configures and deploys a swarm over QUIC transports.
