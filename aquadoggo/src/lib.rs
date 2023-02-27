@@ -64,6 +64,7 @@ mod tests;
 mod validation;
 
 pub use crate::config::Configuration;
+pub use crate::libp2p::Libp2pConfiguration;
 pub use crate::replication::ReplicationConfiguration;
 pub use node::Node;
 
