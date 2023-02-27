@@ -5,7 +5,7 @@ use std::convert::{TryFrom, TryInto};
 use std::error::Error;
 
 use anyhow::Result;
-use aquadoggo::{Configuration, Node, ReplicationConfiguration};
+use aquadoggo::{Configuration, Libp2pConfiguration, Node, ReplicationConfiguration};
 use structopt::StructOpt;
 
 /// Helper method to parse a single key-value pair.
@@ -52,6 +52,14 @@ struct Opt {
     /// - "456def" with log_ids 6 7
     #[structopt(short = "A", parse(try_from_str = parse_key_val), number_of_values = 1)]
     public_keys_to_replicate: Vec<(String, Vec<u64>)>,
+
+    /// Enable mDNS for peer discovery over LAN.
+    #[structopt(short, long)]
+    mdns: bool,
+
+    /// Enable ping for connected peers (send and receive ping packets).
+    #[structopt(long)]
+    ping: bool,
 }
 
 impl TryFrom<Opt> for Configuration {
@@ -71,6 +79,12 @@ impl TryFrom<Opt> for Configuration {
             remote_peers: opt.remote_node_addresses,
             public_keys_to_replicate,
             ..ReplicationConfiguration::default()
+        };
+
+        config.libp2p = Libp2pConfiguration {
+            mdns: opt.mdns,
+            ping: opt.ping,
+            ..Libp2pConfiguration::default()
         };
 
         Ok(config)
