@@ -38,7 +38,7 @@ pub struct Libp2pConfiguration {
     /// Maximum connections per peer (includes outgoing and incoming).
     pub max_connections_per_peer: u32,
 
-    /// Mdns discovery enabled.
+    /// mDNS discovery enabled.
     pub mdns: bool,
 
     /// Notify handler buffer size.
@@ -47,6 +47,9 @@ pub struct Libp2pConfiguration {
     /// If the buffer is exceeded, the Swarm will have to wait. An individual buffer with this
     /// number of events exists for each individual connection.
     pub notify_handler_buffer_size: usize,
+
+    /// Ping behaviour enabled.
+    pub ping: bool,
 }
 
 impl Default for Libp2pConfiguration {
@@ -63,6 +66,7 @@ impl Default for Libp2pConfiguration {
             max_connections_per_peer: 8,
             mdns: false,
             notify_handler_buffer_size: 128,
+            ping: false,
         }
     }
 }
