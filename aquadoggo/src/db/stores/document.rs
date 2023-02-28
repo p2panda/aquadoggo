@@ -30,14 +30,13 @@
 //! retained, we use a system of "pinned relations" to identify and materialise only views we
 //! explicitly wish to keep.
 use async_trait::async_trait;
-use futures::future::try_join_all;
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::{Document, DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::error::DocumentStorageError;
 use p2panda_rs::storage_provider::traits::DocumentStore;
 use sqlx::any::AnyQueryResult;
-use sqlx::{query, query_as, query_scalar};
+use sqlx::{query, query_as, query_scalar, Any, Transaction};
 
 use crate::db::models::utils::parse_document_view_field_rows;
 use crate::db::models::{DocumentRow, DocumentViewFieldRow};
@@ -288,24 +287,25 @@ impl SqlStore {
     pub async fn insert_document(&self, document: &Document) -> Result<(), DocumentStorageError> {
         // Start a transaction, any db insertions after this point, and before the `commit()`
         // can be rolled back in the event of an error.
-        let transaction = self
+        let mut tx = self
             .pool
             .begin()
             .await
             .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
 
         // Insert the document and view to the database, in the case of an error all insertions
-        // since the transaction was instantiated above will be rolled back.
-        match insert_document(&self.pool, document).await {
-            // Commit the transaction here if no error occurred.
-            Ok(_) => transaction
+        // since the tx was instantiated above will be rolled back.
+        let result = insert_document(&mut tx, document).await;
+
+        match result {
+            // Commit the tx here if no error occurred.
+            Ok(_) => tx
                 .commit()
                 .await
                 .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string())),
             // Rollback here if an error occurred.
             Err(err) => {
-                transaction
-                    .rollback()
+                tx.rollback()
                     .await
                     .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
                 Err(err)
@@ -328,18 +328,17 @@ impl SqlStore {
     ) -> Result<(), DocumentStorageError> {
         // Start a transaction, any db insertions after this point, and before the `commit()`
         // will be rolled back in the event of an error.
-        let transaction = self
+        let mut tx = self
             .pool
             .begin()
             .await
             .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
 
         // Insert the document view into the `document_views` table. Rollback insertions if an error occurs.
-        match insert_document_view(&self.pool, document_view, document_id, schema_id).await {
+        match insert_document_view(&mut tx, document_view, document_id, schema_id).await {
             Ok(_) => (),
             Err(err) => {
-                transaction
-                    .rollback()
+                tx.rollback()
                     .await
                     .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
                 return Err(err);
@@ -348,20 +347,18 @@ impl SqlStore {
 
         // Insert the document view fields into the `document_view_fields` table. Rollback
         // insertions if an error occurs.
-        match insert_document_fields(&self.pool, document_view).await {
+        match insert_document_fields(&mut tx, document_view).await {
             Ok(_) => (),
             Err(err) => {
-                transaction
-                    .rollback()
+                tx.rollback()
                     .await
                     .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
                 return Err(err);
             }
         };
 
-        // Commit the transaction here as no errors occurred.
-        transaction
-            .commit()
+        // Commit the tx here as no errors occurred.
+        tx.commit()
             .await
             .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))
     }
@@ -411,12 +408,12 @@ async fn get_document_view_field_rows(
 
 // Helper method for inserting rows in the `document_view_fields` table.
 async fn insert_document_fields(
-    pool: &Pool,
+    tx: &mut Transaction<'_, Any>,
     document_view: &DocumentView,
 ) -> Result<Vec<AnyQueryResult>, DocumentStorageError> {
-    // Insert document view field relations into the db
-    try_join_all(document_view.iter().map(|(name, value)| {
-        query(
+    let mut results = Vec::with_capacity(document_view.len());
+    for (name, value) in document_view.iter() {
+        let result = query(
             "
             INSERT INTO
                 document_view_fields (
@@ -431,15 +428,19 @@ async fn insert_document_fields(
         .bind(document_view.id().to_string())
         .bind(value.id().as_str().to_owned())
         .bind(name)
-        .execute(pool)
-    }))
-    .await
-    .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+
+        results.push(result);
+    }
+
+    Ok(results)
 }
 
 // Helper method for inserting document views into the `document_views` table.
 async fn insert_document_view(
-    pool: &Pool,
+    tx: &mut Transaction<'_, Any>,
     document_view: &DocumentView,
     document_id: &DocumentId,
     schema_id: &SchemaId,
@@ -459,14 +460,17 @@ async fn insert_document_view(
     .bind(document_view.id().to_string())
     .bind(document_id.to_string())
     .bind(schema_id.to_string())
-    .execute(pool)
+    .execute(tx)
     .await
     .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))
 }
 
 // Helper method for inserting documents into the database. For this, insertions are made in the
 // `documents`, `document_views` and `document_view_fields` tables.
-async fn insert_document(pool: &Pool, document: &Document) -> Result<(), DocumentStorageError> {
+async fn insert_document(
+    tx: &mut Transaction<'_, Any>,
+    document: &Document,
+) -> Result<(), DocumentStorageError> {
     // Insert or update the document to the `documents` table.
     query(
         "
@@ -488,7 +492,7 @@ async fn insert_document(pool: &Pool, document: &Document) -> Result<(), Documen
     .bind(document.view_id().to_string())
     .bind(document.is_deleted())
     .bind(document.schema_id().to_string())
-    .execute(pool)
+    .execute(&mut *tx)
     .await
     .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
 
@@ -499,9 +503,15 @@ async fn insert_document(pool: &Pool, document: &Document) -> Result<(), Documen
             DocumentView::new(document.view_id(), document.view().unwrap().fields());
 
         // Insert the document view.
-        insert_document_view(pool, &document_view, document.id(), document.schema_id()).await?;
+        insert_document_view(
+            &mut *tx,
+            &document_view,
+            document.id(),
+            document.schema_id(),
+        )
+        .await?;
         // Insert the document view fields.
-        insert_document_fields(pool, &document_view).await?;
+        insert_document_fields(&mut *tx, &document_view).await?;
     };
 
     Ok(())

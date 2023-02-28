@@ -3,7 +3,6 @@
 use std::collections::BTreeMap;
 
 use async_trait::async_trait;
-use futures::future::try_join_all;
 use p2panda_rs::document::DocumentId;
 use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::traits::AsOperation;
@@ -78,7 +77,7 @@ impl OperationStore for SqlStore {
     ) -> Result<(), OperationStorageError> {
         // Start a transaction, any db insertions after this point, and before the `commit()` will
         // be rolled back in the event of an error.
-        let transaction = self
+        let mut tx = self
             .pool
             .begin()
             .await
@@ -86,7 +85,7 @@ impl OperationStore for SqlStore {
 
         // Construct query for inserting operation an row, execute it and check exactly one row was
         // affected.
-        let operation_insertion_result = query(
+        query(
             "
             INSERT INTO
                 operations_v1 (
@@ -111,29 +110,25 @@ impl OperationStore for SqlStore {
                 .previous()
                 .map(|document_view_id| document_view_id.to_string()),
         )
-        .execute(&self.pool)
+        .execute(&mut tx)
         .await
         .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
 
-        // Construct and execute the queries, return their futures and execute all of them with
-        // `try_join_all()`.
-        let fields_insertion_result = match operation.fields() {
+        let mut results = Vec::new();
+
+        match operation.fields() {
             Some(fields) => {
-                let result = try_join_all(fields.iter().flat_map(|(name, value)| {
+                for (name, value) in fields.iter() {
                     // If the value is a relation_list or pinned_relation_list we need to insert a
                     // new field row for every item in the list. Here we collect these items and
                     // return them in a vector. If this operation value is anything except for the
                     // above list types, we will return a vec containing a single item.
                     let db_values = parse_value_to_string_vec(value);
 
-                    // Collect all query futures.
-                    db_values
-                        .into_iter()
-                        .enumerate()
-                        .map(|(index, db_value)| {
-                            // Compose the query and return it's future.
-                            query(
-                                "
+                    for (index, db_value) in db_values.into_iter().enumerate() {
+                        // Compose the query and return it's future.
+                        let result = query(
+                            "
                             INSERT INTO
                                 operation_fields_v1 (
                                     operation_id,
@@ -145,38 +140,25 @@ impl OperationStore for SqlStore {
                             VALUES
                                 ($1, $2, $3, $4, $5)
                             ",
-                            )
-                            .bind(id.as_str().to_owned())
-                            .bind(name.to_owned())
-                            .bind(value.field_type().to_string())
-                            .bind(db_value)
-                            .bind(index as i32)
-                            .execute(&self.pool)
-                        })
-                        .collect::<Vec<_>>()
-                }))
-                .await
-                // If any queries error, we catch that here.
-                .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
-
-                Some(result)
+                        )
+                        .bind(id.as_str().to_owned())
+                        .bind(name.to_owned())
+                        .bind(value.field_type().to_string())
+                        .bind(db_value)
+                        .bind(index as i32)
+                        .execute(&mut tx)
+                        .await
+                        // If any queries error, we catch that here.
+                        .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
+                        results.push(result);
+                    }
+                }
             }
-            None => None,
+            None => (),
         };
 
-        // Check every insertion performed affected exactly 1 row.
-        if operation_insertion_result.rows_affected() != 1
-            || fields_insertion_result
-                .unwrap_or_default()
-                .iter()
-                .any(|query_result| query_result.rows_affected() != 1)
-        {
-            return Err(OperationStorageError::InsertionError(id.clone()));
-        }
-
         // Commit the transaction.
-        transaction
-            .commit()
+        tx.commit()
             .await
             .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
 
