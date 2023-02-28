@@ -152,6 +152,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Install Protocol Buffers compiler
+        run: sudo apt-get install protobuf-compiler
+
       - name: Checkout repository
         uses: actions/checkout@v3
 
