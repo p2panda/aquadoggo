@@ -7,7 +7,7 @@ use p2panda_rs::entry::traits::AsEntry;
 use p2panda_rs::entry::SeqNum;
 use p2panda_rs::storage_provider::traits::EntryStore;
 
-use crate::db::provider::SqlStorage;
+use crate::db::SqlStore;
 use crate::graphql::replication::response::EncodedEntryAndOperation;
 use crate::graphql::scalars;
 
@@ -33,8 +33,8 @@ impl ReplicationRoot {
         ctx: &Context<'a>,
         hash: scalars::EntryHashScalar,
     ) -> Result<EncodedEntryAndOperation> {
-        let store = ctx.data::<SqlStorage>()?;
-        let result = store.get_entry_by_hash(&hash.clone().into()).await?;
+        let store = ctx.data::<SqlStore>()?;
+        let result = store.get_entry(&hash.clone().into()).await?;
 
         match result {
             Some(inner) => Ok(EncodedEntryAndOperation::from(inner)),
@@ -55,7 +55,7 @@ impl ReplicationRoot {
         #[graphql(name = "publicKey", desc = "Public key of the entry author")]
         public_key: scalars::PublicKeyScalar,
     ) -> Result<EncodedEntryAndOperation> {
-        let store = ctx.data::<SqlStorage>()?;
+        let store = ctx.data::<SqlStore>()?;
 
         let result = store
             .get_entry_at_seq_num(&public_key.into(), &log_id.into(), &seq_num.into())
@@ -86,7 +86,7 @@ impl ReplicationRoot {
         first: Option<i32>,
         after: Option<String>,
     ) -> Result<ConnectionResult> {
-        let store = ctx.data::<SqlStorage>()?;
+        let store = ctx.data::<SqlStore>()?;
 
         query(
             after,
@@ -157,32 +157,48 @@ impl CursorType for scalars::SeqNumScalar {
 #[cfg(test)]
 mod tests {
     use async_graphql::{EmptyMutation, EmptySubscription, Request, Schema};
+    use p2panda_rs::entry::traits::AsEncodedEntry;
+    use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::hash::Hash;
-    use p2panda_rs::test_utils::db::test_db::{populate_store, PopulateDatabaseConfig};
+    use p2panda_rs::storage_provider::traits::EntryStore;
     use p2panda_rs::test_utils::fixtures::random_hash;
+    use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
     use rstest::rstest;
 
-    use crate::db::stores::test_utils::{
-        test_db, with_db_manager_teardown, TestDatabase, TestDatabaseManager, TestDatabaseRunner,
+    use crate::test_utils::{
+        populate_store_config, test_runner, test_runner_with_manager, TestNode, TestNodeManager,
     };
 
     use super::ReplicationRoot;
 
     #[rstest]
     fn entry_by_hash(
-        #[from(test_db)]
+        #[from(populate_store_config)]
         #[with(1, 1, 1)]
-        runner: TestDatabaseRunner,
+        config: PopulateStoreConfig,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        test_runner(|node: TestNode| async move {
+            // Populate the store with some entries and operations.
+            let (key_pairs, _) = populate_store(&node.context.store, &config).await;
+            let key_pair = key_pairs.get(0).expect("Should be one key pair");
+
             let replication_root = ReplicationRoot::default();
             let schema = Schema::build(replication_root, EmptyMutation, EmptySubscription)
-                .data(db.store)
+                .data(node.context.store.clone())
                 .finish();
 
-            // The test runner creates a test entry for us. The entry hash is automatically the
-            // document id as it contains the CREATE operation
-            let entry_hash_str = db.test_data.documents.first().unwrap().as_str();
+            // Retrieve an entry from the store.
+            let entry = node
+                .context
+                .store
+                .get_entry_at_seq_num(
+                    &key_pair.public_key(),
+                    &LogId::default(),
+                    &SeqNum::default(),
+                )
+                .await
+                .expect("The query to succeed")
+                .expect("There to be a first entry");
 
             // Construct the query
             let gql_query = format!(
@@ -194,7 +210,7 @@ mod tests {
                         }}
                     }}
                 "#,
-                entry_hash_str
+                entry.hash().as_str()
             );
 
             // Make the query
@@ -211,14 +227,11 @@ mod tests {
     }
 
     #[rstest]
-    fn entry_by_hash_not_found(
-        #[from(test_db)] runner: TestDatabaseRunner,
-        #[from(random_hash)] random_hash: Hash,
-    ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+    fn entry_by_hash_not_found(#[from(random_hash)] random_hash: Hash) {
+        test_runner(|node: TestNode| async move {
             let replication_root = ReplicationRoot::default();
             let schema = Schema::build(replication_root, EmptyMutation, EmptySubscription)
-                .data(db.store)
+                .data(node.context.store.clone())
                 .finish();
 
             let gql_query = format!(
@@ -234,19 +247,20 @@ mod tests {
 
     #[rstest]
     fn entry_by_log_id_and_seq_num(
-        #[from(test_db)]
+        #[from(populate_store_config)]
         #[with(1, 1, 1)]
-        runner: TestDatabaseRunner,
+        config: PopulateStoreConfig,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        test_runner(|node: TestNode| async move {
+            // Populate the store with some entries and operations.
+            let (key_pairs, _) = populate_store(&node.context.store, &config).await;
+            // The key pair used when populating the store.
+            let key_pair = key_pairs.get(0).expect("Should be one key pair");
+
             let replication_root = ReplicationRoot::default();
             let schema = Schema::build(replication_root, EmptyMutation, EmptySubscription)
-                .data(db.store)
+                .data(node.context.store.clone())
                 .finish();
-
-            // The test runner creates a test entry for us, we can retreive the public key from the
-            // author
-            let public_key = db.test_data.key_pairs.first().unwrap().public_key();
 
             // Construct the query
             let gql_query = format!(
@@ -258,7 +272,9 @@ mod tests {
                         }}
                     }}
                 "#,
-                0, 1, public_key
+                0,
+                1,
+                key_pair.public_key().to_string()
             );
 
             // Make the query
@@ -274,12 +290,12 @@ mod tests {
         });
     }
 
-    #[rstest]
-    fn entry_by_log_id_and_seq_num_not_found(#[from(test_db)] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+    #[test]
+    fn entry_by_log_id_and_seq_num_not_found() {
+        test_runner(|node: TestNode| async move {
             let replication_root = ReplicationRoot::default();
             let schema = Schema::build(replication_root, EmptyMutation, EmptySubscription)
-                .data(db.store)
+                .data(node.context.store.clone())
                 .finish();
 
             // Make a request with garbage data which will not exist in our test database
@@ -313,13 +329,13 @@ mod tests {
         #[case] expected_has_next_page: bool,
         #[case] expected_edges: usize,
     ) {
-        with_db_manager_teardown(move |db_manager: TestDatabaseManager| async move {
-            // Build and populate Billie's database
-            let billie_db = db_manager.create("sqlite::memory:").await;
+        test_runner_with_manager(move |manager: TestNodeManager| async move {
+            // Construct Billie's node and populate the database.
+            let billie = manager.create("sqlite::memory:").await;
 
             let (key_pairs, _) = populate_store(
-                &billie_db.store,
-                &PopulateDatabaseConfig {
+                &billie.context.store,
+                &PopulateStoreConfig {
                     no_of_entries: entries_in_log,
                     no_of_logs: 1,
                     no_of_public_keys: 1,
@@ -331,7 +347,7 @@ mod tests {
             // Construct the replication context, root and graphql schema
             let replication_root = ReplicationRoot::default();
             let schema = Schema::build(replication_root, EmptyMutation, EmptySubscription)
-                .data(billie_db.store)
+                .data(billie.context.store.clone())
                 .finish();
 
             // Get public key from author of generated test data

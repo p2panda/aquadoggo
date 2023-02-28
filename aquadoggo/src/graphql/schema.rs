@@ -9,7 +9,7 @@ use p2panda_rs::Human;
 use tokio::sync::Mutex;
 
 use crate::bus::ServiceSender;
-use crate::db::provider::SqlStorage;
+use crate::db::SqlStore;
 use crate::graphql::client::{ClientMutationRoot, ClientRoot};
 use crate::graphql::replication::ReplicationRoot;
 use crate::schema::{save_static_schemas, SchemaProvider};
@@ -30,7 +30,7 @@ pub type RootSchema = Schema<QueryRoot, MutationRoot, EmptySubscription>;
 /// Builds the root schema that can handle all GraphQL requests from clients (Client API) or other
 /// nodes (Node API).
 pub fn build_root_schema(
-    store: SqlStorage,
+    store: SqlStore,
     tx: ServiceSender,
     schema_provider: SchemaProvider,
 ) -> RootSchema {
@@ -78,7 +78,7 @@ type GraphQLSchemas = Arc<Mutex<Vec<RootSchema>>>;
 #[derive(Clone, Debug)]
 pub struct GraphQLSharedData {
     /// Database interface.
-    store: SqlStorage,
+    store: SqlStore,
 
     /// Communication bus interface to send messages to other services.
     tx: ServiceSender,
@@ -115,11 +115,7 @@ pub struct GraphQLSchemaManager {
 
 impl GraphQLSchemaManager {
     /// Returns a new instance of `GraphQLSchemaManager`.
-    pub async fn new(
-        store: SqlStorage,
-        tx: ServiceSender,
-        schema_provider: SchemaProvider,
-    ) -> Self {
+    pub async fn new(store: SqlStore, tx: ServiceSender, schema_provider: SchemaProvider) -> Self {
         let schemas = Arc::new(Mutex::new(Vec::new()));
         let shared = GraphQLSharedData {
             store,
@@ -206,17 +202,23 @@ mod test {
     use p2panda_rs::test_utils::fixtures::key_pair;
     use rstest::rstest;
     use serde_json::{json, Value};
+    use serial_test::serial;
 
-    use crate::db::stores::test_utils::{add_schema, test_db, TestDatabase, TestDatabaseRunner};
-    use crate::test_helpers::graphql_test_client;
+    use crate::test_utils::{add_schema, graphql_test_client, test_runner, TestNode};
 
     #[rstest]
-    fn schema_updates(#[from(test_db)] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(move |mut db: TestDatabase| async move {
+    // Note: This test uses the underlying static schema provider which is a static mutable data
+    // store, accessible across all test runner threads in parallel mode. To prevent overwriting
+    // data across threads we have to run this test in serial.
+    //
+    // Read more: https://users.rust-lang.org/t/static-mutables-in-tests/49321
+    #[serial]
+    fn schema_updates() {
+        test_runner(|mut node: TestNode| async move {
             // Create test client in the beginning so it is initialised with just the system
             // schemas. Then we create a new application schema to test that the graphql schema
             // is updated and we can query the changed schema.
-            let client = graphql_test_client(&db).await;
+            let client = graphql_test_client(&node).await;
 
             // This test uses a fixed private key to allow us to anticipate the schema typename.
             let key_pair = key_pair(PRIVATE_KEY);
@@ -251,7 +253,7 @@ mod test {
 
             // Add schema to node.
             let schema = add_schema(
-                &mut db,
+                &mut node,
                 "schema_name",
                 vec![("bool_field", FieldType::Boolean)],
                 &key_pair,

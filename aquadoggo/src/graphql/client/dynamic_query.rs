@@ -9,13 +9,14 @@ use async_recursion::async_recursion;
 use async_trait::async_trait;
 use futures::future;
 use log::{debug, error, info};
+use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
+use p2panda_rs::storage_provider::traits::DocumentStore;
 use p2panda_rs::Human;
 
-use crate::db::provider::SqlStorage;
+use crate::db::SqlStore;
 use crate::graphql::client::dynamic_types;
 use crate::graphql::client::dynamic_types::DocumentMeta;
 use crate::graphql::client::utils::validate_view_matches_schema;
@@ -131,7 +132,7 @@ impl DynamicQuery {
     ) -> ServerResult<Option<Value>> {
         info!("Handling collection query for {}", schema_id.display());
 
-        let store = ctx.data_unchecked::<SqlStorage>();
+        let store = ctx.data_unchecked::<SqlStore>();
 
         // Retrieve all documents for schema from storage.
         let documents = store
@@ -140,9 +141,21 @@ impl DynamicQuery {
             .map_err(|err| ServerError::new(err.to_string(), None))?;
 
         // Assemble views async
-        let documents_graphql_values = documents.into_iter().map(|view| async move {
+        let documents_graphql_values = documents.into_iter().map(|document| async move {
             let selected_fields = ctx.field().selection_set().collect();
-            self.document_response(view, ctx, selected_fields).await
+            match document.view() {
+                Some(view) => {
+                    self.document_response(
+                        document.id(),
+                        &view,
+                        document.schema_id(),
+                        ctx,
+                        selected_fields,
+                    )
+                    .await
+                }
+                None => Ok(Value::Null),
+            }
         });
 
         Ok(Some(Value::List(
@@ -167,14 +180,14 @@ impl DynamicQuery {
     ) -> ServerResult<Value> {
         debug!("Fetching {} from store", document_id.display());
 
-        let store = ctx.data_unchecked::<SqlStorage>();
-        let view = store.get_document_by_id(&document_id).await.unwrap();
-        match view {
-            Some(view) => {
+        let store = ctx.data_unchecked::<SqlStore>();
+        let document = store.get_document(&document_id).await.unwrap();
+        match document {
+            Some(document) => {
                 // Validate the document's schema if the `validate_schema` argument is set.
                 if let Some(expected_schema_id) = validate_schema {
                     validate_view_matches_schema(
-                        view.id(),
+                        document.view_id(),
                         expected_schema_id,
                         store,
                         Some(ctx.item.pos),
@@ -182,7 +195,15 @@ impl DynamicQuery {
                     .await?;
                 }
 
-                self.document_response(view, ctx, selected_fields).await
+                // We can unwrap the document view here as documents returned from this store method all contain views.
+                self.document_response(
+                    document.id(),
+                    &document.view().unwrap(),
+                    document.schema_id(),
+                    ctx,
+                    selected_fields,
+                )
+                .await
             }
             None => {
                 error!("No view found for document {}", document_id.as_str());
@@ -191,7 +212,7 @@ impl DynamicQuery {
         }
     }
 
-    /// Fetches the given document view id from the store and returns it as a GraphQL value.
+    /// Fetches a document from the store by view id and returns it as a GraphQL value.
     ///
     /// Recurses into relations when those are selected in `selected_fields`.
     ///
@@ -207,24 +228,33 @@ impl DynamicQuery {
     ) -> ServerResult<Value> {
         debug!("Fetching {} from store", document_view_id.display());
 
-        let store = ctx.data_unchecked::<SqlStorage>();
-        let view = store
-            .get_document_view_by_id(&document_view_id)
+        let store = ctx.data_unchecked::<SqlStore>();
+        let document = store
+            .get_document_by_view_id(&document_view_id)
             .await
+            // @TODO: Not sure why it's ok to unwrap here, needs checking and comment adding.
             .unwrap();
-        match view {
-            Some(view) => {
+        match document {
+            Some(document) => {
                 // Validate the document's schema if the `validate_schema` argument is set.
                 if let Some(expected_schema_id) = validate_schema {
                     validate_view_matches_schema(
-                        view.id(),
+                        document.view_id(),
                         expected_schema_id,
                         store,
                         Some(ctx.item.pos),
                     )
                     .await?;
                 }
-                self.document_response(view, ctx, selected_fields).await
+                // We can unwrap the document view here as documents returned from this store method all contain views.
+                self.document_response(
+                    document.id(),
+                    &document.view().unwrap(),
+                    document.schema_id(),
+                    ctx,
+                    selected_fields,
+                )
+                .await
             }
             None => Ok(Value::Null),
         }
@@ -236,7 +266,9 @@ impl DynamicQuery {
     #[async_recursion]
     async fn document_response(
         &self,
-        view: DocumentView,
+        document_id: &DocumentId,
+        document_view: &DocumentView,
+        schema_id: &SchemaId,
         ctx: &Context<'_>,
         selected_fields: Vec<SelectionField<'async_recursion>>,
     ) -> ServerResult<Value> {
@@ -248,48 +280,26 @@ impl DynamicQuery {
 
             match field.name() {
                 "__typename" => {
-                    let store = ctx.data_unchecked::<SqlStorage>();
-                    let schema_id = store
-                        .get_schema_by_document_view(view.id())
-                        .await
-                        .map_err(|err| ServerError::new(err.to_string(), None))?
-                        .unwrap()
-                        .to_string();
-                    document_fields.insert(response_key, Value::String(schema_id));
+                    document_fields.insert(response_key, Value::String(schema_id.to_string()));
                 }
                 dynamic_types::document::META_FIELD => {
-                    let store = ctx.data_unchecked::<SqlStorage>();
-                    let document_id = store
-                        .get_document_by_operation_id(view.id().graph_tips().first().unwrap())
-                        .await
-                        .map_err(|err| ServerError::new(err.to_string(), None))?
-                        .unwrap();
                     document_fields.insert(
                         response_key,
-                        DocumentMeta::resolve(field, Some(&document_id), Some(view.id()))?,
+                        DocumentMeta::resolve(field, Some(document_id), Some(document_view.id()))?,
                     );
                 }
                 dynamic_types::document::FIELDS_FIELD => {
                     let subselection = field.selection_set().collect();
                     document_fields.insert(
                         response_key,
-                        self.document_fields_response(view.clone(), ctx, subselection)
+                        self.document_fields_response(document_view, schema_id, ctx, subselection)
                             .await?,
                     );
                 }
-                _ => {
-                    let store = ctx.data_unchecked::<SqlStorage>();
-                    let schema_id = store
-                        .get_schema_by_document_view(view.id())
-                        .await
-                        .map_err(|err| ServerError::new(err.to_string(), None))?
-                        .unwrap()
-                        .to_string();
-                    Err(ServerError::new(
-                        format!("Field '{}' does not exist on {}", field.name(), schema_id,),
-                        None,
-                    ))?
-                }
+                _ => Err(ServerError::new(
+                    format!("Field '{}' does not exist on {}", field.name(), schema_id),
+                    None,
+                ))?,
             }
         }
 
@@ -302,20 +312,14 @@ impl DynamicQuery {
     #[async_recursion]
     async fn document_fields_response(
         &self,
-        view: DocumentView,
+        document_view: &DocumentView,
+        schema_id: &SchemaId,
         ctx: &Context<'_>,
         selected_fields: Vec<SelectionField<'async_recursion>>,
     ) -> ServerResult<Value> {
-        let store = ctx.data_unchecked::<SqlStorage>();
-        let schema_id = store
-            .get_schema_by_document_view(view.id())
-            .await
-            .map_err(|err| ServerError::new(err.to_string(), None))?
-            .unwrap();
-
         let schema_provider = ctx.data_unchecked::<SchemaProvider>();
         // Unwrap because this schema id comes from the store.
-        let schema = schema_provider.get(&schema_id).await.unwrap();
+        let schema = schema_provider.get(schema_id).await.unwrap();
 
         // Construct GraphQL value for every field of the given view that has been selected.
         let mut view_fields = IndexMap::new();
@@ -347,7 +351,7 @@ impl DynamicQuery {
             }
             // Retrieve the current field's value from the document view. Unwrap because we have
             // checked that this field exists on the schema.
-            let document_view_value = view.get(selected_field.name()).unwrap();
+            let document_view_value = document_view.get(selected_field.name()).unwrap();
 
             // Collect any further fields that have been selected on the current field.
             let next_selection: Vec<SelectionField<'async_recursion>> =
@@ -414,27 +418,31 @@ fn gql_scalar(operation_value: &OperationValue) -> Value {
 #[cfg(test)]
 mod test {
     use async_graphql::{value, Response, Value};
-    use p2panda_rs::document::DocumentId;
+    use p2panda_rs::document::traits::AsDocument;
+    use p2panda_rs::identity::KeyPair;
     use p2panda_rs::schema::FieldType;
+    use p2panda_rs::storage_provider::traits::DocumentStore;
     use p2panda_rs::test_utils::fixtures::random_key_pair;
     use rstest::rstest;
     use serde_json::json;
+    use serial_test::serial;
 
-    use crate::db::stores::test_utils::{
-        add_document, add_schema, test_db, TestDatabase, TestDatabaseRunner,
-    };
-    use crate::test_helpers::graphql_test_client;
+    use crate::test_utils::{add_document, add_schema, graphql_test_client, test_runner, TestNode};
 
     #[rstest]
-    fn single_query(#[from(test_db)] runner: TestDatabaseRunner) {
+    // Note: This and more tests in this file use the underlying static schema provider which is a
+    // static mutable data store, accessible across all test runner threads in parallel mode. To
+    // prevent overwriting data across threads we have to run this test in serial.
+    //
+    // Read more: https://users.rust-lang.org/t/static-mutables-in-tests/49321
+    #[serial]
+    fn single_query(#[from(random_key_pair)] key_pair: KeyPair) {
         // Test single query parameter variations.
 
-        runner.with_db_teardown(&|mut db: TestDatabase| async move {
-            let key_pair = random_key_pair();
-
+        test_runner(move |mut node: TestNode| async move {
             // Add schema to node.
             let schema = add_schema(
-                &mut db,
+                &mut node,
                 "schema_name",
                 vec![("bool", FieldType::Boolean)],
                 &key_pair,
@@ -442,13 +450,27 @@ mod test {
             .await;
 
             // Publish document on node.
-            let view_id =
-                add_document(&mut db, schema.id(), vec![("bool", true.into())], &key_pair).await;
-            let document_id =
-                DocumentId::from(view_id.graph_tips().first().unwrap().as_hash().to_owned());
+            let view_id = add_document(
+                &mut node,
+                schema.id(),
+                vec![("bool", true.into())],
+                &key_pair,
+            )
+            .await;
+
+            // Get the materialised document.
+            let document = node
+                .context
+                .store
+                .get_document_by_view_id(&view_id)
+                .await
+                .expect("Query succeeds")
+                .expect("There to be a document");
+
+            let document_id = document.id();
 
             // Configure and send test query.
-            let client = graphql_test_client(&db).await;
+            let client = graphql_test_client(&node).await;
             let query = format!(
                 r#"{{
                 byViewId: {type_name}(viewId: "{view_id}") {{
@@ -482,6 +504,7 @@ mod test {
     }
 
     #[rstest]
+    #[serial] // See note above on why we execute this test in series
     #[case::unknown_document_id(
         "id: \"00208f7492d6eb01360a886dac93da88982029484d8c04a0bd2ac0607101b80a6634\"",
         value!({
@@ -512,16 +535,14 @@ mod test {
         vec!["Must provide either `id` or `viewId` argument".to_string()]
     )]
     fn single_query_error_handling(
-        #[from(test_db)] runner: TestDatabaseRunner,
         #[case] params: String,
         #[case] expected_value: Value,
         #[case] expected_errors: Vec<String>,
     ) {
         // Test single query parameter variations.
-
-        runner.with_db_teardown(move |db: TestDatabase| async move {
+        test_runner(move |node: TestNode| async move {
             // Configure and send test query.
-            let client = graphql_test_client(&db).await;
+            let client = graphql_test_client(&node).await;
             let query = format!(
                 r#"{{
                 view: schema_definition_v1({params}) {{
@@ -555,15 +576,13 @@ mod test {
     }
 
     #[rstest]
-    fn collection_query(#[from(test_db)] runner: TestDatabaseRunner) {
+    #[serial] // See note above on why we execute this test in series
+    fn collection_query(#[from(random_key_pair)] key_pair: KeyPair) {
         // Test collection query parameter variations.
-
-        runner.with_db_teardown(&|mut db: TestDatabase| async move {
-            let key_pair = random_key_pair();
-
+        test_runner(move |mut node: TestNode| async move {
             // Add schema to node.
             let schema = add_schema(
-                &mut db,
+                &mut node,
                 "schema_name",
                 vec![("bool", FieldType::Boolean)],
                 &key_pair,
@@ -571,10 +590,16 @@ mod test {
             .await;
 
             // Publish document on node.
-            add_document(&mut db, schema.id(), vec![("bool", true.into())], &key_pair).await;
+            add_document(
+                &mut node,
+                schema.id(),
+                vec![("bool", true.into())],
+                &key_pair,
+            )
+            .await;
 
             // Configure and send test query.
-            let client = graphql_test_client(&db).await;
+            let client = graphql_test_client(&node).await;
             let query = format!(
                 r#"{{
                 collection: all_{type_name} {{
@@ -602,15 +627,13 @@ mod test {
     }
 
     #[rstest]
-    fn type_name(#[from(test_db)] runner: TestDatabaseRunner) {
+    #[serial] // See note above on why we execute this test in series
+    fn type_name(#[from(random_key_pair)] key_pair: KeyPair) {
         // Test availability of `__typename` on all objects.
-
-        runner.with_db_teardown(&|mut db: TestDatabase| async move {
-            let key_pair = random_key_pair();
-
+        test_runner(move |mut node: TestNode| async move {
             // Add schema to node.
             let schema = add_schema(
-                &mut db,
+                &mut node,
                 "schema_name",
                 vec![("bool", FieldType::Boolean)],
                 &key_pair,
@@ -619,7 +642,7 @@ mod test {
 
             // Publish document on node.
             let view_id = add_document(
-                &mut db,
+                &mut node,
                 &schema.id(),
                 vec![("bool", true.into())],
                 &key_pair,
@@ -627,7 +650,7 @@ mod test {
             .await;
 
             // Configure and send test query.
-            let client = graphql_test_client(&db).await;
+            let client = graphql_test_client(&node).await;
             let query = format!(
                 r#"{{
                 single: {type_name}(id: "{view_id}") {{

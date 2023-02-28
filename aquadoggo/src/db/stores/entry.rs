@@ -2,161 +2,28 @@
 
 use async_trait::async_trait;
 use lipmaa_link::get_lipmaa_links_back_to;
-use p2panda_rs::entry::decode::decode_entry;
 use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
-use p2panda_rs::entry::{EncodedEntry, Entry, LogId, SeqNum, Signature};
+use p2panda_rs::entry::{EncodedEntry, Entry, LogId, SeqNum};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::EncodedOperation;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::error::EntryStorageError;
-use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
+use p2panda_rs::storage_provider::traits::EntryStore;
 use sqlx::{query, query_as};
 
 use crate::db::models::EntryRow;
-use crate::db::provider::SqlStorage;
-
-/// A signed entry and it's encoded operation. Entries are the lowest level data type on the
-/// p2panda network, they are signed by authors and form bamboo append only logs. The operation is
-/// an entries' payload, it contains the data mutations which authors publish.
-///
-/// This struct implements the `EntryWithOperation` trait which is required when constructing the
-/// `EntryStore`.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct StorageEntry {
-    /// PublicKey of this entry.
-    pub(crate) public_key: PublicKey,
-
-    /// Used log for this entry.
-    pub(crate) log_id: LogId,
-
-    /// Sequence number of this entry.
-    pub(crate) seq_num: SeqNum,
-
-    /// Hash of skiplink Bamboo entry.
-    pub(crate) skiplink: Option<Hash>,
-
-    /// Hash of previous Bamboo entry.
-    pub(crate) backlink: Option<Hash>,
-
-    /// Byte size of payload.
-    pub(crate) payload_size: u64,
-
-    /// Hash of payload.
-    pub(crate) payload_hash: Hash,
-
-    /// Ed25519 signature of entry.
-    pub(crate) signature: Signature,
-
-    /// Encoded entry bytes.
-    pub(crate) encoded_entry: EncodedEntry,
-
-    /// Encoded entry bytes.
-    pub(crate) payload: Option<EncodedOperation>,
-}
-
-impl EntryWithOperation for StorageEntry {
-    fn payload(&self) -> Option<&EncodedOperation> {
-        self.payload.as_ref()
-    }
-}
-
-impl AsEntry for StorageEntry {
-    /// Returns public key of entry.
-    fn public_key(&self) -> &PublicKey {
-        &self.public_key
-    }
-
-    /// Returns log id of entry.
-    fn log_id(&self) -> &LogId {
-        &self.log_id
-    }
-
-    /// Returns sequence number of entry.
-    fn seq_num(&self) -> &SeqNum {
-        &self.seq_num
-    }
-
-    /// Returns hash of skiplink entry when given.
-    fn skiplink(&self) -> Option<&Hash> {
-        self.skiplink.as_ref()
-    }
-
-    /// Returns hash of backlink entry when given.
-    fn backlink(&self) -> Option<&Hash> {
-        self.backlink.as_ref()
-    }
-
-    /// Returns payload size of operation.
-    fn payload_size(&self) -> u64 {
-        self.payload_size
-    }
-
-    /// Returns payload hash of operation.
-    fn payload_hash(&self) -> &Hash {
-        &self.payload_hash
-    }
-
-    /// Returns signature of entry.
-    fn signature(&self) -> &Signature {
-        &self.signature
-    }
-}
-
-impl AsEncodedEntry for StorageEntry {
-    /// Generates and returns hash of encoded entry.
-    fn hash(&self) -> Hash {
-        self.encoded_entry.hash()
-    }
-
-    /// Returns entry as bytes.
-    fn into_bytes(&self) -> Vec<u8> {
-        self.encoded_entry.into_bytes()
-    }
-
-    /// Returns payload size (number of bytes) of total encoded entry.
-    fn size(&self) -> u64 {
-        self.encoded_entry.size()
-    }
-}
-
-/// `From` implementation for converting an `EntryRow` into a `StorageEntry`. This is needed when
-/// retrieving entries from the database. The `sqlx` crate coerces returned entry rows into
-/// `EntryRow` but we want them as `StorageEntry` which contains typed values.
-impl From<EntryRow> for StorageEntry {
-    fn from(entry_row: EntryRow) -> Self {
-        let encoded_entry = EncodedEntry::from_bytes(
-            &hex::decode(entry_row.entry_bytes)
-                .expect("Decode entry hex entry bytes from database"),
-        );
-        let entry = decode_entry(&encoded_entry).expect("Decoding encoded entry from database");
-        StorageEntry {
-            public_key: entry.public_key().to_owned(),
-            log_id: entry.log_id().to_owned(),
-            seq_num: entry.seq_num().to_owned(),
-            skiplink: entry.skiplink().cloned(),
-            backlink: entry.backlink().cloned(),
-            payload_size: entry.payload_size(),
-            payload_hash: entry.payload_hash().to_owned(),
-            signature: entry.signature().to_owned(),
-            encoded_entry,
-            // We unwrap now as all entries currently contain a payload.
-            payload: entry_row.payload_bytes.map(|payload| {
-                EncodedOperation::from_bytes(
-                    &hex::decode(payload).expect("Decode entry payload from database"),
-                )
-            }),
-        }
-    }
-}
+use crate::db::types::StorageEntry;
+use crate::db::SqlStore;
 
 /// Implementation of `EntryStore` trait which is required when constructing a `StorageProvider`.
 ///
-/// Handles storage and retrieval of entries in the form of`StorageEntry` which implements the
-/// required `EntryWithOperation` trait. An intermediary struct `EntryRow` is also used when retrieving
-/// an entry from the database.
+/// Handles storage and retrieval of entries in the form of `StorageEntry`. An intermediary struct
+/// `EntryRow` is used when retrieving an entry from the database.
 #[async_trait]
-impl EntryStore<StorageEntry> for SqlStorage {
+impl EntryStore for SqlStore {
+    type Entry = StorageEntry;
+
     /// Insert an entry into storage.
     ///
     /// Returns an error if the insertion doesn't result in exactly one
@@ -209,10 +76,7 @@ impl EntryStore<StorageEntry> for SqlStorage {
     /// Returns a result containing the entry wrapped in an option if it was found successfully.
     /// Returns `None` if the entry was not found in storage. Errors when a fatal storage error
     /// occured.
-    async fn get_entry_by_hash(
-        &self,
-        hash: &Hash,
-    ) -> Result<Option<StorageEntry>, EntryStorageError> {
+    async fn get_entry(&self, hash: &Hash) -> Result<Option<StorageEntry>, EntryStorageError> {
         let entry_row = query_as::<_, EntryRow>(
             "
             SELECT
@@ -453,36 +317,38 @@ impl EntryStore<StorageEntry> for SqlStorage {
 #[cfg(test)]
 mod tests {
     use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
-    use p2panda_rs::entry::{EncodedEntry, Entry, LogId, SeqNum};
+    use p2panda_rs::entry::{EncodedEntry, Entry, EntryBuilder, LogId, SeqNum};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::EncodedOperation;
     use p2panda_rs::schema::SchemaId;
-    use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
+    use p2panda_rs::storage_provider::traits::EntryStore;
     use p2panda_rs::test_utils::fixtures::{encoded_entry, encoded_operation, entry, random_hash};
+    use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
     use rstest::rstest;
 
-    use crate::db::stores::test_utils::{doggo_schema, test_db, TestDatabase, TestDatabaseRunner};
+    use crate::test_utils::{populate_store_config, test_runner, TestNode};
 
     #[rstest]
     fn insert_entry(
         encoded_entry: EncodedEntry,
         entry: Entry,
         encoded_operation: EncodedOperation,
-        #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        test_runner(|node: TestNode| async move {
             // Insert one entry into the store.
-            let result = db
+            let result = node
+                .context
                 .store
                 .insert_entry(&entry, &encoded_entry, Some(&encoded_operation))
                 .await;
             assert!(result.is_ok());
 
             // Retrieve the entry again by it's hash.
-            let retrieved_entry = db
+            let retrieved_entry = node
+                .context
                 .store
-                .get_entry_by_hash(&encoded_entry.hash())
+                .get_entry(&encoded_entry.hash())
                 .await
                 .expect("Get entry")
                 .expect("Unwrap entry");
@@ -501,44 +367,47 @@ mod tests {
                 encoded_operation,
                 retrieved_entry.payload().unwrap().to_owned()
             );
-
-            // Convert the retrieved entry back into the types we inserted.
-            let retreved_entry: Entry = retrieved_entry.clone().into();
-            let retreved_encoded_entry: EncodedEntry = retrieved_entry.into();
-
-            // The types should match.
-            assert_eq!(retreved_entry, entry);
-            assert_eq!(retreved_encoded_entry, encoded_entry);
+            assert_eq!(retrieved_entry.encoded_entry, encoded_entry);
         });
     }
 
     #[rstest]
     fn try_insert_non_unique_entry(
-        #[from(test_db)]
-        #[with(10, 1, 1)]
-        runner: TestDatabaseRunner,
+        #[from(populate_store_config)]
+        #[with(2, 1, 1)]
+        config: PopulateStoreConfig,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            // The public key of the author who published the entries in the database
-            let public_key = db.test_data.key_pairs[0].public_key();
+        test_runner(|node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (key_pairs, _) = populate_store(&node.context.store, &config).await;
+
+            // The key pair of the author who published to the note.
+            let key_pair = key_pairs.get(0).expect("At least one key pair");
 
             // We get back the first entry.
-            let first_entry = db
+            let first_entry = node
+                .context
                 .store
-                .get_entry_at_seq_num(&public_key, &LogId::default(), &SeqNum::new(1).unwrap())
+                .get_entry_at_seq_num(
+                    &key_pair.public_key(),
+                    &LogId::default(),
+                    &SeqNum::new(1).unwrap(),
+                )
                 .await
                 .expect("Get entry")
                 .unwrap();
 
+            // Construct a new entry from it with the same values.
+            let entry = EntryBuilder::new()
+                .sign(first_entry.payload().unwrap(), key_pair)
+                .unwrap();
+
             // We try to publish it again which should error as entry hashes
             // have a unique constraint.
-            let result = db
+            let result = node
+                .context
                 .store
-                .insert_entry(
-                    &first_entry.clone().into(),
-                    &first_entry.clone().into(),
-                    first_entry.payload(),
-                )
+                .insert_entry(&entry, &first_entry.encoded_entry, first_entry.payload())
                 .await;
 
             assert!(result.is_err());
@@ -547,37 +416,46 @@ mod tests {
 
     #[rstest]
     fn latest_entry(
-        #[from(test_db)]
-        #[with(20, 1, 1)]
-        runner: TestDatabaseRunner,
+        #[from(populate_store_config)]
+        #[with(2, 1, 1)]
+        config: PopulateStoreConfig,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            // The public key of the author who published the entries in the database
-            let public_key_in_db = db.test_data.key_pairs[0].public_key();
+        test_runner(|node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (key_pairs, _) = populate_store(&node.context.store, &config).await;
+
+            // The public key of the author who published to the node.
+            let public_key_in_db = key_pairs
+                .get(0)
+                .expect("At least one key pair")
+                .public_key();
+
             // There are no entries assigned to this public key.
             let public_key_not_in_db = KeyPair::new().public_key();
-            let log_id = LogId::default();
 
             // We expect no latest entry by a public key who did not
             // publish to this store at this log yet.
-            let latest_entry = db
+            let latest_entry = node
+                .context
                 .store
-                .get_latest_entry(&public_key_not_in_db, &log_id)
+                .get_latest_entry(&public_key_not_in_db, &LogId::default())
                 .await
                 .expect("Get latest entry for public key and log id");
             assert!(latest_entry.is_none());
 
             // We expect the latest entry for the requested public key and log.
-            let latest_entry = db
+            let latest_entry = node
+                .context
                 .store
-                .get_latest_entry(&public_key_in_db, &log_id)
+                .get_latest_entry(&public_key_in_db, &LogId::default())
                 .await
                 .expect("Get latest entry for public key and log id");
-            assert_eq!(latest_entry.unwrap().seq_num(), &SeqNum::new(20).unwrap());
+            assert_eq!(latest_entry.unwrap().seq_num(), &SeqNum::new(2).unwrap());
 
             // If we request for an existing public key but a non-existant log, then we again
             // expect no latest entry.
-            let latest_entry = db
+            let latest_entry = node
+                .context
                 .store
                 .get_latest_entry(&public_key_in_db, &LogId::new(1))
                 .await
@@ -589,18 +467,23 @@ mod tests {
     #[rstest]
     fn entries_by_schema(
         #[from(random_hash)] hash: Hash,
-        #[from(test_db)]
-        #[with(20, 2, 2, false, doggo_schema())]
-        runner: TestDatabaseRunner,
+        #[from(populate_store_config)]
+        #[with(2, 2, 2)]
+        config: PopulateStoreConfig,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        test_runner(|node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            populate_store(&node.context.store, &config).await;
+
+            // This schema was used when publishing the test entries.
+            let schema_in_the_db = config.schema.id();
+
             // No entries were published containing an operation which follows this schema.
             let schema_not_in_the_db = SchemaId::new_application("venue", &hash.into());
-            // This schema was used when publishing the test entries.
-            let schema_in_the_db = doggo_schema().id().to_owned();
 
             // Get entries by schema not in db.
-            let entries = db
+            let entries = node
+                .context
                 .store
                 .get_entries_by_schema(&schema_not_in_the_db)
                 .await
@@ -610,37 +493,41 @@ mod tests {
             assert!(entries.is_empty());
 
             // Get entries by schema which is in the db.
-            let entries = db
+            let entries = node
+                .context
                 .store
-                .get_entries_by_schema(&schema_in_the_db)
+                .get_entries_by_schema(schema_in_the_db)
                 .await
                 .expect("Get entries by schema");
 
-            // Here we expect 80 entries as there are 2 authors each publishing to 2 documents which each contain 20
+            // Here we expect 8 entries as there are 2 authors each publishing to 2 logs which each contain 2
             // entries.
-            //
-            // 2 * 2 * 20 = 80
-            assert!(entries.len() == 80);
+            assert!(entries.len() == 8);
         });
     }
 
     #[rstest]
     fn entry_by_seq_number(
-        #[from(test_db)]
+        #[from(populate_store_config)]
         #[with(10, 1, 1)]
-        runner: TestDatabaseRunner,
+        config: PopulateStoreConfig,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            // The public key of the author who published the entries to the database
-            let public_key = db.test_data.key_pairs[0].public_key();
-            let log_id = LogId::default();
+        test_runner(|node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (key_pairs, _) = populate_store(&node.context.store, &config).await;
+            // The public key of the author who published to the node.
+            let public_key = key_pairs
+                .get(0)
+                .expect("At least one key pair")
+                .public_key();
 
             // We should be able to get each entry by it's public_key, log_id and seq_num.
             for seq_num in 1..10 {
                 let seq_num = SeqNum::new(seq_num).unwrap();
 
                 // We expect the retrieved entry to match the values we requested.
-                let entry = db
+                let entry = node
+                    .context
                     .store
                     .get_entry_at_seq_num(&public_key, &LogId::default(), &seq_num)
                     .await
@@ -648,13 +535,14 @@ mod tests {
                     .expect("Optimistically unwrap entry");
 
                 assert_eq!(entry.seq_num(), &seq_num);
-                assert_eq!(entry.log_id(), &log_id);
+                assert_eq!(entry.log_id(), &LogId::default());
                 assert_eq!(entry.public_key(), &public_key);
             }
 
             // We expect a request to an empty log to return no entries.
             let wrong_log = LogId::new(2);
-            let entry = db
+            let entry = node
+                .context
                 .store
                 .get_entry_at_seq_num(&public_key, &wrong_log, &SeqNum::new(1).unwrap())
                 .await
@@ -663,7 +551,8 @@ mod tests {
 
             // We expect a request to the wrong public key to return no entries.
             let public_key_not_in_db = KeyPair::new().public_key();
-            let entry = db
+            let entry = node
+                .context
                 .store
                 .get_entry_at_seq_num(
                     &public_key_not_in_db,
@@ -677,7 +566,8 @@ mod tests {
             // We expect a request for a sequence number which is too high
             // to return no entries.
             let seq_num_not_in_log = SeqNum::new(1000).unwrap();
-            let entry = db
+            let entry = node
+                .context
                 .store
                 .get_entry_at_seq_num(
                     &public_key_not_in_db,
@@ -691,19 +581,27 @@ mod tests {
     }
 
     #[rstest]
-    fn get_entry_by_hash(
-        #[from(test_db)]
+    fn get_entry(
+        #[from(populate_store_config)]
         #[with(20, 1, 1)]
-        runner: TestDatabaseRunner,
+        config: PopulateStoreConfig,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            let public_key = db.test_data.key_pairs[0].public_key();
+        test_runner(|node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (key_pairs, _) = populate_store(&node.context.store, &config).await;
+
+            // The public key of the author who published to the node.
+            let public_key = key_pairs
+                .get(0)
+                .expect("At least one key pair")
+                .public_key();
 
             // We pick a few entries from the ones in the db to retrieve.
             for seq_num in [1, 11, 18] {
                 let seq_num = SeqNum::new(seq_num).unwrap();
                 // We get them by their sequence number first.
-                let entry = db
+                let entry = node
+                    .context
                     .store
                     .get_entry_at_seq_num(&public_key, &LogId::default(), &seq_num)
                     .await
@@ -712,9 +610,10 @@ mod tests {
 
                 // The we retrieve them by their hash.
                 let entry_hash = entry.hash();
-                let entry_by_hash = db
+                let entry_by_hash = node
+                    .context
                     .store
-                    .get_entry_by_hash(&entry_hash)
+                    .get_entry(&entry_hash)
                     .await
                     .unwrap()
                     .unwrap();
@@ -726,9 +625,10 @@ mod tests {
             // If we try to retrieve with a hash of an entry not in the db then
             // we should get none back.
             let entry_hash_not_in_db = random_hash();
-            let entry = db
+            let entry = node
+                .context
                 .store
-                .get_entry_by_hash(&entry_hash_not_in_db)
+                .get_entry(&entry_hash_not_in_db)
                 .await
                 .unwrap();
             assert!(entry.is_none());
@@ -746,19 +646,25 @@ mod tests {
     fn paginated_log_entries(
         #[case] from: u64,
         #[case] num_of_entries: u64,
-        #[case] expected: usize,
-        #[from(test_db)]
-        // We pre-populate the database with 30 entries for this test.
+        #[case] expected_entries: usize,
+        #[from(populate_store_config)]
         #[with(30, 1, 1)]
-        runner: TestDatabaseRunner,
+        config: PopulateStoreConfig,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
-            // The public key of the author who published the entries in the db.
-            let public_key = db.test_data.key_pairs[0].public_key();
+        test_runner(move |node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (key_pairs, _) = populate_store(&node.context.store, &config).await;
+
+            // The public key of the author who published to the node.
+            let public_key = key_pairs
+                .get(0)
+                .expect("At least one key pair")
+                .public_key();
 
             // Get paginated entries, starting with the one at seq num defined by `from` and
             // continuing for `num_of_entries` or the end of the log is reached.
-            let entries = db
+            let entries = node
+                .context
                 .store
                 .get_paginated_log_entries(
                     &public_key,
@@ -778,24 +684,31 @@ mod tests {
                 )
             }
 
-            // We expect the total number of entries returned to match our `expected`
+            // We expect the total number of entries returned to match our `expected_entries`
             // value.
-            assert_eq!(entries.len(), expected);
+            assert_eq!(entries.len(), expected_entries);
         });
     }
 
     #[rstest]
     fn get_lipmaa_link_entries(
-        #[from(test_db)]
+        #[from(populate_store_config)]
         #[with(20, 1, 1)]
-        runner: TestDatabaseRunner,
+        config: PopulateStoreConfig,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            // An author with this public key has published to the test database.
-            let public_key = db.test_data.key_pairs[0].public_key();
+        test_runner(|node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (key_pairs, _) = populate_store(&node.context.store, &config).await;
+
+            // The public key of the author who published to the node.
+            let public_key = key_pairs
+                .get(0)
+                .expect("At least one key pair")
+                .public_key();
 
             // Get the certificate pool for a specified public_key, log and seq num.
-            let entries = db
+            let entries = node
+                .context
                 .store
                 .get_certificate_pool(&public_key, &LogId::default(), &SeqNum::new(20).unwrap())
                 .await

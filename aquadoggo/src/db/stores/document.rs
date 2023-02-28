@@ -1,31 +1,329 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::collections::BTreeMap;
-
+//! This module implements `DocumentStore` on `SqlStore` as well as aditional insertion methods
+//! specific to the `aquadoggo` storage patterns. The resulting interface offers all storage
+//! methods used for persisting and retrieving materialised documents.
+//!
+//! Documents are created and mutated via operations which arrive at a node. Once validated, the
+//! new operations are sent straight to the materialiser service which builds the documents
+//! themselves. On completion, the resultant documents are stored and can be retrieved using the
+//! methods defined here.
+//!
+//! The whole document store can be seen as a live cache. All it's content is derived from
+//! operations already stored on the node. It allows easy and quick access to current or pinned
+//! values.
+//!
+//! Documents are stored in the database in three tables. These are `documents`, `document_views`
+//! and `document_view_fields`. A `document` can have many `document_views`, one showing the
+//! current state and any number of historic views. A `document_view` itself a unique id plus one
+//! or many `document_view_fields` which are pointers to the operation holding the current value
+//! for the documents' field.
+//!
+//! As mentioned above, a useful property of documents is that they make it easy to retain past
+//! state, we call these states document views. When a document is updated it gets a new state, or
+//! view, which can be referred to by a globally unique document view id.
+//!  
+//! The getter methods allow retrieving a document by it's `DocumentId` or it's
+//! `DocumentViewId`. The former always returns the most current document state, the latter
+//! returns the specific document view if it has already been materialised and stored. Although it
+//! is possible to construct a document at any point in it's history if all operations are
+//! retained, we use a system of "pinned relations" to identify and materialise only views we
+//! explicitly wish to keep.
 use async_trait::async_trait;
 use futures::future::try_join_all;
+use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::{Document, DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::error::DocumentStorageError;
 use p2panda_rs::storage_provider::traits::DocumentStore;
-use sqlx::{query, query_as};
+use sqlx::any::AnyQueryResult;
+use sqlx::{query, query_as, query_scalar};
 
-use crate::db::models::document::DocumentViewFieldRow;
-use crate::db::provider::SqlStorage;
-use crate::db::utils::parse_document_view_field_rows;
+use crate::db::models::utils::parse_document_view_field_rows;
+use crate::db::models::{DocumentRow, DocumentViewFieldRow};
+use crate::db::types::StorageDocument;
+use crate::db::Pool;
+use crate::db::SqlStore;
 
+/// Implementation of
 #[async_trait]
-impl DocumentStore for SqlStorage {
-    /// Insert a document_view into the db.
+impl DocumentStore for SqlStore {
+    type Document = StorageDocument;
+
+    /// Get a document from the store by it's `DocumentId`.
     ///
-    /// Internally, this method performs two different operations:
-    /// - insert a row for every document_view_field present on this view
-    /// - insert a row for the document_view itself
+    /// Retrieves a document in it's most current state from the store. Ignores documents which
+    /// contain a DELETE operation.
     ///
-    /// If either of these operations fail and error is returned.
-    async fn insert_document_view(
+    /// An error is returned only if a fatal database error occurs.
+    async fn get_document(
+        &self,
+        id: &DocumentId,
+    ) -> Result<Option<Self::Document>, DocumentStorageError> {
+        // Retrieve one row from the document table matching on the passed id.
+        let document_row = query_as::<_, DocumentRow>(
+            "
+            SELECT
+                documents.document_id,
+                documents.document_view_id,
+                documents.schema_id,
+                operations_v1.public_key,
+                documents.is_deleted
+            FROM
+                documents
+            LEFT JOIN operations_v1
+                ON
+                    operations_v1.operation_id = $1
+            WHERE
+                documents.document_id = $1 AND documents.is_deleted = false
+            ",
+        )
+        .bind(id.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+
+        // If no row matched we return None here, otherwise unwrap safely.
+        let document_row = match document_row {
+            Some(document_row) => document_row,
+            None => return Ok(None),
+        };
+
+        // We now want to retrieve the view (current key-value map) for this document, as we
+        // already filtered out deleted documents in the query above we can expect all documents
+        // we handle here to have an associated view in the database.
+        let document_view_id = document_row.document_view_id.parse().unwrap();
+        let document_view_field_rows =
+            get_document_view_field_rows(&self.pool, &document_view_id).await?;
+        // this method assumes all values coming from the db are already validated and so
+        // unwraps where errors might occur.
+        let document_view_fields = Some(parse_document_view_field_rows(document_view_field_rows));
+
+        // Construct a `StorageDocument` based on the retrieved values.
+        let document = StorageDocument {
+            id: id.to_owned(),
+            view_id: document_view_id,
+            schema_id: document_row.schema_id.parse().unwrap(),
+            fields: document_view_fields,
+            author: document_row.public_key.parse().unwrap(),
+            deleted: document_row.is_deleted,
+        };
+
+        Ok(Some(document))
+    }
+
+    /// Get a document from the database by `DocumentViewId`.
+    ///
+    /// Get's a document at a specific point in it's history. Only returns views that have already
+    /// been materialised and persisted in the store. These are likely to be "pinned views" which
+    /// are relations from other documents, in which case the materialiser service will have
+    /// identified and materialised them ready for querying.
+    ///
+    /// Any view which existed as part of a document which is now deleted is ignored.
+    ///
+    /// An error is returned only if a fatal database error occurs.
+    async fn get_document_by_view_id(
+        &self,
+        id: &DocumentViewId,
+    ) -> Result<Option<StorageDocument>, DocumentStorageError> {
+        // Retrieve the id of the document which the passed view id comes from.
+        let document_id: Option<String> = query_scalar(
+            "
+            SELECT
+                document_id
+            FROM
+                document_views
+            WHERE
+                document_view_id = $1
+            ",
+        )
+        .bind(id.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+
+        // Parse the document id if one was found otherwise we can already return None here as no
+        // document for the passed view could be found.
+        let document_id: DocumentId = match document_id {
+            Some(document_id) => document_id.parse().unwrap(),
+            None => return Ok(None),
+        };
+
+        // Get a row for the document matching to the found document id.
+        let document_row = query_as::<_, DocumentRow>(
+            "
+            SELECT
+                documents.document_id,
+                documents.document_view_id,
+                documents.schema_id,
+                operations_v1.public_key,
+                documents.is_deleted
+            FROM
+                documents
+            LEFT JOIN operations_v1
+                ON
+                    operations_v1.operation_id = $1    
+            WHERE
+                documents.document_id = $1 AND documents.is_deleted = false
+            ",
+        )
+        .bind(document_id.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+
+        // Unwrap as we can assume a document for the found document id exists.
+        let document_row = document_row.unwrap();
+
+        // We now want to retrieve the view (current key-value map) for this document, as we
+        // already filtered out deleted documents in the query above we can expect all documents
+        // we handle here to have an associated view in the database.
+        let document_view_field_rows = get_document_view_field_rows(&self.pool, id).await?;
+        // this method assumes all values coming from the db are already validated and so
+        // unwraps where errors might occur.
+        let document_view_fields = Some(parse_document_view_field_rows(document_view_field_rows));
+
+        // Construct a `StorageDocument` based on the retrieved values.
+        let document = StorageDocument {
+            id: document_row.document_id.parse().unwrap(),
+            view_id: id.to_owned(), /* set the requested document view id not the current */
+            schema_id: document_row.schema_id.parse().unwrap(),
+            fields: document_view_fields,
+            author: document_row.public_key.parse().unwrap(),
+            deleted: document_row.is_deleted,
+        };
+
+        Ok(Some(document))
+    }
+
+    /// Get all documents which follow the passed schema id.
+    ///
+    /// Retrieves all documents, with their most current views, which follow the specified schema.
+    /// Deleted documents are not included.
+    ///
+    /// An error is returned only if a fatal database error occurs.
+    async fn get_documents_by_schema(
+        &self,
+        schema_id: &SchemaId,
+    ) -> Result<Vec<Self::Document>, DocumentStorageError> {
+        // Retrieve all rows from the document table where the passed schema_id matches.
+        let document_rows = query_as::<_, DocumentRow>(
+            "
+            SELECT
+                documents.document_id,
+                documents.document_view_id,
+                documents.schema_id,
+                operations_v1.public_key,
+                documents.is_deleted
+            FROM
+                documents
+            LEFT JOIN operations_v1
+                ON
+                    operations_v1.operation_id = documents.document_id
+            WHERE
+                documents.schema_id = $1  AND documents.is_deleted = false
+            ",
+        )
+        .bind(schema_id.to_string())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+
+        // If no rows were found we can already return an empty vec here.
+        if document_rows.is_empty() {
+            return Ok(vec![]);
+        }
+
+        // For every row we found we want to retrieve the current view as well.
+        let mut documents: Vec<StorageDocument> = vec![];
+        for document_row in document_rows {
+            let document_view_id = document_row.document_view_id.parse().unwrap();
+            // We now want to retrieve the view (current key-value map) for this document, as we
+            // already filtered out deleted documents in the query above we can expect all documents
+            // we handle here to have an associated view in the database.
+            let document_view_field_rows =
+                get_document_view_field_rows(&self.pool, &document_view_id).await?;
+            // this method assumes all values coming from the db are already validated and so
+            // unwraps where errors might occur.
+            let document_view_fields =
+                Some(parse_document_view_field_rows(document_view_field_rows));
+
+            // Construct a `StorageDocument` based on the retrieved values.
+            let document = StorageDocument {
+                id: document_row.document_id.parse().unwrap(),
+                view_id: document_view_id,
+                schema_id: document_row.schema_id.parse().unwrap(),
+                fields: document_view_fields,
+                author: document_row.public_key.parse().unwrap(),
+                deleted: document_row.is_deleted,
+            };
+
+            documents.push(document)
+        }
+
+        Ok(documents)
+    }
+}
+
+/// Storage api offering an interface for inserting documents and document views into the database.
+///
+/// These methods are specific to `aquadoggo`s approach to document caching and are defined
+/// outside of the required `DocumentStore` trait.
+impl SqlStore {
+    /// Insert a document into the database.
+    ///
+    /// This method inserts or updates a row in the documents table and then inserts the documents
+    /// current view and field values into the `document_views` and `document_view_fields` tables
+    /// respectively.
+    ///
+    /// If the document already existed in the store then it's current view and view id will be
+    /// updated with those contained on the passed document.
+    ///
+    /// If any of the operations fail all insertions are rolled back.
+    ///
+    /// An error is returned in the case of a fatal database error.
+    ///
+    /// Note: "out-of-date" document views will remain in storage when a document already existed
+    /// and is updated. If they are not needed for anything else they can be garbage collected.
+    pub async fn insert_document(&self, document: &Document) -> Result<(), DocumentStorageError> {
+        // Start a transaction, any db insertions after this point, and before the `commit()`
+        // can be rolled back in the event of an error.
+        let transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+
+        // Insert the document and view to the database, in the case of an error all insertions
+        // since the transaction was instantiated above will be rolled back.
+        match insert_document(&self.pool, document).await {
+            // Commit the transaction here if no error occurred.
+            Ok(_) => transaction
+                .commit()
+                .await
+                .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string())),
+            // Rollback here if an error occurred.
+            Err(err) => {
+                transaction
+                    .rollback()
+                    .await
+                    .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+                Err(err)
+            }
+        }
+    }
+
+    /// Insert a document view into the database.
+    ///
+    /// This method performs one insertion in the `document_views` table and at least one in the
+    /// `document_view_fields` table. If either of these operations fail then all insertions are
+    /// rolled back.
+    ///
+    /// An error is returned in the case of a fatal storage error.
+    pub async fn insert_document_view(
         &self,
         document_view: &DocumentView,
+        document_id: &DocumentId,
         schema_id: &SchemaId,
     ) -> Result<(), DocumentStorageError> {
         // Start a transaction, any db insertions after this point, and before the `commit()`
@@ -36,392 +334,308 @@ impl DocumentStore for SqlStorage {
             .await
             .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
 
-        // Insert document view field relations into the db
-        let field_relations_insertion_result =
-            try_join_all(document_view.iter().map(|(name, value)| {
-                query(
-                    "
-                        INSERT INTO
-                            document_view_fields (
-                                document_view_id,
-                                operation_id,
-                                name
-                            )
-                        VALUES
-                            ($1, $2, $3)
-                        ",
-                )
-                .bind(document_view.id().to_string())
-                .bind(value.id().as_str().to_owned())
-                .bind(name)
-                .execute(&self.pool)
-            }))
-            .await
-            .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+        // Insert the document view into the `document_views` table. Rollback insertions if an error occurs.
+        match insert_document_view(&self.pool, document_view, document_id, schema_id).await {
+            Ok(_) => (),
+            Err(err) => {
+                transaction
+                    .rollback()
+                    .await
+                    .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+                return Err(err);
+            }
+        };
 
-        // Insert document view into the db
-        let document_view_insertion_result = query(
+        // Insert the document view fields into the `document_view_fields` table. Rollback
+        // insertions if an error occurs.
+        match insert_document_fields(&self.pool, document_view).await {
+            Ok(_) => (),
+            Err(err) => {
+                transaction
+                    .rollback()
+                    .await
+                    .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+                return Err(err);
+            }
+        };
+
+        // Commit the transaction here as no errors occurred.
+        transaction
+            .commit()
+            .await
+            .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))
+    }
+}
+
+// Helper method for getting rows from the `document_view_fields` table.
+async fn get_document_view_field_rows(
+    pool: &Pool,
+    id: &DocumentViewId,
+) -> Result<Vec<DocumentViewFieldRow>, DocumentStorageError> {
+    // Get all rows which match against the passed document view id.
+    //
+    // This query performs a join against the `operation_fields_v1` table as this is where the
+    // actual field values live. The `document_view_fields` table defines relations between a
+    // document view and the operation values which hold it's field values.
+    //
+    // Each field has one row, or in the case of list values (pinned relations, or relation lists)
+    // then one row exists for every item in the list. The `list_index` column is used for
+    // consistently ordering list items.
+    query_as::<_, DocumentViewFieldRow>(
+        "
+        SELECT
+            document_view_fields.document_view_id,
+            document_view_fields.operation_id,
+            document_view_fields.name,
+            operation_fields_v1.list_index,
+            operation_fields_v1.field_type,
+            operation_fields_v1.value
+        FROM
+            document_view_fields
+        LEFT JOIN operation_fields_v1
+            ON
+                document_view_fields.operation_id = operation_fields_v1.operation_id
+            AND
+                document_view_fields.name = operation_fields_v1.name
+        WHERE
+            document_view_fields.document_view_id = $1
+        ORDER BY
+            operation_fields_v1.list_index ASC
+        ",
+    )
+    .bind(id.to_string())
+    .fetch_all(pool)
+    .await
+    .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))
+}
+
+// Helper method for inserting rows in the `document_view_fields` table.
+async fn insert_document_fields(
+    pool: &Pool,
+    document_view: &DocumentView,
+) -> Result<Vec<AnyQueryResult>, DocumentStorageError> {
+    // Insert document view field relations into the db
+    try_join_all(document_view.iter().map(|(name, value)| {
+        query(
             "
             INSERT INTO
-                document_views (
+                document_view_fields (
                     document_view_id,
-                    schema_id
+                    operation_id,
+                    name
                 )
             VALUES
-                ($1, $2)
+                ($1, $2, $3)
             ",
         )
         .bind(document_view.id().to_string())
-        .bind(schema_id.to_string())
-        .execute(&self.pool)
-        .await
-        .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+        .bind(value.id().as_str().to_owned())
+        .bind(name)
+        .execute(pool)
+    }))
+    .await
+    .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))
+}
 
-        // Check every insertion performed affected exactly 1 row.
-        if document_view_insertion_result.rows_affected() != 1
-            || field_relations_insertion_result
-                .iter()
-                .any(|query_result| query_result.rows_affected() != 1)
-        {
-            return Err(DocumentStorageError::DocumentViewInsertionError(
-                document_view.id().clone(),
-            ));
-        }
+// Helper method for inserting document views into the `document_views` table.
+async fn insert_document_view(
+    pool: &Pool,
+    document_view: &DocumentView,
+    document_id: &DocumentId,
+    schema_id: &SchemaId,
+) -> Result<AnyQueryResult, DocumentStorageError> {
+    query(
+        "
+        INSERT INTO
+            document_views (
+                document_view_id,
+                document_id,
+                schema_id
+            )
+        VALUES
+            ($1, $2, $3)
+        ",
+    )
+    .bind(document_view.id().to_string())
+    .bind(document_id.to_string())
+    .bind(schema_id.to_string())
+    .execute(pool)
+    .await
+    .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))
+}
 
-        // Commit the transaction.
-        transaction
-            .commit()
-            .await
-            .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+// Helper method for inserting documents into the database. For this, insertions are made in the
+// `documents`, `document_views` and `document_view_fields` tables.
+async fn insert_document(pool: &Pool, document: &Document) -> Result<(), DocumentStorageError> {
+    // Insert or update the document to the `documents` table.
+    query(
+        "
+        INSERT INTO
+            documents (
+                document_id,
+                document_view_id,
+                is_deleted,
+                schema_id
+            )
+        VALUES
+            ($1, $2, $3, $4)
+        ON CONFLICT(document_id) DO UPDATE SET
+            document_view_id = $2,
+            is_deleted = $3
+        ",
+    )
+    .bind(document.id().as_str())
+    .bind(document.view_id().to_string())
+    .bind(document.is_deleted())
+    .bind(document.schema_id().to_string())
+    .execute(pool)
+    .await
+    .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
 
-        Ok(())
-    }
+    // If the document is not deleted, then we also want to insert it's view and fields.
+    if !document.is_deleted() && document.view().is_some() {
+        // Construct the view, unwrapping the document view fields as we checked they exist above.
+        let document_view =
+            DocumentView::new(document.view_id(), document.view().unwrap().fields());
 
-    /// Get a document view from the database by it's id.
-    ///
-    /// Internally, this method retrieve all document rows related to this document view id
-    /// and then from these constructs the document view itself.
-    ///
-    /// An error is returned if any of the above steps fail or a fatal database error occured.
-    async fn get_document_view_by_id(
-        &self,
-        id: &DocumentViewId,
-    ) -> Result<Option<DocumentView>, DocumentStorageError> {
-        let document_view_field_rows = query_as::<_, DocumentViewFieldRow>(
-            "
-            SELECT
-                document_view_fields.document_view_id,
-                document_view_fields.operation_id,
-                document_view_fields.name,
-                operation_fields_v1.list_index,
-                operation_fields_v1.field_type,
-                operation_fields_v1.value
-            FROM
-                document_view_fields
-            LEFT JOIN operation_fields_v1
-                ON
-                    operation_fields_v1.operation_id = document_view_fields.operation_id
-                AND
-                    operation_fields_v1.name = document_view_fields.name
-            WHERE
-                document_view_fields.document_view_id = $1
-            ORDER BY
-                operation_fields_v1.list_index ASC
-            ",
-        )
-        .bind(id.to_string())
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+        // Insert the document view.
+        insert_document_view(pool, &document_view, document.id(), document.schema_id()).await?;
+        // Insert the document view fields.
+        insert_document_fields(pool, &document_view).await?;
+    };
 
-        let view = if document_view_field_rows.is_empty() {
-            None
-        } else {
-            Some(DocumentView::new(
-                id,
-                &parse_document_view_field_rows(document_view_field_rows),
-            ))
-        };
-
-        Ok(view)
-    }
-
-    /// Insert a document and it's latest document view into the database.
-    ///
-    /// This method inserts or updates a row into the documents table and then makes a call
-    /// to `insert_document_view()` to insert the new document view for this document.
-    ///
-    /// Note: "out-of-date" document views will remain in storage when a document already
-    /// existed and is updated. If they are not needed for anything else they can be garbage
-    /// collected.
-    async fn insert_document(&self, document: &Document) -> Result<(), DocumentStorageError> {
-        // Start a transaction, any db insertions after this point, and before the `commit()`
-        // will be rolled back in the event of an error.
-        let transaction = self
-            .pool
-            .begin()
-            .await
-            .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
-
-        // Insert document view into the db
-        let document_insertion_result = query(
-            "
-            INSERT INTO
-                documents (
-                    document_id,
-                    document_view_id,
-                    is_deleted,
-                    schema_id
-                )
-            VALUES
-                ($1, $2, $3, $4)
-            ON CONFLICT(document_id) DO UPDATE SET
-                document_view_id = $2,
-                is_deleted = $3
-            ",
-        )
-        .bind(document.id().as_str())
-        .bind(document.view_id().to_string())
-        .bind(document.is_deleted())
-        .bind(document.schema().to_string())
-        .execute(&self.pool)
-        .await
-        .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
-
-        if document_insertion_result.rows_affected() != 1 {
-            return Err(DocumentStorageError::DocumentInsertionError(
-                document.id().clone(),
-            ));
-        }
-
-        if !document.is_deleted() && document.view().is_some() {
-            let document_view =
-                DocumentView::new(document.view_id(), document.view().unwrap().fields());
-
-            self.insert_document_view(&document_view, document.schema())
-                .await?;
-        };
-
-        // Commit the transaction.
-        transaction
-            .commit()
-            .await
-            .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
-
-        Ok(())
-    }
-
-    /// Get a documents' latest document view from the database by it's `DocumentId`.
-    ///
-    /// Retrieve the current document view for a specified document. If the document
-    /// has been deleted then None is returned. An error is returned is a fatal database
-    /// error occurs.
-    async fn get_document_by_id(
-        &self,
-        id: &DocumentId,
-    ) -> Result<Option<DocumentView>, DocumentStorageError> {
-        let document_view_field_rows = query_as::<_, DocumentViewFieldRow>(
-            "
-            SELECT
-                document_view_fields.document_view_id,
-                document_view_fields.operation_id,
-                document_view_fields.name,
-                operation_fields_v1.list_index,
-                operation_fields_v1.field_type,
-                operation_fields_v1.value
-            FROM
-                documents
-            LEFT JOIN document_view_fields
-                ON
-                    documents.document_view_id = document_view_fields.document_view_id
-            LEFT JOIN operation_fields_v1
-                ON
-                    document_view_fields.operation_id = operation_fields_v1.operation_id
-                AND
-                    document_view_fields.name = operation_fields_v1.name
-            WHERE
-                documents.document_id = $1 AND documents.is_deleted = false
-            ORDER BY
-                operation_fields_v1.list_index ASC
-            ",
-        )
-        .bind(id.as_str())
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
-
-        if document_view_field_rows.is_empty() {
-            return Ok(None);
-        }
-
-        Ok(Some(DocumentView::new(
-            &document_view_field_rows[0]
-                .document_view_id
-                .parse()
-                .unwrap(),
-            &parse_document_view_field_rows(document_view_field_rows),
-        )))
-    }
-
-    /// Get all documents which follow the passed schema id from the database
-    ///
-    /// Retrieve the latest document view for all documents which follow the specified schema.
-    ///
-    /// An error is returned is a fatal database error occurs.
-    async fn get_documents_by_schema(
-        &self,
-        schema_id: &SchemaId,
-    ) -> Result<Vec<DocumentView>, DocumentStorageError> {
-        let document_view_field_rows = query_as::<_, DocumentViewFieldRow>(
-            "
-            SELECT
-                documents.document_view_id,
-                document_view_fields.operation_id,
-                document_view_fields.name,
-                operation_fields_v1.list_index,
-                operation_fields_v1.field_type,
-                operation_fields_v1.value
-            FROM
-                documents
-            LEFT JOIN document_view_fields
-                ON
-                    documents.document_view_id = document_view_fields.document_view_id
-            LEFT JOIN operation_fields_v1
-                ON
-                    document_view_fields.operation_id = operation_fields_v1.operation_id
-                AND
-                    document_view_fields.name = operation_fields_v1.name
-            WHERE
-                documents.schema_id = $1 AND documents.is_deleted = false
-            ORDER BY
-                operation_fields_v1.list_index ASC
-            ",
-        )
-        .bind(schema_id.to_string())
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
-
-        // We need to group all returned field rows by their document_view_id so we can then
-        // build schema from them.
-        let mut grouped_document_field_rows: BTreeMap<String, Vec<DocumentViewFieldRow>> =
-            BTreeMap::new();
-
-        for row in document_view_field_rows {
-            let existing_view = grouped_document_field_rows.get_mut(&row.document_view_id);
-            if let Some(existing_view) = existing_view {
-                existing_view.push(row)
-            } else {
-                grouped_document_field_rows.insert(row.clone().document_view_id, vec![row]);
-            };
-        }
-
-        let document_views: Vec<DocumentView> = grouped_document_field_rows
-            .iter()
-            .map(|(id, document_field_row)| {
-                let fields = parse_document_view_field_rows(document_field_row.to_owned());
-                DocumentView::new(&id.parse().unwrap(), &fields)
-            })
-            .collect();
-
-        Ok(document_views)
-    }
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::document::{
-        Document, DocumentBuilder, DocumentId, DocumentViewFields, DocumentViewId,
-    };
+    use p2panda_rs::document::materialization::build_graph;
+    use p2panda_rs::document::traits::AsDocument;
+    use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewFields, DocumentViewId};
     use p2panda_rs::operation::traits::AsOperation;
     use p2panda_rs::operation::{Operation, OperationId};
-    use p2panda_rs::storage_provider::traits::StorageProvider;
-    use p2panda_rs::test_utils::constants::{self};
+    use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
+    use p2panda_rs::test_utils::constants;
     use p2panda_rs::test_utils::fixtures::{
-        operation, random_document_view_id, random_operation_id,
+        operation, random_document_id, random_document_view_id, random_operation_id,
     };
+    use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
+    use p2panda_rs::WithId;
     use rstest::rstest;
 
-    use crate::db::stores::document::{DocumentStore, DocumentView};
-    use crate::db::stores::test_utils::{doggo_schema, test_db, TestDatabase, TestDatabaseRunner};
-
-    async fn build_document<S: StorageProvider>(store: &S, document_id: &DocumentId) -> Document {
-        // We retrieve the operations.
-        let document_operations = store
-            .get_operations_by_document_id(document_id)
-            .await
-            .expect("Get operations");
-
-        // Then we construct the document.
-        DocumentBuilder::new(document_operations)
-            .build()
-            .expect("Build the document")
-    }
+    use crate::db::stores::document::DocumentView;
+    use crate::test_utils::{
+        build_document, populate_and_materialize, populate_store_config, test_runner, TestNode,
+    };
 
     #[rstest]
     fn insert_and_get_one_document_view(
-        #[from(test_db)]
-        #[with(1, 1, 1)]
-        runner: TestDatabaseRunner,
+        #[from(populate_store_config)]
+        #[with(2, 1, 1)]
+        config: PopulateStoreConfig,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            // Operations for this document id exist in the database.
-            let document_id = db.test_data.documents[0].clone();
+        test_runner(|node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (_, document_ids) = populate_store(&node.context.store, &config).await;
+            let document_id = document_ids.get(0).expect("At least one document id");
 
             // Get the operations and build the document.
-            let document = build_document(&db.store, &document_id).await;
-
-            // Get it's document view and insert it in the database.
-            let document_view = document.view().expect("Get document view");
-
-            // Insert the view into the store.
-            let result = db
+            let operations = node
+                .context
                 .store
-                .insert_document_view(document_view, document.schema())
+                .get_operations_by_document_id(&document_id)
+                .await
+                .unwrap();
+
+            // Build the document from the operations.
+            let document_builder = DocumentBuilder::from(&operations);
+            let document = document_builder.build().unwrap();
+
+            // Insert the document into the store
+            let result = node.context.store.insert_document(&document).await;
+            assert!(result.is_ok());
+
+            // Find the "CREATE" operation and get it's id.
+            let create_operation = WithId::<OperationId>::id(
+                operations
+                    .iter()
+                    .find(|operation| operation.is_create())
+                    .unwrap(),
+            )
+            .to_owned();
+
+            // Build the document with just the first operation.
+            let document_at_view_1 = document_builder
+                .build_to_view_id(Some(create_operation.into()))
+                .unwrap();
+
+            // Insert it into the store as well.
+            let result = node
+                .context
+                .store
+                .insert_document_view(
+                    &document_at_view_1.view().unwrap(),
+                    document_at_view_1.id(),
+                    document_at_view_1.schema_id(),
+                )
                 .await;
             assert!(result.is_ok());
 
-            // We should be able to retrieve the document view now by it's view_id.
-            let retrieved_document_view = db
+            // We should be able to retrieve the document at either of it's views now.
+
+            // Here we request the document with it's initial state.
+            let retrieved_document = node
+                .context
                 .store
-                .get_document_view_by_id(document_view.id())
+                .get_document_by_view_id(document_at_view_1.view_id())
                 .await
                 .unwrap()
                 .unwrap();
 
-            // The retrieved view should the expected fields.
-            assert_eq!(retrieved_document_view.len(), 9);
+            // The retrieved document views should match the inserted one.
+            assert_eq!(retrieved_document.id(), document_at_view_1.id());
+            assert_eq!(retrieved_document.view_id(), document_at_view_1.view_id());
+            assert_eq!(retrieved_document.fields(), document_at_view_1.fields());
 
-            for key in [
-                "username",
-                "age",
-                "height",
-                "is_admin",
-                "profile_picture",
-                "many_profile_pictures",
-                "special_profile_picture",
-                "many_special_profile_pictures",
-                "another_relation_field",
-            ] {
-                assert!(retrieved_document_view.get(key).is_some());
-                assert_eq!(retrieved_document_view.get(key), document_view.get(key));
-            }
+            // Here we request it at it's current state.
+            let retrieved_document = node
+                .context
+                .store
+                .get_document_by_view_id(document.view_id())
+                .await
+                .unwrap()
+                .unwrap();
+
+            // The retrieved document views should match the inserted one.
+            assert_eq!(retrieved_document.id(), document.id());
+            assert_eq!(retrieved_document.view_id(), document.view_id());
+            assert_eq!(retrieved_document.fields(), document.fields());
+
+            // If we retrieve the document by it's id, we expect the current state.
+            let retrieved_document = node
+                .context
+                .store
+                .get_document(&document_id)
+                .await
+                .unwrap()
+                .unwrap();
+
+            // The retrieved document views should match the inserted one.
+            assert_eq!(retrieved_document.id(), document.id());
+            assert_eq!(retrieved_document.view_id(), document.view_id());
+            assert_eq!(retrieved_document.fields(), document.fields());
         });
     }
 
     #[rstest]
-    fn document_view_does_not_exist(
-        random_document_view_id: DocumentViewId,
-        #[from(test_db)]
-        #[with(1, 1, 1)]
-        runner: TestDatabaseRunner,
-    ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+    fn document_view_does_not_exist(random_document_view_id: DocumentViewId) {
+        test_runner(|node: TestNode| async move {
             // We try to retrieve a document view by it's id but no view
             // with that id exists.
-            let view_does_not_exist = db
+            let view_does_not_exist = node
+                .context
                 .store
-                .get_document_view_by_id(&random_document_view_id)
+                .get_document_by_view_id(&random_document_view_id)
                 .await
                 .unwrap();
 
@@ -433,11 +647,11 @@ mod tests {
     #[rstest]
     fn insert_document_view_with_missing_operation(
         #[from(random_operation_id)] operation_id: OperationId,
+        #[from(random_document_id)] document_id: DocumentId,
         #[from(random_document_view_id)] document_view_id: DocumentViewId,
-        #[from(test_db)] runner: TestDatabaseRunner,
         operation: Operation,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        test_runner(|node: TestNode| async move {
             // Construct a document view from an operation which is not in the database.
             let document_view = DocumentView::new(
                 &document_view_id,
@@ -449,9 +663,10 @@ mod tests {
 
             // Inserting the view should fail as it must relate to an
             // operation which is already in the database.
-            let result = db
+            let result = node
+                .context
                 .store
-                .insert_document_view(&document_view, constants::schema().id())
+                .insert_document_view(&document_view, &document_id, constants::schema().id())
                 .await;
 
             assert!(result.is_err());
@@ -460,43 +675,42 @@ mod tests {
 
     #[rstest]
     fn inserts_gets_document(
-        #[from(test_db)]
+        #[from(populate_store_config)]
         #[with(1, 1, 1)]
-        runner: TestDatabaseRunner,
+        config: PopulateStoreConfig,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            // Operations for this document id exist in the database.
-            let document_id = db.test_data.documents[0].clone();
-            // Build the document and view.
-            let document = build_document(&db.store, &document_id).await;
-            let expected_document_view = document.view().expect("Get document view");
+        test_runner(|node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (_, document_ids) = populate_store(&node.context.store, &config).await;
+            let document_id = document_ids.get(0).expect("At least one document id");
+
+            // Build the document.
+            let document = build_document(&node.context.store, &document_id).await;
 
             // The document is successfully inserted into the database, this
             // relies on the operations already being present and would fail
             // if they were not.
-            let result = db.store.insert_document(&document).await;
+            let result = node.context.store.insert_document(&document).await;
             assert!(result.is_ok());
 
             // We can retrieve the most recent document view for this document by it's id.
-            let most_recent_document_view = db
+            let retrieved_document = node
+                .context
                 .store
-                .get_document_by_id(document.id())
+                .get_document(document.id())
                 .await
                 .unwrap()
                 .unwrap();
 
             // We can retrieve a specific document view for this document by it's view_id.
             // In this case, that should be the same as the view retrieved above.
-            let specific_document_view = db
+            let specific_document = node
+                .context
                 .store
-                .get_document_view_by_id(document.view_id())
+                .get_document_by_view_id(document.view_id())
                 .await
                 .unwrap()
                 .unwrap();
-
-            // The retrieved views should both have 9 fields.
-            assert_eq!(most_recent_document_view.len(), 9);
-            assert_eq!(specific_document_view.len(), 9);
 
             for key in [
                 "username",
@@ -511,32 +725,27 @@ mod tests {
             ] {
                 // The values contained in both retrieved document views
                 // should match the expected ones.
-                assert!(most_recent_document_view.get(key).is_some());
-                assert_eq!(
-                    most_recent_document_view.get(key),
-                    expected_document_view.get(key)
-                );
-                assert!(specific_document_view.get(key).is_some());
-                assert_eq!(
-                    specific_document_view.get(key),
-                    expected_document_view.get(key)
-                );
+                assert!(retrieved_document.get(key).is_some());
+                assert_eq!(retrieved_document.get(key), document.get(key));
+                assert!(specific_document.get(key).is_some());
+                assert_eq!(specific_document.get(key), document.get(key));
             }
         });
     }
 
     #[rstest]
     fn no_view_when_document_deleted(
-        #[from(test_db)]
+        #[from(populate_store_config)]
         #[with(10, 1, 1, true)]
-        runner: TestDatabaseRunner,
+        config: PopulateStoreConfig,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            // Operations for this document id exist in the database.
-            let document_id = db.test_data.documents[0].clone();
+        test_runner(|node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (_, document_ids) = populate_store(&node.context.store, &config).await;
+            let document_id = document_ids.get(0).expect("At least one document id");
 
             // Get the operations and build the document.
-            let document = build_document(&db.store, &document_id).await;
+            let document = build_document(&node.context.store, &document_id).await;
             // Get the view id.
             let view_id = document.view_id();
 
@@ -544,38 +753,52 @@ mod tests {
             assert!(document.view().is_none());
 
             // Here we insert the document. This action also sets it's most recent view.
-            let result = db.store.insert_document(&document).await;
+            let result = node.context.store.insert_document(&document).await;
             assert!(result.is_ok());
 
             // We retrieve the most recent view for this document by it's document id,
             // but as the document is deleted, we should get a none value back.
-            let document_view = db.store.get_document_by_id(document.id()).await.unwrap();
-            assert!(document_view.is_none());
+            let document = node
+                .context
+                .store
+                .get_document(document.id())
+                .await
+                .unwrap();
+            assert!(document.is_none());
 
             // We also try to retrieve the specific document view by it's view id.
             // This should also return none as it is deleted.
-            let document_view = db.store.get_document_view_by_id(view_id).await.unwrap();
-            assert!(document_view.is_none());
+            let document = node
+                .context
+                .store
+                .get_document_by_view_id(view_id)
+                .await
+                .unwrap();
+            assert!(document.is_none());
         });
     }
 
     #[rstest]
     fn get_documents_by_schema_deleted_document(
-        #[from(test_db)]
+        #[from(populate_store_config)]
         #[with(10, 1, 1, true)]
-        runner: TestDatabaseRunner,
+        config: PopulateStoreConfig,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            // Operations for this document id exist in the database.
-            let document_id = db.test_data.documents[0].clone();
+        test_runner(|node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (_, document_ids) = populate_store(&node.context.store, &config).await;
+            let document_id = document_ids.get(0).expect("At least one document id");
 
             // Get the operations and build the document.
-            let document = build_document(&db.store, &document_id).await;
+            let document = build_document(&node.context.store, &document_id).await;
 
-            let result = db.store.insert_document(&document).await;
+            // Insert the document, this is possible even though it has been deleted.
+            let result = node.context.store.insert_document(&document).await;
             assert!(result.is_ok());
 
-            let document_views = db
+            // When we try to retrieve it by schema id we should NOT get it back.
+            let document_views = node
+                .context
                 .store
                 .get_documents_by_schema(constants::schema().id())
                 .await
@@ -586,18 +809,28 @@ mod tests {
 
     #[rstest]
     fn updates_a_document(
-        #[from(test_db)]
+        #[from(populate_store_config)]
         #[with(10, 1, 1)]
-        runner: TestDatabaseRunner,
+        config: PopulateStoreConfig,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            // Operations for this document id exist in the database.
-            let document_id = db.test_data.documents[0].clone();
+        test_runner(|node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (_, document_ids) = populate_store(&node.context.store, &config).await;
+            let document_id = document_ids.get(0).expect("At least one document id");
 
-            // Get the operations and build the document.
-            let document = build_document(&db.store, &document_id).await;
-            // Get the oredered operations.
-            let sorted_operations = document.operations();
+            // Get the operations for this document and sort them into linear order.
+            let operations = node
+                .context
+                .store
+                .get_operations_by_document_id(&document_id)
+                .await
+                .unwrap();
+            let document_builder = DocumentBuilder::from(&operations);
+            let sorted_operations = build_graph(&document_builder.operations())
+                .unwrap()
+                .sort()
+                .unwrap()
+                .sorted();
 
             // We want to test that a document is updated.
             let mut current_operations = Vec::new();
@@ -613,58 +846,65 @@ mod tests {
                     .expect("Build document");
 
                 // Insert it to the database, this should also update it's view.
-                db.store
+                node.context
+                    .store
                     .insert_document(&document)
                     .await
                     .expect("Insert document");
 
-                // We can retrieve the document's latest view by it's document id.
-                let latest_document_view = db
+                // We can retrieve the document by it's document id.
+                let retrieved_document = node
+                    .context
                     .store
-                    .get_document_by_id(document.id())
+                    .get_document(document.id())
                     .await
-                    .expect("Get document view");
+                    .expect("Get document")
+                    .expect("Unwrap document");
 
-                // And also retrieve the latest document view directly by it's document view id.
-                let specific_document_view = db
+                // And also directly by it's document view id.
+                let specific_document = node
+                    .context
                     .store
-                    .get_document_view_by_id(document.view_id())
+                    .get_document_by_view_id(document.view_id())
                     .await
-                    .expect("Get document view");
+                    .expect("Get document")
+                    .expect("Unwrap document");
 
                 // The views should equal the current view of the document we inserted.
                 // This includes the value and the view id.
-                assert_eq!(document.view(), latest_document_view.as_ref());
-                assert_eq!(document.view(), specific_document_view.as_ref());
+                assert_eq!(document.id(), retrieved_document.id());
+                assert_eq!(
+                    document.fields().unwrap(),
+                    retrieved_document.fields().unwrap()
+                );
+                assert_eq!(document.id(), specific_document.id());
+                assert_eq!(
+                    document.fields().unwrap(),
+                    specific_document.fields().unwrap()
+                );
             }
         })
     }
 
     #[rstest]
     fn gets_documents_by_schema(
-        #[from(test_db)]
-        #[with(2, 10, 1, false)]
-        runner: TestDatabaseRunner,
+        #[from(populate_store_config)]
+        #[with(2, 10, 1)]
+        config: PopulateStoreConfig,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            // Insert two documents which have the same schema.
-            for document_id in &db.test_data.documents {
-                // Get the operations and build the document.
-                let document = build_document(&db.store, document_id).await;
-                db.store
-                    .insert_document(&document)
-                    .await
-                    .expect("Insert document");
-            }
+        test_runner(|mut node: TestNode| async move {
+            // Populate the store and materialize all documents.
+            populate_and_materialize(&mut node, &config).await;
 
             // Retrieve these documents by their schema id.
-            let schema_documents = db
+            let schema_documents = node
+                .context
                 .store
-                .get_documents_by_schema(doggo_schema().id())
+                .get_documents_by_schema(config.schema.id())
                 .await
                 .expect("Get document by schema");
 
-            // There should be two.
+            // There should be ten.
             assert_eq!(schema_documents.len(), 10);
         });
     }

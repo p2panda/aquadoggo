@@ -19,7 +19,7 @@ anyhow = "^1.0.62"
 async-graphql = "^3.0.38"
 async-graphql-axum = "^3.0.38"
 async-recursion = "^1.0.0"
-async-trait = "^0.1.57"
+async-trait = "^0.1.64"
 axum = "^0.5.15"
 bamboo-rs-core-ed25519-yasmf = "^0.1.1"
 deadqueue = { version = "^0.2.3", default-features = false, features = [
@@ -31,7 +31,7 @@ futures = "^0.3.23"
 gql_client = "^1.0.6"
 hex = "^0.4.3"
 http = "^0.2.8"
-libp2p = { version = "0.50.0", features = [
+libp2p = { version = "^0.51.0", features = [
     "tokio",
     "noise",
     "macros",
@@ -43,7 +43,9 @@ lipmaa-link = "^0.2.2"
 log = "^0.4.17"
 once_cell = "^1.12.0"
 openssl-probe = "^0.1.5"
-p2panda-rs = { version = "^0.6.0", features = ["storage-provider"] }
+p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "e3db5ddc96b3268bc06963e11f5c3ccb2bd9c188", features = [
+    "storage-provider",
+] }
 serde = { version = "^1.0.144", features = ["derive"] }
 sqlx = { version = "^0.6.1", features = [
     "any",
@@ -72,7 +74,7 @@ env_logger = "^0.9.0"
 http = "^0.2.8"
 hyper = "^0.14.19"
 once_cell = "^1.12.0"
-p2panda-rs = { version = "^0.6.0", features = [
+p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "e3db5ddc96b3268bc06963e11f5c3ccb2bd9c188", features = [
     "test-utils",
     "storage-provider",
 ] }
@@ -84,5 +86,6 @@ reqwest = { version = "^0.11.11", default-features = false, features = [
 rstest = "^0.15.0"
 rstest_reuse = "^0.3.0"
 serde_json = "^1.0.85"
+serial_test = "1.0.0"
 tower = "^0.4.13"
 tower-service = "^0.3.2"

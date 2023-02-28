@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Rework test runner and test node population patterns and refactor test_utils [#277](https://github.com/p2panda/aquadoggo/pull/277)
+- Implement API changes to p2panda-rs storage traits, new and breaking db migration [#268](https://github.com/p2panda/aquadoggo/pull/268)
+- Move all test utils into one module [#275](https://github.com/p2panda/aquadoggo/pull/275)
+
+### Fixed
+
+- Fix race-condition of mutably shared static schema store during testing [#269](https://github.com/p2panda/aquadoggo/pull/269)
+
 ## [0.4.0]
 
 ### Added

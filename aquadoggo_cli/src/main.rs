@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+#![allow(clippy::uninlined_format_args)]
 use std::convert::{TryFrom, TryInto};
 use std::error::Error;
 

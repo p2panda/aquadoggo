@@ -4,7 +4,7 @@ use async_graphql::{Pos, ServerError, ServerResult};
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::schema::SchemaId;
 
-use crate::db::provider::SqlStorage;
+use crate::db::SqlStore;
 
 /// Validate that the given view matches the given schema.
 ///
@@ -12,7 +12,7 @@ use crate::db::provider::SqlStorage;
 pub async fn validate_view_matches_schema(
     document_view_id: &DocumentViewId,
     schema_id: &SchemaId,
-    store: &SqlStorage,
+    store: &SqlStore,
     pos: Option<Pos>,
 ) -> ServerResult<()> {
     let document_schema_id = store
@@ -41,16 +41,16 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::random_key_pair;
     use rstest::rstest;
 
-    use crate::db::stores::test_utils::{add_document, test_db, TestDatabase, TestDatabaseRunner};
     use crate::graphql::client::utils::validate_view_matches_schema;
+    use crate::test_utils::{add_document, test_runner, TestNode};
 
     #[rstest]
-    fn test_validate_view_matches_schema(#[from(test_db)] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(&|mut db: TestDatabase| async move {
+    fn test_validate_view_matches_schema() {
+        test_runner(|mut node: TestNode| async move {
             let key_pair = random_key_pair();
 
             let view_id = add_document(
-                &mut db,
+                &mut node,
                 &SchemaId::SchemaFieldDefinition(1),
                 vec![
                     ("name", "test_field".into()),
@@ -65,7 +65,7 @@ mod tests {
             assert!(validate_view_matches_schema(
                 &view_id,
                 &SchemaId::SchemaFieldDefinition(1),
-                &db.store,
+                &node.context.store,
                 None
             )
             .await
@@ -74,7 +74,7 @@ mod tests {
             assert!(validate_view_matches_schema(
                 &view_id,
                 &SchemaId::SchemaDefinition(1),
-                &db.store,
+                &node.context.store,
                 None
             )
             .await

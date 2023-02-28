@@ -92,7 +92,7 @@ pub async fn materializer_service(
             // Resolve document id of regarding operation
             match context
                 .store
-                .get_document_by_operation_id(&operation_id)
+                .get_document_id_by_operation_id(&operation_id)
                 .await
                 .unwrap_or_else(|_| {
                     panic!(
@@ -138,53 +138,58 @@ pub async fn materializer_service(
 mod tests {
     use std::time::Duration;
 
+    use p2panda_rs::document::traits::AsDocument;
     use p2panda_rs::entry::traits::AsEncodedEntry;
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::{Operation, OperationId, OperationValue};
     use p2panda_rs::schema::FieldType;
     use p2panda_rs::storage_provider::traits::DocumentStore;
     use p2panda_rs::test_utils::constants::SCHEMA_ID;
-    use p2panda_rs::test_utils::db::test_db::send_to_store;
     use p2panda_rs::test_utils::fixtures::{key_pair, operation, operation_fields, schema};
+    use p2panda_rs::test_utils::memory_store::helpers::{
+        populate_store, send_to_store, PopulateStoreConfig,
+    };
     use rstest::rstest;
     use tokio::sync::{broadcast, oneshot};
     use tokio::task;
 
     use crate::context::Context;
-    use crate::db::stores::test_utils::{
-        doggo_fields, doggo_schema, test_db, TestDatabase, TestDatabaseRunner,
-    };
     use crate::materializer::{Task, TaskInput};
     use crate::schema::SchemaProvider;
+    use crate::test_utils::{
+        doggo_fields, doggo_schema, populate_store_config, test_runner, TestNode,
+    };
     use crate::Configuration;
 
     use super::materializer_service;
 
     #[rstest]
     fn materialize_document_from_bus(
-        #[from(test_db)]
+        #[from(populate_store_config)]
         #[with(1, 1, 1, false, schema(vec![("name".to_string(), FieldType::String)], SCHEMA_ID.parse().unwrap(), "A test schema"), vec![("name", OperationValue::String("panda".into()))])]
-        runner: TestDatabaseRunner,
+        config: PopulateStoreConfig,
     ) {
         // Prepare database which inserts data for one document
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            // Identify document and operation which was inserted for testing
-            let document_id = db.test_data.documents.first().unwrap();
+        test_runner(move |node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (_, document_ids) = populate_store(&node.context.store, &config).await;
+            let document_id = document_ids.get(0).expect("Should be one document id");
 
             // We can infer the id of the first operation from the document id
             let first_operation_id: OperationId = document_id.to_string().parse().unwrap();
 
             // We expect that the database does not contain any materialized document yet
-            assert!(db
+            assert!(node
+                .context
                 .store
-                .get_document_by_id(document_id)
+                .get_document(document_id)
                 .await
                 .unwrap()
                 .is_none());
 
             // Prepare arguments for service
             let context = Context::new(
-                db.store.clone(),
+                node.context.store.clone(),
                 Configuration::default(),
                 SchemaProvider::default(),
             );
@@ -220,15 +225,16 @@ mod tests {
             assert_eq!(handle.is_finished(), false);
 
             // Check database for materialized documents
-            let document = db
+            let document = node
+                .context
                 .store
-                .get_document_by_id(document_id)
+                .get_document(document_id)
                 .await
                 .unwrap()
                 .expect("We expect that the document is `Some`");
             assert_eq!(document.id().to_string(), document_id.to_string());
             assert_eq!(
-                document.fields().get("name").unwrap().value().to_owned(),
+                document.get("name").unwrap().to_owned(),
                 OperationValue::String("panda".into())
             );
         });
@@ -236,18 +242,19 @@ mod tests {
 
     #[rstest]
     fn materialize_document_from_last_runtime(
-        #[from(test_db)]
+        #[from(populate_store_config)]
         #[with(1, 1, 1, false, schema(vec![("name".to_string(), FieldType::String)], SCHEMA_ID.parse().unwrap(), "A test schema"), vec![("name", OperationValue::String("panda".into()))])]
-        runner: TestDatabaseRunner,
+        config: PopulateStoreConfig,
     ) {
-        // Prepare database which inserts data for one document
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            // Identify document and operation which was inserted for testing
-            let document_id = db.test_data.documents.first().unwrap();
+        test_runner(move |node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (_, document_ids) = populate_store(&node.context.store, &config).await;
+            let document_id = document_ids.get(0).expect("Should be one document id");
 
             // Store a pending "reduce" task from last runtime in the database so it gets picked up by
             // the materializer service
-            db.store
+            node.context
+                .store
                 .insert_task(&Task::new(
                     "reduce",
                     TaskInput::new(Some(document_id.to_owned()), None),
@@ -257,7 +264,7 @@ mod tests {
 
             // Prepare arguments for service
             let context = Context::new(
-                db.store.clone(),
+                node.context.store.clone(),
                 Configuration::default(),
                 SchemaProvider::default(),
             );
@@ -290,15 +297,16 @@ mod tests {
             assert_eq!(handle.is_finished(), false);
 
             // Check database for materialized documents
-            let document = db
+            let document = node
+                .context
                 .store
-                .get_document_by_id(document_id)
+                .get_document(document_id)
                 .await
                 .unwrap()
                 .expect("We expect that the document is `Some`");
             assert_eq!(document.id().to_string(), document_id.to_string());
             assert_eq!(
-                document.fields().get("name").unwrap().value().to_owned(),
+                document.get("name").unwrap().to_owned(),
                 OperationValue::String("panda".into())
             );
         });
@@ -306,22 +314,22 @@ mod tests {
 
     #[rstest]
     fn materialize_update_document(
-        #[from(test_db)]
+        #[from(populate_store_config)]
         #[with(1, 1, 1, false, schema(vec![("name".to_string(), FieldType::String)], SCHEMA_ID.parse().unwrap(), "A test schema"), vec![("name", OperationValue::String("panda".into()))])]
-        runner: TestDatabaseRunner,
+        config: PopulateStoreConfig,
     ) {
-        // Prepare database which inserts data for one document
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            // Identify key_pair, document and operation which was inserted for testing
-            let key_pair = db.test_data.key_pairs.first().unwrap();
-            let document_id = db.test_data.documents.first().unwrap();
+        test_runner(move |node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (key_pairs, document_ids) = populate_store(&node.context.store, &config).await;
+            let document_id = document_ids.get(0).expect("Should be one document id");
+            let key_pair = key_pairs.get(0).expect("Should be one key pair");
 
             // We can infer the id of the first operation from the document id
             let first_operation_id: OperationId = document_id.to_string().parse().unwrap();
 
             // Prepare arguments for service
             let context = Context::new(
-                db.store.clone(),
+                node.context.store.clone(),
                 Configuration::default(),
                 SchemaProvider::default(),
             );
@@ -357,7 +365,7 @@ mod tests {
 
             // Then straight away publish an UPDATE on this document and send it over the bus too.
             let (entry_encoded, _) = send_to_store(
-                &db.store,
+                &node.context.store,
                 &operation(
                     Some(operation_fields(vec![(
                         "name",
@@ -389,36 +397,39 @@ mod tests {
             assert_eq!(handle.is_finished(), false);
 
             // Check database for materialized documents
-            let document = db
+            let document = node
+                .context
                 .store
-                .get_document_by_id(document_id)
+                .get_document(document_id)
                 .await
                 .unwrap()
                 .expect("We expect that the document is `Some`");
-            assert_eq!(document.id(), &entry_encoded.hash().into());
+
+            assert_eq!(document.id(), document_id);
             assert_eq!(
-                document.fields().get("name").unwrap().value().to_owned(),
+                document.get("name").unwrap().to_owned(),
                 OperationValue::String("panda123".into())
             );
         });
     }
 
     #[rstest]
-
     fn materialize_complex_documents(
-        #[from(test_db)]
+        #[from(populate_store_config)]
         #[with(0, 0, 0)]
-        runner: TestDatabaseRunner,
+        config: PopulateStoreConfig,
         #[from(operation)]
         #[with(Some(operation_fields(doggo_fields())), None, doggo_schema().id().to_owned())]
         operation: Operation,
         key_pair: KeyPair,
     ) {
-        // Prepare empty database
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        test_runner(move |node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            populate_store(&node.context.store, &config).await;
+
             // Prepare arguments for service
             let context = Context::new(
-                db.store.clone(),
+                node.context.store.clone(),
                 Configuration::default(),
                 SchemaProvider::default(),
             );
@@ -446,7 +457,7 @@ mod tests {
 
             // Then straight away publish a CREATE operation and send it to the bus.
             let (entry_encoded, _) =
-                send_to_store(&db.store, &operation, &doggo_schema(), &key_pair)
+                send_to_store(&node.context.store, &operation, &doggo_schema(), &key_pair)
                     .await
                     .expect("Publish entry");
 
@@ -456,16 +467,17 @@ mod tests {
             ))
             .unwrap();
 
-            // Wait a little bit for work being done ..
+            // Wait a little bit for work being done..
             tokio::time::sleep(Duration::from_millis(200)).await;
 
             // Make sure the service did not crash and is still running
             assert_eq!(handle.is_finished(), false);
 
             // Check database for materialized documents
-            let document = db
+            let document = node
+                .context
                 .store
-                .get_document_by_id(&entry_encoded.hash().into())
+                .get_document(&entry_encoded.hash().into())
                 .await
                 .unwrap()
                 .expect("We expect that the document is `Some`");

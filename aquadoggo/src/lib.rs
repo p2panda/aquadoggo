@@ -42,13 +42,12 @@
     unused_import_braces,
     unused_qualifications
 )]
-
+#![allow(clippy::uninlined_format_args)]
 mod bus;
 mod config;
 mod context;
 mod db;
 mod domain;
-mod errors;
 mod graphql;
 mod http;
 mod libp2p;
@@ -58,7 +57,7 @@ mod node;
 mod replication;
 mod schema;
 #[cfg(test)]
-mod test_helpers;
+mod test_utils;
 #[cfg(test)]
 mod tests;
 mod validation;

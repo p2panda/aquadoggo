@@ -7,18 +7,17 @@ use anyhow::{anyhow, Result};
 use bamboo_rs_core_ed25519_yasmf::verify::verify_batch;
 use log::{debug, error, trace, warn};
 use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
-use p2panda_rs::entry::EncodedEntry;
 use p2panda_rs::entry::LogId;
 use p2panda_rs::entry::SeqNum;
 use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::decode::decode_operation;
 use p2panda_rs::operation::traits::Schematic;
-use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation};
+use p2panda_rs::storage_provider::traits::EntryStore;
 use tokio::task;
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
-use crate::db::stores::StorageEntry;
+use crate::db::types::StorageEntry;
 use crate::domain::publish;
 use crate::graphql::replication::client;
 use crate::manager::{ServiceReadySender, Shutdown};
@@ -168,7 +167,6 @@ async fn insert_new_entries(
         // modular set of methods which can definitely be used here more cleanly. For now, we do it
         // this way.
 
-        let encoded_entry: EncodedEntry = entry.clone().into();
         let encoded_operation = entry
             .payload()
             .expect("All stored entries contain an operation");
@@ -184,7 +182,7 @@ async fn insert_new_entries(
         publish(
             &context.0.store,
             &schema,
-            &encoded_entry,
+            &entry.encoded_entry,
             &operation,
             encoded_operation,
         )
@@ -255,18 +253,18 @@ mod tests {
     use std::time::Duration;
 
     use p2panda_rs::storage_provider::traits::EntryStore;
-    use p2panda_rs::test_utils::db::test_db::{populate_store, PopulateDatabaseConfig};
+    use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
     use rstest::rstest;
     use tokio::sync::{broadcast, oneshot};
     use tokio::task;
 
     use crate::context::Context;
-    use crate::db::stores::test_utils::{
-        doggo_fields, doggo_schema, with_db_manager_teardown, TestDatabaseManager,
-    };
     use crate::http::http_service;
     use crate::replication::ReplicationConfiguration;
-    use crate::test_helpers::shutdown_handle;
+    use crate::test_utils::shutdown_handle;
+    use crate::test_utils::{
+        doggo_fields, doggo_schema, test_runner_with_manager, TestNodeManager,
+    };
     use crate::Configuration;
 
     use super::replication_service;
@@ -278,17 +276,13 @@ mod tests {
     }
     #[rstest]
     fn full_replication() {
-        with_db_manager_teardown(|db_manager: TestDatabaseManager| async move {
+        test_runner_with_manager(|manager: TestNodeManager| async move {
             init_env_logger();
 
             // Build and populate Billie's database
-            let billie_db = db_manager.create("sqlite::memory:").await;
-            billie_db
-                .context
-                .schema_provider
-                .update(doggo_schema())
-                .await;
-            let populate_db_config = PopulateDatabaseConfig {
+            let billie = manager.create("sqlite::memory:").await;
+            billie.context.schema_provider.update(doggo_schema()).await;
+            let populate_db_config = PopulateStoreConfig {
                 no_of_entries: 1,
                 no_of_logs: 1,
                 no_of_public_keys: 1,
@@ -297,19 +291,19 @@ mod tests {
                 create_operation_fields: doggo_fields(),
                 update_operation_fields: doggo_fields(),
             };
-            let (key_pairs, _) = populate_store(&billie_db.store, &populate_db_config).await;
+            let (key_pairs, _) = populate_store(&billie.context.store, &populate_db_config).await;
 
             // Launch HTTP service of Billie
             let (tx, _rx) = broadcast::channel(120);
             let tx_billie = tx.clone();
             let shutdown_billie = shutdown_handle();
             let context_billie = Context::new(
-                billie_db.store.clone(),
+                billie.context.store.clone(),
                 Configuration {
                     http_port: 3022,
                     ..Configuration::default()
                 },
-                billie_db.context.schema_provider.clone(),
+                billie.context.schema_provider.clone(),
             );
             let (tx_ready, rx_ready) = oneshot::channel::<()>();
 
@@ -340,13 +334,13 @@ mod tests {
                 },
                 ..Configuration::default()
             };
-            let ada_db = db_manager.create("sqlite::memory:").await;
-            ada_db.context.schema_provider.update(doggo_schema()).await;
+            let ada = manager.create("sqlite::memory:").await;
+            ada.context.schema_provider.update(doggo_schema()).await;
             let context_ada = Context::new(
-                ada_db.store.clone(),
+                ada.context.store.clone(),
                 config_ada,
                 // We want ada to have the same schema in her schema provider as billie.
-                ada_db.context.schema_provider.clone(),
+                ada.context.schema_provider.clone(),
             );
             let tx_ada = tx.clone();
             let shutdown_ada = shutdown_handle();
@@ -371,7 +365,8 @@ mod tests {
             assert!(!replication_service_ada.is_finished());
 
             // Check the entry arrived into Ada's database
-            let entries = ada_db
+            let entries = ada
+                .context
                 .store
                 .get_entries_by_schema(doggo_schema().id())
                 .await

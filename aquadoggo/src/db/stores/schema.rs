@@ -2,18 +2,18 @@
 
 use std::convert::{TryFrom, TryInto};
 
-use async_trait::async_trait;
+use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::schema::system::{SchemaFieldView, SchemaView};
 use p2panda_rs::schema::{Schema, SchemaId};
+use p2panda_rs::storage_provider::error::OperationStorageError;
 use p2panda_rs::storage_provider::traits::DocumentStore;
+use sqlx::query_scalar;
 
 use crate::db::errors::SchemaStoreError;
-use crate::db::provider::SqlStorage;
-use crate::db::traits::SchemaStore;
+use crate::db::SqlStore;
 
-#[async_trait]
-impl SchemaStore for SqlStorage {
+impl SqlStore {
     /// Get a Schema from the database by it's document view id.
     ///
     /// Internally, this method performs three steps:
@@ -23,13 +23,15 @@ impl SchemaStore for SqlStorage {
     ///
     /// If no schema definition with the passed id is found then None is returned, if any of the
     /// other steps can't be completed, then an error is returned.
-    async fn get_schema_by_id(
+    pub async fn get_schema_by_id(
         &self,
         id: &DocumentViewId,
     ) -> Result<Option<Schema>, SchemaStoreError> {
         // Fetch the document view for the schema
-        let schema_view: SchemaView = match self.get_document_view_by_id(id).await? {
-            Some(document_view) => document_view.try_into()?,
+        let schema_view: SchemaView = match self.get_document_by_view_id(id).await? {
+            // We can unwrap the document view here as documents returned from this store method
+            // all contain views.
+            Some(document) => document.view().unwrap().try_into()?,
             None => return Ok(None),
         };
 
@@ -38,8 +40,10 @@ impl SchemaStore for SqlStorage {
         for field_id in schema_view.fields().iter() {
             // Fetch schema field document views
             let scheme_field_view: SchemaFieldView =
-                match self.get_document_view_by_id(field_id).await? {
-                    Some(document_view) => document_view.try_into()?,
+                match self.get_document_by_view_id(field_id).await? {
+                    // We can unwrap the document view here as documents returned from this store
+                    // method all contain views.
+                    Some(document) => document.view().unwrap().try_into()?,
                     None => return Ok(None),
                 };
 
@@ -59,19 +63,21 @@ impl SchemaStore for SqlStorage {
     /// Returns an error if a fatal db error occured.
     ///
     /// Silently ignores incomplete or broken schema definitions.
-    async fn get_all_schema(&self) -> Result<Vec<Schema>, SchemaStoreError> {
+    pub async fn get_all_schema(&self) -> Result<Vec<Schema>, SchemaStoreError> {
         let schema_views: Vec<SchemaView> = self
             .get_documents_by_schema(&SchemaId::new("schema_definition_v1")?)
             .await?
             .into_iter()
-            .filter_map(|view| SchemaView::try_from(view).ok())
+            // We can unwrap the document view here as documents returned from this store method all contain views.
+            .filter_map(|document| SchemaView::try_from(document.view().unwrap()).ok())
             .collect();
 
         let schema_field_views: Vec<SchemaFieldView> = self
             .get_documents_by_schema(&SchemaId::new("schema_field_definition_v1")?)
             .await?
             .into_iter()
-            .filter_map(|view| SchemaFieldView::try_from(view).ok())
+            // We can unwrap the document view here as documents returned from this store method all contain views.
+            .filter_map(|document| SchemaFieldView::try_from(document.view().unwrap()).ok())
             .collect();
 
         let mut all_schema = vec![];
@@ -89,26 +95,53 @@ impl SchemaStore for SqlStorage {
 
         Ok(all_schema.into_iter().flatten().collect())
     }
+
+    /// Returns the schema id for a document view.
+    ///
+    /// Returns `None` if this document view is not found.
+    pub async fn get_schema_by_document_view(
+        &self,
+        view_id: &DocumentViewId,
+    ) -> Result<Option<SchemaId>, SchemaStoreError> {
+        let result: Option<String> = query_scalar(
+            "
+            SELECT
+                schema_id
+            FROM
+                document_views
+            WHERE
+                document_view_id = $1
+            ",
+        )
+        .bind(view_id.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
+
+        // Unwrap because we expect no invalid schema ids in the db.
+        Ok(result.map(|id_str| id_str.parse().unwrap()))
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use p2panda_rs::document::DocumentViewId;
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::schema::{FieldType, SchemaId};
     use p2panda_rs::test_utils::fixtures::{key_pair, random_document_view_id};
+    use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
     use rstest::rstest;
 
-    use crate::db::stores::test_utils::{
-        add_document, add_schema, test_db, TestDatabase, TestDatabaseRunner,
+    use crate::test_utils::{
+        add_document, add_schema, populate_and_materialize, populate_store_config, test_runner,
+        TestNode,
     };
 
-    use super::SchemaStore;
-
     #[rstest]
-    fn get_schema(key_pair: KeyPair, #[from(test_db)] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(move |mut db: TestDatabase| async move {
+    fn get_schema(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
             let schema = add_schema(
-                &mut db,
+                &mut node,
                 "test_schema",
                 vec![
                     ("description", FieldType::String),
@@ -123,7 +156,8 @@ mod tests {
                 _ => panic!("Invalid schema id"),
             };
 
-            let result = db
+            let result = node
+                .context
                 .store
                 .get_schema_by_id(document_view_id)
                 .await
@@ -135,11 +169,11 @@ mod tests {
     }
 
     #[rstest]
-    fn get_all_schema(key_pair: KeyPair, #[from(test_db)] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(move |mut db: TestDatabase| async move {
+    fn get_all_schema(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
             for i in 0..5 {
                 add_schema(
-                    &mut db,
+                    &mut node,
                     &format!("test_schema_{}", i),
                     vec![
                         ("description", FieldType::String),
@@ -150,17 +184,17 @@ mod tests {
                 .await;
             }
 
-            let schemas = db.store.get_all_schema().await;
+            let schemas = node.context.store.get_all_schema().await;
             assert_eq!(schemas.unwrap().len(), 5);
         });
     }
 
     #[rstest]
-    fn schema_fields_do_not_exist(#[from(test_db)] runner: TestDatabaseRunner, key_pair: KeyPair) {
-        runner.with_db_teardown(|mut db: TestDatabase| async move {
+    fn schema_fields_do_not_exist(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
             // Create a schema definition but no schema field definitions
             let document_view_id = add_document(
-                &mut db,
+                &mut node,
                 &SchemaId::SchemaDefinition(1),
                 vec![
                     ("name", "test_schema".into()),
@@ -173,10 +207,68 @@ mod tests {
 
             // Retrieve the schema by it's document view id. We unwrap here as we expect an `Ok`
             // result for the succeeding db query, even though the schema could not be built.
-            let schema = db.store.get_schema_by_id(&document_view_id).await.unwrap();
+            let schema = node
+                .context
+                .store
+                .get_schema_by_id(&document_view_id)
+                .await
+                .unwrap();
 
             // We receive nothing as the fields are missing for this schema
             assert!(schema.is_none());
+        });
+    }
+
+    #[rstest]
+    fn test_get_schema_for_view(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            let schema = add_schema(
+                &mut node,
+                "venue",
+                vec![
+                    ("description", FieldType::String),
+                    ("profile_name", FieldType::String),
+                ],
+                &key_pair,
+            )
+            .await;
+
+            let document_view_id = match schema.id() {
+                SchemaId::Application(_, view_id) => view_id,
+                _ => panic!("Invalid schema id"),
+            };
+
+            let result = node
+                .context
+                .store
+                .get_schema_by_document_view(document_view_id)
+                .await;
+
+            assert!(result.is_ok());
+            // This is the schema name of the schema document we published.
+            assert_eq!(result.unwrap().unwrap().name(), "schema_definition");
+        });
+    }
+
+    #[rstest]
+    fn test_get_schema_for_missing_view(
+        random_document_view_id: DocumentViewId,
+        #[from(populate_store_config)]
+        #[with(2, 10, 1)]
+        config: PopulateStoreConfig,
+    ) {
+        test_runner(|mut node: TestNode| async move {
+            // Populate the store and materialize all documents.
+            populate_and_materialize(&mut node, &config).await;
+
+            let result = node
+                .context
+                .store
+                .get_schema_by_document_view(&random_document_view_id)
+                .await;
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().is_none());
         });
     }
 }

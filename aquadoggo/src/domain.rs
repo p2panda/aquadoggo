@@ -8,15 +8,14 @@ use bamboo_rs_core_ed25519_yasmf::entry::is_lipmaa_required;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::entry::decode::decode_entry;
 use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
-use p2panda_rs::entry::{EncodedEntry, Entry, LogId, SeqNum};
-use p2panda_rs::hash::Hash;
+use p2panda_rs::entry::{EncodedEntry, LogId, SeqNum};
 use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::plain::PlainOperation;
 use p2panda_rs::operation::traits::AsOperation;
 use p2panda_rs::operation::validate::validate_operation_with_entry;
 use p2panda_rs::operation::{EncodedOperation, OperationAction};
 use p2panda_rs::schema::Schema;
-use p2panda_rs::storage_provider::traits::{AsStorageLog, StorageProvider};
+use p2panda_rs::storage_provider::traits::{EntryStore, LogStore, OperationStore};
 use p2panda_rs::Human;
 
 use crate::graphql::client::NextArguments;
@@ -58,7 +57,7 @@ use crate::validation::{
 /// - get the latest seq num for this public key and log and safely increment
 ///
 /// Finally, return next arguments.
-pub async fn next_args<S: StorageProvider>(
+pub async fn next_args<S: EntryStore + OperationStore + LogStore>(
     store: &S,
     public_key: &PublicKey,
     document_view_id: Option<&DocumentViewId>,
@@ -102,7 +101,7 @@ pub async fn next_args<S: StorageProvider>(
     /////////////////////////
 
     // Retrieve the log_id for the found document_id and public_key.
-    let log_id = store.get(public_key, &document_id).await?;
+    let log_id = store.get_log_id(public_key, &document_id).await?;
 
     // Check if an existing log id was found for this public key and document.
     match log_id {
@@ -203,7 +202,7 @@ pub async fn next_args<S: StorageProvider>(
 /// ## Compute and return next entry arguments
 ///
 /// - Done!
-pub async fn publish<S: StorageProvider>(
+pub async fn publish<S: EntryStore + OperationStore + LogStore>(
     store: &S,
     schema: &Schema,
     encoded_entry: &EncodedEntry,
@@ -238,18 +237,18 @@ pub async fn publish<S: StorageProvider>(
         None => None,
     };
 
-    let skiplink_params: Option<(Entry, Hash)> = skiplink.map(|entry| {
+    let skiplink_params = skiplink.map(|entry| {
         let hash = entry.hash();
-        (entry.into(), hash)
+        (entry, hash)
     });
 
-    let backlink_params: Option<(Entry, Hash)> = backlink.map(|entry| {
+    let backlink_params = backlink.map(|entry| {
         let hash = entry.hash();
-        (entry.into(), hash)
+        (entry, hash)
     });
 
     // Perform validation of the entry and it's operation.
-    let operation = validate_operation_with_entry(
+    let (operation, operation_id) = validate_operation_with_entry(
         &entry,
         encoded_entry,
         skiplink_params.as_ref().map(|(entry, hash)| (entry, hash)),
@@ -326,8 +325,9 @@ pub async fn publish<S: StorageProvider>(
 
     // If the entries' seq num is 1 we insert a new log here.
     if entry.seq_num().is_first() {
-        let log = S::StorageLog::new(public_key, &operation.schema_id(), &document_id, log_id);
-        store.insert_log(log).await?;
+        store
+            .insert_log(log_id, public_key, &operation.schema_id(), &document_id)
+            .await?;
     }
 
     ///////////////////////////////
@@ -340,7 +340,9 @@ pub async fn publish<S: StorageProvider>(
         .await?;
 
     // Insert the operation into the store.
-    store.insert_operation(&operation, &document_id).await?;
+    store
+        .insert_operation(&operation_id, public_key, &operation, &document_id)
+        .await?;
 
     Ok(next_args)
 }
@@ -352,14 +354,14 @@ pub async fn publish<S: StorageProvider>(
 /// - any of the operations contained in the view id _don't_ exist in the store
 /// - any of the operations contained in the view id return a different document id than any of the
 /// others
-pub async fn get_checked_document_id_for_view_id<S: StorageProvider>(
+pub async fn get_checked_document_id_for_view_id<S: EntryStore + OperationStore + LogStore>(
     store: &S,
     view_id: &DocumentViewId,
 ) -> AnyhowResult<DocumentId> {
     let mut found_document_ids: HashSet<DocumentId> = HashSet::new();
     for operation in view_id.iter() {
         // If any operation can't be found return an error at this point already.
-        let document_id = store.get_document_by_operation_id(operation).await?;
+        let document_id = store.get_document_id_by_operation_id(operation).await?;
 
         ensure!(
             document_id.is_some(),
@@ -398,16 +400,16 @@ mod tests {
         Operation, OperationAction, OperationBuilder, OperationId, OperationValue,
     };
     use p2panda_rs::schema::{FieldType, Schema};
-    use p2panda_rs::storage_provider::traits::{EntryStore, EntryWithOperation, LogStore};
+    use p2panda_rs::storage_provider::traits::{EntryStore, LogStore};
     use p2panda_rs::test_utils::constants::{test_fields, PRIVATE_KEY};
-    use p2panda_rs::test_utils::db::test_db::{
-        populate_store, send_to_store, test_db_config, PopulateDatabaseConfig,
-    };
-    use p2panda_rs::test_utils::db::{MemoryStore, StorageEntry};
     use p2panda_rs::test_utils::fixtures::{
-        create_operation, delete_operation, key_pair, operation, public_key,
+        create_operation, delete_operation, key_pair, operation, populate_store_config, public_key,
         random_document_view_id, random_hash, schema, update_operation,
     };
+    use p2panda_rs::test_utils::memory_store::helpers::{
+        populate_store, send_to_store, PopulateStoreConfig,
+    };
+    use p2panda_rs::test_utils::memory_store::{MemoryStore, StorageEntry};
     use rstest::rstest;
 
     use crate::graphql::client::NextArguments;
@@ -532,9 +534,9 @@ mod tests {
         schema: Schema,
         #[case] entries_to_remove: &[LogIdAndSeqNum],
         #[case] entry_to_publish: LogIdAndSeqNum,
-        #[from(test_db_config)]
+        #[from(populate_store_config)]
         #[with(8, 1, 1)]
-        config: PopulateDatabaseConfig,
+        config: PopulateStoreConfig,
     ) {
         let store = MemoryStore::default();
         let (key_pairs, _) = populate_store(&store, &config).await;
@@ -558,13 +560,13 @@ mod tests {
         remove_entries(&store, &public_key, entries_to_remove);
 
         // Publish the latest entry again and see what happens.
-        let operation = next_entry.payload().unwrap();
+        let operation = next_entry.payload.unwrap();
         let result = publish(
             &store,
             &schema,
-            &next_entry.clone().into(),
-            &decode_operation(operation).unwrap(),
-            operation,
+            &next_entry.encoded_entry,
+            &decode_operation(&operation).unwrap(),
+            &operation,
         )
         .await;
 
@@ -629,9 +631,9 @@ mod tests {
         // The previous operations described by their log id and seq number (log_id, seq_num)
         #[case] previous: &[LogIdAndSeqNum],
         #[case] key_pair: KeyPair,
-        #[from(test_db_config)]
+        #[from(populate_store_config)]
         #[with(8, 2, 1)]
-        config: PopulateDatabaseConfig,
+        config: PopulateStoreConfig,
     ) {
         let store = MemoryStore::default();
         let (key_pairs, documents) = populate_store(&store, &config).await;
@@ -762,9 +764,9 @@ mod tests {
         #[case] operations_to_remove: &[LogIdAndSeqNum],
         #[case] document_view_id: &[LogIdAndSeqNum],
         #[case] key_pair: KeyPair,
-        #[from(test_db_config)]
+        #[from(populate_store_config)]
         #[with(8, 2, 1)]
-        config: PopulateDatabaseConfig,
+        config: PopulateStoreConfig,
     ) {
         let store = MemoryStore::default();
         let (key_pairs, _) = populate_store(&store, &config).await;
@@ -834,11 +836,11 @@ mod tests {
     ) {
         let store = MemoryStore::default();
         // Populate the db with the number of entries defined in the test params.
-        let config = PopulateDatabaseConfig {
+        let config = PopulateStoreConfig {
             no_of_entries,
             no_of_logs: 1,
             no_of_public_keys: 1,
-            ..PopulateDatabaseConfig::default()
+            ..PopulateStoreConfig::default()
         };
         let (key_pairs, _) = populate_store(&store, &config).await;
 
@@ -900,9 +902,9 @@ mod tests {
     #[tokio::test]
     async fn gets_next_args_other_cases(
         public_key: PublicKey,
-        #[from(test_db_config)]
+        #[from(populate_store_config)]
         #[with(7, 1, 1)]
-        config: PopulateDatabaseConfig,
+        config: PopulateStoreConfig,
     ) {
         let store = MemoryStore::default();
         let (_, documents) = populate_store(&store, &config).await;
@@ -966,9 +968,9 @@ mod tests {
         schema: Schema,
         #[case] log_id: LogId,
         #[case] key_pair: KeyPair,
-        #[from(test_db_config)]
+        #[from(populate_store_config)]
         #[with(2, 1, 1)]
-        config: PopulateDatabaseConfig,
+        config: PopulateStoreConfig,
     ) {
         let store = MemoryStore::default();
         let (_, documents) = populate_store(&store, &config).await;
@@ -1017,7 +1019,7 @@ mod tests {
 
         // For non error cases we test that there is a log for the updated document.
         let log = store
-            .get(&author_performing_update, document_id)
+            .get_log_id(&author_performing_update, document_id)
             .await
             .unwrap();
 
@@ -1055,9 +1057,9 @@ mod tests {
         #[case] log_id: LogId,
         #[case] key_pair: KeyPair,
         operation: Operation,
-        #[from(test_db_config)]
+        #[from(populate_store_config)]
         #[with(1, 2, 1)]
-        config: PopulateDatabaseConfig,
+        config: PopulateStoreConfig,
     ) {
         let store = MemoryStore::default();
         let _ = populate_store(&store, &config).await;
@@ -1091,7 +1093,7 @@ mod tests {
         let document_id = encoded_entry.hash().into();
 
         let retrieved_log_id = store
-            .get(&public_key, &document_id)
+            .get_log_id(&public_key, &document_id)
             .await
             .expect("Retrieve log id for document");
 
@@ -1111,9 +1113,9 @@ mod tests {
     async fn publish_to_deleted_documents(
         schema: Schema,
         #[case] key_pair: KeyPair,
-        #[from(test_db_config)]
+        #[from(populate_store_config)]
         #[with(2, 1, 1, true)]
-        config: PopulateDatabaseConfig,
+        config: PopulateStoreConfig,
     ) {
         let store = MemoryStore::default();
         let (_, documents) = populate_store(&store, &config).await;
@@ -1167,9 +1169,9 @@ mod tests {
     #[tokio::test]
     async fn next_args_deleted_documents(
         #[case] key_pair: KeyPair,
-        #[from(test_db_config)]
+        #[from(populate_store_config)]
         #[with(3, 1, 1, true)]
-        config: PopulateDatabaseConfig,
+        config: PopulateStoreConfig,
     ) {
         let store = MemoryStore::default();
         let (_, documents) = populate_store(&store, &config).await;
@@ -1260,9 +1262,9 @@ mod tests {
     #[tokio::test]
     async fn next_args_max_seq_num_reached(
         key_pair: KeyPair,
-        #[from(test_db_config)]
+        #[from(populate_store_config)]
         #[with(2, 1, 1, false)]
-        config: PopulateDatabaseConfig,
+        config: PopulateStoreConfig,
     ) {
         let store = MemoryStore::default();
         let _ = populate_store(&store, &config).await;
@@ -1280,12 +1282,12 @@ mod tests {
             &SeqNum::new(u64::MAX).unwrap(),
             Some(&random_hash()),
             Some(&random_hash()),
-            entry_two.payload().unwrap(),
+            entry_two.payload.as_ref().unwrap(),
             &key_pair,
         )
         .unwrap();
 
-        let entry = StorageEntry::new(&encoded_entry, entry_two.payload());
+        let entry = StorageEntry::new(&encoded_entry, entry_two.payload.as_ref());
 
         store
             .entries
@@ -1304,9 +1306,9 @@ mod tests {
     async fn publish_max_seq_num_reached(
         schema: Schema,
         key_pair: KeyPair,
-        #[from(test_db_config)]
+        #[from(populate_store_config)]
         #[with(2, 1, 1, false)]
-        config: PopulateDatabaseConfig,
+        config: PopulateStoreConfig,
     ) {
         let store = MemoryStore::default();
         let _ = populate_store(&store, &config).await;
@@ -1328,12 +1330,12 @@ mod tests {
             &SeqNum::new(18446744073709551611).unwrap(),
             Some(&random_hash()),
             Some(&random_hash()),
-            entry_two.payload().unwrap(),
+            entry_two.payload.as_ref().unwrap(),
             &key_pair,
         )
         .unwrap();
 
-        let skiplink = StorageEntry::new(&encoded_entry, entry_two.payload());
+        let skiplink = StorageEntry::new(&encoded_entry, entry_two.payload.as_ref());
         store
             .entries
             .lock()
@@ -1346,12 +1348,12 @@ mod tests {
             &SeqNum::new(u64::MAX - 1).unwrap(),
             None,
             Some(&random_hash()),
-            entry_two.payload().unwrap(),
+            entry_two.payload.as_ref().unwrap(),
             &key_pair,
         )
         .unwrap();
 
-        let backlink = StorageEntry::new(&encoded_entry, entry_two.payload());
+        let backlink = StorageEntry::new(&encoded_entry, entry_two.payload.as_ref());
         store
             .entries
             .lock()
@@ -1364,13 +1366,13 @@ mod tests {
             &SeqNum::new(u64::MAX).unwrap(),
             Some(&skiplink.hash()),
             Some(&backlink.hash()),
-            entry_two.payload().unwrap(),
+            entry_two.payload.as_ref().unwrap(),
             &key_pair,
         )
         .unwrap();
 
         // Publish the MAX_SEQ_NUM entry
-        let operation = entry_two.payload().unwrap();
+        let operation = &entry_two.payload.unwrap();
         let result = publish(
             &store,
             &schema,
@@ -1381,10 +1383,7 @@ mod tests {
         .await;
 
         // try and get the MAX_SEQ_NUM entry again (it shouldn't be there)
-        let entry_at_max_seq_num = store
-            .get_entry_by_hash(&encoded_entry.hash())
-            .await
-            .unwrap();
+        let entry_at_max_seq_num = store.get_entry(&encoded_entry.hash()).await.unwrap();
 
         // We expect the entry we published not to have been stored in the db
         assert!(entry_at_max_seq_num.is_none());

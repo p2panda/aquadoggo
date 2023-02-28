@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use log::debug;
+use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::DocumentStore;
@@ -25,11 +26,11 @@ use crate::materializer::TaskInput;
 pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
     debug!("Working on {}", input);
 
-    // Here we retrive the document view by document view id.
-    let document_view = match &input.document_view_id {
+    // Here we retrieve the document by document view id.
+    let document = match &input.document_view_id {
         Some(view_id) => context
             .store
-            .get_document_view_by_id(view_id)
+            .get_document_by_view_id(view_id)
             .await
             .map_err(|err| {
                 TaskError::Critical(err.to_string())
@@ -39,23 +40,27 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
         None => Err(TaskError::Critical("Missing document_view_id in task input".into())),
     }?;
 
-    let document_view = match document_view {
-        Some(document_view) => {
+    let document = match document {
+        Some(document) => {
             debug!(
-                "Document view retrieved from storage with id: {}",
-                document_view.id()
+                "Document retrieved from storage with view id: {}",
+                document.view_id()
             );
-            Ok(document_view)
+            Ok(document)
         }
-        // If no document view for the id passed into this task could be retrieved then this
-        // document has been deleted or the document view id was invalid. As "dependency" tasks
-        // are only dispatched after a successful "reduce" task, neither `None` case should
+        // If no document with the view for the id passed into this task could be retrieved then
+        // this document has been deleted or the document view does not exist. As "dependency"
+        // tasks are only dispatched after a successful "reduce" task, neither `None` case should
         // happen, so this is a critical error.
         None => Err(TaskError::Critical(format!(
-            "Expected document view {} not found in store",
+            "Expected document with view {} not found in store",
             &input.document_view_id.unwrap()
         ))),
     }?;
+
+    // We can unwrap the view here as only documents with views (meaning they are not deleted) are
+    // returned from the store method above.
+    let document_view = document.view().unwrap();
 
     let mut next_tasks = Vec::new();
 
@@ -106,18 +111,6 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
     // dependencies have been reduced.
     let all_dependencies_met = !next_tasks.iter().any(|task| task.is_some());
     if all_dependencies_met {
-        let task_input_schema = context
-            .store
-            .get_schema_by_document_view(document_view.id())
-            .await
-            .map_err(|err| TaskError::Critical(err.to_string()))?
-            .ok_or_else(|| {
-                TaskError::Failure(format!(
-                    "{} was deleted while processing task",
-                    document_view
-                ))
-            })?;
-
         // Helper that returns a schema task for the current task input.
         let schema_task = || {
             Some(Task::new(
@@ -126,7 +119,7 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
             ))
         };
 
-        match task_input_schema {
+        match document.schema_id() {
             // Start `schema` task when a schema (field) definition view is completed with
             // dependencies
             SchemaId::SchemaDefinition(_) => next_tasks.push(schema_task()),
@@ -153,7 +146,7 @@ async fn construct_relation_task(
 
     match context
         .store
-        .get_document_view_by_id(&document_view_id)
+        .get_document_by_view_id(&document_view_id)
         .await
         .map_err(|err| TaskError::Critical(err.to_string()))?
     {
@@ -173,41 +166,35 @@ async fn construct_relation_task(
 
 #[cfg(test)]
 mod tests {
+    use p2panda_rs::document::traits::AsDocument;
     use p2panda_rs::document::{DocumentId, DocumentViewId};
     use p2panda_rs::entry::traits::AsEncodedEntry;
     use p2panda_rs::identity::KeyPair;
-    use p2panda_rs::operation::traits::AsVerifiedOperation;
     use p2panda_rs::operation::{
-        Operation, OperationBuilder, OperationValue, PinnedRelation, PinnedRelationList, Relation,
-        RelationList,
+        Operation, OperationBuilder, OperationId, OperationValue, PinnedRelation,
+        PinnedRelationList, Relation, RelationList,
     };
     use p2panda_rs::schema::{FieldType, Schema, SchemaId};
     use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
-    use p2panda_rs::test_utils::constants;
-    use p2panda_rs::test_utils::db::test_db::send_to_store;
-    use p2panda_rs::test_utils::fixtures::{
-        key_pair, random_document_id, random_document_view_id, schema, schema_fields,
+    use p2panda_rs::test_utils::fixtures::{key_pair, random_document_id, random_document_view_id};
+    use p2panda_rs::test_utils::memory_store::helpers::{
+        populate_store, send_to_store, PopulateStoreConfig,
     };
+    use p2panda_rs::WithId;
     use rstest::rstest;
 
-    use crate::db::stores::test_utils::{
-        add_document, add_schema, doggo_schema, test_db, TestDatabase, TestDatabaseRunner,
-    };
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
+    use crate::test_utils::{
+        add_document, add_schema, doggo_schema, populate_store_config, schema_from_fields,
+        test_runner, TestNode,
+    };
 
     use super::dependency_task;
 
-    fn schema_from_fields(fields: Vec<(&str, OperationValue)>) -> Schema {
-        schema(
-            schema_fields(fields, constants::SCHEMA_ID.parse().unwrap()),
-            constants::SCHEMA_ID.parse().unwrap(),
-            "A doggo schema for testing",
-        )
-    }
     #[rstest]
     #[case(
-        test_db(
+        populate_store_config(
             1,
             1,
             1,
@@ -219,7 +206,7 @@ mod tests {
         0
     )]
     #[case(
-        test_db(
+        populate_store_config(
             1,
             1,
             1,
@@ -239,7 +226,7 @@ mod tests {
         0
     )]
     #[case(
-        test_db(
+        populate_store_config(
             1,
             1,
             1,
@@ -257,7 +244,7 @@ mod tests {
         1
     )]
     #[case(
-        test_db(
+        populate_store_config(
             1,
             1,
             1,
@@ -277,7 +264,7 @@ mod tests {
         2
     )]
     #[case(
-        test_db(
+        populate_store_config(
             1,
             1,
             1,
@@ -304,7 +291,7 @@ mod tests {
     )]
     // This document has been updated
     #[case(
-        test_db(
+        populate_store_config(
             4,
             1,
             1,
@@ -336,29 +323,33 @@ mod tests {
         3
     )]
     fn dispatches_reduce_tasks_for_pinned_child_dependencies(
-        #[case] runner: TestDatabaseRunner,
+        #[case] config: PopulateStoreConfig,
         #[case] expected_next_tasks: usize,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
-            for document_id in &db.test_data.documents {
+        test_runner(move |node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (_, document_ids) = populate_store(&node.context.store, &config).await;
+
+            for document_id in &document_ids {
                 let input = TaskInput::new(Some(document_id.clone()), None);
-                reduce_task(db.context.clone(), input)
+                reduce_task(node.context.clone(), input)
                     .await
                     .unwrap()
                     .unwrap();
             }
 
-            for document_id in &db.test_data.documents {
-                let document_view = db
+            for document_id in &document_ids {
+                let document = node
+                    .context
                     .store
-                    .get_document_by_id(document_id)
+                    .get_document(document_id)
                     .await
                     .unwrap()
                     .unwrap();
 
-                let input = TaskInput::new(None, Some(document_view.id().clone()));
+                let input = TaskInput::new(None, Some(document.view_id().clone()));
 
-                let reduce_tasks = dependency_task(db.context.clone(), input)
+                let reduce_tasks = dependency_task(node.context.clone(), input)
                     .await
                     .unwrap()
                     .unwrap();
@@ -373,14 +364,19 @@ mod tests {
     #[rstest]
     fn no_reduce_task_for_materialised_document_relations(
         key_pair: KeyPair,
-        #[from(test_db)]
-        #[with(1, 1, 1)]
-        runner: TestDatabaseRunner,
+        #[from(populate_store_config)]
+        #[with(2, 1, 1)]
+        config: PopulateStoreConfig,
     ) {
-        runner.with_db_teardown(|mut db: TestDatabase| async move {
-            let document_id = db.test_data.documents[0].clone();
+        test_runner(|mut node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (_, document_ids) = populate_store(&node.context.store, &config).await;
+            let document_id = document_ids
+                .get(0)
+                .expect("Should be at least one document id");
+
             let input = TaskInput::new(Some(document_id.clone()), None);
-            reduce_task(db.context.clone(), input)
+            reduce_task(node.context.clone(), input)
                 .await
                 .unwrap()
                 .unwrap();
@@ -388,17 +384,18 @@ mod tests {
             // Here we have one materialised document, (we are calling it a child as we will
             // shortly be publishing parents) it contains relations which are not materialised yet
             // so should dispatch a reduce task for each one.
-            let document_view_of_child = db
+            let child_document = node
+                .context
                 .store
-                .get_document_by_id(&document_id)
+                .get_document(&document_id)
                 .await
                 .unwrap()
                 .unwrap();
 
-            let document_view_id_of_child = document_view_of_child.id();
+            let document_view_id_of_child = child_document.view_id();
 
             let schema = add_schema(
-                &mut db,
+                &mut node,
                 "test_schema",
                 vec![
                     (
@@ -415,7 +412,7 @@ mod tests {
             .await;
 
             let document_view_id = add_document(
-                &mut db,
+                &mut node,
                 schema.id(),
                 vec![
                     (
@@ -438,7 +435,7 @@ mod tests {
             // The new document should now dispatch one dependency task for the child relation which
             // has not been materialised yet.
             let input = TaskInput::new(None, Some(document_view_id.clone()));
-            let tasks = dependency_task(db.context.clone(), input)
+            let tasks = dependency_task(node.context.clone(), input)
                 .await
                 .unwrap()
                 .unwrap();
@@ -456,18 +453,17 @@ mod tests {
     fn fails_correctly(
         #[case] document_id: Option<DocumentId>,
         #[case] document_view_id: Option<DocumentViewId>,
-        #[from(test_db)] runner: TestDatabaseRunner,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
+        test_runner(|node: TestNode| async move {
             let input = TaskInput::new(document_id, document_view_id);
-            let next_tasks = dependency_task(db.context.clone(), input).await;
+            let next_tasks = dependency_task(node.context.clone(), input).await;
             assert!(next_tasks.is_err())
         });
     }
 
     #[rstest]
     #[case(
-        test_db(
+        populate_store_config(
             2,
             1,
             1,
@@ -484,7 +480,7 @@ mod tests {
         )
     )]
     #[case(
-        test_db(
+        populate_store_config(
             2,
             1,
             1,
@@ -508,24 +504,32 @@ mod tests {
             vec![]
         )
     )]
-    fn fails_on_deleted_documents(#[case] runner: TestDatabaseRunner) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            let document_id = db.test_data.documents[0].clone();
+    fn fails_on_deleted_documents(#[case] config: PopulateStoreConfig) {
+        test_runner(|node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (_, document_ids) = populate_store(&node.context.store, &config).await;
+            let document_id = document_ids
+                .get(0)
+                .expect("Should be at least one document id");
 
             let input = TaskInput::new(Some(document_id.clone()), None);
-            reduce_task(db.context.clone(), input).await.unwrap();
+            reduce_task(node.context.clone(), input).await.unwrap();
 
-            let document_operations = db
+            let document_operations = node
+                .context
                 .store
                 .get_operations_by_document_id(&document_id)
                 .await
                 .unwrap();
 
-            let document_view_id: DocumentViewId = document_operations[1].id().clone().into();
+            let document_view_id: DocumentViewId =
+                WithId::<OperationId>::id(&document_operations[1])
+                    .clone()
+                    .into();
 
             let input = TaskInput::new(None, Some(document_view_id.clone()));
 
-            let result = dependency_task(db.context.clone(), input).await;
+            let result = dependency_task(node.context.clone(), input).await;
 
             assert!(result.is_err())
         });
@@ -533,20 +537,23 @@ mod tests {
 
     #[rstest]
     fn dispatches_schema_tasks_for_field_definitions(
-        #[from(test_db)]
+        #[from(populate_store_config)]
         #[with(1, 1, 1, false, Schema::get_system(SchemaId::SchemaFieldDefinition(1)).unwrap().to_owned(), vec![
             ("name", OperationValue::String("field_name".to_string())),
             ("type", FieldType::String.into()),
         ])]
-        runner: TestDatabaseRunner,
+        config: PopulateStoreConfig,
     ) {
-        runner.with_db_teardown(|db: TestDatabase| async move {
-            // The document id for a schema_field_definition who's operation already exists in the
-            // store.
-            let document_id = db.test_data.documents.first().unwrap();
+        test_runner(|node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (_, document_ids) = populate_store(&node.context.store, &config).await;
+            let document_id = document_ids
+                .get(0)
+                .expect("Should be at least one document id");
+
             // Materialise the schema field definition.
             let input = TaskInput::new(Some(document_id.to_owned()), None);
-            reduce_task(db.context.clone(), input.clone())
+            reduce_task(node.context.clone(), input.clone())
                 .await
                 .unwrap();
 
@@ -554,7 +561,7 @@ mod tests {
             let document_view_id = document_id.as_str().parse().unwrap();
             // Dispatch a dependency task for this document_view_id.
             let input = TaskInput::new(None, Some(document_view_id));
-            let tasks = dependency_task(db.context.clone(), input)
+            let tasks = dependency_task(node.context.clone(), input)
                 .await
                 .unwrap()
                 .unwrap();
@@ -610,26 +617,29 @@ mod tests {
     fn dispatches_schema_tasks_for_schema_definitions(
         #[case] schema_create_operation: Operation,
         #[case] expected_schema_tasks: usize,
-        #[from(test_db)]
+        #[from(populate_store_config)]
         #[with(1, 1, 1, false, Schema::get_system(SchemaId::SchemaFieldDefinition(1)).unwrap().to_owned(), vec![
             ("name", OperationValue::String("field_name".to_string())),
             ("type", FieldType::String.into()),
         ])]
-        runner: TestDatabaseRunner,
+        config: PopulateStoreConfig,
     ) {
-        runner.with_db_teardown(move |db: TestDatabase| async move {
-            // The document id for the schema_field_definition who's operation already exists in
-            // the store.
-            let schema_field_document_id = db.test_data.documents.first().unwrap();
+        test_runner(move |node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (_, document_ids) = populate_store(&node.context.store, &config).await;
+            let schema_field_document_id = document_ids
+                .get(0)
+                .expect("Should be at least one document id");
+
             // Materialise the schema field definition.
             let input = TaskInput::new(Some(schema_field_document_id.to_owned()), None);
-            reduce_task(db.context.clone(), input.clone())
+            reduce_task(node.context.clone(), input.clone())
                 .await
                 .unwrap();
 
             // Persist a schema definition entry and operation to the store.
             let (entry_signed, _) = send_to_store(
-                &db.store,
+                &node.context.store,
                 &schema_create_operation,
                 Schema::get_system(SchemaId::SchemaDefinition(1)).unwrap(),
                 &KeyPair::new(),
@@ -638,15 +648,16 @@ mod tests {
             .unwrap();
 
             // Materialise the schema definition.
-            let document_view_id: DocumentViewId = entry_signed.hash().into();
-            let input = TaskInput::new(None, Some(document_view_id.clone()));
-            reduce_task(db.context.clone(), input.clone())
+            let document_id: DocumentId = entry_signed.hash().into();
+            let input = TaskInput::new(Some(document_id.clone()), None);
+            reduce_task(node.context.clone(), input.clone())
                 .await
                 .unwrap();
 
             // Dispatch a dependency task for the schema definition.
+            let document_view_id: DocumentViewId = entry_signed.hash().into();
             let input = TaskInput::new(None, Some(document_view_id));
-            let tasks = dependency_task(db.context.clone(), input)
+            let tasks = dependency_task(node.context.clone(), input)
                 .await
                 .unwrap()
                 .unwrap();
