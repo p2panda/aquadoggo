@@ -6,14 +6,6 @@ use serde::{Deserialize, Serialize};
 /// Libp2p config for the node.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Libp2pConfiguration {
-    /// Connection event buffer size.
-    ///
-    /// Defines the additional buffer size for events sent from the ConnectionHandler to the
-    /// NetworkBehaviour. A shared buffer exists with one available "slot" per connection. This
-    /// value defines the number of additional slots per connection. If the buffer is exceeded,
-    /// the ConnectionHandler will sleep.
-    pub connection_event_buffer_size: usize,
-
     /// Dial concurrency factor.
     ///
     /// Number of addresses concurrently dialed for a single outbound
@@ -48,6 +40,13 @@ pub struct Libp2pConfiguration {
     /// number of events exists for each individual connection.
     pub notify_handler_buffer_size: usize,
 
+    /// Connection event buffer size.
+    ///
+    /// Defines the buffer size for events sent from the ConnectionHandler to the
+    /// NetworkBehaviour. Each connection has its own buffer. If the buffer is
+    /// exceeded, the ConnectionHandler will sleep.
+    pub per_connection_event_buffer_size: usize,
+
     /// Ping behaviour enabled.
     pub ping: bool,
 }
@@ -55,7 +54,6 @@ pub struct Libp2pConfiguration {
 impl Default for Libp2pConfiguration {
     fn default() -> Self {
         Self {
-            connection_event_buffer_size: 128,
             dial_concurrency_factor: 8,
             // Listen on 127.0.0.1 and a random, OS-assigned port
             listening_multiaddr: "/ip4/127.0.0.1/udp/0/quic-v1".parse().unwrap(),
@@ -66,6 +64,7 @@ impl Default for Libp2pConfiguration {
             max_connections_per_peer: 8,
             mdns: false,
             notify_handler_buffer_size: 128,
+            per_connection_event_buffer_size: 8,
             ping: false,
         }
     }

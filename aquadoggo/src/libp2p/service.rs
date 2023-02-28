@@ -32,10 +32,12 @@ struct Behaviour {
 }
 
 impl Behaviour {
-    fn new(context: &Context) -> Result<Self> {
+    /// Generate a new instance of the composed network behaviour according to
+    /// the application configuration context.
+    fn new(context: &Context, peer_id: PeerId) -> Result<Self> {
         // Create an mDNS behaviour with default configuration if the mDNS flag is set
         let mdns = if context.config.libp2p.mdns {
-            Some(mdns::Behaviour::new(Default::default())?)
+            Some(mdns::Behaviour::new(Default::default(), peer_id)?)
         } else {
             None
         };
@@ -100,8 +102,9 @@ pub async fn libp2p_service(
         .with_max_established_incoming(Some(libp2p_config.max_connections_in))
         .with_max_established_per_peer(Some(libp2p_config.max_connections_per_peer));
 
-    // Instantiate the custom network behaviour with defaults
-    let behaviour = Behaviour::new(&context)?;
+    // Instantiate the custom network behaviour with default configuration
+    // and the libp2p peer ID
+    let behaviour = Behaviour::new(&context, peer_id)?;
 
     // Initialise a swarm with QUIC transports, our composed network behaviour
     // and the default configuration parameters
@@ -109,7 +112,7 @@ pub async fn libp2p_service(
         .connection_limits(connection_limits)
         // This method expects a NonZeroU8 as input, hence the try_into conversion
         .dial_concurrency_factor(libp2p_config.dial_concurrency_factor.try_into()?)
-        .connection_event_buffer_size(libp2p_config.connection_event_buffer_size)
+        .per_connection_event_buffer_size(libp2p_config.per_connection_event_buffer_size)
         .notify_handler_buffer_size(libp2p_config.notify_handler_buffer_size.try_into()?)
         .build();
 
