@@ -14,6 +14,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Install Protocol Buffers compiler
+        run: sudo apt-get install protobuf-compiler
+
       - name: Checkout repository
         uses: actions/checkout@v3
 
@@ -67,6 +70,9 @@ jobs:
           --health-retries 5
 
     steps:
+      - name: Install Protocol Buffers compiler
+        run: sudo apt-get install protobuf-compiler
+
       - name: Checkout repository
         uses: actions/checkout@v3
 
@@ -99,6 +105,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Install Protocol Buffers compiler
+        run: sudo apt-get install protobuf-compiler
+
       - name: Checkout repository
         uses: actions/checkout@v3
 
@@ -182,6 +191,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Install Protocol Buffers compiler
+        run: sudo apt-get install protobuf-compiler
+
       - name: Checkout repository
         uses: actions/checkout@v3
 
