@@ -416,13 +416,10 @@ where
                                 queue.push(QueueItem::new(next_id, task.1.clone()));
 
                                 // Keep count of how many tasks are duplicates
-                                match index_value {
-                                    None => {
-                                        index.insert(task.1, AtomicU64::new(1));
-                                    }
-                                    Some(task_count) => {
-                                        task_count.fetch_add(1, Ordering::Relaxed);
-                                    }
+                                if let Some(task_count) = index_value {
+                                    task_count.fetch_add(1, Ordering::Relaxed);
+                                } else {
+                                    index.insert(task.1, AtomicU64::new(1));
                                 }
                             }
                             Err(err) => {
@@ -497,18 +494,15 @@ where
                         Ok(mut index) => {
                             let index_value = index.get(&item.input);
 
-                            match index_value {
-                                Some(task_count) => {
-                                    task_count.fetch_sub(1, Ordering::Relaxed);
+                            if let Some(task_count) = index_value {
+                                task_count.fetch_sub(1, Ordering::Relaxed);
 
-                                    if task_count.load(Ordering::Relaxed) == 0 {
-                                        index.remove(&item.input);
+                                if task_count.load(Ordering::Relaxed) == 0 {
+                                    index.remove(&item.input);
 
-                                        // Trigger removing the task from the task store
-                                        on_complete(item.input());
-                                    }
+                                    // Trigger removing the task from the task store
+                                    on_complete(item.input());
                                 }
-                                None => (),
                             }
                         }
                         Err(err) => {
