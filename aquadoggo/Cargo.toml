@@ -37,12 +37,13 @@ libp2p = { version = "^0.51.0", features = [
     "macros",
     "quic",
     "ping",
-    "mdns"
+    "mdns",
 ] }
 lipmaa-link = "^0.2.2"
 log = "^0.4.17"
 once_cell = "^1.12.0"
 openssl-probe = "^0.1.5"
+pem = "^1.1.1"
 p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "e3db5ddc96b3268bc06963e11f5c3ccb2bd9c188", features = [
     "storage-provider",
 ] }
