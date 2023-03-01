@@ -96,7 +96,7 @@ pub async fn materializer_service(
                 .await
                 .unwrap_or_else(|_| {
                     panic!(
-                        "Failed database query when retreiving document for operation_id {}",
+                        "Failed database query when retreiving document for operation id {}",
                         operation_id
                     )
                 }) {
@@ -109,7 +109,7 @@ pub async fn materializer_service(
                     // safely assure that this is due to a critical bug affecting the database
                     // integrity. Panicking here will close `handle` and by that signal a node
                     // shutdown.
-                    panic!("Could not find document for operation_id {}", operation_id);
+                    panic!("Could not find document for operation id {}", operation_id);
                 }
             }
         }

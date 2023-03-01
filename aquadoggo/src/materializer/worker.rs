@@ -6,9 +6,6 @@
 //! A task queue allows control over a) order of operations and b) amount of work being done per
 //! time c) avoiding duplicate work.
 //!
-//! This particular task queue implementation rejects tasks with duplicate input values already
-//! waiting in the queue (which would result in doing the same work again).
-//!
 //! A worker can be defined by any sort of async function which returns a result, indicating if it
 //! succeeded, failed or crashed critically.
 //!
@@ -64,8 +61,7 @@
 //! - Worker: "square" -
 //! --------------------
 //!
-//! The internal queue of "square" contains now: [{Task 1}, {Task 2}, {Task 4}]. Task 3 got
-//! rejected silently as it contains the same input data.
+//! The internal queue of "square" contains now: [{Task 1}, {Task 2}, {Task 3}, {Task 4}]
 //!
 //! 3. Process tasks
 //!
@@ -73,9 +69,9 @@
 //! concurrently. After one of them finishes, the next free worker will eventually take Task 4 from
 //! the queue and process it.
 //!
-//! Task 1 results in "25", Task 2 in "64", Task 4 in "9".
+//! Task 1 results in "25", Task 2 in "64", Task 3 in "25", Task 4 in "9".
 //! ```
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::future::Future;
 use std::hash::Hash;
@@ -145,11 +141,12 @@ struct WorkerManager<IN>
 where
     IN: Send + Sync + Clone + Hash + Eq + Display + 'static,
 {
-    /// Index of all current inputs inside the task queue organized in a hash set.
+    /// Index of all current inputs inside the task queue organized in a hash map.
     ///
-    /// This allows us to avoid duplicate tasks by detecting if there is already a task in our
-    /// queue with the same input hash.
-    input_index: Arc<Mutex<HashSet<IN>>>,
+    /// This allows us to keep track of the number of tasks working on the same problem. Similar to
+    /// an atomic reference counter dropping at 0, we can safely inform other layers about when we
+    /// are "done" with working on the problem.
+    input_index: Arc<Mutex<HashMap<IN, AtomicU64>>>,
 
     /// FIFO queue of all tasks for this worker pool.
     queue: Arc<Queue<QueueItem<IN>>>,
@@ -162,7 +159,7 @@ where
     /// Returns a new worker manager.
     pub fn new() -> Self {
         Self {
-            input_index: Arc::new(Mutex::new(HashSet::new())),
+            input_index: Arc::new(Mutex::new(HashMap::new())),
             queue: Arc::new(Queue::new()),
         }
     }
@@ -405,16 +402,27 @@ where
                         // Check if a task with the same input values already exists in queue
                         match input_index.lock() {
                             Ok(mut index) => {
-                                if index.contains(&task.1) {
-                                    continue; // Task already exists
-                                } else {
+                                // Check if we haven't taken note yet of that task yet. Through the
+                                // index we're detecting duplicates, making sure that we only keep
+                                // track of one
+                                let index_value = index.get(&task.1);
+                                if index_value.is_none() {
                                     // Trigger status update
                                     on_pending(task.clone());
+                                }
 
-                                    // Generate a unique id for this new task and add it to queue
-                                    let next_id = counter.fetch_add(1, Ordering::Relaxed);
-                                    queue.push(QueueItem::new(next_id, task.1.clone()));
-                                    index.insert(task.1);
+                                // Generate a unique id for this new task and add it to queue
+                                let next_id = counter.fetch_add(1, Ordering::Relaxed);
+                                queue.push(QueueItem::new(next_id, task.1.clone()));
+
+                                // Keep count of how many tasks are duplicates
+                                match index_value {
+                                    None => {
+                                        index.insert(task.1, AtomicU64::new(1));
+                                    }
+                                    Some(task_count) => {
+                                        task_count.fetch_add(1, Ordering::Relaxed);
+                                    }
                                 }
                             }
                             Err(err) => {
@@ -480,10 +488,28 @@ where
                     // Take this task and do work ..
                     let result = work.call(context.clone(), item.input()).await;
 
-                    // Remove input index from queue
+                    // Decrease task counter by one. If the counter hits zero we can safely remove
+                    // the index.
+                    //
+                    // This helps us to keep track of if there are still running tasks around
+                    // working on the same problem.
                     match input_index.lock() {
                         Ok(mut index) => {
-                            index.remove(&item.input());
+                            let index_value = index.get(&item.input);
+
+                            match index_value {
+                                Some(task_count) => {
+                                    task_count.fetch_sub(1, Ordering::Relaxed);
+
+                                    if task_count.load(Ordering::Relaxed) == 0 {
+                                        index.remove(&item.input);
+
+                                        // Trigger removing the task from the task store
+                                        on_complete(item.input());
+                                    }
+                                }
+                                None => (),
+                            }
                         }
                         Err(err) => {
                             error!(
@@ -494,9 +520,6 @@ where
                             error_signal.trigger();
                         }
                     }
-
-                    // Trigger removing the task from the task store
-                    on_complete(item.input());
 
                     // Check the result
                     match result {
