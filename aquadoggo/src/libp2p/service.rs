@@ -8,7 +8,7 @@ use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::ping::Event;
 use libp2p::swarm::behaviour::toggle::Toggle;
 use libp2p::swarm::{keep_alive, ConnectionLimits, NetworkBehaviour, SwarmBuilder, SwarmEvent};
-use libp2p::{identity, mdns, ping, quic, Multiaddr, PeerId, Transport};
+use libp2p::{mdns, ping, quic, Multiaddr, PeerId, Transport};
 use log::{info, warn};
 
 use crate::bus::ServiceSender;
@@ -16,7 +16,7 @@ use crate::context::Context;
 use crate::libp2p::Libp2pConfiguration;
 use crate::manager::{ServiceReadySender, Shutdown};
 
-/// Our network behaviour.
+/// Network behaviour for the aquadoggo node.
 ///
 /// For illustrative purposes, this includes the [`KeepAlive`](behaviour::KeepAlive) behaviour so
 /// a continuous sequence of pings can be observed.
@@ -33,17 +33,17 @@ struct Behaviour {
 
 impl Behaviour {
     /// Generate a new instance of the composed network behaviour according to
-    /// the application configuration context.
-    fn new(context: &Context, peer_id: PeerId) -> Result<Self> {
+    /// the libp2p configuration context.
+    fn new(libp2p_config: &Libp2pConfiguration, peer_id: PeerId) -> Result<Self> {
         // Create an mDNS behaviour with default configuration if the mDNS flag is set
-        let mdns = if context.config.libp2p.mdns {
+        let mdns = if libp2p_config.mdns {
             Some(mdns::Behaviour::new(Default::default(), peer_id)?)
         } else {
             None
         };
 
         // Create a ping behaviour with default configuration if the ping flag is set
-        let ping = if context.config.libp2p.mdns {
+        let ping = if libp2p_config.ping {
             Some(ping::Behaviour::default())
         } else {
             None
@@ -78,10 +78,13 @@ pub async fn libp2p_service(
     // Subscribe to communication bus
     let mut _rx = tx.subscribe();
 
-    // Create a random PeerId
-    let keypair = identity::Keypair::generate_ed25519();
+    // Read the libp2p configuration parameters from the application context
+    let libp2p_config = context.config.libp2p.clone();
+
+    // Load the libp2p keypair and peer ID
+    let keypair = Libp2pConfiguration::load_or_generate_keypair(context.config.base_path.clone())?;
     let peer_id = PeerId::from(keypair.public());
-    info!("Peer id: {peer_id:?}");
+    info!("libp2p peer ID: {peer_id:?}");
 
     // Create a QUIC transport
     let quic_config = quic::Config::new(&keypair);
@@ -90,9 +93,6 @@ pub async fn libp2p_service(
         // Perform conversion to a StreamMuxerBox (QUIC handles multiplexing)
         .map(|(p, c), _| (p, StreamMuxerBox::new(c)))
         .boxed();
-
-    // Define the swarm configuration parameters
-    let libp2p_config = Libp2pConfiguration::default();
 
     // Define the connection limits of the swarm
     let connection_limits = ConnectionLimits::default()
@@ -104,7 +104,7 @@ pub async fn libp2p_service(
 
     // Instantiate the custom network behaviour with default configuration
     // and the libp2p peer ID
-    let behaviour = Behaviour::new(&context, peer_id)?;
+    let behaviour = Behaviour::new(&libp2p_config, peer_id)?;
 
     // Initialise a swarm with QUIC transports, our composed network behaviour
     // and the default configuration parameters
