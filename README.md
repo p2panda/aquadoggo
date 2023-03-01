@@ -48,7 +48,7 @@ Configurable node server implementation for the [`p2panda`] network running as a
 
 > The core p2panda [`specification`] is fully functional but still under review so
 > please be prepared for breaking API changes until we reach v1.0. Currently no
-> p2panda implementation has recieved a security audit.
+> p2panda implementation has received a security audit.
 
 [`command line application`]: /aquadoggo_cli
 [`library`]: /aquadoggo
