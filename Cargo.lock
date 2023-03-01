@@ -195,6 +195,7 @@ dependencies = [
  "serde_json",
  "serial_test",
  "sqlx",
+ "tempfile",
  "thiserror",
  "tokio",
  "tower",
