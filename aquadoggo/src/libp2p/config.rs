@@ -112,3 +112,34 @@ impl Libp2pConfiguration {
         Ok(keypair)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Libp2pConfiguration;
+    use tempfile::TempDir;
+
+    #[test]
+    fn generates_new_keypair() {
+        let keypair = Libp2pConfiguration::load_or_generate_keypair(None);
+        assert!(keypair.is_ok());
+    }
+
+    #[test]
+    fn saves_and_loads_keypair() {
+        let tmp_dir = TempDir::new().unwrap();
+        let tmp_path = tmp_dir.path().to_owned();
+
+        // Attempt to load the keypair from the temporary path
+        // This should result in a new keypair being generated and written to file
+        let keypair_1 = Libp2pConfiguration::load_or_generate_keypair(Some(tmp_path.clone()));
+        assert!(keypair_1.is_ok());
+
+        // Attempt to load the keypair from the same temporary path
+        // This should result in the previously-generated keypair being loaded from file
+        let keypair_2 = Libp2pConfiguration::load_or_generate_keypair(Some(tmp_path));
+        assert!(keypair_2.is_ok());
+
+        // Ensure that both keypairs have the same public key
+        assert_eq!(keypair_1.unwrap().public(), keypair_2.unwrap().public());
+    }
+}
