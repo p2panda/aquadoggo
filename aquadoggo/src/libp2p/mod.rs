@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 mod config;
+mod identity;
 mod service;
 
 pub use config::Libp2pConfiguration;
