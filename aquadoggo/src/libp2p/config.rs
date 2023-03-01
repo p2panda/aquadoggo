@@ -1,7 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::path::PathBuf;
+
+use anyhow::Result;
+use libp2p::identity::Keypair;
 use libp2p::Multiaddr;
+use log::info;
 use serde::{Deserialize, Serialize};
+
+use crate::libp2p::identity::Identity;
+
+/// Keypair file name.
+const KEYPAIR_FILE_NAME: &str = "libp2p.pem";
 
 /// Libp2p config for the node.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -67,5 +77,38 @@ impl Default for Libp2pConfiguration {
             per_connection_event_buffer_size: 8,
             ping: false,
         }
+    }
+}
+
+impl Libp2pConfiguration {
+    /// Load the keypair from the file at the specified path.
+    /// If the file does not exist, a random keypair is generated and saved.
+    /// If no path is specified, a random keypair is generated.
+    pub fn load_or_generate_keypair(path: Option<PathBuf>) -> Result<Keypair> {
+        let keypair = match path {
+            Some(mut path) => {
+                // Extend the base data directory path with the keypair filename
+                path.push(KEYPAIR_FILE_NAME);
+
+                // Check if the keypair file exists.
+                // If not, generate a new keypair and write it to file
+                if !path.is_file() {
+                    let identity: Keypair = Identity::new();
+                    identity.save(&path)?;
+                    info!("Created new libp2p keypair and saved it to {:?}", path);
+                    identity.keypair()
+                } else {
+                    // If the keypair file exists, open it and load the keypair
+                    let stored_identity: Keypair = Identity::load(&path)?;
+                    stored_identity.keypair()
+                }
+            }
+            None => {
+                // No path was provided. Generate and return a random keypair
+                Identity::new()
+            }
+        };
+
+        Ok(keypair)
     }
 }
