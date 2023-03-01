@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Correct use of `sqlx` transactions [#285](https://github.com/p2panda/aquadoggo/pull/285) `rs`
 - Fix race-condition of mutably shared static schema store during testing [#269](https://github.com/p2panda/aquadoggo/pull/269)
 
 ## [0.4.0]
