@@ -115,20 +115,18 @@ impl OperationStore for SqlStore {
         .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
 
         let mut results = Vec::new();
+        if let Some(fields) = operation.fields() {
+            for (name, value) in fields.iter() {
+                // If the value is a relation_list or pinned_relation_list we need to insert a
+                // new field row for every item in the list. Here we collect these items and
+                // return them in a vector. If this operation value is anything except for the
+                // above list types, we will return a vec containing a single item.
+                let db_values = parse_value_to_string_vec(value);
 
-        match operation.fields() {
-            Some(fields) => {
-                for (name, value) in fields.iter() {
-                    // If the value is a relation_list or pinned_relation_list we need to insert a
-                    // new field row for every item in the list. Here we collect these items and
-                    // return them in a vector. If this operation value is anything except for the
-                    // above list types, we will return a vec containing a single item.
-                    let db_values = parse_value_to_string_vec(value);
-
-                    for (index, db_value) in db_values.into_iter().enumerate() {
-                        // Compose the query and return it's future.
-                        let result = query(
-                            "
+                for (index, db_value) in db_values.into_iter().enumerate() {
+                    // Compose the query and return it's future.
+                    let result = query(
+                        "
                             INSERT INTO
                                 operation_fields_v1 (
                                     operation_id,
@@ -140,21 +138,19 @@ impl OperationStore for SqlStore {
                             VALUES
                                 ($1, $2, $3, $4, $5)
                             ",
-                        )
-                        .bind(id.as_str().to_owned())
-                        .bind(name.to_owned())
-                        .bind(value.field_type().to_string())
-                        .bind(db_value)
-                        .bind(index as i32)
-                        .execute(&mut tx)
-                        .await
-                        // If any queries error, we catch that here.
-                        .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
-                        results.push(result);
-                    }
+                    )
+                    .bind(id.as_str().to_owned())
+                    .bind(name.to_owned())
+                    .bind(value.field_type().to_string())
+                    .bind(db_value)
+                    .bind(index as i32)
+                    .execute(&mut tx)
+                    .await
+                    .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
+
+                    results.push(result);
                 }
             }
-            None => (),
         };
 
         // Commit the transaction.
