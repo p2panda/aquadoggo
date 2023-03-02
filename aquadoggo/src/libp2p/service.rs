@@ -7,7 +7,7 @@ use futures::StreamExt;
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::ping::Event;
 use libp2p::swarm::behaviour::toggle::Toggle;
-use libp2p::swarm::{ConnectionLimits, NetworkBehaviour, SwarmBuilder, SwarmEvent};
+use libp2p::swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent};
 use libp2p::{mdns, ping, quic, Multiaddr, PeerId, Transport};
 use log::{info, warn};
 
@@ -17,9 +17,6 @@ use crate::libp2p::Libp2pConfiguration;
 use crate::manager::{ServiceReadySender, Shutdown};
 
 /// Network behaviour for the aquadoggo node.
-///
-/// For illustrative purposes, this includes the [`KeepAlive`](behaviour::KeepAlive) behaviour so
-/// a continuous sequence of pings can be observed.
 #[derive(NetworkBehaviour)]
 struct Behaviour {
     /// Automatically discover peers on the local network.
@@ -83,14 +80,6 @@ pub async fn libp2p_service(
         .map(|(p, c), _| (p, StreamMuxerBox::new(c)))
         .boxed();
 
-    // Define the connection limits of the swarm
-    let connection_limits = ConnectionLimits::default()
-        .with_max_pending_outgoing(Some(libp2p_config.max_connections_pending_out))
-        .with_max_pending_incoming(Some(libp2p_config.max_connections_pending_in))
-        .with_max_established_outgoing(Some(libp2p_config.max_connections_out))
-        .with_max_established_incoming(Some(libp2p_config.max_connections_in))
-        .with_max_established_per_peer(Some(libp2p_config.max_connections_per_peer));
-
     // Instantiate the custom network behaviour with default configuration
     // and the libp2p peer ID
     let behaviour = Behaviour::new(&libp2p_config, peer_id)?;
@@ -98,7 +87,7 @@ pub async fn libp2p_service(
     // Initialise a swarm with QUIC transports, our composed network behaviour
     // and the default configuration parameters
     let mut swarm = SwarmBuilder::with_tokio_executor(quic_transport, behaviour, peer_id)
-        .connection_limits(connection_limits)
+        .connection_limits(libp2p_config.connection_limits())
         // This method expects a NonZeroU8 as input, hence the try_into conversion
         .dial_concurrency_factor(libp2p_config.dial_concurrency_factor.try_into()?)
         .per_connection_event_buffer_size(libp2p_config.per_connection_event_buffer_size)

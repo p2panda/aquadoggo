@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use libp2p::identity::Keypair;
+use libp2p::swarm::ConnectionLimits;
 use libp2p::Multiaddr;
 use log::info;
 use serde::{Deserialize, Serialize};
@@ -88,6 +89,16 @@ impl Default for Libp2pConfiguration {
 }
 
 impl Libp2pConfiguration {
+    /// Define the connection limits of the swarm.
+    pub fn connection_limits(&self) -> ConnectionLimits {
+        ConnectionLimits::default()
+            .with_max_pending_outgoing(Some(self.max_connections_pending_out))
+            .with_max_pending_incoming(Some(self.max_connections_pending_in))
+            .with_max_established_outgoing(Some(self.max_connections_out))
+            .with_max_established_incoming(Some(self.max_connections_in))
+            .with_max_established_per_peer(Some(self.max_connections_per_peer))
+    }
+
     /// Load the keypair from the file at the specified path.
     /// If the file does not exist, a random keypair is generated and saved.
     /// If no path is specified, a random keypair is generated.
