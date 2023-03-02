@@ -13,6 +13,9 @@ use crate::libp2p::identity::Identity;
 /// Keypair file name.
 const KEYPAIR_FILE_NAME: &str = "libp2p.pem";
 
+/// QUIC default transport port.
+const QUIC_PORT: u16 = 48648;
+
 /// Libp2p config for the node.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Libp2pConfiguration {
@@ -63,10 +66,14 @@ pub struct Libp2pConfiguration {
 
 impl Default for Libp2pConfiguration {
     fn default() -> Self {
+        // Define the default listening multiaddress using the default QUIC port
+        let listening_multiaddr = format!("/ip4/0.0.0.0/udp/{QUIC_PORT}/quic-v1")
+            .parse()
+            .unwrap();
+
         Self {
             dial_concurrency_factor: 8,
-            // Listen on 127.0.0.1 and a random, OS-assigned port
-            listening_multiaddr: "/ip4/127.0.0.1/udp/0/quic-v1".parse().unwrap(),
+            listening_multiaddr,
             max_connections_in: 16,
             max_connections_out: 16,
             max_connections_pending_in: 8,
