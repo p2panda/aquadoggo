@@ -7,7 +7,7 @@ use futures::StreamExt;
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::ping::Event;
 use libp2p::swarm::behaviour::toggle::Toggle;
-use libp2p::swarm::{keep_alive, ConnectionLimits, NetworkBehaviour, SwarmBuilder, SwarmEvent};
+use libp2p::swarm::{ConnectionLimits, NetworkBehaviour, SwarmBuilder, SwarmEvent};
 use libp2p::{mdns, ping, quic, Multiaddr, PeerId, Transport};
 use log::{info, warn};
 
@@ -22,8 +22,6 @@ use crate::manager::{ServiceReadySender, Shutdown};
 /// a continuous sequence of pings can be observed.
 #[derive(NetworkBehaviour)]
 struct Behaviour {
-    // TODO: remove this behaviour once we're past the experimental phase
-    keep_alive: keep_alive::Behaviour,
     /// Automatically discover peers on the local network.
     mdns: Toggle<mdns::tokio::Behaviour>,
     /// Respond to inbound pings and periodically send outbound ping on every established
@@ -50,25 +48,16 @@ impl Behaviour {
         };
 
         Ok(Self {
-            keep_alive: keep_alive::Behaviour::default(),
             mdns: mdns.into(), // Convert the `Option` into a `Toggle`
             ping: ping.into(),
         })
     }
 }
 
-/// Libp2p service that configures and deploys a swarm over QUIC transports.
+/// Libp2p service that configures and deploys a network swarm over QUIC transports.
 ///
-/// This service can run as either a listener or a dialer.
-///
-/// First run as a listener like so:
-///
-/// `RUST_LOG=info cargo run`
-///
-/// Then run as a dialer which attempts to dial the above listener, taking the correct multiaddr
-/// from the logging in the previous peer:
-///
-/// `RUST_LOG=info cargo run -- --http-port 2021 --remote-node-addresses "/ip4/127.0.0.1/udp/<PORT>/quic-v1"`
+/// The swarm listens for incoming connections, dials remote nodes, manages
+/// connections and executes predefined network behaviours.
 pub async fn libp2p_service(
     context: Context,
     shutdown: Shutdown,
@@ -134,7 +123,6 @@ pub async fn libp2p_service(
                     peer_id,
                     endpoint: _,
                 } => info!("BannedPeer: {peer_id:?}"),
-                SwarmEvent::Behaviour(BehaviourEvent::KeepAlive(_)) => info!("Keep alive"),
                 SwarmEvent::Behaviour(BehaviourEvent::Mdns(event)) => match event {
                     mdns::Event::Discovered(list) => {
                         for (peer, _multiaddr) in list {
