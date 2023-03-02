@@ -86,7 +86,7 @@ $ cargo add aquadoggo
 
 [`cargo-edit`]: https://github.com/killercup/cargo-edit
 
-## Developer Requirements
+## Development
 
 The Protocol Buffers compiler must be installed in order to compile aquadoggo.
 
