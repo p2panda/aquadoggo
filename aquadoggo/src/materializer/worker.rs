@@ -506,9 +506,6 @@ where
                     // Take this task and do work ..
                     let result = work.call(context.clone(), item.input()).await;
 
-                    // Trigger removing the task from the task store
-                    on_complete(item.input());
-
                     // Check the result
                     match result {
                         Ok(Some(list)) => {
@@ -565,6 +562,9 @@ where
                             error!("Error while broadcasting task during requeue: {}", err);
                             error_signal.trigger();
                         }
+                    } else {
+                        // Trigger removing the task from the task store
+                        on_complete(item.input());
                     }
                 }
             });
