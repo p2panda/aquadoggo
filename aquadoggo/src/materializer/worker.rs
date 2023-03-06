@@ -4,10 +4,10 @@
 //! processed in worker pools where one worker executes the task.
 //!
 //! A task queue allows control over a) order of operations and b) amount of work being done per
-//! time c) avoiding duplicate work.
+//! time c) avoiding concurrent writes to the same data.
 //!
-//! This particular task queue implementation rejects tasks with duplicate input values already
-//! waiting in the queue (which would result in doing the same work again).
+//! This particular task queue implementation "batches" tasks with duplicate input values, only
+//! processing one at a time to avoid them overwriting each other's work.
 //!
 //! A worker can be defined by any sort of async function which returns a result, indicating if it
 //! succeeded, failed or crashed critically.
@@ -65,7 +65,8 @@
 //! --------------------
 //!
 //! The internal queue of "square" contains now: [{Task 1}, {Task 2}, {Task 4}]. Task 3 got
-//! rejected silently as it contains the same input data.
+//! internally "batched" as it contains the same input data as Task 1, which means that Task 1 will
+//! be re-scheduled after it finished.
 //!
 //! 3. Process tasks
 //!
@@ -73,7 +74,12 @@
 //! concurrently. After one of them finishes, the next free worker will eventually take Task 4 from
 //! the queue and process it.
 //!
-//! Task 1 results in "25", Task 2 in "64", Task 4 in "9".
+//! Task 1 results in "25", Task 2 in "64", Task 4 in "9". Later Task 1 gets re-scheduled to
+//! account for the duplicate Task 3 (again resulting in "25").
+//!
+//! In this example that might look redundant but in a more complex system the input might be the
+//! same, but the worker function might have access to a database with possibily diverging state
+//! between the tasks.
 //! ```
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
@@ -150,7 +156,7 @@ where
 {
     /// Index of all current inputs inside the task queue organized in a hash set.
     ///
-    /// This allows us to avoid duplicate tasks by detecting if there is already a task in our
+    /// This allows us to detect duplicate tasks by checking if there is already a task in our
     /// queue with the same input hash.
     ///
     /// An additional flag can be used to indicate that we want to requeue the same task again
@@ -342,8 +348,8 @@ where
 
     /// Queues up a new task in the regarding worker queue.
     ///
-    /// Tasks with duplicate input values which already exist in the queue will be silently
-    /// rejected.
+    /// Tasks with duplicate input values which already exist in the queue will be internally
+    /// batched.
     pub fn queue(&mut self, task: Task<IN>) {
         if let Err(err) = self.tx.send(task) {
             error!("Error while broadcasting task: {}", err);
@@ -416,13 +422,18 @@ where
                                 match index.get(&task.1) {
                                     Some(requeue) => {
                                         if *requeue {
+                                            // We observed already one duplicate task coming in,
+                                            // let's ignore this one
                                             continue;
                                         } else {
+                                            // This is the first duplicate coming in, let's set
+                                            // the requeue flag to indicate that more work needs to
+                                            // be done when the current task completes
                                             index.insert(task.1, true);
                                         }
                                     }
                                     None => {
-                                        // Trigger status update
+                                        // This task is completly new! Trigger status update
                                         on_pending(task.clone());
 
                                         // Generate a unique id for this new task and add it to queue
