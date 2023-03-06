@@ -75,7 +75,7 @@
 //!
 //! Task 1 results in "25", Task 2 in "64", Task 4 in "9".
 //! ```
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::future::Future;
 use std::hash::Hash;
@@ -139,6 +139,9 @@ pub enum TaskStatus<IN> {
 /// Workers are identified by simple string values.
 pub type WorkerName = String;
 
+/// Flag for the input index to indicate if we want to requeue the task after it completed.
+type RequeueFlag = bool;
+
 /// Every registered worker pool is managed by a `WorkerManager` which holds the task queue for
 /// this registered work and an index of all current inputs in the task queue.
 struct WorkerManager<IN>
@@ -149,7 +152,12 @@ where
     ///
     /// This allows us to avoid duplicate tasks by detecting if there is already a task in our
     /// queue with the same input hash.
-    input_index: Arc<Mutex<HashSet<IN>>>,
+    ///
+    /// An additional flag can be used to indicate that we want to requeue the same task again
+    /// after it completed. This is useful to account for more events which arrived _while_ the
+    /// task was processed. It is enough to only remember one of the potentially many events
+    /// arriving in this time, we're "batching" them for the next round.
+    input_index: Arc<Mutex<HashMap<IN, RequeueFlag>>>,
 
     /// FIFO queue of all tasks for this worker pool.
     queue: Arc<Queue<QueueItem<IN>>>,
@@ -162,7 +170,7 @@ where
     /// Returns a new worker manager.
     pub fn new() -> Self {
         Self {
-            input_index: Arc::new(Mutex::new(HashSet::new())),
+            input_index: Arc::new(Mutex::new(HashMap::new())),
             queue: Arc::new(Queue::new()),
         }
     }
@@ -405,16 +413,23 @@ where
                         // Check if a task with the same input values already exists in queue
                         match input_index.lock() {
                             Ok(mut index) => {
-                                if index.contains(&task.1) {
-                                    continue; // Task already exists
-                                } else {
-                                    // Trigger status update
-                                    on_pending(task.clone());
+                                match index.get(&task.1) {
+                                    Some(requeue) => {
+                                        if *requeue {
+                                            continue;
+                                        } else {
+                                            index.insert(task.1, true);
+                                        }
+                                    }
+                                    None => {
+                                        // Trigger status update
+                                        on_pending(task.clone());
 
-                                    // Generate a unique id for this new task and add it to queue
-                                    let next_id = counter.fetch_add(1, Ordering::Relaxed);
-                                    queue.push(QueueItem::new(next_id, task.1.clone()));
-                                    index.insert(task.1);
+                                        // Generate a unique id for this new task and add it to queue
+                                        let next_id = counter.fetch_add(1, Ordering::Relaxed);
+                                        queue.push(QueueItem::new(next_id, task.1.clone()));
+                                        index.insert(task.1, false);
+                                    }
                                 }
                             }
                             Err(err) => {
@@ -480,21 +495,6 @@ where
                     // Take this task and do work ..
                     let result = work.call(context.clone(), item.input()).await;
 
-                    // Remove input index from queue
-                    match input_index.lock() {
-                        Ok(mut index) => {
-                            index.remove(&item.input());
-                        }
-                        Err(err) => {
-                            error!(
-                                "Error while locking input index in worker {} for task {:?}: {}",
-                                name, item, err
-                            );
-
-                            error_signal.trigger();
-                        }
-                    }
-
                     // Trigger removing the task from the task store
                     on_complete(item.input());
 
@@ -525,6 +525,35 @@ where
                             );
                         }
                         _ => (), // Task succeeded, but nothing to dispatch
+                    };
+
+                    // Remove input index from queue and check if we should requeue that task
+                    let requeue = match input_index.lock() {
+                        Ok(mut index) => match index.remove(&item.input()) {
+                            Some(value) => value,
+                            None => {
+                                error!("Incosistency detected in queue input index");
+                                error_signal.trigger();
+                                false
+                            }
+                        },
+                        Err(err) => {
+                            error!(
+                                "Error while locking input index in worker {} for task {:?}: {}",
+                                name, item, err
+                            );
+
+                            error_signal.trigger();
+                            false
+                        }
+                    };
+
+                    // Send the task again to dispatcher if requeue flag is set
+                    if requeue {
+                        if let Err(err) = tx.send(Task(name.clone(), item.input())) {
+                            error!("Error while broadcasting task during requeue: {}", err);
+                            error_signal.trigger();
+                        }
                     }
                 }
             });
