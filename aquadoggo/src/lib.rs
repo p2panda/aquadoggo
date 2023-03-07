@@ -50,9 +50,9 @@ mod db;
 mod domain;
 mod graphql;
 mod http;
-mod libp2p;
 mod manager;
 mod materializer;
+mod network;
 mod node;
 mod replication;
 mod schema;
@@ -63,7 +63,7 @@ mod tests;
 mod validation;
 
 pub use crate::config::Configuration;
-pub use crate::libp2p::Libp2pConfiguration;
+pub use crate::network::NetworkConfiguration;
 pub use crate::replication::ReplicationConfiguration;
 pub use node::Node;
 

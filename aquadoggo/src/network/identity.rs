@@ -16,10 +16,15 @@ pub trait Identity {
     fn new() -> Self
     where
         Self: Sized;
+
     fn id(&self) -> PeerId;
+
     fn keypair(&self) -> Keypair;
+
     fn encode_pem(&self) -> String;
+
     fn save(&self, path: &Path) -> Result<()>;
+
     fn load(path: &Path) -> Result<Self>
     where
         Self: Sized;
@@ -77,9 +82,11 @@ impl Identity for Keypair {
         let mut file = File::create(path)?;
         file.write_all(pem.as_bytes())?;
         file.sync_all()?;
+
         let mut perms = file.metadata()?.permissions();
         perms.set_mode(0o600);
         fs::set_permissions(path, perms)?;
+
         Ok(())
     }
 

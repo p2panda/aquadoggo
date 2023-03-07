@@ -13,14 +13,15 @@ use log::{info, warn};
 
 use crate::bus::ServiceSender;
 use crate::context::Context;
-use crate::libp2p::Libp2pConfiguration;
 use crate::manager::{ServiceReadySender, Shutdown};
+use crate::network::NetworkConfiguration;
 
 /// Network behaviour for the aquadoggo node.
 #[derive(NetworkBehaviour)]
 struct Behaviour {
     /// Automatically discover peers on the local network.
     mdns: Toggle<mdns::tokio::Behaviour>,
+
     /// Respond to inbound pings and periodically send outbound ping on every established
     /// connection.
     ping: Toggle<ping::Behaviour>,
@@ -28,17 +29,17 @@ struct Behaviour {
 
 impl Behaviour {
     /// Generate a new instance of the composed network behaviour according to
-    /// the libp2p configuration context.
-    fn new(libp2p_config: &Libp2pConfiguration, peer_id: PeerId) -> Result<Self> {
+    /// the network configuration context.
+    fn new(network_config: &NetworkConfiguration, peer_id: PeerId) -> Result<Self> {
         // Create an mDNS behaviour with default configuration if the mDNS flag is set
-        let mdns = if libp2p_config.mdns {
+        let mdns = if network_config.mdns {
             Some(mdns::Behaviour::new(Default::default(), peer_id)?)
         } else {
             None
         };
 
         // Create a ping behaviour with default configuration if the ping flag is set
-        let ping = if libp2p_config.ping {
+        let ping = if network_config.ping {
             Some(ping::Behaviour::default())
         } else {
             None
@@ -51,11 +52,11 @@ impl Behaviour {
     }
 }
 
-/// Libp2p service that configures and deploys a network swarm over QUIC transports.
+/// Network service that configures and deploys a network swarm over QUIC transports.
 ///
 /// The swarm listens for incoming connections, dials remote nodes, manages
 /// connections and executes predefined network behaviours.
-pub async fn libp2p_service(
+pub async fn network_service(
     context: Context,
     shutdown: Shutdown,
     tx: ServiceSender,
@@ -64,11 +65,11 @@ pub async fn libp2p_service(
     // Subscribe to communication bus
     let mut _rx = tx.subscribe();
 
-    // Read the libp2p configuration parameters from the application context
-    let libp2p_config = context.config.libp2p.clone();
+    // Read the network configuration parameters from the application context
+    let network_config = context.config.network.clone();
 
-    // Load the libp2p keypair and peer ID
-    let keypair = Libp2pConfiguration::load_or_generate_keypair(context.config.base_path.clone())?;
+    // Load the network key pair and peer ID
+    let keypair = NetworkConfiguration::load_or_generate_keypair(context.config.base_path.clone())?;
     let peer_id = PeerId::from(keypair.public());
     info!("libp2p peer ID: {peer_id:?}");
 
@@ -82,20 +83,20 @@ pub async fn libp2p_service(
 
     // Instantiate the custom network behaviour with default configuration
     // and the libp2p peer ID
-    let behaviour = Behaviour::new(&libp2p_config, peer_id)?;
+    let behaviour = Behaviour::new(&network_config, peer_id)?;
 
     // Initialise a swarm with QUIC transports, our composed network behaviour
     // and the default configuration parameters
     let mut swarm = SwarmBuilder::with_tokio_executor(quic_transport, behaviour, peer_id)
-        .connection_limits(libp2p_config.connection_limits())
+        .connection_limits(network_config.connection_limits())
         // This method expects a NonZeroU8 as input, hence the try_into conversion
-        .dial_concurrency_factor(libp2p_config.dial_concurrency_factor.try_into()?)
-        .per_connection_event_buffer_size(libp2p_config.per_connection_event_buffer_size)
-        .notify_handler_buffer_size(libp2p_config.notify_handler_buffer_size.try_into()?)
+        .dial_concurrency_factor(network_config.dial_concurrency_factor.try_into()?)
+        .per_connection_event_buffer_size(network_config.per_connection_event_buffer_size)
+        .notify_handler_buffer_size(network_config.notify_handler_buffer_size.try_into()?)
         .build();
 
     // Tell the swarm to listen on the default multiaddress
-    swarm.listen_on(libp2p_config.listening_multiaddr)?;
+    swarm.listen_on(network_config.listening_multiaddr)?;
 
     // Dial the peer identified by the multi-address given in the `--remote-node-addresses` if given
     if let Some(addr) = context.config.replication.remote_peers.get(0) {
@@ -178,17 +179,16 @@ pub async fn libp2p_service(
         }
     });
 
-    info!("libp2p service is ready");
+    info!("network service is ready");
 
     if tx_ready.send(()).is_err() {
-        warn!("No subscriber informed about libp2p service being ready");
+        warn!("No subscriber informed about network service being ready");
     };
 
     // Wait until we received the application shutdown signal or handle closed
     tokio::select! {
         _ = handle => (),
-        _ = shutdown => {
-        },
+        _ = shutdown => (),
     }
 
     Ok(())

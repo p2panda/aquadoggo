@@ -4,5 +4,5 @@ mod config;
 mod identity;
 mod service;
 
-pub use config::Libp2pConfiguration;
-pub use service::libp2p_service;
+pub use config::NetworkConfiguration;
+pub use service::network_service;

@@ -8,9 +8,9 @@ use crate::context::Context;
 use crate::db::SqlStore;
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
 use crate::http::http_service;
-use crate::libp2p::libp2p_service;
 use crate::manager::ServiceManager;
 use crate::materializer::materializer_service;
+use crate::network::network_service;
 use crate::replication::replication_service;
 use crate::schema::SchemaProvider;
 
@@ -71,7 +71,7 @@ impl Node {
         {
             panic!("Failed starting materialiser service");
         }
-        // Start replication service
+        // Start replication service.
         if manager
             .add("replication", replication_service)
             .await
@@ -80,14 +80,14 @@ impl Node {
             panic!("Failed starting replication service");
         }
 
-        // Start HTTP server with GraphQL API
+        // Start HTTP server with GraphQL API.
         if manager.add("http", http_service).await.is_err() {
             panic!("Failed starting HTTP service");
         }
 
-        // Start libp2p service
-        if manager.add("libp2p", libp2p_service).await.is_err() {
-            panic!("Failed starting libp2p service");
+        // Start network service.
+        if manager.add("network", network_service).await.is_err() {
+            panic!("Failed starting network service");
         }
 
         Self { pool, manager }

@@ -9,7 +9,7 @@ use libp2p::Multiaddr;
 use log::info;
 use serde::{Deserialize, Serialize};
 
-use crate::libp2p::identity::Identity;
+use crate::network::identity::Identity;
 
 /// Keypair file name.
 const KEYPAIR_FILE_NAME: &str = "libp2p.pem";
@@ -17,9 +17,9 @@ const KEYPAIR_FILE_NAME: &str = "libp2p.pem";
 /// QUIC default transport port.
 const QUIC_PORT: u16 = 48648;
 
-/// Libp2p config for the node.
+/// Network config for the node.
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Libp2pConfiguration {
+pub struct NetworkConfiguration {
     /// Dial concurrency factor.
     ///
     /// Number of addresses concurrently dialed for a single outbound
@@ -65,7 +65,7 @@ pub struct Libp2pConfiguration {
     pub ping: bool,
 }
 
-impl Default for Libp2pConfiguration {
+impl Default for NetworkConfiguration {
     fn default() -> Self {
         // Define the default listening multiaddress using the default QUIC port
         let listening_multiaddr = format!("/ip4/0.0.0.0/udp/{QUIC_PORT}/quic-v1")
@@ -88,7 +88,7 @@ impl Default for Libp2pConfiguration {
     }
 }
 
-impl Libp2pConfiguration {
+impl NetworkConfiguration {
     /// Define the connection limits of the swarm.
     pub fn connection_limits(&self) -> ConnectionLimits {
         ConnectionLimits::default()
@@ -99,30 +99,31 @@ impl Libp2pConfiguration {
             .with_max_established_per_peer(Some(self.max_connections_per_peer))
     }
 
-    /// Load the keypair from the file at the specified path.
-    /// If the file does not exist, a random keypair is generated and saved.
-    /// If no path is specified, a random keypair is generated.
+    /// Load the key pair from the file at the specified path.
+    ///
+    /// If the file does not exist, a random key pair is generated and saved.
+    /// If no path is specified, a random key pair is generated.
     pub fn load_or_generate_keypair(path: Option<PathBuf>) -> Result<Keypair> {
         let keypair = match path {
             Some(mut path) => {
-                // Extend the base data directory path with the keypair filename
+                // Extend the base data directory path with the key pair filename
                 path.push(KEYPAIR_FILE_NAME);
 
-                // Check if the keypair file exists.
-                // If not, generate a new keypair and write it to file
+                // Check if the key pair file exists.
+                // If not, generate a new key pair and write it to file
                 if !path.is_file() {
                     let identity: Keypair = Identity::new();
                     identity.save(&path)?;
-                    info!("Created new libp2p keypair and saved it to {:?}", path);
+                    info!("Created new network key pair and saved it to {:?}", path);
                     identity.keypair()
                 } else {
-                    // If the keypair file exists, open it and load the keypair
+                    // If the key pair file exists, open it and load the key pair
                     let stored_identity: Keypair = Identity::load(&path)?;
                     stored_identity.keypair()
                 }
             }
             None => {
-                // No path was provided. Generate and return a random keypair
+                // No path was provided. Generate and return a random key pair
                 Identity::new()
             }
         };
@@ -133,12 +134,13 @@ impl Libp2pConfiguration {
 
 #[cfg(test)]
 mod tests {
-    use super::Libp2pConfiguration;
     use tempfile::TempDir;
+
+    use super::NetworkConfiguration;
 
     #[test]
     fn generates_new_keypair() {
-        let keypair = Libp2pConfiguration::load_or_generate_keypair(None);
+        let keypair = NetworkConfiguration::load_or_generate_keypair(None);
         assert!(keypair.is_ok());
     }
 
@@ -149,12 +151,12 @@ mod tests {
 
         // Attempt to load the keypair from the temporary path
         // This should result in a new keypair being generated and written to file
-        let keypair_1 = Libp2pConfiguration::load_or_generate_keypair(Some(tmp_path.clone()));
+        let keypair_1 = NetworkConfiguration::load_or_generate_keypair(Some(tmp_path.clone()));
         assert!(keypair_1.is_ok());
 
         // Attempt to load the keypair from the same temporary path
         // This should result in the previously-generated keypair being loaded from file
-        let keypair_2 = Libp2pConfiguration::load_or_generate_keypair(Some(tmp_path));
+        let keypair_2 = NetworkConfiguration::load_or_generate_keypair(Some(tmp_path));
         assert!(keypair_2.is_ok());
 
         // Ensure that both keypairs have the same public key
