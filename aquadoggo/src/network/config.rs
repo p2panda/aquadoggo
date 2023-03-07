@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::network::identity::Identity;
 
-/// Keypair file name.
-const KEYPAIR_FILE_NAME: &str = "libp2p.pem";
+/// Key pair file name.
+const KEY_PAIR_FILE_NAME: &str = "private-key";
 
 /// QUIC default transport port.
 const QUIC_PORT: u16 = 2022;
@@ -103,11 +103,11 @@ impl NetworkConfiguration {
     ///
     /// If the file does not exist, a random key pair is generated and saved.
     /// If no path is specified, a random key pair is generated.
-    pub fn load_or_generate_keypair(path: Option<PathBuf>) -> Result<Keypair> {
-        let keypair = match path {
+    pub fn load_or_generate_key_pair(path: Option<PathBuf>) -> Result<Keypair> {
+        let key_pair = match path {
             Some(mut path) => {
                 // Extend the base data directory path with the key pair filename
-                path.push(KEYPAIR_FILE_NAME);
+                path.push(KEY_PAIR_FILE_NAME);
 
                 // Check if the key pair file exists.
                 // If not, generate a new key pair and write it to file
@@ -115,11 +115,11 @@ impl NetworkConfiguration {
                     let identity: Keypair = Identity::new();
                     identity.save(&path)?;
                     info!("Created new network key pair and saved it to {:?}", path);
-                    identity.keypair()
+                    identity.key_pair()
                 } else {
                     // If the key pair file exists, open it and load the key pair
                     let stored_identity: Keypair = Identity::load(&path)?;
-                    stored_identity.keypair()
+                    stored_identity.key_pair()
                 }
             }
             None => {
@@ -128,7 +128,7 @@ impl NetworkConfiguration {
             }
         };
 
-        Ok(keypair)
+        Ok(key_pair)
     }
 }
 
@@ -139,27 +139,27 @@ mod tests {
     use super::NetworkConfiguration;
 
     #[test]
-    fn generates_new_keypair() {
-        let keypair = NetworkConfiguration::load_or_generate_keypair(None);
-        assert!(keypair.is_ok());
+    fn generates_new_key_pair() {
+        let key_pair = NetworkConfiguration::load_or_generate_key_pair(None);
+        assert!(key_pair.is_ok());
     }
 
     #[test]
-    fn saves_and_loads_keypair() {
+    fn saves_and_loads_key_pair() {
         let tmp_dir = TempDir::new().unwrap();
         let tmp_path = tmp_dir.path().to_owned();
 
-        // Attempt to load the keypair from the temporary path
-        // This should result in a new keypair being generated and written to file
-        let keypair_1 = NetworkConfiguration::load_or_generate_keypair(Some(tmp_path.clone()));
-        assert!(keypair_1.is_ok());
+        // Attempt to load the key pair from the temporary path
+        // This should result in a new key pair being generated and written to file
+        let key_pair_1 = NetworkConfiguration::load_or_generate_key_pair(Some(tmp_path.clone()));
+        assert!(key_pair_1.is_ok());
 
-        // Attempt to load the keypair from the same temporary path
-        // This should result in the previously-generated keypair being loaded from file
-        let keypair_2 = NetworkConfiguration::load_or_generate_keypair(Some(tmp_path));
-        assert!(keypair_2.is_ok());
+        // Attempt to load the key pair from the same temporary path
+        // This should result in the previously-generated key pair being loaded from file
+        let key_pair_2 = NetworkConfiguration::load_or_generate_key_pair(Some(tmp_path));
+        assert!(key_pair_2.is_ok());
 
-        // Ensure that both keypairs have the same public key
-        assert_eq!(keypair_1.unwrap().public(), keypair_2.unwrap().public());
+        // Ensure that both key pairs have the same public key
+        assert_eq!(key_pair_1.unwrap().public(), key_pair_2.unwrap().public());
     }
 }
