@@ -16,8 +16,8 @@ edition = "2018"
 
 [dependencies]
 anyhow = "^1.0.62"
-async-graphql = "^3.0.38"
-async-graphql-axum = "^3.0.38"
+async-graphql = "^5.0.6"
+async-graphql-axum = "^5.0.6"
 async-recursion = "^1.0.0"
 async-trait = "^0.1.64"
 axum = "^0.5.15"
