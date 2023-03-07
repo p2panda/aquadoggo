@@ -53,13 +53,13 @@ struct Opt {
     #[structopt(short = "A", parse(try_from_str = parse_key_val), number_of_values = 1)]
     public_keys_to_replicate: Vec<(String, Vec<u64>)>,
 
-    /// Enable mDNS for peer discovery over LAN.
+    /// Enable mDNS for peer discovery over LAN, true by default.
     #[structopt(short, long)]
-    mdns: bool,
+    mdns: Option<bool>,
 
-    /// Enable ping for connected peers (send and receive ping packets).
+    /// Enable ping for connected peers (send and receive ping packets), true by default.
     #[structopt(long)]
-    ping: bool,
+    ping: Option<bool>,
 }
 
 impl TryFrom<Opt> for Configuration {
@@ -82,8 +82,8 @@ impl TryFrom<Opt> for Configuration {
         };
 
         config.network = NetworkConfiguration {
-            mdns: opt.mdns,
-            ping: opt.ping,
+            mdns: opt.mdns.unwrap_or(true),
+            ping: opt.ping.unwrap_or(true),
             ..NetworkConfiguration::default()
         };
 
