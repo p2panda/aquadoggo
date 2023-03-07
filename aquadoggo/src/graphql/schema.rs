@@ -12,7 +12,7 @@ use crate::bus::ServiceSender;
 use crate::db::SqlStore;
 use crate::graphql::client::{ClientMutationRoot, ClientRoot};
 use crate::graphql::replication::ReplicationRoot;
-use crate::schema::{save_static_schemas, SchemaProvider};
+use crate::schema::SchemaProvider;
 
 /// All of the GraphQL query sub modules merged into one top level root.
 #[derive(MergedObject, Debug)]
@@ -62,9 +62,6 @@ pub fn build_root_schema(
 /// the database and write them into a temporary in-memory store. When `async_graphql` builds the
 /// GraphQL schema we can load from this store statically to build the schemas on the fly.
 async fn build_schema_with_workaround(shared: GraphQLSharedData) -> RootSchema {
-    // Store all application schemas from database into static in-memory storage
-    let all_schemas = shared.schema_provider.all().await;
-    save_static_schemas(&all_schemas);
 
     // Build the actual GraphQL root schema, this will internally read the created JSON file and
     // accordingly build the schema
