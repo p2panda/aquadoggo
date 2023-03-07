@@ -3,7 +3,7 @@
 //! Build and manage a GraphQL schema including dynamic parts of the schema.
 use std::sync::Arc;
 
-use async_graphql::dynamic::{Field, FieldFuture, Object, Schema, TypeRef, SchemaError};
+use async_graphql::dynamic::{Field, FieldFuture, Object, Schema, SchemaError, TypeRef};
 use async_graphql::{EmptySubscription, MergedObject, Request, Response, Value};
 use log::{debug, info};
 use p2panda_rs::Human;
@@ -30,17 +30,24 @@ pub async fn build_root_schema(
     // TODO: here we want to build application schema using async-graphql dynamic schema
 
     // Just a dummy schema for testing that we can build and serve a dynamically created schema
-    let query = Object::new("Query").field(Field::new("value", TypeRef::named_nn(TypeRef::INT), |ctx| {
-        FieldFuture::new(async move { Ok(Some(Value::from(100))) })
-    }));
-    
+    let query = Object::new("Query").field(Field::new(
+        "value",
+        TypeRef::named_nn(TypeRef::INT),
+        |ctx| FieldFuture::new(async move { Ok(Some(Value::from(100))) }),
+    ));
+
     // Build GraphQL schema
+    //
+    // TODO: how to register more than one schema? I see we can call register multiple times, but
+    // also we're passing the type name into the schema::build method, which only occurs once. Not
+    // been able to figure out how this flow works yet.
     Schema::build(query.type_name(), None, None)
         .register(query)
         .data(store)
         .data(schema_provider)
         .data(tx)
-        .finish().expect("We only build valid schema")
+        .finish()
+        .expect("We only build valid schema")
 }
 
 /// List of created GraphQL root schemas.
