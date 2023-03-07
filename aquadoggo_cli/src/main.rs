@@ -5,7 +5,7 @@ use std::convert::{TryFrom, TryInto};
 use std::error::Error;
 
 use anyhow::Result;
-use aquadoggo::{Configuration, Libp2pConfiguration, Node, ReplicationConfiguration};
+use aquadoggo::{Configuration, NetworkConfiguration, Node, ReplicationConfiguration};
 use structopt::StructOpt;
 
 /// Helper method to parse a single key-value pair.
@@ -81,10 +81,10 @@ impl TryFrom<Opt> for Configuration {
             ..ReplicationConfiguration::default()
         };
 
-        config.libp2p = Libp2pConfiguration {
+        config.network = NetworkConfiguration {
             mdns: opt.mdns,
             ping: opt.ping,
-            ..Libp2pConfiguration::default()
+            ..NetworkConfiguration::default()
         };
 
         Ok(config)
