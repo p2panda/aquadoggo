@@ -180,7 +180,7 @@ pub async fn network_service(
         }
     });
 
-    info!("network service is ready");
+    info!("Network service is ready");
 
     if tx_ready.send(()).is_err() {
         warn!("No subscriber informed about network service being ready");
