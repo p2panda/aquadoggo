@@ -16,7 +16,7 @@ edition = "2018"
 
 [dependencies]
 anyhow = "^1.0.62"
-async-graphql = "^5.0.6"
+async-graphql = { version = "^5.0.6", features = ["dynamic-schema"] }
 async-graphql-axum = "^5.0.6"
 async-recursion = "^1.0.0"
 async-trait = "^0.1.64"

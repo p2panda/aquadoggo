@@ -3,7 +3,8 @@
 //! Build and manage a GraphQL schema including dynamic parts of the schema.
 use std::sync::Arc;
 
-use async_graphql::{EmptySubscription, MergedObject, Request, Response, Schema};
+use async_graphql::dynamic::{Field, FieldFuture, Object, Schema, TypeRef, SchemaError};
+use async_graphql::{EmptySubscription, MergedObject, Request, Response, Value};
 use log::{debug, info};
 use p2panda_rs::Human;
 use tokio::sync::Mutex;
@@ -14,45 +15,36 @@ use crate::graphql::client::{ClientMutationRoot, ClientRoot};
 use crate::graphql::replication::ReplicationRoot;
 use crate::schema::SchemaProvider;
 
-/// All of the GraphQL query sub modules merged into one top level root.
-#[derive(MergedObject, Debug)]
-pub struct QueryRoot(pub ReplicationRoot, pub ClientRoot);
-
-/// All of the GraphQL mutation sub modules merged into one top level root.
-#[derive(MergedObject, Debug, Copy, Clone, Default)]
-pub struct MutationRoot(pub ClientMutationRoot);
-
-/// GraphQL schema for p2panda node.
-pub type RootSchema = Schema<QueryRoot, MutationRoot, EmptySubscription>;
-
 /// Returns GraphQL API schema for p2panda node.
 ///
 /// Builds the root schema that can handle all GraphQL requests from clients (Client API) or other
 /// nodes (Node API).
-pub fn build_root_schema(
+pub async fn build_root_schema(
     store: SqlStore,
     tx: ServiceSender,
     schema_provider: SchemaProvider,
-) -> RootSchema {
-    // Configure query root
-    let replication_root = ReplicationRoot::default();
-    let client_query_root = ClientRoot::new();
-    let query_root = QueryRoot(replication_root, client_query_root);
+) -> Schema {
+    // Get all p2panda system and application schema from the schema provider
+    let _application_schema = schema_provider.all().await;
 
-    // Configure mutation root
-    let client_mutation_root = ClientMutationRoot::default();
-    let mutation_root = MutationRoot(client_mutation_root);
+    // TODO: here we want to build application schema using async-graphql dynamic schema
 
+    // Just a dummy schema for testing that we can build and serve a dynamically created schema
+    let query = Object::new("Query").field(Field::new("value", TypeRef::named_nn(TypeRef::INT), |ctx| {
+        FieldFuture::new(async move { Ok(Some(Value::from(100))) })
+    }));
+    
     // Build GraphQL schema
-    Schema::build(query_root, mutation_root, EmptySubscription)
+    Schema::build(query.type_name(), None, None)
+        .register(query)
         .data(store)
         .data(schema_provider)
         .data(tx)
-        .finish()
+        .finish().expect("We only build valid schema")
 }
 
 /// List of created GraphQL root schemas.
-type GraphQLSchemas = Arc<Mutex<Vec<RootSchema>>>;
+type GraphQLSchemas = Arc<Mutex<Vec<Schema>>>;
 
 /// Shared types between GraphQL schemas.
 #[derive(Clone, Debug)]
@@ -123,7 +115,7 @@ impl GraphQLSchemaManager {
 
         // Create the new GraphQL based on the current state of known p2panda application schemas
         async fn rebuild(shared: GraphQLSharedData, schemas: GraphQLSchemas) {
-            let schema = build_root_schema(shared.store, shared.tx, shared.schema_provider);
+            let schema = build_root_schema(shared.store, shared.tx, shared.schema_provider).await;
             schemas.lock().await.push(schema);
         }
 
