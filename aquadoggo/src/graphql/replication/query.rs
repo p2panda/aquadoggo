@@ -107,7 +107,7 @@ impl ReplicationRoot {
                     .map(|n| n.clamp(0, MAX_PAGINATION_SIZE))
                     .unwrap_or(DEFAULT_PAGINATION_SIZE);
 
-                let edges = store
+                let mut edges = store
                     .get_paginated_log_entries(
                         &public_key.into(),
                         &log_id.into(),
@@ -132,7 +132,7 @@ impl ReplicationRoot {
                 let has_previous_page = start > 0;
 
                 let mut connection = Connection::new(has_previous_page, has_next_page);
-                connection.append(edges);
+                connection.edges.append(&mut edges);
 
                 Result::<_, Error>::Ok(connection)
             },

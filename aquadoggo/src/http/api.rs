@@ -14,8 +14,8 @@ pub async fn handle_graphql_playground(path: &str) -> impl IntoResponse {
 
 /// Handle graphql requests.
 pub async fn handle_graphql_query(
-    request: GraphQLRequest,
     Extension(context): Extension<HttpServiceContext>,
+    req: GraphQLRequest,
 ) -> GraphQLResponse {
-    context.schema.execute(request.into_inner()).await.into()
+    context.schema.execute(req.into_inner()).await.into()
 }
