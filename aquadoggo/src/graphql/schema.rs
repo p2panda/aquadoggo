@@ -51,23 +51,6 @@ pub fn build_root_schema(
         .finish()
 }
 
-/// Returns GraphQL API schema for p2panda node with a little trick to make dynamic schemas work.
-///
-/// The `async_graphql` crate we're using in this project does only provide methods to generate
-/// GraphQL schemas statically. Ideally we would like to query our database for currently known
-/// p2panda schemas and accordingly update the GraphQL schema whenever necessary but we don't have
-/// static and sync access to the database when building `async_graphql` types.
-///
-/// With this little workaround we are still able to make it work! We load the p2panda schemas from
-/// the database and write them into a temporary in-memory store. When `async_graphql` builds the
-/// GraphQL schema we can load from this store statically to build the schemas on the fly.
-async fn build_schema_with_workaround(shared: GraphQLSharedData) -> RootSchema {
-
-    // Build the actual GraphQL root schema, this will internally read the created JSON file and
-    // accordingly build the schema
-    build_root_schema(shared.store, shared.tx, shared.schema_provider)
-}
-
 /// List of created GraphQL root schemas.
 type GraphQLSchemas = Arc<Mutex<Vec<RootSchema>>>;
 
@@ -140,7 +123,7 @@ impl GraphQLSchemaManager {
 
         // Create the new GraphQL based on the current state of known p2panda application schemas
         async fn rebuild(shared: GraphQLSharedData, schemas: GraphQLSchemas) {
-            let schema = build_schema_with_workaround(shared).await;
+            let schema = build_root_schema(shared.store, shared.tx, shared.schema_provider);
             schemas.lock().await.push(schema);
         }
 
