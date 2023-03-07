@@ -15,7 +15,7 @@ use crate::network::identity::Identity;
 const KEYPAIR_FILE_NAME: &str = "libp2p.pem";
 
 /// QUIC default transport port.
-const QUIC_PORT: u16 = 48648;
+const QUIC_PORT: u16 = 2022;
 
 /// Network config for the node.
 #[derive(Debug, Clone, Deserialize, Serialize)]
