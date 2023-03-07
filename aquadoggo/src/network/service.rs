@@ -72,7 +72,7 @@ pub async fn network_service(
     let key_pair =
         NetworkConfiguration::load_or_generate_key_pair(context.config.base_path.clone())?;
     let peer_id = PeerId::from(key_pair.public());
-    info!("Network service peer ID: {peer_id:?}");
+    info!("Network service peer ID: {peer_id}");
 
     // Create a QUIC transport
     let quic_config = quic::Config::new(&key_pair);
@@ -113,21 +113,21 @@ pub async fn network_service(
                 SwarmEvent::BannedPeer {
                     peer_id,
                     endpoint: _,
-                } => info!("BannedPeer: {peer_id:?}"),
+                } => info!("BannedPeer: {peer_id}"),
                 SwarmEvent::Behaviour(BehaviourEvent::Mdns(event)) => match event {
                     mdns::Event::Discovered(list) => {
                         for (peer, _multiaddr) in list {
-                            info!("mDNS discovered a new peer: {peer:?}");
+                            info!("mDNS discovered a new peer: {peer}");
                         }
                     }
                     mdns::Event::Expired(list) => {
                         for (peer, _multiaddr) in list {
-                            info!("mDNS peer has expired: {peer:?}");
+                            info!("mDNS peer has expired: {peer}");
                         }
                     }
                 },
                 SwarmEvent::Behaviour(BehaviourEvent::Ping(Event { peer, result: _ })) => {
-                    info!("Ping from: {peer:?}")
+                    info!("Ping from: {peer}")
                 }
                 SwarmEvent::ConnectionClosed {
                     peer_id,
@@ -135,16 +135,16 @@ pub async fn network_service(
                     num_established,
                     cause,
                 } => {
-                    info!("ConnectionClosed: {peer_id:?} {endpoint:?} {num_established} {cause:?}")
+                    info!("ConnectionClosed: {peer_id} {endpoint:?} {num_established} {cause:?}")
                 }
                 SwarmEvent::ConnectionEstablished {
                     peer_id,
                     endpoint,
                     num_established,
                     ..
-                } => info!("ConnectionEstablished: {peer_id:?} {endpoint:?} {num_established}"),
+                } => info!("ConnectionEstablished: {peer_id} {endpoint:?} {num_established}"),
 
-                SwarmEvent::Dialing(peer_id) => info!("Dialing: {peer_id:?}"),
+                SwarmEvent::Dialing(peer_id) => info!("Dialing: {peer_id}"),
                 SwarmEvent::ExpiredListenAddr {
                     listener_id,
                     address,
