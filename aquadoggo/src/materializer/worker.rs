@@ -145,8 +145,14 @@ pub enum TaskStatus<IN> {
 /// Workers are identified by simple string values.
 pub type WorkerName = String;
 
-/// Flag for the input index to indicate if we want to requeue the task after it completed.
-type RequeueFlag = bool;
+/// Flags for queue items to define post-completion actions.
+enum PostAction {
+    /// Moves the completed task into the queue again.
+    Requeue,
+
+    /// Do nothing after completion.
+    Idle,
+}
 
 /// Every registered worker pool is managed by a `WorkerManager` which holds the task queue for
 /// this registered work and an index of all current inputs in the task queue.
@@ -163,7 +169,7 @@ where
     /// after it completed. This is useful to account for more events which arrived _while_ the
     /// task was processed. It is enough to only remember one of the potentially many events
     /// arriving in this time, we're "batching" them for the next round.
-    input_index: Arc<Mutex<HashMap<IN, RequeueFlag>>>,
+    input_index: Arc<Mutex<HashMap<IN, PostAction>>>,
 
     /// FIFO queue of all tasks for this worker pool.
     queue: Arc<Queue<QueueItem<IN>>>,
@@ -420,26 +426,28 @@ where
                         match input_index.lock() {
                             Ok(mut index) => {
                                 match index.get(&task.1) {
-                                    Some(requeue) => {
-                                        if *requeue {
-                                            // We observed already one duplicate task coming in,
-                                            // let's ignore this one
-                                            continue;
-                                        } else {
-                                            // This is the first duplicate coming in, let's set
-                                            // the requeue flag to indicate that more work needs to
-                                            // be done when the current task completes
-                                            index.insert(task.1, true);
-                                        }
-                                    }
                                     None => {
-                                        // This task is completly new! Trigger status update
+                                        // 1. This task is completly new! We don't work on anything
+                                        // similar yet.
+                                        //
+                                        // Trigger status update:
                                         on_pending(task.clone());
 
                                         // Generate a unique id for this new task and add it to queue
                                         let next_id = counter.fetch_add(1, Ordering::Relaxed);
                                         queue.push(QueueItem::new(next_id, task.1.clone()));
-                                        index.insert(task.1, false);
+                                        index.insert(task.1, PostAction::Idle);
+                                    }
+                                    Some(PostAction::Idle) => {
+                                        // 2. This is the first duplicate coming in, let's set the
+                                        // requeue flag to indicate that more work needs to be done
+                                        // when the current task completes
+                                        index.insert(task.1, PostAction::Requeue);
+                                    }
+                                    Some(PostAction::Requeue) => {
+                                        // 3. We observed already one duplicate task coming in, let's
+                                        // ignore this one
+                                        continue;
                                     }
                                 }
                             }
@@ -538,7 +546,8 @@ where
                     // Remove input index from queue and check if we should requeue that task
                     let requeue = match input_index.lock() {
                         Ok(mut index) => match index.remove(&item.input()) {
-                            Some(value) => value,
+                            Some(PostAction::Idle) => false,
+                            Some(PostAction::Requeue) => true,
                             None => {
                                 error!("Incosistency detected in queue input index");
                                 error_signal.trigger();
