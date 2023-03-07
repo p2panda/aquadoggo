@@ -69,12 +69,13 @@ pub async fn network_service(
     let network_config = context.config.network.clone();
 
     // Load the network key pair and peer ID
-    let keypair = NetworkConfiguration::load_or_generate_keypair(context.config.base_path.clone())?;
-    let peer_id = PeerId::from(keypair.public());
-    info!("libp2p peer ID: {peer_id:?}");
+    let key_pair =
+        NetworkConfiguration::load_or_generate_key_pair(context.config.base_path.clone())?;
+    let peer_id = PeerId::from(key_pair.public());
+    info!("Network service peer ID: {peer_id:?}");
 
     // Create a QUIC transport
-    let quic_config = quic::Config::new(&keypair);
+    let quic_config = quic::Config::new(&key_pair);
     // QUIC provides transport, security, and multiplexing in a single protocol
     let quic_transport = quic::tokio::Transport::new(quic_config)
         // Perform conversion to a StreamMuxerBox (QUIC handles multiplexing)
