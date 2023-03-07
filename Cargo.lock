@@ -186,7 +186,6 @@ dependencies = [
  "once_cell",
  "openssl-probe",
  "p2panda-rs",
- "pem",
  "rand 0.8.5",
  "reqwest",
  "rstest 0.15.0",
