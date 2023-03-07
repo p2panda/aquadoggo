@@ -47,7 +47,6 @@ mod bus;
 mod config;
 mod context;
 mod db;
-mod domain;
 mod graphql;
 mod http;
 mod manager;
@@ -59,7 +58,6 @@ mod schema;
 mod test_utils;
 #[cfg(test)]
 mod tests;
-mod validation;
 
 pub use crate::config::Configuration;
 pub use crate::replication::ReplicationConfiguration;

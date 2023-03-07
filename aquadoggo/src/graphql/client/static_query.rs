@@ -2,11 +2,11 @@
 
 //! Static fields of the client api.
 use async_graphql::{Context, Object, Result};
+use p2panda_rs::api::next_args;
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::identity::PublicKey;
 
 use crate::db::SqlStore;
-use crate::domain::next_args;
 use crate::graphql::client::NextArguments;
 use crate::graphql::scalars;
 
@@ -41,7 +41,15 @@ impl StaticQuery {
         let document_view_id = document_view_id.map(|val| DocumentViewId::from(&val));
 
         // Calculate next entry's arguments.
-        next_args(store, &public_key, document_view_id.as_ref()).await
+        let (backlink, skiplink, seq_num, log_id) =
+            next_args(store, &public_key, document_view_id.as_ref()).await?;
+
+        Ok(NextArguments {
+            log_id: log_id.into(),
+            seq_num: seq_num.into(),
+            backlink: backlink.map(|hash| hash.into()),
+            skiplink: skiplink.map(|hash| hash.into()),
+        })
     }
 }
 

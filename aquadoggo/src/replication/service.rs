@@ -6,6 +6,7 @@ use std::time::Duration;
 use anyhow::{anyhow, Result};
 use bamboo_rs_core_ed25519_yasmf::verify::verify_batch;
 use log::{debug, error, trace, warn};
+use p2panda_rs::api::publish;
 use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
 use p2panda_rs::entry::LogId;
 use p2panda_rs::entry::SeqNum;
@@ -18,7 +19,6 @@ use tokio::task;
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
 use crate::db::types::StorageEntry;
-use crate::domain::publish;
 use crate::graphql::replication::client;
 use crate::manager::{ServiceReadySender, Shutdown};
 
