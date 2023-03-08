@@ -22,8 +22,8 @@ const QUIC_PORT: u16 = 2022;
 pub struct NetworkConfiguration {
     /// Dial concurrency factor.
     ///
-    /// Number of addresses concurrently dialed for a single outbound
-    /// connection attempt.
+    /// Number of addresses concurrently dialed for an outbound connection attempt with a single
+    /// peer.
     pub dial_concurrency_factor: u8,
 
     /// Local address.
@@ -36,32 +36,42 @@ pub struct NetworkConfiguration {
     pub max_connections_out: u32,
 
     /// Maximum pending incoming connections.
+    ///
+    /// A pending connection is one which has been initiated but has not yet received a response.
     pub max_connections_pending_in: u32,
 
     /// Maximum pending outgoing connections.
+    ///
+    /// A pending connection is one which has been initiated but has not yet received a response.
     pub max_connections_pending_out: u32,
 
     /// Maximum connections per peer (includes outgoing and incoming).
     pub max_connections_per_peer: u32,
 
     /// mDNS discovery enabled.
+    ///
+    /// Automatically discover peers on the local network (over IPv4 only, using port 5353).
     pub mdns: bool,
 
     /// Notify handler buffer size.
     ///
-    /// Defines the buffer size for events sent from the NetworkBehaviour to the ConnectionHandler.
-    /// If the buffer is exceeded, the Swarm will have to wait. An individual buffer with this
-    /// number of events exists for each individual connection.
+    /// Defines the buffer size for events sent from a network protocol handler to the connection
+    /// manager. If the buffer is exceeded, other network processes will have to wait while the
+    /// events are processed. An individual buffer with this number of events exists for each
+    /// individual connection.
     pub notify_handler_buffer_size: usize,
 
     /// Connection event buffer size.
     ///
-    /// Defines the buffer size for events sent from the ConnectionHandler to the
-    /// NetworkBehaviour. Each connection has its own buffer. If the buffer is
-    /// exceeded, the ConnectionHandler will sleep.
+    /// Defines the buffer size for events sent from the connection manager to a network protocol
+    /// handler. Each connection has its own buffer. If the buffer is exceeded, the connection
+    /// manager will sleep.
     pub per_connection_event_buffer_size: usize,
 
     /// Ping behaviour enabled.
+    ///
+    /// Send outbound pings to connected peers every 15 seconds and respond to inbound pings.
+    /// Every sent ping must yield a response within 20 seconds in order to be successful.
     pub ping: bool,
 }
 
