@@ -9,7 +9,7 @@ use libp2p::ping::Event;
 use libp2p::swarm::behaviour::toggle::Toggle;
 use libp2p::swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent};
 use libp2p::{mdns, ping, quic, Multiaddr, PeerId, Transport};
-use log::{info, warn};
+use log::{debug, info, warn};
 
 use crate::bus::ServiceSender;
 use crate::context::Context;
@@ -103,7 +103,6 @@ pub async fn network_service(
     if let Some(addr) = context.config.replication.remote_peers.get(0) {
         let remote: Multiaddr = addr.parse()?;
         swarm.dial(remote)?;
-        println!("Dialed {addr}")
     }
 
     // Spawn a task logging swarm events
@@ -113,21 +112,21 @@ pub async fn network_service(
                 SwarmEvent::BannedPeer {
                     peer_id,
                     endpoint: _,
-                } => info!("BannedPeer: {peer_id}"),
+                } => debug!("BannedPeer: {peer_id}"),
                 SwarmEvent::Behaviour(BehaviourEvent::Mdns(event)) => match event {
                     mdns::Event::Discovered(list) => {
                         for (peer, _multiaddr) in list {
-                            info!("mDNS discovered a new peer: {peer}");
+                            debug!("mDNS discovered a new peer: {peer}");
                         }
                     }
                     mdns::Event::Expired(list) => {
                         for (peer, _multiaddr) in list {
-                            info!("mDNS peer has expired: {peer}");
+                            debug!("mDNS peer has expired: {peer}");
                         }
                     }
                 },
                 SwarmEvent::Behaviour(BehaviourEvent::Ping(Event { peer, result: _ })) => {
-                    info!("Ping from: {peer}")
+                    debug!("Ping from: {peer}")
                 }
                 SwarmEvent::ConnectionClosed {
                     peer_id,
@@ -135,46 +134,46 @@ pub async fn network_service(
                     num_established,
                     cause,
                 } => {
-                    info!("ConnectionClosed: {peer_id} {endpoint:?} {num_established} {cause:?}")
+                    debug!("ConnectionClosed: {peer_id} {endpoint:?} {num_established} {cause:?}")
                 }
                 SwarmEvent::ConnectionEstablished {
                     peer_id,
                     endpoint,
                     num_established,
                     ..
-                } => info!("ConnectionEstablished: {peer_id} {endpoint:?} {num_established}"),
+                } => debug!("ConnectionEstablished: {peer_id} {endpoint:?} {num_established}"),
 
                 SwarmEvent::Dialing(peer_id) => info!("Dialing: {peer_id}"),
                 SwarmEvent::ExpiredListenAddr {
                     listener_id,
                     address,
-                } => info!("ExpiredListenAddr: {listener_id:?} {address:?}"),
+                } => debug!("ExpiredListenAddr: {listener_id:?} {address}"),
 
                 SwarmEvent::IncomingConnection {
                     local_addr,
                     send_back_addr,
-                } => info!("IncomingConnection: {local_addr:?} {send_back_addr:?}"),
+                } => debug!("IncomingConnection: {local_addr} {send_back_addr}"),
                 SwarmEvent::IncomingConnectionError {
                     local_addr,
                     send_back_addr,
                     error,
-                } => info!("IncomingConnectionError: {local_addr:?} {send_back_addr:?} {error:?}"),
+                } => warn!("IncomingConnectionError: {local_addr} {send_back_addr} {error:?}"),
                 SwarmEvent::ListenerClosed {
                     listener_id,
                     addresses,
                     reason,
-                } => info!("ListenerClosed: {listener_id:?} {addresses:?} {reason:?}"),
+                } => debug!("ListenerClosed: {listener_id:?} {addresses:?} {reason:?}"),
                 SwarmEvent::ListenerError { listener_id, error } => {
-                    info!("ListenerError: {listener_id:?} {error:?}")
+                    warn!("ListenerError: {listener_id:?} {error:?}")
                 }
                 SwarmEvent::NewListenAddr {
                     address,
-                    listener_id,
+                    listener_id: _,
                 } => {
-                    info!("Listening on {address:?} {listener_id:?}");
+                    info!("Listening on {address}");
                 }
                 SwarmEvent::OutgoingConnectionError { peer_id, error } => {
-                    info!("OutgoingConnectionError: {peer_id:?} {error:?}")
+                    warn!("OutgoingConnectionError: {peer_id:?} {error:?}")
                 }
             };
         }
