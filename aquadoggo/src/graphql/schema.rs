@@ -4,14 +4,24 @@
 use std::sync::Arc;
 
 use async_graphql::dynamic::{Field, FieldFuture, Object, Schema, TypeRef};
-use async_graphql::{Request, Response, Value};
+use async_graphql::{Number, Request, Response, Result, Value};
 use log::{debug, info};
+use once_cell::sync::Lazy;
 use p2panda_rs::Human;
 use tokio::sync::Mutex;
 
 use crate::bus::ServiceSender;
 use crate::db::SqlStore;
 use crate::schema::SchemaProvider;
+
+/// Some dummy values to return from queries.
+const VALUES: Lazy<Vec<Value>> = Lazy::new(|| {
+    vec![
+        Value::String("boop".to_owned()),
+        Value::String("is it me you're looking for?".to_owned()),
+        Value::Number(Number::from(2)),
+    ]
+});
 
 /// Returns GraphQL API schema for p2panda node.
 ///
@@ -22,19 +32,21 @@ pub async fn build_root_schema(
     _tx: ServiceSender,
     _schema_provider: SchemaProvider,
 ) -> Schema {
-    let operations = [
-        ("beep", "boop"),
-        ("hey", "ho!"),
-        ("hello", "is it me you're looking for?"),
+
+    // Query fields we want to dynamically add to the root query object.
+    let query_fields = vec![
+        ("beep", TypeRef::STRING),
+        ("hello", TypeRef::STRING),
+        ("one", TypeRef::INT),
     ];
 
     let mut query = Object::new("Query");
 
-    for operation in operations {
+    for (index, field) in query_fields.into_iter().enumerate() {
         query = query.field(Field::new(
-            operation.0,
-            TypeRef::named_nn(TypeRef::STRING),
-            move |_ctx| FieldFuture::new(async move { Ok(Some(Value::from(operation.1))) }),
+            field.0,
+            TypeRef::named_nn(field.1),
+            move |_ctx| FieldFuture::new(async move { Ok(Some(VALUES[index].clone())) }),
         ))
     }
 
