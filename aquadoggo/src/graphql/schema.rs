@@ -34,22 +34,26 @@ pub async fn build_root_schema(
 ) -> Schema {
     // Query fields we want to dynamically add to the root query object.
     let query_fields = vec![
-        ("beep", TypeRef::STRING),
-        ("hello", TypeRef::STRING),
-        ("one", TypeRef::INT),
+        ("beep", TypeRef::STRING, "The beep of the boop"),
+        ("hello", TypeRef::STRING, "The song lyric, not the planet"),
+        ("one", TypeRef::INT, "What comes after it?"),
     ];
 
+    // Construct the root query object.
     let mut query = Object::new("Query");
 
+    // Iterate over our query fields and insert them into the root query. 
     for (index, field) in query_fields.into_iter().enumerate() {
         query = query.field(
             Field::new(field.0, TypeRef::named_nn(field.1), move |_ctx| {
                 FieldFuture::new(async move { Ok(Some(VALUES[index].clone())) })
             })
-            .argument(InputValue::new("id", TypeRef::named_nn(TypeRef::STRING))),
+            .argument(InputValue::new("id", TypeRef::named_nn(TypeRef::STRING)))
+            .description(field.2),
         )
     }
 
+    // Build the schema.
     Schema::build("Query", None, None)
         .register(query)
         .finish()
