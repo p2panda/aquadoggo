@@ -33,6 +33,7 @@ impl Behaviour {
     fn new(network_config: &NetworkConfiguration, peer_id: PeerId) -> Result<Self> {
         // Create an mDNS behaviour with default configuration if the mDNS flag is set
         let mdns = if network_config.mdns {
+            debug!("mDNS network behaviour enabled");
             Some(mdns::Behaviour::new(Default::default(), peer_id)?)
         } else {
             None
@@ -40,6 +41,7 @@ impl Behaviour {
 
         // Create a ping behaviour with default configuration if the ping flag is set
         let ping = if network_config.ping {
+            debug!("Ping network behaviour enabled");
             Some(ping::Behaviour::default())
         } else {
             None
@@ -66,7 +68,7 @@ pub async fn network_service(
     let mut _rx = tx.subscribe();
 
     // Read the network configuration parameters from the application context
-    let network_config = context.config.network.clone();
+    let network_config = context.config.network;
 
     // Load the network key pair and peer ID
     let key_pair =
@@ -74,13 +76,14 @@ pub async fn network_service(
     let peer_id = PeerId::from(key_pair.public());
     info!("Network service peer ID: {peer_id}");
 
-    // Create a QUIC transport
     let quic_config = quic::Config::new(&key_pair);
-    // QUIC provides transport, security, and multiplexing in a single protocol
+    // Create QUIC transport (provides transport, security and multiplexing in a single protocol)
     let quic_transport = quic::tokio::Transport::new(quic_config)
         // Perform conversion to a StreamMuxerBox (QUIC handles multiplexing)
         .map(|(p, c), _| (p, StreamMuxerBox::new(c)))
         .boxed();
+    let quic_multiaddr =
+        format!("/ip4/0.0.0.0/udp/{}/quic-v1", network_config.quic_port).parse()?;
 
     // Instantiate the custom network behaviour with default configuration
     // and the libp2p peer ID
@@ -96,8 +99,8 @@ pub async fn network_service(
         .notify_handler_buffer_size(network_config.notify_handler_buffer_size.try_into()?)
         .build();
 
-    // Tell the swarm to listen on the default multiaddress
-    swarm.listen_on(network_config.listening_multiaddr)?;
+    // Listen for incoming connection requests over the QUIC transport
+    swarm.listen_on(quic_multiaddr)?;
 
     // Dial the peer identified by the multi-address given in the `--remote-node-addresses` if given
     if let Some(addr) = context.config.replication.remote_peers.get(0) {

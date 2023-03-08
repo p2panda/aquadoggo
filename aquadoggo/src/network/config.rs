@@ -5,7 +5,6 @@ use std::path::PathBuf;
 use anyhow::Result;
 use libp2p::identity::Keypair;
 use libp2p::swarm::ConnectionLimits;
-use libp2p::Multiaddr;
 use log::info;
 use serde::{Deserialize, Serialize};
 
@@ -14,20 +13,14 @@ use crate::network::identity::Identity;
 /// Key pair file name.
 const KEY_PAIR_FILE_NAME: &str = "private-key";
 
-/// QUIC default transport port.
-const QUIC_PORT: u16 = 2022;
-
 /// Network config for the node.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Copy, Clone, Deserialize, Serialize)]
 pub struct NetworkConfiguration {
     /// Dial concurrency factor.
     ///
     /// Number of addresses concurrently dialed for an outbound connection attempt with a single
     /// peer.
     pub dial_concurrency_factor: u8,
-
-    /// Local address.
-    pub listening_multiaddr: Multiaddr,
 
     /// Maximum incoming connections.
     pub max_connections_in: u32,
@@ -73,18 +66,15 @@ pub struct NetworkConfiguration {
     /// Send outbound pings to connected peers every 15 seconds and respond to inbound pings.
     /// Every sent ping must yield a response within 20 seconds in order to be successful.
     pub ping: bool,
+
+    /// QUIC transport port.
+    pub quic_port: u16,
 }
 
 impl Default for NetworkConfiguration {
     fn default() -> Self {
-        // Define the default listening multiaddress using the default QUIC port
-        let listening_multiaddr = format!("/ip4/0.0.0.0/udp/{QUIC_PORT}/quic-v1")
-            .parse()
-            .unwrap();
-
         Self {
             dial_concurrency_factor: 8,
-            listening_multiaddr,
             max_connections_in: 16,
             max_connections_out: 16,
             max_connections_pending_in: 8,
@@ -94,6 +84,7 @@ impl Default for NetworkConfiguration {
             notify_handler_buffer_size: 128,
             per_connection_event_buffer_size: 8,
             ping: false,
+            quic_port: 2022,
         }
     }
 }

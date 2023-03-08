@@ -40,6 +40,10 @@ struct Opt {
     #[structopt(short = "P", long)]
     http_port: Option<u16>,
 
+    /// Port for the QUIC transport, 2022 by default.
+    #[structopt(short, long)]
+    quic_port: Option<u16>,
+
     /// URLs of remote nodes to replicate with.
     #[structopt(short, long)]
     remote_node_addresses: Vec<String>,
@@ -84,6 +88,7 @@ impl TryFrom<Opt> for Configuration {
         config.network = NetworkConfiguration {
             mdns: opt.mdns.unwrap_or(true),
             ping: opt.ping.unwrap_or(true),
+            quic_port: opt.quic_port.unwrap_or(2022),
             ..NetworkConfiguration::default()
         };
 
