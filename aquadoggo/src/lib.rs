@@ -47,6 +47,7 @@ mod bus;
 mod config;
 mod context;
 mod db;
+mod dynamic_graphql;
 mod graphql;
 mod http;
 mod manager;
