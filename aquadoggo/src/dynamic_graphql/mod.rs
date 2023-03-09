@@ -3,5 +3,6 @@
 pub mod types;
 pub mod queries;
 mod schema;
+pub mod scalars;
 
 pub use schema::{build_root_schema, GraphQLSchemaManager};

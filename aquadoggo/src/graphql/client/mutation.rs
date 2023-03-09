@@ -117,7 +117,7 @@ mod tests {
     use tokio::sync::broadcast;
 
     use crate::bus::ServiceMessage;
-    use crate::graphql::GraphQLSchemaManager;
+    use crate::dynamic_graphql::GraphQLSchemaManager;
     use crate::http::HttpServiceContext;
     use crate::test_utils::{
         doggo_fields, doggo_schema, graphql_test_client, populate_and_materialize,

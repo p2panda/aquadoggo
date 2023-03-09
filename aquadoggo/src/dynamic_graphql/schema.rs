@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use async_graphql::dynamic::{Field, FieldFuture, InputValue, Object, Schema, TypeRef};
-use async_graphql::{Number, Request, Response, Result, Value};
+use async_graphql::{Number, Request, Response, Value};
 use dynamic_graphql::internal::Registry;
 use dynamic_graphql::FieldValue;
 use log::{debug, info};
@@ -14,6 +14,10 @@ use tokio::sync::Mutex;
 
 use crate::bus::ServiceSender;
 use crate::db::SqlStore;
+use crate::dynamic_graphql::scalars::{
+    DocumentIdScalar, DocumentViewIdScalar, EncodedEntryScalar, EncodedOperationScalar,
+    EntryHashScalar, LogIdScalar, PublicKeyScalar, SeqNumScalar,
+};
 use crate::dynamic_graphql::types::NextArguments;
 use crate::schema::SchemaProvider;
 
@@ -43,7 +47,16 @@ pub async fn build_root_schema(
     ];
 
     // Using dynamic-graphql we create a registry where we can add types.
-    let registry = Registry::new().register::<NextArguments>();
+    let registry = Registry::new()
+        .register::<NextArguments>()
+        .register::<DocumentIdScalar>()
+        .register::<DocumentViewIdScalar>()
+        .register::<EncodedEntryScalar>()
+        .register::<EncodedOperationScalar>()
+        .register::<EntryHashScalar>()
+        .register::<LogIdScalar>()
+        .register::<PublicKeyScalar>()
+        .register::<SeqNumScalar>();
 
     // Construct the schema builder.
     let schema = Schema::build("Query", None, None);
@@ -68,7 +81,7 @@ pub async fn build_root_schema(
 
     // Add next args to the query object.
     let query = query.field(
-        Field::new("nextArgs", TypeRef::named("NextArguments"), |_ctx| {
+        Field::new("nextArgs", TypeRef::named("NextArguments"), |ctx| {
             FieldFuture::new(async move {
                 Ok(Some(FieldValue::owned_any(NextArguments {
                     log_id: "0".to_string(),

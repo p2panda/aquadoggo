@@ -14,7 +14,7 @@ use tokio::task::{self, JoinHandle};
 use tower::make::Shared;
 use tower_service::Service;
 
-use crate::graphql::GraphQLSchemaManager;
+use crate::dynamic_graphql::GraphQLSchemaManager;
 use crate::http::{build_server, HttpServiceContext};
 use crate::test_utils::TestNode;
 
