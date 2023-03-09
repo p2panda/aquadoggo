@@ -32,7 +32,6 @@ pub async fn build_root_schema(
     _tx: ServiceSender,
     schema_provider: SchemaProvider,
 ) -> Schema {
-
     // Get all schema from the schema provider.
     let all_schema = schema_provider.all().await;
 
@@ -103,7 +102,13 @@ pub async fn build_root_schema(
     );
 
     // Build the schema.
-    schema.register(query).finish().unwrap()
+    schema
+        .register(query)
+        .data(store)
+        .data(schema_provider)
+        .data(tx)
+        .finish()
+        .unwrap()
 }
 
 /// List of created GraphQL root schemas.
