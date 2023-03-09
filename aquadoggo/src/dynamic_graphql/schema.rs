@@ -48,21 +48,54 @@ pub async fn build_root_schema(
         .register::<SeqNumScalar>();
 
     // Construct the schema builder.
-    let schema = Schema::build("Query", None, None);
+    let mut schema_builder = Schema::build("Query", None, None);
 
     // Populate it with the registered types. We can now use these in any following dynamically
     // created query object fields.
-    let schema = registry.apply_into_schema_builder(schema);
+    schema_builder = registry.apply_into_schema_builder(schema_builder);
 
     // Construct the root query object.
     let mut query = Object::new("Query");
 
-    // Loop through all schema retrieved from the schema store and add them all to the query object.
+    // Loop through all schema retrieved from the schema store and add a type and query for the
+    // document they describe.
     for schema in all_schema {
+        let mut document = Object::new(schema.id().to_string());
+        for (name, field_type) in schema.fields() {
+            let graphql_type = match field_type {
+                p2panda_rs::schema::FieldType::Boolean => TypeRef::named(TypeRef::BOOLEAN),
+                p2panda_rs::schema::FieldType::Integer => TypeRef::named(TypeRef::INT),
+                p2panda_rs::schema::FieldType::Float => TypeRef::named(TypeRef::FLOAT),
+                p2panda_rs::schema::FieldType::String => TypeRef::named(TypeRef::STRING),
+                p2panda_rs::schema::FieldType::Relation(schema_id) => {
+                    TypeRef::named(schema_id.to_string())
+                }
+                p2panda_rs::schema::FieldType::RelationList(schema_id) => {
+                    TypeRef::named_list(schema_id.to_string())
+                }
+                p2panda_rs::schema::FieldType::PinnedRelation(schema_id) => {
+                    TypeRef::named(schema_id.to_string())
+                }
+                p2panda_rs::schema::FieldType::PinnedRelationList(schema_id) => {
+                    TypeRef::named_list(schema_id.to_string())
+                }
+            };
+
+            document = document.field(Field::new(name, graphql_type, move |_ctx| {
+                FieldFuture::new(
+                    async move { Ok(Some(Value::String("The value of this".to_owned()))) },
+                )
+            }))
+        }
+
+        // Register a document object type for every schema.
+        schema_builder = schema_builder.register(document);
+
+        // Add a query object for each schema.
         query = query.field(
             Field::new(
                 schema.id().to_string(),
-                TypeRef::named_nn(TypeRef::STRING),
+                TypeRef::named(schema.id().to_string()),
                 move |_ctx| {
                     FieldFuture::new(async move {
                         Ok(Some(Value::String("If only i had a document!".to_owned())))
@@ -70,10 +103,7 @@ pub async fn build_root_schema(
                 },
             )
             .argument(InputValue::new("id", TypeRef::named("DocumentId")))
-            .argument(InputValue::new(
-                "view_id",
-                TypeRef::named("DocumentViewId"),
-            ))
+            .argument(InputValue::new("view_id", TypeRef::named("DocumentViewId")))
             .description(schema.description()),
         )
     }
@@ -102,7 +132,7 @@ pub async fn build_root_schema(
     );
 
     // Build the schema.
-    schema
+    schema_builder
         .register(query)
         .data(store)
         .data(schema_provider)
