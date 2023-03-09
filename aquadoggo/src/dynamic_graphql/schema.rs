@@ -28,8 +28,8 @@ use crate::schema::SchemaProvider;
 /// Builds the root schema that can handle all GraphQL requests from clients (Client API) or other
 /// nodes (Node API).
 pub async fn build_root_schema(
-    _store: SqlStore,
-    _tx: ServiceSender,
+    store: SqlStore,
+    tx: ServiceSender,
     schema_provider: SchemaProvider,
 ) -> Schema {
     // Get all schema from the schema provider.
@@ -69,10 +69,10 @@ pub async fn build_root_schema(
                     })
                 },
             )
-            .argument(InputValue::new("id", TypeRef::named_nn("DocumentId")))
+            .argument(InputValue::new("id", TypeRef::named("DocumentId")))
             .argument(InputValue::new(
                 "view_id",
-                TypeRef::named_nn("DocumentViewId"),
+                TypeRef::named("DocumentViewId"),
             ))
             .description(schema.description()),
         )
