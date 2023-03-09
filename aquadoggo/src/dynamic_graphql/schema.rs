@@ -3,15 +3,18 @@
 //! Build and manage a GraphQL schema including dynamic parts of the schema.
 use std::sync::Arc;
 
-use async_graphql::dynamic::{Field, FieldFuture, InputValue, Object, Schema, TypeRef};
+use async_graphql::dynamic::{Field, FieldFuture, InputValue, Interface, Object, Schema, TypeRef};
 use async_graphql::indexmap::IndexMap;
-use async_graphql::{Request, Response, Value};
+use async_graphql::{Error, Name, Request, Response, Value};
 use dynamic_graphql::internal::Registry;
 use dynamic_graphql::FieldValue;
 use log::{debug, info};
-use p2panda_rs::document::DocumentViewId;
+use p2panda_rs::document::traits::AsDocument;
+use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::identity::PublicKey;
+use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::FieldType;
+use p2panda_rs::storage_provider::traits::DocumentStore;
 use p2panda_rs::Human;
 use tokio::sync::Mutex;
 
@@ -27,6 +30,20 @@ use crate::schema::SchemaProvider;
 // Correctly formats the name of a document field type.
 fn fields_name(name: &str) -> String {
     format!("{name}Fields")
+}
+
+/// Convert non-relation operation values into GraphQL values.
+///
+/// Panics when given a relation field value.
+fn gql_scalar(operation_value: &OperationValue) -> Value {
+    match operation_value {
+        OperationValue::Boolean(value) => value.to_owned().into(),
+        OperationValue::Integer(value) => value.to_owned().into(),
+        OperationValue::Float(value) => value.to_owned().into(),
+        OperationValue::String(value) => value.to_owned().into(),
+        // only use for scalars
+        _ => panic!("can only return scalar values"),
+    }
 }
 
 /// Get the GraphQL type name for a p2panda field type.
@@ -108,11 +125,12 @@ pub async fn build_root_schema(
                 TypeRef::named_nn(&document_fields_name),
                 move |_ctx| FieldFuture::new(async move { Ok(FieldValue::NONE) }),
             ))
-            .field(Field::new(
-                "meta",
-                TypeRef::named_nn("DocumentMeta"),
-                move |_ctx| FieldFuture::new(async move { Ok(FieldValue::NONE) }),
-            ))
+            .field(
+                Field::new("meta", TypeRef::named_nn("DocumentMeta"), move |_ctx| {
+                    FieldFuture::new(async move { Ok(FieldValue::NONE) })
+                })
+                .argument(InputValue::new("id", TypeRef::named("DocumentId"))),
+            )
             .description(schema.description());
 
         // Register a document and document fields type for every schema.
@@ -123,11 +141,60 @@ pub async fn build_root_schema(
             Field::new(
                 schema.id().to_string(),
                 TypeRef::named(schema.id().to_string()),
-                move |_ctx| FieldFuture::new(async move { Ok(FieldValue::NONE) }),
+                move |ctx| {
+                    FieldFuture::new(async move {
+                        let store = ctx.data_unchecked::<SqlStore>();
+                        let document_id = ctx.args.get("id");
+                        let document_view_id = ctx.args.get("view_id");
+                        let document = match (document_id, document_view_id) {
+                            (Some(document_id), None) => {
+                                let id: DocumentId = document_id.deserialize()?;
+                                store.get_document(&id).await?
+                            }
+                            (None, None) => return Err(Error::new(
+                                "Either document id or document view id arguments must be passed",
+                            )),
+                            (None, Some(document_view_id)) => {
+                                let id: DocumentViewId = document_view_id.deserialize()?;
+                                store.get_document_by_view_id(&id).await?
+                            }
+                            (Some(_), Some(_)) => return Err(Error::new(
+                                "Both document id and document view id arguments cannot be passed",
+                            )),
+                        };
+                        match document {
+                            Some(document) => {
+                                if document.is_deleted() {
+                                    return Ok(FieldValue::NONE);
+                                };
+
+                                let fields = document.fields().expect(
+                                    "All documents which haven't been deleted should have fields",
+                                );
+
+                                let mut fields_value = IndexMap::new();
+                                for (name, value) in fields.iter() {
+                                    fields_value.insert(Name::new(name), gql_scalar(value.value()));
+                                }
+
+                                let mut document_value = IndexMap::new();
+                                document_value
+                                    .insert(Name::new("fields"), Value::Object(fields_value));
+                                let document_value = FieldValue::value(Value::Object(document_value))
+                                    .with_type(document.schema_id().to_string());
+                                Ok(Some(document_value))
+                            }
+                            None => Ok(FieldValue::NONE),
+                        }
+                    })
+                },
             )
             .argument(InputValue::new("id", TypeRef::named("DocumentId")))
             .argument(InputValue::new("view_id", TypeRef::named("DocumentViewId")))
-            .description(format!("Query a {} document by id or view id", schema.name()))
+            .description(format!(
+                "Query a {} document by id or view id",
+                schema.name()
+            )),
         )
     }
 
