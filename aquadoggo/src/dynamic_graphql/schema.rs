@@ -12,7 +12,6 @@ use once_cell::sync::Lazy;
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::identity::PublicKey;
 use p2panda_rs::Human;
-use serde::Deserialize;
 use tokio::sync::Mutex;
 
 use crate::bus::ServiceSender;
@@ -24,15 +23,6 @@ use crate::dynamic_graphql::scalars::{
 use crate::dynamic_graphql::types::NextArguments;
 use crate::schema::SchemaProvider;
 
-/// Some dummy values to return from queries.
-const VALUES: Lazy<Vec<Value>> = Lazy::new(|| {
-    vec![
-        Value::String("boop".to_owned()),
-        Value::String("is it me you're looking for?".to_owned()),
-        Value::Number(Number::from(2)),
-    ]
-});
-
 /// Returns GraphQL API schema for p2panda node.
 ///
 /// Builds the root schema that can handle all GraphQL requests from clients (Client API) or other
@@ -40,14 +30,11 @@ const VALUES: Lazy<Vec<Value>> = Lazy::new(|| {
 pub async fn build_root_schema(
     _store: SqlStore,
     _tx: ServiceSender,
-    _schema_provider: SchemaProvider,
+    schema_provider: SchemaProvider,
 ) -> Schema {
-    // Query fields we want to dynamically add to the root query object.
-    let query_fields = vec![
-        ("beep", TypeRef::STRING, "The beep of the boop"),
-        ("hello", TypeRef::STRING, "The song lyric, not the planet"),
-        ("one", TypeRef::INT, "What comes after it?"),
-    ];
+
+    // Get all schema from the schema provider.
+    let all_schema = schema_provider.all().await;
 
     // Using dynamic-graphql we create a registry where we can add types.
     let registry = Registry::new()
@@ -71,14 +58,24 @@ pub async fn build_root_schema(
     // Construct the root query object.
     let mut query = Object::new("Query");
 
-    // Iterate over our query fields and insert them into the root query.
-    for (index, field) in query_fields.into_iter().enumerate() {
+    // Loop through all schema retrieved from the schema store and add them all to the query object.
+    for schema in all_schema {
         query = query.field(
-            Field::new(field.0, TypeRef::named_nn(field.1), move |_ctx| {
-                FieldFuture::new(async move { Ok(Some(VALUES[index].clone())) })
-            })
-            .argument(InputValue::new("id", TypeRef::named_nn(TypeRef::STRING)))
-            .description(field.2),
+            Field::new(
+                schema.id().to_string(),
+                TypeRef::named_nn(TypeRef::STRING),
+                move |_ctx| {
+                    FieldFuture::new(async move {
+                        Ok(Some(Value::String("If only i had a document!".to_owned())))
+                    })
+                },
+            )
+            .argument(InputValue::new("id", TypeRef::named_nn("DocumentId")))
+            .argument(InputValue::new(
+                "view_id",
+                TypeRef::named_nn("DocumentViewId"),
+            ))
+            .description(schema.description()),
         )
     }
 
