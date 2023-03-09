@@ -112,7 +112,8 @@ pub async fn build_root_schema(
                 "meta",
                 TypeRef::named_nn("DocumentMeta"),
                 move |_ctx| FieldFuture::new(async move { Ok(FieldValue::NONE) }),
-            ));
+            ))
+            .description(schema.description());
 
         // Register a document and document fields type for every schema.
         schema_builder = schema_builder.register(document_fields).register(document);
@@ -126,7 +127,7 @@ pub async fn build_root_schema(
             )
             .argument(InputValue::new("id", TypeRef::named("DocumentId")))
             .argument(InputValue::new("view_id", TypeRef::named("DocumentViewId")))
-            .description(schema.description()),
+            .description(format!("Query a {} document by id or view id", schema.name()))
         )
     }
 
