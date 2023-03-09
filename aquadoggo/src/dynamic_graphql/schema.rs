@@ -4,13 +4,14 @@
 use std::sync::Arc;
 
 use async_graphql::dynamic::{Field, FieldFuture, InputValue, Object, Schema, TypeRef};
-use async_graphql::{Number, Request, Response, Value};
+use async_graphql::indexmap::IndexMap;
+use async_graphql::{Request, Response, Value};
 use dynamic_graphql::internal::Registry;
 use dynamic_graphql::FieldValue;
 use log::{debug, info};
-use once_cell::sync::Lazy;
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::identity::PublicKey;
+use p2panda_rs::schema::FieldType;
 use p2panda_rs::Human;
 use tokio::sync::Mutex;
 
@@ -22,6 +23,33 @@ use crate::dynamic_graphql::scalars::{
 };
 use crate::dynamic_graphql::types::NextArguments;
 use crate::schema::SchemaProvider;
+
+/// Correctly formats the name of a document field type.
+fn fields_name(name: &str) -> String {
+    format!("{name}Fields")
+}
+
+/// Get the GraphQL type name for a p2panda field type.
+///
+/// GraphQL types for relations use the p2panda schema id as their name.
+fn graphql_type(field_type: &FieldType) -> TypeRef {
+    match field_type {
+        p2panda_rs::schema::FieldType::Boolean => TypeRef::named_nn(TypeRef::BOOLEAN),
+        p2panda_rs::schema::FieldType::Integer => TypeRef::named_nn(TypeRef::INT),
+        p2panda_rs::schema::FieldType::Float => TypeRef::named_nn(TypeRef::FLOAT),
+        p2panda_rs::schema::FieldType::String => TypeRef::named_nn(TypeRef::STRING),
+        p2panda_rs::schema::FieldType::Relation(schema_id) => TypeRef::named(schema_id.to_string()),
+        p2panda_rs::schema::FieldType::RelationList(schema_id) => {
+            TypeRef::named_list(schema_id.to_string())
+        }
+        p2panda_rs::schema::FieldType::PinnedRelation(schema_id) => {
+            TypeRef::named(schema_id.to_string())
+        }
+        p2panda_rs::schema::FieldType::PinnedRelationList(schema_id) => {
+            TypeRef::named_list(schema_id.to_string())
+        }
+    }
+}
 
 /// Returns GraphQL API schema for p2panda node.
 ///
@@ -57,39 +85,32 @@ pub async fn build_root_schema(
     // Construct the root query object.
     let mut query = Object::new("Query");
 
-    // Loop through all schema retrieved from the schema store and add a type and query for the
-    // document they describe.
+    // Loop through all schema retrieved from the schema store and add types and query for the
+    // documents they describe.
     for schema in all_schema {
-        let mut document = Object::new(schema.id().to_string());
+        // Construct the document fields type.
+        let document_fields_name = fields_name(&schema.id().to_string());
+        let mut document_fields = Object::new(&document_fields_name);
+        
         for (name, field_type) in schema.fields() {
-            let graphql_type = match field_type {
-                p2panda_rs::schema::FieldType::Boolean => TypeRef::named(TypeRef::BOOLEAN),
-                p2panda_rs::schema::FieldType::Integer => TypeRef::named(TypeRef::INT),
-                p2panda_rs::schema::FieldType::Float => TypeRef::named(TypeRef::FLOAT),
-                p2panda_rs::schema::FieldType::String => TypeRef::named(TypeRef::STRING),
-                p2panda_rs::schema::FieldType::Relation(schema_id) => {
-                    TypeRef::named(schema_id.to_string())
-                }
-                p2panda_rs::schema::FieldType::RelationList(schema_id) => {
-                    TypeRef::named_list(schema_id.to_string())
-                }
-                p2panda_rs::schema::FieldType::PinnedRelation(schema_id) => {
-                    TypeRef::named(schema_id.to_string())
-                }
-                p2panda_rs::schema::FieldType::PinnedRelationList(schema_id) => {
-                    TypeRef::named_list(schema_id.to_string())
-                }
-            };
+            let graphql_type = graphql_type(field_type);
 
-            document = document.field(Field::new(name, graphql_type, move |_ctx| {
+            document_fields = document_fields.field(Field::new(name, graphql_type, move |_ctx| {
                 FieldFuture::new(
                     async move { Ok(Some(Value::String("The value of this".to_owned()))) },
                 )
             }))
         }
 
-        // Register a document object type for every schema.
-        schema_builder = schema_builder.register(document);
+        // Construct the document type.
+        let document = Object::new(&schema.id().to_string()).field(Field::new(
+            "fields",
+            TypeRef::named_nn(&document_fields_name),
+            move |_ctx| FieldFuture::new(async move { Ok(Some(Value::Object(IndexMap::new()))) }),
+        ));
+
+        // Register a document and document fields type for every schema.
+        schema_builder = schema_builder.register(document_fields).register(document);
 
         // Add a query object for each schema.
         query = query.field(
