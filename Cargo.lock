@@ -62,6 +62,7 @@ dependencies = [
  "ctor",
  "deadqueue",
  "directories",
+ "dynamic-graphql",
  "env_logger",
  "envy",
  "futures",
@@ -757,6 +758,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7e851a83c30366fd01d75b913588e95e74a1705c1ecc5d58b1f8e1a6d556525f"
 dependencies = [
  "dirs",
+]
+
+[[package]]
+name = "dynamic-graphql"
+version = "0.7.1"
+source = "git+https://github.com/smmoosavi/dynamic-graphql#7f471f3e6d1189491caa2e89be7b368b79622585"
+dependencies = [
+ "async-graphql",
+ "dynamic-graphql-derive",
+ "fnv",
+]
+
+[[package]]
+name = "dynamic-graphql-derive"
+version = "0.7.1"
+source = "git+https://github.com/smmoosavi/dynamic-graphql#7f471f3e6d1189491caa2e89be7b368b79622585"
+dependencies = [
+ "Inflector",
+ "darling",
+ "proc-macro-crate",
+ "proc-macro2",
+ "quote",
+ "syn",
+ "thiserror",
 ]
 
 [[package]]

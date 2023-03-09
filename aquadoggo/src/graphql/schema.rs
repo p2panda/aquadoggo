@@ -5,6 +5,8 @@ use std::sync::Arc;
 
 use async_graphql::dynamic::{Field, FieldFuture, InputValue, Object, Schema, TypeRef};
 use async_graphql::{Number, Request, Response, Result, Value};
+use dynamic_graphql::internal::Registry;
+use dynamic_graphql::FieldValue;
 use log::{debug, info};
 use once_cell::sync::Lazy;
 use p2panda_rs::Human;
@@ -12,6 +14,7 @@ use tokio::sync::Mutex;
 
 use crate::bus::ServiceSender;
 use crate::db::SqlStore;
+use crate::graphql::client::dynamic_types::NextArguments;
 use crate::schema::SchemaProvider;
 
 /// Some dummy values to return from queries.
@@ -39,10 +42,20 @@ pub async fn build_root_schema(
         ("one", TypeRef::INT, "What comes after it?"),
     ];
 
+    // Using dynamic-graphql we create a registry where we can add types.
+    let registry = Registry::new().register::<NextArguments>();
+
+    // Construct the schema builder.
+    let schema = Schema::build("Query", None, None);
+
+    // Populate it with the registered types. We can now use these in any following dynamically
+    // created query object fields.
+    let schema = registry.apply_into_schema_builder(schema);
+
     // Construct the root query object.
     let mut query = Object::new("Query");
 
-    // Iterate over our query fields and insert them into the root query. 
+    // Iterate over our query fields and insert them into the root query.
     for (index, field) in query_fields.into_iter().enumerate() {
         query = query.field(
             Field::new(field.0, TypeRef::named_nn(field.1), move |_ctx| {
@@ -53,11 +66,31 @@ pub async fn build_root_schema(
         )
     }
 
+    // Add next args to the query object.
+    let query = query.field(
+        Field::new("nextArgs", TypeRef::named("NextArguments"), |_ctx| {
+            FieldFuture::new(async move {
+                Ok(Some(FieldValue::owned_any(NextArguments {
+                    log_id: "0".to_string(),
+                    seq_num: "1".to_string(),
+                    backlink: None,
+                    skiplink: None,
+                })))
+            })
+        })
+        .argument(InputValue::new(
+            "publicKey",
+            TypeRef::named_nn(TypeRef::STRING),
+        ))
+        .argument(InputValue::new(
+            "documentViewId",
+            TypeRef::named(TypeRef::STRING),
+        ))
+        .description("Gimme some sweet sweet next args!"),
+    );
+
     // Build the schema.
-    Schema::build("Query", None, None)
-        .register(query)
-        .finish()
-        .unwrap()
+    schema.register(query).finish().unwrap()
 }
 
 /// List of created GraphQL root schemas.

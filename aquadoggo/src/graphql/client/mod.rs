@@ -5,6 +5,7 @@ mod mutation;
 mod query;
 mod static_query;
 mod static_types;
+pub mod dynamic_types;
 #[cfg(test)]
 mod tests;
 mod utils;
