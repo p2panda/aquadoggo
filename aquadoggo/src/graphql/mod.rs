@@ -7,4 +7,4 @@ pub mod replication;
 pub mod scalars;
 mod schema;
 
-pub use schema::{build_root_schema, GraphQLSchemaManager};
+pub use schema::{build_root_schema, GraphQLSchemaManager, QueryRoot, RootSchema};

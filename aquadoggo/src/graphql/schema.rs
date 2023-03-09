@@ -3,98 +3,56 @@
 //! Build and manage a GraphQL schema including dynamic parts of the schema.
 use std::sync::Arc;
 
-use async_graphql::dynamic::{Field, FieldFuture, InputValue, Object, Schema, TypeRef};
-use async_graphql::{Number, Request, Response, Result, Value};
-use dynamic_graphql::internal::Registry;
-use dynamic_graphql::FieldValue;
+use async_graphql::{EmptySubscription, MergedObject, Request, Response, Schema};
 use log::{debug, info};
-use once_cell::sync::Lazy;
 use p2panda_rs::Human;
 use tokio::sync::Mutex;
 
 use crate::bus::ServiceSender;
 use crate::db::SqlStore;
-use crate::dynamic_graphql::types::NextArguments;
+use crate::graphql::client::{ClientMutationRoot, ClientRoot};
+use crate::graphql::replication::ReplicationRoot;
 use crate::schema::SchemaProvider;
 
-/// Some dummy values to return from queries.
-const VALUES: Lazy<Vec<Value>> = Lazy::new(|| {
-    vec![
-        Value::String("boop".to_owned()),
-        Value::String("is it me you're looking for?".to_owned()),
-        Value::Number(Number::from(2)),
-    ]
-});
+/// All of the GraphQL query sub modules merged into one top level root.
+#[derive(MergedObject, Debug)]
+pub struct QueryRoot(pub ReplicationRoot, pub ClientRoot);
+
+/// All of the GraphQL mutation sub modules merged into one top level root.
+#[derive(MergedObject, Debug, Copy, Clone, Default)]
+pub struct MutationRoot(pub ClientMutationRoot);
+
+/// GraphQL schema for p2panda node.
+pub type RootSchema = Schema<QueryRoot, MutationRoot, EmptySubscription>;
 
 /// Returns GraphQL API schema for p2panda node.
 ///
 /// Builds the root schema that can handle all GraphQL requests from clients (Client API) or other
 /// nodes (Node API).
-pub async fn build_root_schema(
-    _store: SqlStore,
-    _tx: ServiceSender,
-    _schema_provider: SchemaProvider,
-) -> Schema {
-    // Query fields we want to dynamically add to the root query object.
-    let query_fields = vec![
-        ("beep", TypeRef::STRING, "The beep of the boop"),
-        ("hello", TypeRef::STRING, "The song lyric, not the planet"),
-        ("one", TypeRef::INT, "What comes after it?"),
-    ];
+pub fn build_root_schema(
+    store: SqlStore,
+    tx: ServiceSender,
+    schema_provider: SchemaProvider,
+) -> RootSchema {
+    // Configure query root
+    let replication_root = ReplicationRoot::default();
+    let client_query_root = ClientRoot::new();
+    let query_root = QueryRoot(replication_root, client_query_root);
 
-    // Using dynamic-graphql we create a registry where we can add types.
-    let registry = Registry::new().register::<NextArguments>();
+    // Configure mutation root
+    let client_mutation_root = ClientMutationRoot::default();
+    let mutation_root = MutationRoot(client_mutation_root);
 
-    // Construct the schema builder.
-    let schema = Schema::build("Query", None, None);
-
-    // Populate it with the registered types. We can now use these in any following dynamically
-    // created query object fields.
-    let schema = registry.apply_into_schema_builder(schema);
-
-    // Construct the root query object.
-    let mut query = Object::new("Query");
-
-    // Iterate over our query fields and insert them into the root query.
-    for (index, field) in query_fields.into_iter().enumerate() {
-        query = query.field(
-            Field::new(field.0, TypeRef::named_nn(field.1), move |_ctx| {
-                FieldFuture::new(async move { Ok(Some(VALUES[index].clone())) })
-            })
-            .argument(InputValue::new("id", TypeRef::named_nn(TypeRef::STRING)))
-            .description(field.2),
-        )
-    }
-
-    // Add next args to the query object.
-    let query = query.field(
-        Field::new("nextArgs", TypeRef::named("NextArguments"), |_ctx| {
-            FieldFuture::new(async move {
-                Ok(Some(FieldValue::owned_any(NextArguments {
-                    log_id: "0".to_string(),
-                    seq_num: "1".to_string(),
-                    backlink: None,
-                    skiplink: None,
-                })))
-            })
-        })
-        .argument(InputValue::new(
-            "publicKey",
-            TypeRef::named_nn(TypeRef::STRING),
-        ))
-        .argument(InputValue::new(
-            "documentViewId",
-            TypeRef::named(TypeRef::STRING),
-        ))
-        .description("Gimme some sweet sweet next args!"),
-    );
-
-    // Build the schema.
-    schema.register(query).finish().unwrap()
+    // Build GraphQL schema
+    Schema::build(query_root, mutation_root, EmptySubscription)
+        .data(store)
+        .data(schema_provider)
+        .data(tx)
+        .finish()
 }
 
 /// List of created GraphQL root schemas.
-type GraphQLSchemas = Arc<Mutex<Vec<Schema>>>;
+type GraphQLSchemas = Arc<Mutex<Vec<RootSchema>>>;
 
 /// Shared types between GraphQL schemas.
 #[derive(Clone, Debug)]
@@ -165,7 +123,7 @@ impl GraphQLSchemaManager {
 
         // Create the new GraphQL based on the current state of known p2panda application schemas
         async fn rebuild(shared: GraphQLSharedData, schemas: GraphQLSchemas) {
-            let schema = build_root_schema(shared.store, shared.tx, shared.schema_provider).await;
+            let schema = build_root_schema(shared.store, shared.tx, shared.schema_provider);
             schemas.lock().await.push(schema);
         }
 
