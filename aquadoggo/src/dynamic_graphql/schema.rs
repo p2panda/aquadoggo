@@ -21,10 +21,10 @@ use crate::dynamic_graphql::scalars::{
     DocumentIdScalar, DocumentViewIdScalar, EncodedEntryScalar, EncodedOperationScalar,
     EntryHashScalar, LogIdScalar, PublicKeyScalar, SeqNumScalar,
 };
-use crate::dynamic_graphql::types::NextArguments;
+use crate::dynamic_graphql::types::{DocumentMeta, NextArguments};
 use crate::schema::SchemaProvider;
 
-/// Correctly formats the name of a document field type.
+// Correctly formats the name of a document field type.
 fn fields_name(name: &str) -> String {
     format!("{name}Fields")
 }
@@ -67,6 +67,7 @@ pub async fn build_root_schema(
     let registry = Registry::new()
         .register::<NextArguments>()
         .register::<DocumentIdScalar>()
+        .register::<DocumentMeta>()
         .register::<DocumentViewIdScalar>()
         .register::<EncodedEntryScalar>()
         .register::<EncodedOperationScalar>()
@@ -91,23 +92,27 @@ pub async fn build_root_schema(
         // Construct the document fields type.
         let document_fields_name = fields_name(&schema.id().to_string());
         let mut document_fields = Object::new(&document_fields_name);
-        
+
         for (name, field_type) in schema.fields() {
             let graphql_type = graphql_type(field_type);
 
             document_fields = document_fields.field(Field::new(name, graphql_type, move |_ctx| {
-                FieldFuture::new(
-                    async move { Ok(Some(Value::String("The value of this".to_owned()))) },
-                )
+                FieldFuture::new(async move { Ok(FieldValue::NONE) })
             }))
         }
 
         // Construct the document type.
-        let document = Object::new(&schema.id().to_string()).field(Field::new(
-            "fields",
-            TypeRef::named_nn(&document_fields_name),
-            move |_ctx| FieldFuture::new(async move { Ok(Some(Value::Object(IndexMap::new()))) }),
-        ));
+        let document = Object::new(&schema.id().to_string())
+            .field(Field::new(
+                "fields",
+                TypeRef::named_nn(&document_fields_name),
+                move |_ctx| FieldFuture::new(async move { Ok(FieldValue::NONE) }),
+            ))
+            .field(Field::new(
+                "meta",
+                TypeRef::named_nn("DocumentMeta"),
+                move |_ctx| FieldFuture::new(async move { Ok(FieldValue::NONE) }),
+            ));
 
         // Register a document and document fields type for every schema.
         schema_builder = schema_builder.register(document_fields).register(document);
@@ -117,11 +122,7 @@ pub async fn build_root_schema(
             Field::new(
                 schema.id().to_string(),
                 TypeRef::named(schema.id().to_string()),
-                move |_ctx| {
-                    FieldFuture::new(async move {
-                        Ok(Some(Value::String("If only i had a document!".to_owned())))
-                    })
-                },
+                move |_ctx| FieldFuture::new(async move { Ok(FieldValue::NONE) }),
             )
             .argument(InputValue::new("id", TypeRef::named("DocumentId")))
             .argument(InputValue::new("view_id", TypeRef::named("DocumentViewId")))

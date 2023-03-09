@@ -2,7 +2,7 @@
 
 use dynamic_graphql::SimpleObject;
 
-/// NextArguments type which can be used with dynamically created graphql objects. 
+/// Values used to in the construction of p2panda entries and operations. 
 #[derive(SimpleObject)]
 pub struct NextArguments {
     /// Log id of the entry.
