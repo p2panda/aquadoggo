@@ -9,7 +9,10 @@ use dynamic_graphql::internal::Registry;
 use dynamic_graphql::FieldValue;
 use log::{debug, info};
 use once_cell::sync::Lazy;
+use p2panda_rs::document::DocumentViewId;
+use p2panda_rs::identity::PublicKey;
 use p2panda_rs::Human;
+use serde::Deserialize;
 use tokio::sync::Mutex;
 
 use crate::bus::ServiceSender;
@@ -83,6 +86,9 @@ pub async fn build_root_schema(
     let query = query.field(
         Field::new("nextArgs", TypeRef::named("NextArguments"), |ctx| {
             FieldFuture::new(async move {
+                let _public_key: PublicKey = ctx.args.get("publicKey").unwrap().deserialize()?;
+                let _document_view_id: Option<DocumentViewId> =
+                    ctx.args.get("documentViewId").unwrap().deserialize()?;
                 Ok(Some(FieldValue::owned_any(NextArguments {
                     log_id: "0".to_string(),
                     seq_num: "1".to_string(),
@@ -91,13 +97,10 @@ pub async fn build_root_schema(
                 })))
             })
         })
-        .argument(InputValue::new(
-            "publicKey",
-            TypeRef::named_nn(TypeRef::STRING),
-        ))
+        .argument(InputValue::new("publicKey", TypeRef::named_nn("PublicKey")))
         .argument(InputValue::new(
             "documentViewId",
-            TypeRef::named(TypeRef::STRING),
+            TypeRef::named("DocumentViewId"),
         ))
         .description("Gimme some sweet sweet next args!"),
     );
