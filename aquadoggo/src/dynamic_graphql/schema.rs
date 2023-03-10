@@ -7,7 +7,7 @@ use async_graphql::dynamic::{Field, FieldFuture, InputValue, Interface, Object, 
 use async_graphql::indexmap::IndexMap;
 use async_graphql::{Error, Name, Request, Response, Value};
 use dynamic_graphql::internal::Registry;
-use dynamic_graphql::FieldValue;
+use dynamic_graphql::{FieldValue, ScalarValue};
 use log::{debug, info};
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
@@ -113,8 +113,19 @@ pub async fn build_root_schema(
         for (name, field_type) in schema.fields() {
             let graphql_type = graphql_type(field_type);
 
-            document_fields = document_fields.field(Field::new(name, graphql_type, move |_ctx| {
-                FieldFuture::new(async move { Ok(FieldValue::NONE) })
+            document_fields = document_fields.field(Field::new(name, graphql_type, move |ctx| {
+                FieldFuture::new(async move {
+                    let field_name = ctx.field().name();
+                    match ctx.parent_value.as_value() {
+                        Some(Value::Object(map)) => {
+                            let value = map
+                                .get(field_name)
+                                .map(|value| FieldValue::value(value.to_owned()));
+                            Ok(value)
+                        }
+                        _ => Ok(FieldValue::NONE),
+                    }
+                })
             }))
         }
 
@@ -123,14 +134,49 @@ pub async fn build_root_schema(
             .field(Field::new(
                 "fields",
                 TypeRef::named_nn(&document_fields_name),
-                move |_ctx| FieldFuture::new(async move { Ok(FieldValue::NONE) }),
+                move |ctx| {
+                    FieldFuture::new(async move {
+                        let field_name = ctx.field().name();
+                        match ctx.parent_value.as_value() {
+                            Some(Value::Object(map)) => {
+                                let value = map
+                                    .get(field_name)
+                                    .map(|value| FieldValue::value(value.to_owned()));
+                                Ok(value)
+                            }
+                            _ => Ok(FieldValue::NONE),
+                        }
+                    })
+                },
             ))
-            .field(
-                Field::new("meta", TypeRef::named_nn("DocumentMeta"), move |_ctx| {
-                    FieldFuture::new(async move { Ok(FieldValue::NONE) })
-                })
-                .argument(InputValue::new("id", TypeRef::named("DocumentId"))),
-            )
+            .field(Field::new(
+                "meta",
+                TypeRef::named_nn("DocumentMeta"),
+                move |ctx| {
+                    FieldFuture::new(async move {
+                        let field_name = ctx.field().name();
+                        match ctx.parent_value.as_value() {
+                            Some(Value::Object(map)) => match map.get(field_name).unwrap() {
+                                Value::Object(document_meta) => {
+                                    let document_meta = DocumentMeta {
+                                        document_id: DocumentIdScalar::from_value(
+                                            document_meta.get("document_id").unwrap().to_owned(),
+                                        )
+                                        .unwrap(),
+                                        view_id: DocumentViewIdScalar::from_value(
+                                            document_meta.get("view_id").unwrap().to_owned(),
+                                        )
+                                        .unwrap(),
+                                    };
+                                    Ok(Some(FieldValue::owned_any(document_meta)))
+                                }
+                                _ => Ok(FieldValue::NONE),
+                            },
+                            _ => Ok(FieldValue::NONE),
+                        }
+                    })
+                },
+            ))
             .description(schema.description());
 
         // Register a document and document fields type for every schema.
@@ -155,8 +201,10 @@ pub async fn build_root_schema(
                                 "Either document id or document view id arguments must be passed",
                             )),
                             (None, Some(document_view_id)) => {
-                                let id: DocumentViewId = document_view_id.deserialize()?;
-                                store.get_document_by_view_id(&id).await?
+                                let document_view_id_str = document_view_id.string()?;
+                                let document_view_id: DocumentViewId = document_view_id_str.parse()?;
+
+                                store.get_document_by_view_id(&document_view_id).await?
                             }
                             (Some(_), Some(_)) => return Err(Error::new(
                                 "Both document id and document view id arguments cannot be passed",
@@ -177,11 +225,23 @@ pub async fn build_root_schema(
                                     fields_value.insert(Name::new(name), gql_scalar(value.value()));
                                 }
 
+                                let mut document_meta_value = IndexMap::new();
+                                document_meta_value.insert(
+                                    Name::new("document_id"),
+                                    Value::String(document.id().to_string()),
+                                );
+                                document_meta_value.insert(
+                                    Name::new("view_id"),
+                                    Value::String(document.view_id().to_string()),
+                                );
+
                                 let mut document_value = IndexMap::new();
                                 document_value
                                     .insert(Name::new("fields"), Value::Object(fields_value));
-                                let document_value = FieldValue::value(Value::Object(document_value))
-                                    .with_type(document.schema_id().to_string());
+                                document_value
+                                    .insert(Name::new("meta"), Value::Object(document_meta_value));
+                                let document_value =
+                                    FieldValue::value(Value::Object(document_value));
                                 Ok(Some(document_value))
                             }
                             None => Ok(FieldValue::NONE),

@@ -7,6 +7,9 @@ use crate::dynamic_graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
 /// The meta fields of a document.
 #[derive(SimpleObject)]
 pub struct DocumentMeta {
-    pub id: DocumentIdScalar,
+    #[graphql(name = "documentId")]
+    pub document_id: DocumentIdScalar,
+
+    #[graphql(name = "viewId")]
     pub view_id: DocumentViewIdScalar,
 }
