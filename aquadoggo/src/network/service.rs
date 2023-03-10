@@ -54,7 +54,8 @@ impl Behaviour {
     }
 }
 
-/// Network service that configures and deploys a network swarm over QUIC transports.
+/// Network service that configures and deploys a network swarm over QUIC transports,
+/// with mDNS provided for peer discovery on the local network.
 ///
 /// The swarm listens for incoming connections, dials remote nodes, manages
 /// connections and executes predefined network behaviours.
