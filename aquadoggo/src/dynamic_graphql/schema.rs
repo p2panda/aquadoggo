@@ -3,22 +3,26 @@
 //! Build and manage a GraphQL schema including dynamic parts of the schema.
 use std::sync::Arc;
 
-use async_graphql::dynamic::{Field, FieldFuture, InputValue, Interface, Object, Schema, TypeRef};
+use async_graphql::dynamic::{
+    Field, FieldFuture, InputValue, Interface, Object, ResolverContext, Schema, TypeRef,
+};
 use async_graphql::indexmap::IndexMap;
-use async_graphql::{Error, Name, Request, Response, Value};
+use async_graphql::{Context, Error, Name, Request, Response, Value};
 use dynamic_graphql::internal::Registry;
 use dynamic_graphql::{FieldValue, ScalarValue};
 use log::{debug, info};
 use p2panda_rs::document::traits::AsDocument;
-use p2panda_rs::document::{DocumentId, DocumentViewId};
+use p2panda_rs::document::{Document, DocumentId, DocumentViewId};
 use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::FieldType;
+use p2panda_rs::storage_provider::error::DocumentStorageError;
 use p2panda_rs::storage_provider::traits::DocumentStore;
 use p2panda_rs::Human;
 use tokio::sync::Mutex;
 
 use crate::bus::ServiceSender;
+use crate::db::types::StorageDocument;
 use crate::db::SqlStore;
 use crate::dynamic_graphql::scalars::{
     DocumentIdScalar, DocumentViewIdScalar, EncodedEntryScalar, EncodedOperationScalar,
@@ -41,8 +45,8 @@ fn gql_scalar(operation_value: &OperationValue) -> Value {
         OperationValue::Integer(value) => value.to_owned().into(),
         OperationValue::Float(value) => value.to_owned().into(),
         OperationValue::String(value) => value.to_owned().into(),
-        // only use for scalars
-        _ => panic!("can only return scalar values"),
+        // Recursion not implemented yet.
+        _ => todo!(),
     }
 }
 
@@ -68,6 +72,34 @@ fn graphql_type(field_type: &FieldType) -> TypeRef {
     }
 }
 
+/// Downcast document id and document view id from parameters passed up the query fields and
+/// retrieved via the `ResolverContext`.
+fn downcast_id_params(
+    ctx: &ResolverContext,
+) -> (Option<DocumentIdScalar>, Option<DocumentViewIdScalar>) {
+    ctx.parent_value
+        .downcast_ref::<(Option<DocumentIdScalar>, Option<DocumentViewIdScalar>)>()
+        .expect("Values passed from query parent should match expected")
+        .to_owned()
+}
+
+/// Helper for getting a document from score by either the document id or document view id.
+async fn get_document_from_params(
+    store: &SqlStore,
+    document_id: &Option<DocumentIdScalar>,
+    document_view_id: &Option<DocumentViewIdScalar>,
+) -> Result<Option<StorageDocument>, DocumentStorageError> {
+    match (document_id, document_view_id) {
+        (None, Some(document_view_id)) => {
+            store
+                .get_document_by_view_id(&DocumentViewId::from(document_view_id))
+                .await
+        }
+        (Some(document_id), None) => store.get_document(&DocumentId::from(document_id)).await,
+        _ => panic!("Invalid values passed from query field parent"),
+    }
+}
+
 /// Returns GraphQL API schema for p2panda node.
 ///
 /// Builds the root schema that can handle all GraphQL requests from clients (Client API) or other
@@ -80,7 +112,7 @@ pub async fn build_root_schema(
     // Get all schema from the schema provider.
     let all_schema = schema_provider.all().await;
 
-    // Using dynamic-graphql we create a registry where we can add types.
+    // Using dynamic-graphql we create a registry and add types.
     let registry = Registry::new()
         .register::<NextArguments>()
         .register::<DocumentIdScalar>()
@@ -103,49 +135,60 @@ pub async fn build_root_schema(
     // Construct the root query object.
     let mut query = Object::new("Query");
 
-    // Loop through all schema retrieved from the schema store and add types and query for the
+    // Loop through all schema retrieved from the schema store, create types and a root query for the
     // documents they describe.
     for schema in all_schema {
-        // Construct the document fields type.
+        // Construct the document fields object which will be named `<schema_id>Field`.
         let document_fields_name = fields_name(&schema.id().to_string());
         let mut document_fields = Object::new(&document_fields_name);
 
+        // For every field in the schema we create a type with a resolver.
+        //
+        // TODO: We can optimize the field resolution methods later with a data loader.
         for (name, field_type) in schema.fields() {
+            // The type of this field.
             let graphql_type = graphql_type(field_type);
 
+            // Define the field and create a resolver.
             document_fields = document_fields.field(Field::new(name, graphql_type, move |ctx| {
                 FieldFuture::new(async move {
+                    let store = ctx.data_unchecked::<SqlStore>();
                     let field_name = ctx.field().name();
-                    match ctx.parent_value.as_value() {
-                        Some(Value::Object(map)) => {
-                            let value = map
+
+                    // Downcast the parameters passed up from the parent query field.
+                    let (document_id, document_view_id) = downcast_id_params(&ctx);
+                    // Get the whole document.
+                    //
+                    // TODO: This can be optimized with per field SQL queries and data loader.
+                    let document =
+                        get_document_from_params(store, &document_id, &document_view_id).await?;
+
+                    match document {
+                        Some(document) => {
+                            let value = document
                                 .get(field_name)
-                                .map(|value| FieldValue::value(value.to_owned()));
-                            Ok(value)
+                                .expect("Only fields defined on the schema can be queried");
+                            // Convert the operation value into a graphql scalar type.
+                            //
+                            // TODO: Relation fields aren't supported yet, we need recursion.
+                            Ok(Some(FieldValue::value(gql_scalar(value))))
                         }
-                        _ => Ok(FieldValue::NONE),
+                        None => Ok(FieldValue::NONE),
                     }
                 })
             }))
         }
 
-        // Construct the document type.
+        // Construct the root document type which has "fields" and "meta" fields.
         let document = Object::new(&schema.id().to_string())
             .field(Field::new(
                 "fields",
                 TypeRef::named_nn(&document_fields_name),
                 move |ctx| {
                     FieldFuture::new(async move {
-                        let field_name = ctx.field().name();
-                        match ctx.parent_value.as_value() {
-                            Some(Value::Object(map)) => {
-                                let value = map
-                                    .get(field_name)
-                                    .map(|value| FieldValue::value(value.to_owned()));
-                                Ok(value)
-                            }
-                            _ => Ok(FieldValue::NONE),
-                        }
+                        // Here we just pass up the root query parameters to be used in the fields resolver.
+                        let params = downcast_id_params(&ctx);
+                        Ok(Some(FieldValue::owned_any(params)))
                     })
                 },
             ))
@@ -154,26 +197,33 @@ pub async fn build_root_schema(
                 TypeRef::named_nn("DocumentMeta"),
                 move |ctx| {
                     FieldFuture::new(async move {
-                        let field_name = ctx.field().name();
-                        match ctx.parent_value.as_value() {
-                            Some(Value::Object(map)) => match map.get(field_name).unwrap() {
-                                Value::Object(document_meta) => {
-                                    let document_meta = DocumentMeta {
-                                        document_id: DocumentIdScalar::from_value(
-                                            document_meta.get("document_id").unwrap().to_owned(),
-                                        )
-                                        .unwrap(),
-                                        view_id: DocumentViewIdScalar::from_value(
-                                            document_meta.get("view_id").unwrap().to_owned(),
-                                        )
-                                        .unwrap(),
-                                    };
-                                    Ok(Some(FieldValue::owned_any(document_meta)))
-                                }
-                                _ => Ok(FieldValue::NONE),
-                            },
-                            _ => Ok(FieldValue::NONE),
-                        }
+                        let store = ctx.data_unchecked::<SqlStore>();
+
+                        // Downcast the parameters passed up from the parent query field.
+                        let (document_id, document_view_id) = downcast_id_params(&ctx);
+                        // Get the whole document.
+                        let document =
+                            get_document_from_params(store, &document_id, &document_view_id)
+                                .await?;
+
+                        // Construct `DocumentMeta` and return it. We defined the document meta
+                        // type and already registered it in the schema. It's derived resolvers
+                        // will handle field selection.
+                        //
+                        // TODO: We could again optimize here by defining our own resolver logic
+                        // for each field.
+                        let field_value = match document {
+                            Some(document) => {
+                                let document_meta = DocumentMeta {
+                                    document_id: document.id().into(),
+                                    view_id: document.view_id().into(),
+                                };
+                                Some(FieldValue::owned_any(document_meta))
+                            }
+                            None => FieldValue::NONE,
+                        };
+
+                        Ok(field_value)
                     })
                 },
             ))
@@ -183,69 +233,45 @@ pub async fn build_root_schema(
         schema_builder = schema_builder.register(document_fields).register(document);
 
         // Add a query object for each schema.
+        //
+        // This is the top level root query which we create for each document. It's resolver parses and
+        // validates the passed parameters, then forwards them up to the children query fields.
         query = query.field(
             Field::new(
                 schema.id().to_string(),
                 TypeRef::named(schema.id().to_string()),
                 move |ctx| {
                     FieldFuture::new(async move {
-                        let store = ctx.data_unchecked::<SqlStore>();
-                        let document_id = ctx.args.get("id");
-                        let document_view_id = ctx.args.get("view_id");
-                        let document = match (document_id, document_view_id) {
-                            (Some(document_id), None) => {
-                                let id: DocumentId = document_id.deserialize()?;
-                                store.get_document(&id).await?
+                        // Parse document id.
+                        let document_id = match ctx.args.get("id") {
+                            Some(id) => {
+                                let id = id.string()?;
+                                Some(DocumentIdScalar::from_value(Value::String(id.to_string()))?)
                             }
+                            None => None,
+                        };
+                        // Parse document view id.
+                        let document_view_id = match ctx.args.get("view_id") {
+                            Some(id) => {
+                                let id = id.string()?;
+                                Some(DocumentViewIdScalar::from_value(Value::String(
+                                    id.to_string(),
+                                ))?)
+                            }
+                            None => None,
+                        };
+                        // Check a valid combination of id's was passed.
+                        match (&document_id, &document_view_id) {
                             (None, None) => return Err(Error::new(
                                 "Either document id or document view id arguments must be passed",
                             )),
-                            (None, Some(document_view_id)) => {
-                                let document_view_id_str = document_view_id.string()?;
-                                let document_view_id: DocumentViewId = document_view_id_str.parse()?;
-
-                                store.get_document_by_view_id(&document_view_id).await?
-                            }
                             (Some(_), Some(_)) => return Err(Error::new(
                                 "Both document id and document view id arguments cannot be passed",
                             )),
+                            (_, _) => (),
                         };
-                        match document {
-                            Some(document) => {
-                                if document.is_deleted() {
-                                    return Ok(FieldValue::NONE);
-                                };
-
-                                let fields = document.fields().expect(
-                                    "All documents which haven't been deleted should have fields",
-                                );
-
-                                let mut fields_value = IndexMap::new();
-                                for (name, value) in fields.iter() {
-                                    fields_value.insert(Name::new(name), gql_scalar(value.value()));
-                                }
-
-                                let mut document_meta_value = IndexMap::new();
-                                document_meta_value.insert(
-                                    Name::new("document_id"),
-                                    Value::String(document.id().to_string()),
-                                );
-                                document_meta_value.insert(
-                                    Name::new("view_id"),
-                                    Value::String(document.view_id().to_string()),
-                                );
-
-                                let mut document_value = IndexMap::new();
-                                document_value
-                                    .insert(Name::new("fields"), Value::Object(fields_value));
-                                document_value
-                                    .insert(Name::new("meta"), Value::Object(document_meta_value));
-                                let document_value =
-                                    FieldValue::value(Value::Object(document_value));
-                                Ok(Some(document_value))
-                            }
-                            None => Ok(FieldValue::NONE),
-                        }
+                        // Pass them up to the children query fields.
+                        Ok(Some(FieldValue::owned_any((document_id, document_view_id))))
                     })
                 },
             )
