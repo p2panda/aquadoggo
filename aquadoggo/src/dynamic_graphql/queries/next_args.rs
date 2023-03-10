@@ -2,19 +2,22 @@
 
 //! Static fields of the client api.
 use async_graphql::{Context, Object, Result};
+use dynamic_graphql::SimpleObject;
 use p2panda_rs::api;
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::identity::PublicKey;
 
 use crate::db::SqlStore;
-use crate::graphql::client::NextArguments;
-use crate::graphql::scalars;
+use crate::dynamic_graphql::scalars::{
+    DocumentViewIdScalar, EntryHashScalar, LogIdScalar, PublicKeyScalar, SeqNumScalar,
+};
+use crate::dynamic_graphql::types::NextArguments;
 
 /// Return required arguments for publishing the next entry.
 pub async fn next_args(
     ctx: &Context<'_>,
-    public_key: scalars::PublicKeyScalar,
-    document_view_id: Option<scalars::DocumentViewIdScalar>,
+    public_key: PublicKeyScalar,
+    document_view_id: Option<DocumentViewIdScalar>,
 ) -> Result<NextArguments> {
     // Access the store from context.
     let store = ctx.data::<SqlStore>()?;

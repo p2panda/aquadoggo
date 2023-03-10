@@ -4,16 +4,14 @@
 use std::sync::Arc;
 
 use async_graphql::dynamic::{
-    Field, FieldFuture, InputValue, Interface, Object, ResolverContext, Schema, TypeRef,
+    Field, FieldFuture, InputValue, Object, ResolverContext, Schema, TypeRef,
 };
-use async_graphql::indexmap::IndexMap;
-use async_graphql::{Context, Error, Name, Request, Response, Value};
+use async_graphql::{Error, Request, Response, Value};
 use dynamic_graphql::internal::Registry;
-use dynamic_graphql::{FieldValue, ScalarValue, App};
+use dynamic_graphql::{FieldValue, ScalarValue};
 use log::{debug, info};
 use p2panda_rs::document::traits::AsDocument;
-use p2panda_rs::document::{Document, DocumentId, DocumentViewId};
-use p2panda_rs::identity::PublicKey;
+use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::FieldType;
 use p2panda_rs::storage_provider::error::DocumentStorageError;
@@ -25,6 +23,7 @@ use crate::bus::ServiceSender;
 use crate::db::types::StorageDocument;
 use crate::db::SqlStore;
 use crate::dynamic_graphql::mutations::{MutationRoot, Publish};
+use crate::dynamic_graphql::queries::next_args;
 use crate::dynamic_graphql::scalars::{
     DocumentIdScalar, DocumentViewIdScalar, EncodedEntryScalar, EncodedOperationScalar,
     EntryHashScalar, LogIdScalar, PublicKeyScalar, SeqNumScalar,
@@ -245,24 +244,20 @@ pub async fn build_root_schema(
                 TypeRef::named(schema.id().to_string()),
                 move |ctx| {
                     FieldFuture::new(async move {
+                        let mut args = ctx.field().arguments()?.into_iter().map(|(_, value)| value);
+
                         // Parse document id.
-                        let document_id = match ctx.args.get("id") {
-                            Some(id) => {
-                                let id = id.string()?;
-                                Some(DocumentIdScalar::from_value(Value::String(id.to_string()))?)
-                            }
+                        let document_id = match args.next() {
+                            Some(id) => Some(DocumentIdScalar::from_value(id)?),
                             None => None,
                         };
+
                         // Parse document view id.
-                        let document_view_id = match ctx.args.get("view_id") {
-                            Some(id) => {
-                                let id = id.string()?;
-                                Some(DocumentViewIdScalar::from_value(Value::String(
-                                    id.to_string(),
-                                ))?)
-                            }
+                        let document_view_id = match args.next() {
+                            Some(id) => Some(DocumentViewIdScalar::from_value(id)?),
                             None => None,
                         };
+
                         // Check a valid combination of id's was passed.
                         match (&document_id, &document_view_id) {
                             (None, None) => return Err(Error::new(
@@ -291,15 +286,15 @@ pub async fn build_root_schema(
     let query = query.field(
         Field::new("nextArgs", TypeRef::named("NextArguments"), |ctx| {
             FieldFuture::new(async move {
-                let _public_key: PublicKey = ctx.args.get("publicKey").unwrap().deserialize()?;
-                let _document_view_id: Option<DocumentViewId> =
-                    ctx.args.get("documentViewId").unwrap().deserialize()?;
-                Ok(Some(FieldValue::owned_any(NextArguments {
-                    log_id: "0".to_string(),
-                    seq_num: "1".to_string(),
-                    backlink: None,
-                    skiplink: None,
-                })))
+                let mut args = ctx.field().arguments()?.into_iter().map(|(_, value)| value);
+
+                let public_key = PublicKeyScalar::from_value(args.next().unwrap())?;
+                let document_view_id = match args.next() {
+                    Some(value) => Some(DocumentViewIdScalar::from_value(value)?),
+                    None => None,
+                };
+                let next_args = next_args(&ctx, public_key, document_view_id).await?;
+                Ok(Some(FieldValue::owned_any(next_args)))
             })
         })
         .argument(InputValue::new("publicKey", TypeRef::named_nn("PublicKey")))
