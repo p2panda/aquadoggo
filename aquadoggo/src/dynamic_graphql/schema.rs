@@ -9,7 +9,7 @@ use async_graphql::dynamic::{
 use async_graphql::indexmap::IndexMap;
 use async_graphql::{Context, Error, Name, Request, Response, Value};
 use dynamic_graphql::internal::Registry;
-use dynamic_graphql::{FieldValue, ScalarValue};
+use dynamic_graphql::{FieldValue, ScalarValue, App};
 use log::{debug, info};
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::{Document, DocumentId, DocumentViewId};
@@ -24,6 +24,7 @@ use tokio::sync::Mutex;
 use crate::bus::ServiceSender;
 use crate::db::types::StorageDocument;
 use crate::db::SqlStore;
+use crate::dynamic_graphql::mutations::{MutationRoot, Publish};
 use crate::dynamic_graphql::scalars::{
     DocumentIdScalar, DocumentViewIdScalar, EncodedEntryScalar, EncodedOperationScalar,
     EntryHashScalar, LogIdScalar, PublicKeyScalar, SeqNumScalar,
@@ -115,6 +116,8 @@ pub async fn build_root_schema(
     // Using dynamic-graphql we create a registry and add types.
     let registry = Registry::new()
         .register::<NextArguments>()
+        .register::<MutationRoot>()
+        .register::<Publish>()
         .register::<DocumentIdScalar>()
         .register::<DocumentMeta>()
         .register::<DocumentViewIdScalar>()
@@ -126,7 +129,7 @@ pub async fn build_root_schema(
         .register::<SeqNumScalar>();
 
     // Construct the schema builder.
-    let mut schema_builder = Schema::build("Query", None, None);
+    let mut schema_builder = Schema::build("Query", Some("MutationRoot"), None);
 
     // Populate it with the registered types. We can now use these in any following dynamically
     // created query object fields.
