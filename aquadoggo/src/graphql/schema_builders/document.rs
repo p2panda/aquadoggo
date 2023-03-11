@@ -35,8 +35,7 @@ pub fn build_document_schema(schema: &Schema) -> Object {
                         let (document_id, document_view_id) = downcast_id_params(&ctx);
                         // Get the whole document.
                         let document =
-                            get_document_from_params(store, &document_id, &document_view_id)
-                                .await?;
+                            get_document_from_params(store, &document_id, &document_view_id).await?;
 
                         // Construct `DocumentMeta` and return it. We defined the document meta
                         // type and already registered it in the schema. It's derived resolvers
@@ -52,7 +51,7 @@ pub fn build_document_schema(schema: &Schema) -> Object {
                                 };
                                 Some(FieldValue::owned_any(document_meta))
                             }
-                            None => FieldValue::NONE,
+                            None => Some(FieldValue::NULL),
                         };
 
                         Ok(field_value)

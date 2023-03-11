@@ -57,7 +57,7 @@ pub fn build_document_field_schema(document_fields: Object, name: &str, field_ty
                     // TODO: Relation fields aren't supported yet, we need recursion.
                     Ok(Some(FieldValue::value(gql_scalar(value))))
                 }
-                None => Ok(FieldValue::NONE),
+                None => Ok(Some(FieldValue::NULL)),
             }
         })
     }))
