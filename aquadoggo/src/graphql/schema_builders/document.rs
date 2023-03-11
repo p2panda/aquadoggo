@@ -100,7 +100,7 @@ pub fn build_document_query(query: Object, schema: &Schema) -> Object {
             },
         )
         .argument(InputValue::new("id", TypeRef::named("DocumentId")))
-        .argument(InputValue::new("view_id", TypeRef::named("DocumentViewId")))
+        .argument(InputValue::new("viewId", TypeRef::named("DocumentViewId")))
         .description(format!(
             "Query a {} document by id or view id",
             schema.name()
