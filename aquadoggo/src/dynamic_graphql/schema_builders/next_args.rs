@@ -15,11 +15,18 @@ pub fn build_next_args_query(query: Object) -> Object {
     query.field(
         Field::new("nextArgs", TypeRef::named("NextArguments"), |ctx| {
             FieldFuture::new(async move {
+                // TODO: In this dynamic query definition the passed args aren't parsed before
+                // handing them into this method. They arrive as generic values which we then
+                // validate below. This is different from the behavior in statically defined
+                // schema, where scalar types are parsed on arrival and any validation errors
+                // caught at that point. Maybe we can enable this behavior using the validation
+                // traits provided in async-graphql.
                 let mut args = ctx.field().arguments()?.into_iter().map(|(_, value)| value);
                 let store = ctx.data::<SqlStore>()?;
 
                 // Convert and validate passed parameters.
-                let public_key: PublicKey = PublicKeyScalar::from_value(args.next().unwrap())?.into();
+                let public_key: PublicKey =
+                    PublicKeyScalar::from_value(args.next().unwrap())?.into();
                 let document_view_id: Option<DocumentViewId> = match args.next() {
                     Some(value) => Some(DocumentViewIdScalar::from_value(value)?.into()),
                     None => None,
@@ -41,13 +48,12 @@ pub fn build_next_args_query(query: Object) -> Object {
         })
         .argument(InputValue::new("publicKey", TypeRef::named_nn("PublicKey")))
         .argument(InputValue::new(
-            "documentViewId",
+            "viewId",
             TypeRef::named("DocumentViewId"),
         ))
         .description("Gimme some sweet sweet next args!"),
     )
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -151,6 +157,7 @@ mod tests {
                 .json::<Response>()
                 .await;
 
+            print!("{:?}", received_entry_args.errors);
             assert!(received_entry_args.is_ok());
             assert_eq!(
                 received_entry_args.data,
@@ -186,7 +193,7 @@ mod tests {
             let response: Response = response.json().await;
             assert_eq!(
                 response.errors[0].message,
-                "Failed to parse \"PublicKey\": invalid hex encoding in public key string"
+                "invalid hex encoding in public key string"
             )
         })
     }

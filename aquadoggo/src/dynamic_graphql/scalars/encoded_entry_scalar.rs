@@ -15,7 +15,7 @@ impl ScalarValue for EncodedEntryScalar {
         match &value {
             Value::String(str_value) => {
                 let bytes =
-                    hex::decode(str_value).map_err(|_| anyhow!("invalid hex encoding in entry"))?;
+                    hex::decode(str_value).map_err(|e| anyhow!(e.to_string()))?;
                 Ok(EncodedEntryScalar(EncodedEntry::from_bytes(&bytes)))
             }
             _ => Err(Error::new(format!("Expected a valid encoded entry, found: {value}"))),

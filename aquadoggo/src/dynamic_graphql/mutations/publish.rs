@@ -12,7 +12,7 @@ use p2panda_rs::operation::{EncodedOperation, OperationId};
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::SqlStore;
 use crate::dynamic_graphql::types::NextArguments;
-use crate::dynamic_graphql::scalars;
+use crate::dynamic_graphql::scalars::{EncodedOperationScalar, EncodedEntryScalar};
 use crate::schema::SchemaProvider;
 
 /// GraphQL mutatation root.
@@ -31,9 +31,9 @@ impl Publish {
     async fn publish(
         ctx: &Context<'_>,
         // Signed and encoded entry to publish
-        entry: scalars::EncodedEntryScalar,
+        entry: EncodedEntryScalar,
         // p2panda operation representing the entry payload.
-        operation: scalars::EncodedOperationScalar,
+        operation: EncodedOperationScalar,
     ) -> Result<NextArguments> {
         let store = ctx.data::<SqlStore>()?;
         let tx = ctx.data::<ServiceSender>()?;
@@ -339,7 +339,7 @@ mod tests {
     #[case::invalid_entry_hex_encoding(
         "-/74='4,.=4-=235m-0   34.6-3",
         &OPERATION_ENCODED,
-        "Failed to parse \"EncodedEntry\": invalid hex encoding in entry"
+        "Invalid value for argument \"entry\": Failed to parse \"EntryEncoded\": Invalid character '-' at position 0"
     )]
     #[case::no_entry(
         "",
@@ -377,12 +377,12 @@ mod tests {
     #[case::valid_entry_with_extra_hex_char_at_end(
         &{EncodedEntry::from_bytes(&ENTRY_ENCODED).to_string() + "A"},
         &OPERATION_ENCODED,
-        "Failed to parse \"EncodedEntry\": invalid hex encoding in entry"
+        "Invalid value for argument \"entry\": Failed to parse \"EntryEncoded\": Odd number of digits"
     )]
     #[case::valid_entry_with_extra_hex_char_at_start(
         &{"A".to_string() + &EncodedEntry::from_bytes(&ENTRY_ENCODED).to_string()},
         &OPERATION_ENCODED,
-        "Failed to parse \"EncodedEntry\": invalid hex encoding in entry"
+        "Invalid value for argument \"entry\": Failed to parse \"EntryEncoded\": Odd number of digits"
     )]
     #[case::should_not_have_skiplink(
         &entry_signed_encoded_unvalidated(
