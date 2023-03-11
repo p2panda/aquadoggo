@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+mod document;
 mod document_field;
 mod next_args;
-mod document;
 #[cfg(test)]
 mod tests;
 
-pub use next_args::build_next_args_query;
+pub use document::{build_document_query, build_document_schema};
 pub use document_field::build_document_field_schema;
-pub use document::{build_document_schema, build_document_query};
+pub use next_args::build_next_args_query;

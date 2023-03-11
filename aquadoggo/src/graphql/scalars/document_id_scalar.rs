@@ -3,7 +3,7 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
-use dynamic_graphql::{Scalar, ScalarValue, Value, Result, Error};
+use dynamic_graphql::{Error, Result, Scalar, ScalarValue, Value};
 use p2panda_rs::document::DocumentId;
 
 /// Id of a p2panda document.
@@ -21,7 +21,9 @@ impl ScalarValue for DocumentIdScalar {
                 let document_id = DocumentId::from_str(str_value)?;
                 Ok(DocumentIdScalar(document_id))
             }
-            _ => Err(Error::new(format!("Expected a valid document id, got: {value}"))),
+            _ => Err(Error::new(format!(
+                "Expected a valid document id, got: {value}"
+            ))),
         }
     }
 

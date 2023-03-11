@@ -79,7 +79,7 @@ impl Display for LogIdScalar {
 
 #[cfg(test)]
 mod tests {
-    use dynamic_graphql::{Value, ScalarValue};
+    use dynamic_graphql::{ScalarValue, Value};
     use p2panda_rs::entry::LogId;
     use serde::{Deserialize, Serialize};
 

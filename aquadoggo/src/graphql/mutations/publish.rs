@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use anyhow::anyhow;
-use dynamic_graphql::{Mutation, MutationFields, MutationRoot, Context, Result};
+use dynamic_graphql::{Context, Mutation, MutationFields, MutationRoot, Result};
 use p2panda_rs::api::publish;
 use p2panda_rs::entry::traits::AsEncodedEntry;
 use p2panda_rs::entry::EncodedEntry;
@@ -11,8 +11,8 @@ use p2panda_rs::operation::{EncodedOperation, OperationId};
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::SqlStore;
+use crate::graphql::scalars::{EncodedEntryScalar, EncodedOperationScalar};
 use crate::graphql::types::NextArguments;
-use crate::graphql::scalars::{EncodedOperationScalar, EncodedEntryScalar};
 use crate::schema::SchemaProvider;
 
 /// GraphQL mutatation root.

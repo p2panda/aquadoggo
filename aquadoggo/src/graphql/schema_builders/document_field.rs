@@ -30,7 +30,11 @@ fn graphql_type(field_type: &FieldType) -> TypeRef {
     }
 }
 
-pub fn build_document_field_schema(document_fields: Object, name: &str, field_type: &FieldType) -> Object {
+pub fn build_document_field_schema(
+    document_fields: Object,
+    name: &str,
+    field_type: &FieldType,
+) -> Object {
     // The type of this field.
     let graphql_type = graphql_type(field_type);
 

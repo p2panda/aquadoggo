@@ -105,7 +105,7 @@ impl Display for SeqNumScalar {
 
 #[cfg(test)]
 mod tests {
-    use dynamic_graphql::{Value, ScalarValue};
+    use dynamic_graphql::{ScalarValue, Value};
     use p2panda_rs::entry::SeqNum;
     use serde::{Deserialize, Serialize};
 

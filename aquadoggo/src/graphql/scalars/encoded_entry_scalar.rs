@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use anyhow::anyhow;
-use dynamic_graphql::{Scalar, ScalarValue, Value, Result, Error};
+use dynamic_graphql::{Error, Result, Scalar, ScalarValue, Value};
 use p2panda_rs::entry::EncodedEntry;
 use serde::{Deserialize, Serialize};
 
@@ -14,11 +14,12 @@ impl ScalarValue for EncodedEntryScalar {
     fn from_value(value: Value) -> Result<Self> {
         match &value {
             Value::String(str_value) => {
-                let bytes =
-                    hex::decode(str_value).map_err(|e| anyhow!(e.to_string()))?;
+                let bytes = hex::decode(str_value).map_err(|e| anyhow!(e.to_string()))?;
                 Ok(EncodedEntryScalar(EncodedEntry::from_bytes(&bytes)))
             }
-            _ => Err(Error::new(format!("Expected a valid encoded entry, found: {value}"))),
+            _ => Err(Error::new(format!(
+                "Expected a valid encoded entry, found: {value}"
+            ))),
         }
     }
 

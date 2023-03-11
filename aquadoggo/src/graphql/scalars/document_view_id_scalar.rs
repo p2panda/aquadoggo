@@ -2,7 +2,7 @@
 
 use std::{fmt::Display, str::FromStr};
 
-use dynamic_graphql::{Scalar, ScalarValue, Value, Result, Error};
+use dynamic_graphql::{Error, Result, Scalar, ScalarValue, Value};
 use p2panda_rs::document::DocumentViewId;
 
 /// Document view id as a GraphQL scalar.
@@ -12,15 +12,17 @@ pub struct DocumentViewIdScalar(DocumentViewId);
 
 impl ScalarValue for DocumentViewIdScalar {
     fn from_value(value: Value) -> Result<Self>
-        where
-            Self: Sized {
-        
+    where
+        Self: Sized,
+    {
         match &value {
             Value::String(str_value) => {
                 let view_id = DocumentViewId::from_str(str_value)?;
                 Ok(DocumentViewIdScalar(view_id))
             }
-            _ => Err(Error::new(format!("Expected a valid document view id, found: {value}"))),
+            _ => Err(Error::new(format!(
+                "Expected a valid document view id, found: {value}"
+            ))),
         }
     }
 

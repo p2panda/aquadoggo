@@ -47,10 +47,7 @@ pub fn build_next_args_query(query: Object) -> Object {
             })
         })
         .argument(InputValue::new("publicKey", TypeRef::named_nn("PublicKey")))
-        .argument(InputValue::new(
-            "viewId",
-            TypeRef::named("DocumentViewId"),
-        ))
+        .argument(InputValue::new("viewId", TypeRef::named("DocumentViewId")))
         .description("Gimme some sweet sweet next args!"),
     )
 }

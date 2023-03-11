@@ -13,51 +13,51 @@ use crate::graphql::utils::{downcast_id_params, fields_name, get_document_from_p
 pub fn build_document_schema(schema: &Schema) -> Object {
     let document_fields_name = fields_name(&schema.id().to_string());
     Object::new(&schema.id().to_string())
-            .field(Field::new(
-                "fields",
-                TypeRef::named_nn(document_fields_name),
-                move |ctx| {
-                    FieldFuture::new(async move {
-                        // Here we just pass up the root query parameters to be used in the fields resolver.
-                        let params = downcast_id_params(&ctx);
-                        Ok(Some(FieldValue::owned_any(params)))
-                    })
-                },
-            ))
-            .field(Field::new(
-                "meta",
-                TypeRef::named_nn("DocumentMeta"),
-                move |ctx| {
-                    FieldFuture::new(async move {
-                        let store = ctx.data_unchecked::<SqlStore>();
+        .field(Field::new(
+            "fields",
+            TypeRef::named_nn(document_fields_name),
+            move |ctx| {
+                FieldFuture::new(async move {
+                    // Here we just pass up the root query parameters to be used in the fields resolver.
+                    let params = downcast_id_params(&ctx);
+                    Ok(Some(FieldValue::owned_any(params)))
+                })
+            },
+        ))
+        .field(Field::new(
+            "meta",
+            TypeRef::named_nn("DocumentMeta"),
+            move |ctx| {
+                FieldFuture::new(async move {
+                    let store = ctx.data_unchecked::<SqlStore>();
 
-                        // Downcast the parameters passed up from the parent query field.
-                        let (document_id, document_view_id) = downcast_id_params(&ctx);
-                        // Get the whole document.
-                        let document =
-                            get_document_from_params(store, &document_id, &document_view_id).await?;
+                    // Downcast the parameters passed up from the parent query field.
+                    let (document_id, document_view_id) = downcast_id_params(&ctx);
+                    // Get the whole document.
+                    let document =
+                        get_document_from_params(store, &document_id, &document_view_id).await?;
 
-                        // Construct `DocumentMeta` and return it. We defined the document meta
-                        // type and already registered it in the schema. It's derived resolvers
-                        // will handle field selection.
-                        //
-                        // TODO: We could again optimize here by defining our own resolver logic
-                        // for each field.
-                        let field_value = match document {
-                            Some(document) => {
-                                let document_meta = DocumentMeta {
-                                    document_id: document.id().into(),
-                                    view_id: document.view_id().into(),
-                                };
-                                Some(FieldValue::owned_any(document_meta))
-                            }
-                            None => Some(FieldValue::NULL),
-                        };
+                    // Construct `DocumentMeta` and return it. We defined the document meta
+                    // type and already registered it in the schema. It's derived resolvers
+                    // will handle field selection.
+                    //
+                    // TODO: We could again optimize here by defining our own resolver logic
+                    // for each field.
+                    let field_value = match document {
+                        Some(document) => {
+                            let document_meta = DocumentMeta {
+                                document_id: document.id().into(),
+                                view_id: document.view_id().into(),
+                            };
+                            Some(FieldValue::owned_any(document_meta))
+                        }
+                        None => Some(FieldValue::NULL),
+                    };
 
-                        Ok(field_value)
-                    })
-                },
-            ))
+                    Ok(field_value)
+                })
+            },
+        ))
         .description(schema.description())
 }
 

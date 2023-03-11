@@ -17,8 +17,7 @@ impl ScalarValue for EncodedOperationScalar {
     {
         match &value {
             Value::String(str_value) => {
-                let bytes = hex::decode(str_value)
-                    .map_err(|e| anyhow!(e.to_string()))?;
+                let bytes = hex::decode(str_value).map_err(|e| anyhow!(e.to_string()))?;
                 Ok(EncodedOperationScalar(EncodedOperation::from_bytes(&bytes)))
             }
             _ => Err(Error::new(format!(

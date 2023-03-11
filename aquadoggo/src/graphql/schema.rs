@@ -18,7 +18,7 @@ use crate::graphql::scalars::{
     EntryHashScalar, LogIdScalar, PublicKeyScalar, SeqNumScalar,
 };
 use crate::graphql::schema_builders::{
-    build_document_schema, build_document_field_schema, build_document_query, build_next_args_query,
+    build_document_field_schema, build_document_query, build_document_schema, build_next_args_query,
 };
 use crate::graphql::types::{DocumentMeta, NextArguments};
 use crate::graphql::utils::fields_name;
@@ -72,14 +72,17 @@ pub async fn build_root_schema(
         //
         // TODO: We can optimize the field resolution methods later with a data loader.
         for (name, field_type) in schema.fields() {
-            document_schema_fields = build_document_field_schema(document_schema_fields, name, field_type);
+            document_schema_fields =
+                build_document_field_schema(document_schema_fields, name, field_type);
         }
 
         // Construct the document schema which has "fields" and "meta" fields.
         let document_schema = build_document_schema(&schema);
 
         // Register a schema and schema fields type for every schema.
-        schema_builder = schema_builder.register(document_schema_fields).register(document_schema);
+        schema_builder = schema_builder
+            .register(document_schema_fields)
+            .register(document_schema);
 
         // Add a query object for each schema. It offers an interface to retrieve a single
         // document of this schema by it's document id or view id. It's resolver parses and
