@@ -3,102 +3,26 @@
 //! Build and manage a GraphQL schema including dynamic parts of the schema.
 use std::sync::Arc;
 
-use async_graphql::dynamic::{
-    Field, FieldFuture, InputValue, Object, ResolverContext, Schema, TypeRef,
-};
-use async_graphql::{Error, Request, Response, Value};
+use async_graphql::dynamic::{Object, Schema};
+use async_graphql::{Request, Response};
 use dynamic_graphql::internal::Registry;
-use dynamic_graphql::{FieldValue, ScalarValue};
 use log::{debug, info};
-use p2panda_rs::document::traits::AsDocument;
-use p2panda_rs::document::{DocumentId, DocumentViewId};
-use p2panda_rs::operation::OperationValue;
-use p2panda_rs::schema::FieldType;
-use p2panda_rs::storage_provider::error::DocumentStorageError;
-use p2panda_rs::storage_provider::traits::DocumentStore;
 use p2panda_rs::Human;
 use tokio::sync::Mutex;
 
 use crate::bus::ServiceSender;
-use crate::db::types::StorageDocument;
 use crate::db::SqlStore;
 use crate::dynamic_graphql::mutations::{MutationRoot, Publish};
-use crate::dynamic_graphql::queries::next_args;
 use crate::dynamic_graphql::scalars::{
     DocumentIdScalar, DocumentViewIdScalar, EncodedEntryScalar, EncodedOperationScalar,
     EntryHashScalar, LogIdScalar, PublicKeyScalar, SeqNumScalar,
 };
+use crate::dynamic_graphql::schema_builders::{
+    build_document_schema, build_document_field_schema, build_document_query, build_next_args_query,
+};
 use crate::dynamic_graphql::types::{DocumentMeta, NextArguments};
+use crate::dynamic_graphql::utils::fields_name;
 use crate::schema::SchemaProvider;
-
-// Correctly formats the name of a document field type.
-fn fields_name(name: &str) -> String {
-    format!("{name}Fields")
-}
-
-/// Convert non-relation operation values into GraphQL values.
-///
-/// Panics when given a relation field value.
-fn gql_scalar(operation_value: &OperationValue) -> Value {
-    match operation_value {
-        OperationValue::Boolean(value) => value.to_owned().into(),
-        OperationValue::Integer(value) => value.to_owned().into(),
-        OperationValue::Float(value) => value.to_owned().into(),
-        OperationValue::String(value) => value.to_owned().into(),
-        // Recursion not implemented yet.
-        _ => todo!(),
-    }
-}
-
-/// Get the GraphQL type name for a p2panda field type.
-///
-/// GraphQL types for relations use the p2panda schema id as their name.
-fn graphql_type(field_type: &FieldType) -> TypeRef {
-    match field_type {
-        p2panda_rs::schema::FieldType::Boolean => TypeRef::named_nn(TypeRef::BOOLEAN),
-        p2panda_rs::schema::FieldType::Integer => TypeRef::named_nn(TypeRef::INT),
-        p2panda_rs::schema::FieldType::Float => TypeRef::named_nn(TypeRef::FLOAT),
-        p2panda_rs::schema::FieldType::String => TypeRef::named_nn(TypeRef::STRING),
-        p2panda_rs::schema::FieldType::Relation(schema_id) => TypeRef::named(schema_id.to_string()),
-        p2panda_rs::schema::FieldType::RelationList(schema_id) => {
-            TypeRef::named_list(schema_id.to_string())
-        }
-        p2panda_rs::schema::FieldType::PinnedRelation(schema_id) => {
-            TypeRef::named(schema_id.to_string())
-        }
-        p2panda_rs::schema::FieldType::PinnedRelationList(schema_id) => {
-            TypeRef::named_list(schema_id.to_string())
-        }
-    }
-}
-
-/// Downcast document id and document view id from parameters passed up the query fields and
-/// retrieved via the `ResolverContext`.
-fn downcast_id_params(
-    ctx: &ResolverContext,
-) -> (Option<DocumentIdScalar>, Option<DocumentViewIdScalar>) {
-    ctx.parent_value
-        .downcast_ref::<(Option<DocumentIdScalar>, Option<DocumentViewIdScalar>)>()
-        .expect("Values passed from query parent should match expected")
-        .to_owned()
-}
-
-/// Helper for getting a document from score by either the document id or document view id.
-async fn get_document_from_params(
-    store: &SqlStore,
-    document_id: &Option<DocumentIdScalar>,
-    document_view_id: &Option<DocumentViewIdScalar>,
-) -> Result<Option<StorageDocument>, DocumentStorageError> {
-    match (document_id, document_view_id) {
-        (None, Some(document_view_id)) => {
-            store
-                .get_document_by_view_id(&DocumentViewId::from(document_view_id))
-                .await
-        }
-        (Some(document_id), None) => store.get_document(&DocumentId::from(document_id)).await,
-        _ => panic!("Invalid values passed from query field parent"),
-    }
-}
 
 /// Returns GraphQL API schema for p2panda node.
 ///
@@ -135,179 +59,40 @@ pub async fn build_root_schema(
     schema_builder = registry.apply_into_schema_builder(schema_builder);
 
     // Construct the root query object.
-    let mut query = Object::new("Query");
+    let mut root_query = Object::new("Query");
 
     // Loop through all schema retrieved from the schema store, create types and a root query for the
     // documents they describe.
     for schema in all_schema {
         // Construct the document fields object which will be named `<schema_id>Field`.
-        let document_fields_name = fields_name(&schema.id().to_string());
-        let mut document_fields = Object::new(&document_fields_name);
+        let schema_field_name = fields_name(&schema.id().to_string());
+        let mut document_schema_fields = Object::new(&schema_field_name);
 
         // For every field in the schema we create a type with a resolver.
         //
         // TODO: We can optimize the field resolution methods later with a data loader.
         for (name, field_type) in schema.fields() {
-            // The type of this field.
-            let graphql_type = graphql_type(field_type);
-
-            // Define the field and create a resolver.
-            document_fields = document_fields.field(Field::new(name, graphql_type, move |ctx| {
-                FieldFuture::new(async move {
-                    let store = ctx.data_unchecked::<SqlStore>();
-                    let field_name = ctx.field().name();
-
-                    // Downcast the parameters passed up from the parent query field.
-                    let (document_id, document_view_id) = downcast_id_params(&ctx);
-                    // Get the whole document.
-                    //
-                    // TODO: This can be optimized with per field SQL queries and data loader.
-                    let document =
-                        get_document_from_params(store, &document_id, &document_view_id).await?;
-
-                    match document {
-                        Some(document) => {
-                            let value = document
-                                .get(field_name)
-                                .expect("Only fields defined on the schema can be queried");
-                            // Convert the operation value into a graphql scalar type.
-                            //
-                            // TODO: Relation fields aren't supported yet, we need recursion.
-                            Ok(Some(FieldValue::value(gql_scalar(value))))
-                        }
-                        None => Ok(FieldValue::NONE),
-                    }
-                })
-            }))
+            document_schema_fields = build_document_field_schema(document_schema_fields, name, field_type);
         }
 
-        // Construct the root document type which has "fields" and "meta" fields.
-        let document = Object::new(&schema.id().to_string())
-            .field(Field::new(
-                "fields",
-                TypeRef::named_nn(&document_fields_name),
-                move |ctx| {
-                    FieldFuture::new(async move {
-                        // Here we just pass up the root query parameters to be used in the fields resolver.
-                        let params = downcast_id_params(&ctx);
-                        Ok(Some(FieldValue::owned_any(params)))
-                    })
-                },
-            ))
-            .field(Field::new(
-                "meta",
-                TypeRef::named_nn("DocumentMeta"),
-                move |ctx| {
-                    FieldFuture::new(async move {
-                        let store = ctx.data_unchecked::<SqlStore>();
+        // Construct the document schema which has "fields" and "meta" fields.
+        let document_schema = build_document_schema(&schema);
 
-                        // Downcast the parameters passed up from the parent query field.
-                        let (document_id, document_view_id) = downcast_id_params(&ctx);
-                        // Get the whole document.
-                        let document =
-                            get_document_from_params(store, &document_id, &document_view_id)
-                                .await?;
+        // Register a schema and schema fields type for every schema.
+        schema_builder = schema_builder.register(document_schema_fields).register(document_schema);
 
-                        // Construct `DocumentMeta` and return it. We defined the document meta
-                        // type and already registered it in the schema. It's derived resolvers
-                        // will handle field selection.
-                        //
-                        // TODO: We could again optimize here by defining our own resolver logic
-                        // for each field.
-                        let field_value = match document {
-                            Some(document) => {
-                                let document_meta = DocumentMeta {
-                                    document_id: document.id().into(),
-                                    view_id: document.view_id().into(),
-                                };
-                                Some(FieldValue::owned_any(document_meta))
-                            }
-                            None => FieldValue::NONE,
-                        };
-
-                        Ok(field_value)
-                    })
-                },
-            ))
-            .description(schema.description());
-
-        // Register a document and document fields type for every schema.
-        schema_builder = schema_builder.register(document_fields).register(document);
-
-        // Add a query object for each schema.
-        //
-        // This is the top level root query which we create for each document. It's resolver parses and
+        // Add a query object for each schema. It offers an interface to retrieve a single
+        // document of this schema by it's document id or view id. It's resolver parses and
         // validates the passed parameters, then forwards them up to the children query fields.
-        query = query.field(
-            Field::new(
-                schema.id().to_string(),
-                TypeRef::named(schema.id().to_string()),
-                move |ctx| {
-                    FieldFuture::new(async move {
-                        let mut args = ctx.field().arguments()?.into_iter().map(|(_, value)| value);
-
-                        // Parse document id.
-                        let document_id = match args.next() {
-                            Some(id) => Some(DocumentIdScalar::from_value(id)?),
-                            None => None,
-                        };
-
-                        // Parse document view id.
-                        let document_view_id = match args.next() {
-                            Some(id) => Some(DocumentViewIdScalar::from_value(id)?),
-                            None => None,
-                        };
-
-                        // Check a valid combination of id's was passed.
-                        match (&document_id, &document_view_id) {
-                            (None, None) => return Err(Error::new(
-                                "Either document id or document view id arguments must be passed",
-                            )),
-                            (Some(_), Some(_)) => return Err(Error::new(
-                                "Both document id and document view id arguments cannot be passed",
-                            )),
-                            (_, _) => (),
-                        };
-                        // Pass them up to the children query fields.
-                        Ok(Some(FieldValue::owned_any((document_id, document_view_id))))
-                    })
-                },
-            )
-            .argument(InputValue::new("id", TypeRef::named("DocumentId")))
-            .argument(InputValue::new("view_id", TypeRef::named("DocumentViewId")))
-            .description(format!(
-                "Query a {} document by id or view id",
-                schema.name()
-            )),
-        )
+        root_query = build_document_query(root_query, &schema);
     }
 
     // Add next args to the query object.
-    let query = query.field(
-        Field::new("nextArgs", TypeRef::named("NextArguments"), |ctx| {
-            FieldFuture::new(async move {
-                let mut args = ctx.field().arguments()?.into_iter().map(|(_, value)| value);
-
-                let public_key = PublicKeyScalar::from_value(args.next().unwrap())?;
-                let document_view_id = match args.next() {
-                    Some(value) => Some(DocumentViewIdScalar::from_value(value)?),
-                    None => None,
-                };
-                let next_args = next_args(&ctx, public_key, document_view_id).await?;
-                Ok(Some(FieldValue::owned_any(next_args)))
-            })
-        })
-        .argument(InputValue::new("publicKey", TypeRef::named_nn("PublicKey")))
-        .argument(InputValue::new(
-            "documentViewId",
-            TypeRef::named("DocumentViewId"),
-        ))
-        .description("Gimme some sweet sweet next args!"),
-    );
+    let root_query = build_next_args_query(root_query);
 
     // Build the schema.
     schema_builder
-        .register(query)
+        .register(root_query)
         .data(store)
         .data(schema_provider)
         .data(tx)
