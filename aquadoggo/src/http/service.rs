@@ -13,7 +13,7 @@ use tower_http::cors::{Any, CorsLayer};
 
 use crate::bus::ServiceSender;
 use crate::context::Context;
-use crate::dynamic_graphql::GraphQLSchemaManager;
+use crate::graphql::GraphQLSchemaManager;
 use crate::http::api::{handle_graphql_playground, handle_graphql_query};
 use crate::http::context::HttpServiceContext;
 use crate::manager::{ServiceReadySender, Shutdown};
@@ -78,7 +78,7 @@ mod tests {
     use serde_json::json;
     use tokio::sync::broadcast;
 
-    use crate::dynamic_graphql::GraphQLSchemaManager;
+    use crate::graphql::GraphQLSchemaManager;
     use crate::http::context::HttpServiceContext;
     use crate::schema::SchemaProvider;
     use crate::test_utils::TestClient;

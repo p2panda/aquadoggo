@@ -2,22 +2,25 @@
 
 use std::{fmt::Display, str::FromStr};
 
-use async_graphql::{InputValueError, InputValueResult, Scalar, ScalarType, Value};
+use dynamic_graphql::{Scalar, ScalarValue, Value, Result, Error};
 use p2panda_rs::document::DocumentViewId;
 
 /// Document view id as a GraphQL scalar.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Scalar, Clone, Debug, Eq, PartialEq)]
+#[graphql(name = "DocumentViewId")]
 pub struct DocumentViewIdScalar(DocumentViewId);
 
-#[Scalar(name = "DocumentViewId")]
-impl ScalarType for DocumentViewIdScalar {
-    fn parse(value: Value) -> InputValueResult<Self> {
+impl ScalarValue for DocumentViewIdScalar {
+    fn from_value(value: Value) -> Result<Self>
+        where
+            Self: Sized {
+        
         match &value {
             Value::String(str_value) => {
                 let view_id = DocumentViewId::from_str(str_value)?;
                 Ok(DocumentViewIdScalar(view_id))
             }
-            _ => Err(InputValueError::expected_type(value)),
+            _ => Err(Error::new(format!("Expected a valid document view id, found: {value}"))),
         }
     }
 
@@ -32,8 +35,8 @@ impl From<&DocumentViewId> for DocumentViewIdScalar {
     }
 }
 
-impl From<&DocumentViewIdScalar> for DocumentViewId {
-    fn from(value: &DocumentViewIdScalar) -> Self {
+impl From<DocumentViewIdScalar> for DocumentViewId {
+    fn from(value: DocumentViewIdScalar) -> Self {
         DocumentViewId::new(value.0.graph_tips())
     }
 }

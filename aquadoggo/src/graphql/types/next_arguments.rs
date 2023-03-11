@@ -2,7 +2,7 @@
 
 use dynamic_graphql::SimpleObject;
 
-use crate::dynamic_graphql::scalars::{EntryHashScalar, LogIdScalar, SeqNumScalar};
+use crate::graphql::scalars::{EntryHashScalar, LogIdScalar, SeqNumScalar};
 
 /// Values used to in the construction of p2panda entries and operations.
 #[derive(SimpleObject)]

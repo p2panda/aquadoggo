@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use crate::dynamic_graphql::GraphQLSchemaManager;
+use crate::graphql::GraphQLSchemaManager;
 
 #[derive(Clone)]
 pub struct HttpServiceContext {

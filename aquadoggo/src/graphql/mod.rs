@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! Provides GraphQL APIs for both replication and interfacing with p2panda clients.
-pub mod client;
-pub mod pagination;
-pub mod replication;
-pub mod scalars;
+pub mod types;
+mod schema_builders;
+pub mod mutations;
 mod schema;
+pub mod scalars;
+pub mod utils;
 
-pub use schema::{build_root_schema, GraphQLSchemaManager, QueryRoot, RootSchema};
+pub use schema::{build_root_schema, GraphQLSchemaManager};

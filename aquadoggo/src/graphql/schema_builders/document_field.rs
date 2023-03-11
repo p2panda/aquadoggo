@@ -6,7 +6,7 @@ use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::schema::FieldType;
 
 use crate::db::SqlStore;
-use crate::dynamic_graphql::utils::{downcast_id_params, get_document_from_params, gql_scalar};
+use crate::graphql::utils::{downcast_id_params, get_document_from_params, gql_scalar};
 
 /// Get the GraphQL type name for a p2panda field type.
 ///

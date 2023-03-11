@@ -2,7 +2,7 @@
 
 use dynamic_graphql::SimpleObject;
 
-use crate::dynamic_graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
+use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
 
 /// The meta fields of a document.
 #[derive(SimpleObject)]

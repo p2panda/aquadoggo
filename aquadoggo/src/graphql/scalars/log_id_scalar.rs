@@ -3,23 +3,28 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
-use async_graphql::{InputValueError, InputValueResult, Scalar, ScalarType, Value};
+use dynamic_graphql::{Error, Result, Scalar, ScalarValue, Value};
 use p2panda_rs::entry::LogId;
 use serde::{Deserialize, Serialize};
 
 /// Log id of a bamboo entry.
-#[derive(Clone, Copy, Eq, PartialEq, Debug)]
+#[derive(Scalar, Clone, Copy, Eq, PartialEq, Debug)]
+#[graphql(name = "LogId")]
 pub struct LogIdScalar(LogId);
 
-#[Scalar(name = "LogId")]
-impl ScalarType for LogIdScalar {
-    fn parse(value: Value) -> InputValueResult<Self> {
+impl ScalarValue for LogIdScalar {
+    fn from_value(value: Value) -> Result<Self>
+    where
+        Self: Sized,
+    {
         match &value {
             Value::String(str_value) => {
                 let log_id = LogId::from_str(str_value)?;
                 Ok(LogIdScalar(log_id))
             }
-            _ => Err(InputValueError::expected_type(value)),
+            _ => Err(Error::new(format!(
+                "Expected a valid log id, found: {value}"
+            ))),
         }
     }
 
@@ -74,7 +79,7 @@ impl Display for LogIdScalar {
 
 #[cfg(test)]
 mod tests {
-    use async_graphql::ScalarType;
+    use dynamic_graphql::{Value, ScalarValue};
     use p2panda_rs::entry::LogId;
     use serde::{Deserialize, Serialize};
 
@@ -101,14 +106,14 @@ mod tests {
         // Convert to gql value
         let value = LogId::default();
         let scalar_value: LogIdScalar = value.into();
-        let gql_value: async_graphql::Value = scalar_value.to_value();
+        let gql_value: Value = scalar_value.to_value();
 
         // Convert back
-        let converted_value = LogIdScalar::parse(gql_value).unwrap().into();
+        let converted_value = LogIdScalar::from_value(gql_value).unwrap().into();
         assert_eq!(value, converted_value);
 
         // Convert invalid type
-        let invalid_conversion = LogIdScalar::parse(async_graphql::Value::Boolean(true));
+        let invalid_conversion = LogIdScalar::from_value(Value::Boolean(true));
         assert!(invalid_conversion.is_err())
     }
 }

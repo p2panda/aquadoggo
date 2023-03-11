@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use anyhow::anyhow;
-use async_graphql::{Context, Object, Result};
+use dynamic_graphql::{Mutation, MutationFields, MutationRoot, Context, Result};
 use p2panda_rs::api::publish;
 use p2panda_rs::entry::traits::AsEncodedEntry;
 use p2panda_rs::entry::EncodedEntry;
@@ -11,29 +11,29 @@ use p2panda_rs::operation::{EncodedOperation, OperationId};
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::SqlStore;
-use crate::graphql::client::NextArguments;
-use crate::graphql::scalars;
+use crate::graphql::types::NextArguments;
+use crate::graphql::scalars::{EncodedOperationScalar, EncodedEntryScalar};
 use crate::schema::SchemaProvider;
 
-/// GraphQL queries for the Client API.
-#[derive(Default, Debug, Copy, Clone)]
-pub struct ClientMutationRoot;
+/// GraphQL mutatation root.
+#[derive(MutationRoot, Default, Debug, Copy, Clone)]
+pub struct MutationRoot;
 
-#[Object]
-impl ClientMutationRoot {
+/// GraphQL publish mutation.
+#[derive(Mutation, Default, Debug, Copy, Clone)]
+pub struct Publish(MutationRoot);
+
+#[MutationFields]
+impl Publish {
     /// Publish an entry using parameters obtained through `nextArgs` query.
     ///
     /// Returns arguments for publishing the next entry in the same log.
     async fn publish(
-        &self,
         ctx: &Context<'_>,
-        #[graphql(name = "entry", desc = "Signed and encoded entry to publish")]
-        entry: scalars::EncodedEntryScalar,
-        #[graphql(
-            name = "operation",
-            desc = "p2panda operation representing the entry payload."
-        )]
-        operation: scalars::EncodedOperationScalar,
+        // Signed and encoded entry to publish
+        entry: EncodedEntryScalar,
+        // p2panda operation representing the entry payload.
+        operation: EncodedOperationScalar,
     ) -> Result<NextArguments> {
         let store = ctx.data::<SqlStore>()?;
         let tx = ctx.data::<ServiceSender>()?;
@@ -117,7 +117,7 @@ mod tests {
     use tokio::sync::broadcast;
 
     use crate::bus::ServiceMessage;
-    use crate::dynamic_graphql::GraphQLSchemaManager;
+    use crate::graphql::GraphQLSchemaManager;
     use crate::http::HttpServiceContext;
     use crate::test_utils::{
         doggo_fields, doggo_schema, graphql_test_client, populate_and_materialize,
@@ -339,7 +339,7 @@ mod tests {
     #[case::invalid_entry_hex_encoding(
         "-/74='4,.=4-=235m-0   34.6-3",
         &OPERATION_ENCODED,
-        "Failed to parse \"EncodedEntry\": invalid hex encoding in entry"
+        "Invalid value for argument \"entry\": Failed to parse \"EntryEncoded\": Invalid character '-' at position 0"
     )]
     #[case::no_entry(
         "",
@@ -377,12 +377,12 @@ mod tests {
     #[case::valid_entry_with_extra_hex_char_at_end(
         &{EncodedEntry::from_bytes(&ENTRY_ENCODED).to_string() + "A"},
         &OPERATION_ENCODED,
-        "Failed to parse \"EncodedEntry\": invalid hex encoding in entry"
+        "Invalid value for argument \"entry\": Failed to parse \"EntryEncoded\": Odd number of digits"
     )]
     #[case::valid_entry_with_extra_hex_char_at_start(
         &{"A".to_string() + &EncodedEntry::from_bytes(&ENTRY_ENCODED).to_string()},
         &OPERATION_ENCODED,
-        "Failed to parse \"EncodedEntry\": invalid hex encoding in entry"
+        "Invalid value for argument \"entry\": Failed to parse \"EntryEncoded\": Odd number of digits"
     )]
     #[case::should_not_have_skiplink(
         &entry_signed_encoded_unvalidated(

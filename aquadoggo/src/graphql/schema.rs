@@ -3,56 +3,105 @@
 //! Build and manage a GraphQL schema including dynamic parts of the schema.
 use std::sync::Arc;
 
-use async_graphql::{EmptySubscription, MergedObject, Request, Response, Schema};
+use async_graphql::dynamic::{Object, Schema};
+use async_graphql::{Request, Response};
+use dynamic_graphql::internal::Registry;
 use log::{debug, info};
 use p2panda_rs::Human;
 use tokio::sync::Mutex;
 
 use crate::bus::ServiceSender;
 use crate::db::SqlStore;
-use crate::graphql::client::{ClientMutationRoot, ClientRoot};
-use crate::graphql::replication::ReplicationRoot;
+use crate::graphql::mutations::{MutationRoot, Publish};
+use crate::graphql::scalars::{
+    DocumentIdScalar, DocumentViewIdScalar, EncodedEntryScalar, EncodedOperationScalar,
+    EntryHashScalar, LogIdScalar, PublicKeyScalar, SeqNumScalar,
+};
+use crate::graphql::schema_builders::{
+    build_document_schema, build_document_field_schema, build_document_query, build_next_args_query,
+};
+use crate::graphql::types::{DocumentMeta, NextArguments};
+use crate::graphql::utils::fields_name;
 use crate::schema::SchemaProvider;
-
-/// All of the GraphQL query sub modules merged into one top level root.
-#[derive(MergedObject, Debug)]
-pub struct QueryRoot(pub ReplicationRoot, pub ClientRoot);
-
-/// All of the GraphQL mutation sub modules merged into one top level root.
-#[derive(MergedObject, Debug, Copy, Clone, Default)]
-pub struct MutationRoot(pub ClientMutationRoot);
-
-/// GraphQL schema for p2panda node.
-pub type RootSchema = Schema<QueryRoot, MutationRoot, EmptySubscription>;
 
 /// Returns GraphQL API schema for p2panda node.
 ///
 /// Builds the root schema that can handle all GraphQL requests from clients (Client API) or other
 /// nodes (Node API).
-pub fn build_root_schema(
+pub async fn build_root_schema(
     store: SqlStore,
     tx: ServiceSender,
     schema_provider: SchemaProvider,
-) -> RootSchema {
-    // Configure query root
-    let replication_root = ReplicationRoot::default();
-    let client_query_root = ClientRoot::new();
-    let query_root = QueryRoot(replication_root, client_query_root);
+) -> Schema {
+    // Get all schema from the schema provider.
+    let all_schema = schema_provider.all().await;
 
-    // Configure mutation root
-    let client_mutation_root = ClientMutationRoot::default();
-    let mutation_root = MutationRoot(client_mutation_root);
+    // Using dynamic-graphql we create a registry and add types.
+    let registry = Registry::new()
+        .register::<NextArguments>()
+        .register::<MutationRoot>()
+        .register::<Publish>()
+        .register::<DocumentIdScalar>()
+        .register::<DocumentMeta>()
+        .register::<DocumentViewIdScalar>()
+        .register::<EncodedEntryScalar>()
+        .register::<EncodedOperationScalar>()
+        .register::<EntryHashScalar>()
+        .register::<LogIdScalar>()
+        .register::<PublicKeyScalar>()
+        .register::<SeqNumScalar>();
 
-    // Build GraphQL schema
-    Schema::build(query_root, mutation_root, EmptySubscription)
+    // Construct the schema builder.
+    let mut schema_builder = Schema::build("Query", Some("MutationRoot"), None);
+
+    // Populate it with the registered types. We can now use these in any following dynamically
+    // created query object fields.
+    schema_builder = registry.apply_into_schema_builder(schema_builder);
+
+    // Construct the root query object.
+    let mut root_query = Object::new("Query");
+
+    // Loop through all schema retrieved from the schema store, create types and a root query for the
+    // documents they describe.
+    for schema in all_schema {
+        // Construct the document fields object which will be named `<schema_id>Field`.
+        let schema_field_name = fields_name(&schema.id().to_string());
+        let mut document_schema_fields = Object::new(&schema_field_name);
+
+        // For every field in the schema we create a type with a resolver.
+        //
+        // TODO: We can optimize the field resolution methods later with a data loader.
+        for (name, field_type) in schema.fields() {
+            document_schema_fields = build_document_field_schema(document_schema_fields, name, field_type);
+        }
+
+        // Construct the document schema which has "fields" and "meta" fields.
+        let document_schema = build_document_schema(&schema);
+
+        // Register a schema and schema fields type for every schema.
+        schema_builder = schema_builder.register(document_schema_fields).register(document_schema);
+
+        // Add a query object for each schema. It offers an interface to retrieve a single
+        // document of this schema by it's document id or view id. It's resolver parses and
+        // validates the passed parameters, then forwards them up to the children query fields.
+        root_query = build_document_query(root_query, &schema);
+    }
+
+    // Add next args to the query object.
+    let root_query = build_next_args_query(root_query);
+
+    // Build the schema.
+    schema_builder
+        .register(root_query)
         .data(store)
         .data(schema_provider)
         .data(tx)
         .finish()
+        .unwrap()
 }
 
 /// List of created GraphQL root schemas.
-type GraphQLSchemas = Arc<Mutex<Vec<RootSchema>>>;
+type GraphQLSchemas = Arc<Mutex<Vec<Schema>>>;
 
 /// Shared types between GraphQL schemas.
 #[derive(Clone, Debug)]
@@ -123,7 +172,7 @@ impl GraphQLSchemaManager {
 
         // Create the new GraphQL based on the current state of known p2panda application schemas
         async fn rebuild(shared: GraphQLSharedData, schemas: GraphQLSchemas) {
-            let schema = build_root_schema(shared.store, shared.tx, shared.schema_provider);
+            let schema = build_root_schema(shared.store, shared.tx, shared.schema_provider).await;
             schemas.lock().await.push(schema);
         }
 

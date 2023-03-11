@@ -8,7 +8,7 @@ use p2panda_rs::storage_provider::error::DocumentStorageError;
 use p2panda_rs::storage_provider::traits::DocumentStore;
 
 use crate::db::{types::StorageDocument, SqlStore};
-use crate::dynamic_graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
+use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
 
 // Correctly formats the name of a document field type.
 pub fn fields_name(name: &str) -> String {

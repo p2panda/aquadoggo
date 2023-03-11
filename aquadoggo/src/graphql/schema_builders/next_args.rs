@@ -7,8 +7,8 @@ use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::identity::PublicKey;
 
 use crate::db::SqlStore;
-use crate::dynamic_graphql::scalars::{DocumentViewIdScalar, PublicKeyScalar};
-use crate::dynamic_graphql::types::NextArguments;
+use crate::graphql::scalars::{DocumentViewIdScalar, PublicKeyScalar};
+use crate::graphql::types::NextArguments;
 
 // Add next args to the query object.
 pub fn build_next_args_query(query: Object) -> Object {

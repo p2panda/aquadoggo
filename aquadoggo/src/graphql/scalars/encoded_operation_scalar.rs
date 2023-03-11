@@ -1,24 +1,29 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use anyhow::anyhow;
-use async_graphql::{InputValueError, InputValueResult, Scalar, ScalarType, Value};
+use dynamic_graphql::{Error, Result, Scalar, ScalarValue, Value};
 use p2panda_rs::operation::EncodedOperation;
 use serde::{Deserialize, Serialize};
 
 /// Entry payload and p2panda operation, CBOR bytes encoded as a hexadecimal string.
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Scalar, Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[graphql(name = "EncodedOperation")]
 pub struct EncodedOperationScalar(EncodedOperation);
 
-#[Scalar(name = "EncodedOperation")]
-impl ScalarType for EncodedOperationScalar {
-    fn parse(value: Value) -> InputValueResult<Self> {
+impl ScalarValue for EncodedOperationScalar {
+    fn from_value(value: Value) -> Result<Self>
+    where
+        Self: Sized,
+    {
         match &value {
             Value::String(str_value) => {
                 let bytes = hex::decode(str_value)
-                    .map_err(|_| anyhow!("invalid hex encoding in operation"))?;
+                    .map_err(|e| anyhow!(e.to_string()))?;
                 Ok(EncodedOperationScalar(EncodedOperation::from_bytes(&bytes)))
             }
-            _ => Err(InputValueError::expected_type(value)),
+            _ => Err(Error::new(format!(
+                "Expected a valid encoded operation, found: {value}"
+            ))),
         }
     }
 

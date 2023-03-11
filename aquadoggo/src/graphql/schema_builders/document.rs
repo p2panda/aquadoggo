@@ -4,10 +4,10 @@ use async_graphql::dynamic::{Object, Field, TypeRef, InputValue, FieldFuture};
 use p2panda_rs::{schema::Schema, document::traits::AsDocument};
 use dynamic_graphql::{FieldValue, Error, ScalarValue};
 
-use crate::dynamic_graphql::scalars::{DocumentViewIdScalar, DocumentIdScalar};
-use crate::dynamic_graphql::types::DocumentMeta;
+use crate::graphql::scalars::{DocumentViewIdScalar, DocumentIdScalar};
+use crate::graphql::types::DocumentMeta;
 use crate:: db::SqlStore;
-use crate::dynamic_graphql::utils::{downcast_id_params, get_document_from_params, fields_name};
+use crate::graphql::utils::{downcast_id_params, get_document_from_params, fields_name};
 
 /// Build a graphql object type for a p2panda schema.
 pub fn build_document_schema(schema: &Schema) -> Object {
