@@ -3,6 +3,8 @@
 mod document_field;
 mod next_args;
 mod document;
+#[cfg(test)]
+mod tests;
 
 pub use next_args::build_next_args_query;
 pub use document_field::build_document_field_schema;
