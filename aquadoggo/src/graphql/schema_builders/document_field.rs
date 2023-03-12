@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use async_graphql::Value;
 use async_graphql::dynamic::{Field, FieldFuture, Object, TypeRef};
+use async_graphql::Value;
+use async_recursion::async_recursion;
 use dynamic_graphql::FieldValue;
 use futures::future;
 use p2panda_rs::document::traits::AsDocument;
@@ -10,7 +11,10 @@ use p2panda_rs::schema::FieldType;
 use p2panda_rs::storage_provider::traits::DocumentStore;
 
 use crate::db::SqlStore;
-use crate::graphql::utils::{downcast_id_params, get_document_from_params, gql_scalar};
+use crate::graphql::utils::{
+    downcast_id_params, fields_name, get_document_from_params, gql_scalar,
+};
+use crate::schema::SchemaProvider;
 
 /// Get the GraphQL type name for a p2panda field type.
 ///
@@ -46,6 +50,7 @@ pub fn build_document_field_schema(
     document_fields.field(Field::new(name, graphql_type, move |ctx| {
         FieldFuture::new(async move {
             let store = ctx.data_unchecked::<SqlStore>();
+            let schema_provider = ctx.data_unchecked::<SchemaProvider>();
             let field_name = ctx.field().name();
 
             // Downcast the parameters passed up from the parent query field.
@@ -63,34 +68,40 @@ pub fn build_document_field_schema(
                     // Convert the operation value into a graphql scalar type.
                     //
                     // TODO: Relation fields aren't supported yet, we need recursion.
-                    let value = match value {
-                        // Recurse into single views.
-                        OperationValue::Relation(rel) => {
-                            store.get_document(rel.document_id()).await?
-                        }
-                        OperationValue::PinnedRelation(rel) => {
-                            store.get_document_by_view_id(rel.view_id()).await?
-                        }
+                    let field_value = match field_type {
+                        FieldType::Boolean => FieldValue::value(gql_scalar(value)),
+                        FieldType::Integer => FieldValue::value(gql_scalar(value)),
+                        FieldType::Float => FieldValue::value(gql_scalar(value)),
+                        FieldType::String => FieldValue::value(gql_scalar(value)),
+                        FieldType::Relation(schema_id) => {
+                            match schema_provider.get(schema_id).await {
+                                Some(schema) => {
+                                    // Construct the document fields object which will be named `<schema_id>Field`.
+                                    let schema_field_name = fields_name(&schema.id().to_string());
+                                    let mut document_schema_fields =
+                                        Object::new(&schema_field_name);
 
-                        // Recurse into view lists.
-                        OperationValue::RelationList(rel) => {
-                            let queries = rel
-                                .iter()
-                                .map(|doc_id| store.get_document(doc_id));
-                            Value::List(future::try_join_all(queries).await?)
+                                    // For every field in the schema we create a type with a resolver.
+                                    //
+                                    // TODO: We can optimize the field resolution methods later with a data loader.
+                                    for (name, field_type) in schema.fields() {
+                                        document_schema_fields = build_document_field_schema(
+                                            document_schema_fields,
+                                            name,
+                                            field_type,
+                                        );
+                                    }
+                                    FieldValue::owned_any(document_schema_fields)
+                                }
+                                None => todo!(),
+                            }
                         }
-                        OperationValue::PinnedRelationList(rel) => {
-                            let queries = rel.iter().map(|view_id| {
-                                store.get_document_by_view_id(view_id)
-                            });
-                            Value::List(future::try_join_all(queries).await?)
-                        }
-
-                        // Convert all simple fields to scalar values.
-                        _ => gql_scalar(value),
+                        FieldType::RelationList(_) => todo!(),
+                        FieldType::PinnedRelation(_) => todo!(),
+                        FieldType::PinnedRelationList(_) => todo!(),
                     };
 
-                    Ok(Some(FieldValue::value(gql_scalar(value))))
+                    Ok(Some(field_value))
                 }
                 None => Ok(Some(FieldValue::NULL)),
             }

@@ -73,7 +73,7 @@ pub async fn build_root_schema(
         // TODO: We can optimize the field resolution methods later with a data loader.
         for (name, field_type) in schema.fields() {
             document_schema_fields =
-                build_document_field_schema(document_schema_fields, name, field_type);
+                build_document_field_schema(document_schema_fields, name, &field_type);
         }
 
         // Construct the document schema which has "fields" and "meta" fields.
