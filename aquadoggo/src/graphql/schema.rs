@@ -24,6 +24,8 @@ use crate::graphql::types::{DocumentMeta, NextArguments};
 use crate::graphql::utils::fields_name;
 use crate::schema::SchemaProvider;
 
+use super::utils::downcast_id_params;
+
 /// Returns GraphQL API schema for p2panda node.
 ///
 /// Builds the root schema that can handle all GraphQL requests from clients (Client API) or other
@@ -72,8 +74,9 @@ pub async fn build_root_schema(
         //
         // TODO: We can optimize the field resolution methods later with a data loader.
         for (name, field_type) in schema.fields() {
+            
             document_schema_fields =
-                build_document_field_schema(document_schema_fields, name, &field_type);
+                build_document_field_schema(document_schema_fields, name.to_string(), &field_type, None, None);
         }
 
         // Construct the document schema which has "fields" and "meta" fields.
