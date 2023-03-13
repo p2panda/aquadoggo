@@ -51,6 +51,7 @@ pub fn build_document_field_schema(
         let name = name.clone();
 
         FieldFuture::new(async move {
+            // Parse the bubble up message.
             let (document_id, document_view_id) =
                 if document_id.is_none() && document_view_id.is_none() {
                     downcast_id_params(&ctx)
@@ -58,17 +59,26 @@ pub fn build_document_field_schema(
                     (document_id, document_view_id)
                 };
 
+            // Get the whole document from the store.
+            //
+            // TODO: This can be optimized by using a data loader.
             let document =
                 match get_document_from_params(store, &document_id, &document_view_id).await? {
                     Some(document) => document,
                     None => return Ok(FieldValue::NONE),
                 };
 
+            // Get the field this query is concerned with.
             match document.get(&name).unwrap() {
+                // Relation fields are expected to resolve to the related document so we pass
+                // along the document id which will be processed through it's own resolver.
                 OperationValue::Relation(rel) => Ok(Some(FieldValue::owned_any((
                     Some(DocumentIdScalar::from(rel.document_id())),
                     None::<DocumentViewIdScalar>,
                 )))),
+                // Relation lists are handled by collecting and returning a list of all document
+                // id's in the relation list. Each of these in turn are processed and queries
+                // forwarded up the tree via their own respective resolvers.
                 OperationValue::RelationList(rel) => {
                     let mut fields = vec![];
                     for document_id in rel.iter() {
@@ -79,10 +89,12 @@ pub fn build_document_field_schema(
                     }
                     Ok(Some(FieldValue::list(fields)))
                 }
+                // Pinned relation behaves the same as relation but passes along a document view id.
                 OperationValue::PinnedRelation(rel) => Ok(Some(FieldValue::owned_any((
                     None::<DocumentIdScalar>,
                     Some(DocumentViewIdScalar::from(rel.view_id())),
                 )))),
+                // Pinned relation lists behave the same as relation lists but pass along view ids.
                 OperationValue::PinnedRelationList(rel) => {
                     let mut fields = vec![];
                     for document_view_id in rel.iter() {
@@ -93,6 +105,7 @@ pub fn build_document_field_schema(
                     }
                     Ok(Some(FieldValue::list(fields)))
                 }
+                // All other fields are simply resolved to their scalar value.
                 value => Ok(Some(FieldValue::value(gql_scalar(value)))),
             }
         })
