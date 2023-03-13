@@ -121,14 +121,14 @@ fn relation_fields() {
                     "by_pinned_relation",
                     FieldType::PinnedRelation(child_schema.id().clone()),
                 ),
-                // (
-                //     "by_relation_list",
-                //     FieldType::RelationList(child_schema.id().clone()),
-                // ),
-                // (
-                //     "by_pinned_relation_list",
-                //     FieldType::PinnedRelationList(child_schema.id().clone()),
-                // ),
+                (
+                    "by_relation_list",
+                    FieldType::RelationList(child_schema.id().clone()),
+                ),
+                (
+                    "by_pinned_relation_list",
+                    FieldType::PinnedRelationList(child_schema.id().clone()),
+                ),
             ],
             &key_pair,
         )
@@ -149,8 +149,8 @@ fn relation_fields() {
         let parent_fields = vec![
             ("by_relation", child_doc_id.clone().into()),
             ("by_pinned_relation", child_view_id.clone().into()),
-            // ("by_relation_list", vec![child_doc_id].into()),
-            // ("by_pinned_relation_list", vec![child_view_id].into()),
+            ("by_relation_list", vec![child_doc_id].into()),
+            ("by_pinned_relation_list", vec![child_view_id].into()),
         ];
 
         let parent_view_id =
@@ -164,6 +164,8 @@ fn relation_fields() {
                     fields {{
                         by_relation {{ fields {{ it_works }} }},
                         by_pinned_relation {{ fields {{ it_works }} }},
+                        by_relation_list {{ fields {{ it_works }} }},
+                        by_pinned_relation_list {{ fields {{ it_works }} }},
                     }}
                 }}
             }}"#,
