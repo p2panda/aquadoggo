@@ -79,12 +79,30 @@ pub fn build_document_field_schema(
                     Some(DocumentIdScalar::from(rel.document_id())),
                     None::<DocumentViewIdScalar>,
                 )))),
-                OperationValue::RelationList(rel) => todo!(),
+                OperationValue::RelationList(rel) => {
+                    let mut fields = vec![];
+                    for document_id in rel.iter() {
+                        fields.push(FieldValue::owned_any((
+                            Some(DocumentIdScalar::from(document_id)),
+                            None::<DocumentViewIdScalar>,
+                        )));
+                    }
+                    Ok(Some(FieldValue::list(fields)))
+                }
                 OperationValue::PinnedRelation(rel) => Ok(Some(FieldValue::owned_any((
                     None::<DocumentIdScalar>,
                     Some(DocumentViewIdScalar::from(rel.view_id())),
                 )))),
-                OperationValue::PinnedRelationList(rel) => todo!(),
+                OperationValue::PinnedRelationList(rel) => {
+                    let mut fields = vec![];
+                    for document_view_id in rel.iter() {
+                        fields.push(FieldValue::owned_any((
+                            None::<DocumentIdScalar>,
+                            Some(DocumentViewIdScalar::from(document_view_id)),
+                        )));
+                    }
+                    Ok(Some(FieldValue::list(fields)))
+                }
                 value => Ok(Some(FieldValue::value(gql_scalar(value)))),
             }
         })
