@@ -35,9 +35,7 @@ fn graphql_type(field_type: &FieldType) -> TypeRef {
 pub fn build_document_field_schema(
     document_fields: Object,
     name: String,
-    field_type: &FieldType,
-    document_id: Option<DocumentIdScalar>,
-    document_view_id: Option<DocumentViewIdScalar>,
+    field_type: &FieldType
 ) -> Object {
     // The type of this field.
     let field_type = field_type.clone();
@@ -46,18 +44,12 @@ pub fn build_document_field_schema(
     // Define the field and create a resolver.
     document_fields.field(Field::new(name.clone(), graphql_type, move |ctx| {
         let store = ctx.data_unchecked::<SqlStore>();
-        let document_id = document_id.clone();
-        let document_view_id = document_view_id.clone();
         let name = name.clone();
 
         FieldFuture::new(async move {
             // Parse the bubble up message.
             let (document_id, document_view_id) =
-                if document_id.is_none() && document_view_id.is_none() {
-                    downcast_id_params(&ctx)
-                } else {
-                    (document_id, document_view_id)
-                };
+                    downcast_id_params(&ctx);
 
             // Get the whole document from the store.
             //
