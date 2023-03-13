@@ -24,8 +24,6 @@ use crate::graphql::types::{DocumentMeta, NextArguments};
 use crate::graphql::utils::fields_name;
 use crate::schema::SchemaProvider;
 
-use super::utils::downcast_id_params;
-
 /// Returns GraphQL API schema for p2panda node.
 ///
 /// Builds the root schema that can handle all GraphQL requests from clients (Client API) or other

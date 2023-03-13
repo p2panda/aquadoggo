@@ -1,24 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use async_graphql::dynamic::{Field, FieldFuture, Object, ResolverContext, TypeRef};
-use async_graphql::{Error, Result};
-use async_recursion::async_recursion;
+use async_graphql::dynamic::{Field, FieldFuture, Object, TypeRef};
 use dynamic_graphql::FieldValue;
-use futures::future;
 use p2panda_rs::document::traits::AsDocument;
-use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::operation::OperationValue;
-use p2panda_rs::schema::{FieldType, SchemaId};
-use p2panda_rs::storage_provider::error::DocumentStorageError;
-use p2panda_rs::storage_provider::traits::DocumentStore;
+use p2panda_rs::schema::FieldType;
 
-use crate::db::types::StorageDocument;
 use crate::db::SqlStore;
 use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
-use crate::graphql::utils::{
-    downcast_id_params, fields_name, get_document_from_params, gql_scalar,
-};
-use crate::schema::SchemaProvider;
+use crate::graphql::utils::{downcast_id_params, get_document_from_params, gql_scalar};
 
 /// Get the GraphQL type name for a p2panda field type.
 ///
