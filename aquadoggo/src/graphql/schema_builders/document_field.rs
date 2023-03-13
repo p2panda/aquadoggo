@@ -35,7 +35,7 @@ fn graphql_type(field_type: &FieldType) -> TypeRef {
 pub fn build_document_field_schema(
     document_fields: Object,
     name: String,
-    field_type: &FieldType
+    field_type: &FieldType,
 ) -> Object {
     // The type of this field.
     let field_type = field_type.clone();
@@ -48,8 +48,7 @@ pub fn build_document_field_schema(
 
         FieldFuture::new(async move {
             // Parse the bubble up message.
-            let (document_id, document_view_id) =
-                    downcast_id_params(&ctx);
+            let (document_id, document_view_id) = downcast_id_params(&ctx);
 
             // Get the whole document from the store.
             //
