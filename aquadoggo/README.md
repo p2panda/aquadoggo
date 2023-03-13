@@ -86,6 +86,18 @@ $ cargo add aquadoggo
 
 [`cargo-edit`]: https://github.com/killercup/cargo-edit
 
+## Development
+
+The Protocol Buffers compiler must be installed in order to compile aquadoggo.
+
+On a Debian-based OS run:
+
+```bash
+$ sudo apt install -y protobuf-compiler
+```
+
+See the [installation documentation](https://grpc.io/docs/protoc-installation/) for more options.
+
 ## License
 
 GNU Affero General Public License v3.0 [`AGPL-3.0-or-later`](LICENSE)

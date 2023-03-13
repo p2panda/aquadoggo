@@ -5,7 +5,7 @@ use std::convert::{TryFrom, TryInto};
 use std::error::Error;
 
 use anyhow::Result;
-use aquadoggo::{Configuration, Node, ReplicationConfiguration};
+use aquadoggo::{Configuration, NetworkConfiguration, Node, ReplicationConfiguration};
 use structopt::StructOpt;
 
 /// Helper method to parse a single key-value pair.
@@ -36,6 +36,14 @@ struct Opt {
     #[structopt(short, long, parse(from_os_str))]
     data_dir: Option<std::path::PathBuf>,
 
+    /// Port for the http server, 2020 by default.
+    #[structopt(short = "P", long)]
+    http_port: Option<u16>,
+
+    /// Port for the QUIC transport, 2022 by default.
+    #[structopt(short, long)]
+    quic_port: Option<u16>,
+
     /// URLs of remote nodes to replicate with.
     #[structopt(short, long)]
     remote_node_addresses: Vec<String>,
@@ -48,6 +56,14 @@ struct Opt {
     /// - "456def" with log_ids 6 7
     #[structopt(short = "A", parse(try_from_str = parse_key_val), number_of_values = 1)]
     public_keys_to_replicate: Vec<(String, Vec<u64>)>,
+
+    /// Enable mDNS for peer discovery over LAN (using port 5353), true by default.
+    #[structopt(short, long)]
+    mdns: Option<bool>,
+
+    /// Enable ping for connected peers (send and receive ping packets), true by default.
+    #[structopt(long)]
+    ping: Option<bool>,
 }
 
 impl TryFrom<Opt> for Configuration {
@@ -55,6 +71,7 @@ impl TryFrom<Opt> for Configuration {
 
     fn try_from(opt: Opt) -> Result<Self, Self::Error> {
         let mut config = Configuration::new(opt.data_dir)?;
+        config.http_port = opt.http_port.unwrap_or(2020);
 
         let public_keys_to_replicate = opt
             .public_keys_to_replicate
@@ -66,6 +83,13 @@ impl TryFrom<Opt> for Configuration {
             remote_peers: opt.remote_node_addresses,
             public_keys_to_replicate,
             ..ReplicationConfiguration::default()
+        };
+
+        config.network = NetworkConfiguration {
+            mdns: opt.mdns.unwrap_or(true),
+            ping: opt.ping.unwrap_or(true),
+            quic_port: opt.quic_port.unwrap_or(2022),
+            ..NetworkConfiguration::default()
         };
 
         Ok(config)
