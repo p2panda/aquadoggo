@@ -238,8 +238,7 @@ mod test {
     use p2panda_rs::test_utils::fixtures::key_pair;
     use rstest::rstest;
     use serde_json::{json, Value};
-    use serial_test::serial;
-
+    
     use crate::test_utils::{add_schema, graphql_test_client, test_runner, TestNode};
 
     #[rstest]
@@ -248,7 +247,6 @@ mod test {
     // data across threads we have to run this test in serial.
     //
     // Read more: https://users.rust-lang.org/t/static-mutables-in-tests/49321
-    #[serial]
     fn schema_updates() {
         test_runner(|mut node: TestNode| async move {
             // Create test client in the beginning so it is initialised with just the system

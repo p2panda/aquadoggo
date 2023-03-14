@@ -198,17 +198,10 @@ mod test {
     use p2panda_rs::test_utils::fixtures::random_key_pair;
     use rstest::rstest;
     use serde_json::json;
-    use serial_test::serial;
-
+    
     use crate::test_utils::{add_document, add_schema, graphql_test_client, test_runner, TestNode};
 
     #[rstest]
-    // Note: This and more tests in this file use the underlying static schema provider which is a
-    // static mutable data store, accessible across all test runner threads in parallel mode. To
-    // prevent overwriting data across threads we have to run this test in serial.
-    //
-    // Read more: https://users.rust-lang.org/t/static-mutables-in-tests/49321
-    #[serial]
     fn single_query(#[from(random_key_pair)] key_pair: KeyPair) {
         // Test single query parameter variations.
 
@@ -277,7 +270,6 @@ mod test {
     }
 
     #[rstest]
-    #[serial] // See note above on why we execute this test in series
     #[case::unknown_document_id(
         "id: \"00208f7492d6eb01360a886dac93da88982029484d8c04a0bd2ac0607101b80a6634\"",
         value!({
@@ -358,7 +350,6 @@ mod test {
     }
 
     #[rstest]
-    #[serial] // See note above on why we execute this test in series
     fn collection_query(#[from(random_key_pair)] key_pair: KeyPair) {
         // Test collection query parameter variations.
         test_runner(move |mut node: TestNode| async move {
@@ -409,7 +400,6 @@ mod test {
     }
 
     #[rstest]
-    #[serial] // See note above on why we execute this test in series
     fn type_name(#[from(random_key_pair)] key_pair: KeyPair) {
         // Test availability of `__typename` on all objects.
         test_runner(move |mut node: TestNode| async move {
