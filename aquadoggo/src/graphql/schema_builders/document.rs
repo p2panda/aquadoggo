@@ -2,12 +2,15 @@
 
 use async_graphql::dynamic::{Field, FieldFuture, InputValue, Object, TypeRef};
 use dynamic_graphql::{Error, FieldValue, ScalarValue};
+use p2panda_rs::storage_provider::traits::DocumentStore;
 use p2panda_rs::{document::traits::AsDocument, schema::Schema};
 
 use crate::db::SqlStore;
 use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
 use crate::graphql::types::DocumentMeta;
 use crate::graphql::utils::{downcast_id_params, fields_name, get_document_from_params};
+
+const QUERY_ALL_PREFIX: &str = "all_";
 
 /// Build a graphql object type for a p2panda schema.
 pub fn build_document_schema(schema: &Schema) -> Object {
@@ -61,7 +64,6 @@ pub fn build_document_schema(schema: &Schema) -> Object {
         .description(schema.description())
 }
 
-// Add next args to the query object.
 pub fn build_document_query(query: Object, schema: &Schema) -> Object {
     query.field(
         Field::new(
@@ -111,6 +113,46 @@ pub fn build_document_query(query: Object, schema: &Schema) -> Object {
             "Query a {} document by id or view id",
             schema.name()
         )),
+    )
+}
+
+/// Add query for getting all documents of a certain schema type to the root query object.
+/// 
+/// Constructs an endpoint with the format `all_<SCHEMA_ID>`.
+pub fn build_all_document_query(query: Object, schema: &Schema) -> Object {
+    let schema_id = schema.id().clone();
+    query.field(
+        Field::new(
+            format!("{QUERY_ALL_PREFIX}{}", schema_id.to_string()),
+            TypeRef::named_list(schema_id.to_string()),
+            move |ctx| {
+                let schema_id = schema_id.clone();
+                FieldFuture::new(async move {
+                    // Access the store.
+                    let store = ctx.data_unchecked::<SqlStore>();
+
+                    // Fetch all documents of the schema this endpoint serves and compose the
+                    // field value (a list) which will bubble up the query tree.
+                    //
+                    // TODO: Optimize with data loader.
+                    let documents: Vec<FieldValue> = store
+                        .get_documents_by_schema(&schema_id)
+                        .await?
+                        .iter()
+                        .map(|document| {
+                            FieldValue::owned_any((
+                                Some(DocumentIdScalar::from(document.id())),
+                                None::<DocumentViewIdScalar>,
+                            ))
+                        })
+                        .collect();
+
+                    // Pass the list up to the children query fields.
+                    Ok(Some(FieldValue::list(documents)))
+                })
+            },
+        )
+        .description(format!("Get all {} documents", schema.name())),
     )
 }
 

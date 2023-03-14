@@ -18,7 +18,8 @@ use crate::graphql::scalars::{
     EntryHashScalar, LogIdScalar, PublicKeyScalar, SeqNumScalar,
 };
 use crate::graphql::schema_builders::{
-    build_document_field_schema, build_document_query, build_document_schema, build_next_args_query,
+    build_all_document_query, build_document_field_schema, build_document_query,
+    build_document_schema, build_next_args_query,
 };
 use crate::graphql::types::{DocumentMeta, NextArguments};
 use crate::graphql::utils::fields_name;
@@ -85,9 +86,12 @@ pub async fn build_root_schema(
             .register(document_schema);
 
         // Add a query object for each schema. It offers an interface to retrieve a single
-        // document of this schema by it's document id or view id. It's resolver parses and
+        // document of this schema by it's document id or view id. Its resolver parses and
         // validates the passed parameters, then forwards them up to the children query fields.
         root_query = build_document_query(root_query, &schema);
+
+        // Add a query for retrieving all documents of a certain schema.
+        root_query = build_all_document_query(root_query, &schema);
     }
 
     // Add next args to the query object.
