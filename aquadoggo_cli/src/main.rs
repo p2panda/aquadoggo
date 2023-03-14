@@ -30,7 +30,8 @@ where
 }
 
 #[derive(Parser, Debug)]
-#[command(name = "aquadoggo Node", about = "Node server for the p2panda network")]
+#[command(name = "aquadoggo Node", version)]
+/// Node server for the p2panda network.
 struct Cli {
     /// Path to data folder, $HOME/.local/share/aquadoggo by default on Linux.
     #[arg(short, long)]
