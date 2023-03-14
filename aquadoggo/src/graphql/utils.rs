@@ -11,7 +11,7 @@ use p2panda_rs::storage_provider::traits::DocumentStore;
 use crate::db::{types::StorageDocument, SqlStore};
 use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
 
-const DOCUMENT_FIELDS_SUFFIX: &str = "Field";
+const DOCUMENT_FIELDS_SUFFIX: &str = "Fields";
 
 // Correctly formats the name of a document field type.
 pub fn fields_name(schema_id: &SchemaId) -> String {

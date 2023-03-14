@@ -15,10 +15,10 @@ use crate::graphql::utils::{downcast_id_params, get_document_from_params, gql_sc
 /// GraphQL types for relations use the p2panda schema id as their name.
 fn graphql_type(field_type: &FieldType) -> TypeRef {
     match field_type {
-        p2panda_rs::schema::FieldType::Boolean => TypeRef::named_nn(TypeRef::BOOLEAN),
-        p2panda_rs::schema::FieldType::Integer => TypeRef::named_nn(TypeRef::INT),
-        p2panda_rs::schema::FieldType::Float => TypeRef::named_nn(TypeRef::FLOAT),
-        p2panda_rs::schema::FieldType::String => TypeRef::named_nn(TypeRef::STRING),
+        p2panda_rs::schema::FieldType::Boolean => TypeRef::named(TypeRef::BOOLEAN),
+        p2panda_rs::schema::FieldType::Integer => TypeRef::named(TypeRef::INT),
+        p2panda_rs::schema::FieldType::Float => TypeRef::named(TypeRef::FLOAT),
+        p2panda_rs::schema::FieldType::String => TypeRef::named(TypeRef::STRING),
         p2panda_rs::schema::FieldType::Relation(schema_id) => TypeRef::named(schema_id.to_string()),
         p2panda_rs::schema::FieldType::RelationList(schema_id) => {
             TypeRef::named_list(schema_id.to_string())

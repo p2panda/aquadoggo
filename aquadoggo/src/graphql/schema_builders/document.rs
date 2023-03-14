@@ -30,7 +30,7 @@ pub fn build_document_schema(schema: &Schema) -> Object {
         // The `fields` of a document, passes up the query arguments to it's children.
         .field(Field::new(
             FIELDS_FIELD,
-            TypeRef::named_nn(document_fields_name),
+            TypeRef::named(document_fields_name),
             move |ctx| {
                 FieldFuture::new(async move {
                     // Here we just pass up the root query parameters to be used in the fields resolver.
@@ -42,7 +42,7 @@ pub fn build_document_schema(schema: &Schema) -> Object {
         // The `meta` field of a document, resolves the `DocumentMeta` object.
         .field(Field::new(
             META_FIELD,
-            TypeRef::named_nn(DOCUMENT_META_SCHEMA_ID),
+            TypeRef::named(DOCUMENT_META_SCHEMA_ID),
             move |ctx| {
                 FieldFuture::new(async move {
                     let store = ctx.data_unchecked::<SqlStore>();
@@ -89,10 +89,10 @@ pub fn build_document_query(query: Object, schema: &Schema) -> Object {
                     let mut document_view_id = None;
                     for (name, id) in ctx.field().arguments()?.into_iter() {
                         match name.as_str() {
-                            ID_ARG => {
+                            DOCUMENT_ID_ARG => {
                                 document_id = Some(DocumentIdScalar::from_value(id)?);
                             }
-                            VIEW_ID_ARG => {
+                            DOCUMENT_VIEW_ID_ARG => {
                                 document_view_id = Some(DocumentViewIdScalar::from_value(id)?)
                             }
                             _ => (),
@@ -268,14 +268,22 @@ mod test {
     #[case::unknown_document_id(
         "id: \"00208f7492d6eb01360a886dac93da88982029484d8c04a0bd2ac0607101b80a6634\"",
         value!({
-            "view": Value::Null
+            "view": {
+                "fields": {
+                    "name": Value::Null
+                }
+            }
         }),
         vec![]
     )]
     #[case::unknown_view_id(
         "viewId: \"00208f7492d6eb01360a886dac93da88982029484d8c04a0bd2ac0607101b80a6634\"",
         value!({
-            "view": Value::Null
+            "view": {
+                "fields": {
+                    "name": Value::Null
+                }
+            }
         }),
         vec![]
     )]
@@ -324,7 +332,7 @@ mod test {
             let response: Response = response.json().await;
 
             // Assert response data.
-            assert_eq!(response.data, expected_value, "{:#?}", response);
+            assert_eq!(response.data, expected_value, "{:#?}", response.data);
 
             // Assert error messages.
             let err_msgs: Vec<String> = response
