@@ -77,7 +77,7 @@ async fn _verify_entries(entries: &[StorageEntry], context: &Context) -> Result<
         }
         Some(entry) => {
             trace!("Getting certificate pool for entries");
-        _add_certpool_to_entries_for_verification(&mut entries_to_verify, entry, context)
+            _add_certpool_to_entries_for_verification(&mut entries_to_verify, entry, context)
                 .await?;
         }
         None => (),
@@ -137,7 +137,7 @@ async fn _insert_new_entries(
         .map_err(|err| anyhow!(format!("Error inserting new entry into db: {:?}", err)))?;
 
         // Send new entry & operation to other services.
-    _send_new_entry_service_message(tx.clone(), entry);
+        _send_new_entry_service_message(tx.clone(), entry);
     }
 
     Ok(())

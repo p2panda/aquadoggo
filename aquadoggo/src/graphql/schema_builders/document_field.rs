@@ -33,9 +33,9 @@ fn graphql_type(field_type: &FieldType) -> TypeRef {
 }
 
 /// Build a graphql schema object for each field of a document.
-/// 
+///
 /// Contains a resolver which accesses the actual value of the field from the store when queries
-/// are resolved. 
+/// are resolved.
 pub fn build_document_field_schema(
     document_fields: Object,
     name: String,
