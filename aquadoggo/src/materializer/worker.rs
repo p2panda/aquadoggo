@@ -434,6 +434,7 @@ where
                                         on_pending(task.clone());
 
                                         // Generate a unique id for this new task and add it to queue
+                                        debug!("Sending materializer {} task with input {} to the task queue.", task.worker_name(), task.input());
                                         let next_id = counter.fetch_add(1, Ordering::Relaxed);
                                         queue.push(QueueItem::new(next_id, task.1.clone()));
                                         index.insert(task.1, PostAction::Idle);
@@ -442,11 +443,13 @@ where
                                         // 2. This is the first duplicate coming in, let's set the
                                         // requeue flag to indicate that more work needs to be done
                                         // when the current task completes
+                                        debug!("Duplicate materializer {} task already in progress, setting re-queue flag for task with input {} and not adding this task to the queue.", task.worker_name(), task.input());
                                         index.insert(task.1, PostAction::Requeue);
                                     }
                                     Some(PostAction::Requeue) => {
                                         // 3. We observed already one duplicate task coming in, let's
                                         // ignore this one
+                                        debug!("Materializer {} task with input {} not sent to queue as a task for this document has already been re-queued.", task.worker_name(), task.input());
                                         continue;
                                     }
                                 }
