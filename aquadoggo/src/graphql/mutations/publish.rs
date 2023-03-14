@@ -810,7 +810,7 @@ mod tests {
             // Prepare a publish entry request for the entry.
             let publish_request = publish_request(
                 &entry.encoded_entry.to_string(),
-                &entry.payload().unwrap().to_string(),
+                &entry._payload().unwrap().to_string(),
             );
 
             // Publish the entry and parse response.

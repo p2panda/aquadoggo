@@ -88,7 +88,7 @@ async fn _verify_entries(entries: &[StorageEntry], context: &Context) -> Result<
         .map(|entry| {
             (
                 entry.into_bytes(),
-                entry.payload().map(|payload| payload.into_bytes()),
+                entry._payload().map(|payload| payload.into_bytes()),
             )
         })
         .collect();
@@ -115,7 +115,7 @@ async fn _insert_new_entries(
         // this way.
 
         let encoded_operation = entry
-            .payload()
+            ._payload()
             .expect("All stored entries contain an operation");
         let operation = decode_operation(encoded_operation)?;
 

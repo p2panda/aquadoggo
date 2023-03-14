@@ -365,7 +365,7 @@ mod tests {
             assert_eq!(encoded_entry.hash(), retrieved_entry.hash());
             assert_eq!(
                 encoded_operation,
-                retrieved_entry.payload().unwrap().to_owned()
+                retrieved_entry._payload().unwrap().to_owned()
             );
             assert_eq!(retrieved_entry.encoded_entry, encoded_entry);
         });
@@ -399,7 +399,7 @@ mod tests {
 
             // Construct a new entry from it with the same values.
             let entry = EntryBuilder::new()
-                .sign(first_entry.payload().unwrap(), key_pair)
+                .sign(first_entry._payload().unwrap(), key_pair)
                 .unwrap();
 
             // We try to publish it again which should error as entry hashes
@@ -407,7 +407,7 @@ mod tests {
             let result = node
                 .context
                 .store
-                .insert_entry(&entry, &first_entry.encoded_entry, first_entry.payload())
+                .insert_entry(&entry, &first_entry.encoded_entry, first_entry._payload())
                 .await;
 
             assert!(result.is_err());
