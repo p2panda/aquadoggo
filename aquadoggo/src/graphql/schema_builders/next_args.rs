@@ -69,7 +69,7 @@ pub fn build_next_args_query(query: Object) -> Object {
             TypeRef::named_nn(PUBLIC_KEY_SCHEMA),
         ))
         .argument(InputValue::new(VIEW_ID_ARG, TypeRef::named(VIEW_ID_SCHEMA)))
-        .description("Gimme some sweet sweet next args!"),
+        .description("Return required arguments for publishing the next entry."),
     )
 }
 
