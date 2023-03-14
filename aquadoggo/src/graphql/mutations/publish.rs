@@ -43,7 +43,10 @@ impl Publish {
         let encoded_entry: EncodedEntry = entry.into();
         let encoded_operation: EncodedOperation = operation.into();
 
-        debug!("Query to publish received containing entry with hash {}", encoded_entry.hash());
+        debug!(
+            "Query to publish received containing entry with hash {}",
+            encoded_entry.hash()
+        );
 
         let operation = decode_operation(&encoded_operation)?;
 

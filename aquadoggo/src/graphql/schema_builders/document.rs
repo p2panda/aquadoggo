@@ -27,7 +27,7 @@ const DOCUMENT_VIEW_ID_SCALAR: &str = "DocumentViewId";
 /// already constructs and returns the `DocumentMeta` object.
 pub fn build_document_schema(schema: &Schema) -> Object {
     let document_fields_name = fields_name(schema.id());
-    Object::new(&schema.id().to_string())
+    Object::new(schema.id().to_string())
         // The `fields` of a document, passes up the query arguments to it's children.
         .field(Field::new(
             FIELDS_FIELD,
@@ -153,15 +153,12 @@ pub fn build_all_document_query(query: Object, schema: &Schema) -> Object {
     let schema_id = schema.id().clone();
     query.field(
         Field::new(
-            format!("{QUERY_ALL_PREFIX}{}", schema_id.to_string()),
+            format!("{QUERY_ALL_PREFIX}{}", schema_id),
             TypeRef::named_list(schema_id.to_string()),
             move |ctx| {
                 let schema_id = schema_id.clone();
                 FieldFuture::new(async move {
-                    debug!(
-                        "Query to {QUERY_ALL_PREFIX}{} received",
-                        schema_id.to_string()
-                    );
+                    debug!("Query to {QUERY_ALL_PREFIX}{} received", schema_id);
 
                     // Access the store.
                     let store = ctx.data_unchecked::<SqlStore>();

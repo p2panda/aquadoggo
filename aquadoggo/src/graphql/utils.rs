@@ -15,7 +15,7 @@ const DOCUMENT_FIELDS_SUFFIX: &str = "Fields";
 
 // Correctly formats the name of a document field type.
 pub fn fields_name(schema_id: &SchemaId) -> String {
-    format!("{}{DOCUMENT_FIELDS_SUFFIX}", schema_id.to_string())
+    format!("{}{DOCUMENT_FIELDS_SUFFIX}", schema_id)
 }
 
 /// Convert non-relation operation values into GraphQL values.

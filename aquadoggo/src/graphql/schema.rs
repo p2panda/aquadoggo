@@ -66,7 +66,7 @@ pub async fn build_root_schema(
     // documents they describe.
     for schema in all_schema {
         // Construct the document fields object which will be named `<schema_id>Field`.
-        let schema_field_name = fields_name(&schema.id());
+        let schema_field_name = fields_name(schema.id());
         let mut document_schema_fields = Object::new(&schema_field_name);
 
         // For every field in the schema we create a type with a resolver.
@@ -74,7 +74,7 @@ pub async fn build_root_schema(
         // TODO: We can optimize the field resolution methods later with a data loader.
         for (name, field_type) in schema.fields() {
             document_schema_fields =
-                build_document_field_schema(document_schema_fields, name.to_string(), &field_type);
+                build_document_field_schema(document_schema_fields, name.to_string(), field_type);
         }
 
         // Construct the document schema which has "fields" and "meta" fields.
