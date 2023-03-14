@@ -140,7 +140,7 @@ pub fn build_document_query(query: Object, schema: &Schema) -> Object {
             TypeRef::named(DOCUMENT_VIEW_ID_SCALAR),
         ))
         .description(format!(
-            "Query a {} document by id or view id",
+            "Query a {} document by id or view id.",
             schema.name()
         )),
     )
@@ -187,7 +187,7 @@ pub fn build_all_document_query(query: Object, schema: &Schema) -> Object {
                 })
             },
         )
-        .description(format!("Get all {} documents", schema.name())),
+        .description(format!("Get all {} documents.", schema.name())),
     )
 }
 

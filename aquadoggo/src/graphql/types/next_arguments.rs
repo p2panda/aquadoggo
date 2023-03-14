@@ -4,7 +4,7 @@ use dynamic_graphql::SimpleObject;
 
 use crate::graphql::scalars::{EntryHashScalar, LogIdScalar, SeqNumScalar};
 
-/// Values used to in the construction of p2panda entries and operations.
+/// Arguments required to sign and encode the next entry for a public_key.
 #[derive(SimpleObject)]
 pub struct NextArguments {
     /// Log id of the entry.
