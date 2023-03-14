@@ -2,6 +2,7 @@
 
 use async_graphql::dynamic::{Field, FieldFuture, InputValue, Object, TypeRef};
 use dynamic_graphql::{Error, FieldValue, ScalarValue};
+use log::debug;
 use p2panda_rs::storage_provider::traits::DocumentStore;
 use p2panda_rs::{document::traits::AsDocument, schema::Schema};
 
@@ -78,11 +79,13 @@ pub fn build_document_schema(schema: &Schema) -> Object {
 }
 
 pub fn build_document_query(query: Object, schema: &Schema) -> Object {
+    let schema_id = schema.id().clone();
     query.field(
         Field::new(
-            schema.id().to_string(),
-            TypeRef::named(schema.id().to_string()),
+            schema_id.to_string(),
+            TypeRef::named(schema_id.to_string()),
             move |ctx| {
+                let schema_id = schema_id.clone();
                 FieldFuture::new(async move {
                     // Parse arguments.
                     let mut document_id = None;
@@ -111,7 +114,15 @@ pub fn build_document_query(query: Object, schema: &Schema) -> Object {
                                 "Both document id and document view id arguments cannot be passed",
                             ))
                         }
-                        (_, _) => (),
+                        (Some(id), None) => {
+                            debug!("Query to {} received for document {}", schema_id, id);
+                        }
+                        (None, Some(id)) => {
+                            debug!(
+                                "Query to {} received for document at view id {}",
+                                schema_id, id
+                            );
+                        }
                     };
                     // Pass them up to the children query fields.
                     Ok(Some(FieldValue::owned_any((document_id, document_view_id))))
@@ -147,6 +158,11 @@ pub fn build_all_document_query(query: Object, schema: &Schema) -> Object {
             move |ctx| {
                 let schema_id = schema_id.clone();
                 FieldFuture::new(async move {
+                    debug!(
+                        "Query to {QUERY_ALL_PREFIX}{} received",
+                        schema_id.to_string()
+                    );
+
                     // Access the store.
                     let store = ctx.data_unchecked::<SqlStore>();
 

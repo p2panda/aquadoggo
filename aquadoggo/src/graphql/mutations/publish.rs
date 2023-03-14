@@ -2,6 +2,7 @@
 
 use anyhow::anyhow;
 use dynamic_graphql::{Context, Mutation, MutationFields, MutationRoot, Result};
+use log::debug;
 use p2panda_rs::api::publish;
 use p2panda_rs::entry::traits::AsEncodedEntry;
 use p2panda_rs::entry::EncodedEntry;
@@ -41,6 +42,8 @@ impl Publish {
 
         let encoded_entry: EncodedEntry = entry.into();
         let encoded_operation: EncodedOperation = operation.into();
+
+        debug!("Query to publish received containing entry with hash {}", encoded_entry.hash());
 
         let operation = decode_operation(&encoded_operation)?;
 

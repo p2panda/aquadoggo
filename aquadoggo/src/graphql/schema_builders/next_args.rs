@@ -2,6 +2,7 @@
 
 use async_graphql::dynamic::{Field, FieldFuture, InputValue, Object, TypeRef};
 use dynamic_graphql::{FieldValue, ScalarValue};
+use log::debug;
 use p2panda_rs::api;
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::identity::PublicKey;
@@ -35,8 +36,18 @@ pub fn build_next_args_query(query: Object) -> Object {
                 let public_key: PublicKey =
                     PublicKeyScalar::from_value(args.next().unwrap())?.into();
                 let document_view_id: Option<DocumentViewId> = match args.next() {
-                    Some(value) => Some(DocumentViewIdScalar::from_value(value)?.into()),
-                    None => None,
+                    Some(value) => {
+                        let document_view_id = DocumentViewIdScalar::from_value(value)?.into();
+                        debug!(
+                            "Query to nextArgs received for public key {} and document at view {}",
+                            public_key, document_view_id
+                        );
+                        Some(document_view_id)
+                    }
+                    None => {
+                        debug!("Query to nextArgs received for public key {}", public_key);
+                        None
+                    }
                 };
 
                 // Calculate next entry's arguments.
