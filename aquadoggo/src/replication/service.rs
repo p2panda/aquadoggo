@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use anyhow::{anyhow, Result};
 use bamboo_rs_core_ed25519_yasmf::verify::verify_batch;
-use log::{debug, error, trace, warn};
+use log::{debug, trace, warn};
 use p2panda_rs::api::publish;
 use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
 use p2panda_rs::entry::LogId;
@@ -26,13 +26,13 @@ use crate::manager::{ServiceReadySender, Shutdown};
 pub async fn replication_service(
     context: Context,
     shutdown: Shutdown,
-    tx: ServiceSender,
+    _tx: ServiceSender,
     tx_ready: ServiceReadySender,
 ) -> Result<()> {
     // Prepare replication configuration
     let config = &context.config.replication;
     let connection_interval = Duration::from_secs(config.connection_interval_seconds);
-    let public_keys_to_replicate = Arc::new(config.public_keys_to_replicate.clone());
+    let _public_keys_to_replicate = Arc::new(config.public_keys_to_replicate.clone());
     let remote_peers = Arc::new(config.remote_peers.clone());
 
     // Start replication service
@@ -63,7 +63,7 @@ pub async fn replication_service(
 }
 
 /// Helper method to verify a batch of entries coming from an untrusted peer.
-async fn verify_entries(entries: &[StorageEntry], context: &Context) -> Result<()> {
+async fn _verify_entries(entries: &[StorageEntry], context: &Context) -> Result<()> {
     // Get the first entry (assumes they're sorted by seq_num smallest to largest)
     // @TODO: We can not trust that the other peer sorted the entries for us?
     let first_entry = entries.get(0).cloned();
@@ -77,7 +77,7 @@ async fn verify_entries(entries: &[StorageEntry], context: &Context) -> Result<(
         }
         Some(entry) => {
             trace!("Getting certificate pool for entries");
-            add_certpool_to_entries_for_verification(&mut entries_to_verify, entry, context)
+        _add_certpool_to_entries_for_verification(&mut entries_to_verify, entry, context)
                 .await?;
         }
         None => (),
@@ -100,7 +100,7 @@ async fn verify_entries(entries: &[StorageEntry], context: &Context) -> Result<(
 }
 
 /// Helper method to insert a batch of verified entries into the database.
-async fn insert_new_entries(
+async fn _insert_new_entries(
     new_entries: &[StorageEntry],
     context: &Context,
     tx: ServiceSender,
@@ -137,7 +137,7 @@ async fn insert_new_entries(
         .map_err(|err| anyhow!(format!("Error inserting new entry into db: {:?}", err)))?;
 
         // Send new entry & operation to other services.
-        send_new_entry_service_message(tx.clone(), entry);
+    _send_new_entry_service_message(tx.clone(), entry);
     }
 
     Ok(())
@@ -145,7 +145,7 @@ async fn insert_new_entries(
 
 /// Helper method to retreive all entries from certificate pool to be able to verify Bamboo log
 /// integrity.
-async fn add_certpool_to_entries_for_verification(
+async fn _add_certpool_to_entries_for_verification(
     entries: &mut Vec<StorageEntry>,
     first_entry: &StorageEntry,
     context: &Context,
@@ -171,7 +171,7 @@ async fn add_certpool_to_entries_for_verification(
 }
 
 /// Helper method to inform other services (like materialisation service) about new operations.
-fn send_new_entry_service_message(tx: ServiceSender, entry: &StorageEntry) {
+fn _send_new_entry_service_message(tx: ServiceSender, entry: &StorageEntry) {
     let bus_message = ServiceMessage::NewOperation(entry.hash().into());
 
     if tx.send(bus_message).is_err() {
@@ -180,7 +180,7 @@ fn send_new_entry_service_message(tx: ServiceSender, entry: &StorageEntry) {
 }
 
 /// Helper method to get the latest sequence number of a log and public_key.
-async fn get_latest_seq_num(
+async fn _get_latest_seq_num(
     context: &Context,
     log_id: &LogId,
     public_key: &PublicKey,

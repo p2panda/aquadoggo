@@ -13,7 +13,7 @@ use crate::graphql::types::NextArguments;
 const NEXT_ARGS_QUERY: &str = "nextArgs";
 const NEXT_ARGS_SCHEMA: &str = "NextArguments";
 const PUBLIC_KEY_ARG: &str = "publicKey";
-const PUBLIC_KEY_SCHEMA: &str = "FublicKey";
+const PUBLIC_KEY_SCHEMA: &str = "PublicKey";
 const VIEW_ID_ARG: &str = "viewId";
 const VIEW_ID_SCHEMA: &str = "DocumentViewId";
 

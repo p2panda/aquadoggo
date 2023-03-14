@@ -141,7 +141,7 @@ impl TestResponse {
 }
 
 // Helper method to give us a shutdown future which will never resolve
-pub fn shutdown_handle() -> JoinHandle<()> {
+pub fn _shutdown_handle() -> JoinHandle<()> {
     task::spawn(async {
         loop {
             // Do this forever ..
