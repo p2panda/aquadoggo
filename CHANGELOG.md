@@ -14,8 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Correct use of `sqlx` transactions [#285](https://github.com/p2panda/aquadoggo/pull/285) `rs`
+- Correct use of `sqlx` transactions [#285](https://github.com/p2panda/aquadoggo/pull/285)
 - Fix race-condition of mutably shared static schema store during testing [#269](https://github.com/p2panda/aquadoggo/pull/269)
+- Introduce flag to requeue tasks in worker queue, fixes race-condition in materialization logic [#286](https://github.com/p2panda/aquadoggo/pull/286)
 
 ## [0.4.0]
 
