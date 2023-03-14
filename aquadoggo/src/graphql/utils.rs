@@ -4,15 +4,18 @@ use async_graphql::dynamic::ResolverContext;
 use async_graphql::Value;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::operation::OperationValue;
+use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::error::DocumentStorageError;
 use p2panda_rs::storage_provider::traits::DocumentStore;
 
 use crate::db::{types::StorageDocument, SqlStore};
 use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
 
+const DOCUMENT_FIELDS_SUFFIX: &str = "Field";
+
 // Correctly formats the name of a document field type.
-pub fn fields_name(name: &str) -> String {
-    format!("{name}Fields")
+pub fn fields_name(schema_id: &SchemaId) -> String {
+    format!("{}{DOCUMENT_FIELDS_SUFFIX}", schema_id.to_string())
 }
 
 /// Convert non-relation operation values into GraphQL values.

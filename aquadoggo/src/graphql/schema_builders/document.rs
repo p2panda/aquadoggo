@@ -11,13 +11,25 @@ use crate::graphql::types::DocumentMeta;
 use crate::graphql::utils::{downcast_id_params, fields_name, get_document_from_params};
 
 const QUERY_ALL_PREFIX: &str = "all_";
+const FIELDS_FIELD: &str = "fields";
+const META_FIELD: &str = "meta";
+const DOCUMENT_META_SCHEMA_ID: &str = "DocumentMeta";
+const DOCUMENT_ID_ARG: &str = "id";
+const DOCUMENT_VIEW_ID_ARG: &str = "viewId";
+const DOCUMENT_ID_SCALAR: &str = "DocumentId";
+const DOCUMENT_VIEW_ID_SCALAR: &str = "DocumentViewId";
 
 /// Build a graphql object type for a p2panda schema.
+///
+/// Contains resolvers for both `fields` and `meta`. The former simply passes up the query
+/// arguments to it's children query fields. The latter retrieves the document being queried and
+/// already constructs and returns the `DocumentMeta` object.
 pub fn build_document_schema(schema: &Schema) -> Object {
-    let document_fields_name = fields_name(&schema.id().to_string());
+    let document_fields_name = fields_name(schema.id());
     Object::new(&schema.id().to_string())
+        // The `fields` of a document, passes up the query arguments to it's children.
         .field(Field::new(
-            "fields",
+            FIELDS_FIELD,
             TypeRef::named_nn(document_fields_name),
             move |ctx| {
                 FieldFuture::new(async move {
@@ -27,9 +39,10 @@ pub fn build_document_schema(schema: &Schema) -> Object {
                 })
             },
         ))
+        // The `meta` field of a document, resolves the `DocumentMeta` object.
         .field(Field::new(
-            "meta",
-            TypeRef::named_nn("DocumentMeta"),
+            META_FIELD,
+            TypeRef::named_nn(DOCUMENT_META_SCHEMA_ID),
             move |ctx| {
                 FieldFuture::new(async move {
                     let store = ctx.data_unchecked::<SqlStore>();
@@ -76,10 +89,10 @@ pub fn build_document_query(query: Object, schema: &Schema) -> Object {
                     let mut document_view_id = None;
                     for (name, id) in ctx.field().arguments()?.into_iter() {
                         match name.as_str() {
-                            "id" => {
+                            ID_ARG => {
                                 document_id = Some(DocumentIdScalar::from_value(id)?);
                             }
-                            "viewId" => {
+                            VIEW_ID_ARG => {
                                 document_view_id = Some(DocumentViewIdScalar::from_value(id)?)
                             }
                             _ => (),
@@ -107,8 +120,14 @@ pub fn build_document_query(query: Object, schema: &Schema) -> Object {
         )
         // TODO: We'd be better off using an enum input type here i think, then we can specify it
         // as required, which will provide a validation step for us.
-        .argument(InputValue::new("id", TypeRef::named("DocumentId")))
-        .argument(InputValue::new("viewId", TypeRef::named("DocumentViewId")))
+        .argument(InputValue::new(
+            DOCUMENT_ID_ARG,
+            TypeRef::named(DOCUMENT_ID_SCALAR),
+        ))
+        .argument(InputValue::new(
+            DOCUMENT_VIEW_ID_ARG,
+            TypeRef::named(DOCUMENT_VIEW_ID_SCALAR),
+        ))
         .description(format!(
             "Query a {} document by id or view id",
             schema.name()
@@ -117,7 +136,7 @@ pub fn build_document_query(query: Object, schema: &Schema) -> Object {
 }
 
 /// Add query for getting all documents of a certain schema type to the root query object.
-/// 
+///
 /// Constructs an endpoint with the format `all_<SCHEMA_ID>`.
 pub fn build_all_document_query(query: Object, schema: &Schema) -> Object {
     let schema_id = schema.id().clone();
