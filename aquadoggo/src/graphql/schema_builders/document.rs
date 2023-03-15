@@ -52,9 +52,6 @@ pub fn build_document_schema(schema: &Schema) -> Object {
                     // Construct `DocumentMeta` and return it. We defined the document meta
                     // type and already registered it in the schema. It's derived resolvers
                     // will handle field selection.
-                    //
-                    // TODO: We could again optimize here by defining our own resolver logic
-                    // for each field.
                     let field_value = match document {
                         Some(document) => {
                             let document_meta = DocumentMeta {
@@ -124,8 +121,6 @@ pub fn build_document_query(query: Object, schema: &Schema) -> Object {
                 })
             },
         )
-        // TODO: We'd be better off using an enum input type here i think, then we can specify it
-        // as required, which will provide a validation step for us.
         .argument(InputValue::new(
             DOCUMENT_ID_ARG,
             TypeRef::named(DOCUMENT_ID),
@@ -160,8 +155,6 @@ pub fn build_all_document_query(query: Object, schema: &Schema) -> Object {
 
                     // Fetch all documents of the schema this endpoint serves and compose the
                     // field value (a list) which will bubble up the query tree.
-                    //
-                    // TODO: Optimize with data loader.
                     let documents: Vec<FieldValue> = store
                         .get_documents_by_schema(&schema_id)
                         .await?

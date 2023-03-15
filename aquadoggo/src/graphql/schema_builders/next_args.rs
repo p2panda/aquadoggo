@@ -17,12 +17,6 @@ pub fn build_next_args_query(query: Object) -> Object {
     query.field(
         Field::new(NEXT_ARGS_QUERY, TypeRef::named(NEXT_ARGS), |ctx| {
             FieldFuture::new(async move {
-                // TODO: In this dynamic query definition the passed args aren't parsed before
-                // handing them into this method. They arrive as generic values which we then
-                // validate below. This is different from the behavior in statically defined
-                // schema, where scalar types are parsed on arrival and any validation errors
-                // caught at that point. Maybe we can enable this behavior using the validation
-                // traits provided in async-graphql.
                 let mut args = ctx.field().arguments()?.into_iter().map(|(_, value)| value);
                 let store = ctx.data::<SqlStore>()?;
 

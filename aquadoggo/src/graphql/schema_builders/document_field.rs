@@ -55,8 +55,6 @@ pub fn build_document_field_schema(
             let (document_id, document_view_id) = downcast_id_params(&ctx);
 
             // Get the whole document from the store.
-            //
-            // TODO: This can be optimized by using a data loader.
             let document =
                 match get_document_from_params(store, &document_id, &document_view_id).await? {
                     Some(document) => document,
