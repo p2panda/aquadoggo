@@ -10,18 +10,12 @@ use p2panda_rs::identity::PublicKey;
 use crate::db::SqlStore;
 use crate::graphql::scalars::{DocumentViewIdScalar, PublicKeyScalar};
 use crate::graphql::types::NextArguments;
-
-const NEXT_ARGS_QUERY: &str = "nextArgs";
-const NEXT_ARGS_SCHEMA: &str = "NextArguments";
-const PUBLIC_KEY_ARG: &str = "publicKey";
-const PUBLIC_KEY_SCHEMA: &str = "PublicKey";
-const VIEW_ID_ARG: &str = "viewId";
-const VIEW_ID_SCHEMA: &str = "DocumentViewId";
+use crate::graphql::{NEXT_ARGS, NEXT_ARGS_QUERY, PUBLIC_KEY_ARG, DOCUMENT_VIEW_ID, DOCUMENT_VIEW_ID_ARG, PUBLIC_KEY};
 
 // Add next args to the query object.
 pub fn build_next_args_query(query: Object) -> Object {
     query.field(
-        Field::new(NEXT_ARGS_QUERY, TypeRef::named(NEXT_ARGS_SCHEMA), |ctx| {
+        Field::new(NEXT_ARGS_QUERY, TypeRef::named(NEXT_ARGS), |ctx| {
             FieldFuture::new(async move {
                 // TODO: In this dynamic query definition the passed args aren't parsed before
                 // handing them into this method. They arrive as generic values which we then
@@ -66,9 +60,9 @@ pub fn build_next_args_query(query: Object) -> Object {
         })
         .argument(InputValue::new(
             PUBLIC_KEY_ARG,
-            TypeRef::named_nn(PUBLIC_KEY_SCHEMA),
+            TypeRef::named_nn(PUBLIC_KEY),
         ))
-        .argument(InputValue::new(VIEW_ID_ARG, TypeRef::named(VIEW_ID_SCHEMA)))
+        .argument(InputValue::new(DOCUMENT_VIEW_ID_ARG, TypeRef::named(DOCUMENT_VIEW_ID)))
         .description("Return required arguments for publishing the next entry."),
     )
 }

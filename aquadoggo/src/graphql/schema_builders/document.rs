@@ -10,15 +10,10 @@ use crate::db::SqlStore;
 use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
 use crate::graphql::types::DocumentMeta;
 use crate::graphql::utils::{downcast_id_params, fields_name, get_document_from_params};
-
-const QUERY_ALL_PREFIX: &str = "all_";
-const FIELDS_FIELD: &str = "fields";
-const META_FIELD: &str = "meta";
-const DOCUMENT_META_SCHEMA_ID: &str = "DocumentMeta";
-const DOCUMENT_ID_ARG: &str = "id";
-const DOCUMENT_VIEW_ID_ARG: &str = "viewId";
-const DOCUMENT_ID_SCALAR: &str = "DocumentId";
-const DOCUMENT_VIEW_ID_SCALAR: &str = "DocumentViewId";
+use crate::graphql::{
+    DOCUMENT_ID, DOCUMENT_ID_ARG, DOCUMENT_META, DOCUMENT_VIEW_ID, DOCUMENT_VIEW_ID_ARG,
+    FIELDS_FIELD, META_FIELD, QUERY_ALL_PREFIX,
+};
 
 /// Build a graphql object type for a p2panda schema.
 ///
@@ -43,7 +38,7 @@ pub fn build_document_schema(schema: &Schema) -> Object {
         // The `meta` field of a document, resolves the `DocumentMeta` object.
         .field(Field::new(
             META_FIELD,
-            TypeRef::named(DOCUMENT_META_SCHEMA_ID),
+            TypeRef::named(DOCUMENT_META),
             move |ctx| {
                 FieldFuture::new(async move {
                     let store = ctx.data_unchecked::<SqlStore>();
@@ -133,11 +128,11 @@ pub fn build_document_query(query: Object, schema: &Schema) -> Object {
         // as required, which will provide a validation step for us.
         .argument(InputValue::new(
             DOCUMENT_ID_ARG,
-            TypeRef::named(DOCUMENT_ID_SCALAR),
+            TypeRef::named(DOCUMENT_ID),
         ))
         .argument(InputValue::new(
             DOCUMENT_VIEW_ID_ARG,
-            TypeRef::named(DOCUMENT_VIEW_ID_SCALAR),
+            TypeRef::named(DOCUMENT_VIEW_ID),
         ))
         .description(format!(
             "Query a {} document by id or view id.",
@@ -198,7 +193,7 @@ mod test {
     use p2panda_rs::test_utils::fixtures::random_key_pair;
     use rstest::rstest;
     use serde_json::json;
-    
+
     use crate::test_utils::{add_document, add_schema, graphql_test_client, test_runner, TestNode};
 
     #[rstest]
