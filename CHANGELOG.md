@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Migrate CLI from `structopt` to `clap` [#289](https://github.com/p2panda/aquadoggo/pull/289)
 - Introduce libp2p networking service and configuration [#282](https://github.com/p2panda/aquadoggo/pull/282)
 - Rework test runner and test node population patterns and refactor test_utils [#277](https://github.com/p2panda/aquadoggo/pull/277)
 - Implement API changes to p2panda-rs storage traits, new and breaking db migration [#268](https://github.com/p2panda/aquadoggo/pull/268)
