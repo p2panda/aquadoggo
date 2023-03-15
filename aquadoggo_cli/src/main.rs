@@ -55,7 +55,7 @@ struct Cli {
     /// .. adds the authors:
     /// - "123abc" with log_ids 1, 2, 345
     /// - "456def" with log_ids 6 7
-    #[arg(short = 'A', value_parser = parse_key_val::<String, u64>, number_of_values = 1)]
+    #[arg(short = 'A', value_parser = parse_key_val::<String, u64>, number_of_values = 1, verbatim_doc_comment)]
     public_keys_to_replicate: Vec<(String, Vec<u64>)>,
 
     /// Enable mDNS for peer discovery over LAN (using port 5353), true by default.
