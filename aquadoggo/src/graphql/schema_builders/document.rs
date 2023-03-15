@@ -98,12 +98,12 @@ pub fn build_document_query(query: Object, schema: &Schema) -> Object {
                     match (&document_id, &document_view_id) {
                         (None, None) => {
                             return Err(Error::new(
-                                "Either document id or document view id arguments must be passed",
+                                "Must provide either `id` or `viewId` argument",
                             ))
                         }
                         (Some(_), Some(_)) => {
                             return Err(Error::new(
-                                "Both document id and document view id arguments cannot be passed",
+                                "Must only provide `id` or `viewId` argument",
                             ))
                         }
                         (Some(id), None) => {
@@ -259,7 +259,7 @@ mod test {
 
     #[rstest]
     #[case::unknown_document_id(
-        "id: \"00208f7492d6eb01360a886dac93da88982029484d8c04a0bd2ac0607101b80a6634\"",
+        "(id: \"00208f7492d6eb01360a886dac93da88982029484d8c04a0bd2ac0607101b80a6634\")",
         value!({
             "view": {
                 "fields": {
@@ -270,7 +270,7 @@ mod test {
         vec![]
     )]
     #[case::unknown_view_id(
-        "viewId: \"00208f7492d6eb01360a886dac93da88982029484d8c04a0bd2ac0607101b80a6634\"",
+        "(viewId: \"00208f7492d6eb01360a886dac93da88982029484d8c04a0bd2ac0607101b80a6634\")",
         value!({
             "view": {
                 "fields": {
@@ -281,21 +281,25 @@ mod test {
         vec![]
     )]
     #[case::malformed_document_id(
-        "id: \"verboten\"",
+        "(id: \"verboten\")",
         Value::Null,
         vec!["invalid hex encoding in hash string".to_string()]
     )]
     #[case::malformed_view_id(
-        "viewId: \"verboten\"",
+        "(viewId: \"verboten\")",
         Value::Null,
         vec!["invalid hex encoding in hash string".to_string()]
     )]
-    // TODO: reinstate as stand alone test.
-    // #[case::missing_parameters(
-    //     "id: null",
-    //     Value::Null,
-    //     vec!["Must provide either `id` or `viewId` argument".to_string()]
-    // )]
+    #[case::missing_parameters(
+        "",
+        Value::Null,
+        vec!["Must provide either `id` or `viewId` argument".to_string()]
+    )]
+    #[case::unknown_view_id(
+        "(id: \"00208f7492d6eb01360a886dac93da88982029484d8c04a0bd2ac0607101b80a6634\" viewId: \"00208f7492d6eb01360a886dac93da88982029484d8c04a0bd2ac0607101b80a6634\")",
+        Value::Null,
+        vec!["Must only provide `id` or `viewId` argument".to_string()]
+    )]
     fn single_query_error_handling(
         #[case] params: String,
         #[case] expected_value: Value,
@@ -307,7 +311,7 @@ mod test {
             let client = graphql_test_client(&node).await;
             let query = format!(
                 r#"{{
-                view: schema_definition_v1({params}) {{
+                view: schema_definition_v1{params} {{
                     fields {{ name }}
                 }}
             }}"#,
