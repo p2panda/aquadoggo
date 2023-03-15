@@ -5,26 +5,42 @@ Node server with GraphQL API for the p2panda network.
 ## Usage
 
 ```
-FLAGS:
-    -h, --help
-            Prints help information
+Options:
+  -d, --data-dir <DATA_DIR>
+          Path to data folder, $HOME/.local/share/aquadoggo by default on Linux
 
-    -V, --version
-            Prints version information
+  -P, --http-port <HTTP_PORT>
+          Port for the http server, 2020 by default
 
-OPTIONS:
-    -A <authors-to-replicate>...
-            A collection of authors and their logs to replicate.
+  -q, --quic-port <QUIC_PORT>
+          Port for the QUIC transport, 2022 by default
 
-            eg. -A 123abc="1 2 345" -A 456def="6 7" .. adds the authors:
-            - "123abc" with log_ids 1, 2, 345
-            - "456def" with log_ids 6 7
+  -r, --remote-node-addresses <REMOTE_NODE_ADDRESSES>
+          URLs of remote nodes to replicate with
 
-    -d, --data-dir <data-dir>
-            Path to data folder, $HOME/.local/share/aquadoggo by default on Linux
+  -A <PUBLIC_KEYS_TO_REPLICATE>
+          A collection of authors and their logs to replicate.
 
-    -r, --remote-node-addresses <remote-node-addresses>...
-            URLs of remote nodes to replicate with
+          eg. -A 123abc="1 2 345" -A 456def="6 7"
+          .. adds the authors:
+          - "123abc" with log_ids 1, 2, 345
+          - "456def" with log_ids 6 7
+
+  -m, --mdns <MDNS>
+          Enable mDNS for peer discovery over LAN (using port 5353), true by default
+
+          [possible values: true, false]
+
+      --ping <PING>
+          Enable ping for connected peers (send and receive ping packets), true by default
+
+          [possible values: true, false]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version
 ```
 
 ## Environment variables
