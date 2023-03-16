@@ -139,13 +139,3 @@ impl TestResponse {
         self.response.status()
     }
 }
-
-// Helper method to give us a shutdown future which will never resolve
-pub fn _shutdown_handle() -> JoinHandle<()> {
-    task::spawn(async {
-        loop {
-            // Do this forever ..
-            tokio::time::sleep(Duration::from_millis(100)).await;
-        }
-    })
-}

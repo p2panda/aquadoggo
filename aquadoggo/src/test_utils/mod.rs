@@ -7,7 +7,7 @@ mod helpers;
 mod node;
 mod runner;
 
-pub use client::{graphql_test_client, TestClient, _shutdown_handle};
+pub use client::{graphql_test_client, TestClient};
 pub use config::{TestConfiguration, TEST_CONFIG};
 pub use db::{drop_database, initialize_db, initialize_db_with_url};
 pub use helpers::{build_document, doggo_fields, doggo_schema, schema_from_fields};
