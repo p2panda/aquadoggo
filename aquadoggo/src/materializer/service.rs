@@ -339,7 +339,7 @@ mod tests {
                     tokio::time::sleep(Duration::from_millis(100)).await;
                 }
             });
-            let (tx, _) = broadcast::channel(1024);
+            let (tx, _) = broadcast::channel(128);
             let (tx_ready, rx_ready) = oneshot::channel::<()>();
 
             // Start materializer service
@@ -361,7 +361,7 @@ mod tests {
             .unwrap();
 
             // Wait a little bit for work being done ..
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            tokio::time::sleep(Duration::from_millis(500)).await;
 
             // Then straight away publish an UPDATE on this document and send it over the bus too.
             let (entry_encoded, _) = send_to_store(
@@ -391,7 +391,7 @@ mod tests {
             .unwrap();
 
             // Wait a little bit for work being done ..
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            tokio::time::sleep(Duration::from_millis(500)).await;
 
             // Make sure the service did not crash and is still running
             assert_eq!(handle.is_finished(), false);
