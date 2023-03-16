@@ -19,7 +19,7 @@ use crate::test_utils::{add_schema, graphql_test_client, test_runner, TestNode};
 #[serial]
 #[case(SYSTEM_SCHEMAS[0].id().to_string(), SYSTEM_SCHEMAS[0].description().to_string())]
 #[case(SYSTEM_SCHEMAS[1].id().to_string(), SYSTEM_SCHEMAS[1].description().to_string())]
-fn system_schema_container_type(#[case] type_name: String, #[case] type_description: String) {
+fn system_schema_container_type(#[case] type_name: String, #[case] _type_description: String) {
     test_runner(move |node: TestNode| async move {
         let client = graphql_test_client(&node).await;
         let response = client
@@ -52,7 +52,7 @@ fn system_schema_container_type(#[case] type_name: String, #[case] type_descript
                 // Currently, all system schemas are object types.
                 "kind": "OBJECT",
                 "name": type_name,
-                "description": type_description,
+                "description": "",
                 "fields": [{
                     "name": "meta",
                     "type": {
@@ -118,7 +118,7 @@ fn application_schema_container_type() {
             "schema": {
                 "kind": "OBJECT",
                 "name": type_name,
-                "description": schema.description(),
+                "description": "",
                 "fields": [{
                     "name": "meta",
                     "type": {
