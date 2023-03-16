@@ -5,7 +5,7 @@ use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::entry::traits::AsEncodedEntry;
 use p2panda_rs::identity::KeyPair;
 use p2panda_rs::operation::{OperationBuilder, OperationValue};
-use p2panda_rs::schema::{FieldType, Schema, SchemaId};
+use p2panda_rs::schema::{FieldType, Schema, SchemaId, SchemaName};
 use p2panda_rs::test_utils::memory_store::helpers::{
     populate_store, send_to_store, PopulateStoreConfig,
 };
@@ -226,7 +226,7 @@ pub async fn add_schema(
         .expect("Run schema task");
 
     let view_id = DocumentViewId::from(entry_signed.hash());
-    let schema_id = SchemaId::Application(name.to_string(), view_id);
+    let schema_id = SchemaId::Application(SchemaName::new(name).unwrap(), view_id);
 
     debug!("Done building {}", schema_id);
     node.context

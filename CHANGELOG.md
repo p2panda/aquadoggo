@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Correct use of `sqlx` transactions [#285](https://github.com/p2panda/aquadoggo/pull/285)
 - Fix race-condition of mutably shared static schema store during testing [#269](https://github.com/p2panda/aquadoggo/pull/269)
 - Introduce flag to requeue tasks in worker queue, fixes race-condition in materialization logic [#286](https://github.com/p2panda/aquadoggo/pull/286)
+- Update breaking API calls for new `p2panda-rs` 0.7.0 version [#293](https://github.com/p2panda/aquadoggo/pull/293)
 
 ## [0.4.0]
 

@@ -93,10 +93,10 @@ impl Default for SchemaProvider {
 
 #[cfg(test)]
 mod test {
-    use p2panda_rs::schema::FieldType;
+    use p2panda_rs::schema::{FieldType, Schema, SchemaId, SchemaName};
     use p2panda_rs::test_utils::fixtures::random_document_view_id;
 
-    use super::*;
+    use super::SchemaProvider;
 
     #[tokio::test]
     async fn get_all_schemas() {
@@ -115,12 +115,14 @@ mod test {
     #[tokio::test]
     async fn update_schemas() {
         let provider = SchemaProvider::default();
-        let new_schema_id =
-            SchemaId::Application("test_schema".to_string(), random_document_view_id());
+        let new_schema_id = SchemaId::Application(
+            SchemaName::new("test_schema").unwrap(),
+            random_document_view_id(),
+        );
         let new_schema = Schema::new(
             &new_schema_id,
             "description",
-            vec![("test_field", FieldType::String)],
+            &[("test_field", FieldType::String)],
         )
         .unwrap();
         let is_update = provider.update(new_schema).await;

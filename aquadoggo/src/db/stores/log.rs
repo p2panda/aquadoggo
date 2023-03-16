@@ -126,7 +126,7 @@ mod tests {
     use p2panda_rs::entry::LogId;
     use p2panda_rs::identity::PublicKey;
     use p2panda_rs::operation::OperationId;
-    use p2panda_rs::schema::SchemaId;
+    use p2panda_rs::schema::{SchemaId, SchemaName};
     use p2panda_rs::storage_provider::traits::LogStore;
     use p2panda_rs::test_utils::fixtures::{
         public_key, random_document_id, random_operation_id, schema_id,
@@ -166,7 +166,7 @@ mod tests {
     ) {
         test_runner(move |node: TestNode| async move {
             let schema = SchemaId::new_application(
-                "venue",
+                &SchemaName::new("venue").unwrap(),
                 &DocumentViewId::new(&[operation_id_1, operation_id_2]),
             );
 

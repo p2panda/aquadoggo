@@ -7,14 +7,17 @@ use p2panda_rs::hash::Hash;
 use p2panda_rs::operation::{
     OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList,
 };
-use p2panda_rs::schema::{Schema, SchemaId};
+use p2panda_rs::schema::{Schema, SchemaId, SchemaName};
 use p2panda_rs::storage_provider::traits::OperationStore;
 use p2panda_rs::test_utils::constants;
 use p2panda_rs::test_utils::fixtures::{schema, schema_fields};
 
 /// Schema id used in aquadoggo tests.
 fn doggo_schema_id() -> SchemaId {
-    SchemaId::new_application("doggo_schema", &constants::HASH.to_owned().parse().unwrap())
+    SchemaId::new_application(
+        &SchemaName::new("doggo_schema").unwrap(),
+        &constants::HASH.to_owned().parse().unwrap(),
+    )
 }
 
 /// Schema used in aquadoggo tests.

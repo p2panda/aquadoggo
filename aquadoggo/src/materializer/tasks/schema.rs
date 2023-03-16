@@ -122,7 +122,7 @@ async fn get_related_schema_definitions(
 mod tests {
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::{OperationValue, PinnedRelationList};
-    use p2panda_rs::schema::{FieldType, SchemaId};
+    use p2panda_rs::schema::{FieldType, SchemaId, SchemaName};
     use p2panda_rs::test_utils::fixtures::key_pair;
     use rstest::rstest;
 
@@ -183,7 +183,7 @@ mod tests {
                 .context
                 .schema_provider
                 .get(&SchemaId::Application(
-                    "schema_name".to_string(),
+                    SchemaName::new("schema_name").unwrap(),
                     schema_view_id.clone(),
                 ))
                 .await;
