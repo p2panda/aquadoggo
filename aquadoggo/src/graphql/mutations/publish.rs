@@ -509,25 +509,25 @@ mod tests {
         config: PopulateStoreConfig,
     ) {
         // Test that encoded entries and operations are correctly validated when passed into
-        // qraphql publish endpoint. This is a public facing method so we should expect any
-        // junk data to arrive.
+        // GraphQL "publish" mutation. This is a public facing method so we should expect any junk
+        // data to arrive.
 
-        // Encode the entry and operation as string values.
+        // Encode the entry and operation as string values
         let entry_encoded = entry_encoded.to_string();
         let encoded_operation = hex::encode(encoded_operation);
         let expected_error_message = expected_error_message.to_string();
 
         test_runner(|mut node: TestNode| async move {
-            // Adds the test_schema to the store and schema provider.
+            // Adds the test_schema to the store and schema provider
             populate_and_materialize(&mut node, &config).await;
 
-            // Init the test client.
+            // Init the test client
             let client = graphql_test_client(&node).await;
 
-            // Prepare the GQL publish request,
+            // Prepare the GQL publish request
             let publish_request = publish_request(&entry_encoded, &encoded_operation);
 
-            // Send the publish request.
+            // Send the publish request
             let response = client
                 .post("/graphql")
                 .json(&json!({
@@ -538,7 +538,7 @@ mod tests {
                 .send()
                 .await;
 
-            // Parse the response and check any errors match the expected ones.
+            // Parse the response and check any errors match the expected ones
             let response = response.json::<serde_json::Value>().await;
             for error in response.get("errors").unwrap().as_array().unwrap() {
                 assert_eq!(

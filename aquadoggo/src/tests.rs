@@ -50,8 +50,8 @@ async fn e2e() {
 
     // Start the node.
     //
-    // There's quite a lot happening under the hood here. We initialize the database, start a http
-    // server with GraphQL endpoints, a service for materialising documents from entries and
+    // There's quite a lot happening under the hood here. We initialize the database, start a HTTP
+    // server with GraphQL endpoint, a service for materialising documents from entries and
     // operation which arrive at the node, and finally a replication service for communicating and
     // replicating with other nodes.
     //

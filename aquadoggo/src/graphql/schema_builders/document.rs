@@ -15,7 +15,7 @@ use crate::graphql::{
     FIELDS_FIELD, META_FIELD, QUERY_ALL_PREFIX,
 };
 
-/// Build a graphql object type for a p2panda schema.
+/// Build a GraphQL object type for a p2panda schema.
 ///
 /// Contains resolvers for both `fields` and `meta`. The former simply passes up the query
 /// arguments to it's children query fields. The latter retrieves the document being queried and
@@ -29,7 +29,7 @@ pub fn build_document_schema(schema: &Schema) -> Object {
             TypeRef::named(document_fields_name),
             move |ctx| {
                 FieldFuture::new(async move {
-                    // Here we just pass up the root query parameters to be used in the fields resolver.
+                    // Here we just pass up the root query parameters to be used in the fields resolver
                     let params = downcast_id_params(&ctx);
                     Ok(Some(FieldValue::owned_any(params)))
                 })
@@ -43,9 +43,9 @@ pub fn build_document_schema(schema: &Schema) -> Object {
                 FieldFuture::new(async move {
                     let store = ctx.data_unchecked::<SqlStore>();
 
-                    // Downcast the parameters passed up from the parent query field.
+                    // Downcast the parameters passed up from the parent query field
                     let (document_id, document_view_id) = downcast_id_params(&ctx);
-                    // Get the whole document.
+                    // Get the whole document
                     let document =
                         get_document_from_params(store, &document_id, &document_view_id).await?;
 
@@ -70,6 +70,10 @@ pub fn build_document_schema(schema: &Schema) -> Object {
         .description(schema.description())
 }
 
+/// Adds GraphQL query for getting a single p2panda document, selected by its document id or
+/// document view id to the root query object.
+///
+/// The query follows the format `<SCHEMA_ID>`.
 pub fn build_document_query(query: Object, schema: &Schema) -> Object {
     let schema_id = schema.id().clone();
     query.field(
@@ -79,7 +83,7 @@ pub fn build_document_query(query: Object, schema: &Schema) -> Object {
             move |ctx| {
                 let schema_id = schema_id.clone();
                 FieldFuture::new(async move {
-                    // Parse arguments.
+                    // Parse arguments
                     let mut document_id = None;
                     let mut document_view_id = None;
                     for (name, id) in ctx.field().arguments()?.into_iter() {
@@ -94,7 +98,7 @@ pub fn build_document_query(query: Object, schema: &Schema) -> Object {
                         }
                     }
 
-                    // Check a valid combination of arguments was passed.
+                    // Check a valid combination of arguments was passed
                     match (&document_id, &document_view_id) {
                         (None, None) => {
                             return Err(Error::new("Must provide either `id` or `viewId` argument"))
@@ -112,7 +116,7 @@ pub fn build_document_query(query: Object, schema: &Schema) -> Object {
                             );
                         }
                     };
-                    // Pass them up to the children query fields.
+                    // Pass them up to the children query fields
                     Ok(Some(FieldValue::owned_any((document_id, document_view_id))))
                 })
             },
@@ -132,9 +136,10 @@ pub fn build_document_query(query: Object, schema: &Schema) -> Object {
     )
 }
 
-/// Add query for getting all documents of a certain schema type to the root query object.
+/// Adds GraphQL query for getting all documents of a certain p2panda schema to the root query
+/// object.
 ///
-/// Constructs an endpoint with the format `all_<SCHEMA_ID>`.
+/// The query follows the format `all_<SCHEMA_ID>`.
 pub fn build_all_document_query(query: Object, schema: &Schema) -> Object {
     let schema_id = schema.id().clone();
     query.field(
