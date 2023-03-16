@@ -23,7 +23,7 @@ use crate::graphql::{
 pub fn build_document_schema(schema: &Schema) -> Object {
     let document_fields_name = fields_name(schema.id());
     Object::new(schema.id().to_string())
-        // The `fields` of a document, passes up the query arguments to it's children.
+        // The `fields` field of a document, passes up the query arguments to it's children.
         .field(Field::new(
             FIELDS_FIELD,
             TypeRef::named(document_fields_name),
@@ -97,14 +97,10 @@ pub fn build_document_query(query: Object, schema: &Schema) -> Object {
                     // Check a valid combination of arguments was passed.
                     match (&document_id, &document_view_id) {
                         (None, None) => {
-                            return Err(Error::new(
-                                "Must provide either `id` or `viewId` argument",
-                            ))
+                            return Err(Error::new("Must provide either `id` or `viewId` argument"))
                         }
                         (Some(_), Some(_)) => {
-                            return Err(Error::new(
-                                "Must only provide `id` or `viewId` argument",
-                            ))
+                            return Err(Error::new("Must only provide `id` or `viewId` argument"))
                         }
                         (Some(id), None) => {
                             debug!("Query to {} received for document {}", schema_id, id);
