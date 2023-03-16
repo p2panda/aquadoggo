@@ -133,12 +133,7 @@ pub struct GraphQLSharedData {
 /// still get processed using the "old" schema.
 //
 // @TODO: This manager does not "clean up" outdated schemas yet, they will just be appended to
-// an ever-growing list.
-//
-// WARNING: As soon as we start implementing GraphQL schema clean-up, we need to make sure to also
-// free the used memory for all leaked schema data we've created. Otherwise this will lead to a
-// memory leak! See `static_provider` module for more information (and useful tools) on this whole
-// topic.
+// an ever-growing list. See: https://github.com/p2panda/aquadoggo/issues/222
 #[derive(Clone)]
 pub struct GraphQLSchemaManager {
     /// List of all built GraphQL root schemas.
@@ -241,11 +236,6 @@ mod test {
     use crate::test_utils::{add_schema, graphql_test_client, test_runner, TestNode};
 
     #[rstest]
-    // Note: This test uses the underlying static schema provider which is a static mutable data
-    // store, accessible across all test runner threads in parallel mode. To prevent overwriting
-    // data across threads we have to run this test in serial.
-    //
-    // Read more: https://users.rust-lang.org/t/static-mutables-in-tests/49321
     fn schema_updates() {
         test_runner(|mut node: TestNode| async move {
             // Create test client in the beginning so it is initialised with just the system
