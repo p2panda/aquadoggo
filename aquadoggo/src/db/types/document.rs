@@ -66,4 +66,15 @@ impl AsDocument for StorageDocument {
     fn is_deleted(&self) -> bool {
         self.deleted
     }
+
+    /// Update the current view of this document.
+    fn update_view(&mut self, id: &DocumentViewId, view: Option<&DocumentViewFields>) {
+        self.view_id = id.to_owned();
+        self.fields = view.cloned();
+
+        // If no view has been passed we can consider this document as deleted
+        if view.is_none() {
+            self.deleted = true;
+        }
+    }
 }
