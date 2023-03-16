@@ -219,7 +219,7 @@ mod tests {
                 .unwrap();
 
             // Wait a little bit for work being done ..
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            tokio::time::sleep(Duration::from_millis(500)).await;
 
             // Make sure the service did not crash and is still running
             assert_eq!(handle.is_finished(), false);

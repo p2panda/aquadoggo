@@ -14,7 +14,7 @@ use p2panda_rs::identity::{KeyPair, PublicKey};
 use p2panda_rs::operation::encode::encode_operation;
 use p2panda_rs::operation::traits::Actionable;
 use p2panda_rs::operation::{Operation, OperationAction, OperationBuilder};
-use p2panda_rs::schema::{FieldType, Schema, SchemaId};
+use p2panda_rs::schema::{FieldType, Schema, SchemaId, SchemaName};
 use reqwest::Client;
 use serde_json::{json, Map, Value};
 
@@ -311,7 +311,7 @@ async fn create_schema(
     let create_schema_operation = Schema::create(name, description, fields_ids);
     let schema_definition_id = publish(client, &shirokuma, &create_schema_operation).await;
 
-    SchemaId::Application(name.to_string(), schema_definition_id)
+    SchemaId::Application(SchemaName::new(name).unwrap(), schema_definition_id)
 }
 
 /// Get the next args for a `public_key` and `document`.

@@ -138,7 +138,7 @@ mod tests {
             )
             .unwrap(),
             "My test message schema",
-            vec![("message", FieldType::String)],
+            &[("message", FieldType::String)],
         )
         .unwrap()
     }
@@ -627,7 +627,7 @@ mod tests {
                 test_schema().id().to_owned()
             ).into_bytes()
         },
-        "Operation 0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543 not found, could not determine document id"
+        "Previous operation 0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543 not found in store"
     )]
     #[case::claimed_log_id_does_not_match_expected(
         &entry_signed_encoded_unvalidated(
