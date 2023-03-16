@@ -95,7 +95,8 @@ pub async fn build_root_schema(
     // Add next args to the query object.
     let root_query = build_next_args_query(root_query);
 
-    // Build the schema.
+    // Build the GraphQL schema. We can unwrap here since it will only fail if we forgot to
+    // register all required types above
     schema_builder
         .register(root_query)
         .data(store)
