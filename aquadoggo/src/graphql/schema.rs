@@ -236,7 +236,7 @@ mod test {
     use p2panda_rs::test_utils::fixtures::key_pair;
     use rstest::rstest;
     use serde_json::{json, Value};
-    
+
     use crate::test_utils::{add_schema, graphql_test_client, test_runner, TestNode};
 
     #[rstest]

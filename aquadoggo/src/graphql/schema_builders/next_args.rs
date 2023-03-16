@@ -12,7 +12,7 @@ use crate::graphql::scalars::{DocumentViewIdScalar, PublicKeyScalar};
 use crate::graphql::types::NextArguments;
 use crate::graphql::{NEXT_ARGS, NEXT_ARGS_QUERY, PUBLIC_KEY_ARG, DOCUMENT_VIEW_ID, DOCUMENT_VIEW_ID_ARG, PUBLIC_KEY};
 
-// Add next args to the query object.
+/// Add "nextArgs" to the query object.
 pub fn build_next_args_query(query: Object) -> Object {
     query.field(
         Field::new(NEXT_ARGS_QUERY, TypeRef::named(NEXT_ARGS), |ctx| {
@@ -67,7 +67,7 @@ mod tests {
     use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
     use rstest::rstest;
     use serde_json::json;
-    
+
     use crate::test_utils::{
         graphql_test_client, populate_and_materialize, populate_store_config, test_runner, TestNode,
     };

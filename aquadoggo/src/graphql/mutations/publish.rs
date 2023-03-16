@@ -16,11 +16,11 @@ use crate::graphql::scalars::{EncodedEntryScalar, EncodedOperationScalar};
 use crate::graphql::types::NextArguments;
 use crate::schema::SchemaProvider;
 
-/// GraphQL mutatation root.
+/// GraphQL mutation root.
 #[derive(MutationRoot, Default, Debug, Copy, Clone)]
 pub struct MutationRoot;
 
-/// GraphQL publish mutation.
+/// GraphQL "publish" mutation.
 #[derive(Mutation, Default, Debug, Copy, Clone)]
 pub struct Publish(MutationRoot);
 
