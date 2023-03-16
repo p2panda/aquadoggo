@@ -46,7 +46,9 @@ pub struct StorageEntry {
 }
 
 impl StorageEntry {
-    pub fn _payload(&self) -> Option<&EncodedOperation> {
+    // We will need this again as soon as we implement a new replication protocol
+    #[allow(dead_code)]
+    pub fn payload(&self) -> Option<&EncodedOperation> {
         self.payload.as_ref()
     }
 }

@@ -14,4 +14,4 @@ pub use helpers::{build_document, doggo_fields, doggo_schema, schema_from_fields
 pub use node::{
     add_document, add_schema, populate_and_materialize, populate_store_config, TestNode,
 };
-pub use runner::{test_runner, TestNodeManager, _test_runner_with_manager};
+pub use runner::test_runner;
