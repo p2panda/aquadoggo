@@ -64,7 +64,7 @@ pub fn build_document_schema(schema: &Schema) -> Object {
                 })
             },
         ))
-        .description(schema.description())
+        .description(schema.description().to_string())
 }
 
 /// Adds GraphQL query for getting a single p2panda document, selected by its document id or
