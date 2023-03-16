@@ -46,7 +46,7 @@ pub struct StorageEntry {
 }
 
 impl StorageEntry {
-    pub fn payload(&self) -> Option<&EncodedOperation> {
+    pub fn _payload(&self) -> Option<&EncodedOperation> {
         self.payload.as_ref()
     }
 }

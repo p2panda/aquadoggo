@@ -3,23 +3,28 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
-use async_graphql::{InputValueError, InputValueResult, Scalar, ScalarType, Value};
+use dynamic_graphql::{Error, Result, Scalar, ScalarValue, Value};
 use p2panda_rs::hash::Hash;
 use serde::Serialize;
 
 /// Hash of a signed bamboo entry.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Scalar, Clone, Debug, Eq, PartialEq, Serialize)]
+#[graphql(name = "EntryHash")]
 pub struct EntryHashScalar(Hash);
 
-#[Scalar(name = "EntryHash")]
-impl ScalarType for EntryHashScalar {
-    fn parse(value: Value) -> InputValueResult<Self> {
+impl ScalarValue for EntryHashScalar {
+    fn from_value(value: Value) -> Result<Self>
+    where
+        Self: Sized,
+    {
         match &value {
             Value::String(str_value) => {
                 let hash = Hash::from_str(str_value)?;
                 Ok(EntryHashScalar(hash))
             }
-            _ => Err(InputValueError::expected_type(value)),
+            _ => Err(Error::new(format!(
+                "Expected a valid entry hash, found: {value}"
+            ))),
         }
     }
 
@@ -42,7 +47,7 @@ impl From<Hash> for EntryHashScalar {
 
 impl From<EntryHashScalar> for Value {
     fn from(entry: EntryHashScalar) -> Self {
-        async_graphql::ScalarType::to_value(&entry)
+        ScalarValue::to_value(&entry)
     }
 }
 

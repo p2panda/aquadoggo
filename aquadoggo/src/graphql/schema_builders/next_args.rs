@@ -1,56 +1,71 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! Static fields of the client api.
-use async_graphql::{Context, Object, Result};
-use p2panda_rs::api::next_args;
+use async_graphql::dynamic::{Field, FieldFuture, InputValue, Object, TypeRef};
+use dynamic_graphql::{FieldValue, ScalarValue};
+use log::debug;
+use p2panda_rs::api;
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::identity::PublicKey;
 
 use crate::db::SqlStore;
-use crate::graphql::client::NextArguments;
-use crate::graphql::scalars;
+use crate::graphql::constants;
+use crate::graphql::scalars::{DocumentViewIdScalar, PublicKeyScalar};
+use crate::graphql::types::NextArguments;
 
-/// GraphQL queries for the Client API.
-#[derive(Default, Debug, Copy, Clone)]
-pub struct StaticQuery;
+/// Add "nextArgs" to the query object.
+pub fn build_next_args_query(query: Object) -> Object {
+    query.field(
+        Field::new(
+            constants::NEXT_ARGS_QUERY,
+            TypeRef::named(constants::NEXT_ARGS),
+            |ctx| {
+                FieldFuture::new(async move {
+                    let mut args = ctx.field().arguments()?.into_iter().map(|(_, value)| value);
+                    let store = ctx.data::<SqlStore>()?;
 
-#[Object]
-impl StaticQuery {
-    /// Return required arguments for publishing the next entry.
-    async fn next_args(
-        &self,
-        ctx: &Context<'_>,
-        #[graphql(
-            name = "publicKey",
-            desc = "Public key of author that will encode and sign the next entry \
-            using the returned arguments"
-        )]
-        public_key: scalars::PublicKeyScalar,
-        #[graphql(
-            name = "viewId",
-            desc = "Document the entry's UPDATE or DELETE operation is referring to, \
-            can be left empty when it is a CREATE operation"
-        )]
-        document_view_id: Option<scalars::DocumentViewIdScalar>,
-    ) -> Result<NextArguments> {
-        // Access the store from context.
-        let store = ctx.data::<SqlStore>()?;
+                    // Convert and validate passed parameters.
+                    let public_key: PublicKey =
+                        PublicKeyScalar::from_value(args.next().unwrap())?.into();
+                    let document_view_id: Option<DocumentViewId> = match args.next() {
+                        Some(value) => {
+                            let document_view_id = DocumentViewIdScalar::from_value(value)?.into();
+                            debug!(
+                            "Query to nextArgs received for public key {} and document at view {}",
+                            public_key, document_view_id
+                        );
+                            Some(document_view_id)
+                        }
+                        None => {
+                            debug!("Query to nextArgs received for public key {}", public_key);
+                            None
+                        }
+                    };
 
-        // Convert and validate passed parameters.
-        let public_key: PublicKey = public_key.into();
-        let document_view_id = document_view_id.map(|val| DocumentViewId::from(&val));
+                    // Calculate next entry's arguments.
+                    let (backlink, skiplink, seq_num, log_id) =
+                        api::next_args(store, &public_key, document_view_id.as_ref()).await?;
 
-        // Calculate next entry's arguments.
-        let (backlink, skiplink, seq_num, log_id) =
-            next_args(store, &public_key, document_view_id.as_ref()).await?;
+                    let next_args = NextArguments {
+                        log_id: log_id.into(),
+                        seq_num: seq_num.into(),
+                        backlink: backlink.map(|hash| hash.into()),
+                        skiplink: skiplink.map(|hash| hash.into()),
+                    };
 
-        Ok(NextArguments {
-            log_id: log_id.into(),
-            seq_num: seq_num.into(),
-            backlink: backlink.map(|hash| hash.into()),
-            skiplink: skiplink.map(|hash| hash.into()),
-        })
-    }
+                    Ok(Some(FieldValue::owned_any(next_args)))
+                })
+            },
+        )
+        .argument(InputValue::new(
+            constants::PUBLIC_KEY_ARG,
+            TypeRef::named_nn(constants::PUBLIC_KEY),
+        ))
+        .argument(InputValue::new(
+            constants::DOCUMENT_VIEW_ID_ARG,
+            TypeRef::named(constants::DOCUMENT_VIEW_ID),
+        ))
+        .description("Return required arguments for publishing the next entry."),
+    )
 }
 
 #[cfg(test)]
@@ -59,19 +74,12 @@ mod tests {
     use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
     use rstest::rstest;
     use serde_json::json;
-    use serial_test::serial;
 
     use crate::test_utils::{
         graphql_test_client, populate_and_materialize, populate_store_config, test_runner, TestNode,
     };
 
     #[rstest]
-    // Note: This and more tests in this file use the underlying static schema provider which is a
-    // static mutable data store, accessible across all test runner threads in parallel mode. To
-    // prevent overwriting data across threads we have to run this test in serial.
-    //
-    // Read more: https://users.rust-lang.org/t/static-mutables-in-tests/49321
-    #[serial]
     fn next_args_valid_query() {
         test_runner(|node: TestNode| async move {
             let client = graphql_test_client(&node).await;
@@ -111,7 +119,6 @@ mod tests {
     }
 
     #[rstest]
-    #[serial] // See note above on why we execute this test in series
     fn next_args_valid_query_with_document_id(
         #[from(populate_store_config)]
         #[with(1, 1, 1)]
@@ -155,6 +162,7 @@ mod tests {
                 .json::<Response>()
                 .await;
 
+            print!("{:?}", received_entry_args.errors);
             assert!(received_entry_args.is_ok());
             assert_eq!(
                 received_entry_args.data,
@@ -171,7 +179,6 @@ mod tests {
     }
 
     #[rstest]
-    #[serial] // See note above on why we execute this test in series
     fn next_args_error_response() {
         test_runner(|node: TestNode| async move {
             let client = graphql_test_client(&node).await;
@@ -190,7 +197,7 @@ mod tests {
             let response: Response = response.json().await;
             assert_eq!(
                 response.errors[0].message,
-                "Failed to parse \"PublicKey\": invalid hex encoding in public key string"
+                "invalid hex encoding in public key string"
             )
         })
     }

@@ -4,14 +4,14 @@ use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
 use std::str::FromStr;
 
-use anyhow::Result;
-use async_graphql::{InputValueError, Scalar, ScalarType, Value};
+use dynamic_graphql::{Error, Result, Scalar, ScalarValue, Value};
 use p2panda_rs::entry::error::SeqNumError;
 use p2panda_rs::entry::SeqNum;
 use serde::{Deserialize, Serialize};
 
 /// Sequence number of an entry.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Scalar, Clone, Copy, Debug, Eq, PartialEq)]
+#[graphql(name = "SeqNum")]
 pub struct SeqNumScalar(SeqNum);
 
 impl SeqNumScalar {
@@ -21,15 +21,19 @@ impl SeqNumScalar {
     }
 }
 
-#[Scalar(name = "SeqNum")]
-impl ScalarType for SeqNumScalar {
-    fn parse(value: Value) -> Result<Self, InputValueError<Self>> {
+impl ScalarValue for SeqNumScalar {
+    fn from_value(value: Value) -> Result<Self>
+    where
+        Self: Sized,
+    {
         match &value {
             Value::String(str_value) => {
                 let seq_num = SeqNum::from_str(str_value)?;
                 Ok(SeqNumScalar(seq_num))
             }
-            _ => Err(InputValueError::expected_type(value)),
+            _ => Err(Error::new(format!(
+                "Expected a valid sequence number, found: {value}"
+            ))),
         }
     }
 
@@ -101,7 +105,7 @@ impl Display for SeqNumScalar {
 
 #[cfg(test)]
 mod tests {
-    use async_graphql::InputType;
+    use dynamic_graphql::{ScalarValue, Value};
     use p2panda_rs::entry::SeqNum;
     use serde::{Deserialize, Serialize};
 
@@ -128,14 +132,14 @@ mod tests {
         // Convert to gql value
         let value = SeqNum::default();
         let scalar_value: SeqNumScalar = value.into();
-        let gql_value: async_graphql::Value = scalar_value.to_value();
+        let gql_value: Value = scalar_value.to_value();
 
         // Convert back
-        let converted_value = SeqNumScalar::parse(Some(gql_value)).unwrap().into();
+        let converted_value = SeqNumScalar::from_value(gql_value).unwrap().into();
         assert_eq!(value, converted_value);
 
         // Convert invalid type
-        let invalid_conversion = SeqNumScalar::parse(Some(async_graphql::Value::Boolean(true)));
+        let invalid_conversion = SeqNumScalar::from_value(Value::Boolean(true));
         assert!(invalid_conversion.is_err())
     }
 }

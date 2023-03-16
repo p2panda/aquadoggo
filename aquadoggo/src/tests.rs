@@ -17,17 +17,10 @@ use p2panda_rs::operation::{Operation, OperationAction, OperationBuilder};
 use p2panda_rs::schema::{FieldType, Schema, SchemaId, SchemaName};
 use reqwest::Client;
 use serde_json::{json, Map, Value};
-use serial_test::serial;
 
 use crate::{Configuration, Node};
 
 #[tokio::test]
-// Note: This test uses the underlying static schema provider which is a static mutable data store,
-// accessible across all test runner threads in parallel mode. To prevent overwriting data across
-// threads we have to run this test in serial.
-//
-// Read more: https://users.rust-lang.org/t/static-mutables-in-tests/49321
-#[serial]
 async fn e2e() {
     // This is an aquadoggo E2E test.
     //
@@ -57,8 +50,8 @@ async fn e2e() {
 
     // Start the node.
     //
-    // There's quite a lot happening under the hood here. We initialize the database, start a http
-    // server with GraphQL endpoints, a service for materialising documents from entries and
+    // There's quite a lot happening under the hood here. We initialize the database, start a HTTP
+    // server with GraphQL endpoint, a service for materialising documents from entries and
     // operation which arrive at the node, and finally a replication service for communicating and
     // replicating with other nodes.
     //

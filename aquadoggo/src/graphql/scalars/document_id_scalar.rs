@@ -3,22 +3,27 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
-use async_graphql::{InputValueError, InputValueResult, Scalar, ScalarType, Value};
+use dynamic_graphql::{Error, Result, Scalar, ScalarValue, Value};
 use p2panda_rs::document::DocumentId;
 
 /// Id of a p2panda document.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Scalar, Clone, Debug, Eq, PartialEq)]
+#[graphql(name = "DocumentId")]
 pub struct DocumentIdScalar(DocumentId);
 
-#[Scalar(name = "DocumentId")]
-impl ScalarType for DocumentIdScalar {
-    fn parse(value: Value) -> InputValueResult<Self> {
+impl ScalarValue for DocumentIdScalar {
+    fn from_value(value: Value) -> Result<Self>
+    where
+        Self: Sized,
+    {
         match &value {
             Value::String(str_value) => {
                 let document_id = DocumentId::from_str(str_value)?;
                 Ok(DocumentIdScalar(document_id))
             }
-            _ => Err(InputValueError::expected_type(value)),
+            _ => Err(Error::new(format!(
+                "Expected a valid document id, got: {value}"
+            ))),
         }
     }
 

@@ -50,23 +50,23 @@ where
 /// A manager which can create many databases and retain a handle on their connection pools.
 #[derive(Default)]
 pub struct TestNodeManager {
-    pools: Arc<Mutex<Vec<Pool>>>,
+    _pools: Arc<Mutex<Vec<Pool>>>,
 }
 
 impl TestNodeManager {
-    pub fn new() -> Self {
+    pub fn _new() -> Self {
         Self::default()
     }
 
-    pub async fn create(&self, url: &str) -> TestNode {
+    pub async fn _create(&self, url: &str) -> TestNode {
         let pool = initialize_db_with_url(url).await;
 
         // Initialise test store using pool.
         let store = SqlStore::new(pool.clone());
 
-        let test_node = TestNode::new(store.clone());
+        let test_node = TestNode::_new(store.clone());
 
-        self.pools.lock().await.push(pool);
+        self._pools.lock().await.push(pool);
         test_node
     }
 }
@@ -129,7 +129,7 @@ pub fn test_runner<F: AsyncTestFn + Send + Sync + 'static>(test: F) {
 ///
 /// Takes an (async) test function as an argument and passes over the `TestNodeManager`
 /// instance which can be used to build nodes with databases from inside the tests.
-pub fn test_runner_with_manager<F: AsyncTestFnWithManager + Send + Sync + 'static>(test: F) {
+pub fn _test_runner_with_manager<F: AsyncTestFnWithManager + Send + Sync + 'static>(test: F) {
     let runtime = Builder::new_current_thread()
         .worker_threads(1)
         .enable_all()
@@ -138,10 +138,10 @@ pub fn test_runner_with_manager<F: AsyncTestFnWithManager + Send + Sync + 'stati
         .expect("Could not build tokio Runtime for test");
 
     // Instantiate the database manager
-    let manager = TestNodeManager::new();
+    let manager = TestNodeManager::_new();
 
     // Get a handle onto it's collection of pools
-    let pools = manager.pools.clone();
+    let pools = manager._pools.clone();
 
     runtime.block_on(async {
         // Spawn the test in a separate task to make sure we have control over the possible

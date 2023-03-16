@@ -30,7 +30,7 @@ pub struct TestNode {
 }
 
 impl TestNode {
-    pub fn new(store: SqlStore) -> Self {
+    pub fn _new(store: SqlStore) -> Self {
         TestNode {
             context: Context::new(store, Configuration::default(), SchemaProvider::default()),
         }

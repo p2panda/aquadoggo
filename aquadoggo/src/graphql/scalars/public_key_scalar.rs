@@ -3,22 +3,27 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
-use async_graphql::{InputValueError, Scalar, ScalarType, Value};
+use dynamic_graphql::{Error, Result, Scalar, ScalarValue, Value};
 use p2panda_rs::identity::PublicKey;
 
 /// Public key that signed the entry.
-#[derive(Debug, Clone, Eq, PartialEq, Copy)]
+#[derive(Scalar, Debug, Clone, Eq, PartialEq, Copy)]
+#[graphql(name = "PublicKey")]
 pub struct PublicKeyScalar(PublicKey);
 
-#[Scalar(name = "PublicKey")]
-impl ScalarType for PublicKeyScalar {
-    fn parse(value: Value) -> async_graphql::InputValueResult<Self> {
+impl ScalarValue for PublicKeyScalar {
+    fn from_value(value: Value) -> Result<Self>
+    where
+        Self: Sized,
+    {
         match &value {
             Value::String(str_value) => {
                 let panda_value = PublicKey::from_str(str_value)?;
                 Ok(PublicKeyScalar(panda_value))
             }
-            _ => Err(InputValueError::expected_type(value)),
+            _ => Err(Error::new(format!(
+                "Expected a valid public key, found: {value}"
+            ))),
         }
     }
 

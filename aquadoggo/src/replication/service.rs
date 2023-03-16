@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use anyhow::{anyhow, Result};
 use bamboo_rs_core_ed25519_yasmf::verify::verify_batch;
-use log::{debug, error, trace, warn};
+use log::{debug, trace, warn};
 use p2panda_rs::api::publish;
 use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
 use p2panda_rs::entry::LogId;
@@ -19,7 +19,6 @@ use tokio::task;
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
 use crate::db::types::StorageEntry;
-use crate::graphql::replication::client;
 use crate::manager::{ServiceReadySender, Shutdown};
 
 /// Replication service polling other nodes frequently to ask them about new entries from a defined
@@ -27,13 +26,13 @@ use crate::manager::{ServiceReadySender, Shutdown};
 pub async fn replication_service(
     context: Context,
     shutdown: Shutdown,
-    tx: ServiceSender,
+    _tx: ServiceSender,
     tx_ready: ServiceReadySender,
 ) -> Result<()> {
     // Prepare replication configuration
     let config = &context.config.replication;
     let connection_interval = Duration::from_secs(config.connection_interval_seconds);
-    let public_keys_to_replicate = Arc::new(config.public_keys_to_replicate.clone());
+    let _public_keys_to_replicate = Arc::new(config.public_keys_to_replicate.clone());
     let remote_peers = Arc::new(config.remote_peers.clone());
 
     // Start replication service
@@ -43,59 +42,7 @@ pub async fn replication_service(
                 debug!("Starting replication with remote peers");
             }
 
-            // Ask every remote peer about latest entries of log ids and authors
-            for remote_peer in remote_peers.clone().iter() {
-                for public_key_to_replicate in public_keys_to_replicate.clone().iter() {
-                    let public_key = public_key_to_replicate.public_key();
-                    let log_ids = public_key_to_replicate.log_ids().clone();
-
-                    for log_id in log_ids {
-                        // Get the latest sequence number we have for this log and public key
-                        let latest_seq_num =
-                            get_latest_seq_num(&context, &log_id, public_key).await;
-                        debug!(
-                            "Latest entry sequence number of {} and {}: {:?}",
-                            log_id.as_u64(),
-                            public_key,
-                            latest_seq_num
-                        );
-
-                        // Make our replication request to the remote peer
-                        let response = client::entries_newer_than_seq_num(
-                            remote_peer,
-                            &log_id,
-                            public_key,
-                            latest_seq_num.as_ref(),
-                        )
-                        .await;
-
-                        match response {
-                            Ok(entries) => {
-                                debug!(
-                                    "Received {} new entries from peer {}",
-                                    entries.len(),
-                                    remote_peer
-                                );
-
-                                if let Err(err) = verify_entries(&entries, &context).await {
-                                    warn!("Couldn't verify entries: {}", err);
-                                    continue;
-                                }
-
-                                insert_new_entries(&entries, &context, tx.clone())
-                                    .await
-                                    .unwrap_or_else(|err| error!("{:?}", err));
-                            }
-                            Err(err) => {
-                                warn!(
-                                    "Replication request to peer {} failed: {}",
-                                    remote_peer, err
-                                );
-                            }
-                        }
-                    }
-                }
-            }
+            // TODO: Replication goes here.....
 
             // Wait a couple of seconds before we attempt next replication requests
             tokio::time::sleep(connection_interval).await;
@@ -116,7 +63,7 @@ pub async fn replication_service(
 }
 
 /// Helper method to verify a batch of entries coming from an untrusted peer.
-async fn verify_entries(entries: &[StorageEntry], context: &Context) -> Result<()> {
+async fn _verify_entries(entries: &[StorageEntry], context: &Context) -> Result<()> {
     // Get the first entry (assumes they're sorted by seq_num smallest to largest)
     // @TODO: We can not trust that the other peer sorted the entries for us?
     let first_entry = entries.get(0).cloned();
@@ -130,7 +77,7 @@ async fn verify_entries(entries: &[StorageEntry], context: &Context) -> Result<(
         }
         Some(entry) => {
             trace!("Getting certificate pool for entries");
-            add_certpool_to_entries_for_verification(&mut entries_to_verify, entry, context)
+            _add_certpool_to_entries_for_verification(&mut entries_to_verify, entry, context)
                 .await?;
         }
         None => (),
@@ -141,7 +88,7 @@ async fn verify_entries(entries: &[StorageEntry], context: &Context) -> Result<(
         .map(|entry| {
             (
                 entry.into_bytes(),
-                entry.payload().map(|payload| payload.into_bytes()),
+                entry._payload().map(|payload| payload.into_bytes()),
             )
         })
         .collect();
@@ -153,7 +100,7 @@ async fn verify_entries(entries: &[StorageEntry], context: &Context) -> Result<(
 }
 
 /// Helper method to insert a batch of verified entries into the database.
-async fn insert_new_entries(
+async fn _insert_new_entries(
     new_entries: &[StorageEntry],
     context: &Context,
     tx: ServiceSender,
@@ -168,7 +115,7 @@ async fn insert_new_entries(
         // this way.
 
         let encoded_operation = entry
-            .payload()
+            ._payload()
             .expect("All stored entries contain an operation");
         let operation = decode_operation(encoded_operation)?;
 
@@ -190,7 +137,7 @@ async fn insert_new_entries(
         .map_err(|err| anyhow!(format!("Error inserting new entry into db: {:?}", err)))?;
 
         // Send new entry & operation to other services.
-        send_new_entry_service_message(tx.clone(), entry);
+        _send_new_entry_service_message(tx.clone(), entry);
     }
 
     Ok(())
@@ -198,7 +145,7 @@ async fn insert_new_entries(
 
 /// Helper method to retreive all entries from certificate pool to be able to verify Bamboo log
 /// integrity.
-async fn add_certpool_to_entries_for_verification(
+async fn _add_certpool_to_entries_for_verification(
     entries: &mut Vec<StorageEntry>,
     first_entry: &StorageEntry,
     context: &Context,
@@ -224,7 +171,7 @@ async fn add_certpool_to_entries_for_verification(
 }
 
 /// Helper method to inform other services (like materialisation service) about new operations.
-fn send_new_entry_service_message(tx: ServiceSender, entry: &StorageEntry) {
+fn _send_new_entry_service_message(tx: ServiceSender, entry: &StorageEntry) {
     let bus_message = ServiceMessage::NewOperation(entry.hash().into());
 
     if tx.send(bus_message).is_err() {
@@ -233,7 +180,7 @@ fn send_new_entry_service_message(tx: ServiceSender, entry: &StorageEntry) {
 }
 
 /// Helper method to get the latest sequence number of a log and public_key.
-async fn get_latest_seq_num(
+async fn _get_latest_seq_num(
     context: &Context,
     log_id: &LogId,
     public_key: &PublicKey,
@@ -245,133 +192,4 @@ async fn get_latest_seq_num(
         .ok()
         .flatten()
         .map(|entry| *entry.seq_num())
-}
-
-#[cfg(test)]
-mod tests {
-    use std::convert::TryInto;
-    use std::time::Duration;
-
-    use p2panda_rs::storage_provider::traits::EntryStore;
-    use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
-    use rstest::rstest;
-    use tokio::sync::{broadcast, oneshot};
-    use tokio::task;
-
-    use crate::context::Context;
-    use crate::http::http_service;
-    use crate::replication::ReplicationConfiguration;
-    use crate::test_utils::shutdown_handle;
-    use crate::test_utils::{
-        doggo_fields, doggo_schema, test_runner_with_manager, TestNodeManager,
-    };
-    use crate::Configuration;
-
-    use super::replication_service;
-
-    // @TODO: This will be replaced with using `ctor` in this PR:
-    // https://github.com/p2panda/aquadoggo/pull/166
-    fn init_env_logger() {
-        let _ = env_logger::builder().is_test(true).try_init();
-    }
-    #[rstest]
-    fn full_replication() {
-        test_runner_with_manager(|manager: TestNodeManager| async move {
-            init_env_logger();
-
-            // Build and populate Billie's database
-            let billie = manager.create("sqlite::memory:").await;
-            billie.context.schema_provider.update(doggo_schema()).await;
-            let populate_db_config = PopulateStoreConfig {
-                no_of_entries: 1,
-                no_of_logs: 1,
-                no_of_public_keys: 1,
-                with_delete: false,
-                schema: doggo_schema(),
-                create_operation_fields: doggo_fields(),
-                update_operation_fields: doggo_fields(),
-            };
-            let (key_pairs, _) = populate_store(&billie.context.store, &populate_db_config).await;
-
-            // Launch HTTP service of Billie
-            let (tx, _rx) = broadcast::channel(120);
-            let tx_billie = tx.clone();
-            let shutdown_billie = shutdown_handle();
-            let context_billie = Context::new(
-                billie.context.store.clone(),
-                Configuration {
-                    http_port: 3022,
-                    ..Configuration::default()
-                },
-                billie.context.schema_provider.clone(),
-            );
-            let (tx_ready, rx_ready) = oneshot::channel::<()>();
-
-            let http_server_billie = task::spawn(async {
-                http_service(context_billie, shutdown_billie, tx_billie, tx_ready)
-                    .await
-                    .unwrap();
-            });
-
-            if rx_ready.await.is_err() {
-                panic!("Service dropped");
-            }
-
-            // Our test database helper already populated the database for us. We retreive the
-            // public keys here of the authors who created these test data entries
-            let public_key = key_pairs.first().unwrap().public_key();
-            let log_ids: Vec<u64> = vec![0];
-            let endpoint: String = "http://localhost:3022/graphql".into();
-
-            // Construct database and context for Ada
-            let config_ada = Configuration {
-                replication: ReplicationConfiguration {
-                    public_keys_to_replicate: vec![(public_key.to_string(), log_ids)
-                        .try_into()
-                        .unwrap()],
-                    remote_peers: vec![endpoint],
-                    ..ReplicationConfiguration::default()
-                },
-                ..Configuration::default()
-            };
-            let ada = manager.create("sqlite::memory:").await;
-            ada.context.schema_provider.update(doggo_schema()).await;
-            let context_ada = Context::new(
-                ada.context.store.clone(),
-                config_ada,
-                // We want ada to have the same schema in her schema provider as billie.
-                ada.context.schema_provider.clone(),
-            );
-            let tx_ada = tx.clone();
-            let shutdown_ada = shutdown_handle();
-            let (tx_ready, rx_ready) = oneshot::channel::<()>();
-
-            // Ada starts replication service to get data from Billies GraphQL API
-            let replication_service_ada = task::spawn(async {
-                replication_service(context_ada, shutdown_ada, tx_ada, tx_ready)
-                    .await
-                    .unwrap();
-            });
-
-            if rx_ready.await.is_err() {
-                panic!("Service dropped");
-            }
-
-            // Wait a little bit for replication to take place
-            tokio::time::sleep(Duration::from_millis(500)).await;
-
-            // Make sure the services did not stop
-            assert!(!http_server_billie.is_finished());
-            assert!(!replication_service_ada.is_finished());
-
-            // Check the entry arrived into Ada's database
-            let entries = ada
-                .context
-                .store
-                .get_entries_by_schema(doggo_schema().id())
-                .await
-                .unwrap();
-            assert_eq!(entries.len(), 1);
-        })
-    }
 }

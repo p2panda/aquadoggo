@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use anyhow::anyhow;
-use async_graphql::{Context, Object, Result};
+use dynamic_graphql::{Context, Mutation, MutationFields, MutationRoot, Result};
+use log::debug;
 use p2panda_rs::api::publish;
 use p2panda_rs::entry::traits::AsEncodedEntry;
 use p2panda_rs::entry::EncodedEntry;
@@ -11,29 +12,29 @@ use p2panda_rs::operation::{EncodedOperation, OperationId};
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::SqlStore;
-use crate::graphql::client::NextArguments;
-use crate::graphql::scalars;
+use crate::graphql::scalars::{EncodedEntryScalar, EncodedOperationScalar};
+use crate::graphql::types::NextArguments;
 use crate::schema::SchemaProvider;
 
-/// GraphQL queries for the Client API.
-#[derive(Default, Debug, Copy, Clone)]
-pub struct ClientMutationRoot;
+/// GraphQL mutation root.
+#[derive(MutationRoot, Default, Debug, Copy, Clone)]
+pub struct MutationRoot;
 
-#[Object]
-impl ClientMutationRoot {
+/// GraphQL "publish" mutation.
+#[derive(Mutation, Default, Debug, Copy, Clone)]
+pub struct Publish(MutationRoot);
+
+#[MutationFields]
+impl Publish {
     /// Publish an entry using parameters obtained through `nextArgs` query.
     ///
     /// Returns arguments for publishing the next entry in the same log.
     async fn publish(
-        &self,
         ctx: &Context<'_>,
-        #[graphql(name = "entry", desc = "Signed and encoded entry to publish")]
-        entry: scalars::EncodedEntryScalar,
-        #[graphql(
-            name = "operation",
-            desc = "p2panda operation representing the entry payload."
-        )]
-        operation: scalars::EncodedOperationScalar,
+        // Signed and encoded entry to publish
+        entry: EncodedEntryScalar,
+        // p2panda operation representing the entry payload.
+        operation: EncodedOperationScalar,
     ) -> Result<NextArguments> {
         let store = ctx.data::<SqlStore>()?;
         let tx = ctx.data::<ServiceSender>()?;
@@ -41,6 +42,11 @@ impl ClientMutationRoot {
 
         let encoded_entry: EncodedEntry = entry.into();
         let encoded_operation: EncodedOperation = operation.into();
+
+        debug!(
+            "Query to publish received containing entry with hash {}",
+            encoded_entry.hash()
+        );
 
         let operation = decode_operation(&encoded_operation)?;
 
@@ -113,7 +119,6 @@ mod tests {
     use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
     use rstest::{fixture, rstest};
     use serde_json::json;
-    use serial_test::serial;
     use tokio::sync::broadcast;
 
     use crate::bus::ServiceMessage;
@@ -213,12 +218,6 @@ mod tests {
     }
 
     #[rstest]
-    // Note: This and more tests in this file use the underlying static schema provider which is a
-    // static mutable data store, accessible across all test runner threads in parallel mode. To
-    // prevent overwriting data across threads we have to run this test in serial.
-    //
-    // Read more: https://users.rust-lang.org/t/static-mutables-in-tests/49321
-    #[serial]
     fn publish_entry(
         #[from(populate_store_config)]
         #[with(0, 0, 0, false, test_schema())]
@@ -255,7 +254,6 @@ mod tests {
     }
 
     #[rstest]
-    #[serial] // See note above on why we execute this test in series
     fn sends_message_on_communication_bus(
         #[from(populate_store_config)]
         #[with(0, 0, 0, false, test_schema())]
@@ -289,7 +287,6 @@ mod tests {
     }
 
     #[rstest]
-    #[serial] // See note above on why we execute this test in series
     fn post_gql_mutation(
         #[from(populate_store_config)]
         #[with(0, 0, 0, false, test_schema())]
@@ -330,7 +327,6 @@ mod tests {
     }
 
     #[rstest]
-    #[serial] // See note above on why we execute this test in series
     #[case::invalid_entry_bytes(
         "AB01",
         &OPERATION_ENCODED,
@@ -339,7 +335,7 @@ mod tests {
     #[case::invalid_entry_hex_encoding(
         "-/74='4,.=4-=235m-0   34.6-3",
         &OPERATION_ENCODED,
-        "Failed to parse \"EncodedEntry\": invalid hex encoding in entry"
+        "Invalid value for argument \"entry\": Failed to parse \"EncodedEntry\": Invalid character '-' at position 0"
     )]
     #[case::no_entry(
         "",
@@ -377,12 +373,12 @@ mod tests {
     #[case::valid_entry_with_extra_hex_char_at_end(
         &{EncodedEntry::from_bytes(&ENTRY_ENCODED).to_string() + "A"},
         &OPERATION_ENCODED,
-        "Failed to parse \"EncodedEntry\": invalid hex encoding in entry"
+        "Invalid value for argument \"entry\": Failed to parse \"EncodedEntry\": Odd number of digits"
     )]
     #[case::valid_entry_with_extra_hex_char_at_start(
         &{"A".to_string() + &EncodedEntry::from_bytes(&ENTRY_ENCODED).to_string()},
         &OPERATION_ENCODED,
-        "Failed to parse \"EncodedEntry\": invalid hex encoding in entry"
+        "Invalid value for argument \"entry\": Failed to parse \"EncodedEntry\": Odd number of digits"
     )]
     #[case::should_not_have_skiplink(
         &entry_signed_encoded_unvalidated(
@@ -513,25 +509,25 @@ mod tests {
         config: PopulateStoreConfig,
     ) {
         // Test that encoded entries and operations are correctly validated when passed into
-        // qraphql publish endpoint. This is a public facing method so we should expect any
-        // junk data to arrive.
+        // GraphQL "publish" mutation. This is a public facing method so we should expect any junk
+        // data to arrive.
 
-        // Encode the entry and operation as string values.
+        // Encode the entry and operation as string values
         let entry_encoded = entry_encoded.to_string();
         let encoded_operation = hex::encode(encoded_operation);
         let expected_error_message = expected_error_message.to_string();
 
         test_runner(|mut node: TestNode| async move {
-            // Adds the test_schema to the store and schema provider.
+            // Adds the test_schema to the store and schema provider
             populate_and_materialize(&mut node, &config).await;
 
-            // Init the test client.
+            // Init the test client
             let client = graphql_test_client(&node).await;
 
-            // Prepare the GQL publish request,
+            // Prepare the GQL publish request
             let publish_request = publish_request(&entry_encoded, &encoded_operation);
 
-            // Send the publish request.
+            // Send the publish request
             let response = client
                 .post("/graphql")
                 .json(&json!({
@@ -542,7 +538,7 @@ mod tests {
                 .send()
                 .await;
 
-            // Parse the response and check any errors match the expected ones.
+            // Parse the response and check any errors match the expected ones
             let response = response.json::<serde_json::Value>().await;
             for error in response.get("errors").unwrap().as_array().unwrap() {
                 assert_eq!(
@@ -554,7 +550,6 @@ mod tests {
     }
 
     #[rstest]
-    #[serial] // See note above on why we execute this test in series
     #[case::backlink_and_skiplink_not_in_db(
         &entry_signed_encoded_unvalidated(
             8,
@@ -692,7 +687,6 @@ mod tests {
     }
 
     #[rstest]
-    #[serial] // See note above on why we execute this test in series
     fn publish_many_entries(
         #[from(populate_store_config)]
         #[with(0, 0, 0, false, doggo_schema())]
@@ -785,7 +779,6 @@ mod tests {
     }
 
     #[rstest]
-    #[serial] // See note above on why we execute this test in series
     fn duplicate_publishing_of_entries(
         #[from(populate_store_config)]
         #[with(1, 1, 1, false, doggo_schema())]
@@ -810,7 +803,7 @@ mod tests {
             // Prepare a publish entry request for the entry.
             let publish_request = publish_request(
                 &entry.encoded_entry.to_string(),
-                &entry.payload().unwrap().to_string(),
+                &entry._payload().unwrap().to_string(),
             );
 
             // Publish the entry and parse response.
@@ -833,7 +826,6 @@ mod tests {
     }
 
     #[rstest]
-    #[serial] // See note above on why we execute this test in series
     fn publish_unsupported_schema(
         #[from(encoded_entry)] entry_with_unsupported_schema: EncodedEntry,
         #[from(encoded_operation)] operation_with_unsupported_schema: EncodedOperation,

@@ -3,76 +3,111 @@
 //! Build and manage a GraphQL schema including dynamic parts of the schema.
 use std::sync::Arc;
 
-use async_graphql::{EmptySubscription, MergedObject, Request, Response, Schema};
+use async_graphql::dynamic::{Object, Schema};
+use async_graphql::{Request, Response};
+use dynamic_graphql::internal::Registry;
 use log::{debug, info};
 use p2panda_rs::Human;
 use tokio::sync::Mutex;
 
 use crate::bus::ServiceSender;
 use crate::db::SqlStore;
-use crate::graphql::client::{ClientMutationRoot, ClientRoot};
-use crate::graphql::replication::ReplicationRoot;
-use crate::schema::{save_static_schemas, SchemaProvider};
-
-/// All of the GraphQL query sub modules merged into one top level root.
-#[derive(MergedObject, Debug)]
-pub struct QueryRoot(pub ReplicationRoot, pub ClientRoot);
-
-/// All of the GraphQL mutation sub modules merged into one top level root.
-#[derive(MergedObject, Debug, Copy, Clone, Default)]
-pub struct MutationRoot(pub ClientMutationRoot);
-
-/// GraphQL schema for p2panda node.
-pub type RootSchema = Schema<QueryRoot, MutationRoot, EmptySubscription>;
+use crate::graphql::mutations::{MutationRoot, Publish};
+use crate::graphql::scalars::{
+    DocumentIdScalar, DocumentViewIdScalar, EncodedEntryScalar, EncodedOperationScalar,
+    EntryHashScalar, LogIdScalar, PublicKeyScalar, SeqNumScalar,
+};
+use crate::graphql::schema_builders::{
+    build_all_document_query, build_document_field_schema, build_document_query,
+    build_document_schema, build_next_args_query,
+};
+use crate::graphql::types::{DocumentMeta, NextArguments};
+use crate::graphql::utils::fields_name;
+use crate::schema::SchemaProvider;
 
 /// Returns GraphQL API schema for p2panda node.
 ///
 /// Builds the root schema that can handle all GraphQL requests from clients (Client API) or other
 /// nodes (Node API).
-pub fn build_root_schema(
+pub async fn build_root_schema(
     store: SqlStore,
     tx: ServiceSender,
     schema_provider: SchemaProvider,
-) -> RootSchema {
-    // Configure query root
-    let replication_root = ReplicationRoot::default();
-    let client_query_root = ClientRoot::new();
-    let query_root = QueryRoot(replication_root, client_query_root);
+) -> Schema {
+    // Get all schema from the schema provider.
+    let all_schema = schema_provider.all().await;
 
-    // Configure mutation root
-    let client_mutation_root = ClientMutationRoot::default();
-    let mutation_root = MutationRoot(client_mutation_root);
+    // Using dynamic-graphql we create a registry and add types.
+    let registry = Registry::new()
+        .register::<NextArguments>()
+        .register::<MutationRoot>()
+        .register::<Publish>()
+        .register::<DocumentIdScalar>()
+        .register::<DocumentMeta>()
+        .register::<DocumentViewIdScalar>()
+        .register::<EncodedEntryScalar>()
+        .register::<EncodedOperationScalar>()
+        .register::<EntryHashScalar>()
+        .register::<LogIdScalar>()
+        .register::<PublicKeyScalar>()
+        .register::<SeqNumScalar>();
 
-    // Build GraphQL schema
-    Schema::build(query_root, mutation_root, EmptySubscription)
+    // Construct the schema builder.
+    let mut schema_builder = Schema::build("Query", Some("MutationRoot"), None);
+
+    // Populate it with the registered types. We can now use these in any following dynamically
+    // created query object fields.
+    schema_builder = registry.apply_into_schema_builder(schema_builder);
+
+    // Construct the root query object.
+    let mut root_query = Object::new("Query");
+
+    // Loop through all schema retrieved from the schema store, create types and a root query for the
+    // documents they describe.
+    for schema in all_schema {
+        // Construct the document fields object which will be named `<schema_id>Field`.
+        let schema_field_name = fields_name(schema.id());
+        let mut document_schema_fields = Object::new(&schema_field_name);
+
+        // For every field in the schema we create a type with a resolver.
+        for (name, field_type) in schema.fields().iter() {
+            document_schema_fields =
+                build_document_field_schema(document_schema_fields, name.to_string(), field_type);
+        }
+
+        // Construct the document schema which has "fields" and "meta" fields.
+        let document_schema = build_document_schema(&schema);
+
+        // Register a schema and schema fields type for every schema.
+        schema_builder = schema_builder
+            .register(document_schema_fields)
+            .register(document_schema);
+
+        // Add a query object for each schema. It offers an interface to retrieve a single
+        // document of this schema by it's document id or view id. Its resolver parses and
+        // validates the passed parameters, then forwards them up to the children query fields.
+        root_query = build_document_query(root_query, &schema);
+
+        // Add a query for retrieving all documents of a certain schema.
+        root_query = build_all_document_query(root_query, &schema);
+    }
+
+    // Add next args to the query object.
+    let root_query = build_next_args_query(root_query);
+
+    // Build the GraphQL schema. We can unwrap here since it will only fail if we forgot to
+    // register all required types above
+    schema_builder
+        .register(root_query)
         .data(store)
         .data(schema_provider)
         .data(tx)
         .finish()
-}
-
-/// Returns GraphQL API schema for p2panda node with a little trick to make dynamic schemas work.
-///
-/// The `async_graphql` crate we're using in this project does only provide methods to generate
-/// GraphQL schemas statically. Ideally we would like to query our database for currently known
-/// p2panda schemas and accordingly update the GraphQL schema whenever necessary but we don't have
-/// static and sync access to the database when building `async_graphql` types.
-///
-/// With this little workaround we are still able to make it work! We load the p2panda schemas from
-/// the database and write them into a temporary in-memory store. When `async_graphql` builds the
-/// GraphQL schema we can load from this store statically to build the schemas on the fly.
-async fn build_schema_with_workaround(shared: GraphQLSharedData) -> RootSchema {
-    // Store all application schemas from database into static in-memory storage
-    let all_schemas = shared.schema_provider.all().await;
-    save_static_schemas(&all_schemas);
-
-    // Build the actual GraphQL root schema, this will internally read the created JSON file and
-    // accordingly build the schema
-    build_root_schema(shared.store, shared.tx, shared.schema_provider)
+        .unwrap()
 }
 
 /// List of created GraphQL root schemas.
-type GraphQLSchemas = Arc<Mutex<Vec<RootSchema>>>;
+type GraphQLSchemas = Arc<Mutex<Vec<Schema>>>;
 
 /// Shared types between GraphQL schemas.
 #[derive(Clone, Debug)]
@@ -143,7 +178,7 @@ impl GraphQLSchemaManager {
 
         // Create the new GraphQL based on the current state of known p2panda application schemas
         async fn rebuild(shared: GraphQLSharedData, schemas: GraphQLSchemas) {
-            let schema = build_schema_with_workaround(shared).await;
+            let schema = build_root_schema(shared.store, shared.tx, shared.schema_provider).await;
             schemas.lock().await.push(schema);
         }
 
@@ -202,7 +237,6 @@ mod test {
     use p2panda_rs::test_utils::fixtures::key_pair;
     use rstest::rstest;
     use serde_json::{json, Value};
-    use serial_test::serial;
 
     use crate::test_utils::{add_schema, graphql_test_client, test_runner, TestNode};
 
@@ -212,7 +246,6 @@ mod test {
     // data across threads we have to run this test in serial.
     //
     // Read more: https://users.rust-lang.org/t/static-mutables-in-tests/49321
-    #[serial]
     fn schema_updates() {
         test_runner(|mut node: TestNode| async move {
             // Create test client in the beginning so it is initialised with just the system
