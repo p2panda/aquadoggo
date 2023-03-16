@@ -339,7 +339,11 @@ impl DynamicQuery {
             }
 
             // Handle document fields.
-            if !schema.fields().contains_key(selected_field.name()) {
+            if !schema
+                .fields()
+                .keys()
+                .contains(&selected_field.name().to_string())
+            {
                 return Err(ServerError::new(
                     format!(
                         "Field {} does not exist for schema {}",

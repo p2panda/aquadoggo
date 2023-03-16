@@ -127,7 +127,7 @@ impl SqlStore {
 mod tests {
     use p2panda_rs::document::DocumentViewId;
     use p2panda_rs::identity::KeyPair;
-    use p2panda_rs::schema::{FieldType, SchemaId};
+    use p2panda_rs::schema::{FieldType, SchemaId, SchemaName};
     use p2panda_rs::test_utils::fixtures::{key_pair, random_document_view_id};
     use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
     use rstest::rstest;
@@ -246,7 +246,10 @@ mod tests {
 
             assert!(result.is_ok());
             // This is the schema name of the schema document we published.
-            assert_eq!(result.unwrap().unwrap().name(), "schema_definition");
+            assert_eq!(
+                result.unwrap().unwrap().name(),
+                SchemaName::new("schema_definition").unwrap()
+            );
         });
     }
 

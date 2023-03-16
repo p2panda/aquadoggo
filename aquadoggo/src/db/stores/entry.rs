@@ -321,7 +321,7 @@ mod tests {
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::EncodedOperation;
-    use p2panda_rs::schema::SchemaId;
+    use p2panda_rs::schema::{SchemaId, SchemaName};
     use p2panda_rs::storage_provider::traits::EntryStore;
     use p2panda_rs::test_utils::fixtures::{encoded_entry, encoded_operation, entry, random_hash};
     use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
@@ -479,7 +479,8 @@ mod tests {
             let schema_in_the_db = config.schema.id();
 
             // No entries were published containing an operation which follows this schema.
-            let schema_not_in_the_db = SchemaId::new_application("venue", &hash.into());
+            let schema_not_in_the_db =
+                SchemaId::new_application(&SchemaName::new("venue").unwrap(), &hash.into());
 
             // Get entries by schema not in db.
             let entries = node

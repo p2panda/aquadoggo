@@ -56,7 +56,11 @@ impl Document {
         );
 
         // Finally register the metatype for this schema.
-        let metatype = metaobject(&self.type_name(), Some(self.schema().description()), fields);
+        let metatype = metaobject(
+            &self.type_name(),
+            Some(&self.schema().description().to_string()),
+            fields,
+        );
         registry.types.insert(self.type_name(), metatype);
     }
 }

@@ -133,7 +133,7 @@ mod tests {
             )
             .unwrap(),
             "My test message schema",
-            vec![("message", FieldType::String)],
+            &[("message", FieldType::String)],
         )
         .unwrap()
     }
