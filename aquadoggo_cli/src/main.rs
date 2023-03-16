@@ -2,32 +2,10 @@
 
 #![allow(clippy::uninlined_format_args)]
 use std::convert::{TryFrom, TryInto};
-use std::error::Error;
 
 use anyhow::Result;
-use aquadoggo::{Configuration, NetworkConfiguration, Node, ReplicationConfiguration};
+use aquadoggo::{Configuration, NetworkConfiguration, Node};
 use clap::Parser;
-
-/// Helper method to parse a single key-value pair.
-fn parse_key_val<T, U>(s: &str) -> Result<(T, Vec<U>), Box<dyn Error + Send + Sync + 'static>>
-where
-    T: std::str::FromStr,
-    T::Err: Error + Send + Sync + 'static,
-    U: std::str::FromStr,
-    U::Err: Error + Send + Sync + 'static,
-{
-    let pos = s
-        .find('=')
-        .ok_or_else(|| format!("invalid KEY=value: no `=` found in `{}`", s))?;
-
-    let key = s[..pos].parse()?;
-    let values = s[pos + 1..]
-        .split(' ')
-        .map(|elem| elem.parse())
-        .collect::<Result<Vec<_>, _>>()?;
-
-    Ok((key, values))
-}
 
 #[derive(Parser, Debug)]
 #[command(name = "aquadoggo Node", version)]
@@ -49,15 +27,6 @@ struct Cli {
     #[arg(short, long)]
     remote_node_addresses: Vec<String>,
 
-    /// A collection of authors and their logs to replicate.
-    ///
-    /// eg. -A 123abc="1 2 345" -A 456def="6 7"
-    /// .. adds the authors:
-    /// - "123abc" with log_ids 1, 2, 345
-    /// - "456def" with log_ids 6 7
-    #[arg(short = 'A', value_parser = parse_key_val::<String, u64>, number_of_values = 1, verbatim_doc_comment)]
-    public_keys_to_replicate: Vec<(String, Vec<u64>)>,
-
     /// Enable mDNS for peer discovery over LAN (using port 5353), true by default.
     #[arg(short, long)]
     mdns: Option<bool>,
@@ -74,22 +43,11 @@ impl TryFrom<Cli> for Configuration {
         let mut config = Configuration::new(cli.data_dir)?;
         config.http_port = cli.http_port.unwrap_or(2020);
 
-        let public_keys_to_replicate = cli
-            .public_keys_to_replicate
-            .into_iter()
-            .map(|elem| elem.try_into())
-            .collect::<Result<_>>()?;
-
-        config.replication = ReplicationConfiguration {
-            remote_peers: cli.remote_node_addresses,
-            public_keys_to_replicate,
-            ..ReplicationConfiguration::default()
-        };
-
         config.network = NetworkConfiguration {
             mdns: cli.mdns.unwrap_or(true),
             ping: cli.ping.unwrap_or(true),
             quic_port: cli.quic_port.unwrap_or(2022),
+            remote_peers: cli.remote_node_addresses,
             ..NetworkConfiguration::default()
         };
 

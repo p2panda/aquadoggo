@@ -8,7 +8,6 @@ use directories::ProjectDirs;
 use serde::Deserialize;
 
 use crate::network::NetworkConfiguration;
-use crate::replication::ReplicationConfiguration;
 
 /// Data directory name.
 const DATA_DIR_NAME: &str = "aquadoggo";
@@ -42,9 +41,6 @@ pub struct Configuration {
     /// Network configuration.
     pub network: NetworkConfiguration,
 
-    /// Replication configuration.
-    pub replication: ReplicationConfiguration,
-
     /// Materializer worker pool size.
     pub worker_pool_size: u32,
 }
@@ -57,7 +53,6 @@ impl Default for Configuration {
             database_max_connections: 32,
             http_port: 2020,
             network: NetworkConfiguration::default(),
-            replication: ReplicationConfiguration::default(),
             worker_pool_size: 16,
         }
     }

@@ -18,14 +18,6 @@ Options:
   -r, --remote-node-addresses <REMOTE_NODE_ADDRESSES>
           URLs of remote nodes to replicate with
 
-  -A <PUBLIC_KEYS_TO_REPLICATE>
-          A collection of authors and their logs to replicate.
-
-          eg. -A 123abc="1 2 345" -A 456def="6 7"
-          .. adds the authors:
-          - "123abc" with log_ids 1, 2, 345
-          - "456def" with log_ids 6 7
-
   -m, --mdns <MDNS>
           Enable mDNS for peer discovery over LAN (using port 5353), true by default
 

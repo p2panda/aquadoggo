@@ -11,30 +11,15 @@ use p2panda_rs::test_utils::memory_store::helpers::{
 };
 use rstest::fixture;
 
-use crate::config::Configuration;
 use crate::context::Context;
 use crate::db::SqlStore;
 use crate::materializer::tasks::{dependency_task, reduce_task, schema_task};
 use crate::materializer::TaskInput;
-use crate::schema::SchemaProvider;
 use crate::test_utils::{doggo_fields, doggo_schema};
 
 /// Test node which contains a context with an [`SqlStore`].
-///
-/// Is created through `test_runner` for tests which only require one node, or `TestNodeManager`
-/// via `test_runner_with_manager` for constructing multiple nodes in a single test. Both
-/// construction methods handle safe closing of database pool connections and handles any errors
-/// occurring in the tests.
 pub struct TestNode {
     pub context: Context<SqlStore>,
-}
-
-impl TestNode {
-    pub fn _new(store: SqlStore) -> Self {
-        TestNode {
-            context: Context::new(store, Configuration::default(), SchemaProvider::default()),
-        }
-    }
 }
 
 /// Fixture for constructing a `PopulateStoreConfig` with default values for aquadoggo tests.
