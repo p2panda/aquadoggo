@@ -119,7 +119,7 @@ mod tests {
     use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
     use rstest::{fixture, rstest};
     use serde_json::json;
-        use tokio::sync::broadcast;
+    use tokio::sync::broadcast;
 
     use crate::bus::ServiceMessage;
     use crate::graphql::GraphQLSchemaManager;
