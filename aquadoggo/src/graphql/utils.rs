@@ -24,11 +24,10 @@ pub fn fields_name(schema_id: &SchemaId) -> String {
 pub fn gql_scalar(operation_value: &OperationValue) -> Value {
     match operation_value {
         OperationValue::Boolean(value) => value.to_owned().into(),
-        OperationValue::Integer(value) => value.to_owned().into(),
         OperationValue::Float(value) => value.to_owned().into(),
+        OperationValue::Integer(value) => value.to_owned().into(),
         OperationValue::String(value) => value.to_owned().into(),
-        // Recursion not implemented yet.
-        _ => todo!(),
+        _ => panic!("This method is not used for relation types"),
     }
 }
 
