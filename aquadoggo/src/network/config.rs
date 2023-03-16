@@ -14,7 +14,7 @@ use crate::network::identity::Identity;
 const KEY_PAIR_FILE_NAME: &str = "private-key";
 
 /// Network config for the node.
-#[derive(Debug, Copy, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct NetworkConfiguration {
     /// Dial concurrency factor.
     ///
@@ -69,6 +69,9 @@ pub struct NetworkConfiguration {
 
     /// QUIC transport port.
     pub quic_port: u16,
+
+    /// The addresses of remote peers to replicate from.
+    pub remote_peers: Vec<String>,
 }
 
 impl Default for NetworkConfiguration {
@@ -85,6 +88,7 @@ impl Default for NetworkConfiguration {
             per_connection_event_buffer_size: 8,
             ping: false,
             quic_port: 2022,
+            remote_peers: Vec::new(),
         }
     }
 }

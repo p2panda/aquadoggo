@@ -53,7 +53,6 @@ mod manager;
 mod materializer;
 mod network;
 mod node;
-mod replication;
 mod schema;
 #[cfg(test)]
 mod test_utils;
@@ -62,7 +61,6 @@ mod tests;
 
 pub use crate::config::Configuration;
 pub use crate::network::NetworkConfiguration;
-pub use crate::replication::ReplicationConfiguration;
 pub use node::Node;
 
 /// Init env_logger before the test suite runs to handle logging outputs.

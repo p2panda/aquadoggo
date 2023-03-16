@@ -69,7 +69,7 @@ pub async fn network_service(
     let mut _rx = tx.subscribe();
 
     // Read the network configuration parameters from the application context
-    let network_config = context.config.network;
+    let network_config = context.config.network.clone();
 
     // Load the network key pair and peer ID
     let key_pair =
@@ -104,7 +104,7 @@ pub async fn network_service(
     swarm.listen_on(quic_multiaddr)?;
 
     // Dial the peer identified by the multi-address given in the `--remote-node-addresses` if given
-    if let Some(addr) = context.config.replication.remote_peers.get(0) {
+    if let Some(addr) = network_config.remote_peers.get(0) {
         let remote: Multiaddr = addr.parse()?;
         swarm.dial(remote)?;
     }

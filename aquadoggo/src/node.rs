@@ -11,7 +11,6 @@ use crate::http::http_service;
 use crate::manager::ServiceManager;
 use crate::materializer::materializer_service;
 use crate::network::network_service;
-use crate::replication::replication_service;
 use crate::schema::SchemaProvider;
 
 /// Capacity of the internal broadcast channel used to communicate between services.
@@ -49,21 +48,21 @@ impl Node {
     /// Start p2panda node with your configuration. This method can be used to run the node within
     /// other applications.
     pub async fn start(config: Configuration) -> Self {
-        // Initialize database and get connection pool.
+        // Initialize database and get connection pool
         let pool = initialize_db(&config)
             .await
             .expect("Could not initialize database");
 
-        // Prepare storage and schema providers using connection pool.
+        // Prepare storage and schema providers using connection pool
         let store = SqlStore::new(pool.clone());
         let schemas = SchemaProvider::new(store.get_all_schema().await.unwrap());
 
-        // Create service manager with shared data between services.
+        // Create service manager with shared data between services
         let context = Context::new(store, config, schemas);
         let mut manager =
             ServiceManager::<Context, ServiceMessage>::new(SERVICE_BUS_CAPACITY, context);
 
-        // Start materializer service.
+        // Start materializer service
         if manager
             .add("materializer", materializer_service)
             .await
@@ -71,21 +70,13 @@ impl Node {
         {
             panic!("Failed starting materialiser service");
         }
-        // Start replication service.
-        if manager
-            .add("replication", replication_service)
-            .await
-            .is_err()
-        {
-            panic!("Failed starting replication service");
-        }
 
-        // Start HTTP server with GraphQL API.
+        // Start HTTP server with GraphQL API
         if manager.add("http", http_service).await.is_err() {
             panic!("Failed starting HTTP service");
         }
 
-        // Start network service.
+        // Start network service
         if manager.add("network", network_service).await.is_err() {
             panic!("Failed starting network service");
         }
