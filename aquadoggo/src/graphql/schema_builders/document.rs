@@ -7,13 +7,10 @@ use p2panda_rs::storage_provider::traits::DocumentStore;
 use p2panda_rs::{document::traits::AsDocument, schema::Schema};
 
 use crate::db::SqlStore;
+use crate::graphql::constants;
 use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
 use crate::graphql::types::DocumentMeta;
 use crate::graphql::utils::{downcast_id_params, fields_name, get_document_from_params};
-use crate::graphql::{
-    DOCUMENT_ID, DOCUMENT_ID_ARG, DOCUMENT_META, DOCUMENT_VIEW_ID, DOCUMENT_VIEW_ID_ARG,
-    FIELDS_FIELD, META_FIELD, QUERY_ALL_PREFIX,
-};
 
 /// Build a GraphQL object type for a p2panda schema.
 ///
@@ -25,7 +22,7 @@ pub fn build_document_schema(schema: &Schema) -> Object {
     Object::new(schema.id().to_string())
         // The `fields` field of a document, passes up the query arguments to it's children.
         .field(Field::new(
-            FIELDS_FIELD,
+            constants::FIELDS_FIELD,
             TypeRef::named(document_fields_name),
             move |ctx| {
                 FieldFuture::new(async move {
@@ -37,8 +34,8 @@ pub fn build_document_schema(schema: &Schema) -> Object {
         ))
         // The `meta` field of a document, resolves the `DocumentMeta` object.
         .field(Field::new(
-            META_FIELD,
-            TypeRef::named(DOCUMENT_META),
+            constants::META_FIELD,
+            TypeRef::named(constants::DOCUMENT_META),
             move |ctx| {
                 FieldFuture::new(async move {
                     let store = ctx.data_unchecked::<SqlStore>();
@@ -88,10 +85,10 @@ pub fn build_document_query(query: Object, schema: &Schema) -> Object {
                     let mut document_view_id = None;
                     for (name, id) in ctx.field().arguments()?.into_iter() {
                         match name.as_str() {
-                            DOCUMENT_ID_ARG => {
+                            constants::DOCUMENT_ID_ARG => {
                                 document_id = Some(DocumentIdScalar::from_value(id)?);
                             }
-                            DOCUMENT_VIEW_ID_ARG => {
+                            constants::DOCUMENT_VIEW_ID_ARG => {
                                 document_view_id = Some(DocumentViewIdScalar::from_value(id)?)
                             }
                             _ => (),
@@ -122,12 +119,12 @@ pub fn build_document_query(query: Object, schema: &Schema) -> Object {
             },
         )
         .argument(InputValue::new(
-            DOCUMENT_ID_ARG,
-            TypeRef::named(DOCUMENT_ID),
+            constants::DOCUMENT_ID_ARG,
+            TypeRef::named(constants::DOCUMENT_ID),
         ))
         .argument(InputValue::new(
-            DOCUMENT_VIEW_ID_ARG,
-            TypeRef::named(DOCUMENT_VIEW_ID),
+            constants::DOCUMENT_VIEW_ID_ARG,
+            TypeRef::named(constants::DOCUMENT_VIEW_ID),
         ))
         .description(format!(
             "Query a {} document by id or view id.",
@@ -144,12 +141,16 @@ pub fn build_all_document_query(query: Object, schema: &Schema) -> Object {
     let schema_id = schema.id().clone();
     query.field(
         Field::new(
-            format!("{QUERY_ALL_PREFIX}{}", schema_id),
+            format!("{}{}", constants::QUERY_ALL_PREFIX, schema_id),
             TypeRef::named_list(schema_id.to_string()),
             move |ctx| {
                 let schema_id = schema_id.clone();
                 FieldFuture::new(async move {
-                    debug!("Query to {QUERY_ALL_PREFIX}{} received", schema_id);
+                    debug!(
+                        "Query to {}{} received",
+                        constants::QUERY_ALL_PREFIX,
+                        schema_id
+                    );
 
                     // Access the store.
                     let store = ctx.data_unchecked::<SqlStore>();
