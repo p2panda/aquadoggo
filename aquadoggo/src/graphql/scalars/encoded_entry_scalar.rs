@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 /// Signed bamboo entry, encoded as a hexadecimal string.
 #[derive(Scalar, Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[graphql(name = "EntryEncoded")]
+#[graphql(name = "EncodedEntry")]
 pub struct EncodedEntryScalar(EncodedEntry);
 
 impl ScalarValue for EncodedEntryScalar {
