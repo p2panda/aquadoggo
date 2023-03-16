@@ -361,7 +361,6 @@ async fn query(
     );
 
     let response = post(client, &query_str).await;
-    print!("{:?}", response.errors);
     response.data.into_json().expect("Get response data field")["documentQuery"]
         .as_object()
         .expect("Unwrap object")
