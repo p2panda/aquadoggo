@@ -150,6 +150,14 @@ impl Filter {
         }
     }
 
+    /// Helper method to merge or extend existing filterings.
+    ///
+    /// This is a preparation step to pass on well-formed filters to the database backend, since we
+    /// can't make sure that the filters were used "inefficiently" by the requesting client.
+    ///
+    /// Note that this method does not merge across exclusivity, even though it would be possible
+    /// to merge two filters A: [1, 2] and B: NOT 2, which would result in [1]. This feature can be
+    /// added one day, but for now we keep it simple.
     fn upsert_field(&mut self, new_field: Field) {
         // Check if a field exists we potentially can extend. For this the field needs to:
         // - Have the same field name
