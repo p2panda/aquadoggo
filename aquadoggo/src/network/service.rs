@@ -6,56 +6,18 @@ use anyhow::Result;
 use futures::StreamExt;
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::ping::Event;
-use libp2p::swarm::behaviour::toggle::Toggle;
-use libp2p::swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent};
-use libp2p::{mdns, ping, quic, Multiaddr, PeerId, Transport};
+use libp2p::swarm::{SwarmBuilder, SwarmEvent};
+use libp2p::{identify, mdns, quic, rendezvous, Multiaddr, PeerId, Transport};
 use log::{debug, info, warn};
 
 use crate::bus::ServiceSender;
 use crate::context::Context;
 use crate::manager::{ServiceReadySender, Shutdown};
+use crate::network::behaviour::{Behaviour, BehaviourEvent};
+use crate::network::config::NODE_NAMESPACE;
 use crate::network::NetworkConfiguration;
 
-/// Network behaviour for the aquadoggo node.
-#[derive(NetworkBehaviour)]
-struct Behaviour {
-    /// Automatically discover peers on the local network.
-    mdns: Toggle<mdns::tokio::Behaviour>,
-
-    /// Respond to inbound pings and periodically send outbound ping on every established
-    /// connection.
-    ping: Toggle<ping::Behaviour>,
-}
-
-impl Behaviour {
-    /// Generate a new instance of the composed network behaviour according to
-    /// the network configuration context.
-    fn new(network_config: &NetworkConfiguration, peer_id: PeerId) -> Result<Self> {
-        // Create an mDNS behaviour with default configuration if the mDNS flag is set
-        let mdns = if network_config.mdns {
-            debug!("mDNS network behaviour enabled");
-            Some(mdns::Behaviour::new(Default::default(), peer_id)?)
-        } else {
-            None
-        };
-
-        // Create a ping behaviour with default configuration if the ping flag is set
-        let ping = if network_config.ping {
-            debug!("Ping network behaviour enabled");
-            Some(ping::Behaviour::default())
-        } else {
-            None
-        };
-
-        Ok(Self {
-            mdns: mdns.into(), // Convert the `Option` into a `Toggle`
-            ping: ping.into(),
-        })
-    }
-}
-
-/// Network service that configures and deploys a network swarm over QUIC transports,
-/// with mDNS provided for peer discovery on the local network.
+/// Network service that configures and deploys a network swarm over QUIC transports.
 ///
 /// The swarm listens for incoming connections, dials remote nodes, manages
 /// connections and executes predefined network behaviours.
@@ -88,7 +50,7 @@ pub async fn network_service(
 
     // Instantiate the custom network behaviour with default configuration
     // and the libp2p peer ID
-    let behaviour = Behaviour::new(&network_config, peer_id)?;
+    let behaviour = Behaviour::new(&network_config, peer_id, key_pair)?;
 
     // Initialise a swarm with QUIC transports, our composed network behaviour
     // and the default configuration parameters
@@ -105,6 +67,23 @@ pub async fn network_service(
 
     // Dial the peer identified by the multi-address given in the `--remote-node-addresses` if given
     if let Some(addr) = network_config.remote_peers.get(0) {
+        let remote: Multiaddr = addr.parse()?;
+        swarm.dial(remote)?;
+    }
+
+    // TODO: find a more elegant solution...this is super hacky
+    // The rendezvous server peer ID will only be used if the local node is set as a rendezvous
+    // client. I'm creating a random ID as a fallback here so I can avoid an unwrap in the swarm
+    // event loop
+    let rendezvous_server_peer_id = if let Some(peer_id) = network_config.rendezvous_peer_id.clone()
+    {
+        peer_id.parse()?
+    } else {
+        PeerId::random()
+    };
+
+    // Dial the peer identified by the multi-address given in the `--rendezvous_address` if given
+    if let Some(addr) = network_config.rendezvous_address.clone() {
         let remote: Multiaddr = addr.parse()?;
         swarm.dial(remote)?;
     }
@@ -179,7 +158,63 @@ pub async fn network_service(
                 SwarmEvent::OutgoingConnectionError { peer_id, error } => {
                     warn!("OutgoingConnectionError: {peer_id:?} {error:?}")
                 }
-            };
+                SwarmEvent::Behaviour(BehaviourEvent::RendezvousClient(event)) => match event {
+                    rendezvous::client::Event::Registered {
+                        namespace,
+                        ttl,
+                        rendezvous_node,
+                    } => {
+                        debug!("Registered for namespace '{namespace}' at rendezvous point {rendezvous_node} for the next {ttl} seconds")
+                    }
+                    other => debug!("Unhandled rendezvous client event: {:?}", other),
+                },
+                SwarmEvent::Behaviour(BehaviourEvent::RendezvousServer(event)) => match event {
+                    rendezvous::server::Event::PeerRegistered { peer, registration } => {
+                        debug!(
+                            "Peer {} registered for namespace '{}'",
+                            peer, registration.namespace
+                        );
+                    }
+                    rendezvous::server::Event::DiscoverServed {
+                        enquirer,
+                        registrations,
+                    } => {
+                        debug!(
+                            "Served peer {} with {} registrations",
+                            enquirer,
+                            registrations.len()
+                        );
+                    }
+                    // TODO: consider exhaustive matching with logging for each discrete event
+                    other => debug!("Unhandled rendezvous server event: {:?}", other),
+                },
+                SwarmEvent::Behaviour(BehaviourEvent::Identify(event)) => {
+                    match event {
+                        identify::Event::Received { .. } => {
+                            // Only attempt registration if the local node is running as a rendezvous client
+                            if network_config.rendezvous_client {
+                                // Once `identify` information is received from a remote peer, the external
+                                // address of the local node is known and registration with the rendezvous
+                                // server can be carried out.
+
+                                // We call `as_mut()` on the rendezvous client network behaviour in
+                                // order to get a mutable reference out of the `Toggle`
+                                swarm
+                                    .behaviour_mut()
+                                    .rendezvous_client
+                                    .as_mut()
+                                    .unwrap()
+                                    .register(
+                                        rendezvous::Namespace::from_static(NODE_NAMESPACE),
+                                        rendezvous_server_peer_id,
+                                        None,
+                                    );
+                            }
+                        }
+                        other => debug!("Unhandled identify event: {:?}", other),
+                    }
+                }
+            }
         }
     });
 
