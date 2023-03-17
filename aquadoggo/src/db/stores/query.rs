@@ -144,8 +144,6 @@ impl Filter {
     /// This is a preparation step to pass on well-formed filters to the database backend, since we
     /// can't make sure that the filters were used "efficiently" by the requesting client.
     ///
-    /// The logic of this method is that the last setting wins, meaning that if a fil
-    ///
     /// Note that this method does not merge across exclusivity and does not support multiple
     /// intervals for one field.
     fn upsert_filter_item(&mut self, new_item: FilterItem) {
