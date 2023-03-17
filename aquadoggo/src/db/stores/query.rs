@@ -15,7 +15,28 @@ use crate::db::SqlStore;
 
 const DEFAULT_PAGE_SIZE: u64 = 10;
 
+// @TODO: Probably this should be a trait
 pub type Cursor = String;
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum MetaField {
+    DocumentId,
+    Owner,
+    Edited,
+    Deleted,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Field {
+    Meta(MetaField),
+    Field(FieldName),
+}
+
+impl From<&str> for Field {
+    fn from(value: &str) -> Self {
+        Self::Field(value.to_string())
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum Direction {
@@ -24,26 +45,15 @@ pub enum Direction {
 }
 
 #[derive(Debug, Clone)]
-pub enum OrderMeta {
-    DocumentId,
-}
-
-#[derive(Debug, Clone)]
-pub enum OrderField {
-    Meta(OrderMeta),
-    Field(FieldName),
-}
-
-#[derive(Debug, Clone)]
 pub struct Order {
-    field: OrderField,
+    field: Field,
     direction: Direction,
 }
 
 impl Default for Order {
     fn default() -> Self {
         Self {
-            field: OrderField::Meta(OrderMeta::DocumentId),
+            field: Field::Meta(MetaField::DocumentId),
             direction: Direction::Ascending,
         }
     }
@@ -74,29 +84,6 @@ impl Default for Pagination {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct FilterMeta {
-    public_keys: Option<Vec<PublicKey>>,
-    edited: Option<bool>,
-    deleted: Option<bool>,
-}
-
-impl FilterMeta {
-    pub fn new() -> Self {
-        Self {
-            public_keys: None,
-            edited: None,
-            deleted: None,
-        }
-    }
-}
-
-impl Default for FilterMeta {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum UpperBound {
     Unbounded,
@@ -112,42 +99,44 @@ pub enum LowerBound {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum FieldFilter {
-    Single(OperationValue),
-    Multiple(Vec<OperationValue>),
+pub enum FilterBy {
+    Element(OperationValue),
+    Set(Vec<OperationValue>),
     Interval(LowerBound, UpperBound),
     Contains(String),
 }
 
 #[derive(Debug, Clone)]
-pub struct Field {
-    field_name: FieldName,
-    field_filter: FieldFilter,
+pub struct FilterItem {
+    field: Field,
+    by: FilterBy,
     exclusive: bool,
 }
 
-impl Field {
-    pub fn new(field_name: &FieldName, field_filter: FieldFilter, exclusive: bool) -> Self {
+impl FilterItem {
+    pub fn new(field: &Field, by: FilterBy, exclusive: bool) -> Self {
         Self {
-            field_name: field_name.to_owned(),
-            field_filter,
+            field: field.to_owned(),
+            by,
             exclusive,
         }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Filter {
-    meta: FilterMeta,
-    fields: Vec<Field>,
-}
+pub struct Filter(Vec<FilterItem>);
 
 impl Filter {
     pub fn new() -> Self {
-        Self {
-            meta: FilterMeta::new(),
-            fields: Vec::new(),
-        }
+        Self(Vec::new())
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn get(&self, index: usize) -> Option<&FilterItem> {
+        self.0.get(index)
     }
 
     /// Helper method to merge or extend existing filterings.
@@ -159,68 +148,65 @@ impl Filter {
     ///
     /// Note that this method does not merge across exclusivity and does not support multiple
     /// intervals for one field.
-    fn upsert_field(&mut self, new_field: Field) {
+    fn upsert_filter_item(&mut self, new_item: FilterItem) {
         // Check if a field exists we potentially can extend. For this the field needs to:
         // - Have the same field name
         // - Be also exclusive or non-exclusive
-        let field_index = self.fields.iter().position(|current_field| {
-            current_field.field_name == new_field.field_name
-                && current_field.exclusive == new_field.exclusive
-        });
+        let index = self
+            .0
+            .iter()
+            .position(|item| item.field == new_item.field && item.exclusive == new_item.exclusive);
 
         // We haven't found anything matching, just add it to the array
-        if field_index.is_none() {
-            self.fields.push(new_field);
+        if index.is_none() {
+            self.0.push(new_item);
             return;
         }
 
         // Get a mutable reference to the current field, unwrap since we know that both the index
         // and the element exists at this point
-        let current_field = self.fields.get_mut(field_index.unwrap()).unwrap();
+        let current_item = self.0.get_mut(index.unwrap()).unwrap();
 
         // Merge or extend potentially overlapping filters
-        let updated_filter = match (
-            current_field.clone().field_filter,
-            new_field.clone().field_filter,
-        ) {
-            (FieldFilter::Single(element_a), FieldFilter::Single(element_b)) => {
+        let updated_filter = match (current_item.clone().by, new_item.clone().by) {
+            (FilterBy::Element(element_a), FilterBy::Element(element_b)) => {
                 if element_a != element_b {
-                    Some(FieldFilter::Multiple(vec![element_a, element_b]))
+                    Some(FilterBy::Set(vec![element_a, element_b]))
                 } else {
-                    Some(FieldFilter::Single(element_a))
+                    Some(FilterBy::Element(element_a))
                 }
             }
-            (FieldFilter::Single(element_a), FieldFilter::Multiple(mut elements)) => {
+            (FilterBy::Element(element_a), FilterBy::Set(mut elements)) => {
                 if !elements.contains(&element_a) {
                     elements.push(element_a);
                 }
 
-                Some(FieldFilter::Multiple(elements))
+                Some(FilterBy::Set(elements))
             }
-            (FieldFilter::Multiple(mut elements), FieldFilter::Single(element_b)) => {
+            (FilterBy::Set(mut elements), FilterBy::Element(element_b)) => {
                 if !elements.contains(&element_b) {
                     elements.push(element_b);
                 }
 
-                Some(FieldFilter::Multiple(elements))
+                Some(FilterBy::Set(elements))
             }
-            (FieldFilter::Multiple(mut elements_a), FieldFilter::Multiple(elements_b)) => {
+            (FilterBy::Set(mut elements_a), FilterBy::Set(elements_b)) => {
                 for element in elements_b {
                     if !elements_a.contains(&element) {
                         elements_a.push(element);
                     }
                 }
 
-                Some(FieldFilter::Multiple(elements_a))
+                Some(FilterBy::Set(elements_a))
             }
-            (FieldFilter::Interval(lower_a, upper_a), FieldFilter::Interval(lower_b, upper_b)) => {
+            (FilterBy::Interval(lower_a, upper_a), FilterBy::Interval(lower_b, upper_b)) => {
                 match (lower_b.clone(), upper_b.clone()) {
                     (LowerBound::Unbounded, UpperBound::Unbounded) => {
-                        Some(FieldFilter::Interval(lower_a, upper_a))
+                        Some(FilterBy::Interval(lower_a, upper_a))
                     }
-                    (LowerBound::Unbounded, _) => Some(FieldFilter::Interval(lower_a, upper_b)),
-                    (_, UpperBound::Unbounded) => Some(FieldFilter::Interval(lower_b, upper_a)),
-                    _ => Some(FieldFilter::Interval(lower_b, upper_b)),
+                    (LowerBound::Unbounded, _) => Some(FilterBy::Interval(lower_a, upper_b)),
+                    (_, UpperBound::Unbounded) => Some(FilterBy::Interval(lower_b, upper_a)),
+                    _ => Some(FilterBy::Interval(lower_b, upper_b)),
                 }
             }
             _ => None,
@@ -228,74 +214,74 @@ impl Filter {
 
         match updated_filter {
             Some(filter) => {
-                current_field.field_filter = filter;
+                current_item.by = filter;
             }
             None => {
-                self.fields.push(new_field);
+                self.0.push(new_item);
             }
         }
     }
 
-    pub fn add(&mut self, field_name: &FieldName, value: &OperationValue) {
-        self.upsert_field(Field::new(
-            field_name,
-            FieldFilter::Single(value.to_owned()),
+    pub fn add(&mut self, field: &Field, value: &OperationValue) {
+        self.upsert_filter_item(FilterItem::new(
+            field,
+            FilterBy::Element(value.to_owned()),
             false,
         ));
     }
 
-    pub fn add_not(&mut self, field_name: &FieldName, value: &OperationValue) {
-        self.upsert_field(Field::new(
-            field_name,
-            FieldFilter::Single(value.to_owned()),
+    pub fn add_not(&mut self, field: &Field, value: &OperationValue) {
+        self.upsert_filter_item(FilterItem::new(
+            field,
+            FilterBy::Element(value.to_owned()),
             true,
         ));
     }
 
-    pub fn add_in(&mut self, field_name: &FieldName, values: &[OperationValue]) {
+    pub fn add_in(&mut self, field: &Field, values: &[OperationValue]) {
         if values.len() == 1 {
-            self.upsert_field(Field::new(
-                field_name,
-                FieldFilter::Single(values[0].to_owned()),
+            self.upsert_filter_item(FilterItem::new(
+                field,
+                FilterBy::Element(values[0].to_owned()),
                 false,
             ));
         } else {
-            self.upsert_field(Field::new(
-                field_name,
-                FieldFilter::Multiple(values.to_owned()),
+            self.upsert_filter_item(FilterItem::new(
+                field,
+                FilterBy::Set(values.to_owned()),
                 false,
             ));
         }
     }
 
-    pub fn add_not_in(&mut self, field_name: &FieldName, values: &[OperationValue]) {
+    pub fn add_not_in(&mut self, field: &Field, values: &[OperationValue]) {
         if values.len() == 1 {
-            self.upsert_field(Field::new(
-                field_name,
-                FieldFilter::Single(values[0].to_owned()),
+            self.upsert_filter_item(FilterItem::new(
+                field,
+                FilterBy::Element(values[0].to_owned()),
                 true,
             ));
         } else {
-            self.upsert_field(Field::new(
-                field_name,
-                FieldFilter::Multiple(values.to_owned()),
+            self.upsert_filter_item(FilterItem::new(
+                field,
+                FilterBy::Set(values.to_owned()),
                 true,
             ));
         }
     }
 
-    pub fn add_gt(&mut self, field_name: &FieldName, value: &OperationValue) {
-        self.upsert_field(Field::new(
-            field_name,
-            FieldFilter::Interval(LowerBound::Greater(value.to_owned()), UpperBound::Unbounded),
+    pub fn add_gt(&mut self, field: &Field, value: &OperationValue) {
+        self.upsert_filter_item(FilterItem::new(
+            field,
+            FilterBy::Interval(LowerBound::Greater(value.to_owned()), UpperBound::Unbounded),
             false,
         ));
     }
 
-    pub fn add_gte(&mut self, field_name: &FieldName, value: &OperationValue) {
-        self.upsert_field(Field::new(
-            field_name,
-            FieldFilter::Interval(
+    pub fn add_gte(&mut self, field: &Field, value: &OperationValue) {
+        self.upsert_filter_item(FilterItem::new(
+            field,
+            FilterBy::Interval(
                 LowerBound::GreaterEqual(value.to_owned()),
                 UpperBound::Unbounded,
             ),
@@ -303,18 +289,18 @@ impl Filter {
         ));
     }
 
-    pub fn add_lt(&mut self, field_name: &FieldName, value: &OperationValue) {
-        self.upsert_field(Field::new(
-            field_name,
-            FieldFilter::Interval(LowerBound::Unbounded, UpperBound::Lower(value.to_owned())),
+    pub fn add_lt(&mut self, field: &Field, value: &OperationValue) {
+        self.upsert_filter_item(FilterItem::new(
+            field,
+            FilterBy::Interval(LowerBound::Unbounded, UpperBound::Lower(value.to_owned())),
             false,
         ));
     }
 
-    pub fn add_lte(&mut self, field_name: &FieldName, value: &OperationValue) {
-        self.upsert_field(Field::new(
-            field_name,
-            FieldFilter::Interval(
+    pub fn add_lte(&mut self, field: &Field, value: &OperationValue) {
+        self.upsert_filter_item(FilterItem::new(
+            field,
+            FilterBy::Interval(
                 LowerBound::Unbounded,
                 UpperBound::LowerEqual(value.to_owned()),
             ),
@@ -322,18 +308,18 @@ impl Filter {
         ));
     }
 
-    pub fn add_contains(&mut self, field_name: &FieldName, value: &str) {
-        self.upsert_field(Field::new(
-            field_name,
-            FieldFilter::Contains(value.to_string()),
+    pub fn add_contains(&mut self, field: &Field, value: &str) {
+        self.upsert_filter_item(FilterItem::new(
+            field,
+            FilterBy::Contains(value.to_string()),
             false,
         ));
     }
 
-    pub fn add_not_contains(&mut self, field_name: &FieldName, value: &str) {
-        self.upsert_field(Field::new(
-            field_name,
-            FieldFilter::Contains(value.to_string()),
+    pub fn add_not_contains(&mut self, field: &Field, value: &str) {
+        self.upsert_filter_item(FilterItem::new(
+            field,
+            FilterBy::Contains(value.to_string()),
             true,
         ));
     }
@@ -384,8 +370,8 @@ mod tests {
     use p2panda_rs::schema::FieldName;
 
     use super::{
-        Cursor, Direction, Field, FieldFilter, Filter, FilterMeta, Find, FindMany, LowerBound,
-        Order, Pagination, UpperBound,
+        Cursor, Direction, Field, FilterBy, Find, FindMany, LowerBound, Order, Pagination,
+        UpperBound,
     };
 
     #[test]
@@ -396,14 +382,14 @@ mod tests {
             .filter
             .add_in(&"city".into(), &["tokyo".into(), "osaka".into()]);
 
-        assert_eq!(query.filter.fields.len(), 2);
+        assert_eq!(query.filter.len(), 2);
         assert_eq!(
-            query.filter.fields[0].field_filter,
-            FieldFilter::Single("panda".into())
+            query.filter.get(0).unwrap().by,
+            FilterBy::Element("panda".into())
         );
         assert_eq!(
-            query.filter.fields[1].field_filter,
-            FieldFilter::Multiple(vec!["tokyo".into(), "osaka".into()])
+            query.filter.get(1).unwrap().by,
+            FilterBy::Set(vec!["tokyo".into(), "osaka".into()])
         );
     }
 
@@ -413,14 +399,14 @@ mod tests {
         query.filter.add_gt(&"year".into(), &2004.into());
         query.filter.add_lte(&"temperature".into(), &15.75.into());
 
-        assert_eq!(query.filter.fields.len(), 2);
+        assert_eq!(query.filter.len(), 2);
         assert_eq!(
-            query.filter.fields[0].field_filter,
-            FieldFilter::Interval(LowerBound::Greater(2004.into()), UpperBound::Unbounded)
+            query.filter.get(0).unwrap().by,
+            FilterBy::Interval(LowerBound::Greater(2004.into()), UpperBound::Unbounded)
         );
         assert_eq!(
-            query.filter.fields[1].field_filter,
-            FieldFilter::Interval(LowerBound::Unbounded, UpperBound::LowerEqual(15.75.into()))
+            query.filter.get(1).unwrap().by,
+            FilterBy::Interval(LowerBound::Unbounded, UpperBound::LowerEqual(15.75.into()))
         );
     }
 
@@ -434,61 +420,58 @@ mod tests {
             .filter
             .add_not_contains(&"description".into(), "Llama");
 
-        assert_eq!(query.filter.fields.len(), 2);
+        assert_eq!(query.filter.len(), 2);
         assert_eq!(
-            query.filter.fields[0].field_filter,
-            FieldFilter::Contains("Panda is the best".into())
+            query.filter.get(0).unwrap().by,
+            FilterBy::Contains("Panda is the best".into())
         );
-        assert_eq!(query.filter.fields[0].exclusive, false,);
+        assert_eq!(query.filter.get(0).unwrap().exclusive, false,);
         assert_eq!(
-            query.filter.fields[1].field_filter,
-            FieldFilter::Contains("Llama".into())
+            query.filter.get(1).unwrap().by,
+            FilterBy::Contains("Llama".into())
         );
-        assert_eq!(query.filter.fields[1].exclusive, true);
+        assert_eq!(query.filter.get(1).unwrap().exclusive, true);
     }
 
     #[test]
     fn convert_single_element_filter() {
         let mut query = FindMany::default();
-        let field_name: FieldName = "animal".into();
+        let field: Field = "animal".into();
         let panda: OperationValue = "panda".into();
 
         // We're filtering "many" elements but the set only contains one
-        query.filter.add_in(&field_name, &[panda.clone()]);
+        query.filter.add_in(&field, &[panda.clone()]);
 
-        assert_eq!(
-            query.filter.fields[0].field_filter,
-            FieldFilter::Single(panda)
-        );
+        assert_eq!(query.filter.get(0).unwrap().by, FilterBy::Element(panda));
     }
 
     #[test]
     fn merge_element_filters() {
         let mut query = FindMany::default();
-        let field_name: FieldName = "animal".into();
+        let field: Field = "animal".into();
 
         let panda: OperationValue = "panda".into();
         let turtle: OperationValue = "turtle".into();
         let llama: OperationValue = "llama".into();
 
         // We filter multiple elements but add them one-by-one for the same field
-        query.filter.add(&field_name, &panda);
-        query.filter.add(&field_name, &turtle);
-        query.filter.add(&field_name, &llama);
+        query.filter.add(&field, &panda);
+        query.filter.add(&field, &turtle);
+        query.filter.add(&field, &llama);
 
-        assert_eq!(query.filter.fields.len(), 1);
-        assert_eq!(query.filter.fields[0].field_name, field_name);
-        assert_eq!(query.filter.fields[0].exclusive, false);
+        assert_eq!(query.filter.len(), 1);
+        assert_eq!(query.filter.get(0).unwrap().field, field);
+        assert_eq!(query.filter.get(0).unwrap().exclusive, false);
         assert_eq!(
-            query.filter.fields[0].field_filter,
-            FieldFilter::Multiple(vec![panda, turtle, llama])
+            query.filter.get(0).unwrap().by,
+            FilterBy::Set(vec![panda, turtle, llama])
         );
     }
 
     #[test]
     fn merge_multiple_element_filters() {
         let mut query = FindMany::default();
-        let field_name: FieldName = "animal".into();
+        let field: Field = "animal".into();
 
         let panda: OperationValue = "panda".into();
         let turtle: OperationValue = "turtle".into();
@@ -499,58 +482,58 @@ mod tests {
         // We filter multiple elements for the same field
         query
             .filter
-            .add_in(&field_name, &[panda.clone(), turtle.clone()]);
+            .add_in(&field, &[panda.clone(), turtle.clone()]);
         query
             .filter
-            .add_in(&field_name, &[llama.clone(), icebear.clone()]);
-        query.filter.add(&field_name, &penguin);
+            .add_in(&field, &[llama.clone(), icebear.clone()]);
+        query.filter.add(&field, &penguin);
 
-        assert_eq!(query.filter.fields.len(), 1);
+        assert_eq!(query.filter.len(), 1);
         assert_eq!(
-            query.filter.fields[0].field_filter,
-            FieldFilter::Multiple(vec![panda, turtle, llama, icebear, penguin])
+            query.filter.get(0).unwrap().by,
+            FilterBy::Set(vec![panda, turtle, llama, icebear, penguin])
         );
     }
 
     #[test]
     fn merge_range_filters() {
         let mut query = FindMany::default();
-        let field_name: FieldName = "year".into();
+        let field: Field = "year".into();
 
         let from: OperationValue = 2020.into();
         let to: OperationValue = 2023.into();
 
         // We filter over an open interval
-        query.filter.add_gt(&field_name, &from);
-        query.filter.add_lt(&field_name, &to);
+        query.filter.add_gt(&field, &from);
+        query.filter.add_lt(&field, &to);
 
-        assert_eq!(query.filter.fields.len(), 1);
+        assert_eq!(query.filter.len(), 1);
         assert_eq!(
-            query.filter.fields[0].field_filter,
-            FieldFilter::Interval(LowerBound::Greater(from), UpperBound::Lower(to))
+            query.filter.get(0).unwrap().by,
+            FilterBy::Interval(LowerBound::Greater(from), UpperBound::Lower(to))
         );
     }
 
     #[test]
     fn overwrite_range_filters() {
         let mut query = FindMany::default();
-        let field_name: FieldName = "year".into();
+        let field: Field = "year".into();
 
         let from: OperationValue = 2020.into();
         let to: OperationValue = 2023.into();
         let to_new: OperationValue = 2025.into();
 
         // We filter over an open interval
-        query.filter.add_gt(&field_name, &from);
-        query.filter.add_lt(&field_name, &to);
+        query.filter.add_gt(&field, &from);
+        query.filter.add_lt(&field, &to);
 
         // .. and make it half-open afterwards
-        query.filter.add_lte(&field_name, &to_new);
+        query.filter.add_lte(&field, &to_new);
 
-        assert_eq!(query.filter.fields.len(), 1);
+        assert_eq!(query.filter.len(), 1);
         assert_eq!(
-            query.filter.fields[0].field_filter,
-            FieldFilter::Interval(LowerBound::Greater(from), UpperBound::LowerEqual(to_new))
+            query.filter.get(0).unwrap().by,
+            FilterBy::Interval(LowerBound::Greater(from), UpperBound::LowerEqual(to_new))
         );
     }
 }
