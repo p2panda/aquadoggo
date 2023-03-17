@@ -19,6 +19,7 @@ pub type Cursor = String;
 #[derive(Debug, Clone, PartialEq)]
 pub enum MetaField {
     DocumentId,
+    DocumentViewId,
     Owner,
     Edited,
     Deleted,
@@ -28,6 +29,16 @@ pub enum MetaField {
 pub enum Field {
     Meta(MetaField),
     Field(FieldName),
+}
+
+impl Field {
+    pub fn new(name: &FieldName) -> Self {
+        Self::Field(name.to_string())
+    }
+
+    pub fn new_meta(meta: MetaField) -> Self {
+        Self::Meta(meta)
+    }
 }
 
 impl From<&str> for Field {
@@ -104,7 +115,7 @@ pub enum FilterBy {
     Contains(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FilterItem {
     field: Field,
     by: FilterBy,
@@ -121,7 +132,7 @@ impl FilterItem {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Filter(Vec<FilterItem>);
 
 impl Filter {
