@@ -375,16 +375,76 @@ mod tests {
     use p2panda_rs::schema::FieldName;
 
     use super::{
-        Cursor, Direction, Field, FieldFilter, Filter, FilterMeta, Find, FindMany, Order,
-        Pagination,
+        Cursor, Direction, Field, FieldFilter, Filter, FilterMeta, Find, FindMany, LowerBound,
+        Order, Pagination, UpperBound,
     };
 
     #[test]
-    fn convert_single_element_filters() {
+    fn element_filters() {
+        let mut query = FindMany::default();
+        query.filter.add(&"animal".into(), &"panda".into());
+        query
+            .filter
+            .add_in(&"city".into(), &["tokyo".into(), "osaka".into()]);
+
+        assert_eq!(query.filter.fields.len(), 2);
+        assert_eq!(
+            query.filter.fields[0].field_filter,
+            FieldFilter::Single("panda".into())
+        );
+        assert_eq!(
+            query.filter.fields[1].field_filter,
+            FieldFilter::Multiple(vec!["tokyo".into(), "osaka".into()])
+        );
+    }
+
+    #[test]
+    fn range_filters() {
+        let mut query = FindMany::default();
+        query.filter.add_gt(&"year".into(), &2004.into());
+        query.filter.add_lte(&"temperature".into(), &15.75.into());
+
+        assert_eq!(query.filter.fields.len(), 2);
+        assert_eq!(
+            query.filter.fields[0].field_filter,
+            FieldFilter::Range(LowerBound::Greater(2004.into()), UpperBound::Unbounded)
+        );
+        assert_eq!(
+            query.filter.fields[1].field_filter,
+            FieldFilter::Range(LowerBound::Unbounded, UpperBound::LowerEqual(15.75.into()))
+        );
+    }
+
+    #[test]
+    fn contains_filters() {
+        let mut query = FindMany::default();
+        query
+            .filter
+            .add_contains(&"description".into(), "Panda is the best");
+        query
+            .filter
+            .add_not_contains(&"description".into(), "Llama");
+
+        assert_eq!(query.filter.fields.len(), 2);
+        assert_eq!(
+            query.filter.fields[0].field_filter,
+            FieldFilter::Contains("Panda is the best".into())
+        );
+        assert_eq!(query.filter.fields[0].exclusive, false,);
+        assert_eq!(
+            query.filter.fields[1].field_filter,
+            FieldFilter::Contains("Llama".into())
+        );
+        assert_eq!(query.filter.fields[1].exclusive, true);
+    }
+
+    #[test]
+    fn convert_single_element_filter() {
         let mut query = FindMany::default();
         let field_name: FieldName = "animal".into();
         let panda: OperationValue = "panda".into();
 
+        // We're filtering "many" elements but the set only contains one
         query.filter.add_in(&field_name, &[panda.clone()]);
 
         assert_eq!(
@@ -402,6 +462,7 @@ mod tests {
         let turtle: OperationValue = "turtle".into();
         let llama: OperationValue = "llama".into();
 
+        // We filter multiple elements but add them one-by-one for the same field
         query.filter.add(&field_name, &panda);
         query.filter.add(&field_name, &turtle);
         query.filter.add(&field_name, &llama);
@@ -426,6 +487,7 @@ mod tests {
         let icebear: OperationValue = "icebear".into();
         let penguin: OperationValue = "penguin".into();
 
+        // We filter multiple elements for the same field
         query
             .filter
             .add_in(&field_name, &[panda.clone(), turtle.clone()]);
@@ -435,11 +497,51 @@ mod tests {
         query.filter.add(&field_name, &penguin);
 
         assert_eq!(query.filter.fields.len(), 1);
-        assert_eq!(query.filter.fields[0].field_name, field_name);
-        assert_eq!(query.filter.fields[0].exclusive, false);
         assert_eq!(
             query.filter.fields[0].field_filter,
             FieldFilter::Multiple(vec![panda, turtle, llama, icebear, penguin])
+        );
+    }
+
+    #[test]
+    fn merge_range_filters() {
+        let mut query = FindMany::default();
+        let field_name: FieldName = "year".into();
+
+        let from: OperationValue = 2020.into();
+        let to: OperationValue = 2023.into();
+
+        // We filter over an open interval
+        query.filter.add_gt(&field_name, &from);
+        query.filter.add_lt(&field_name, &to);
+
+        assert_eq!(query.filter.fields.len(), 1);
+        assert_eq!(
+            query.filter.fields[0].field_filter,
+            FieldFilter::Range(LowerBound::Greater(from), UpperBound::Lower(to))
+        );
+    }
+
+    #[test]
+    fn overwrite_range_filters() {
+        let mut query = FindMany::default();
+        let field_name: FieldName = "year".into();
+
+        let from: OperationValue = 2020.into();
+        let to: OperationValue = 2023.into();
+        let to_new: OperationValue = 2025.into();
+
+        // We filter over an open interval
+        query.filter.add_gt(&field_name, &from);
+        query.filter.add_lt(&field_name, &to);
+
+        // .. and make it half-open afterwards
+        query.filter.add_lte(&field_name, &to_new);
+
+        assert_eq!(query.filter.fields.len(), 1);
+        assert_eq!(
+            query.filter.fields[0].field_filter,
+            FieldFilter::Range(LowerBound::Greater(from), UpperBound::LowerEqual(to_new))
         );
     }
 }
