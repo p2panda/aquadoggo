@@ -13,6 +13,10 @@ use crate::network::identity::Identity;
 /// Key pair file name.
 const KEY_PAIR_FILE_NAME: &str = "private-key";
 
+// TODO: make the namespace dynamic (ie. can be user-assigned)
+/// The namespace used by the `identify` network behaviour.
+pub const NODE_NAMESPACE: &str = "aquadoggo";
+
 /// Network config for the node.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct NetworkConfiguration {
@@ -72,6 +76,22 @@ pub struct NetworkConfiguration {
 
     /// The addresses of remote peers to replicate from.
     pub remote_peers: Vec<String>,
+
+    /// Rendezvous client behaviour enabled.
+    ///
+    /// Connect to a rendezvous point, register the local node and query addresses of remote peers.
+    pub rendezvous_client: bool,
+
+    /// Rendezvous server behaviour enabled.
+    ///
+    /// Serve as a rendezvous point for peer discovery, allowing peer registration and queries.
+    pub rendezvous_server: bool,
+
+    /// Address of a rendezvous server in the form of a multiaddress.
+    pub rendezvous_address: Option<String>,
+
+    /// Peer ID of a rendezvous server.
+    pub rendezvous_peer_id: Option<String>,
 }
 
 impl Default for NetworkConfiguration {
@@ -89,6 +109,10 @@ impl Default for NetworkConfiguration {
             ping: false,
             quic_port: 2022,
             remote_peers: Vec::new(),
+            rendezvous_client: false,
+            rendezvous_server: false,
+            rendezvous_address: None,
+            rendezvous_peer_id: None,
         }
     }
 }

@@ -34,6 +34,27 @@ struct Cli {
     /// Enable ping for connected peers (send and receive ping packets), true by default.
     #[arg(long)]
     ping: Option<bool>,
+
+    /// Enable rendezvous client to facilitate peer discovery via a rendezvous server, false by default.
+    #[arg(short = 'C', long)]
+    rendezvous_client: Option<bool>,
+
+    /// Enable rendezvous server to facilitate peer discovery for remote peers, false by default.
+    #[arg(short = 'S', long)]
+    rendezvous_server: Option<bool>,
+
+    /// The IP address of a rendezvous server in the form of a multiaddress.
+    ///
+    /// eg. --rendezvous-address "/ip4/127.0.0.1/udp/12345/quic-v1"
+    #[arg(long)]
+    rendezvous_address: Option<String>,
+
+    /// The peer ID of a rendezvous server in the form of an Ed25519 key encoded as a raw
+    /// base58btc multihash.
+    ///
+    /// eg. --rendezvous-peer-id "12D3KooWD3eckifWpRn9wQpMG9R9hX3sD158z7EqHWmweQAJU5SA"
+    #[arg(long)]
+    rendezvous_peer_id: Option<String>,
 }
 
 impl TryFrom<Cli> for Configuration {
@@ -48,6 +69,10 @@ impl TryFrom<Cli> for Configuration {
             ping: cli.ping.unwrap_or(true),
             quic_port: cli.quic_port.unwrap_or(2022),
             remote_peers: cli.remote_node_addresses,
+            rendezvous_client: cli.rendezvous_client.unwrap_or(false),
+            rendezvous_server: cli.rendezvous_server.unwrap_or(false),
+            rendezvous_address: cli.rendezvous_address,
+            rendezvous_peer_id: cli.rendezvous_peer_id,
             ..NetworkConfiguration::default()
         };
 
