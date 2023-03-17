@@ -115,7 +115,7 @@ pub enum LowerBound {
 pub enum FieldFilter {
     Single(OperationValue),
     Multiple(Vec<OperationValue>),
-    Range(LowerBound, UpperBound),
+    Interval(LowerBound, UpperBound),
     Contains(String),
 }
 
@@ -155,9 +155,10 @@ impl Filter {
     /// This is a preparation step to pass on well-formed filters to the database backend, since we
     /// can't make sure that the filters were used "efficiently" by the requesting client.
     ///
-    /// Note that this method does not merge across exclusivity, even though it would be possible
-    /// to merge two filters A: [1, 2] and B: NOT 2, which would result in [1]. This feature can be
-    /// added one day, but for now we keep it simple.
+    /// The logic of this method is that the last setting wins, meaning that if a fil
+    ///
+    /// Note that this method does not merge across exclusivity and does not support multiple
+    /// intervals for one field.
     fn upsert_field(&mut self, new_field: Field) {
         // Check if a field exists we potentially can extend. For this the field needs to:
         // - Have the same field name
@@ -212,14 +213,14 @@ impl Filter {
 
                 Some(FieldFilter::Multiple(elements_a))
             }
-            (FieldFilter::Range(lower_a, upper_a), FieldFilter::Range(lower_b, upper_b)) => {
+            (FieldFilter::Interval(lower_a, upper_a), FieldFilter::Interval(lower_b, upper_b)) => {
                 match (lower_b.clone(), upper_b.clone()) {
                     (LowerBound::Unbounded, UpperBound::Unbounded) => {
-                        Some(FieldFilter::Range(lower_a, upper_a))
+                        Some(FieldFilter::Interval(lower_a, upper_a))
                     }
-                    (LowerBound::Unbounded, _) => Some(FieldFilter::Range(lower_a, upper_b)),
-                    (_, UpperBound::Unbounded) => Some(FieldFilter::Range(lower_b, upper_a)),
-                    _ => Some(FieldFilter::Range(lower_b, upper_b)),
+                    (LowerBound::Unbounded, _) => Some(FieldFilter::Interval(lower_a, upper_b)),
+                    (_, UpperBound::Unbounded) => Some(FieldFilter::Interval(lower_b, upper_a)),
+                    _ => Some(FieldFilter::Interval(lower_b, upper_b)),
                 }
             }
             _ => None,
@@ -286,7 +287,7 @@ impl Filter {
     pub fn add_gt(&mut self, field_name: &FieldName, value: &OperationValue) {
         self.upsert_field(Field::new(
             field_name,
-            FieldFilter::Range(LowerBound::Greater(value.to_owned()), UpperBound::Unbounded),
+            FieldFilter::Interval(LowerBound::Greater(value.to_owned()), UpperBound::Unbounded),
             false,
         ));
     }
@@ -294,7 +295,7 @@ impl Filter {
     pub fn add_gte(&mut self, field_name: &FieldName, value: &OperationValue) {
         self.upsert_field(Field::new(
             field_name,
-            FieldFilter::Range(
+            FieldFilter::Interval(
                 LowerBound::GreaterEqual(value.to_owned()),
                 UpperBound::Unbounded,
             ),
@@ -305,7 +306,7 @@ impl Filter {
     pub fn add_lt(&mut self, field_name: &FieldName, value: &OperationValue) {
         self.upsert_field(Field::new(
             field_name,
-            FieldFilter::Range(LowerBound::Unbounded, UpperBound::Lower(value.to_owned())),
+            FieldFilter::Interval(LowerBound::Unbounded, UpperBound::Lower(value.to_owned())),
             false,
         ));
     }
@@ -313,7 +314,7 @@ impl Filter {
     pub fn add_lte(&mut self, field_name: &FieldName, value: &OperationValue) {
         self.upsert_field(Field::new(
             field_name,
-            FieldFilter::Range(
+            FieldFilter::Interval(
                 LowerBound::Unbounded,
                 UpperBound::LowerEqual(value.to_owned()),
             ),
@@ -415,11 +416,11 @@ mod tests {
         assert_eq!(query.filter.fields.len(), 2);
         assert_eq!(
             query.filter.fields[0].field_filter,
-            FieldFilter::Range(LowerBound::Greater(2004.into()), UpperBound::Unbounded)
+            FieldFilter::Interval(LowerBound::Greater(2004.into()), UpperBound::Unbounded)
         );
         assert_eq!(
             query.filter.fields[1].field_filter,
-            FieldFilter::Range(LowerBound::Unbounded, UpperBound::LowerEqual(15.75.into()))
+            FieldFilter::Interval(LowerBound::Unbounded, UpperBound::LowerEqual(15.75.into()))
         );
     }
 
@@ -526,7 +527,7 @@ mod tests {
         assert_eq!(query.filter.fields.len(), 1);
         assert_eq!(
             query.filter.fields[0].field_filter,
-            FieldFilter::Range(LowerBound::Greater(from), UpperBound::Lower(to))
+            FieldFilter::Interval(LowerBound::Greater(from), UpperBound::Lower(to))
         );
     }
 
@@ -549,7 +550,7 @@ mod tests {
         assert_eq!(query.filter.fields.len(), 1);
         assert_eq!(
             query.filter.fields[0].field_filter,
-            FieldFilter::Range(LowerBound::Greater(from), UpperBound::LowerEqual(to_new))
+            FieldFilter::Interval(LowerBound::Greater(from), UpperBound::LowerEqual(to_new))
         );
     }
 }
