@@ -97,21 +97,21 @@ impl Default for FilterMeta {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum UpperBound {
     Unbounded,
     Lower(OperationValue),
     LowerEqual(OperationValue),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum LowerBound {
     Unbounded,
     Greater(OperationValue),
     GreaterEqual(OperationValue),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum FieldFilter {
     Single(OperationValue),
     Multiple(Vec<OperationValue>),
@@ -195,14 +195,14 @@ impl Filter {
 
                 Some(FieldFilter::Multiple(elements))
             }
-            (FieldFilter::Multiple(elements_a), FieldFilter::Multiple(mut elements_b)) => {
-                for element in elements_a {
-                    if !elements_b.contains(&element) {
-                        elements_b.push(element);
+            (FieldFilter::Multiple(mut elements_a), FieldFilter::Multiple(elements_b)) => {
+                for element in elements_b {
+                    if !elements_a.contains(&element) {
+                        elements_a.push(element);
                     }
                 }
 
-                Some(FieldFilter::Multiple(elements_b))
+                Some(FieldFilter::Multiple(elements_a))
             }
             (FieldFilter::Range(lower_a, upper_a), FieldFilter::Range(lower_b, upper_b)) => {
                 match (lower_b.clone(), upper_b.clone()) {
@@ -244,19 +244,35 @@ impl Filter {
     }
 
     pub fn add_in(&mut self, field_name: &FieldName, values: &[OperationValue]) {
-        self.upsert_field(Field::new(
-            field_name,
-            FieldFilter::Multiple(values.to_owned()),
-            false,
-        ));
+        if values.len() == 1 {
+            self.upsert_field(Field::new(
+                field_name,
+                FieldFilter::Single(values[0].to_owned()),
+                false,
+            ));
+        } else {
+            self.upsert_field(Field::new(
+                field_name,
+                FieldFilter::Multiple(values.to_owned()),
+                false,
+            ));
+        }
     }
 
     pub fn add_not_in(&mut self, field_name: &FieldName, values: &[OperationValue]) {
-        self.upsert_field(Field::new(
-            field_name,
-            FieldFilter::Multiple(values.to_owned()),
-            true,
-        ));
+        if values.len() == 1 {
+            self.upsert_field(Field::new(
+                field_name,
+                FieldFilter::Single(values[0].to_owned()),
+                true,
+            ));
+        } else {
+            self.upsert_field(Field::new(
+                field_name,
+                FieldFilter::Multiple(values.to_owned()),
+                true,
+            ));
+        }
     }
 
     pub fn add_gt(&mut self, field_name: &FieldName, value: &OperationValue) {
@@ -355,12 +371,63 @@ impl SqlStore {
 
 #[cfg(test)]
 mod tests {
+    use p2panda_rs::operation::OperationValue;
+    use p2panda_rs::schema::FieldName;
+
     use super::{
-        Cursor, Direction, FieldFilter, Filter, FilterMeta, Find, FindMany, Order, Pagination,
+        Cursor, Direction, Field, FieldFilter, Filter, FilterMeta, Find, FindMany, Order,
+        Pagination,
     };
 
     #[test]
-    fn nice_api() {
+    fn merge_element_filters() {
         let mut query = FindMany::default();
+
+        let field_name: FieldName = "animal".into();
+
+        let panda: OperationValue = "panda".into();
+        let turtle: OperationValue = "turtle".into();
+        let llama: OperationValue = "llama".into();
+
+        query.filter.add(&field_name, &panda);
+        query.filter.add(&field_name, &turtle);
+        query.filter.add(&field_name, &llama);
+
+        assert_eq!(query.filter.fields.len(), 1);
+        assert_eq!(query.filter.fields[0].field_name, field_name);
+        assert_eq!(query.filter.fields[0].exclusive, false);
+        assert_eq!(
+            query.filter.fields[0].field_filter,
+            FieldFilter::Multiple(vec![panda, turtle, llama])
+        );
+    }
+
+    #[test]
+    fn merge_multiple_element_filters() {
+        let mut query = FindMany::default();
+
+        let field_name: FieldName = "animal".into();
+
+        let panda: OperationValue = "panda".into();
+        let turtle: OperationValue = "turtle".into();
+        let llama: OperationValue = "llama".into();
+        let icebear: OperationValue = "icebear".into();
+        let penguin: OperationValue = "penguin".into();
+
+        query
+            .filter
+            .add_in(&field_name, &[panda.clone(), turtle.clone()]);
+        query
+            .filter
+            .add_in(&field_name, &[llama.clone(), icebear.clone()]);
+        query.filter.add(&field_name, &penguin);
+
+        assert_eq!(query.filter.fields.len(), 1);
+        assert_eq!(query.filter.fields[0].field_name, field_name);
+        assert_eq!(query.filter.fields[0].exclusive, false);
+        assert_eq!(
+            query.filter.fields[0].field_filter,
+            FieldFilter::Multiple(vec![panda, turtle, llama, icebear, penguin])
+        );
     }
 }
