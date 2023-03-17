@@ -380,9 +380,22 @@ mod tests {
     };
 
     #[test]
+    fn convert_single_element_filters() {
+        let mut query = FindMany::default();
+        let field_name: FieldName = "animal".into();
+        let panda: OperationValue = "panda".into();
+
+        query.filter.add_in(&field_name, &[panda.clone()]);
+
+        assert_eq!(
+            query.filter.fields[0].field_filter,
+            FieldFilter::Single(panda)
+        );
+    }
+
+    #[test]
     fn merge_element_filters() {
         let mut query = FindMany::default();
-
         let field_name: FieldName = "animal".into();
 
         let panda: OperationValue = "panda".into();
@@ -405,7 +418,6 @@ mod tests {
     #[test]
     fn merge_multiple_element_filters() {
         let mut query = FindMany::default();
-
         let field_name: FieldName = "animal".into();
 
         let panda: OperationValue = "panda".into();
