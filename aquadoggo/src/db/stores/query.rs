@@ -2,10 +2,8 @@
 
 //! This module offers a query API to find one or many p2panda documents, filtered or sorted by
 //! custom parameters. Multiple results are paginated.
-use std::collections::HashMap;
 use std::num::NonZeroU64;
 
-use libp2p::identity::PublicKey;
 use p2panda_rs::document::Document;
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::FieldName;
