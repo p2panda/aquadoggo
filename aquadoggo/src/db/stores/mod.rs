@@ -6,5 +6,6 @@ pub mod document;
 mod entry;
 mod log;
 mod operation;
+mod query;
 mod schema;
 mod task;
