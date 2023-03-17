@@ -44,6 +44,8 @@ impl Identity for Keypair {
     }
 
     /// Encode the private key as a hex string and save it to the given file path.
+    // See: https://github.com/p2panda/aquadoggo/issues/295
+    #[allow(deprecated)]
     fn save(&self, path: &Path) -> Result<()> {
         // Retrieve the private key from the key pair
         let private_key = match self {
@@ -65,6 +67,8 @@ impl Identity for Keypair {
     }
 
     /// Load a key pair from file at the given path.
+    // See: https://github.com/p2panda/aquadoggo/issues/295
+    #[allow(deprecated)]
     fn load(path: &Path) -> Result<Self>
     where
         Self: Sized,
