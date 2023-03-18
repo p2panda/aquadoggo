@@ -5,7 +5,8 @@ use std::convert::{TryFrom, TryInto};
 
 use anyhow::Result;
 use aquadoggo::{Configuration, NetworkConfiguration, Node};
-use clap::Parser;
+use clap::error::ErrorKind as ClapErrorKind;
+use clap::{CommandFactory, Parser};
 
 #[derive(Parser, Debug)]
 #[command(name = "aquadoggo Node", version)]
@@ -57,6 +58,28 @@ struct Cli {
     rendezvous_peer_id: Option<String>,
 }
 
+impl Cli {
+    // Run custom validators on parsed CLI input
+    fn validate(self) -> Self {
+        // Ensure rendezvous server address and peer ID are both provided if
+        // rendezvous client mode has been set to `true`. Both values are required
+        // to dial the rendezvous server.
+        if let Some(true) = self.rendezvous_client {
+            if self.rendezvous_address.is_none() || self.rendezvous_peer_id.is_none() {
+                // Print a help message about the missing value(s) and exit
+                Cli::command()
+                .error(
+                    ClapErrorKind::MissingRequiredArgument,
+                    "'--rendezvous-address' and '--rendezvous-peer-id' must both be provided if '--rendezvous-client true'",
+                )
+                .exit()
+            }
+        }
+
+        self
+    }
+}
+
 impl TryFrom<Cli> for Configuration {
     type Error = anyhow::Error;
 
@@ -84,8 +107,10 @@ impl TryFrom<Cli> for Configuration {
 async fn main() {
     env_logger::init();
 
-    // Parse command line arguments and load configuration
-    let cli = Cli::parse();
+    // Parse command line arguments and run custom validators
+    let cli = Cli::parse().validate();
+
+    // Load configuration parameters and apply defaults
     let config = cli.try_into().expect("Could not load configuration");
 
     // Start p2panda node in async runtime
