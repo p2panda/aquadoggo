@@ -245,7 +245,15 @@ pub async fn network_service(
                                     );
                             }
                         }
-                        other => debug!("Unhandled identify event: {:?}", other),
+                        identify::Event::Sent { peer_id } | identify::Event::Pushed { peer_id } => {
+                            debug!(
+                                "Sent identification information of the local node to peer {}",
+                                peer_id
+                            )
+                        }
+                        identify::Event::Error { peer_id, error } => {
+                            warn!("Failed to identify the remote peer {}: {}", peer_id, error)
+                        }
                     }
                 }
             }
