@@ -197,6 +197,9 @@ pub async fn network_service(
                             }
                         }
                     }
+                    rendezvous::client::Event::RegisterFailed(error) => {
+                        warn!("Failed to register with rendezvous server: {}", error);
+                    }
                     other => debug!("Unhandled rendezvous client event: {:?}", other),
                 },
                 SwarmEvent::Behaviour(BehaviourEvent::RendezvousServer(event)) => match event {
