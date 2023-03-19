@@ -5,6 +5,7 @@ use std::convert::TryInto;
 use anyhow::Result;
 use futures::StreamExt;
 use libp2p::core::muxing::StreamMuxerBox;
+use libp2p::multiaddr::Protocol;
 use libp2p::ping::Event;
 use libp2p::swarm::{SwarmBuilder, SwarmEvent};
 use libp2p::{identify, mdns, quic, rendezvous, Multiaddr, PeerId, Transport};
@@ -88,7 +89,10 @@ pub async fn network_service(
         swarm.dial(remote)?;
     }
 
-    // Spawn a task logging swarm events
+    // Create a cookie holder for the identify service
+    let mut cookie = None;
+
+    // Spawn a task to handle swarm events
     let handle = tokio::spawn(async move {
         loop {
             match swarm.select_next_some().await {
@@ -165,6 +169,33 @@ pub async fn network_service(
                         rendezvous_node,
                     } => {
                         debug!("Registered for namespace '{namespace}' at rendezvous point {rendezvous_node} for the next {ttl} seconds")
+                    }
+                    rendezvous::client::Event::Discovered {
+                        registrations,
+                        cookie: new_cookie,
+                        ..
+                    } => {
+                        debug!("Rendezvous server responded with peer registration data");
+
+                        cookie.replace(new_cookie);
+
+                        for registration in registrations {
+                            for address in registration.record.addresses() {
+                                let peer = registration.record.peer_id();
+                                debug!("Discovered peer {} at {}", peer, address);
+
+                                let p2p_suffix = Protocol::P2p(*peer.as_ref());
+                                let address_with_p2p = if !address
+                                    .ends_with(&Multiaddr::empty().with(p2p_suffix.clone()))
+                                {
+                                    address.clone().with(p2p_suffix)
+                                } else {
+                                    address.clone()
+                                };
+
+                                swarm.dial(address_with_p2p).unwrap();
+                            }
+                        }
                     }
                     other => debug!("Unhandled rendezvous client event: {:?}", other),
                 },
