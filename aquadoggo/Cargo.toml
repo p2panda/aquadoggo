@@ -39,7 +39,8 @@ libp2p = { version = "^0.51.0", features = [
     "ping",
     "mdns",
     "identify",
-    "rendezvous"
+    "rendezvous",
+    "serde",
 ] }
 lipmaa-link = "^0.2.2"
 log = "^0.4.17"
