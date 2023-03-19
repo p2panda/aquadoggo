@@ -7,6 +7,7 @@ use anyhow::Result;
 use aquadoggo::{Configuration, NetworkConfiguration, Node};
 use clap::error::ErrorKind as ClapErrorKind;
 use clap::{CommandFactory, Parser};
+use libp2p::{Multiaddr, PeerId};
 
 #[derive(Parser, Debug)]
 #[command(name = "aquadoggo Node", version)]
@@ -26,7 +27,7 @@ struct Cli {
 
     /// URLs of remote nodes to replicate with.
     #[arg(short, long)]
-    remote_node_addresses: Vec<String>,
+    remote_node_addresses: Vec<Multiaddr>,
 
     /// Enable mDNS for peer discovery over LAN (using port 5353), true by default.
     #[arg(short, long)]
@@ -48,14 +49,14 @@ struct Cli {
     ///
     /// eg. --rendezvous-address "/ip4/127.0.0.1/udp/12345/quic-v1"
     #[arg(long)]
-    rendezvous_address: Option<String>,
+    rendezvous_address: Option<Multiaddr>,
 
     /// The peer ID of a rendezvous server in the form of an Ed25519 key encoded as a raw
     /// base58btc multihash.
     ///
     /// eg. --rendezvous-peer-id "12D3KooWD3eckifWpRn9wQpMG9R9hX3sD158z7EqHWmweQAJU5SA"
     #[arg(long)]
-    rendezvous_peer_id: Option<String>,
+    rendezvous_peer_id: Option<PeerId>,
 }
 
 impl Cli {

@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use libp2p::identity::Keypair;
 use libp2p::swarm::ConnectionLimits;
+use libp2p::{Multiaddr, PeerId};
 use log::info;
 use serde::{Deserialize, Serialize};
 
@@ -75,7 +76,7 @@ pub struct NetworkConfiguration {
     pub quic_port: u16,
 
     /// The addresses of remote peers to replicate from.
-    pub remote_peers: Vec<String>,
+    pub remote_peers: Vec<Multiaddr>,
 
     /// Rendezvous client behaviour enabled.
     ///
@@ -88,10 +89,10 @@ pub struct NetworkConfiguration {
     pub rendezvous_server: bool,
 
     /// Address of a rendezvous server in the form of a multiaddress.
-    pub rendezvous_address: Option<String>,
+    pub rendezvous_address: Option<Multiaddr>,
 
     /// Peer ID of a rendezvous server.
-    pub rendezvous_peer_id: Option<String>,
+    pub rendezvous_peer_id: Option<PeerId>,
 }
 
 impl Default for NetworkConfiguration {

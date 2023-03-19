@@ -66,27 +66,14 @@ pub async fn network_service(
     // Listen for incoming connection requests over the QUIC transport
     swarm.listen_on(quic_multiaddr)?;
 
-    // Dial the peer identified by the multi-address given in the `--remote-node-addresses` if given
-    if let Some(addr) = network_config.remote_peers.get(0) {
-        let remote: Multiaddr = addr.parse()?;
-        swarm.dial(remote)?;
+    // Dial each peer identified by the multi-address provided via `--remote-node-addresses` if given
+    for addr in network_config.remote_peers.clone() {
+        swarm.dial(addr)?
     }
 
-    // TODO: find a more elegant solution...this is super hacky
-    // The rendezvous server peer ID will only be used if the local node is set as a rendezvous
-    // client. I'm creating a random ID as a fallback here so I can avoid an unwrap in the swarm
-    // event loop
-    let rendezvous_server_peer_id = if let Some(peer_id) = network_config.rendezvous_peer_id.clone()
-    {
-        peer_id.parse()?
-    } else {
-        PeerId::random()
-    };
-
-    // Dial the peer identified by the multi-address given in the `--rendezvous_address` if given
+    // Dial the peer identified by the multi-address provided via `--rendezvous_address` if given
     if let Some(addr) = network_config.rendezvous_address.clone() {
-        let remote: Multiaddr = addr.parse()?;
-        swarm.dial(remote)?;
+        swarm.dial(addr)?;
     }
 
     // Create a cookie holder for the identify service
@@ -240,7 +227,9 @@ pub async fn network_service(
                                     .unwrap()
                                     .register(
                                         rendezvous::Namespace::from_static(NODE_NAMESPACE),
-                                        rendezvous_server_peer_id,
+                                        network_config
+                                            .rendezvous_peer_id
+                                            .expect("Rendezvous server peer ID was provided"),
                                         None,
                                     );
                             }
