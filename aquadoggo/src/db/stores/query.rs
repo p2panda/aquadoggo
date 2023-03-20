@@ -5,7 +5,7 @@
 use p2panda_rs::document::Document;
 
 use crate::db::errors::QueryError;
-use crate::db::query::{Filter, Order, Pagination};
+use crate::db::query::{Cursor, Filter, Order, Pagination};
 use crate::db::SqlStore;
 
 #[derive(Default, Debug, Clone)]
@@ -15,8 +15,11 @@ pub struct Find {
 }
 
 #[derive(Default, Debug, Clone)]
-pub struct FindMany {
-    pub pagination: Pagination,
+pub struct FindMany<C>
+where
+    C: Cursor,
+{
+    pub pagination: Pagination<C>,
     pub filter: Filter,
     pub order: Order,
 }
@@ -26,7 +29,10 @@ impl SqlStore {
         todo!();
     }
 
-    pub async fn find_many(&self, args: &FindMany) -> Result<Vec<Document>, QueryError> {
+    pub async fn find_many<C: Cursor>(
+        &self,
+        args: &FindMany<C>,
+    ) -> Result<Vec<Document>, QueryError> {
         todo!();
     }
 }
@@ -55,7 +61,8 @@ mod tests {
     #[test]
     fn find_many_getters_and_setters() {
         let order = Order::new(&Field::Meta(MetaField::Owner), &Direction::Descending);
-        let pagination = Pagination::new(&NonZeroU64::new(50).unwrap(), Some(&"cursor".into()));
+        let pagination =
+            Pagination::<String>::new(&NonZeroU64::new(50).unwrap(), Some(&"cursor".into()));
 
         let query = FindMany {
             order: order.clone(),

@@ -9,5 +9,5 @@ mod validate;
 pub use field::{Field, MetaField};
 pub use filter::Filter;
 pub use order::{Direction, Order};
-pub use pagination::Pagination;
+pub use pagination::{Cursor, Pagination};
 pub use validate::validate_query;
