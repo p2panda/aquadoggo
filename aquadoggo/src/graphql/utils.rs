@@ -4,7 +4,7 @@ use async_graphql::dynamic::{ResolverContext, TypeRef};
 use async_graphql::Value;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::operation::OperationValue;
-use p2panda_rs::schema::{SchemaId, FieldType};
+use p2panda_rs::schema::{FieldType, SchemaId};
 use p2panda_rs::storage_provider::error::DocumentStorageError;
 use p2panda_rs::storage_provider::traits::DocumentStore;
 

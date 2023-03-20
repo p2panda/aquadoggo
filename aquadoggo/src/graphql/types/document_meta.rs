@@ -21,14 +21,14 @@ pub struct DocumentMeta {
 
 impl DocumentMeta {
     /// Resolve `DocumentMeta` as a graphql `FieldValue`.
-    /// 
-    /// Requires a `ResolverContext` to be passed into the method. 
+    ///
+    /// Requires a `ResolverContext` to be passed into the method.
     pub async fn resolve<'a>(ctx: ResolverContext<'a>) -> Result<Option<FieldValue<'a>>, Error> {
         let store = ctx.data_unchecked::<SqlStore>();
 
         // Downcast the parameters passed up from the parent query field
         let (document_id, document_view_id) = downcast_document_id_arguments(&ctx);
-        
+
         // Get the whole document
         let document = get_document_from_params(store, &document_id, &document_view_id).await?;
 

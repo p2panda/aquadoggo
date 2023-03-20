@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use async_graphql::dynamic::{Field, FieldFuture, InputValue, Object, ResolverContext, TypeRef};
 use async_graphql::Error;
-use async_graphql::dynamic::{Field, FieldFuture, InputValue, Object, TypeRef, ResolverContext};
 use dynamic_graphql::ScalarValue;
 use log::debug;
 
-use crate::db::SqlStore;
 use crate::graphql::constants;
 use crate::graphql::scalars::{DocumentViewIdScalar, PublicKeyScalar};
 use crate::graphql::types::NextArguments;
@@ -16,9 +15,12 @@ pub fn build_next_args_query(query: Object) -> Object {
         Field::new(
             constants::NEXT_ARGS_QUERY,
             TypeRef::named(constants::NEXT_ARGS),
-            |ctx| FieldFuture::new(async move { 
-                validate_args(&ctx)?;
-                NextArguments::resolve(ctx).await }),
+            |ctx| {
+                FieldFuture::new(async move {
+                    validate_args(&ctx)?;
+                    NextArguments::resolve(ctx).await
+                })
+            },
         )
         .argument(InputValue::new(
             constants::PUBLIC_KEY_ARG,
@@ -32,7 +34,9 @@ pub fn build_next_args_query(query: Object) -> Object {
     )
 }
 
-fn validate_args<'a>(ctx: &ResolverContext<'a>) -> Result<(PublicKeyScalar, Option<DocumentViewIdScalar>), Error> {
+fn validate_args<'a>(
+    ctx: &ResolverContext<'a>,
+) -> Result<(PublicKeyScalar, Option<DocumentViewIdScalar>), Error> {
     let mut args = ctx.field().arguments()?.into_iter().map(|(_, value)| value);
 
     // Convert and validate passed parameters.
@@ -53,9 +57,7 @@ fn validate_args<'a>(ctx: &ResolverContext<'a>) -> Result<(PublicKeyScalar, Opti
     };
 
     Ok((public_key, document_view_id))
-
 }
-
 
 #[cfg(test)]
 mod tests {

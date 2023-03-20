@@ -11,7 +11,7 @@ use crate::graphql::utils::{downcast_document_id_arguments, fields_name};
 /// GraphQL object which represents a document type which contains `fields` and `meta` fields. A
 /// type is added to the root GraphQL schema for every document, as these types are not known at
 /// compile time we make use of the `async-graphql ` `dynamic` module.
-/// 
+///
 /// See `DocumentFields` and `DocumentMeta` to see the shape of the children field types.
 pub struct Document;
 

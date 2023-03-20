@@ -2,7 +2,7 @@
 
 use async_graphql::dynamic::{Field, FieldFuture, InputValue, Object, ResolverContext, TypeRef};
 use async_graphql::Error;
-use dynamic_graphql::{ScalarValue, FieldValue};
+use dynamic_graphql::{FieldValue, ScalarValue};
 use log::debug;
 use p2panda_rs::schema::Schema;
 

@@ -13,12 +13,14 @@ use tokio::sync::Mutex;
 use crate::bus::ServiceSender;
 use crate::db::SqlStore;
 use crate::graphql::mutations::{MutationRoot, Publish};
+use crate::graphql::queries::{
+    build_all_documents_query, build_document_query, build_next_args_query,
+};
 use crate::graphql::scalars::{
     DocumentIdScalar, DocumentViewIdScalar, EncodedEntryScalar, EncodedOperationScalar,
     EntryHashScalar, LogIdScalar, PublicKeyScalar, SeqNumScalar,
 };
-use crate::graphql::queries::{build_next_args_query, build_document_query, build_all_documents_query};
-use crate::graphql::types::{DocumentMeta, NextArguments, Document, DocumentFields};
+use crate::graphql::types::{Document, DocumentFields, DocumentMeta, NextArguments};
 use crate::schema::SchemaProvider;
 
 /// Returns GraphQL API schema for p2panda node.
