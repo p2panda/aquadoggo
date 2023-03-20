@@ -18,17 +18,25 @@ pub enum Field {
 }
 
 impl Field {
-    pub fn new(name: &FieldName) -> Self {
+    pub fn new(name: &str) -> Self {
         Self::Field(name.to_string())
-    }
-
-    pub fn new_meta(meta: MetaField) -> Self {
-        Self::Meta(meta)
     }
 }
 
 impl From<&str> for Field {
     fn from(value: &str) -> Self {
         Self::Field(value.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Field;
+
+    #[test]
+    fn create_field_from_str() {
+        let field: Field = "message".into();
+        assert_eq!(field, Field::new("message"));
+        assert_eq!(Field::Field("favorite".to_string()), Field::new("favorite"));
     }
 }
