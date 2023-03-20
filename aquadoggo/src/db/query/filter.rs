@@ -47,6 +47,7 @@ impl FilterItem {
         }
     }
 
+    // @TODO: Can we separate this better? This is already introducing a notion of GraphQL
     pub fn from_field_str(key: &str, value: &[OperationValue]) -> Result<Self> {
         let (field_name, by, exclusive) = parse_str(key, value)?;
 
@@ -57,6 +58,7 @@ impl FilterItem {
         })
     }
 
+    // @TODO: Can we separate this better? This is already introducing a notion of GraphQL
     pub fn from_meta_str(key: &str, value: &[OperationValue]) -> Result<Self> {
         let (field_name, by, exclusive) = parse_str(key, value)?;
         let meta_field = field_name.as_str().try_into()?;
