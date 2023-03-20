@@ -11,6 +11,8 @@ use p2panda_rs::storage_provider::traits::DocumentStore;
 use crate::db::{types::StorageDocument, SqlStore};
 use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
 
+use super::scalars::PublicKeyScalar;
+
 const DOCUMENT_FIELDS_SUFFIX: &str = "Fields";
 
 // Correctly formats the name of a document field type.
@@ -55,11 +57,22 @@ pub fn graphql_type(field_type: &FieldType) -> TypeRef {
 
 /// Downcast document id and document view id from parameters passed up the query fields and
 /// retrieved via the `ResolverContext`.
-pub fn downcast_id_params(
+pub fn downcast_document_id_arguments(
     ctx: &ResolverContext,
 ) -> (Option<DocumentIdScalar>, Option<DocumentViewIdScalar>) {
     ctx.parent_value
         .downcast_ref::<(Option<DocumentIdScalar>, Option<DocumentViewIdScalar>)>()
+        .expect("Values passed from query parent should match expected")
+        .to_owned()
+}
+
+/// Downcast document id and document view id from parameters passed up the query fields and
+/// retrieved via the `ResolverContext`.
+pub fn downcast_next_args_arguments(
+    ctx: &ResolverContext,
+) -> (PublicKeyScalar, Option<DocumentViewIdScalar>) {
+    ctx.parent_value
+        .downcast_ref::<(PublicKeyScalar, Option<DocumentViewIdScalar>)>()
         .expect("Values passed from query parent should match expected")
         .to_owned()
 }

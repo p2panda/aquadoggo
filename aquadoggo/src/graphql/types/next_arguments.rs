@@ -9,6 +9,7 @@ use crate::db::SqlStore;
 use crate::graphql::scalars::{
     DocumentViewIdScalar, EntryHashScalar, LogIdScalar, PublicKeyScalar, SeqNumScalar,
 };
+use crate::graphql::utils::downcast_next_args_arguments;
 
 /// Arguments required to sign and encode the next entry for a public_key.
 #[derive(SimpleObject)]
@@ -29,27 +30,11 @@ pub struct NextArguments {
 }
 
 impl NextArguments {
+    /// Resolve `NextArgs` from a resolver context and it's contained arguments.
     pub async fn resolve<'a>(ctx: ResolverContext<'a>) -> Result<Option<FieldValue<'a>>, Error> {
-        let mut args = ctx.field().arguments()?.into_iter().map(|(_, value)| value);
-        let store = ctx.data::<SqlStore>()?;
-
-        // Convert and validate passed parameters.
-        let public_key = PublicKeyScalar::from_value(args.next().unwrap())?;
-        let document_view_id = match args.next() {
-            Some(value) => {
-                let document_view_id = DocumentViewIdScalar::from_value(value)?;
-                debug!(
-                    "Query to nextArgs received for public key {} and document at view {}",
-                    public_key, document_view_id
-                );
-                Some(document_view_id)
-            }
-            None => {
-                debug!("Query to nextArgs received for public key {}", public_key);
-                None
-            }
-        };
-
+        let (public_key, document_view_id) = downcast_next_args_arguments(&ctx);
+        let store = ctx.data_unchecked::<SqlStore>();
+        
         // Calculate next entry's arguments.
         let (backlink, skiplink, seq_num, log_id) = api::next_args(
             store,

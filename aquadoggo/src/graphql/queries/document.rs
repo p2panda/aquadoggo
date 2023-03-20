@@ -2,13 +2,12 @@
 
 use async_graphql::dynamic::{Field, FieldFuture, InputValue, Object, ResolverContext, TypeRef};
 use async_graphql::Error;
-use dynamic_graphql::ScalarValue;
+use dynamic_graphql::{ScalarValue, FieldValue};
 use log::debug;
-use p2panda_rs:: schema::Schema;
+use p2panda_rs::schema::Schema;
 
 use crate::graphql::constants;
 use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
-use crate::graphql::types::Document;
 
 /// Adds GraphQL query for getting a single p2panda document, selected by its document id or
 /// document view id to the root query object.
@@ -22,8 +21,11 @@ pub fn build_document_query(query: Object, schema: &Schema) -> Object {
             TypeRef::named(schema_id.to_string()),
             move |ctx| {
                 FieldFuture::new(async move {
-                    validate_args(&ctx)?;
-                    Document::resolve(ctx).await
+                    // Validate the received arguments.
+                    let args = validate_args(&ctx)?;
+
+                    // Pass them up to the children query fields.
+                    Ok(Some(FieldValue::owned_any(args)))
                 })
             },
         )
@@ -42,7 +44,9 @@ pub fn build_document_query(query: Object, schema: &Schema) -> Object {
     )
 }
 
-fn validate_args<'a>(ctx: &ResolverContext<'a>) -> Result<(), Error> {
+fn validate_args<'a>(
+    ctx: &ResolverContext<'a>,
+) -> Result<(Option<DocumentIdScalar>, Option<DocumentViewIdScalar>), Error> {
     // Parse arguments
     let schema_id = ctx.field().name();
     let mut document_id = None;
@@ -76,7 +80,7 @@ fn validate_args<'a>(ctx: &ResolverContext<'a>) -> Result<(), Error> {
         }
     };
 
-    Ok(())
+    Ok((document_id, document_view_id))
 }
 
 #[cfg(test)]

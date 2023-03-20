@@ -1,8 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use async_graphql::dynamic::{Field, FieldFuture, InputValue, Object, TypeRef};
+use async_graphql::Error;
+use async_graphql::dynamic::{Field, FieldFuture, InputValue, Object, TypeRef, ResolverContext};
+use dynamic_graphql::ScalarValue;
+use log::debug;
 
+use crate::db::SqlStore;
 use crate::graphql::constants;
+use crate::graphql::scalars::{DocumentViewIdScalar, PublicKeyScalar};
 use crate::graphql::types::NextArguments;
 
 /// Add "nextArgs" to the query object.
@@ -11,7 +16,9 @@ pub fn build_next_args_query(query: Object) -> Object {
         Field::new(
             constants::NEXT_ARGS_QUERY,
             TypeRef::named(constants::NEXT_ARGS),
-            |ctx| FieldFuture::new(async move { NextArguments::resolve(ctx).await }),
+            |ctx| FieldFuture::new(async move { 
+                validate_args(&ctx)?;
+                NextArguments::resolve(ctx).await }),
         )
         .argument(InputValue::new(
             constants::PUBLIC_KEY_ARG,
@@ -24,6 +31,31 @@ pub fn build_next_args_query(query: Object) -> Object {
         .description("Return required arguments for publishing the next entry."),
     )
 }
+
+fn validate_args<'a>(ctx: &ResolverContext<'a>) -> Result<(PublicKeyScalar, Option<DocumentViewIdScalar>), Error> {
+    let mut args = ctx.field().arguments()?.into_iter().map(|(_, value)| value);
+
+    // Convert and validate passed parameters.
+    let public_key = PublicKeyScalar::from_value(args.next().unwrap())?;
+    let document_view_id = match args.next() {
+        Some(value) => {
+            let document_view_id = DocumentViewIdScalar::from_value(value)?;
+            debug!(
+                "Query to nextArgs received for public key {} and document at view {}",
+                public_key, document_view_id
+            );
+            Some(document_view_id)
+        }
+        None => {
+            debug!("Query to nextArgs received for public key {}", public_key);
+            None
+        }
+    };
+
+    Ok((public_key, document_view_id))
+
+}
+
 
 #[cfg(test)]
 mod tests {

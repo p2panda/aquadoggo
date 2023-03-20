@@ -4,10 +4,10 @@ use async_graphql::dynamic::{Field, FieldFuture, Object, ResolverContext, TypeRe
 use async_graphql::Error;
 use dynamic_graphql::FieldValue;
 use log::debug;
+use p2panda_rs::document::traits::AsDocument;
+use p2panda_rs::schema::Schema;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::DocumentStore;
-use p2panda_rs::schema::Schema;
-use p2panda_rs::document::traits::AsDocument;
 
 use crate::db::SqlStore;
 use crate::graphql::constants;
@@ -24,16 +24,31 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
             format!("{}{}", constants::QUERY_ALL_PREFIX, schema_id),
             TypeRef::named_list(schema_id.to_string()),
             move |ctx| {
+                // Take ownership of the schema id in the resolver.
                 let schema_id = schema_id.clone();
-                FieldFuture::new(async move {
-                    debug!(
-                        "Query to {}{} received",
-                        constants::QUERY_ALL_PREFIX,
-                        schema_id
-                    );
 
-                    // Resolve documents.
-                    let documents = resolve_documents(&ctx, &schema_id).await?;
+                debug!(
+                    "Query to {}{} received",
+                    constants::QUERY_ALL_PREFIX,
+                    schema_id
+                );
+
+                FieldFuture::new(async move {
+                    // Fetch all queried documents and compose the field value, a list of document
+                    // id / view id tuples, which will bubble up the query tree.
+
+                    let store = ctx.data_unchecked::<SqlStore>();
+                    let documents: Vec<FieldValue> = store
+                        .get_documents_by_schema(&schema_id)
+                        .await?
+                        .iter()
+                        .map(|document| {
+                            FieldValue::owned_any((
+                                Some(DocumentIdScalar::from(document.id())),
+                                None::<DocumentViewIdScalar>,
+                            ))
+                        })
+                        .collect();
 
                     // Pass the list up to the children query fields.
                     Ok(Some(FieldValue::list(documents)))
@@ -42,27 +57,6 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
         )
         .description(format!("Get all {} documents.", schema.name())),
     )
-}
-
-async fn resolve_documents<'a>(ctx: &ResolverContext<'a>, schema_id: &SchemaId) -> Result<Vec<FieldValue<'a>>, Error> {
-    // Access the store.
-    let store = ctx.data_unchecked::<SqlStore>();
-
-    // Fetch all documents of the schema this endpoint serves and compose the
-    // field value (a list) which will bubble up the query tree.
-    let documents: Vec<FieldValue> = store
-        .get_documents_by_schema(&schema_id)
-        .await?
-        .iter()
-        .map(|document| {
-            FieldValue::owned_any((
-                Some(DocumentIdScalar::from(document.id())),
-                None::<DocumentViewIdScalar>,
-            ))
-        })
-        .collect();
-
-    Ok(documents)
 }
 
 #[cfg(test)]

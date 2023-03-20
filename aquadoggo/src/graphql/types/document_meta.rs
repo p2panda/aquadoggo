@@ -7,7 +7,7 @@ use p2panda_rs::document::traits::AsDocument;
 
 use crate::db::SqlStore;
 use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
-use crate::graphql::utils::{downcast_id_params, get_document_from_params};
+use crate::graphql::utils::{downcast_document_id_arguments, get_document_from_params};
 
 /// The meta fields of a document.
 #[derive(SimpleObject)]
@@ -27,7 +27,8 @@ impl DocumentMeta {
         let store = ctx.data_unchecked::<SqlStore>();
 
         // Downcast the parameters passed up from the parent query field
-        let (document_id, document_view_id) = downcast_id_params(&ctx);
+        let (document_id, document_view_id) = downcast_document_id_arguments(&ctx);
+        
         // Get the whole document
         let document = get_document_from_params(store, &document_id, &document_view_id).await?;
 
