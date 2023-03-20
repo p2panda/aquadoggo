@@ -14,7 +14,6 @@ use crate::network::identity::Identity;
 /// Key pair file name.
 const KEY_PAIR_FILE_NAME: &str = "private-key";
 
-// TODO: make the namespace dynamic (ie. can be user-assigned)
 /// The namespace used by the `identify` network behaviour.
 pub const NODE_NAMESPACE: &str = "aquadoggo";
 

@@ -116,7 +116,6 @@ pub async fn network_service(
                     num_established,
                     ..
                 } => debug!("ConnectionEstablished: {peer_id} {endpoint:?} {num_established}"),
-
                 SwarmEvent::Dialing(peer_id) => info!("Dialing: {peer_id}"),
                 SwarmEvent::ExpiredListenAddr {
                     listener_id,
@@ -206,7 +205,6 @@ pub async fn network_service(
                             registrations.len()
                         );
                     }
-                    // TODO: consider exhaustive matching with logging for each discrete event
                     other => debug!("Unhandled rendezvous server event: {:?}", other),
                 },
                 SwarmEvent::Behaviour(BehaviourEvent::Identify(event)) => {
