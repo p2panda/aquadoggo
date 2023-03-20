@@ -115,8 +115,7 @@ pub async fn network_service(
                         && network_config.rendezvous_peer_id.unwrap() == peer_id =>
                 {
                     debug!(
-                        "Connected to rendezvous point, discovering nodes in '{}' namespace ...",
-                        NODE_NAMESPACE
+                        "Connected to rendezvous point, discovering nodes in '{NODE_NAMESPACE}' namespace ..."
                     );
 
                     swarm
@@ -191,7 +190,7 @@ pub async fn network_service(
                         for registration in registrations {
                             for address in registration.record.addresses() {
                                 let peer = registration.record.peer_id();
-                                debug!("Discovered peer {} at {}", peer, address);
+                                debug!("Discovered peer {peer} at {address}");
 
                                 let p2p_suffix = Protocol::P2p(*peer.as_ref());
                                 let address_with_p2p = if !address
@@ -207,15 +206,15 @@ pub async fn network_service(
                         }
                     }
                     rendezvous::client::Event::RegisterFailed(error) => {
-                        warn!("Failed to register with rendezvous point: {}", error);
+                        warn!("Failed to register with rendezvous point: {error}");
                     }
-                    other => debug!("Unhandled rendezvous client event: {:?}", other),
+                    other => debug!("Unhandled rendezvous client event: {other:?}"),
                 },
                 SwarmEvent::Behaviour(BehaviourEvent::RendezvousServer(event)) => match event {
                     rendezvous::server::Event::PeerRegistered { peer, registration } => {
                         debug!(
-                            "Peer {} registered for namespace '{}'",
-                            peer, registration.namespace
+                            "Peer {peer} registered for namespace '{}'",
+                            registration.namespace
                         );
                     }
                     rendezvous::server::Event::DiscoverServed {
@@ -223,20 +222,19 @@ pub async fn network_service(
                         registrations,
                     } => {
                         debug!(
-                            "Served peer {} with {} registrations",
-                            enquirer,
+                            "Served peer {enquirer} with {} registrations",
                             registrations.len()
                         );
                     }
-                    other => debug!("Unhandled rendezvous server event: {:?}", other),
+                    other => debug!("Unhandled rendezvous server event: {other:?}"),
                 },
                 SwarmEvent::Behaviour(BehaviourEvent::Identify(event)) => {
                     match event {
                         identify::Event::Received { peer_id, info } => {
-                            debug!("Received identify information from peer {}", peer_id);
+                            debug!("Received identify information from peer {peer_id}");
                             debug!(
-                                "Peer {} reported local external address: {}",
-                                peer_id, info.observed_addr
+                                "Peer {peer_id} reported local external address: {}",
+                                info.observed_addr
                             );
 
                             swarm.add_external_address(info.observed_addr, AddressScore::Infinite);
@@ -265,12 +263,11 @@ pub async fn network_service(
                         }
                         identify::Event::Sent { peer_id } | identify::Event::Pushed { peer_id } => {
                             debug!(
-                                "Sent identification information of the local node to peer {}",
-                                peer_id
+                                "Sent identification information of the local node to peer {peer_id}"
                             )
                         }
                         identify::Event::Error { peer_id, error } => {
-                            warn!("Failed to identify the remote peer {}: {}", peer_id, error)
+                            warn!("Failed to identify the remote peer {peer_id}: {error}")
                         }
                     }
                 }
