@@ -1,8 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use dynamic_graphql::SimpleObject;
+use async_graphql::{dynamic::ResolverContext, Error};
+use dynamic_graphql::{FieldValue, ScalarValue, SimpleObject};
+use log::debug;
+use p2panda_rs::api;
 
-use crate::graphql::scalars::{EntryHashScalar, LogIdScalar, SeqNumScalar};
+use crate::db::SqlStore;
+use crate::graphql::scalars::{
+    DocumentViewIdScalar, EntryHashScalar, LogIdScalar, PublicKeyScalar, SeqNumScalar,
+};
 
 /// Arguments required to sign and encode the next entry for a public_key.
 #[derive(SimpleObject)]
@@ -20,4 +26,45 @@ pub struct NextArguments {
 
     /// Hash of the entry skiplink.
     pub skiplink: Option<EntryHashScalar>,
+}
+
+impl NextArguments {
+    pub async fn resolve<'a>(ctx: ResolverContext<'a>) -> Result<Option<FieldValue<'a>>, Error> {
+        let mut args = ctx.field().arguments()?.into_iter().map(|(_, value)| value);
+        let store = ctx.data::<SqlStore>()?;
+
+        // Convert and validate passed parameters.
+        let public_key = PublicKeyScalar::from_value(args.next().unwrap())?;
+        let document_view_id = match args.next() {
+            Some(value) => {
+                let document_view_id = DocumentViewIdScalar::from_value(value)?;
+                debug!(
+                    "Query to nextArgs received for public key {} and document at view {}",
+                    public_key, document_view_id
+                );
+                Some(document_view_id)
+            }
+            None => {
+                debug!("Query to nextArgs received for public key {}", public_key);
+                None
+            }
+        };
+
+        // Calculate next entry's arguments.
+        let (backlink, skiplink, seq_num, log_id) = api::next_args(
+            store,
+            &public_key.into(),
+            document_view_id.map(|id| id.into()).as_ref(),
+        )
+        .await?;
+
+        let next_args = Self {
+            log_id: log_id.into(),
+            seq_num: seq_num.into(),
+            backlink: backlink.map(|hash| hash.into()),
+            skiplink: skiplink.map(|hash| hash.into()),
+        };
+
+        Ok(Some(FieldValue::owned_any(next_args)))
+    }
 }

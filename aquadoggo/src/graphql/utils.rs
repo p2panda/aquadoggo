@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use async_graphql::dynamic::ResolverContext;
+use async_graphql::dynamic::{ResolverContext, TypeRef};
 use async_graphql::Value;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::operation::OperationValue;
-use p2panda_rs::schema::SchemaId;
+use p2panda_rs::schema::{SchemaId, FieldType};
 use p2panda_rs::storage_provider::error::DocumentStorageError;
 use p2panda_rs::storage_provider::traits::DocumentStore;
 
@@ -28,6 +28,28 @@ pub fn gql_scalar(operation_value: &OperationValue) -> Value {
         OperationValue::Integer(value) => value.to_owned().into(),
         OperationValue::String(value) => value.to_owned().into(),
         _ => panic!("This method is not used for relation types"),
+    }
+}
+
+/// Get the GraphQL type name for a p2panda field type.
+///
+/// GraphQL types for relations use the p2panda schema id as their name.
+pub fn graphql_type(field_type: &FieldType) -> TypeRef {
+    match field_type {
+        p2panda_rs::schema::FieldType::Boolean => TypeRef::named(TypeRef::BOOLEAN),
+        p2panda_rs::schema::FieldType::Integer => TypeRef::named(TypeRef::INT),
+        p2panda_rs::schema::FieldType::Float => TypeRef::named(TypeRef::FLOAT),
+        p2panda_rs::schema::FieldType::String => TypeRef::named(TypeRef::STRING),
+        p2panda_rs::schema::FieldType::Relation(schema_id) => TypeRef::named(schema_id.to_string()),
+        p2panda_rs::schema::FieldType::RelationList(schema_id) => {
+            TypeRef::named_list(schema_id.to_string())
+        }
+        p2panda_rs::schema::FieldType::PinnedRelation(schema_id) => {
+            TypeRef::named(schema_id.to_string())
+        }
+        p2panda_rs::schema::FieldType::PinnedRelationList(schema_id) => {
+            TypeRef::named_list(schema_id.to_string())
+        }
     }
 }
 

@@ -1,15 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_graphql::dynamic::{Field, FieldFuture, InputValue, Object, TypeRef};
-use dynamic_graphql::{FieldValue, ScalarValue};
-use log::debug;
-use p2panda_rs::api;
-use p2panda_rs::document::DocumentViewId;
-use p2panda_rs::identity::PublicKey;
 
-use crate::db::SqlStore;
 use crate::graphql::constants;
-use crate::graphql::scalars::{DocumentViewIdScalar, PublicKeyScalar};
 use crate::graphql::types::NextArguments;
 
 /// Add "nextArgs" to the query object.
@@ -18,43 +11,7 @@ pub fn build_next_args_query(query: Object) -> Object {
         Field::new(
             constants::NEXT_ARGS_QUERY,
             TypeRef::named(constants::NEXT_ARGS),
-            |ctx| {
-                FieldFuture::new(async move {
-                    let mut args = ctx.field().arguments()?.into_iter().map(|(_, value)| value);
-                    let store = ctx.data::<SqlStore>()?;
-
-                    // Convert and validate passed parameters.
-                    let public_key: PublicKey =
-                        PublicKeyScalar::from_value(args.next().unwrap())?.into();
-                    let document_view_id: Option<DocumentViewId> = match args.next() {
-                        Some(value) => {
-                            let document_view_id = DocumentViewIdScalar::from_value(value)?.into();
-                            debug!(
-                            "Query to nextArgs received for public key {} and document at view {}",
-                            public_key, document_view_id
-                        );
-                            Some(document_view_id)
-                        }
-                        None => {
-                            debug!("Query to nextArgs received for public key {}", public_key);
-                            None
-                        }
-                    };
-
-                    // Calculate next entry's arguments.
-                    let (backlink, skiplink, seq_num, log_id) =
-                        api::next_args(store, &public_key, document_view_id.as_ref()).await?;
-
-                    let next_args = NextArguments {
-                        log_id: log_id.into(),
-                        seq_num: seq_num.into(),
-                        backlink: backlink.map(|hash| hash.into()),
-                        skiplink: skiplink.map(|hash| hash.into()),
-                    };
-
-                    Ok(Some(FieldValue::owned_any(next_args)))
-                })
-            },
+            |ctx| FieldFuture::new(async move { NextArguments::resolve(ctx).await }),
         )
         .argument(InputValue::new(
             constants::PUBLIC_KEY_ARG,
