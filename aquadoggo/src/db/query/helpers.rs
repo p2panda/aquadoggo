@@ -11,7 +11,7 @@ fn clean_key(key: &str, suffix: &str) -> String {
 
 // @TODO: Make suffixes constants
 pub fn parse_str(key: &str, value: &[OperationValue]) -> Result<(String, FilterBy, bool)> {
-    if value.len() == 0 {
+    if value.is_empty() {
         bail!("Needs at least one value");
     }
 
@@ -33,63 +33,63 @@ pub fn parse_str(key: &str, value: &[OperationValue]) -> Result<(String, FilterB
     let element = value.get(0).unwrap();
 
     if key.ends_with("_gt") {
-        return Ok((
+        Ok((
             clean_key(key, "_gt"),
             FilterBy::Interval(
                 LowerBound::Greater(element.to_owned()),
                 UpperBound::Unbounded,
             ),
             false,
-        ));
+        ))
     } else if key.ends_with("_gte") {
         let element = value.get(0).context("Needs at least one value")?;
 
-        return Ok((
+        Ok((
             clean_key(key, "_gte"),
             FilterBy::Interval(
                 LowerBound::GreaterEqual(element.to_owned()),
                 UpperBound::Unbounded,
             ),
             false,
-        ));
+        ))
     } else if key.ends_with("_lt") {
-        return Ok((
+        Ok((
             clean_key(key, "_lt"),
             FilterBy::Interval(LowerBound::Unbounded, UpperBound::Lower(element.to_owned())),
             false,
-        ));
+        ))
     } else if key.ends_with("_lte") {
-        return Ok((
+        Ok((
             clean_key(key, "_lte"),
             FilterBy::Interval(
                 LowerBound::Unbounded,
                 UpperBound::LowerEqual(element.to_owned()),
             ),
             false,
-        ));
+        ))
     } else if key.ends_with("_contains") {
-        return Ok((
+        Ok((
             clean_key(key, "_contains"),
             FilterBy::Contains(element.to_owned()),
             false,
-        ));
+        ))
     } else if key.ends_with("_not_contains") {
-        return Ok((
+        Ok((
             clean_key(key, "_not_contains"),
             FilterBy::Contains(element.to_owned()),
             true,
-        ));
+        ))
     } else if key.ends_with("_not") {
-        return Ok((
+        Ok((
             clean_key(key, "_not"),
             FilterBy::Element(element.to_owned()),
             true,
-        ));
-    } else if key.ends_with("_") {
+        ))
+    } else if key.ends_with('_') {
         // @TODO: Better error message
         bail!("Invalid query string");
     } else {
-        return Ok((key.into(), FilterBy::Element(element.to_owned()), false));
+        Ok((key.into(), FilterBy::Element(element.to_owned()), false))
     }
 }
 
