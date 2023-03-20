@@ -47,5 +47,21 @@ pub enum SchemaStoreError {
 /// `Query` API errors.
 #[derive(Error, Debug)]
 pub enum QueryError {
-    // @TODO
+    #[error("Can't apply ordering on unknown field '{0}'")]
+    OrderFieldUnknown(String),
+
+    #[error("Can't apply filter on unknown field '{0}'")]
+    FilterFieldUnknown(String),
+
+    #[error("Filter type {0} for field '{1}' is not matching schema type {2}")]
+    FilterInvalidType(String, String, String),
+
+    #[error("Can't apply set filter as field '{0}' is of type boolean")]
+    FilterInvalidSet(String),
+
+    #[error("Can't apply interval filter as field '{0}' is not of type string, float or integer")]
+    FilterInvalidInterval(String),
+
+    #[error("Can't apply search filter as field '{0}' is not of type string")]
+    FilterInvalidSearch(String),
 }

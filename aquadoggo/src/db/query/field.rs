@@ -11,6 +11,19 @@ pub enum MetaField {
     Deleted,
 }
 
+impl ToString for MetaField {
+    fn to_string(&self) -> String {
+        match self {
+            MetaField::DocumentId => "documentId",
+            MetaField::DocumentViewId => "viewId",
+            MetaField::Owner => "owner",
+            MetaField::Edited => "edited",
+            MetaField::Deleted => "deleted",
+        }
+        .to_string()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Field {
     Meta(MetaField),

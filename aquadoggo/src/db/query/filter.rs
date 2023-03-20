@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::slice::Iter;
+
 use p2panda_rs::operation::OperationValue;
 
 use crate::db::query::Field;
@@ -57,6 +59,10 @@ impl Filter {
 
     pub fn get(&self, index: usize) -> Option<&FilterItem> {
         self.0.get(index)
+    }
+
+    pub fn iter(&self) -> Iter<FilterItem> {
+        self.0.iter()
     }
 
     /// Helper method to merge or extend existing filterings.
