@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::convert::TryFrom;
+
+use anyhow::bail;
 use p2panda_rs::schema::FieldName;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -9,6 +12,22 @@ pub enum MetaField {
     Owner,
     Edited,
     Deleted,
+}
+
+// @TODO: Make strings constants
+impl TryFrom<&str> for MetaField {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "documentId" => Ok(MetaField::DocumentId),
+            "viewId" => Ok(MetaField::DocumentViewId),
+            "owner" => Ok(MetaField::Owner),
+            "edited" => Ok(MetaField::Edited),
+            "deleted" => Ok(MetaField::Deleted),
+            _ => bail!("Unknown meta field"),
+        }
+    }
 }
 
 impl ToString for MetaField {

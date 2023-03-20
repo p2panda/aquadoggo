@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::slice::Iter;
+use std::str::FromStr;
+use std::{convert::TryInto, slice::Iter};
 
+use anyhow::{anyhow, bail, Context, Error, Result};
 use p2panda_rs::operation::OperationValue;
 
+use crate::db::query::helpers::parse_str;
 use crate::db::query::Field;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -25,7 +28,7 @@ pub enum FilterBy {
     Element(OperationValue),
     Set(Vec<OperationValue>),
     Interval(LowerBound, UpperBound),
-    Contains(String),
+    Contains(OperationValue),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -43,6 +46,27 @@ impl FilterItem {
             exclusive,
         }
     }
+
+    pub fn from_field_str(key: &str, value: &[OperationValue]) -> Result<Self> {
+        let (field_name, by, exclusive) = parse_str(key, value)?;
+
+        Ok(Self {
+            field: Field::Field(field_name),
+            by,
+            exclusive,
+        })
+    }
+
+    pub fn from_meta_str(key: &str, value: &[OperationValue]) -> Result<Self> {
+        let (field_name, by, exclusive) = parse_str(key, value)?;
+        let meta_field = field_name.as_str().try_into()?;
+
+        Ok(Self {
+            field: Field::Meta(meta_field),
+            by,
+            exclusive,
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -51,6 +75,24 @@ pub struct Filter(Vec<FilterItem>);
 impl Filter {
     pub fn new() -> Self {
         Self(Vec::new())
+    }
+
+    // @TODO: Make sure that sets with one item are converte
+    pub fn fields(mut self, fields: &[(&str, &[OperationValue])]) -> Result<Self> {
+        for field in fields {
+            self.upsert_filter_item(FilterItem::from_field_str(field.0, field.1)?);
+        }
+
+        Ok(self)
+    }
+
+    // @TODO: Make sure that sets with one item are converte
+    pub fn meta_fields(mut self, fields: &[(&str, &[OperationValue])]) -> Result<Self> {
+        for field in fields {
+            self.upsert_filter_item(FilterItem::from_meta_str(field.0, field.1)?);
+        }
+
+        Ok(self)
     }
 
     pub fn len(&self) -> usize {
@@ -235,7 +277,7 @@ impl Filter {
     pub fn add_contains(&mut self, field: &Field, value: &str) {
         self.upsert_filter_item(FilterItem::new(
             field,
-            FilterBy::Contains(value.to_string()),
+            FilterBy::Contains(OperationValue::String(value.to_string())),
             false,
         ));
     }
@@ -243,7 +285,7 @@ impl Filter {
     pub fn add_not_contains(&mut self, field: &Field, value: &str) {
         self.upsert_filter_item(FilterItem::new(
             field,
-            FilterBy::Contains(value.to_string()),
+            FilterBy::Contains(OperationValue::String(value.to_string())),
             true,
         ));
     }

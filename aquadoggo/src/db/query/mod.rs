@@ -2,12 +2,13 @@
 
 mod field;
 mod filter;
+mod helpers;
 mod order;
 mod pagination;
 mod validate;
 
 pub use field::{Field, MetaField};
-pub use filter::{Filter, FilterBy, FilterItem};
+pub use filter::{Filter, FilterBy, FilterItem, LowerBound, UpperBound};
 pub use order::{Direction, Order};
 pub use pagination::{Cursor, Pagination};
 pub use validate::validate_query;

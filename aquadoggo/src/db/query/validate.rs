@@ -147,8 +147,23 @@ pub fn validate_query(filter: &Filter, order: &Order, schema: &Schema) -> Result
 
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn test() {
-        // @TODO
+    use p2panda_rs::operation::OperationValue;
+    use p2panda_rs::schema::Schema;
+    use rstest::rstest;
+
+    use crate::db::query::{Filter, Order};
+    use crate::test_utils::doggo_schema;
+
+    use super::validate_query;
+
+    #[rstest]
+    #[case::defaults(
+        Filter::new().fields(
+            &[("username_not_in", &["bubu".into()])]
+        ).unwrap(),
+        Order::default()
+    )]
+    fn valid_queries(#[case] filter: Filter, #[case] order: Order) {
+        assert!(validate_query(&filter, &order, &doggo_schema()).is_ok());
     }
 }
