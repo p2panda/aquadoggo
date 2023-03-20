@@ -28,9 +28,9 @@ pub enum FilterBy {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FilterItem {
-    field: Field,
-    by: FilterBy,
-    exclusive: bool,
+    pub field: Field,
+    pub by: FilterBy,
+    pub exclusive: bool,
 }
 
 impl FilterItem {

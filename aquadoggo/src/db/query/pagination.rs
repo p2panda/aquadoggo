@@ -7,16 +7,16 @@ const DEFAULT_PAGE_SIZE: u64 = 10;
 // @TODO: Probably this should be a trait
 pub type Cursor = String;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pagination {
-    first: NonZeroU64,
-    after: Option<Cursor>,
+    pub first: NonZeroU64,
+    pub after: Option<Cursor>,
 }
 
 impl Pagination {
-    pub fn new(first: NonZeroU64, after: Option<&Cursor>) -> Self {
+    pub fn new(first: &NonZeroU64, after: Option<&Cursor>) -> Self {
         Self {
-            first,
+            first: first.clone(),
             after: after.cloned(),
         }
     }
