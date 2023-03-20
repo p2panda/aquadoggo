@@ -13,6 +13,7 @@ pub trait Cursor: Sized + Clone {
     fn encode(&self) -> String;
 }
 
+#[cfg(test)]
 impl Cursor for String {
     type Error = anyhow::Error;
 
