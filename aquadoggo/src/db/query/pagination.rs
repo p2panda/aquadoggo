@@ -16,7 +16,7 @@ pub struct Pagination {
 impl Pagination {
     pub fn new(first: &NonZeroU64, after: Option<&Cursor>) -> Self {
         Self {
-            first: first.clone(),
+            first: *first,
             after: after.cloned(),
         }
     }

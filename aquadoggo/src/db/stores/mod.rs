@@ -6,6 +6,7 @@ pub mod document;
 mod entry;
 mod log;
 mod operation;
+#[allow(unused)]
 pub mod query;
 mod schema;
 mod task;
