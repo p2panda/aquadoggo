@@ -7,7 +7,7 @@ use futures::StreamExt;
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::multiaddr::Protocol;
 use libp2p::ping::Event;
-use libp2p::swarm::{SwarmBuilder, SwarmEvent};
+use libp2p::swarm::{AddressScore, SwarmBuilder, SwarmEvent};
 use libp2p::{identify, mdns, quic, rendezvous, Multiaddr, PeerId, Transport};
 use log::{debug, info, warn};
 
@@ -110,6 +110,29 @@ pub async fn network_service(
                 } => {
                     debug!("ConnectionClosed: {peer_id} {endpoint:?} {num_established} {cause:?}")
                 }
+                SwarmEvent::ConnectionEstablished { peer_id, .. }
+                    if network_config.rendezvous_client
+                        && network_config.rendezvous_peer_id.unwrap() == peer_id =>
+                {
+                    debug!(
+                        "Connected to rendezvous point, discovering nodes in '{}' namespace ...",
+                        NODE_NAMESPACE
+                    );
+
+                    swarm
+                        .behaviour_mut()
+                        .rendezvous_client
+                        .as_mut()
+                        .unwrap()
+                        .discover(
+                            Some(rendezvous::Namespace::new(NODE_NAMESPACE.to_string()).unwrap()),
+                            None,
+                            None,
+                            network_config
+                                .rendezvous_peer_id
+                                .expect("Rendezvous server peer ID was provided"),
+                        );
+                }
                 SwarmEvent::ConnectionEstablished {
                     peer_id,
                     endpoint,
@@ -161,7 +184,7 @@ pub async fn network_service(
                         cookie: new_cookie,
                         ..
                     } => {
-                        debug!("Rendezvous server responded with peer registration data");
+                        debug!("Rendezvous point responded with peer registration data");
 
                         cookie.replace(new_cookie);
 
@@ -184,7 +207,7 @@ pub async fn network_service(
                         }
                     }
                     rendezvous::client::Event::RegisterFailed(error) => {
-                        warn!("Failed to register with rendezvous server: {}", error);
+                        warn!("Failed to register with rendezvous point: {}", error);
                     }
                     other => debug!("Unhandled rendezvous client event: {:?}", other),
                 },
@@ -209,7 +232,15 @@ pub async fn network_service(
                 },
                 SwarmEvent::Behaviour(BehaviourEvent::Identify(event)) => {
                     match event {
-                        identify::Event::Received { .. } => {
+                        identify::Event::Received { peer_id, info } => {
+                            debug!("Received identify information from peer {}", peer_id);
+                            debug!(
+                                "Peer {} reported local external address: {}",
+                                peer_id, info.observed_addr
+                            );
+
+                            swarm.add_external_address(info.observed_addr, AddressScore::Infinite);
+
                             // Only attempt registration if the local node is running as a rendezvous client
                             if network_config.rendezvous_client {
                                 // Once `identify` information is received from a remote peer, the external
