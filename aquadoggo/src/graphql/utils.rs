@@ -57,6 +57,8 @@ pub fn graphql_type(field_type: &FieldType) -> TypeRef {
 
 /// Downcast document id and document view id from parameters passed up the query fields and
 /// retrieved via the `ResolverContext`.
+///
+/// We unwrap internally here as we expect validation to have occured in the query resolver.
 pub fn downcast_document_id_arguments(
     ctx: &ResolverContext,
 ) -> (Option<DocumentIdScalar>, Option<DocumentViewIdScalar>) {
@@ -66,8 +68,10 @@ pub fn downcast_document_id_arguments(
         .to_owned()
 }
 
-/// Downcast document id and document view id from parameters passed up the query fields and
+/// Downcast public key and document view id from parameters passed up the query fields and
 /// retrieved via the `ResolverContext`.
+/// 
+/// We unwrap internally here as we expect validation to have occured in the query resolver.
 pub fn downcast_next_args_arguments(
     ctx: &ResolverContext,
 ) -> (PublicKeyScalar, Option<DocumentViewIdScalar>) {
@@ -77,7 +81,7 @@ pub fn downcast_next_args_arguments(
         .to_owned()
 }
 
-/// Helper for getting a document from score by either the document id or document view id.
+/// Helper for getting a document from the store by either the document id or document view id.
 pub async fn get_document_from_params(
     store: &SqlStore,
     document_id: &Option<DocumentIdScalar>,
