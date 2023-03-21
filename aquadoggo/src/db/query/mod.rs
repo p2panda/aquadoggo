@@ -2,10 +2,10 @@
 
 mod field;
 mod filter;
-#[cfg(test)]
-mod test_utils;
 mod order;
 mod pagination;
+#[cfg(test)]
+mod test_utils;
 mod validate;
 
 pub use field::{Field, MetaField};
