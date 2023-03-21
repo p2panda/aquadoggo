@@ -57,6 +57,10 @@ struct Cli {
     /// eg. --rendezvous-peer-id "12D3KooWD3eckifWpRn9wQpMG9R9hX3sD158z7EqHWmweQAJU5SA"
     #[arg(long)]
     rendezvous_peer_id: Option<PeerId>,
+
+    /// Enable relay server to facilitate peer connectivity, false by default.
+    #[arg(long)]
+    relay_server: Option<bool>,
 }
 
 impl Cli {
@@ -92,6 +96,7 @@ impl TryFrom<Cli> for Configuration {
             mdns: cli.mdns.unwrap_or(true),
             ping: cli.ping.unwrap_or(true),
             quic_port: cli.quic_port.unwrap_or(2022),
+            relay_server: cli.relay_server.unwrap_or(false),
             remote_peers: cli.remote_node_addresses,
             rendezvous_client: cli.rendezvous_client.unwrap_or(false),
             rendezvous_server: cli.rendezvous_server.unwrap_or(false),
