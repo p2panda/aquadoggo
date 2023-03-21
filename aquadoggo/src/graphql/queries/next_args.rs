@@ -54,8 +54,9 @@ pub fn build_next_args_query(query: Object) -> Object {
     )
 }
 
-fn validate_args<'a>(
-    ctx: &ResolverContext<'a>,
+/// Validate and return the arguments passed to next_args.
+fn validate_args(
+    ctx: &ResolverContext,
 ) -> Result<(PublicKeyScalar, Option<DocumentViewIdScalar>), Error> {
     let mut args = ctx.field().arguments()?.into_iter().map(|(_, value)| value);
 

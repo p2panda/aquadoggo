@@ -11,8 +11,6 @@ use p2panda_rs::storage_provider::traits::DocumentStore;
 use crate::db::{types::StorageDocument, SqlStore};
 use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
 
-use super::scalars::PublicKeyScalar;
-
 const DOCUMENT_FIELDS_SUFFIX: &str = "Fields";
 
 // Correctly formats the name of a document field type.

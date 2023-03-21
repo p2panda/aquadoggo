@@ -23,7 +23,7 @@ impl DocumentMeta {
     /// Resolve `DocumentMeta` as a graphql `FieldValue`.
     ///
     /// Requires a `ResolverContext` to be passed into the method.
-    pub async fn resolve<'a>(ctx: ResolverContext<'a>) -> Result<Option<FieldValue<'a>>, Error> {
+    pub async fn resolve(ctx: ResolverContext<'_>) -> Result<Option<FieldValue<'_>>, Error> {
         let store = ctx.data_unchecked::<SqlStore>();
 
         // Downcast the parameters passed up from the parent query field

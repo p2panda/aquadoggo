@@ -43,7 +43,7 @@ impl DocumentFields {
     /// If the value is a simple type (meaning it is also a query leaf) then it is directly resolved.
     ///
     /// Requires a `ResolverContext` to be passed into the method.
-    async fn resolve<'a>(ctx: ResolverContext<'a>) -> Result<Option<FieldValue<'a>>, Error> {
+    async fn resolve(ctx: ResolverContext<'_>) -> Result<Option<FieldValue<'_>>, Error> {
         let store = ctx.data_unchecked::<SqlStore>();
         let name = ctx.field().name();
 
@@ -58,7 +58,7 @@ impl DocumentFields {
             };
 
         // Get the field this query is concerned with.
-        match document.get(&name).unwrap() {
+        match document.get(name).unwrap() {
             // Relation fields are expected to resolve to the related document so we pass
             // along the document id which will be processed through it's own resolver.
             OperationValue::Relation(rel) => Ok(Some(FieldValue::owned_any((

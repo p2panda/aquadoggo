@@ -44,8 +44,8 @@ pub fn build_document_query(query: Object, schema: &Schema) -> Object {
     )
 }
 
-fn validate_args<'a>(
-    ctx: &ResolverContext<'a>,
+fn validate_args(
+    ctx: &ResolverContext,
 ) -> Result<(Option<DocumentIdScalar>, Option<DocumentViewIdScalar>), Error> {
     // Parse arguments
     let schema_id = ctx.field().name();
