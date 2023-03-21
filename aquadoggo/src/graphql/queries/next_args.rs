@@ -22,7 +22,7 @@ pub fn build_next_args_query(query: Object) -> Object {
                     // Get and validate arguments.
                     let (public_key, document_view_id) = validate_args(&ctx)?;
                     let store = ctx.data_unchecked::<SqlStore>();
-                    
+
                     // Calculate next entry's arguments.
                     let (backlink, skiplink, seq_num, log_id) = api::next_args(
                         store,
