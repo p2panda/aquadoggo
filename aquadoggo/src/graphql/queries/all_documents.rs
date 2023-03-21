@@ -54,10 +54,10 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                 })
             },
         )
-        .argument(InputValue::new(
-            "filter",
-            TypeRef::named(filter_name(&schema.id())),
-        ).description("Filter the query based on passed arguments"))
+        .argument(
+            InputValue::new("filter", TypeRef::named(filter_name(&schema.id())))
+                .description("Filter the query based on passed arguments"),
+        )
         .description(format!("Get all {} documents.", schema.name())),
     )
 }
