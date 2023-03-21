@@ -68,19 +68,6 @@ pub fn downcast_document_id_arguments(
         .to_owned()
 }
 
-/// Downcast public key and document view id from parameters passed up the query fields and
-/// retrieved via the `ResolverContext`.
-/// 
-/// We unwrap internally here as we expect validation to have occured in the query resolver.
-pub fn downcast_next_args_arguments(
-    ctx: &ResolverContext,
-) -> (PublicKeyScalar, Option<DocumentViewIdScalar>) {
-    ctx.parent_value
-        .downcast_ref::<(PublicKeyScalar, Option<DocumentViewIdScalar>)>()
-        .expect("Values passed from query parent should match expected")
-        .to_owned()
-}
-
 /// Helper for getting a document from the store by either the document id or document view id.
 pub async fn get_document_from_params(
     store: &SqlStore,

@@ -2,9 +2,11 @@
 
 use async_graphql::dynamic::{Field, FieldFuture, InputValue, Object, ResolverContext, TypeRef};
 use async_graphql::Error;
-use dynamic_graphql::ScalarValue;
+use dynamic_graphql::{FieldValue, ScalarValue};
 use log::debug;
+use p2panda_rs::api;
 
+use crate::db::SqlStore;
 use crate::graphql::constants;
 use crate::graphql::scalars::{DocumentViewIdScalar, PublicKeyScalar};
 use crate::graphql::types::NextArguments;
@@ -17,8 +19,26 @@ pub fn build_next_args_query(query: Object) -> Object {
             TypeRef::named(constants::NEXT_ARGS),
             |ctx| {
                 FieldFuture::new(async move {
-                    validate_args(&ctx)?;
-                    NextArguments::resolve(ctx).await
+                    // Get and validate arguments.
+                    let (public_key, document_view_id) = validate_args(&ctx)?;
+                    let store = ctx.data_unchecked::<SqlStore>();
+                    
+                    // Calculate next entry's arguments.
+                    let (backlink, skiplink, seq_num, log_id) = api::next_args(
+                        store,
+                        &public_key.into(),
+                        document_view_id.map(|id| id.into()).as_ref(),
+                    )
+                    .await?;
+
+                    let next_args = NextArguments {
+                        log_id: log_id.into(),
+                        seq_num: seq_num.into(),
+                        backlink: backlink.map(|hash| hash.into()),
+                        skiplink: skiplink.map(|hash| hash.into()),
+                    };
+
+                    Ok(Some(FieldValue::owned_any(next_args)))
                 })
             },
         )
