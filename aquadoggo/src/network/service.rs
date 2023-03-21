@@ -271,6 +271,7 @@ pub async fn network_service(
                         }
                     }
                 }
+                SwarmEvent::Behaviour(BehaviourEvent::RelayServer(_)) => todo!(),
             }
         }
     });

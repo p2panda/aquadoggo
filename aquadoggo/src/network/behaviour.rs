@@ -4,7 +4,7 @@ use anyhow::Result;
 use libp2p::identity::Keypair;
 use libp2p::swarm::behaviour::toggle::Toggle;
 use libp2p::swarm::NetworkBehaviour;
-use libp2p::{identify, mdns, ping, rendezvous, PeerId};
+use libp2p::{identify, mdns, ping, relay, rendezvous, PeerId};
 use log::debug;
 
 use crate::network::config::NODE_NAMESPACE;
@@ -19,6 +19,10 @@ pub struct Behaviour {
     /// Respond to inbound pings and periodically send outbound ping on every established
     /// connection.
     pub ping: Toggle<ping::Behaviour>,
+
+    /// Serve as a relay point for remote peers to establish connectivity when a direct
+    /// peer-to-peer connection is not possible.
+    pub relay_server: Toggle<relay::Behaviour>,
 
     /// Register with a rendezvous server and query remote peer addresses.
     pub rendezvous_client: Toggle<rendezvous::client::Behaviour>,
@@ -90,12 +94,20 @@ impl Behaviour {
             None
         };
 
+        let relay_server = if network_config.relay_server {
+            debug!("Relay server network behaviour enabled");
+            Some(relay::Behaviour::new(peer_id, relay::Config::default()))
+        } else {
+            None
+        };
+
         Ok(Self {
             mdns: mdns.into(), // Convert the `Option` into a `Toggle`
             ping: ping.into(),
             rendezvous_client: rendezvous_client.into(),
             rendezvous_server: rendezvous_server.into(),
             identify: identify.into(),
+            relay_server: relay_server.into(),
         })
     }
 }
