@@ -2264,6 +2264,7 @@ dependencies = [
  "libp2p-metrics",
  "libp2p-ping",
  "libp2p-quic",
+ "libp2p-relay",
  "libp2p-rendezvous",
  "libp2p-swarm",
  "libp2p-tcp",
@@ -2446,6 +2447,7 @@ dependencies = [
  "libp2p-core",
  "libp2p-identify",
  "libp2p-ping",
+ "libp2p-relay",
  "libp2p-swarm",
  "prometheus-client",
 ]
@@ -2510,6 +2512,30 @@ dependencies = [
  "rustls 0.20.8",
  "thiserror",
  "tokio",
+]
+
+[[package]]
+name = "libp2p-relay"
+version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2a56a60045a02298defcd7633e770ad1277fea68ca6e9620b52c79bba277ae21"
+dependencies = [
+ "asynchronous-codec",
+ "bytes",
+ "either",
+ "futures",
+ "futures-timer",
+ "instant",
+ "libp2p-core",
+ "libp2p-identity",
+ "libp2p-swarm",
+ "log",
+ "quick-protobuf",
+ "quick-protobuf-codec",
+ "rand 0.8.5",
+ "static_assertions 1.1.0",
+ "thiserror",
+ "void",
 ]
 
 [[package]]
