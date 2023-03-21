@@ -4,8 +4,10 @@ mod document;
 mod document_fields;
 mod document_meta;
 mod next_arguments;
+mod filter;
 
 pub use document::Document;
 pub use document_fields::DocumentFields;
 pub use document_meta::DocumentMeta;
 pub use next_arguments::NextArguments;
+pub use filter::{StringFilter, FilterInput};

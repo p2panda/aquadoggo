@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use async_graphql::dynamic::{Field, FieldFuture, Object, TypeRef};
+use async_graphql::dynamic::{Field, FieldFuture, InputValue, Object, TypeRef};
 use dynamic_graphql::FieldValue;
 use log::debug;
 use p2panda_rs::document::traits::AsDocument;
@@ -10,6 +10,7 @@ use p2panda_rs::storage_provider::traits::DocumentStore;
 use crate::db::SqlStore;
 use crate::graphql::constants;
 use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
+use crate::graphql::utils::filter_name;
 
 /// Adds GraphQL query for getting all documents of a certain p2panda schema to the root query
 /// object.
@@ -53,6 +54,10 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                 })
             },
         )
+        .argument(InputValue::new(
+            "filter",
+            TypeRef::named(filter_name(&schema.id())),
+        ).description("Filter the query based on passed arguments"))
         .description(format!("Get all {} documents.", schema.name())),
     )
 }

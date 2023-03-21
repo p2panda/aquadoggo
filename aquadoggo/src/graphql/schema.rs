@@ -20,7 +20,9 @@ use crate::graphql::scalars::{
     DocumentIdScalar, DocumentViewIdScalar, EncodedEntryScalar, EncodedOperationScalar,
     EntryHashScalar, LogIdScalar, PublicKeyScalar, SeqNumScalar,
 };
-use crate::graphql::types::{Document, DocumentFields, DocumentMeta, NextArguments};
+use crate::graphql::types::{
+    Document, DocumentFields, DocumentMeta, FilterInput, NextArguments, StringFilter,
+};
 use crate::schema::SchemaProvider;
 
 /// Returns GraphQL API schema for p2panda node.
@@ -48,7 +50,8 @@ pub async fn build_root_schema(
         .register::<EntryHashScalar>()
         .register::<LogIdScalar>()
         .register::<PublicKeyScalar>()
-        .register::<SeqNumScalar>();
+        .register::<SeqNumScalar>()
+        .register::<StringFilter>();
 
     // Construct the schema builder.
     let mut schema_builder = Schema::build("Query", Some("MutationRoot"), None);
@@ -63,16 +66,20 @@ pub async fn build_root_schema(
     // Loop through all schema retrieved from the schema store, create types and a root query for the
     // documents they describe.
     for schema in all_schema {
-        // Construct the document fields object which will be named `<schema_id>Field`.
+        // Construct the fields type object which will be named `<schema_id>Field`.
         let document_schema_fields = DocumentFields::build(&schema);
 
-        // Construct the document schema which has "fields" and "meta" fields.
+        // Construct the schema type object which contains "fields" and "meta" fields.
         let document_schema = Document::build(&schema);
 
-        // Register a schema and schema fields type for every schema.
+        // Construct the filter input type object.
+        let filter_input = FilterInput::build(&schema);
+
+        // Register a schema, schema fields and filter type for every schema.
         schema_builder = schema_builder
             .register(document_schema_fields)
-            .register(document_schema);
+            .register(document_schema)
+            .register(filter_input);
 
         // Add a query object for each schema. It offers an interface to retrieve a single
         // document of this schema by it's document id or view id. Its resolver parses and

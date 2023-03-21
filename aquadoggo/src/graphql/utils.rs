@@ -12,10 +12,16 @@ use crate::db::{types::StorageDocument, SqlStore};
 use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
 
 const DOCUMENT_FIELDS_SUFFIX: &str = "Fields";
+const FILTER_INPUT_SUFFIX: &str = "Filter";
 
 // Correctly formats the name of a document field type.
 pub fn fields_name(schema_id: &SchemaId) -> String {
     format!("{}{DOCUMENT_FIELDS_SUFFIX}", schema_id)
+}
+
+// Correctly formats the name of a document filter type.
+pub fn filter_name(schema_id: &SchemaId) -> String {
+    format!("{}{FILTER_INPUT_SUFFIX}", schema_id)
 }
 
 /// Convert non-relation operation values into GraphQL values.
