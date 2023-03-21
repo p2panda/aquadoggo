@@ -2,7 +2,8 @@
 
 mod field;
 mod filter;
-mod helpers;
+#[cfg(test)]
+mod test_utils;
 mod order;
 mod pagination;
 mod validate;

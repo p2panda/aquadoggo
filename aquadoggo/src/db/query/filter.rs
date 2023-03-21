@@ -6,7 +6,8 @@ use std::{convert::TryInto, slice::Iter};
 use anyhow::{anyhow, bail, Context, Error, Result};
 use p2panda_rs::operation::OperationValue;
 
-use crate::db::query::helpers::parse_str;
+#[cfg(test)]
+use crate::db::query::test_utils::parse_str;
 use crate::db::query::Field;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -46,29 +47,6 @@ impl FilterItem {
             exclusive,
         }
     }
-
-    // @TODO: Can we separate this better? This is already introducing a notion of GraphQL
-    pub fn from_field_str(key: &str, value: &[OperationValue]) -> Result<Self> {
-        let (field_name, by, exclusive) = parse_str(key, value)?;
-
-        Ok(Self {
-            field: Field::Field(field_name),
-            by,
-            exclusive,
-        })
-    }
-
-    // @TODO: Can we separate this better? This is already introducing a notion of GraphQL
-    pub fn from_meta_str(key: &str, value: &[OperationValue]) -> Result<Self> {
-        let (field_name, by, exclusive) = parse_str(key, value)?;
-        let meta_field = field_name.as_str().try_into()?;
-
-        Ok(Self {
-            field: Field::Meta(meta_field),
-            by,
-            exclusive,
-        })
-    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -77,24 +55,6 @@ pub struct Filter(Vec<FilterItem>);
 impl Filter {
     pub fn new() -> Self {
         Self(Vec::new())
-    }
-
-    // @TODO: Make sure that sets with one item are converte
-    pub fn fields(mut self, fields: &[(&str, &[OperationValue])]) -> Result<Self> {
-        for field in fields {
-            self.upsert_filter_item(FilterItem::from_field_str(field.0, field.1)?);
-        }
-
-        Ok(self)
-    }
-
-    // @TODO: Make sure that sets with one item are converte
-    pub fn meta_fields(mut self, fields: &[(&str, &[OperationValue])]) -> Result<Self> {
-        for field in fields {
-            self.upsert_filter_item(FilterItem::from_meta_str(field.0, field.1)?);
-        }
-
-        Ok(self)
     }
 
     pub fn len(&self) -> usize {
@@ -296,6 +256,49 @@ impl Filter {
 impl Default for Filter {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+impl Filter {
+    pub fn fields(mut self, fields: &[(&str, &[OperationValue])]) -> Result<Self> {
+        for field in fields {
+            self.upsert_filter_item(FilterItem::from_field_str(field.0, field.1)?);
+        }
+
+        Ok(self)
+    }
+
+    pub fn meta_fields(mut self, fields: &[(&str, &[OperationValue])]) -> Result<Self> {
+        for field in fields {
+            self.upsert_filter_item(FilterItem::from_meta_str(field.0, field.1)?);
+        }
+
+        Ok(self)
+    }
+}
+
+#[cfg(test)]
+impl FilterItem {
+    pub fn from_field_str(key: &str, value: &[OperationValue]) -> Result<Self> {
+        let (field_name, by, exclusive) = parse_str(key, value)?;
+
+        Ok(Self {
+            field: Field::Field(field_name),
+            by,
+            exclusive,
+        })
+    }
+
+    pub fn from_meta_str(key: &str, value: &[OperationValue]) -> Result<Self> {
+        let (field_name, by, exclusive) = parse_str(key, value)?;
+        let meta_field = field_name.as_str().try_into()?;
+
+        Ok(Self {
+            field: Field::Meta(meta_field),
+            by,
+            exclusive,
+        })
     }
 }
 
