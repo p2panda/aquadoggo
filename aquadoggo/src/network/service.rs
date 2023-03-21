@@ -271,7 +271,9 @@ pub async fn network_service(
                         }
                     }
                 }
-                SwarmEvent::Behaviour(BehaviourEvent::RelayServer(_)) => todo!(),
+                SwarmEvent::Behaviour(BehaviourEvent::RelayServer(event)) => {
+                    debug!("Unhandled relay server event: {event:?}")
+                }
             }
         }
     });
