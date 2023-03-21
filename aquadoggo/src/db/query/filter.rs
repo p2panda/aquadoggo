@@ -49,6 +49,30 @@ impl FilterItem {
     }
 }
 
+#[cfg(test)]
+impl FilterItem {
+    pub fn from_field_str(key: &str, value: &[OperationValue]) -> Result<Self> {
+        let (field_name, by, exclusive) = parse_str(key, value)?;
+
+        Ok(Self {
+            field: Field::Field(field_name),
+            by,
+            exclusive,
+        })
+    }
+
+    pub fn from_meta_str(key: &str, value: &[OperationValue]) -> Result<Self> {
+        let (field_name, by, exclusive) = parse_str(key, value)?;
+        let meta_field = field_name.as_str().try_into()?;
+
+        Ok(Self {
+            field: Field::Meta(meta_field),
+            by,
+            exclusive,
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Filter(Vec<FilterItem>);
 
@@ -275,30 +299,6 @@ impl Filter {
         }
 
         Ok(self)
-    }
-}
-
-#[cfg(test)]
-impl FilterItem {
-    pub fn from_field_str(key: &str, value: &[OperationValue]) -> Result<Self> {
-        let (field_name, by, exclusive) = parse_str(key, value)?;
-
-        Ok(Self {
-            field: Field::Field(field_name),
-            by,
-            exclusive,
-        })
-    }
-
-    pub fn from_meta_str(key: &str, value: &[OperationValue]) -> Result<Self> {
-        let (field_name, by, exclusive) = parse_str(key, value)?;
-        let meta_field = field_name.as_str().try_into()?;
-
-        Ok(Self {
-            field: Field::Meta(meta_field),
-            by,
-            exclusive,
-        })
     }
 }
 
