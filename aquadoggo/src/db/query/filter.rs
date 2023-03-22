@@ -51,25 +51,25 @@ impl FilterItem {
 
 #[cfg(test)]
 impl FilterItem {
-    pub fn from_field_str(key: &str, value: &[OperationValue]) -> Result<Self> {
-        let (field_name, by, exclusive) = parse_str(key, value)?;
+    pub fn from_field_str(key: &str, value: &[OperationValue]) -> Self {
+        let (field_name, by, exclusive) = parse_str(key, value).unwrap();
 
-        Ok(Self {
+        Self {
             field: Field::Field(field_name),
             by,
             exclusive,
-        })
+        }
     }
 
-    pub fn from_meta_str(key: &str, value: &[OperationValue]) -> Result<Self> {
-        let (field_name, by, exclusive) = parse_str(key, value)?;
-        let meta_field = field_name.as_str().try_into()?;
+    pub fn from_meta_str(key: &str, value: &[OperationValue]) -> Self {
+        let (field_name, by, exclusive) = parse_str(key, value).unwrap();
+        let meta_field = field_name.as_str().try_into().unwrap();
 
-        Ok(Self {
+        Self {
             field: Field::Meta(meta_field),
             by,
             exclusive,
-        })
+        }
     }
 }
 
@@ -285,20 +285,20 @@ impl Default for Filter {
 
 #[cfg(test)]
 impl Filter {
-    pub fn fields(mut self, fields: &[(&str, &[OperationValue])]) -> Result<Self> {
+    pub fn fields(mut self, fields: &[(&str, &[OperationValue])]) -> Self {
         for field in fields {
-            self.upsert_filter_item(FilterItem::from_field_str(field.0, field.1)?);
+            self.upsert_filter_item(FilterItem::from_field_str(field.0, field.1));
         }
 
-        Ok(self)
+        self
     }
 
-    pub fn meta_fields(mut self, fields: &[(&str, &[OperationValue])]) -> Result<Self> {
+    pub fn meta_fields(mut self, fields: &[(&str, &[OperationValue])]) -> Self {
         for field in fields {
-            self.upsert_filter_item(FilterItem::from_meta_str(field.0, field.1)?);
+            self.upsert_filter_item(FilterItem::from_meta_str(field.0, field.1));
         }
 
-        Ok(self)
+        self
     }
 }
 
