@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{FieldName, FieldType, Schema};
 
-use crate::db::errors::QueryError;
 use crate::db::query::{Field, Filter, FilterBy, FilterItem, MetaField, Order, Select};
+use crate::db::query::errors::QueryError;
 
 fn validate_type(
     field_name: &str,
@@ -170,20 +170,31 @@ mod tests {
     use p2panda_rs::schema::Schema;
     use rstest::rstest;
 
-    use crate::db::query::{Filter, Order, Select};
+    use crate::db::query::{Direction, Filter, Order, Select};
     use crate::test_utils::doggo_schema;
 
     use super::validate_query;
 
     #[rstest]
     #[case::defaults(
-        Select::default(),
-        Filter::new().fields(
-            &[("username_not_in", &["bubu".into()])]
-        ).unwrap(),
-        Order::default()
+        Select::new(&[
+            "username".into(),
+            "height".into()
+        ]),
+        Filter::new().fields(&[
+            ("username_not_in", &["bubu".into()]),
+            ("height", &[20.5.into()]),
+            ("age_gte", &[16.into()]),
+            ("is_admin_not", &[true.into()]),
+        ]),
+        Order::new(
+            &"username".into(),
+            &Direction::Descending
+        )
     )]
     fn valid_queries(#[case] select: Select, #[case] filter: Filter, #[case] order: Order) {
-        assert!(validate_query(&select, &filter, &order, &doggo_schema()).is_ok());
+        if let Err(err) = validate_query(&select, &filter, &order, &doggo_schema()) {
+            panic!("{}", err)
+        }
     }
 }
