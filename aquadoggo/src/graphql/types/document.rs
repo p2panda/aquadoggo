@@ -30,7 +30,8 @@ impl Document {
                 TypeRef::named(document_fields_name),
                 move |ctx| {
                     FieldFuture::new(async move {
-                        // Here we just pass up the root query parameters to be used in the fields resolver
+                        // Here we just pass up the root query parameters to be used in the fields
+                        // resolver
                         let params = downcast_document_id_arguments(&ctx);
                         Ok(Some(FieldValue::owned_any(params)))
                     })
