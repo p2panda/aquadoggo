@@ -14,7 +14,6 @@ pub enum MetaField {
     Deleted,
 }
 
-// @TODO: Make strings constants
 impl TryFrom<&str> for MetaField {
     type Error = anyhow::Error;
 
