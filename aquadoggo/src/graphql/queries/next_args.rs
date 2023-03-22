@@ -63,6 +63,14 @@ fn validate_args(
     // Convert and validate passed parameters.
     let public_key = PublicKeyScalar::from_value(args.next().unwrap())?;
     let document_view_id = match args.next() {
+        Some(value) => match value {
+            async_graphql::Value::Null => None,
+            async_graphql::Value::String(_) => Some(value),
+            _ => panic!("Unexpected value type received for viewId in nextArgs"),
+        },
+        None => None,
+    };
+    let document_view_id = match document_view_id {
         Some(value) => {
             let document_view_id = DocumentViewIdScalar::from_value(value)?;
             debug!(
