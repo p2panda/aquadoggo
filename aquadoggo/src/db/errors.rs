@@ -47,6 +47,9 @@ pub enum SchemaStoreError {
 /// `Query` API errors.
 #[derive(Error, Debug)]
 pub enum QueryError {
+    #[error("Can't select unknown field '{0}'")]
+    SelectFieldUnknown(String),
+
     #[error("Can't apply ordering on unknown field '{0}'")]
     OrderFieldUnknown(String),
 

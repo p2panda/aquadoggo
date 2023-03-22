@@ -6,7 +6,7 @@ use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{FieldName, FieldType, Schema};
 
 use crate::db::errors::QueryError;
-use crate::db::query::{Field, Filter, FilterBy, FilterItem, MetaField, Order};
+use crate::db::query::{Field, Filter, FilterBy, FilterItem, MetaField, Order, Select};
 
 fn validate_type(
     field_name: &str,
@@ -24,8 +24,27 @@ fn validate_type(
     Ok(())
 }
 
-pub fn validate_query(filter: &Filter, order: &Order, schema: &Schema) -> Result<(), QueryError> {
+pub fn validate_query(
+    select: &Select,
+    filter: &Filter,
+    order: &Order,
+    schema: &Schema,
+) -> Result<(), QueryError> {
     let schema_fields: HashMap<&FieldName, &FieldType> = schema.fields().iter().collect();
+
+    // Make sure selected fields actually exists in schema
+    for field in select.iter() {
+        match field {
+            Field::Meta(_) => {
+                // Selecting any meta field is always okay
+            }
+            Field::Field(field_name) => {
+                if !schema_fields.contains_key(field_name) {
+                    return Err(QueryError::SelectFieldUnknown(field_name.clone()));
+                }
+            }
+        }
+    }
 
     // Make sure field to order actually exists in schema
     match &order.field {
@@ -151,19 +170,20 @@ mod tests {
     use p2panda_rs::schema::Schema;
     use rstest::rstest;
 
-    use crate::db::query::{Filter, Order};
+    use crate::db::query::{Filter, Order, Select};
     use crate::test_utils::doggo_schema;
 
     use super::validate_query;
 
     #[rstest]
     #[case::defaults(
+        Select::default(),
         Filter::new().fields(
             &[("username_not_in", &["bubu".into()])]
         ).unwrap(),
         Order::default()
     )]
-    fn valid_queries(#[case] filter: Filter, #[case] order: Order) {
-        assert!(validate_query(&filter, &order, &doggo_schema()).is_ok());
+    fn valid_queries(#[case] select: Select, #[case] filter: Filter, #[case] order: Order) {
+        assert!(validate_query(&select, &filter, &order, &doggo_schema()).is_ok());
     }
 }
