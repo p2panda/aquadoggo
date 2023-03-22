@@ -5,12 +5,22 @@ use std::convert::TryFrom;
 use anyhow::bail;
 use p2panda_rs::schema::FieldName;
 
-#[derive(Debug, Clone, PartialEq)]
+/// Pre-defined constant fields for every document.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum MetaField {
+    /// Identifier of the document.
     DocumentId,
+
+    /// Latest version of the document.
     DocumentViewId,
+
+    /// Public key of the original author (owner) of the document.
     Owner,
+
+    /// Flag indicating if document was edited at least once.
     Edited,
+
+    /// Flag indicating if document was deleted.
     Deleted,
 }
 
@@ -42,13 +52,22 @@ impl ToString for MetaField {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+/// Fields can be either defined by the regarding schema (application fields) or are constants
+/// (meta fields) like the identifier of the document itself.
+///
+/// Fields can be selected, ordered or filtered. Use the regarding structs to apply settings on top
+/// of these fields.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Field {
+    /// Pre-defined, constant fields for every document.
     Meta(MetaField),
+
+    /// Field defined by the schema.
     Field(FieldName),
 }
 
 impl Field {
+    /// Returns a new application field.
     pub fn new(name: &str) -> Self {
         Self::Field(name.to_string())
     }

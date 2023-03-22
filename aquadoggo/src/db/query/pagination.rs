@@ -3,13 +3,21 @@
 use std::fmt::Display;
 use std::num::NonZeroU64;
 
-pub const DEFAULT_PAGE_SIZE: u64 = 10;
+/// Default page size as defined by the p2panda specification.
+pub const DEFAULT_PAGE_SIZE: u64 = 25;
 
+/// Traits to define your own cursor implementation which will be used during pagination.
+///
+/// Cursors are always strings and ideally opaque. The latter can be achieved by for example
+/// hashing the original value so now semantics can be derived from the cursor itself.
 pub trait Cursor: Sized + Clone {
+    /// Error type for failed decoding.
     type Error: Display;
 
+    /// Convert any string cursor back into its original form.
     fn decode(value: &str) -> Result<Self, Self::Error>;
 
+    /// Convert any object into a string cursor.
     fn encode(&self) -> String;
 }
 
@@ -26,6 +34,10 @@ impl Cursor for String {
     }
 }
 
+/// Pagination settings which can be used further to construct a database query.
+///
+/// This object represents all required values to allow cursor-based pagination, while the cursor
+/// can be externally defined.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pagination<C>
 where
@@ -39,6 +51,7 @@ impl<C> Pagination<C>
 where
     C: Cursor,
 {
+    /// Returns a new instance of pagination settings.
     pub fn new(first: &NonZeroU64, after: Option<&C>) -> Self {
         Self {
             first: *first,
