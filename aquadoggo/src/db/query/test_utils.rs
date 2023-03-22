@@ -9,7 +9,6 @@ fn clean_key(key: &str, suffix: &str) -> String {
     key[0..key.len() - suffix.len()].into()
 }
 
-// @TODO: Make suffixes constants
 pub fn parse_str(key: &str, value: &[OperationValue]) -> Result<(String, FilterBy, bool)> {
     if value.is_empty() {
         bail!("Needs at least one value");
@@ -86,7 +85,6 @@ pub fn parse_str(key: &str, value: &[OperationValue]) -> Result<(String, FilterB
             true,
         ))
     } else if key.ends_with('_') {
-        // @TODO: Better error message
         bail!("Invalid query string");
     } else {
         Ok((key.into(), FilterBy::Element(element.to_owned()), false))
