@@ -160,21 +160,23 @@ pub struct PinnedRelationFilter {
 /// A filter input type for relation list field values.
 #[derive(InputObject)]
 pub struct RelationListFilter {
-    /// Filter for values which contain given list items.
-    contains: Option<Vec<DocumentIdScalar>>,
+    /// Filter by values in set.
+    #[graphql(name = "in")]
+    is_in: Option<Vec<DocumentIdScalar>>,
 
-    /// Filter for values which don't contain given list items.
-    #[graphql(name = "notContains")]
-    not_contains: Option<Vec<DocumentIdScalar>>,
+    /// Filter by values not in set.
+    #[graphql(name = "notIn")]
+    not_in: Option<Vec<DocumentIdScalar>>,
 }
 
 /// A filter input type for pinned relation list field values.
 #[derive(InputObject)]
 pub struct PinnedRelationListFilter {
-    /// Filter for values which contain given list items.
-    contains: Option<Vec<DocumentViewIdScalar>>,
+    /// Filter by values in set.
+    #[graphql(name = "in")]
+    is_in: Option<Vec<DocumentViewIdScalar>>,
 
-    /// Filter for values which don't contain given list items.
-    #[graphql(name = "notContains")]
-    not_contains: Option<Vec<DocumentViewIdScalar>>,
+    /// Filter by values not in set.
+    #[graphql(name = "notIn")]
+    not_in: Option<Vec<DocumentViewIdScalar>>,
 }
