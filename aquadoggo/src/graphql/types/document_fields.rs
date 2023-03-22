@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use async_graphql::dynamic::{Field, FieldFuture, Object, ResolverContext};
+use async_graphql::dynamic::{Field, FieldFuture, InputValue, Object, ResolverContext, TypeRef};
 use async_graphql::Error;
 use dynamic_graphql::FieldValue;
 use p2panda_rs::document::traits::AsDocument;
@@ -10,7 +10,8 @@ use p2panda_rs::schema::Schema;
 use crate::db::SqlStore;
 use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
 use crate::graphql::utils::{
-    downcast_document_id_arguments, fields_name, get_document_from_params, gql_scalar, graphql_type,
+    downcast_document_id_arguments, fields_name, filter_name, get_document_from_params, gql_scalar,
+    graphql_type,
 };
 
 /// GraphQL object which represents the fields of a document document type as described by it's
@@ -28,11 +29,27 @@ impl DocumentFields {
 
         // For every field in the schema we create a type with a resolver.
         for (name, field_type) in schema.fields().iter() {
-            document_schema_fields = document_schema_fields.field(Field::new(
-                name,
-                graphql_type(field_type),
-                move |ctx| FieldFuture::new(async move { Self::resolve(ctx).await }),
-            ));
+            let mut field = Field::new(name, graphql_type(field_type), move |ctx| {
+                FieldFuture::new(async move { Self::resolve(ctx).await })
+            });
+
+            // If this is a relation list type we add an argument for filtering items in the list.
+            match field_type {
+                p2panda_rs::schema::FieldType::RelationList(schema_id) => {
+                    field = field.argument(
+                        InputValue::new("filter", TypeRef::named(filter_name(schema_id)))
+                            .description("Filter the query based on passed arguments"),
+                    );
+                }
+                p2panda_rs::schema::FieldType::PinnedRelationList(schema_id) => {
+                    field = field.argument(
+                        InputValue::new("filter", TypeRef::named(filter_name(schema_id)))
+                            .description("Filter collection"),
+                    );
+                }
+                _ => (),
+            };
+            document_schema_fields = document_schema_fields.field(field);
         }
 
         document_schema_fields

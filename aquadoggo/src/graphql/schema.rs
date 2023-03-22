@@ -21,7 +21,9 @@ use crate::graphql::scalars::{
     EntryHashScalar, LogIdScalar, PublicKeyScalar, SeqNumScalar,
 };
 use crate::graphql::types::{
-    Document, DocumentFields, DocumentMeta, FilterInput, NextArguments, StringFilter,
+    BooleanFilter, Document, DocumentFields, DocumentMeta, FilterInput, FloatFilter, IntegerFilter,
+    NextArguments, PinnedRelationFilter, PinnedRelationListFilter, RelationFilter,
+    RelationListFilter, StringFilter,
 };
 use crate::schema::SchemaProvider;
 
@@ -39,9 +41,21 @@ pub async fn build_root_schema(
 
     // Using dynamic-graphql we create a registry and add types.
     let registry = Registry::new()
-        .register::<NextArguments>()
+        // Register mutations
         .register::<MutationRoot>()
         .register::<Publish>()
+        // Register return types
+        .register::<NextArguments>()
+        // Register input types
+        .register::<StringFilter>()
+        .register::<IntegerFilter>()
+        .register::<BooleanFilter>()
+        .register::<FloatFilter>()
+        .register::<RelationFilter>()
+        .register::<RelationListFilter>()
+        .register::<PinnedRelationFilter>()
+        .register::<PinnedRelationListFilter>()
+        // Register scalar types
         .register::<DocumentIdScalar>()
         .register::<DocumentMeta>()
         .register::<DocumentViewIdScalar>()
@@ -50,8 +64,7 @@ pub async fn build_root_schema(
         .register::<EntryHashScalar>()
         .register::<LogIdScalar>()
         .register::<PublicKeyScalar>()
-        .register::<SeqNumScalar>()
-        .register::<StringFilter>();
+        .register::<SeqNumScalar>();
 
     // Construct the schema builder.
     let mut schema_builder = Schema::build("Query", Some("MutationRoot"), None);
