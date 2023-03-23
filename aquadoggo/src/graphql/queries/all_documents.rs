@@ -8,8 +8,8 @@ use p2panda_rs::storage_provider::traits::DocumentStore;
 
 use crate::db::SqlStore;
 use crate::graphql::constants;
-use crate::graphql::types::DocumentValue;
-use crate::graphql::utils::{filter_name, order_by_name, paginated_document_name};
+use crate::graphql::types::{DocumentValue, PaginationData};
+use crate::graphql::utils::{filter_name, order_by_name, paginated_response_name};
 
 /// Adds GraphQL query for getting all documents of a certain p2panda schema to the root query
 /// object.
@@ -20,7 +20,7 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
     query.field(
         Field::new(
             format!("{}{}", constants::QUERY_ALL_PREFIX, schema_id),
-            TypeRef::named_list(paginated_document_name(&schema_id)),
+            TypeRef::named_list(paginated_response_name(&schema_id)),
             move |ctx| {
                 // Take ownership of the schema id in the resolver.
                 let schema_id = schema_id.clone();
@@ -43,6 +43,7 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                         .map(|document| {
                             FieldValue::owned_any(DocumentValue::Paginated(
                                 "CURSOR".to_string(),
+                                PaginationData::default(),
                                 document.to_owned(),
                             ))
                         })

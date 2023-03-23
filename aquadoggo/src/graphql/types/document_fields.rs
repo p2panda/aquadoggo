@@ -13,7 +13,7 @@ use crate::graphql::utils::{
     downcast_document, fields_name, filter_name, gql_scalar, graphql_type,
 };
 
-use super::DocumentValue;
+use super::{DocumentValue, PaginationData};
 
 /// GraphQL object which represents the fields of a document document type as described by it's
 /// p2panda schema. A type is added to the root GraphQL schema for every document, as these types
@@ -69,8 +69,8 @@ impl DocumentFields {
         let document = downcast_document(&ctx);
 
         let document = match document {
-            super::DocumentValue::Single(document) => document,
-            super::DocumentValue::Paginated(_, document) => document,
+            DocumentValue::Single(document) => document,
+            DocumentValue::Paginated(_, _, document) => document,
         };
 
         // Get the field this query is concerned with.
@@ -99,7 +99,11 @@ impl DocumentFields {
                         None => continue,
                     };
 
-                    let document = DocumentValue::Paginated("CURSOR".to_string(), document);
+                    let document = DocumentValue::Paginated(
+                        "CURSOR".to_string(),
+                        PaginationData::default(),
+                        document,
+                    );
 
                     fields.push(FieldValue::owned_any(document));
                 }
@@ -126,7 +130,11 @@ impl DocumentFields {
                         None => continue,
                     };
 
-                    let document = DocumentValue::Paginated("CURSOR".to_string(), document);
+                    let document = DocumentValue::Paginated(
+                        "CURSOR".to_string(),
+                        PaginationData::default(),
+                        document,
+                    );
 
                     fields.push(FieldValue::owned_any(document));
                 }

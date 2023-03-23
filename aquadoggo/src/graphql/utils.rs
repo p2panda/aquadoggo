@@ -16,11 +16,18 @@ const DOCUMENT_FIELDS_SUFFIX: &str = "Fields";
 const FILTER_INPUT_SUFFIX: &str = "Filter";
 const ORDER_BY_SUFFIX: &str = "OrderBy";
 const PAGINATED_DOCUMENT_SUFFIX: &str = "Paginated";
+const PAGINATED_RESPONSE_SUFFIX: &str = "PaginatedResponse";
 
-// Correctly formats the name of a document field type.
+// Correctly formats the name of a paginated response type.
+pub fn paginated_response_name(schema_id: &SchemaId) -> String {
+    format!("{}{PAGINATED_RESPONSE_SUFFIX}", schema_id)
+}
+
+// Correctly formats the name of a paginated document type.
 pub fn paginated_document_name(schema_id: &SchemaId) -> String {
     format!("{}{PAGINATED_DOCUMENT_SUFFIX}", schema_id)
 }
+
 // Correctly formats the name of a document field type.
 pub fn fields_name(schema_id: &SchemaId) -> String {
     format!("{}{DOCUMENT_FIELDS_SUFFIX}", schema_id)

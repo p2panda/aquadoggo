@@ -28,7 +28,7 @@ impl DocumentMeta {
 
         let document = match document {
             super::DocumentValue::Single(document) => document,
-            super::DocumentValue::Paginated(_, document) => document,
+            super::DocumentValue::Paginated(_, _, document) => document,
         };
 
         // Construct `DocumentMeta` and return it. We defined the document meta

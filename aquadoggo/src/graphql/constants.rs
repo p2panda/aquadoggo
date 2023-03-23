@@ -38,6 +38,9 @@ pub const PUBLIC_KEY_ARG: &str = "publicKey";
 pub const DOCUMENT_VIEW_ID_ARG: &str = "viewId";
 
 /// Name of field on a document where it's fields can be accessed.
+pub const DOCUMENT_FIELD: &str = "document";
+
+/// Name of field on a document where it's fields can be accessed.
 pub const FIELDS_FIELD: &str = "fields";
 
 /// Name of field on a document where it's meta data can be accessed.
@@ -45,3 +48,9 @@ pub const META_FIELD: &str = "meta";
 
 /// Name of field on a document where pagination cursor can be accessed.
 pub const CURSOR_FIELD: &str = "cursor";
+
+/// Name of field on a paginated response which contains the total count.
+pub const TOTAL_COUNT_FIELD: &str = "totalCount";
+
+/// Name of field on a paginated response which shows if a next page exists.
+pub const HAS_NEXT_PAGE_FIELD: &str = "hasNextPage";

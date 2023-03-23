@@ -6,13 +6,13 @@ use p2panda_rs::schema::Schema;
 
 use crate::db::types::StorageDocument;
 use crate::graphql::constants;
-use crate::graphql::types::DocumentMeta;
+use crate::graphql::types::{DocumentMeta, PaginationData};
 use crate::graphql::utils::{downcast_document, fields_name, paginated_document_name};
 
 #[derive(Clone, Debug)]
 pub enum DocumentValue {
     Single(StorageDocument),
-    Paginated(String, StorageDocument),
+    Paginated(String, PaginationData, StorageDocument),
 }
 
 /// GraphQL object which represents a document type which contains `fields` and `meta` fields. A
@@ -93,13 +93,12 @@ impl PaginatedDocumentSchema {
 
                         let cursor = match &document_value {
                             DocumentValue::Single(_) => panic!("Paginated document expected"),
-                            DocumentValue::Paginated(cursor, _) => cursor,
+                            DocumentValue::Paginated(cursor, _, _) => cursor,
                         };
 
                         Ok(Some(FieldValue::from(Value::String(cursor.to_owned()))))
                     })
                 },
             ))
-            .description(schema.description().to_string())
     }
 }
