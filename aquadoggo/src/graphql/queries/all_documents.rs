@@ -56,7 +56,11 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
         )
         .argument(
             InputValue::new("filter", TypeRef::named(filter_name(schema.id())))
-                .description("Filter the query based on passed arguments"),
+                .description("Filter the query based on field values"),
+        )
+        .argument(
+            InputValue::new("meta", TypeRef::named("MetaFilterInput"))
+                .description("Filter the query based on meta field values"),
         )
         .argument(InputValue::new(
             "orderBy",

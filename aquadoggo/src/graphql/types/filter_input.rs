@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_graphql::dynamic::{InputObject, InputValue, TypeRef};
+use dynamic_graphql::InputObject;
 use p2panda_rs::schema::Schema;
 
 use crate::graphql::utils::filter_name;
+use crate::graphql::types::BooleanFilter;
+
+use super::filters::OwnerFilter;
 
 /// GraphQL object which represents a filter input type which contains a filter object for every
 /// field on the passed p2panda schema.
@@ -64,4 +68,11 @@ impl FilterInput {
 
         filter_input
     }
+}
+
+#[derive(InputObject)]
+pub struct MetaFilterInput {
+    owner: Option<OwnerFilter>,
+    edited: Option<BooleanFilter>,
+    deleted: Option<BooleanFilter>
 }

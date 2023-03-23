@@ -12,7 +12,7 @@ mod paginated_response;
 pub use document::{DocumentSchema, DocumentValue, PaginatedDocumentSchema};
 pub use document_fields::DocumentFields;
 pub use document_meta::DocumentMeta;
-pub use filter_input::FilterInput;
+pub use filter_input::{FilterInput, MetaFilterInput};
 pub use filters::{
     BooleanFilter, FloatFilter, IntegerFilter, PinnedRelationFilter, PinnedRelationListFilter,
     RelationFilter, RelationListFilter, StringFilter,

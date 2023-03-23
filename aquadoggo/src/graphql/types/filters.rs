@@ -4,6 +4,26 @@ use dynamic_graphql::InputObject;
 
 use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
 
+/// A filter input type for owner field on meta object.
+#[derive(InputObject)]
+pub struct OwnerFilter {
+    /// Filter by values in set.
+    #[graphql(name = "in")]
+    is_in: Option<Vec<String>>,
+
+    /// Filter by values not in set.
+    #[graphql(name = "notIn")]
+    is_not_in: Option<Vec<String>>,
+
+    /// Filter by equal to.
+    #[graphql(name = "eq")]
+    eq: Option<String>,
+
+    /// Filter by not equal to.
+    #[graphql(name = "notEq")]
+    not_eq: Option<String>,
+}
+
 /// A filter input type for string field values.
 #[derive(InputObject)]
 pub struct StringFilter {

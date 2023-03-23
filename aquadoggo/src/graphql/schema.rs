@@ -22,9 +22,9 @@ use crate::graphql::scalars::{
 };
 use crate::graphql::types::{
     BooleanFilter, DocumentFields, DocumentMeta, DocumentSchema, FilterInput, FloatFilter,
-    IntegerFilter, NextArguments, OrderBy, OrderDirection, PaginatedDocumentSchema,
-    PaginatedResponse, PinnedRelationFilter, PinnedRelationListFilter, RelationFilter,
-    RelationListFilter, StringFilter,
+    IntegerFilter, MetaFilterInput, NextArguments, OrderBy, OrderDirection,
+    PaginatedDocumentSchema, PaginatedResponse, PinnedRelationFilter, PinnedRelationListFilter,
+    RelationFilter, RelationListFilter, StringFilter,
 };
 use crate::schema::SchemaProvider;
 
@@ -57,6 +57,7 @@ pub async fn build_root_schema(
         .register::<PinnedRelationFilter>()
         .register::<PinnedRelationListFilter>()
         .register::<OrderDirection>()
+        .register::<MetaFilterInput>()
         // Register scalar types
         .register::<DocumentIdScalar>()
         .register::<DocumentMeta>()
