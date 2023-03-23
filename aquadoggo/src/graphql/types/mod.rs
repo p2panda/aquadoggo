@@ -5,6 +5,7 @@ mod document_fields;
 mod document_meta;
 mod filter_input;
 mod filters;
+mod ordering;
 mod next_arguments;
 
 pub use document::Document;
@@ -16,3 +17,4 @@ pub use filters::{
     RelationFilter, RelationListFilter, StringFilter,
 };
 pub use next_arguments::NextArguments;
+pub use ordering::{OrderBy, OrderDirection};

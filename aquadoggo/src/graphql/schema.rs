@@ -22,7 +22,7 @@ use crate::graphql::scalars::{
 };
 use crate::graphql::types::{
     BooleanFilter, Document, DocumentFields, DocumentMeta, FilterInput, FloatFilter, IntegerFilter,
-    NextArguments, PinnedRelationFilter, PinnedRelationListFilter, RelationFilter,
+    NextArguments, OrderBy, OrderDirection, PinnedRelationFilter, PinnedRelationListFilter, RelationFilter,
     RelationListFilter, StringFilter,
 };
 use crate::schema::SchemaProvider;
@@ -55,6 +55,7 @@ pub async fn build_root_schema(
         .register::<RelationListFilter>()
         .register::<PinnedRelationFilter>()
         .register::<PinnedRelationListFilter>()
+        .register::<OrderDirection>()
         // Register scalar types
         .register::<DocumentIdScalar>()
         .register::<DocumentMeta>()
@@ -88,10 +89,14 @@ pub async fn build_root_schema(
         // Construct the filter input type object.
         let filter_input = FilterInput::build(&schema);
 
+        // Construct the filter input type object.
+        let ordering_input = OrderBy::build(&schema);
+
         // Register a schema, schema fields and filter type for every schema.
         schema_builder = schema_builder
             .register(document_schema_fields)
             .register(document_schema)
+            .register(ordering_input)
             .register(filter_input);
 
         // Add a query object for each schema. It offers an interface to retrieve a single

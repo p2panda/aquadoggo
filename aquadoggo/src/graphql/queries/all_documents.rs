@@ -10,7 +10,7 @@ use p2panda_rs::storage_provider::traits::DocumentStore;
 use crate::db::SqlStore;
 use crate::graphql::constants;
 use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
-use crate::graphql::utils::filter_name;
+use crate::graphql::utils::{filter_name, order_by_name};
 
 /// Adds GraphQL query for getting all documents of a certain p2panda schema to the root query
 /// object.
@@ -57,6 +57,12 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
         .argument(
             InputValue::new("filter", TypeRef::named(filter_name(schema.id())))
                 .description("Filter the query based on passed arguments"),
+        )
+        .argument(
+            InputValue::new("orderBy", TypeRef::named(order_by_name(schema.id()))),
+        )
+        .argument(
+            InputValue::new("orderDirection", TypeRef::named("OrderDirection")),
         )
         .description(format!("Get all {} documents.", schema.name())),
     )
