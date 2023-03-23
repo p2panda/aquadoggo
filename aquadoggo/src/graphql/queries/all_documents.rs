@@ -66,6 +66,8 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
             "orderDirection",
             TypeRef::named("OrderDirection"),
         ))
+        .argument(InputValue::new("first", TypeRef::named(TypeRef::INT)))
+        .argument(InputValue::new("after", TypeRef::named(TypeRef::STRING)))
         .description(format!("Get all {} documents.", schema.name())),
     )
 }
