@@ -114,7 +114,11 @@ mod test {
             let query = format!(
                 r#"{{
                 collection: all_{type_name} {{
-                    fields {{ bool }}
+                    hasNextPage
+                    totalCount
+                    document {{ 
+                        fields {{ bool }}
+                    }}
                 }},
             }}"#,
                 type_name = schema.id(),
@@ -131,7 +135,7 @@ mod test {
             let response: Response = response.json().await;
 
             let expected_data = value!({
-                "collection": value!([{ "fields": { "bool": true, } }]),
+                "collection": value!([{ "hasNextPage": false, "totalCount": 0, "document": { "fields": { "bool": true, } } }]),
             });
             assert_eq!(response.data, expected_data, "{:#?}", response.errors);
         });

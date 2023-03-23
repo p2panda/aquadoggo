@@ -183,22 +183,14 @@ mod test {
     #[case::unknown_document_id(
         "(id: \"00208f7492d6eb01360a886dac93da88982029484d8c04a0bd2ac0607101b80a6634\")",
         value!({
-            "view": {
-                "fields": {
-                    "name": Value::Null
-                }
-            }
+            "view": Value::Null
         }),
         vec![]
     )]
     #[case::unknown_view_id(
         "(viewId: \"00208f7492d6eb01360a886dac93da88982029484d8c04a0bd2ac0607101b80a6634\")",
         value!({
-            "view": {
-                "fields": {
-                    "name": Value::Null
-                }
-            }
+            "view": Value::Null
         }),
         vec![]
     )]
@@ -296,6 +288,11 @@ mod test {
                 }},
                 collection: all_{type_name} {{
                     __typename,
+                    document {{
+                        __typename,
+                        meta {{ __typename }}
+                        fields {{ __typename }}      
+                    }}
                 }},
             }}"#,
                 type_name = schema.id(),
@@ -319,7 +316,13 @@ mod test {
                     "fields": { "__typename": format!("{}Fields", schema.id()), }
                 },
                 "collection": [{
-                    "__typename": schema.id()
+                    "__typename": format!("{}PaginatedResponse", schema.id()),
+                    "document" : {
+                        "__typename" : format!("{}Paginated", schema.id()),
+                        "meta": { "__typename": "DocumentMeta" },
+                        "fields": { "__typename": format!("{}Fields", schema.id()), }
+
+                    }
                 }]
             });
             assert_eq!(response.data, expected_data, "{:#?}", response.errors);
