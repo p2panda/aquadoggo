@@ -3,8 +3,8 @@
 //! This module offers a query API to find one or many p2panda documents, filtered or sorted by
 //! custom parameters. Multiple results are batched via cursor-based pagination.
 use p2panda_rs::document::DocumentViewFields;
+use p2panda_rs::storage_provider::error::DocumentStorageError;
 
-use crate::db::query::errors::QueryError;
 use crate::db::query::{Cursor, Filter, Order, Pagination, Select};
 use crate::db::SqlStore;
 
@@ -23,7 +23,7 @@ impl SqlStore {
     pub async fn query<C: Cursor>(
         &self,
         args: &Query<C>,
-    ) -> Result<Vec<DocumentViewFields>, QueryError> {
+    ) -> Result<Vec<DocumentViewFields>, DocumentStorageError> {
         todo!();
     }
 }
