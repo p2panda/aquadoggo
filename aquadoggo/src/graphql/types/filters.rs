@@ -73,13 +73,6 @@ pub struct IntegerFilter {
 
     /// Filter by less than.
     lt: Option<u64>,
-
-    /// Filter for items which contain given value.
-    contains: Option<u64>,
-
-    /// Filter for items which don't contain given value.
-    #[graphql(name = "notContains")]
-    not_contains: Option<u64>,
 }
 
 /// A filter input type for float field values.
@@ -112,13 +105,6 @@ pub struct FloatFilter {
 
     /// Filter by less than.
     lt: Option<f64>,
-
-    /// Filter for items which contain given value.
-    contains: Option<f64>,
-
-    /// Filter for items which don't contain given value.
-    #[graphql(name = "notContains")]
-    not_contains: Option<f64>,
 }
 
 /// A filter input type for boolean field values.
