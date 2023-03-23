@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_graphql::dynamic::{Field, FieldFuture, FieldValue, Object, TypeRef};
-use async_graphql::{Number, Value};
+use async_graphql::Value;
 use p2panda_rs::schema::Schema;
 
 use crate::graphql::constants;
-use crate::graphql::types::DocumentMeta;
-use crate::graphql::utils::{downcast_document, paginated_response_name, paginated_document_name};
+use crate::graphql::utils::{downcast_document, paginated_document_name, paginated_response_name};
 
 #[derive(Default, Clone, Debug)]
 pub struct PaginationData {

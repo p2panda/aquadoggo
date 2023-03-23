@@ -10,10 +10,10 @@ use p2panda_rs::storage_provider::traits::DocumentStore;
 
 use crate::db::SqlStore;
 use crate::graphql::utils::{
-    downcast_document, fields_name, filter_name, gql_scalar, graphql_type,
+    downcast_document, fields_name, filter_name, gql_scalar, graphql_type, order_by_name,
 };
 
-use super::{DocumentValue, PaginationData};
+use super::{DocumentValue, PaginationData, PaginatedResponse};
 
 /// GraphQL object which represents the fields of a document document type as described by it's
 /// p2panda schema. A type is added to the root GraphQL schema for every document, as these types
@@ -30,25 +30,29 @@ impl DocumentFields {
 
         // For every field in the schema we create a type with a resolver.
         for (name, field_type) in schema.fields().iter() {
-            let mut field = Field::new(name, graphql_type(field_type), move |ctx| {
-                FieldFuture::new(async move { Self::resolve(ctx).await })
-            });
-
             // If this is a relation list type we add an argument for filtering items in the list.
-            match field_type {
-                p2panda_rs::schema::FieldType::RelationList(schema_id) => {
-                    field = field.argument(
-                        InputValue::new("filter", TypeRef::named(filter_name(schema_id)))
-                            .description("Filter the query based on passed arguments"),
-                    );
-                }
-                p2panda_rs::schema::FieldType::PinnedRelationList(schema_id) => {
-                    field = field.argument(
+            let field = match field_type {
+                p2panda_rs::schema::FieldType::RelationList(schema_id)
+                | p2panda_rs::schema::FieldType::PinnedRelationList(schema_id) => {
+                    Field::new(name, graphql_type(field_type), move |ctx| {
+                        FieldFuture::new(async move { Self::resolve(ctx).await })
+                    })
+                    .argument(
                         InputValue::new("filter", TypeRef::named(filter_name(schema_id)))
                             .description("Filter collection"),
-                    );
+                    )
+                    .argument(InputValue::new(
+                        "orderBy",
+                        TypeRef::named(order_by_name(schema.id())),
+                    ))
+                    .argument(InputValue::new(
+                        "orderDirection",
+                        TypeRef::named("OrderDirection"),
+                    ))
                 }
-                _ => (),
+                _ => Field::new(name, graphql_type(field_type), move |ctx| {
+                    FieldFuture::new(async move { Self::resolve(ctx).await })
+                }),
             };
             document_schema_fields = document_schema_fields.field(field);
         }

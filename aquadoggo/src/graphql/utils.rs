@@ -67,13 +67,13 @@ pub fn graphql_type(field_type: &FieldType) -> TypeRef {
         p2panda_rs::schema::FieldType::String => TypeRef::named(TypeRef::STRING),
         p2panda_rs::schema::FieldType::Relation(schema_id) => TypeRef::named(schema_id.to_string()),
         p2panda_rs::schema::FieldType::RelationList(schema_id) => {
-            TypeRef::named_list(schema_id.to_string())
+            TypeRef::named_list(paginated_response_name(schema_id))
         }
         p2panda_rs::schema::FieldType::PinnedRelation(schema_id) => {
             TypeRef::named(schema_id.to_string())
         }
         p2panda_rs::schema::FieldType::PinnedRelationList(schema_id) => {
-            TypeRef::named_list(schema_id.to_string())
+            TypeRef::named_list(paginated_response_name(schema_id))
         }
     }
 }
@@ -82,9 +82,7 @@ pub fn graphql_type(field_type: &FieldType) -> TypeRef {
 /// retrieved via the `ResolverContext`.
 ///
 /// We unwrap internally here as we expect validation to have occured in the query resolver.
-pub fn downcast_document(
-    ctx: &ResolverContext,
-) -> DocumentValue {
+pub fn downcast_document(ctx: &ResolverContext) -> DocumentValue {
     ctx.parent_value
         .downcast_ref::<DocumentValue>()
         .expect("Values passed from query parent should match expected")
