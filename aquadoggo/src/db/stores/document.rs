@@ -22,7 +22,7 @@
 //! As mentioned above, a useful property of documents is that they make it easy to retain past
 //! state, we call these states document views. When a document is updated it gets a new state, or
 //! view, which can be referred to by a globally unique document view id.
-//!  
+//!
 //! The getter methods allow retrieving a document by it's `DocumentId` or it's
 //! `DocumentViewId`. The former always returns the most current document state, the latter
 //! returns the specific document view if it has already been materialised and stored. Although it
@@ -161,7 +161,7 @@ impl DocumentStore for SqlStore {
                 documents
             LEFT JOIN operations_v1
                 ON
-                    operations_v1.operation_id = $1    
+                    operations_v1.operation_id = $1
             WHERE
                 documents.document_id = $1 AND documents.is_deleted = false
             ",

@@ -52,7 +52,9 @@ pub struct OperationFieldRow {
     ///
     /// This numeric value is a simple list index to represent multiple values within one operation
     /// field.
-    pub list_index: i32,
+    ///
+    /// This is an Option as a DELETE operation contains no fields.
+    pub list_index: Option<i32>,
 }
 
 /// A struct representing a joined OperationRow and OperationFieldRow.
@@ -96,5 +98,5 @@ pub struct OperationFieldsJoinedRow {
     ///
     /// This numeric value is a simple list index to represent multiple values within one operation
     /// field.
-    pub list_index: i32,
+    pub list_index: Option<i32>,
 }
