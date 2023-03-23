@@ -20,6 +20,10 @@ pub struct Behaviour {
     /// connection.
     pub ping: Toggle<ping::Behaviour>,
 
+    /// Communicate with remote peers via a relay server when a direct peer-to-peer
+    /// connection is not possible.
+    pub relay_client: Toggle<relay::client::Behaviour>,
+
     /// Serve as a relay point for remote peers to establish connectivity when a direct
     /// peer-to-peer connection is not possible.
     pub relay_server: Toggle<relay::Behaviour>,
@@ -43,6 +47,7 @@ impl Behaviour {
         network_config: &NetworkConfiguration,
         peer_id: PeerId,
         key_pair: Keypair,
+        relay_client: Option<relay::client::Behaviour>,
     ) -> Result<Self> {
         let public_key = key_pair.public();
 
@@ -94,6 +99,12 @@ impl Behaviour {
             None
         };
 
+        if relay_client.is_some() {
+            debug!("Relay client network behaviour enabled");
+        }
+
+        // Create a relay server behaviour with default configuration if the relay server
+        // flag is set
         let relay_server = if network_config.relay_server {
             debug!("Relay server network behaviour enabled");
             Some(relay::Behaviour::new(peer_id, relay::Config::default()))
@@ -107,6 +118,7 @@ impl Behaviour {
             rendezvous_client: rendezvous_client.into(),
             rendezvous_server: rendezvous_server.into(),
             identify: identify.into(),
+            relay_client: relay_client.into(),
             relay_server: relay_server.into(),
         })
     }
