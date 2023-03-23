@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Introduce `identify` and `rendezvous` network protocols / behaviours [#304](https://github.com/p2panda/aquadoggo/pull/304)
+
 ### Added
 
 - Introduce libp2p networking service and configuration [#282](https://github.com/p2panda/aquadoggo/pull/282)

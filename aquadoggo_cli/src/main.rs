@@ -5,7 +5,9 @@ use std::convert::{TryFrom, TryInto};
 
 use anyhow::Result;
 use aquadoggo::{Configuration, NetworkConfiguration, Node};
-use clap::Parser;
+use clap::error::ErrorKind as ClapErrorKind;
+use clap::{CommandFactory, Parser};
+use libp2p::{Multiaddr, PeerId};
 
 #[derive(Parser, Debug)]
 #[command(name = "aquadoggo Node", version)]
@@ -25,7 +27,7 @@ struct Cli {
 
     /// URLs of remote nodes to replicate with.
     #[arg(short, long)]
-    remote_node_addresses: Vec<String>,
+    remote_node_addresses: Vec<Multiaddr>,
 
     /// Enable mDNS for peer discovery over LAN (using port 5353), true by default.
     #[arg(short, long)]
@@ -34,6 +36,49 @@ struct Cli {
     /// Enable ping for connected peers (send and receive ping packets), true by default.
     #[arg(long)]
     ping: Option<bool>,
+
+    /// Enable rendezvous client to facilitate peer discovery via a rendezvous server, false by default.
+    #[arg(short = 'C', long)]
+    rendezvous_client: Option<bool>,
+
+    /// Enable rendezvous server to facilitate peer discovery for remote peers, false by default.
+    #[arg(short = 'S', long)]
+    rendezvous_server: Option<bool>,
+
+    /// The IP address of a rendezvous server in the form of a multiaddress.
+    ///
+    /// eg. --rendezvous-address "/ip4/127.0.0.1/udp/12345/quic-v1"
+    #[arg(long)]
+    rendezvous_address: Option<Multiaddr>,
+
+    /// The peer ID of a rendezvous server in the form of an Ed25519 key encoded as a raw
+    /// base58btc multihash.
+    ///
+    /// eg. --rendezvous-peer-id "12D3KooWD3eckifWpRn9wQpMG9R9hX3sD158z7EqHWmweQAJU5SA"
+    #[arg(long)]
+    rendezvous_peer_id: Option<PeerId>,
+}
+
+impl Cli {
+    // Run custom validators on parsed CLI input
+    fn validate(self) -> Self {
+        // Ensure rendezvous server address and peer ID are both provided if
+        // rendezvous client mode has been set to `true`. Both values are required
+        // to dial the rendezvous server.
+        if let Some(true) = self.rendezvous_client {
+            if self.rendezvous_address.is_none() || self.rendezvous_peer_id.is_none() {
+                // Print a help message about the missing value(s) and exit
+                Cli::command()
+                .error(
+                    ClapErrorKind::MissingRequiredArgument,
+                    "'--rendezvous-address' and '--rendezvous-peer-id' must both be provided if '--rendezvous-client true'",
+                )
+                .exit()
+            }
+        }
+
+        self
+    }
 }
 
 impl TryFrom<Cli> for Configuration {
@@ -48,6 +93,10 @@ impl TryFrom<Cli> for Configuration {
             ping: cli.ping.unwrap_or(true),
             quic_port: cli.quic_port.unwrap_or(2022),
             remote_peers: cli.remote_node_addresses,
+            rendezvous_client: cli.rendezvous_client.unwrap_or(false),
+            rendezvous_server: cli.rendezvous_server.unwrap_or(false),
+            rendezvous_address: cli.rendezvous_address,
+            rendezvous_peer_id: cli.rendezvous_peer_id,
             ..NetworkConfiguration::default()
         };
 
@@ -59,8 +108,10 @@ impl TryFrom<Cli> for Configuration {
 async fn main() {
     env_logger::init();
 
-    // Parse command line arguments and load configuration
-    let cli = Cli::parse();
+    // Parse command line arguments and run custom validators
+    let cli = Cli::parse().validate();
+
+    // Load configuration parameters and apply defaults
     let config = cli.try_into().expect("Could not load configuration");
 
     // Start p2panda node in async runtime

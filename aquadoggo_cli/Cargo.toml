@@ -7,6 +7,7 @@ authors = [
     "pietgeursen <pietgeursen@gmail.com>",
     "sandreae <contact@samandreae.com>",
     "sophiiistika <sophiiistika@mailbox.org>",
+    "glyph <glyph@mycelial.technology>",
 ]
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/p2panda/aquadoggo"
@@ -23,6 +24,7 @@ anyhow = "^1.0.62"
 tokio = { version = "^1.20.1", features = ["full"] }
 env_logger = "^0.9.0"
 clap = { version = "^4.1.8", features = ["derive"] }
+libp2p = "^0.51.0"
 
 [dependencies.aquadoggo]
 version = "~0.4.0"

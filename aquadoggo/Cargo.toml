@@ -7,6 +7,7 @@ authors = [
     "pietgeursen <pietgeursen@gmail.com>",
     "sandreae <contact@samandreae.com>",
     "sophiiistika <sophiiistika@mailbox.org>",
+    "glyph <glyph@mycelial.technology>",
 ]
 description = "Embeddable p2p network node"
 license = "AGPL-3.0-or-later"
@@ -38,6 +39,9 @@ libp2p = { version = "^0.51.0", features = [
     "quic",
     "ping",
     "mdns",
+    "identify",
+    "rendezvous",
+    "serde",
 ] }
 lipmaa-link = "^0.2.2"
 log = "^0.4.17"
