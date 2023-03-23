@@ -10,11 +10,17 @@ use p2panda_rs::storage_provider::traits::DocumentStore;
 
 use crate::db::{types::StorageDocument, SqlStore};
 use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
+use crate::graphql::types::DocumentValue;
 
 const DOCUMENT_FIELDS_SUFFIX: &str = "Fields";
 const FILTER_INPUT_SUFFIX: &str = "Filter";
 const ORDER_BY_SUFFIX: &str = "OrderBy";
+const PAGINATED_DOCUMENT_SUFFIX: &str = "Paginated";
 
+// Correctly formats the name of a document field type.
+pub fn paginated_document_name(schema_id: &SchemaId) -> String {
+    format!("{}{PAGINATED_DOCUMENT_SUFFIX}", schema_id)
+}
 // Correctly formats the name of a document field type.
 pub fn fields_name(schema_id: &SchemaId) -> String {
     format!("{}{DOCUMENT_FIELDS_SUFFIX}", schema_id)
@@ -65,15 +71,15 @@ pub fn graphql_type(field_type: &FieldType) -> TypeRef {
     }
 }
 
-/// Downcast document id and document view id from parameters passed up the query fields and
+/// Downcast document value which will have been passed up by the parent query node,
 /// retrieved via the `ResolverContext`.
 ///
 /// We unwrap internally here as we expect validation to have occured in the query resolver.
-pub fn downcast_document_id_arguments(
+pub fn downcast_document(
     ctx: &ResolverContext,
-) -> (Option<DocumentIdScalar>, Option<DocumentViewIdScalar>) {
+) -> DocumentValue {
     ctx.parent_value
-        .downcast_ref::<(Option<DocumentIdScalar>, Option<DocumentViewIdScalar>)>()
+        .downcast_ref::<DocumentValue>()
         .expect("Values passed from query parent should match expected")
         .to_owned()
 }

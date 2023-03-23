@@ -42,3 +42,6 @@ pub const FIELDS_FIELD: &str = "fields";
 
 /// Name of field on a document where it's meta data can be accessed.
 pub const META_FIELD: &str = "meta";
+
+/// Name of field on a document where pagination cursor can be accessed.
+pub const CURSOR_FIELD: &str = "cursor";

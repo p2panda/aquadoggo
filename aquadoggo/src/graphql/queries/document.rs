@@ -6,8 +6,11 @@ use dynamic_graphql::{FieldValue, ScalarValue};
 use log::debug;
 use p2panda_rs::schema::Schema;
 
+use crate::db::SqlStore;
 use crate::graphql::constants;
 use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
+use crate::graphql::types::DocumentValue;
+use crate::graphql::utils::get_document_from_params;
 
 /// Adds GraphQL query for getting a single p2panda document, selected by its document id or
 /// document view id to the root query object.
@@ -22,10 +25,22 @@ pub fn build_document_query(query: Object, schema: &Schema) -> Object {
             move |ctx| {
                 FieldFuture::new(async move {
                     // Validate the received arguments.
-                    let args = validate_args(&ctx)?;
+                    let (document_id, document_view_id) = validate_args(&ctx)?;
+                    let store = ctx.data_unchecked::<SqlStore>();
+                    
+                    // Get the whole document from the store.
+                    let document =
+                        match get_document_from_params(store, &document_id, &document_view_id)
+                            .await?
+                        {
+                            Some(document) => document,
+                            None => return Ok(FieldValue::NONE),
+                        };
+
+                    let document = DocumentValue::Single(document);
 
                     // Pass them up to the children query fields.
-                    Ok(Some(FieldValue::owned_any(args)))
+                    Ok(Some(FieldValue::owned_any(document)))
                 })
             },
         )

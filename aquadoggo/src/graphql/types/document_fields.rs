@@ -6,13 +6,14 @@ use dynamic_graphql::FieldValue;
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::Schema;
+use p2panda_rs::storage_provider::traits::DocumentStore;
 
 use crate::db::SqlStore;
-use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
 use crate::graphql::utils::{
-    downcast_document_id_arguments, fields_name, filter_name, get_document_from_params, gql_scalar,
-    graphql_type,
+    downcast_document, fields_name, filter_name, gql_scalar, graphql_type,
 };
+
+use super::DocumentValue;
 
 /// GraphQL object which represents the fields of a document document type as described by it's
 /// p2panda schema. A type is added to the root GraphQL schema for every document, as these types
@@ -64,50 +65,70 @@ impl DocumentFields {
         let store = ctx.data_unchecked::<SqlStore>();
         let name = ctx.field().name();
 
-        // Parse the bubble up message.
-        let (document_id, document_view_id) = downcast_document_id_arguments(&ctx);
+        // Parse the bubble up value.
+        let document = downcast_document(&ctx);
 
-        // Get the whole document from the store.
-        let document =
-            match get_document_from_params(store, &document_id, &document_view_id).await? {
-                Some(document) => document,
-                None => return Ok(FieldValue::NONE),
-            };
+        let document = match document {
+            super::DocumentValue::Single(document) => document,
+            super::DocumentValue::Paginated(_, document) => document,
+        };
 
         // Get the field this query is concerned with.
         match document.get(name).unwrap() {
             // Relation fields are expected to resolve to the related document so we pass
             // along the document id which will be processed through it's own resolver.
-            OperationValue::Relation(rel) => Ok(Some(FieldValue::owned_any((
-                Some(DocumentIdScalar::from(rel.document_id())),
-                None::<DocumentViewIdScalar>,
-            )))),
+            OperationValue::Relation(rel) => {
+                // Get the whole document from the store.
+                let document = match store.get_document(rel.document_id()).await? {
+                    Some(document) => document,
+                    None => return Ok(FieldValue::NONE),
+                };
+
+                let document = DocumentValue::Single(document);
+                Ok(Some(FieldValue::owned_any(document)))
+            }
             // Relation lists are handled by collecting and returning a list of all document
             // id's in the relation list. Each of these in turn are processed and queries
             // forwarded up the tree via their own respective resolvers.
             OperationValue::RelationList(rel) => {
                 let mut fields = vec![];
                 for document_id in rel.iter() {
-                    fields.push(FieldValue::owned_any((
-                        Some(DocumentIdScalar::from(document_id)),
-                        None::<DocumentViewIdScalar>,
-                    )));
+                    // Get the whole document from the store.
+                    let document = match store.get_document(document_id).await? {
+                        Some(document) => document,
+                        None => continue,
+                    };
+
+                    let document = DocumentValue::Paginated("CURSOR".to_string(), document);
+
+                    fields.push(FieldValue::owned_any(document));
                 }
                 Ok(Some(FieldValue::list(fields)))
             }
             // Pinned relation behaves the same as relation but passes along a document view id.
-            OperationValue::PinnedRelation(rel) => Ok(Some(FieldValue::owned_any((
-                None::<DocumentIdScalar>,
-                Some(DocumentViewIdScalar::from(rel.view_id())),
-            )))),
+            OperationValue::PinnedRelation(rel) => {
+                // Get the whole document from the store.
+                let document = match store.get_document_by_view_id(rel.view_id()).await? {
+                    Some(document) => document,
+                    None => return Ok(FieldValue::NONE),
+                };
+
+                let document = DocumentValue::Single(document);
+                Ok(Some(FieldValue::owned_any(document)))
+            }
             // Pinned relation lists behave the same as relation lists but pass along view ids.
             OperationValue::PinnedRelationList(rel) => {
                 let mut fields = vec![];
                 for document_view_id in rel.iter() {
-                    fields.push(FieldValue::owned_any((
-                        None::<DocumentIdScalar>,
-                        Some(DocumentViewIdScalar::from(document_view_id)),
-                    )));
+                    // Get the whole document from the store.
+                    let document = match store.get_document_by_view_id(document_view_id).await? {
+                        Some(document) => document,
+                        None => continue,
+                    };
+
+                    let document = DocumentValue::Paginated("CURSOR".to_string(), document);
+
+                    fields.push(FieldValue::owned_any(document));
                 }
                 Ok(Some(FieldValue::list(fields)))
             }

@@ -3,14 +3,13 @@
 use async_graphql::dynamic::{Field, FieldFuture, InputValue, Object, TypeRef};
 use dynamic_graphql::FieldValue;
 use log::debug;
-use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::schema::Schema;
 use p2panda_rs::storage_provider::traits::DocumentStore;
 
 use crate::db::SqlStore;
 use crate::graphql::constants;
-use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
-use crate::graphql::utils::{filter_name, order_by_name};
+use crate::graphql::types::DocumentValue;
+use crate::graphql::utils::{filter_name, order_by_name, paginated_document_name};
 
 /// Adds GraphQL query for getting all documents of a certain p2panda schema to the root query
 /// object.
@@ -21,7 +20,7 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
     query.field(
         Field::new(
             format!("{}{}", constants::QUERY_ALL_PREFIX, schema_id),
-            TypeRef::named_list(schema_id.to_string()),
+            TypeRef::named_list(paginated_document_name(&schema_id)),
             move |ctx| {
                 // Take ownership of the schema id in the resolver.
                 let schema_id = schema_id.clone();
@@ -42,9 +41,9 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                         .await?
                         .iter()
                         .map(|document| {
-                            FieldValue::owned_any((
-                                Some(DocumentIdScalar::from(document.id())),
-                                None::<DocumentViewIdScalar>,
+                            FieldValue::owned_any(DocumentValue::Paginated(
+                                "CURSOR".to_string(),
+                                document.to_owned(),
                             ))
                         })
                         .collect();
@@ -58,12 +57,14 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
             InputValue::new("filter", TypeRef::named(filter_name(schema.id())))
                 .description("Filter the query based on passed arguments"),
         )
-        .argument(
-            InputValue::new("orderBy", TypeRef::named(order_by_name(schema.id()))),
-        )
-        .argument(
-            InputValue::new("orderDirection", TypeRef::named("OrderDirection")),
-        )
+        .argument(InputValue::new(
+            "orderBy",
+            TypeRef::named(order_by_name(schema.id())),
+        ))
+        .argument(InputValue::new(
+            "orderDirection",
+            TypeRef::named("OrderDirection"),
+        ))
         .description(format!("Get all {} documents.", schema.name())),
     )
 }

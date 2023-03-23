@@ -8,7 +8,7 @@ mod filters;
 mod ordering;
 mod next_arguments;
 
-pub use document::Document;
+pub use document::{DocumentSchema, DocumentValue, PaginatedDocumentSchema};
 pub use document_fields::DocumentFields;
 pub use document_meta::DocumentMeta;
 pub use filter_input::FilterInput;
