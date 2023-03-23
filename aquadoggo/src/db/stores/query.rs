@@ -9,14 +9,7 @@ use crate::db::query::{Cursor, Filter, Order, Pagination, Select};
 use crate::db::SqlStore;
 
 #[derive(Default, Debug, Clone)]
-pub struct Find {
-    pub select: Select,
-    pub filter: Filter,
-    pub order: Order,
-}
-
-#[derive(Default, Debug, Clone)]
-pub struct FindMany<C>
+pub struct Query<C>
 where
     C: Cursor,
 {
@@ -27,13 +20,9 @@ where
 }
 
 impl SqlStore {
-    pub async fn find(&self, args: &Find) -> Result<DocumentViewFields, QueryError> {
-        todo!();
-    }
-
-    pub async fn find_many<C: Cursor>(
+    pub async fn query<C: Cursor>(
         &self,
-        args: &FindMany<C>,
+        args: &Query<C>,
     ) -> Result<Vec<DocumentViewFields>, QueryError> {
         todo!();
     }
@@ -45,20 +34,7 @@ mod tests {
 
     use crate::db::query::{Direction, Field, Filter, MetaField, Order, Pagination};
 
-    use super::{Find, FindMany};
-
-    #[test]
-    fn create_find_query() {
-        let order = Order::new(&Field::Meta(MetaField::Owner), &Direction::Descending);
-
-        let query = Find {
-            order: order.clone(),
-            ..Find::default()
-        };
-
-        assert_eq!(query.order, order);
-        assert_eq!(query.filter, Filter::default());
-    }
+    use super::Query;
 
     #[test]
     fn create_find_many_query() {
@@ -66,10 +42,10 @@ mod tests {
         let pagination =
             Pagination::<String>::new(&NonZeroU64::new(50).unwrap(), Some(&"cursor".into()));
 
-        let query = FindMany {
+        let query = Query {
             order: order.clone(),
             pagination: pagination.clone(),
-            ..FindMany::default()
+            ..Query::default()
         };
 
         assert_eq!(query.pagination, pagination);
