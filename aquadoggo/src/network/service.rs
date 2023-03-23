@@ -3,12 +3,19 @@
 use std::convert::TryInto;
 
 use anyhow::Result;
+use futures::future::Either;
 use futures::StreamExt;
 use libp2p::core::muxing::StreamMuxerBox;
+use libp2p::core::transport::upgrade::Version;
+use libp2p::core::transport::{Boxed, OrTransport};
+use libp2p::identity::Keypair;
 use libp2p::multiaddr::Protocol;
+use libp2p::noise::NoiseAuthenticated;
 use libp2p::ping::Event;
 use libp2p::swarm::{AddressScore, SwarmBuilder, SwarmEvent};
-use libp2p::{identify, mdns, quic, rendezvous, Multiaddr, PeerId, Transport};
+use libp2p::yamux::YamuxConfig;
+use libp2p::Swarm;
+use libp2p::{identify, mdns, quic, relay, rendezvous, Multiaddr, PeerId, Transport};
 use log::{debug, info, warn};
 
 use crate::bus::ServiceSender;
@@ -17,6 +24,64 @@ use crate::manager::{ServiceReadySender, Shutdown};
 use crate::network::behaviour::{Behaviour, BehaviourEvent};
 use crate::network::config::NODE_NAMESPACE;
 use crate::network::NetworkConfiguration;
+
+// Build the transport stack to be used by the network swarm
+async fn build_transport(
+    key_pair: &Keypair,
+) -> (
+    Boxed<(PeerId, StreamMuxerBox)>,
+    Option<relay::client::Behaviour>,
+) {
+    // Generate a relay transport and client behaviour if relay client mode is selected
+    let (relay_transport, relay_client) = relay::client::new(key_pair.public().to_peer_id());
+    let relay_client = Some(relay_client);
+
+    // Add encryption and multiplexing to the relay transport
+    let relay_transport = relay_transport
+        .upgrade(Version::V1)
+        .authenticate(NoiseAuthenticated::xx(key_pair).unwrap())
+        .multiplex(YamuxConfig::default());
+
+    // Create QUIC transport (provides transport, security and multiplexing in a single protocol)
+    let quic_config = quic::Config::new(key_pair);
+    let quic_transport = quic::tokio::Transport::new(quic_config);
+
+    let transport = OrTransport::new(quic_transport, relay_transport)
+        .map(|either_output, _| match either_output {
+            Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+            Either::Right((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+        })
+        .boxed();
+
+    (transport, relay_client)
+}
+
+async fn build_swarm(
+    network_config: &NetworkConfiguration,
+    key_pair: Keypair,
+) -> Result<Swarm<Behaviour>> {
+    // Read the peer ID (public key) from the key pair
+    let peer_id = PeerId::from(key_pair.public());
+    info!("Network service peer ID: {peer_id}");
+
+    let (transport, relay_client) = build_transport(&key_pair).await;
+
+    // Instantiate the custom network behaviour with default configuration
+    // and the libp2p peer ID
+    let behaviour = Behaviour::new(network_config, peer_id, key_pair, relay_client)?;
+
+    // Initialise a swarm with QUIC transports, our composed network behaviour
+    // and the default configuration parameters
+    let swarm = SwarmBuilder::with_tokio_executor(transport, behaviour, peer_id)
+        .connection_limits(network_config.connection_limits())
+        // This method expects a NonZeroU8 as input, hence the try_into conversion
+        .dial_concurrency_factor(network_config.dial_concurrency_factor.try_into()?)
+        .per_connection_event_buffer_size(network_config.per_connection_event_buffer_size)
+        .notify_handler_buffer_size(network_config.notify_handler_buffer_size.try_into()?)
+        .build();
+
+    Ok(swarm)
+}
 
 /// Network service that configures and deploys a network swarm over QUIC transports.
 ///
@@ -31,37 +96,19 @@ pub async fn network_service(
     // Subscribe to communication bus
     let mut _rx = tx.subscribe();
 
-    // Read the network configuration parameters from the application context
-    let network_config = context.config.network.clone();
-
     // Load the network key pair and peer ID
     let key_pair =
         NetworkConfiguration::load_or_generate_key_pair(context.config.base_path.clone())?;
-    let peer_id = PeerId::from(key_pair.public());
-    info!("Network service peer ID: {peer_id}");
 
-    let quic_config = quic::Config::new(&key_pair);
-    // Create QUIC transport (provides transport, security and multiplexing in a single protocol)
-    let quic_transport = quic::tokio::Transport::new(quic_config)
-        // Perform conversion to a StreamMuxerBox (QUIC handles multiplexing)
-        .map(|(p, c), _| (p, StreamMuxerBox::new(c)))
-        .boxed();
+    // Read the network configuration parameters from the application context
+    let network_config = context.config.network.clone();
+
+    // Build the network swarm
+    let mut swarm = build_swarm(&network_config, key_pair).await?;
+
+    // Define the QUIC multiaddress on which the swarm will listen for connections
     let quic_multiaddr =
         format!("/ip4/0.0.0.0/udp/{}/quic-v1", network_config.quic_port).parse()?;
-
-    // Instantiate the custom network behaviour with default configuration
-    // and the libp2p peer ID
-    let behaviour = Behaviour::new(&network_config, peer_id, key_pair)?;
-
-    // Initialise a swarm with QUIC transports, our composed network behaviour
-    // and the default configuration parameters
-    let mut swarm = SwarmBuilder::with_tokio_executor(quic_transport, behaviour, peer_id)
-        .connection_limits(network_config.connection_limits())
-        // This method expects a NonZeroU8 as input, hence the try_into conversion
-        .dial_concurrency_factor(network_config.dial_concurrency_factor.try_into()?)
-        .per_connection_event_buffer_size(network_config.per_connection_event_buffer_size)
-        .notify_handler_buffer_size(network_config.notify_handler_buffer_size.try_into()?)
-        .build();
 
     // Listen for incoming connection requests over the QUIC transport
     swarm.listen_on(quic_multiaddr)?;
@@ -274,6 +321,7 @@ pub async fn network_service(
                 SwarmEvent::Behaviour(BehaviourEvent::RelayServer(event)) => {
                     debug!("Unhandled relay server event: {event:?}")
                 }
+                SwarmEvent::Behaviour(BehaviourEvent::RelayClient(_)) => todo!(),
             }
         }
     });
