@@ -43,6 +43,8 @@ libp2p = { version = "^0.51.0", features = [
     "relay",
     "rendezvous",
     "serde",
+    "noise",
+    "yamux",
 ] }
 lipmaa-link = "^0.2.2"
 log = "^0.4.17"
