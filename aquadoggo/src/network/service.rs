@@ -112,6 +112,9 @@ pub async fn network_service(
                 }
                 SwarmEvent::ConnectionEstablished { peer_id, .. }
                     if network_config.rendezvous_client
+                        && swarm.behaviour().rendezvous_client.is_enabled()
+                        // Should be safe to unwrap rendezvous_peer_id because the CLI parser ensures
+                        // it's provided if rendezvous_client is set to true
                         && network_config.rendezvous_peer_id.unwrap() == peer_id =>
                 {
                     debug!(
@@ -122,7 +125,7 @@ pub async fn network_service(
                         .behaviour_mut()
                         .rendezvous_client
                         .as_mut()
-                        .unwrap()
+                        .unwrap() // Safe to unwrap because rendezvous_client behaviour is enabled
                         .discover(
                             Some(rendezvous::Namespace::new(NODE_NAMESPACE.to_string()).unwrap()),
                             None,
