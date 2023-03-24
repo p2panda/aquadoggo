@@ -8,8 +8,8 @@ use crate::graphql::utils::order_by_name;
 
 #[derive(Enum, Debug)]
 pub enum OrderDirection {
-    Ascending,
-    Descending,
+    Asc,
+    Desc,
 }
 
 pub struct OrderBy;
