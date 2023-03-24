@@ -4,7 +4,7 @@ use anyhow::Result;
 use libp2p::identity::Keypair;
 use libp2p::swarm::behaviour::toggle::Toggle;
 use libp2p::swarm::NetworkBehaviour;
-use libp2p::{identify, mdns, ping, relay, rendezvous, PeerId};
+use libp2p::{autonat, identify, mdns, ping, relay, rendezvous, PeerId};
 use log::debug;
 
 use crate::network::config::NODE_NAMESPACE;
@@ -38,6 +38,10 @@ pub struct Behaviour {
     /// Periodically exchange information between peer on an established connection. This
     /// is useful for learning the external address of the local node from a remote peer.
     pub identify: Toggle<identify::Behaviour>,
+
+    /// Determine NAT status by requesting remote peers to dial the public address of the
+    /// local node.
+    pub autonat: Toggle<autonat::Behaviour>,
 }
 
 impl Behaviour {
@@ -112,6 +116,14 @@ impl Behaviour {
             None
         };
 
+        // Create an autonat behaviour with default configuration if the autonat flag is set
+        let autonat = if network_config.autonat {
+            debug!("AutoNAT network behaviour enabled");
+            Some(autonat::Behaviour::new(peer_id, autonat::Config::default()))
+        } else {
+            None
+        };
+
         Ok(Self {
             mdns: mdns.into(), // Convert the `Option` into a `Toggle`
             ping: ping.into(),
@@ -120,6 +132,7 @@ impl Behaviour {
             identify: identify.into(),
             relay_client: relay_client.into(),
             relay_server: relay_server.into(),
+            autonat: autonat.into(),
         })
     }
 }
