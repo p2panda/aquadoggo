@@ -115,17 +115,112 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
 
 #[cfg(test)]
 mod test {
-    use async_graphql::{value, Response};
+    use async_graphql::{value, Response, Value};
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::schema::FieldType;
-    use p2panda_rs::test_utils::fixtures::random_key_pair;
+    use p2panda_rs::test_utils::fixtures::key_pair;
     use rstest::rstest;
     use serde_json::json;
 
     use crate::test_utils::{add_document, add_schema, graphql_test_client, test_runner, TestNode};
 
     #[rstest]
-    fn collection_query(#[from(random_key_pair)] key_pair: KeyPair) {
+    // TODO: We don't validate all of the internal argument values yet, only the simple types and
+    // object fields, these tests will need updating when we do.
+    //
+    // TODO: We don't actually perform any validation yet, these tests will need to be updated
+    // when we do.
+    #[case(
+        "".to_string(), 
+        value!({
+            "collection": value!([{ "hasNextPage": false, "totalCount": 0, "document": { "cursor": "CURSOR", "fields": { "bool": true, } } }]),
+        }),
+        vec![]
+    )]
+    #[case(
+        r#"(first: 10, after: "CURSOR", orderBy: OWNER, orderDirection: ASC, filter: { bool : { eq: true } }, meta: { owner: { in: ["PUBLIC"] } })"#.to_string(), 
+        value!({
+            "collection": value!([{ "hasNextPage": false, "totalCount": 0, "document": { "cursor": "CURSOR", "fields": { "bool": true, } } }]),
+        }),
+        vec![]
+    )]
+    #[case(
+        r#"(first: "hello")"#.to_string(), 
+        Value::Null,
+        vec!["Invalid value for argument \"first\", expected type \"Int\"".to_string()]
+    )]
+    #[case(
+        r#"(after: HELLO)"#.to_string(), 
+        Value::Null,
+        vec!["Invalid value for argument \"after\", expected type \"String\"".to_string()]
+    )]
+    #[case(
+        r#"(after: 27)"#.to_string(), 
+        Value::Null,
+        vec!["Invalid value for argument \"after\", expected type \"String\"".to_string()]
+    )]
+    #[case(
+        r#"(orderBy: HELLO)"#.to_string(), 
+        Value::Null,
+        vec!["Invalid value for argument \"orderBy\", enumeration type \"schema_name_00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331OrderBy\" does not contain the value \"HELLO\"".to_string()]
+    )]
+    #[case(
+        r#"(orderBy: "hello")"#.to_string(), 
+        Value::Null,
+        vec!["Invalid value for argument \"orderBy\", enumeration type \"schema_name_00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331OrderBy\" does not contain the value \"hello\"".to_string()]
+    )]
+    #[case(
+        r#"(orderDirection: HELLO)"#.to_string(), 
+        Value::Null,
+        vec!["Invalid value for argument \"orderDirection\", enumeration type \"OrderDirection\" does not contain the value \"HELLO\"".to_string()]
+    )]
+    #[case(
+        r#"(orderDirection: "hello")"#.to_string(), 
+        Value::Null,
+        vec!["Invalid value for argument \"orderDirection\", enumeration type \"OrderDirection\" does not contain the value \"hello\"".to_string()]
+    )]
+    #[case(
+        r#"(filter: "hello")"#.to_string(), 
+        Value::Null,
+        vec!["internal: is not an object".to_string()]
+    )]
+    #[case(
+        r#"(filter: { bool: { in: ["hello"] }})"#.to_string(), 
+        Value::Null,
+        vec!["Invalid value for argument \"filter.bool\", unknown field \"in\" of type \"BooleanFilter\"".to_string()]
+    )]
+    #[case(
+        r#"(filter: { hello: { eq: true }})"#.to_string(), 
+        Value::Null,
+        vec!["Invalid value for argument \"filter\", unknown field \"hello\" of type \"schema_name_00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331Filter\"".to_string()]
+    )]
+    #[case(
+        r#"(filter: { bool: { contains: "hello" }})"#.to_string(), 
+        Value::Null,
+        vec!["Invalid value for argument \"filter.bool\", unknown field \"contains\" of type \"BooleanFilter\"".to_string()]
+    )]
+    #[case(
+        r#"(meta: "hello")"#.to_string(), 
+        Value::Null,
+        vec!["internal: is not an object".to_string()]
+    )]
+    #[case(
+        r#"(meta: { bool: { in: ["hello"] }})"#.to_string(), 
+        Value::Null,
+        vec!["Invalid value for argument \"meta\", unknown field \"bool\" of type \"MetaFilterInput\"".to_string()]
+    )]
+    #[case(
+        r#"(meta: { owner: { contains: "hello" }})"#.to_string(), 
+        Value::Null,
+        vec!["Invalid value for argument \"meta.owner\", unknown field \"contains\" of type \"OwnerFilter\"".to_string()]
+    )]
+
+    fn collection_query(
+        key_pair: KeyPair,
+        #[case] query_args: String,
+        #[case] expected_data: Value,
+        #[case] expected_errors: Vec<String>,
+    ) {
         // Test collection query parameter variations.
         test_runner(move |mut node: TestNode| async move {
             // Add schema to node.
@@ -150,7 +245,7 @@ mod test {
             let client = graphql_test_client(&node).await;
             let query = format!(
                 r#"{{
-                collection: all_{type_name} {{
+                collection: all_{type_name}{query_args} {{
                     hasNextPage
                     totalCount
                     document {{ 
@@ -160,6 +255,7 @@ mod test {
                 }},
             }}"#,
                 type_name = schema.id(),
+                query_args = query_args
             );
 
             let response = client
@@ -172,10 +268,15 @@ mod test {
 
             let response: Response = response.json().await;
 
-            let expected_data = value!({
-                "collection": value!([{ "hasNextPage": false, "totalCount": 0, "document": { "cursor": "CURSOR", "fields": { "bool": true, } } }]),
-            });
             assert_eq!(response.data, expected_data, "{:#?}", response.errors);
+
+            // Assert error messages.
+            let err_msgs: Vec<String> = response
+                .errors
+                .iter()
+                .map(|err| err.message.to_string())
+                .collect();
+            assert_eq!(err_msgs, expected_errors);
         });
     }
 }
