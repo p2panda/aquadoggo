@@ -79,6 +79,9 @@ pub struct NetworkConfiguration {
     /// Serve as a relay point for peer connections.
     pub relay_server: bool,
 
+    /// Address of a relay server in the form of a multiaddress.
+    pub relay_address: Option<Multiaddr>,
+
     /// The addresses of remote peers to replicate from.
     pub remote_peers: Vec<Multiaddr>,
 
@@ -97,11 +100,17 @@ pub struct NetworkConfiguration {
 
     /// Peer ID of a rendezvous server.
     pub rendezvous_peer_id: Option<PeerId>,
+
+    /// AutoNAT behaviour enabled.
+    ///
+    /// Determine NAT status by requesting remote peers to dial the public address of the local node.
+    pub autonat: bool,
 }
 
 impl Default for NetworkConfiguration {
     fn default() -> Self {
         Self {
+            autonat: false,
             dial_concurrency_factor: 8,
             max_connections_in: 16,
             max_connections_out: 16,
@@ -114,6 +123,7 @@ impl Default for NetworkConfiguration {
             ping: false,
             quic_port: 2022,
             relay_server: false,
+            relay_address: None,
             remote_peers: Vec::new(),
             rendezvous_client: false,
             rendezvous_server: false,
