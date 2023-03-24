@@ -1,87 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::convert::TryInto;
-
 use anyhow::Result;
-use futures::future::Either;
 use futures::StreamExt;
-use libp2p::core::muxing::StreamMuxerBox;
-use libp2p::core::transport::upgrade::Version;
-use libp2p::core::transport::{Boxed, OrTransport};
-use libp2p::identity::Keypair;
 use libp2p::multiaddr::Protocol;
-use libp2p::noise::NoiseAuthenticated;
 use libp2p::ping::Event;
-use libp2p::swarm::{AddressScore, SwarmBuilder, SwarmEvent};
-use libp2p::yamux::YamuxConfig;
-use libp2p::Swarm;
-use libp2p::{autonat, identify, mdns, quic, relay, rendezvous, Multiaddr, PeerId, Transport};
+use libp2p::swarm::{AddressScore, SwarmEvent};
+use libp2p::{autonat, identify, mdns, rendezvous, Multiaddr};
 use log::{debug, info, warn};
 
 use crate::bus::ServiceSender;
 use crate::context::Context;
 use crate::manager::{ServiceReadySender, Shutdown};
-use crate::network::behaviour::{Behaviour, BehaviourEvent};
+use crate::network::behaviour::BehaviourEvent;
 use crate::network::config::NODE_NAMESPACE;
+use crate::network::swarm;
 use crate::network::NetworkConfiguration;
-
-// Build the transport stack to be used by the network swarm
-async fn build_transport(
-    key_pair: &Keypair,
-) -> (
-    Boxed<(PeerId, StreamMuxerBox)>,
-    Option<relay::client::Behaviour>,
-) {
-    // Generate a relay transport and client behaviour if relay client mode is selected
-    let (relay_transport, relay_client) = relay::client::new(key_pair.public().to_peer_id());
-    let relay_client = Some(relay_client);
-
-    // Add encryption and multiplexing to the relay transport
-    let relay_transport = relay_transport
-        .upgrade(Version::V1)
-        .authenticate(NoiseAuthenticated::xx(key_pair).unwrap())
-        .multiplex(YamuxConfig::default());
-
-    // Create QUIC transport (provides transport, security and multiplexing in a single protocol)
-    let quic_config = quic::Config::new(key_pair);
-    let quic_transport = quic::tokio::Transport::new(quic_config);
-
-    let transport = OrTransport::new(quic_transport, relay_transport)
-        .map(|either_output, _| match either_output {
-            Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
-            Either::Right((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
-        })
-        .boxed();
-
-    (transport, relay_client)
-}
-
-async fn build_swarm(
-    network_config: &NetworkConfiguration,
-    key_pair: Keypair,
-) -> Result<Swarm<Behaviour>> {
-    // Read the peer ID (public key) from the key pair
-    let peer_id = PeerId::from(key_pair.public());
-    info!("Network service peer ID: {peer_id}");
-
-    let (transport, relay_client) = build_transport(&key_pair).await;
-
-    // Instantiate the custom network behaviour with default configuration
-    // and the libp2p peer ID
-    let behaviour = Behaviour::new(network_config, peer_id, key_pair, relay_client)?;
-
-    // Initialise a swarm with QUIC transports, our composed network behaviour
-    // and the default configuration parameters
-    let swarm = SwarmBuilder::with_tokio_executor(transport, behaviour, peer_id)
-        .connection_limits(network_config.connection_limits())
-        // This method expects a NonZeroU8 as input, hence the try_into conversion
-        .dial_concurrency_factor(network_config.dial_concurrency_factor.try_into()?)
-        .per_connection_event_buffer_size(network_config.per_connection_event_buffer_size)
-        .notify_handler_buffer_size(network_config.notify_handler_buffer_size.try_into()?)
-        .build();
-
-    Ok(swarm)
-}
 
 /// Network service that configures and deploys a network swarm over QUIC transports.
 ///
@@ -104,7 +37,7 @@ pub async fn network_service(
     let network_config = context.config.network.clone();
 
     // Build the network swarm
-    let mut swarm = build_swarm(&network_config, key_pair).await?;
+    let mut swarm = swarm::build_swarm(&network_config, key_pair).await?;
 
     // Define the QUIC multiaddress on which the swarm will listen for connections
     let quic_multiaddr =
@@ -127,7 +60,7 @@ pub async fn network_service(
     let mut cookie = None;
 
     // Create a public address holder for the local node, to be updated via AutoNAT
-    let mut public_addr: Option<Multiaddr> = None;
+    let mut _public_addr: Option<Multiaddr> = None;
 
     // Spawn a task to handle swarm events
     let handle = tokio::spawn(async move {
@@ -323,7 +256,9 @@ pub async fn network_service(
                 SwarmEvent::Behaviour(BehaviourEvent::RelayServer(event)) => {
                     debug!("Unhandled relay server event: {event:?}")
                 }
-                SwarmEvent::Behaviour(BehaviourEvent::RelayClient(_)) => todo!(),
+                SwarmEvent::Behaviour(BehaviourEvent::RelayClient(event)) => {
+                    debug!("Unhandled relay client event: {event:?}")
+                }
                 SwarmEvent::Behaviour(BehaviourEvent::Autonat(event)) => {
                     match event {
                         autonat::Event::StatusChanged { old, new } => match (old, new) {
@@ -331,7 +266,7 @@ pub async fn network_service(
                                 if swarm.behaviour().relay_client.is_enabled() {
                                     if let Some(addr) = &network_config.relay_address {
                                         let circuit_addr = addr.clone().with(Protocol::P2pCircuit);
-                                        warn!("Private NAT detected. Listening on relay circuit address");
+                                        debug!("Private NAT detected. Listening on relay circuit address");
                                         swarm
                                             .listen_on(circuit_addr)
                                             .expect("Failed to listen on relay circuit address");
@@ -340,10 +275,12 @@ pub async fn network_service(
                             }
                             (_, autonat::NatStatus::Public(addr)) => {
                                 info!("Public NAT verified! Public listening address: {}", addr);
-                                public_addr = Some(addr);
+                                // TODO: Check if we're already listening on this address
+                                // If not, start listening
+                                _public_addr = Some(addr);
                             }
                             (old, new) => {
-                                warn!("NAT status changed from {:?} to {:?}", old, new);
+                                debug!("NAT status changed from {:?} to {:?}", old, new);
                             }
                         },
                         autonat::Event::InboundProbe(_) | autonat::Event::OutboundProbe(_) => (),
