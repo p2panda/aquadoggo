@@ -32,16 +32,17 @@ futures = "^0.3.23"
 hex = "^0.4.3"
 http = "^0.2.8"
 libp2p = { version = "^0.51.0", features = [
-    "tokio",
-    "macros",
-    "quic",
-    "ping",
-    "mdns",
+    "autonat",
     "identify",
+    "macros",
+    "mdns",
+    "noise",
+    "ping",
+    "quic",
     "relay",
     "rendezvous",
     "serde",
-    "noise",
+    "tokio",
     "yamux",
 ] }
 lipmaa-link = "^0.2.2"
