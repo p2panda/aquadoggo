@@ -2201,6 +2201,7 @@ dependencies = [
  "futures-timer",
  "getrandom 0.2.8",
  "instant",
+ "libp2p-autonat",
  "libp2p-core",
  "libp2p-dns",
  "libp2p-gossipsub",
@@ -2220,6 +2221,25 @@ dependencies = [
  "libp2p-yamux",
  "multiaddr",
  "pin-project",
+]
+
+[[package]]
+name = "libp2p-autonat"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d85a24ab50a85cbcfccf20ccdb02d903e6198d9cee5e67aa122dbfe66824d087"
+dependencies = [
+ "async-trait",
+ "futures",
+ "futures-timer",
+ "instant",
+ "libp2p-core",
+ "libp2p-identity",
+ "libp2p-request-response",
+ "libp2p-swarm",
+ "log",
+ "quick-protobuf",
+ "rand 0.8.5",
 ]
 
 [[package]]
@@ -2507,6 +2527,24 @@ dependencies = [
  "rand 0.8.5",
  "thiserror",
  "void",
+]
+
+[[package]]
+name = "libp2p-request-response"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "872b9d63fed44d9f81110c30be6c7ca5593a093576d2a95c5d018051e294d2e9"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "futures",
+ "instant",
+ "libp2p-core",
+ "libp2p-swarm",
+ "log",
+ "rand 0.8.5",
+ "smallvec",
+ "unsigned-varint",
 ]
 
 [[package]]
@@ -4947,6 +4985,8 @@ checksum = "d86a8dc7f45e4c1b0d30e43038c38f274e77af056aa5f74b93c2cf9eb3c1c836"
 dependencies = [
  "asynchronous-codec",
  "bytes",
+ "futures-io",
+ "futures-util",
 ]
 
 [[package]]
