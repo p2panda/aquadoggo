@@ -5,8 +5,8 @@ mod document_fields;
 mod document_meta;
 mod filter_input;
 mod filters;
-mod ordering;
 mod next_arguments;
+mod ordering;
 mod paginated_response;
 
 pub use document::{DocumentSchema, DocumentValue, PaginatedDocumentSchema};

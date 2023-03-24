@@ -27,7 +27,7 @@ pub fn build_document_query(query: Object, schema: &Schema) -> Object {
                     // Validate the received arguments.
                     let (document_id, document_view_id) = validate_args(&ctx)?;
                     let store = ctx.data_unchecked::<SqlStore>();
-                    
+
                     // Get the whole document from the store.
                     let document =
                         match get_document_from_params(store, &document_id, &document_view_id)

@@ -4,8 +4,8 @@ use async_graphql::dynamic::{InputObject, InputValue, TypeRef};
 use dynamic_graphql::InputObject;
 use p2panda_rs::schema::Schema;
 
-use crate::graphql::utils::filter_name;
 use crate::graphql::types::BooleanFilter;
+use crate::graphql::utils::filter_name;
 
 use super::filters::OwnerFilter;
 
@@ -74,5 +74,5 @@ impl FilterInput {
 pub struct MetaFilterInput {
     owner: Option<OwnerFilter>,
     edited: Option<BooleanFilter>,
-    deleted: Option<BooleanFilter>
+    deleted: Option<BooleanFilter>,
 }

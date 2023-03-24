@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use async_graphql::dynamic::{
-    Field, FieldFuture, FieldValue, InputValue, Object, TypeRef,
-};
+use async_graphql::dynamic::{Field, FieldFuture, FieldValue, InputValue, Object, TypeRef};
 use async_graphql::Error;
 use log::debug;
 use p2panda_rs::schema::Schema;
