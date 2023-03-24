@@ -61,6 +61,12 @@ struct Cli {
     /// Enable relay server to facilitate peer connectivity, false by default.
     #[arg(long)]
     relay_server: Option<bool>,
+
+    /// The IP address of a relay server in the form of a multiaddress.
+    ///
+    /// eg. --relay-address "/ip4/127.0.0.1/udp/12345/quic-v1"
+    #[arg(long)]
+    relay_address: Option<Multiaddr>,
 }
 
 impl Cli {
@@ -97,6 +103,7 @@ impl TryFrom<Cli> for Configuration {
             ping: cli.ping.unwrap_or(true),
             quic_port: cli.quic_port.unwrap_or(2022),
             relay_server: cli.relay_server.unwrap_or(false),
+            relay_address: cli.relay_address,
             remote_peers: cli.remote_node_addresses,
             rendezvous_client: cli.rendezvous_client.unwrap_or(false),
             rendezvous_server: cli.rendezvous_server.unwrap_or(false),
