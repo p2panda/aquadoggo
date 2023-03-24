@@ -161,26 +161,28 @@ pub async fn network_service(
                     debug!("ConnectionClosed: {peer_id} {endpoint:?} {num_established} {cause:?}")
                 }
                 SwarmEvent::ConnectionEstablished { peer_id, .. }
+                    // Match on a connection with the rendezvous server
                     if network_config.rendezvous_client
+                        // Should be safe to unwrap rendezvous_peer_id because the CLI parser ensures
+                        // it's provided if rendezvous_client is set to true
                         && network_config.rendezvous_peer_id.unwrap() == peer_id =>
                 {
-                    debug!(
-                        "Connected to rendezvous point, discovering nodes in '{NODE_NAMESPACE}' namespace ..."
-                    );
+                    if let Some(rendezvous_client) =
+                        swarm.behaviour_mut().rendezvous_client.as_mut()
+                    {
+                        debug!(
+                            "Connected to rendezvous point, discovering nodes in '{NODE_NAMESPACE}' namespace ..."
+                        );
 
-                    swarm
-                        .behaviour_mut()
-                        .rendezvous_client
-                        .as_mut()
-                        .unwrap()
-                        .discover(
-                            Some(rendezvous::Namespace::new(NODE_NAMESPACE.to_string()).unwrap()),
+                        rendezvous_client.discover(
+                            Some(rendezvous::Namespace::from_static(NODE_NAMESPACE)),
                             None,
                             None,
                             network_config
                                 .rendezvous_peer_id
                                 .expect("Rendezvous server peer ID was provided"),
                         );
+                    }
                 }
                 SwarmEvent::ConnectionEstablished {
                     peer_id,
@@ -297,18 +299,15 @@ pub async fn network_service(
 
                                 // We call `as_mut()` on the rendezvous client network behaviour in
                                 // order to get a mutable reference out of the `Toggle`
-                                swarm
-                                    .behaviour_mut()
-                                    .rendezvous_client
-                                    .as_mut()
-                                    .unwrap()
-                                    .register(
+                                if let Some (rendezvous_client) = swarm.behaviour_mut().rendezvous_client.as_mut() {
+                                    rendezvous_client.register(
                                         rendezvous::Namespace::from_static(NODE_NAMESPACE),
                                         network_config
                                             .rendezvous_peer_id
                                             .expect("Rendezvous server peer ID was provided"),
                                         None,
                                     );
+                                }
                             }
                         }
                         identify::Event::Sent { peer_id } | identify::Event::Pushed { peer_id } => {

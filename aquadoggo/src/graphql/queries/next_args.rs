@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use async_graphql::dynamic::{Field, FieldFuture, InputValue, Object, TypeRef};
+use async_graphql::dynamic::{Field, FieldFuture, InputValue, Object, ResolverContext, TypeRef};
+use async_graphql::Error;
 use dynamic_graphql::{FieldValue, ScalarValue};
 use log::debug;
 use p2panda_rs::api;
-use p2panda_rs::document::DocumentViewId;
-use p2panda_rs::identity::PublicKey;
 
 use crate::db::SqlStore;
 use crate::graphql::constants;
@@ -20,30 +19,17 @@ pub fn build_next_args_query(query: Object) -> Object {
             TypeRef::named(constants::NEXT_ARGS),
             |ctx| {
                 FieldFuture::new(async move {
-                    let mut args = ctx.field().arguments()?.into_iter().map(|(_, value)| value);
-                    let store = ctx.data::<SqlStore>()?;
-
-                    // Convert and validate passed parameters.
-                    let public_key: PublicKey =
-                        PublicKeyScalar::from_value(args.next().unwrap())?.into();
-                    let document_view_id: Option<DocumentViewId> = match args.next() {
-                        Some(value) => {
-                            let document_view_id = DocumentViewIdScalar::from_value(value)?.into();
-                            debug!(
-                            "Query to nextArgs received for public key {} and document at view {}",
-                            public_key, document_view_id
-                        );
-                            Some(document_view_id)
-                        }
-                        None => {
-                            debug!("Query to nextArgs received for public key {}", public_key);
-                            None
-                        }
-                    };
+                    // Get and validate arguments.
+                    let (public_key, document_view_id) = validate_args(&ctx)?;
+                    let store = ctx.data_unchecked::<SqlStore>();
 
                     // Calculate next entry's arguments.
-                    let (backlink, skiplink, seq_num, log_id) =
-                        api::next_args(store, &public_key, document_view_id.as_ref()).await?;
+                    let (backlink, skiplink, seq_num, log_id) = api::next_args(
+                        store,
+                        &public_key.into(),
+                        document_view_id.map(|id| id.into()).as_ref(),
+                    )
+                    .await?;
 
                     let next_args = NextArguments {
                         log_id: log_id.into(),
@@ -66,6 +52,40 @@ pub fn build_next_args_query(query: Object) -> Object {
         ))
         .description("Return required arguments for publishing the next entry."),
     )
+}
+
+/// Validate and return the arguments passed to next_args.
+fn validate_args(
+    ctx: &ResolverContext,
+) -> Result<(PublicKeyScalar, Option<DocumentViewIdScalar>), Error> {
+    let mut args = ctx.field().arguments()?.into_iter().map(|(_, value)| value);
+
+    // Convert and validate passed parameters.
+    let public_key = PublicKeyScalar::from_value(args.next().unwrap())?;
+    let document_view_id = match args.next() {
+        Some(value) => match value {
+            async_graphql::Value::Null => None,
+            async_graphql::Value::String(_) => Some(value),
+            _ => panic!("Unexpected value type received for viewId in nextArgs"),
+        },
+        None => None,
+    };
+    let document_view_id = match document_view_id {
+        Some(value) => {
+            let document_view_id = DocumentViewIdScalar::from_value(value)?;
+            debug!(
+                "Query to nextArgs received for public key {} and document at view {}",
+                public_key, document_view_id
+            );
+            Some(document_view_id)
+        }
+        None => {
+            debug!("Query to nextArgs received for public key {}", public_key);
+            None
+        }
+    };
+
+    Ok((public_key, document_view_id))
 }
 
 #[cfg(test)]

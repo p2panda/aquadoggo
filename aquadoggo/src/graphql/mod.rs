@@ -2,9 +2,11 @@
 
 pub mod constants;
 pub mod mutations;
+pub mod queries;
 pub mod scalars;
 mod schema;
-mod schema_builders;
+#[cfg(test)]
+mod tests;
 pub mod types;
 pub mod utils;
 

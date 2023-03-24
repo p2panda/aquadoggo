@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implement API changes to p2panda-rs storage traits, new and breaking db migration [#268](https://github.com/p2panda/aquadoggo/pull/268)
 - Move all test utils into one module [#275](https://github.com/p2panda/aquadoggo/pull/275)
 - Use new version of `async-graphql` for dynamic schema generation [#287](https://github.com/p2panda/aquadoggo/pull/287)
+- Restructure `graphql` module [#307](https://github.com/p2panda/aquadoggo/pull/307)
 - Removed replication service for now, preparing for new replication protocol [#296](https://github.com/p2panda/aquadoggo/pull/296)
 
 ### Fixed

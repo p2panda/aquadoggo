@@ -13,16 +13,14 @@ use tokio::sync::Mutex;
 use crate::bus::ServiceSender;
 use crate::db::SqlStore;
 use crate::graphql::mutations::{MutationRoot, Publish};
+use crate::graphql::queries::{
+    build_all_documents_query, build_document_query, build_next_args_query,
+};
 use crate::graphql::scalars::{
     DocumentIdScalar, DocumentViewIdScalar, EncodedEntryScalar, EncodedOperationScalar,
     EntryHashScalar, LogIdScalar, PublicKeyScalar, SeqNumScalar,
 };
-use crate::graphql::schema_builders::{
-    build_all_document_query, build_document_field_schema, build_document_query,
-    build_document_schema, build_next_args_query,
-};
-use crate::graphql::types::{DocumentMeta, NextArguments};
-use crate::graphql::utils::fields_name;
+use crate::graphql::types::{Document, DocumentFields, DocumentMeta, NextArguments};
 use crate::schema::SchemaProvider;
 
 /// Returns GraphQL API schema for p2panda node.
@@ -66,17 +64,10 @@ pub async fn build_root_schema(
     // documents they describe.
     for schema in all_schema {
         // Construct the document fields object which will be named `<schema_id>Field`.
-        let schema_field_name = fields_name(schema.id());
-        let mut document_schema_fields = Object::new(&schema_field_name);
-
-        // For every field in the schema we create a type with a resolver.
-        for (name, field_type) in schema.fields().iter() {
-            document_schema_fields =
-                build_document_field_schema(document_schema_fields, name.to_string(), field_type);
-        }
+        let document_schema_fields = DocumentFields::build(&schema);
 
         // Construct the document schema which has "fields" and "meta" fields.
-        let document_schema = build_document_schema(&schema);
+        let document_schema = Document::build(&schema);
 
         // Register a schema and schema fields type for every schema.
         schema_builder = schema_builder
@@ -89,7 +80,7 @@ pub async fn build_root_schema(
         root_query = build_document_query(root_query, &schema);
 
         // Add a query for retrieving all documents of a certain schema.
-        root_query = build_all_document_query(root_query, &schema);
+        root_query = build_all_documents_query(root_query, &schema);
     }
 
     // Add next args to the query object.
