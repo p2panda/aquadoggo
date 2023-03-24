@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use async_graphql::dynamic::{Field, FieldFuture, InputValue, Object, ResolverContext, TypeRef};
-use async_graphql::indexmap::IndexMap;
-use async_graphql::{Error, Value, Name};
-use dynamic_graphql::FieldValue;
+use async_graphql::dynamic::{
+    Field, FieldFuture, FieldValue, InputValue, Object, TypeRef,
+};
+use async_graphql::Error;
 use log::debug;
 use p2panda_rs::schema::Schema;
 use p2panda_rs::storage_provider::traits::DocumentStore;
@@ -37,7 +37,38 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                     // Parse all arguments.
                     //
                     // TODO: This is where we will build the abstract filter and query.
-                    let (_from, _first, _order_by, _order_direction, _meta, _filter) = parse_arguments(&ctx)?;
+                    let mut from = None;
+                    let mut first = None;
+                    let mut order_by = None;
+                    let mut order_direction = None;
+                    let mut meta = None;
+                    let mut filter = None;
+
+                    for (name, value) in ctx.args.iter() {
+                        match name.as_str() {
+                            constants::PAGINATION_CURSOR_ARG => from = Some(value.string()?),
+                            constants::PAGINATION_FIRST_ARG => first = Some(value.i64()?),
+                            constants::ORDER_BY_ARG => order_by = Some(value.enum_name()?),
+                            constants::ORDER_DIRECTION_ARG => {
+                                order_direction = Some(value.enum_name()?)
+                            }
+                            constants::META_FILTER_ARG => {
+                                meta = Some(
+                                    value
+                                        .object()
+                                        .map_err(|_| Error::new("internal: is not an object"))?,
+                                )
+                            }
+                            constants::FILTER_ARG => {
+                                filter = Some(
+                                    value
+                                        .object()
+                                        .map_err(|_| Error::new("internal: is not an object"))?,
+                                )
+                            }
+                            _ => (),
+                        }
+                    }
 
                     // Fetch all queried documents and compose the field value list
                     // which will bubble up the query tree.
@@ -80,60 +111,6 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
         .argument(InputValue::new("after", TypeRef::named(TypeRef::STRING)))
         .description(format!("Get all {} documents.", schema.name())),
     )
-}
-
-fn parse_arguments(
-    ctx: &ResolverContext,
-) -> Result<
-    (
-        Option<String>,
-        Option<i64>,
-        Option<Name>,
-        Option<Name>,
-        Option<IndexMap<Name, Value>>,
-        Option<IndexMap<Name, Value>>,
-    ),
-    Error,
-> {
-    let mut from = None;
-    let mut first = None;
-    let mut order_by = None;
-    let mut order_direction = None;
-    let mut meta = None;
-    let mut filter = None;
-    for (name, value) in ctx.field().arguments()?.into_iter() {
-        match name.as_str() {
-            constants::PAGINATION_CURSOR_ARG => from = Some(value.to_string()),
-            constants::PAGINATION_FIRST_ARG => {
-                if let Value::Number(number) = value {
-                    // Argument types are already validated in the graphql api so we can assume this
-                    // value to be an integer if present.
-                    first = number.as_i64()
-                }
-            }
-            constants::ORDER_BY_ARG => {
-                if let Value::Enum(enum_item) = value {
-                    order_by = Some(enum_item)
-                }
-            }
-            constants::ORDER_DIRECTION_ARG => {
-                if let Value::Enum(enum_item) = value {
-                    order_direction = Some(enum_item)
-                }
-            }
-            constants::META_FILTER_ARG => match value {
-                Value::Object(index_map) => meta = Some(index_map),
-                _ => (),
-            },
-            constants::FILTER_ARG => {
-                if let Value::Object(index_map) = value {
-                    filter = Some(index_map)
-                }
-            }
-            _ => (),
-        }
-    }
-    Ok((from, first, order_by, order_direction, meta, filter))
 }
 
 #[cfg(test)]
