@@ -13,7 +13,7 @@ use crate::graphql::utils::{
     downcast_document, fields_name, filter_name, gql_scalar, graphql_type, order_by_name,
 };
 
-use super::{DocumentValue, PaginatedResponse, PaginationData};
+use crate::graphql::types::{DocumentValue, PaginationData};
 
 /// GraphQL object which represents the fields of a document document type as described by it's
 /// p2panda schema. A type is added to the root GraphQL schema for every document, as these types

@@ -37,6 +37,24 @@ pub const PUBLIC_KEY_ARG: &str = "publicKey";
 /// Argument string used for passing a document view id into a query.
 pub const DOCUMENT_VIEW_ID_ARG: &str = "viewId";
 
+/// Argument string used for passing a filter into a query.
+pub const FILTER_ARG: &str = "filter";
+
+/// Argument string used for passing a filter into a query.
+pub const META_FILTER_ARG: &str = "meta";
+
+/// Argument string used for passing a pagination cursor into a query.
+pub const PAGINATION_CURSOR_ARG: &str = "after";
+
+/// Argument string used for passing number of paginated items requested to query.
+pub const PAGINATION_FIRST_ARG: &str = "first";
+
+/// Argument string used for passing field to order by to query.
+pub const ORDER_BY_ARG: &str = "orderBy";
+
+/// Argument string used for passing ordering direction to query.
+pub const ORDER_DIRECTION_ARG: &str = "orderDirection";
+
 /// Name of field on a document where it's fields can be accessed.
 pub const DOCUMENT_FIELD: &str = "document";
 

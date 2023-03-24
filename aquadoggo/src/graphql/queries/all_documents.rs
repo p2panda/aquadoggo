@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use async_graphql::dynamic::{Field, FieldFuture, InputValue, Object, TypeRef};
+use async_graphql::dynamic::{Field, FieldFuture, InputValue, Object, ResolverContext, TypeRef};
+use async_graphql::{Error, Value};
 use dynamic_graphql::FieldValue;
 use log::debug;
 use p2panda_rs::schema::Schema;
@@ -32,9 +33,11 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                 );
 
                 FieldFuture::new(async move {
-                    // Fetch all queried documents and compose the field value, a list of document
-                    // id / view id tuples, which will bubble up the query tree.
+                    // Validate all arguments.
+                    validate_args(&ctx)?;
 
+                    // Fetch all queried documents and compose the field value list
+                    // which will bubble up the query tree.
                     let store = ctx.data_unchecked::<SqlStore>();
                     let documents: Vec<FieldValue> = store
                         .get_documents_by_schema(&schema_id)
@@ -74,6 +77,48 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
         .argument(InputValue::new("after", TypeRef::named(TypeRef::STRING)))
         .description(format!("Get all {} documents.", schema.name())),
     )
+}
+
+fn validate_args(ctx: &ResolverContext) -> Result<(), Error> {
+    // Parse arguments
+    let schema_id = ctx.field().name();
+    let mut from = None;
+    let mut first = None;
+    let mut order_by = None;
+    let mut order_direction = None;
+    let mut meta = None;
+    let mut filter = None;
+    for (name, value) in ctx.field().arguments()?.into_iter() {
+        match name.as_str() {
+            constants::PAGINATION_CURSOR_ARG => from = Some(value.to_string()),
+            constants::PAGINATION_FIRST_ARG => if let Value::Number(number) = value {
+                // Argument types are already validated in the graphql api so we can assume this
+                // value to be an integer if present.
+                first = number.as_i64()
+            },
+            constants::ORDER_BY_ARG => {
+                if let Value::Enum(enum_item) = value {
+                    order_by = Some(enum_item)
+                }
+            }
+            constants::ORDER_DIRECTION_ARG => {
+                if let Value::Enum(enum_item) = value {
+                    order_direction = Some(enum_item)
+                }
+            }
+            constants::META_FILTER_ARG => match value {
+                Value::Object(index_map) => meta = Some(index_map),
+                _ => (),
+            },
+            constants::FILTER_ARG => {
+                if let Value::Object(index_map) = value {
+                    filter = Some(index_map)
+                }
+            }
+            _ => (),
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

@@ -66,13 +66,14 @@ fn validate_args(
     let schema_id = ctx.field().name();
     let mut document_id = None;
     let mut document_view_id = None;
-    for (name, id) in ctx.field().arguments()?.into_iter() {
+
+    for (name, value) in ctx.field().arguments()?.into_iter() {
         match name.as_str() {
             constants::DOCUMENT_ID_ARG => {
-                document_id = Some(DocumentIdScalar::from_value(id)?);
+                document_id = Some(DocumentIdScalar::from_value(value)?);
             }
             constants::DOCUMENT_VIEW_ID_ARG => {
-                document_view_id = Some(DocumentViewIdScalar::from_value(id)?)
+                document_view_id = Some(DocumentViewIdScalar::from_value(value)?)
             }
             _ => (),
         }
