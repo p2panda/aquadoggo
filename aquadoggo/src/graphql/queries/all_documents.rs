@@ -177,6 +177,7 @@ mod test {
                     hasNextPage
                     totalCount
                     document {{ 
+                        cursor
                         fields {{ bool }}
                     }}
                 }},
@@ -195,7 +196,7 @@ mod test {
             let response: Response = response.json().await;
 
             let expected_data = value!({
-                "collection": value!([{ "hasNextPage": false, "totalCount": 0, "document": { "fields": { "bool": true, } } }]),
+                "collection": value!([{ "hasNextPage": false, "totalCount": 0, "document": { "cursor": "CURSOR", "fields": { "bool": true, } } }]),
             });
             assert_eq!(response.data, expected_data, "{:#?}", response.errors);
         });
