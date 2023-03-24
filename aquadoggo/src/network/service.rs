@@ -15,7 +15,7 @@ use libp2p::ping::Event;
 use libp2p::swarm::{AddressScore, SwarmBuilder, SwarmEvent};
 use libp2p::yamux::YamuxConfig;
 use libp2p::Swarm;
-use libp2p::{identify, mdns, quic, relay, rendezvous, Multiaddr, PeerId, Transport};
+use libp2p::{autonat, identify, mdns, quic, relay, rendezvous, Multiaddr, PeerId, Transport};
 use log::{debug, info, warn};
 
 use crate::bus::ServiceSender;
@@ -125,6 +125,9 @@ pub async fn network_service(
 
     // Create a cookie holder for the identify service
     let mut cookie = None;
+
+    // Create a public address holder for the local node, to be updated via AutoNAT
+    let mut public_addr: Option<Multiaddr> = None;
 
     // Spawn a task to handle swarm events
     let handle = tokio::spawn(async move {
@@ -322,6 +325,31 @@ pub async fn network_service(
                     debug!("Unhandled relay server event: {event:?}")
                 }
                 SwarmEvent::Behaviour(BehaviourEvent::RelayClient(_)) => todo!(),
+                SwarmEvent::Behaviour(BehaviourEvent::Autonat(event)) => {
+                    match event {
+                        autonat::Event::StatusChanged { old, new } => match (old, new) {
+                            (autonat::NatStatus::Unknown, autonat::NatStatus::Private) => {
+                                if swarm.behaviour().relay_client.is_enabled() {
+                                    if let Some(addr) = &network_config.relay_address {
+                                        let circuit_addr = addr.clone().with(Protocol::P2pCircuit);
+                                        warn!("Private NAT detected. Listening on relay circuit address");
+                                        swarm
+                                            .listen_on(circuit_addr)
+                                            .expect("Failed to listen on relay circuit address");
+                                    }
+                                }
+                            }
+                            (_, autonat::NatStatus::Public(addr)) => {
+                                info!("Public NAT verified! Public listening address: {}", addr);
+                                public_addr = Some(addr);
+                            }
+                            (old, new) => {
+                                warn!("NAT status changed from {:?} to {:?}", old, new);
+                            }
+                        },
+                        autonat::Event::InboundProbe(_) | autonat::Event::OutboundProbe(_) => (),
+                    }
+                }
             }
         }
     });
