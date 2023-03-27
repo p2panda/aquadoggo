@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::convert::TryFrom;
+
 use async_graphql::dynamic::{
     Field, FieldFuture, FieldValue, InputValue, Object, ObjectAccessor, TypeRef, ValueAccessor,
 };
@@ -8,10 +10,10 @@ use async_graphql::Error;
 use dynamic_graphql::Value;
 use log::{debug, info};
 use p2panda_rs::operation::OperationValue;
-use p2panda_rs::schema::Schema;
+use p2panda_rs::schema::{FieldType, Schema};
 use p2panda_rs::storage_provider::traits::DocumentStore;
 
-use crate::db::query::{Field as FilterField, Filter};
+use crate::db::query::{Field as FilterField, Filter, MetaField};
 use crate::db::SqlStore;
 use crate::graphql::constants;
 use crate::graphql::types::{DocumentValue, PaginationData};
@@ -48,7 +50,7 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                     let mut first = None;
                     let mut order_by = None;
                     let mut order_direction = None;
-                    // let mut meta = None;
+                    let mut meta = None;
                     let mut filter = None;
 
                     // Get the schema for the document type being queried.
@@ -67,7 +69,10 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                                 order_direction = Some(value.enum_name()?)
                             }
                             constants::META_FILTER_ARG => {
-                                todo!();
+                                let filter_object = value
+                                    .object()
+                                    .map_err(|_| Error::new("internal: is not an object"))?;
+                                meta = Some(parse_meta_filter(&filter_object)?)
                             }
                             constants::FILTER_ARG => {
                                 let filter_object = value
@@ -179,6 +184,47 @@ fn parse_filter(schema: &Schema, filter_object: &ObjectAccessor) -> Result<Filte
                     filter.add_contains(&filter_field, &value.string()?);
                 }
                 _ => panic!("Unknown filter type received"),
+            }
+        }
+    }
+    Ok(filter)
+}
+
+/// Parse a meta filter object received from the graphql api into an abstract filter type based on the
+/// schema of the documents being queried.
+fn parse_meta_filter(filter_object: &ObjectAccessor) -> Result<Filter, Error> {
+    let mut filter = Filter::new();
+    for (field, filters) in filter_object.iter() {
+        let meta_field = MetaField::try_from(field.as_str())?;
+        let filter_field = FilterField::Meta(meta_field);
+        let filters = filters.object()?;
+        for (name, value) in filters.iter() {
+            match name.as_str() {
+                "in" => {
+                    let mut list_items: Vec<OperationValue> = vec![];
+                    for value in value.list()?.iter() {
+                        let item = filter_to_operation_value(&value, &FieldType::String)?;
+                        list_items.push(item);
+                    }
+                    filter.add_in(&filter_field, &list_items);
+                }
+                "notIn" => {
+                    let mut list_items: Vec<OperationValue> = vec![];
+                    for value in value.list()?.iter() {
+                        let item = filter_to_operation_value(&value, &FieldType::String)?;
+                        list_items.push(item);
+                    }
+                    filter.add_not_in(&filter_field, &list_items);
+                }
+                "eq" => {
+                    let value = filter_to_operation_value(&value, &FieldType::String)?;
+                    filter.add(&filter_field, &value);
+                }
+                "notEq" => {
+                    let value = filter_to_operation_value(&value, &FieldType::String)?;
+                    filter.add_not(&filter_field, &value);
+                }
+                _ => panic!("Unknown meta filter type received"),
             }
         }
     }
