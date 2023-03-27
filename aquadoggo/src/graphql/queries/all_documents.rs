@@ -1,25 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::convert::TryFrom;
-use std::num::NonZeroU64;
-
-use async_graphql::dynamic::{
-    Field, FieldFuture, FieldValue, InputValue, Object, ObjectAccessor, TypeRef,
-};
-use async_graphql::Error;
-use dynamic_graphql::{ScalarValue, Value};
+use async_graphql::dynamic::{Field, FieldFuture, FieldValue, InputValue, Object, TypeRef};
 use log::{debug, info};
-use p2panda_rs::operation::OperationValue;
-use p2panda_rs::schema::{FieldType, Schema};
+use p2panda_rs::schema::Schema;
 use p2panda_rs::storage_provider::traits::DocumentStore;
 
-use crate::db::query::{Direction, Field as FilterField, Filter, MetaField, Order, Pagination};
+use crate::db::query::{Filter, Order, Pagination};
 use crate::db::SqlStore;
 use crate::graphql::constants;
 use crate::graphql::scalars::CursorScalar;
 use crate::graphql::types::{DocumentValue, PaginationData};
 use crate::graphql::utils::{
-    filter_name, filter_to_operation_value, order_by_name, paginated_response_name,
+    filter_name, order_by_name, paginated_response_name, parse_collection_arguments,
 };
 use crate::schema::SchemaProvider;
 
@@ -47,10 +39,10 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                     let schema_provider = ctx.data_unchecked::<SchemaProvider>();
 
                     // Default pagination, filtering and ordering values.
-                    let mut pagination = Pagination::default();
+                    let mut pagination = Pagination::<CursorScalar>::default();
                     let mut order = Order::default();
-                    let mut meta = Filter::new();
-                    let mut filter = Filter::new();
+                    let mut meta_filter = Filter::new();
+                    let mut field_filter = Filter::new();
 
                     // Get the schema for the document type being queried.
                     let schema = schema_provider
@@ -58,54 +50,21 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                         .await
                         .expect("Schema should exist in schema provider");
 
-                    // Parse all argument values based on expected keys and types.
-                    for (name, value) in ctx.args.iter() {
-                        match name.as_str() {
-                            constants::PAGINATION_CURSOR_ARG => {
-                                let cursor = CursorScalar::from_value(Value::String(
-                                    value.string()?.to_string(),
-                                ))?;
-                                pagination = Pagination::new(&pagination.first, Some(&cursor))
-                            }
-                            constants::PAGINATION_FIRST_ARG => {
-                                let first = NonZeroU64::try_from(value.u64()?)?;
-                                pagination = Pagination::new(&first, pagination.after.as_ref())
-                            }
-                            constants::ORDER_BY_ARG => {
-                                let order_by = match value.enum_name()? {
-                                    "OWNER" => FilterField::Meta(MetaField::Owner),
-                                    field_name => FilterField::new(field_name),
-                                };
-                                order = Order::new(&order_by, &order.direction);
-                            }
-                            constants::ORDER_DIRECTION_ARG => {
-                                let order_direction = match value.enum_name()? {
-                                    "ASC" => Direction::Ascending,
-                                    "DESC" => Direction::Descending,
-                                    _ => panic!("Unknown order direction argument key received"),
-                                };
-                                order = Order::new(&order.field, &order_direction);
-                            }
-                            constants::META_FILTER_ARG => {
-                                let filter_object = value
-                                    .object()
-                                    .map_err(|_| Error::new("internal: is not an object"))?;
-                                parse_meta_filter(&mut meta, &filter_object)?;
-                            }
-                            constants::FILTER_ARG => {
-                                let filter_object = value
-                                    .object()
-                                    .map_err(|_| Error::new("internal: is not an object"))?;
-                                parse_filter(&mut filter, &schema, &filter_object)?;
-                            }
-                            _ => panic!("Unknown argument key received"),
-                        }
-                    }
+                    // Parse arguments.
+                    parse_collection_arguments(
+                        &ctx,
+                        &schema,
+                        &mut pagination,
+                        &mut order,
+                        &mut meta_filter,
+                        &mut field_filter,
+                    )?;
 
+                    // Log everything, just for fun!
                     info!("{pagination:#?}");
                     info!("{order:#?}");
-                    info!("{meta:#?}");
-                    info!("{filter:#?}");
+                    info!("{meta_filter:#?}");
+                    info!("{field_filter:#?}");
 
                     // Fetch all queried documents and compose the field value list
                     // which will bubble up the query tree.
@@ -148,120 +107,6 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
         .argument(InputValue::new("after", TypeRef::named(TypeRef::STRING)))
         .description(format!("Get all {} documents.", schema.name())),
     )
-}
-
-/// Parse a filter object received from the graphql api into an abstract filter type based on the
-/// schema of the documents being queried.
-fn parse_filter(
-    filter: &mut Filter,
-    schema: &Schema,
-    filter_object: &ObjectAccessor,
-) -> Result<(), Error> {
-    for (field, filters) in filter_object.iter() {
-        let filter_field = FilterField::new(field.as_str());
-        let filters = filters.object()?;
-        for (name, value) in filters.iter() {
-            let field_type = schema.fields().get(field.as_str()).unwrap();
-            match name.as_str() {
-                "in" => {
-                    let mut list_items: Vec<OperationValue> = vec![];
-                    for value in value.list()?.iter() {
-                        let item = filter_to_operation_value(&value, field_type)?;
-                        list_items.push(item);
-                    }
-                    filter.add_in(&filter_field, &list_items);
-                }
-                "notIn" => {
-                    let mut list_items: Vec<OperationValue> = vec![];
-                    for value in value.list()?.iter() {
-                        let item = filter_to_operation_value(&value, field_type)?;
-                        list_items.push(item);
-                    }
-                    filter.add_not_in(&filter_field, &list_items);
-                }
-                "eq" => {
-                    let value = filter_to_operation_value(&value, field_type)?;
-                    filter.add(&filter_field, &value);
-                }
-                "notEq" => {
-                    let value = filter_to_operation_value(&value, field_type)?;
-                    filter.add_not(&filter_field, &value);
-                }
-                "gt" => {
-                    let value = filter_to_operation_value(&value, field_type)?;
-                    filter.add_gt(&filter_field, &value);
-                }
-                "gte" => {
-                    let value = filter_to_operation_value(&value, field_type)?;
-                    filter.add_gte(&filter_field, &value);
-                }
-                "lt" => {
-                    let value = filter_to_operation_value(&value, field_type)?;
-                    filter.add_lt(&filter_field, &value);
-                }
-                "lte" => {
-                    let value = filter_to_operation_value(&value, field_type)?;
-                    filter.add_lte(&filter_field, &value);
-                }
-                "contains" => {
-                    filter.add_contains(&filter_field, &value.string()?);
-                }
-                "notContains" => {
-                    filter.add_contains(&filter_field, &value.string()?);
-                }
-                _ => panic!("Unknown filter type received"),
-            }
-        }
-    }
-    Ok(())
-}
-
-/// Parse a meta filter object received from the graphql api into an abstract filter type based on the
-/// schema of the documents being queried.
-fn parse_meta_filter(filter: &mut Filter, filter_object: &ObjectAccessor) -> Result<(), Error> {
-    for (field, filters) in filter_object.iter() {
-        let meta_field = MetaField::try_from(field.as_str())?;
-        let filter_field = FilterField::Meta(meta_field);
-        let filters = filters.object()?;
-        for (name, value) in filters.iter() {
-            match name.as_str() {
-                "in" => {
-                    let mut list_items: Vec<OperationValue> = vec![];
-                    for value in value.list()?.iter() {
-                        let item = filter_to_operation_value(&value, &FieldType::String)?;
-                        list_items.push(item);
-                    }
-                    filter.add_in(&filter_field, &list_items);
-                }
-                "notIn" => {
-                    let mut list_items: Vec<OperationValue> = vec![];
-                    for value in value.list()?.iter() {
-                        let item = filter_to_operation_value(&value, &FieldType::String)?;
-                        list_items.push(item);
-                    }
-                    filter.add_not_in(&filter_field, &list_items);
-                }
-                "eq" => {
-                    let field_type = match field.as_str() {
-                        "edited" | "deleted" => FieldType::Boolean,
-                        _ => FieldType::String,
-                    };
-                    let value = filter_to_operation_value(&value, &field_type)?;
-                    filter.add(&filter_field, &value);
-                }
-                "notEq" => {
-                    let field_type = match field.as_str() {
-                        "edited" | "deleted" => FieldType::Boolean,
-                        _ => FieldType::String,
-                    };
-                    let value = filter_to_operation_value(&value, &field_type)?;
-                    filter.add_not(&filter_field, &value);
-                }
-                _ => panic!("Unknown meta filter type received"),
-            }
-        }
-    }
-    Ok(())
 }
 
 #[cfg(test)]
