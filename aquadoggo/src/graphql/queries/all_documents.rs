@@ -50,8 +50,8 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                     let mut first = None;
                     let mut order_by = None;
                     let mut order_direction = None;
-                    let mut meta = None;
-                    let mut filter = None;
+                    let mut meta = Filter::new();
+                    let mut filter = Filter::new();
 
                     // Get the schema for the document type being queried.
                     let schema = schema_provider
@@ -72,13 +72,13 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                                 let filter_object = value
                                     .object()
                                     .map_err(|_| Error::new("internal: is not an object"))?;
-                                meta = Some(parse_meta_filter(&filter_object)?)
+                                parse_meta_filter(&mut meta, &filter_object)?;
                             }
                             constants::FILTER_ARG => {
                                 let filter_object = value
                                     .object()
                                     .map_err(|_| Error::new("internal: is not an object"))?;
-                                filter = Some(parse_filter(&schema, &filter_object)?)
+                                parse_filter(&mut filter, &schema, &filter_object)?;
                             }
                             _ => panic!("Unknown argument key received"),
                         }
@@ -129,8 +129,7 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
 
 /// Parse a filter object received from the graphql api into an abstract filter type based on the
 /// schema of the documents being queried.
-fn parse_filter(schema: &Schema, filter_object: &ObjectAccessor) -> Result<Filter, Error> {
-    let mut filter = Filter::new();
+fn parse_filter(filter: &mut Filter, schema: &Schema, filter_object: &ObjectAccessor) -> Result<(), Error> {
     for (field, filters) in filter_object.iter() {
         let filter_field = FilterField::new(field.as_str());
         let filters = filters.object()?;
@@ -187,13 +186,12 @@ fn parse_filter(schema: &Schema, filter_object: &ObjectAccessor) -> Result<Filte
             }
         }
     }
-    Ok(filter)
+    Ok(())
 }
 
 /// Parse a meta filter object received from the graphql api into an abstract filter type based on the
 /// schema of the documents being queried.
-fn parse_meta_filter(filter_object: &ObjectAccessor) -> Result<Filter, Error> {
-    let mut filter = Filter::new();
+fn parse_meta_filter(filter: &mut Filter, filter_object: &ObjectAccessor) -> Result<(), Error> {
     for (field, filters) in filter_object.iter() {
         let meta_field = MetaField::try_from(field.as_str())?;
         let filter_field = FilterField::Meta(meta_field);
@@ -228,7 +226,7 @@ fn parse_meta_filter(filter_object: &ObjectAccessor) -> Result<Filter, Error> {
             }
         }
     }
-    Ok(filter)
+    Ok(())
 }
 
 #[cfg(test)]
