@@ -276,10 +276,7 @@ mod test {
     use crate::test_utils::{add_document, add_schema, graphql_test_client, test_runner, TestNode};
 
     #[rstest]
-    // TODO: We don't validate all of the internal argument values yet, only the simple types and
-    // object fields, these tests will need updating when we do.
-    //
-    // TODO: We don't actually perform any validation yet, these tests will need to be updated
+    // TODO: We don't actually perform any queries yet, these tests will need to be updated
     // when we do.
     #[case(
         "".to_string(), 
@@ -289,11 +286,31 @@ mod test {
         vec![]
     )]
     #[case(
-        r#"(first: 10, after: "CURSOR", orderBy: OWNER, orderDirection: ASC, filter: { bool : { eq: true } }, meta: { owner: { in: ["PUBLIC"] } })"#.to_string(), 
+        r#"(
+            first: 10, 
+            after: "1_00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331", 
+            orderBy: OWNER, 
+            orderDirection: ASC, 
+            filter: { 
+                bool : { 
+                    eq: true 
+                } 
+            }, 
+            meta: { 
+                owner: { 
+                    in: ["PUBLIC"] 
+                }
+            }
+        )"#.to_string(), 
         value!({
             "collection": value!([{ "hasNextPage": false, "totalCount": 0, "document": { "cursor": "CURSOR", "fields": { "bool": true, } } }]),
         }),
         vec![]
+    )]
+    #[case(
+        r#"(first: 0)"#.to_string(), 
+        Value::Null,
+        vec!["out of range integral type conversion attempted".to_string()]
     )]
     #[case(
         r#"(first: "hello")"#.to_string(), 
@@ -304,6 +321,11 @@ mod test {
         r#"(after: HELLO)"#.to_string(), 
         Value::Null,
         vec!["Invalid value for argument \"after\", expected type \"String\"".to_string()]
+    )]
+    #[case(
+        r#"(after: "00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331")"#.to_string(), 
+        Value::Null,
+        vec!["Invalid amount of cursor parts".to_string()]
     )]
     #[case(
         r#"(after: 27)"#.to_string(), 
