@@ -13,7 +13,7 @@ use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{FieldType, Schema};
 use p2panda_rs::storage_provider::traits::DocumentStore;
 
-use crate::db::query::{Field as FilterField, Filter, MetaField};
+use crate::db::query::{Direction, Field as FilterField, Filter, MetaField, Order};
 use crate::db::SqlStore;
 use crate::graphql::constants;
 use crate::graphql::types::{DocumentValue, PaginationData};
@@ -45,11 +45,11 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                 FieldFuture::new(async move {
                     let schema_provider = ctx.data_unchecked::<SchemaProvider>();
 
-                    // Parse all arguments.
+                    // Default pagination, filtering and ordering values.
                     let mut from = None;
                     let mut first = None;
-                    let mut order_by = None;
-                    let mut order_direction = None;
+                    let mut order_by = FilterField::Meta(MetaField::DocumentId);
+                    let mut order_direction = Direction::Ascending;
                     let mut meta = Filter::new();
                     let mut filter = Filter::new();
 
@@ -64,9 +64,18 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                         match name.as_str() {
                             constants::PAGINATION_CURSOR_ARG => from = Some(value.string()?),
                             constants::PAGINATION_FIRST_ARG => first = Some(value.i64()?),
-                            constants::ORDER_BY_ARG => order_by = Some(value.enum_name()?),
+                            constants::ORDER_BY_ARG => {
+                                order_direction = match value.enum_name()? {
+                                    "asc" => Direction::Ascending,
+                                    "desc" => Direction::Descending,
+                                    _ => panic!("Unknown order by argument key received"),
+                                };
+                            }
                             constants::ORDER_DIRECTION_ARG => {
-                                order_direction = Some(value.enum_name()?)
+                                order_by = match value.enum_name()? {
+                                    "OWNER" => FilterField::Meta(MetaField::Owner),
+                                    field_name => FilterField::new(field_name),
+                                };
                             }
                             constants::META_FILTER_ARG => {
                                 let filter_object = value
@@ -83,6 +92,9 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                             _ => panic!("Unknown argument key received"),
                         }
                     }
+
+                    // Construct the order struct.
+                    let order = Order::new(&order_by, &order_direction);
 
                     // Fetch all queried documents and compose the field value list
                     // which will bubble up the query tree.
@@ -129,7 +141,11 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
 
 /// Parse a filter object received from the graphql api into an abstract filter type based on the
 /// schema of the documents being queried.
-fn parse_filter(filter: &mut Filter, schema: &Schema, filter_object: &ObjectAccessor) -> Result<(), Error> {
+fn parse_filter(
+    filter: &mut Filter,
+    schema: &Schema,
+    filter_object: &ObjectAccessor,
+) -> Result<(), Error> {
     for (field, filters) in filter_object.iter() {
         let filter_field = FilterField::new(field.as_str());
         let filters = filters.object()?;
