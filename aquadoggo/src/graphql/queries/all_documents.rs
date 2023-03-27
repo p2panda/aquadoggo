@@ -8,7 +8,7 @@ use async_graphql::dynamic::{
 };
 use async_graphql::Error;
 use dynamic_graphql::{ScalarValue, Value};
-use log::debug;
+use log::{debug, info};
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{FieldType, Schema};
 use p2panda_rs::storage_provider::traits::DocumentStore;
@@ -72,19 +72,19 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                                 pagination = Pagination::new(&first, pagination.after.as_ref())
                             }
                             constants::ORDER_BY_ARG => {
-                                let order_direction = match value.enum_name()? {
-                                    "asc" => Direction::Ascending,
-                                    "desc" => Direction::Descending,
-                                    _ => panic!("Unknown order by argument key received"),
-                                };
-                                order = Order::new(&order.field, &order_direction);
-                            }
-                            constants::ORDER_DIRECTION_ARG => {
                                 let order_by = match value.enum_name()? {
                                     "OWNER" => FilterField::Meta(MetaField::Owner),
                                     field_name => FilterField::new(field_name),
                                 };
                                 order = Order::new(&order_by, &order.direction);
+                            }
+                            constants::ORDER_DIRECTION_ARG => {
+                                let order_direction = match value.enum_name()? {
+                                    "ASC" => Direction::Ascending,
+                                    "DESC" => Direction::Descending,
+                                    _ => panic!("Unknown order direction argument key received"),
+                                };
+                                order = Order::new(&order.field, &order_direction);
                             }
                             constants::META_FILTER_ARG => {
                                 let filter_object = value
@@ -101,6 +101,11 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                             _ => panic!("Unknown argument key received"),
                         }
                     }
+
+                    info!("{pagination:#?}");
+                    info!("{order:#?}");
+                    info!("{meta:#?}");
+                    info!("{filter:#?}");
 
                     // Fetch all queried documents and compose the field value list
                     // which will bubble up the query tree.
@@ -237,11 +242,19 @@ fn parse_meta_filter(filter: &mut Filter, filter_object: &ObjectAccessor) -> Res
                     filter.add_not_in(&filter_field, &list_items);
                 }
                 "eq" => {
-                    let value = filter_to_operation_value(&value, &FieldType::String)?;
+                    let field_type = match field.as_str() {
+                        "edited" | "deleted" => FieldType::Boolean,
+                        _ => FieldType::String,
+                    };
+                    let value = filter_to_operation_value(&value, &field_type)?;
                     filter.add(&filter_field, &value);
                 }
                 "notEq" => {
-                    let value = filter_to_operation_value(&value, &FieldType::String)?;
+                    let field_type = match field.as_str() {
+                        "edited" | "deleted" => FieldType::Boolean,
+                        _ => FieldType::String,
+                    };
+                    let value = filter_to_operation_value(&value, &field_type)?;
                     filter.add_not(&filter_field, &value);
                 }
                 _ => panic!("Unknown meta filter type received"),
