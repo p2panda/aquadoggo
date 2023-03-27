@@ -48,8 +48,7 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
 
                     // Default pagination, filtering and ordering values.
                     let mut pagination = Pagination::default();
-                    let mut order_by = FilterField::Meta(MetaField::DocumentId);
-                    let mut order_direction = Direction::Ascending;
+                    let mut order = Order::default();
                     let mut meta = Filter::new();
                     let mut filter = Filter::new();
 
@@ -73,17 +72,19 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                                 pagination = Pagination::new(&first, pagination.after.as_ref())
                             }
                             constants::ORDER_BY_ARG => {
-                                order_direction = match value.enum_name()? {
+                                let order_direction = match value.enum_name()? {
                                     "asc" => Direction::Ascending,
                                     "desc" => Direction::Descending,
                                     _ => panic!("Unknown order by argument key received"),
                                 };
+                                order = Order::new(&order.field, &order_direction);
                             }
                             constants::ORDER_DIRECTION_ARG => {
-                                order_by = match value.enum_name()? {
+                                let order_by = match value.enum_name()? {
                                     "OWNER" => FilterField::Meta(MetaField::Owner),
                                     field_name => FilterField::new(field_name),
                                 };
+                                order = Order::new(&order_by, &order.direction);
                             }
                             constants::META_FILTER_ARG => {
                                 let filter_object = value
@@ -100,9 +101,6 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                             _ => panic!("Unknown argument key received"),
                         }
                     }
-
-                    // Construct the order struct.
-                    let order = Order::new(&order_by, &order_direction);
 
                     // Fetch all queried documents and compose the field value list
                     // which will bubble up the query tree.
