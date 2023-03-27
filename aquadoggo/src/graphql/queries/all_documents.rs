@@ -1,21 +1,22 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::convert::TryFrom;
+use std::num::NonZeroU64;
 
 use async_graphql::dynamic::{
-    Field, FieldFuture, FieldValue, InputValue, Object, ObjectAccessor, TypeRef, ValueAccessor,
+    Field, FieldFuture, FieldValue, InputValue, Object, ObjectAccessor, TypeRef,
 };
-use async_graphql::indexmap::IndexMap;
 use async_graphql::Error;
-use dynamic_graphql::Value;
-use log::{debug, info};
+use dynamic_graphql::{ScalarValue, Value};
+use log::debug;
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{FieldType, Schema};
 use p2panda_rs::storage_provider::traits::DocumentStore;
 
-use crate::db::query::{Direction, Field as FilterField, Filter, MetaField, Order};
+use crate::db::query::{Direction, Field as FilterField, Filter, MetaField, Order, Pagination};
 use crate::db::SqlStore;
 use crate::graphql::constants;
+use crate::graphql::scalars::CursorScalar;
 use crate::graphql::types::{DocumentValue, PaginationData};
 use crate::graphql::utils::{
     filter_name, filter_to_operation_value, order_by_name, paginated_response_name,
@@ -46,8 +47,7 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                     let schema_provider = ctx.data_unchecked::<SchemaProvider>();
 
                     // Default pagination, filtering and ordering values.
-                    let mut from = None;
-                    let mut first = None;
+                    let mut pagination = Pagination::default();
                     let mut order_by = FilterField::Meta(MetaField::DocumentId);
                     let mut order_direction = Direction::Ascending;
                     let mut meta = Filter::new();
@@ -62,8 +62,16 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                     // Parse all argument values based on expected keys and types.
                     for (name, value) in ctx.args.iter() {
                         match name.as_str() {
-                            constants::PAGINATION_CURSOR_ARG => from = Some(value.string()?),
-                            constants::PAGINATION_FIRST_ARG => first = Some(value.i64()?),
+                            constants::PAGINATION_CURSOR_ARG => {
+                                let cursor = CursorScalar::from_value(Value::String(
+                                    value.string()?.to_string(),
+                                ))?;
+                                pagination = Pagination::new(&pagination.first, Some(&cursor))
+                            }
+                            constants::PAGINATION_FIRST_ARG => {
+                                let first = NonZeroU64::try_from(value.u64()?)?;
+                                pagination = Pagination::new(&first, pagination.after.as_ref())
+                            }
                             constants::ORDER_BY_ARG => {
                                 order_direction = match value.enum_name()? {
                                     "asc" => Direction::Ascending,
