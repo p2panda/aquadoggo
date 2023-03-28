@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+//! Input types used in `filter` and `meta` arguments of document collection queries and list
+//! fields in order to apply filters based on document field values to the requested collection.
+
 use async_graphql::dynamic::{InputObject, InputValue, TypeRef};
 use dynamic_graphql::InputObject;
 use p2panda_rs::schema::Schema;
 
-use crate::graphql;
 use crate::graphql::types::{BooleanFilter, DocumentIdFilter, DocumentViewIdFilter, OwnerFilter};
 use crate::graphql::utils::filter_name;
 
