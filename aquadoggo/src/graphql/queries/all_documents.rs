@@ -15,8 +15,8 @@ use crate::graphql::utils::{
 };
 use crate::schema::SchemaProvider;
 
-/// Adds GraphQL query for getting all documents of a certain p2panda schema to the root query
-/// object.
+/// Adds a GraphQL query for retrieving a paginated, ordered and filtered collection of
+/// documents by schema to the passed root query object.
 ///
 /// The query follows the format `all_<SCHEMA_ID>`.
 pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
@@ -85,7 +85,7 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
             },
         ),
         schema.id(),
-    ))
+    )).description(format!("Query a paginated collection of `{}` documents. The requested collection is filtered and ordered following parameters passed into the query via the available arguments.", schema.id().name()))
 }
 
 #[cfg(test)]
