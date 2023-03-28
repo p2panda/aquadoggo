@@ -37,6 +37,7 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
 
                 FieldFuture::new(async move {
                     let schema_provider = ctx.data_unchecked::<SchemaProvider>();
+                    let store = ctx.data_unchecked::<SqlStore>();
 
                     // Default pagination, filtering and ordering values.
                     let mut pagination = Pagination::<CursorScalar>::default();
@@ -60,7 +61,9 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
 
                     // Fetch all queried documents and compose the field value list
                     // which will bubble up the query tree.
-                    let store = ctx.data_unchecked::<SqlStore>();
+                    //
+                    // TODO: This needs be be replaced with a query to the db which retrieves a
+                    // paginated, ordered, filtered collection.
                     let documents: Vec<FieldValue> = store
                         .get_documents_by_schema(&schema_id)
                         .await?
