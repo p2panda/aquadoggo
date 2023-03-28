@@ -6,13 +6,16 @@ use dynamic_graphql::{FieldValue, ScalarValue};
 use log::debug;
 use p2panda_rs::schema::Schema;
 
+use crate::db::SqlStore;
 use crate::graphql::constants;
 use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
+use crate::graphql::types::DocumentValue;
+use crate::graphql::utils::get_document_from_params;
 
-/// Adds GraphQL query for getting a single p2panda document, selected by its document id or
-/// document view id to the root query object.
+/// Adds a GraphQL query for retrieving a single document selected by its id or
+/// view id to the root query object.
 ///
-/// The query follows the format `<SCHEMA_ID>`.
+/// The query follows the format `<SCHEMA_ID>(id: <DOCUMENT_ID>, viewId: <DOCUMENT_VIEW_ID>)`.
 pub fn build_document_query(query: Object, schema: &Schema) -> Object {
     let schema_id = schema.id().clone();
     query.field(
@@ -21,22 +24,42 @@ pub fn build_document_query(query: Object, schema: &Schema) -> Object {
             TypeRef::named(schema_id.to_string()),
             move |ctx| {
                 FieldFuture::new(async move {
-                    // Validate the received arguments.
-                    let args = validate_args(&ctx)?;
+                    // Parse the received arguments.
+                    let (document_id, document_view_id) = parse_arguments(&ctx)?;
+                    let store = ctx.data_unchecked::<SqlStore>();
 
-                    // Pass them up to the children query fields.
-                    Ok(Some(FieldValue::owned_any(args)))
+                    // Get the whole document from the store.
+                    let document =
+                        match get_document_from_params(store, &document_id, &document_view_id)
+                            .await?
+                        {
+                            Some(document) => document,
+                            None => return Ok(FieldValue::NONE),
+                        };
+
+                    // This is a query for a single document so we wrap the document in it's
+                    // relevent enum variant.
+                    let document = DocumentValue::Single(document);
+
+                    // Pass it up to the children query fields.
+                    Ok(Some(FieldValue::owned_any(document)))
                 })
             },
         )
-        .argument(InputValue::new(
-            constants::DOCUMENT_ID_ARG,
-            TypeRef::named(constants::DOCUMENT_ID),
-        ))
-        .argument(InputValue::new(
-            constants::DOCUMENT_VIEW_ID_ARG,
-            TypeRef::named(constants::DOCUMENT_VIEW_ID),
-        ))
+        .argument(
+            InputValue::new(
+                constants::DOCUMENT_ID_ARG,
+                TypeRef::named(constants::DOCUMENT_ID),
+            )
+            .description("Specify the id of the document to be retrieved"),
+        )
+        .argument(
+            InputValue::new(
+                constants::DOCUMENT_VIEW_ID_ARG,
+                TypeRef::named(constants::DOCUMENT_VIEW_ID),
+            )
+            .description("Specify the view id of the document to be retrieved"),
+        )
         .description(format!(
             "Query a {} document by id or view id.",
             schema.name()
@@ -44,20 +67,22 @@ pub fn build_document_query(query: Object, schema: &Schema) -> Object {
     )
 }
 
-fn validate_args(
+/// Parse and validate the arguments passed into this query.
+fn parse_arguments(
     ctx: &ResolverContext,
 ) -> Result<(Option<DocumentIdScalar>, Option<DocumentViewIdScalar>), Error> {
     // Parse arguments
     let schema_id = ctx.field().name();
     let mut document_id = None;
     let mut document_view_id = None;
-    for (name, id) in ctx.field().arguments()?.into_iter() {
+
+    for (name, value) in ctx.field().arguments()?.into_iter() {
         match name.as_str() {
             constants::DOCUMENT_ID_ARG => {
-                document_id = Some(DocumentIdScalar::from_value(id)?);
+                document_id = Some(DocumentIdScalar::from_value(value)?);
             }
             constants::DOCUMENT_VIEW_ID_ARG => {
-                document_view_id = Some(DocumentViewIdScalar::from_value(id)?)
+                document_view_id = Some(DocumentViewIdScalar::from_value(value)?)
             }
             _ => (),
         }
@@ -168,22 +193,14 @@ mod test {
     #[case::unknown_document_id(
         "(id: \"00208f7492d6eb01360a886dac93da88982029484d8c04a0bd2ac0607101b80a6634\")",
         value!({
-            "view": {
-                "fields": {
-                    "name": Value::Null
-                }
-            }
+            "view": Value::Null
         }),
         vec![]
     )]
     #[case::unknown_view_id(
         "(viewId: \"00208f7492d6eb01360a886dac93da88982029484d8c04a0bd2ac0607101b80a6634\")",
         value!({
-            "view": {
-                "fields": {
-                    "name": Value::Null
-                }
-            }
+            "view": Value::Null
         }),
         vec![]
     )]
@@ -281,6 +298,11 @@ mod test {
                 }},
                 collection: all_{type_name} {{
                     __typename,
+                    document {{
+                        __typename,
+                        meta {{ __typename }}
+                        fields {{ __typename }}      
+                    }}
                 }},
             }}"#,
                 type_name = schema.id(),
@@ -304,7 +326,12 @@ mod test {
                     "fields": { "__typename": format!("{}Fields", schema.id()), }
                 },
                 "collection": [{
-                    "__typename": schema.id()
+                    "__typename": format!("{}PaginatedResponse", schema.id()),
+                    "document" : {
+                        "__typename" : format!("{}Paginated", schema.id()),
+                        "meta": { "__typename": "DocumentMeta" },
+                        "fields": { "__typename": format!("{}Fields", schema.id()), }
+                    }
                 }]
             });
             assert_eq!(response.data, expected_data, "{:#?}", response.errors);
