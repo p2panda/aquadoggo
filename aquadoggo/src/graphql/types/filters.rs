@@ -4,7 +4,7 @@
 //! field types have different filter capabilities, this module contains filter objects for all
 //! p2panda core types: `String`, `Integer`, `Float`, `Boolean`, `Relation`, `PinnedRelation`,
 //! `RelationList` and `PinnedRelationList` as well as for `OWNER`, `DOCUMENT_ID` and
-//! `DOCUMENT_VIEW_ID` meta fields. 
+//! `DOCUMENT_VIEW_ID` meta fields.
 
 use dynamic_graphql::InputObject;
 
@@ -12,6 +12,7 @@ use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar, PublicKeyS
 
 /// A filter input type for owner field on meta object.
 #[derive(InputObject)]
+#[allow(dead_code)]
 pub struct OwnerFilter {
     /// Filter by values in set.
     #[graphql(name = "in")]
@@ -32,6 +33,7 @@ pub struct OwnerFilter {
 
 /// A filter input type for document id field on meta object.
 #[derive(InputObject)]
+#[allow(dead_code)]
 pub struct DocumentIdFilter {
     /// Filter by values in set.
     #[graphql(name = "in")]
@@ -52,6 +54,7 @@ pub struct DocumentIdFilter {
 
 /// A filter input type for document view id field on meta object.
 #[derive(InputObject)]
+#[allow(dead_code)]
 pub struct DocumentViewIdFilter {
     /// Filter by values in set.
     #[graphql(name = "in")]
@@ -72,6 +75,7 @@ pub struct DocumentViewIdFilter {
 
 /// A filter input type for string field values.
 #[derive(InputObject)]
+#[allow(dead_code)]
 pub struct StringFilter {
     /// Filter by values in set.
     #[graphql(name = "in")]
@@ -111,6 +115,7 @@ pub struct StringFilter {
 
 /// A filter input type for integer field values.
 #[derive(InputObject)]
+#[allow(dead_code)]
 pub struct IntegerFilter {
     /// Filter by values in set.
     #[graphql(name = "in")]
@@ -143,6 +148,7 @@ pub struct IntegerFilter {
 
 /// A filter input type for float field values.
 #[derive(InputObject)]
+#[allow(dead_code)]
 pub struct FloatFilter {
     /// Filter by values in set.
     #[graphql(name = "in")]
@@ -175,6 +181,7 @@ pub struct FloatFilter {
 
 /// A filter input type for boolean field values.
 #[derive(InputObject)]
+#[allow(dead_code)]
 pub struct BooleanFilter {
     /// Filter by equal to.
     #[graphql(name = "eq")]
@@ -187,6 +194,7 @@ pub struct BooleanFilter {
 
 /// A filter input type for relation field values.
 #[derive(InputObject)]
+#[allow(dead_code)]
 pub struct RelationFilter {
     /// Filter by equal to.
     #[graphql(name = "eq")]
@@ -199,6 +207,7 @@ pub struct RelationFilter {
 
 /// A filter input type for pinned relation field values.
 #[derive(InputObject)]
+#[allow(dead_code)]
 pub struct PinnedRelationFilter {
     /// Filter by equal to.
     #[graphql(name = "eq")]
@@ -211,6 +220,7 @@ pub struct PinnedRelationFilter {
 
 /// A filter input type for relation list field values.
 #[derive(InputObject)]
+#[allow(dead_code)]
 pub struct RelationListFilter {
     /// Filter by values in set.
     #[graphql(name = "in")]
@@ -223,6 +233,7 @@ pub struct RelationListFilter {
 
 /// A filter input type for pinned relation list field values.
 #[derive(InputObject)]
+#[allow(dead_code)]
 pub struct PinnedRelationListFilter {
     /// Filter by values in set.
     #[graphql(name = "in")]

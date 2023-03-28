@@ -163,7 +163,7 @@ pub fn parse_collection_arguments(
                 let filter_object = value
                     .object()
                     .map_err(|_| Error::new("internal: is not an object"))?;
-                parse_filter(filter, &schema, &filter_object)?;
+                parse_filter(filter, schema, &filter_object)?;
             }
             _ => panic!("Unknown argument key received"),
         }
@@ -225,10 +225,10 @@ fn parse_filter(
                     filter.add_lte(&filter_field, &value);
                 }
                 "contains" => {
-                    filter.add_contains(&filter_field, &value.string()?);
+                    filter.add_contains(&filter_field, value.string()?);
                 }
                 "notContains" => {
-                    filter.add_contains(&filter_field, &value.string()?);
+                    filter.add_contains(&filter_field, value.string()?);
                 }
                 _ => panic!("Unknown filter type received"),
             }

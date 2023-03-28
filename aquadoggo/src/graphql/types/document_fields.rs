@@ -43,7 +43,7 @@ impl DocumentFields {
                         Field::new(name, graphql_type(field_type), move |ctx| {
                             FieldFuture::new(async move { Self::resolve(ctx).await })
                         }),
-                        &schema_id,
+                        schema_id,
                     )
                 }
                 _ => Field::new(name, graphql_type(field_type), move |ctx| {

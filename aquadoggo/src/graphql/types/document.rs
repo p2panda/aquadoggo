@@ -55,7 +55,7 @@ impl PaginatedDocumentSchema {
     /// `DocumentMeta` type.
     pub fn build(schema: &Schema) -> Object {
         let fields = Object::new(paginated_document_name(schema.id()));
-        with_document_fields(fields, &schema).field(
+        with_document_fields(fields, schema).field(
             Field::new(
                 constants::CURSOR_FIELD,
                 TypeRef::named(TypeRef::STRING),
@@ -72,7 +72,10 @@ impl PaginatedDocumentSchema {
                     })
                 },
             )
-            .description(format!("The pagination `cursor` for this `{}` document.", schema.id().name())),
+            .description(format!(
+                "The pagination `cursor` for this `{}` document.",
+                schema.id().name()
+            )),
         )
     }
 }
@@ -95,7 +98,10 @@ fn with_document_fields(fields: Object, schema: &Schema) -> Object {
                     })
                 },
             )
-            .description(format!("Application fields of a `{}` document.", schema.id().name())),
+            .description(format!(
+                "Application fields of a `{}` document.",
+                schema.id().name()
+            )),
         )
         // The `meta` field of a document, resolves the `DocumentMeta` object.
         .field(
@@ -104,7 +110,10 @@ fn with_document_fields(fields: Object, schema: &Schema) -> Object {
                 TypeRef::named(constants::DOCUMENT_META),
                 move |ctx| FieldFuture::new(async move { DocumentMeta::resolve(ctx).await }),
             )
-            .description(format!("Meta fields of a `{}` document.", schema.id().name())),
+            .description(format!(
+                "Meta fields of a `{}` document.",
+                schema.id().name()
+            )),
         )
         .description(schema.description().to_string())
 }

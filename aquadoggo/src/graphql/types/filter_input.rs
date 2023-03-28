@@ -75,6 +75,7 @@ impl FilterInput {
 /// Filter input containing all meta fields a collection of documents can be filtered by. Is
 /// passed to the `meta` argument on a document collection query or list relation fields.
 #[derive(InputObject)]
+#[allow(dead_code)]
 pub struct MetaFilterInput {
     /// Document id filter.
     document_id: Option<DocumentIdFilter>,
