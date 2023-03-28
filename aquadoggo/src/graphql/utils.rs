@@ -20,6 +20,7 @@ use crate::graphql::types::DocumentValue;
 use super::constants;
 use super::scalars::CursorScalar;
 
+// Type name suffixes.
 const DOCUMENT_FIELDS_SUFFIX: &str = "Fields";
 const FILTER_INPUT_SUFFIX: &str = "Filter";
 const ORDER_BY_SUFFIX: &str = "OrderBy";
@@ -36,12 +37,12 @@ pub fn paginated_document_name(schema_id: &SchemaId) -> String {
     format!("{}{PAGINATED_DOCUMENT_SUFFIX}", schema_id)
 }
 
-// Correctly formats the name of a document field type.
+// Correctly formats the name of a document fields type.
 pub fn fields_name(schema_id: &SchemaId) -> String {
     format!("{}{DOCUMENT_FIELDS_SUFFIX}", schema_id)
 }
 
-// Correctly formats the name of a document filter type.
+// Correctly formats the name of a collection filter type.
 pub fn filter_name(schema_id: &SchemaId) -> String {
     format!("{}{FILTER_INPUT_SUFFIX}", schema_id)
 }
@@ -309,6 +310,7 @@ pub async fn get_document_from_params(
     }
 }
 
+/// Add collection query arguments to a field.
 pub fn with_collection_arguments(
     field: async_graphql::dynamic::Field,
     schema_id: &SchemaId,
