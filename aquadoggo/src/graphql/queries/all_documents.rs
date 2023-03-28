@@ -41,8 +41,7 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                     // Default pagination, filtering and ordering values.
                     let mut pagination = Pagination::<CursorScalar>::default();
                     let mut order = Order::default();
-                    let mut meta_filter = Filter::new();
-                    let mut field_filter = Filter::new();
+                    let mut filter = Filter::new();
 
                     // Get the schema for the document type being queried.
                     let schema = schema_provider
@@ -56,15 +55,13 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                         &schema,
                         &mut pagination,
                         &mut order,
-                        &mut meta_filter,
-                        &mut field_filter,
+                        &mut filter,
                     )?;
 
                     // Log everything, just for fun!
                     info!("{pagination:#?}");
                     info!("{order:#?}");
-                    info!("{meta_filter:#?}");
-                    info!("{field_filter:#?}");
+                    info!("{filter:#?}");
 
                     // Fetch all queried documents and compose the field value list
                     // which will bubble up the query tree.

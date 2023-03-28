@@ -3,16 +3,16 @@
 use std::convert::TryFrom;
 use std::num::NonZeroU64;
 
-use async_graphql::dynamic::{ResolverContext, TypeRef, ValueAccessor, ObjectAccessor};
+use async_graphql::dynamic::{ObjectAccessor, ResolverContext, TypeRef, ValueAccessor};
 use async_graphql::{Error, Value};
 use dynamic_graphql::ScalarValue;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::operation::OperationValue;
-use p2panda_rs::schema::{FieldType, SchemaId, Schema};
+use p2panda_rs::schema::{FieldType, Schema, SchemaId};
 use p2panda_rs::storage_provider::error::DocumentStorageError;
 use p2panda_rs::storage_provider::traits::DocumentStore;
 
-use crate::db::query::{Filter, Order, Pagination, MetaField, Field, Direction};
+use crate::db::query::{Direction, Field, Filter, MetaField, Order, Pagination};
 use crate::db::{types::StorageDocument, SqlStore};
 use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
 use crate::graphql::types::DocumentValue;
@@ -122,11 +122,10 @@ pub fn filter_to_operation_value(
 /// Parse all argument values based on expected keys and types.
 pub fn parse_collection_arguments(
     ctx: &ResolverContext,
-    schema: &Schema, 
+    schema: &Schema,
     pagination: &mut Pagination<CursorScalar>,
     order: &mut Order,
-    meta_filter: &mut Filter,
-    field_filter: &mut Filter,
+    filter: &mut Filter,
 ) -> Result<(), Error> {
     for (name, value) in ctx.args.iter() {
         match name.as_str() {
@@ -158,20 +157,19 @@ pub fn parse_collection_arguments(
                 let filter_object = value
                     .object()
                     .map_err(|_| Error::new("internal: is not an object"))?;
-                parse_meta_filter(meta_filter, &filter_object)?;
+                parse_meta_filter(filter, &filter_object)?;
             }
             constants::FILTER_ARG => {
                 let filter_object = value
                     .object()
                     .map_err(|_| Error::new("internal: is not an object"))?;
-                parse_filter(field_filter, &schema, &filter_object)?;
+                parse_filter(filter, &schema, &filter_object)?;
             }
             _ => panic!("Unknown argument key received"),
         }
     }
     Ok(())
 }
-
 
 /// Parse a filter object received from the graphql api into an abstract filter type based on the
 /// schema of the documents being queried.

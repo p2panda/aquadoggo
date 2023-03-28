@@ -43,7 +43,7 @@ impl DocumentFields {
                     })
                     .argument(
                         InputValue::new("filter", TypeRef::named(filter_name(schema_id)))
-                        .description("Filter the query based on field values"),
+                            .description("Filter the query based on field values"),
                     )
                     .argument(
                         InputValue::new("meta", TypeRef::named("MetaFilterInput"))
@@ -130,13 +130,12 @@ impl DocumentFields {
                 // Default pagination, filtering and ordering values.
                 let mut pagination = Pagination::<CursorScalar>::default();
                 let mut order = Order::default();
-                let mut meta_filter = Filter::new();
-                let mut field_filter = Filter::new();
+                let mut filter = Filter::new();
 
                 // Add all items in the list to the meta_filter `in` filter.
                 let list: Vec<OperationValue> =
                     rel.iter().map(|item| item.to_owned().into()).collect();
-                meta_filter.add_in(&FilterField::Meta(MetaField::DocumentId), &list);
+                filter.add_in(&FilterField::Meta(MetaField::DocumentId), &list);
 
                 // Parse arguments.
                 parse_collection_arguments(
@@ -144,8 +143,7 @@ impl DocumentFields {
                     &schema,
                     &mut pagination,
                     &mut order,
-                    &mut meta_filter,
-                    &mut field_filter,
+                    &mut filter,
                 )?;
 
                 // TODO: This needs be be replaced with a query to the db which retrieves a
@@ -199,13 +197,12 @@ impl DocumentFields {
                 // Default pagination, filtering and ordering values.
                 let mut pagination = Pagination::<CursorScalar>::default();
                 let mut order = Order::default();
-                let mut meta_filter = Filter::new();
-                let mut field_filter = Filter::new();
+                let mut filter = Filter::new();
 
-                // Add all items in the list to the meta_filter.
+                // Add all items in the list to the filter.
                 let list: Vec<OperationValue> =
                     rel.iter().map(|item| item.to_owned().into()).collect();
-                meta_filter.add_in(&FilterField::Meta(MetaField::DocumentId), &list);
+                filter.add_in(&FilterField::Meta(MetaField::DocumentId), &list);
 
                 // Parse arguments.
                 parse_collection_arguments(
@@ -213,8 +210,7 @@ impl DocumentFields {
                     &schema,
                     &mut pagination,
                     &mut order,
-                    &mut meta_filter,
-                    &mut field_filter,
+                    &mut filter,
                 )?;
 
                 // TODO: This needs be be replaced with a query to the db which retrieves a
