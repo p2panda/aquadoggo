@@ -203,6 +203,14 @@ pub struct RelationFilter {
     /// Filter by not equal to.
     #[graphql(name = "notEq")]
     not_eq: Option<DocumentIdScalar>,
+
+    /// Filter by values in set.
+    #[graphql(name = "in")]
+    is_in: Option<Vec<DocumentIdScalar>>,
+
+    /// Filter by values not in set.
+    #[graphql(name = "notIn")]
+    is_not_in: Option<Vec<DocumentIdScalar>>,
 }
 
 /// A filter input type for pinned relation field values.
@@ -216,6 +224,14 @@ pub struct PinnedRelationFilter {
     /// Filter by not equal to.
     #[graphql(name = "notEq")]
     not_eq: Option<DocumentViewIdScalar>,
+
+    /// Filter by values in set.
+    #[graphql(name = "in")]
+    is_in: Option<Vec<DocumentViewIdScalar>>,
+
+    /// Filter by values not in set.
+    #[graphql(name = "notIn")]
+    is_not_in: Option<Vec<DocumentViewIdScalar>>,
 }
 
 /// A filter input type for relation list field values.
