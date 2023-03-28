@@ -33,7 +33,7 @@ impl DocumentSchema {
     /// `DocumentMeta` type.
     pub fn build(schema: &Schema) -> Object {
         let fields = Object::new(schema.id().to_string());
-        with_document_fields(fields, &schema)
+        with_document_fields(fields, schema)
     }
 }
 

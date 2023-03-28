@@ -7,9 +7,13 @@ use p2panda_rs::schema::Schema;
 use crate::graphql::constants;
 use crate::graphql::utils::{downcast_document, paginated_document_name, paginated_response_name};
 
+/// Pagination data passed from parent to child query fields.
 #[derive(Default, Clone, Debug)]
 pub struct PaginationData {
+    /// The total page count.
     total_count: u64,
+
+    /// Whether this query has a next page waiting.
     has_next_page: bool,
 }
 
