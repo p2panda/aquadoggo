@@ -122,7 +122,7 @@ mod test {
             }, 
             meta: { 
                 owner: { 
-                    in: ["PUBLIC"] 
+                    in: ["7cf4f58a2d89e93313f2de99604a814ecea9800cf217b140e9c3a7ba59a5d982"] 
                 }
             }
         )"#.to_string(), 
@@ -144,7 +144,7 @@ mod test {
     #[case(
         r#"(after: HELLO)"#.to_string(), 
         Value::Null,
-        vec!["Invalid value for argument \"after\", expected type \"String\"".to_string()]
+        vec!["internal: not a string".to_string()]
     )]
     #[case(
         r#"(after: "00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331")"#.to_string(), 
@@ -154,7 +154,7 @@ mod test {
     #[case(
         r#"(after: 27)"#.to_string(), 
         Value::Null,
-        vec!["Invalid value for argument \"after\", expected type \"String\"".to_string()]
+        vec!["internal: not a string".to_string()]
     )]
     #[case(
         r#"(orderBy: HELLO)"#.to_string(), 
@@ -211,6 +211,13 @@ mod test {
         Value::Null,
         vec!["Invalid value for argument \"meta.owner\", unknown field \"contains\" of type \"OwnerFilter\"".to_string()]
     )]
+    // TODO: When we have a way to add custom validation to scalar types then this case should
+    // fail as we pass in an invalid public key string.
+    // #[case(
+    //     r#"(meta: { owner: { eq: "hello" }})"#.to_string(), 
+    //     Value::Null,
+    //     vec!["Invalid value for argument \"meta.owner\", unknown field \"contains\" of type \"OwnerFilter\"".to_string()]
+    // )]
 
     fn collection_query(
         key_pair: KeyPair,
