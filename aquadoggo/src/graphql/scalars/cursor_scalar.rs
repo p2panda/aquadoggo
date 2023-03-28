@@ -10,7 +10,7 @@ use p2panda_rs::document::DocumentId;
 
 use crate::db::query::Cursor;
 
-/// A cursor used in paginated queries.
+/// The cursor used in paginated queries.
 #[derive(Scalar, Clone, Debug, Eq, PartialEq)]
 #[graphql(name = "Cursor")]
 pub struct CursorScalar(String, DocumentId);

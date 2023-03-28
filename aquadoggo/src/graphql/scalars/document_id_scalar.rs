@@ -6,7 +6,7 @@ use std::str::FromStr;
 use dynamic_graphql::{Error, Result, Scalar, ScalarValue, Value};
 use p2panda_rs::document::DocumentId;
 
-/// Id of a p2panda document.
+/// The id of a p2panda document.
 #[derive(Scalar, Clone, Debug, Eq, PartialEq)]
 #[graphql(name = "DocumentId")]
 pub struct DocumentIdScalar(DocumentId);
