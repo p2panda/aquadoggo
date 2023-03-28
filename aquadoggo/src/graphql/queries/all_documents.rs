@@ -18,7 +18,7 @@ use crate::schema::SchemaProvider;
 /// Adds a GraphQL query for retrieving a paginated, ordered and filtered collection of
 /// documents by schema to the passed root query object.
 ///
-/// The query follows the format `all_<SCHEMA_ID>`.
+/// The query follows the format `all_<SCHEMA_ID>(<...ARGS>)`.
 pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
     let schema_id = schema.id().clone();
     query.field(with_collection_arguments(
