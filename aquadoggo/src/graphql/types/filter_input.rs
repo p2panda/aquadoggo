@@ -4,6 +4,7 @@ use async_graphql::dynamic::{InputObject, InputValue, TypeRef};
 use dynamic_graphql::InputObject;
 use p2panda_rs::schema::Schema;
 
+use crate::graphql;
 use crate::graphql::types::{BooleanFilter, DocumentIdFilter, DocumentViewIdFilter, OwnerFilter};
 use crate::graphql::utils::filter_name;
 
@@ -77,6 +78,7 @@ pub struct MetaFilterInput {
     document_id: Option<DocumentIdFilter>,
 
     /// Document view id filter.
+    #[graphql(name = "viewId")]
     document_view_id: Option<DocumentViewIdFilter>,
 
     /// Owner filter.

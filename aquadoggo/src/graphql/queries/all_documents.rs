@@ -123,6 +123,12 @@ mod test {
             meta: { 
                 owner: { 
                     in: ["7cf4f58a2d89e93313f2de99604a814ecea9800cf217b140e9c3a7ba59a5d982"] 
+                },
+                documentId: { 
+                    eq: "00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331" 
+                },
+                viewId: { 
+                    notIn: ["00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331"] 
                 }
             }
         )"#.to_string(), 
@@ -211,8 +217,28 @@ mod test {
         Value::Null,
         vec!["Invalid value for argument \"meta.owner\", unknown field \"contains\" of type \"OwnerFilter\"".to_string()]
     )]
+    #[case(
+        r#"(meta: { documentId: { contains: "hello" }})"#.to_string(), 
+        Value::Null,
+        vec!["Invalid value for argument \"meta.documentId\", unknown field \"contains\" of type \"DocumentIdFilter\"".to_string()]
+    )]
+    #[case(
+        r#"(meta: { viewId: { contains: "hello" }})"#.to_string(), 
+        Value::Null,
+        vec!["Invalid value for argument \"meta.viewId\", unknown field \"contains\" of type \"DocumentViewIdFilter\"".to_string()]
+    )]
+    #[case(
+        r#"(meta: { documentId: { eq: 27 }})"#.to_string(), 
+        Value::Null,
+        vec!["internal: not a string".to_string()]
+    )]
+    #[case(
+        r#"(meta: { viewId: { in: "hello" }})"#.to_string(), 
+        Value::Null,
+        vec!["internal: not a list".to_string()]
+    )]
     // TODO: When we have a way to add custom validation to scalar types then this case should
-    // fail as we pass in an invalid public key string.
+    // fail as we pass in an invalid public key string. Same for documentId and viewId meta fields.
     // #[case(
     //     r#"(meta: { owner: { eq: "hello" }})"#.to_string(),
     //     Value::Null,
