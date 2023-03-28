@@ -8,7 +8,7 @@ use p2panda_rs::identity::PublicKey;
 
 /// Public key that signed the entry.
 #[derive(Scalar, Debug, Clone, Eq, PartialEq, Copy)]
-#[graphql(name = "PublicKey")]
+#[graphql(name = "PublicKey", validator(validate))]
 pub struct PublicKeyScalar(PublicKey);
 
 impl ScalarValue for PublicKeyScalar {
@@ -49,3 +49,10 @@ impl Display for PublicKeyScalar {
         write!(f, "{}", self.0)
     }
 }
+
+/// Validation method used internally in `async-graphql` to check scalar values passed into the
+/// public api. 
+fn validate(value: &Value) -> bool {
+    PublicKeyScalar::from_value(value.to_owned()).is_ok()
+}
+

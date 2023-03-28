@@ -12,7 +12,7 @@ use crate::db::query::Cursor;
 
 /// The cursor used in paginated queries.
 #[derive(Scalar, Clone, Debug, Eq, PartialEq)]
-#[graphql(name = "Cursor")]
+#[graphql(name = "Cursor", validator(validate))]
 pub struct CursorScalar(String, DocumentId);
 
 impl ScalarValue for CursorScalar {
@@ -60,4 +60,10 @@ impl Cursor for CursorScalar {
     fn encode(&self) -> String {
         format!("{}_{}", self.0, self.1)
     }
+}
+
+/// Validation method used internally in `async-graphql` to check scalar values passed into the
+/// public api. 
+fn validate(value: &Value) -> bool {
+    CursorScalar::from_value(value.to_owned()).is_ok()
 }

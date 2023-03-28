@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 /// Entry payload and p2panda operation, CBOR bytes encoded as a hexadecimal string.
 #[derive(Scalar, Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[graphql(name = "EncodedOperation")]
+#[graphql(name = "EncodedOperation",validator(validate))]
 pub struct EncodedOperationScalar(EncodedOperation);
 
 impl ScalarValue for EncodedOperationScalar {
@@ -41,4 +41,10 @@ impl From<EncodedOperationScalar> for EncodedOperation {
     fn from(operation: EncodedOperationScalar) -> EncodedOperation {
         operation.0
     }
+}
+
+/// Validation method used internally in `async-graphql` to check scalar values passed into the
+/// public api. 
+fn validate(value: &Value) -> bool {
+    EncodedOperationScalar::from_value(value.to_owned()).is_ok()
 }

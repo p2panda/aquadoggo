@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 /// Signed bamboo entry, encoded as a hexadecimal string.
 #[derive(Scalar, Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[graphql(name = "EncodedEntry")]
+#[graphql(name = "EncodedEntry", validator(validate))]
 pub struct EncodedEntryScalar(EncodedEntry);
 
 impl ScalarValue for EncodedEntryScalar {
@@ -38,4 +38,10 @@ impl From<EncodedEntryScalar> for EncodedEntry {
     fn from(entry: EncodedEntryScalar) -> EncodedEntry {
         entry.0
     }
+}
+
+/// Validation method used internally in `async-graphql` to check scalar values passed into the
+/// public api. 
+fn validate(value: &Value) -> bool {
+    EncodedEntryScalar::from_value(value.to_owned()).is_ok()
 }

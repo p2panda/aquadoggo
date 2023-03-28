@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 /// Log id of a bamboo entry.
 #[derive(Scalar, Clone, Copy, Eq, PartialEq, Debug)]
-#[graphql(name = "LogId")]
+#[graphql(name = "LogId", validator(validate))]
 pub struct LogIdScalar(LogId);
 
 impl ScalarValue for LogIdScalar {
@@ -75,6 +75,12 @@ impl Display for LogIdScalar {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0.as_u64())
     }
+}
+
+/// Validation method used internally in `async-graphql` to check scalar values passed into the
+/// public api. 
+fn validate(value: &Value) -> bool {
+    LogIdScalar::from_value(value.to_owned()).is_ok()
 }
 
 #[cfg(test)]
