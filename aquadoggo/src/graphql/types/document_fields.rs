@@ -55,9 +55,10 @@ impl DocumentFields {
                     schema.id().name()
                 )),
             };
-            document_schema_fields = document_schema_fields
-                .field(field)
-                .description(format!("The application fields of a `{}` document.", schema.id().name()));
+            document_schema_fields = document_schema_fields.field(field).description(format!(
+                "The application fields of a `{}` document.",
+                schema.id().name()
+            ));
         }
 
         document_schema_fields

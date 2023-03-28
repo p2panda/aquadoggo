@@ -67,7 +67,7 @@ pub fn build_document_query(query: Object, schema: &Schema) -> Object {
     )
 }
 
-/// Parse and validate the arguments passed into this query. 
+/// Parse and validate the arguments passed into this query.
 fn parse_arguments(
     ctx: &ResolverContext,
 ) -> Result<(Option<DocumentIdScalar>, Option<DocumentViewIdScalar>), Error> {

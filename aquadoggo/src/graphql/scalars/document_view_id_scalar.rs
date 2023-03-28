@@ -6,7 +6,7 @@ use dynamic_graphql::{Error, Result, Scalar, ScalarValue, Value};
 use p2panda_rs::document::DocumentViewId;
 
 /// The document view id of a p2panda document. Refers to a specific point in a documents history
-/// and can be used to deterministically reconstruct it's state at that time. 
+/// and can be used to deterministically reconstruct it's state at that time.
 #[derive(Scalar, Clone, Debug, Eq, PartialEq)]
 #[graphql(name = "DocumentViewId")]
 pub struct DocumentViewIdScalar(DocumentViewId);
