@@ -67,6 +67,9 @@ struct Cli {
     /// eg. --relay-address "/ip4/127.0.0.1/udp/12345/quic-v1"
     #[arg(long)]
     relay_address: Option<Multiaddr>,
+
+    /// Enable AutoNAT to facilitate NAT status determination, true by default.
+    autonat: Option<bool>,
 }
 
 impl Cli {
@@ -99,6 +102,7 @@ impl TryFrom<Cli> for Configuration {
         config.http_port = cli.http_port.unwrap_or(2020);
 
         config.network = NetworkConfiguration {
+            autonat: cli.autonat.unwrap_or(true),
             mdns: cli.mdns.unwrap_or(true),
             ping: cli.ping.unwrap_or(true),
             quic_port: cli.quic_port.unwrap_or(2022),
