@@ -41,7 +41,7 @@ impl From<EncodedEntryScalar> for EncodedEntry {
 }
 
 /// Validation method used internally in `async-graphql` to check scalar values passed into the
-/// public api. 
+/// public api.
 fn validate(value: &Value) -> bool {
     EncodedEntryScalar::from_value(value.to_owned()).is_ok()
 }

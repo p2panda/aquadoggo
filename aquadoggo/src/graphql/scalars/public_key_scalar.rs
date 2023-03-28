@@ -51,8 +51,7 @@ impl Display for PublicKeyScalar {
 }
 
 /// Validation method used internally in `async-graphql` to check scalar values passed into the
-/// public api. 
+/// public api.
 fn validate(value: &Value) -> bool {
     PublicKeyScalar::from_value(value.to_owned()).is_ok()
 }
-
