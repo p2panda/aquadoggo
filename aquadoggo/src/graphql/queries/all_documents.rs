@@ -214,7 +214,7 @@ mod test {
     // TODO: When we have a way to add custom validation to scalar types then this case should
     // fail as we pass in an invalid public key string.
     // #[case(
-    //     r#"(meta: { owner: { eq: "hello" }})"#.to_string(), 
+    //     r#"(meta: { owner: { eq: "hello" }})"#.to_string(),
     //     Value::Null,
     //     vec!["Invalid value for argument \"meta.owner\", unknown field \"contains\" of type \"OwnerFilter\"".to_string()]
     // )]
