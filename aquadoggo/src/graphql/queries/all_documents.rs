@@ -58,11 +58,6 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                         &mut filter,
                     )?;
 
-                    // Log everything, just for fun!
-                    info!("{pagination:#?}");
-                    info!("{order:#?}");
-                    info!("{filter:#?}");
-
                     // Fetch all queried documents and compose the field value list
                     // which will bubble up the query tree.
                     let store = ctx.data_unchecked::<SqlStore>();
