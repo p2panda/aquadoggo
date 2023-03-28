@@ -13,7 +13,7 @@ use crate::db::SqlStore;
 use crate::graphql::scalars::CursorScalar;
 use crate::graphql::utils::{
     downcast_document, fields_name, filter_name, gql_scalar, graphql_type, order_by_name,
-    parse_collection_arguments,
+    parse_collection_arguments, with_collection_arguments,
 };
 
 use crate::graphql::types::{DocumentValue, PaginationData};
@@ -38,27 +38,12 @@ impl DocumentFields {
             let field = match field_type {
                 p2panda_rs::schema::FieldType::RelationList(schema_id)
                 | p2panda_rs::schema::FieldType::PinnedRelationList(schema_id) => {
-                    Field::new(name, graphql_type(field_type), move |ctx| {
-                        FieldFuture::new(async move { Self::resolve(ctx).await })
-                    })
-                    .argument(
-                        InputValue::new("filter", TypeRef::named(filter_name(schema_id)))
-                            .description("Filter the query based on field values"),
+                    with_collection_arguments(
+                        Field::new(name, graphql_type(field_type), move |ctx| {
+                            FieldFuture::new(async move { Self::resolve(ctx).await })
+                        }),
+                        &schema_id,
                     )
-                    .argument(
-                        InputValue::new("meta", TypeRef::named("MetaFilterInput"))
-                            .description("Filter the query based on meta field values"),
-                    )
-                    .argument(InputValue::new(
-                        "orderBy",
-                        TypeRef::named(order_by_name(schema.id())),
-                    ))
-                    .argument(InputValue::new(
-                        "orderDirection",
-                        TypeRef::named("OrderDirection"),
-                    ))
-                    .argument(InputValue::new("first", TypeRef::named(TypeRef::INT)))
-                    .argument(InputValue::new("after", TypeRef::named(TypeRef::STRING)))
                 }
                 _ => Field::new(name, graphql_type(field_type), move |ctx| {
                     FieldFuture::new(async move { Self::resolve(ctx).await })

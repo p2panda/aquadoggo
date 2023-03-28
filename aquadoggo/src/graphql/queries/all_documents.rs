@@ -11,7 +11,7 @@ use crate::graphql::constants;
 use crate::graphql::scalars::CursorScalar;
 use crate::graphql::types::{DocumentValue, PaginationData};
 use crate::graphql::utils::{
-    filter_name, order_by_name, paginated_response_name, parse_collection_arguments,
+    filter_name, order_by_name, paginated_response_name, parse_collection_arguments, with_collection_arguments,
 };
 use crate::schema::SchemaProvider;
 
@@ -22,7 +22,7 @@ use crate::schema::SchemaProvider;
 pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
     let schema_id = schema.id().clone();
     query.field(
-        Field::new(
+        with_collection_arguments(Field::new(
             format!("{}{}", constants::QUERY_ALL_PREFIX, schema_id),
             TypeRef::named_list(paginated_response_name(&schema_id)),
             move |ctx| {
@@ -83,26 +83,7 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                     Ok(Some(FieldValue::list(documents)))
                 })
             },
-        )
-        .argument(
-            InputValue::new("filter", TypeRef::named(filter_name(schema.id())))
-                .description("Filter the query based on field values"),
-        )
-        .argument(
-            InputValue::new("meta", TypeRef::named("MetaFilterInput"))
-                .description("Filter the query based on meta field values"),
-        )
-        .argument(InputValue::new(
-            "orderBy",
-            TypeRef::named(order_by_name(schema.id())),
-        ))
-        .argument(InputValue::new(
-            "orderDirection",
-            TypeRef::named("OrderDirection"),
-        ))
-        .argument(InputValue::new("first", TypeRef::named(TypeRef::INT)))
-        .argument(InputValue::new("after", TypeRef::named(TypeRef::STRING)))
-        .description(format!("Get all {} documents.", schema.name())),
+        ), schema.id())
     )
 }
 

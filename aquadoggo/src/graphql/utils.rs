@@ -3,7 +3,7 @@
 use std::convert::TryFrom;
 use std::num::NonZeroU64;
 
-use async_graphql::dynamic::{ObjectAccessor, ResolverContext, TypeRef, ValueAccessor};
+use async_graphql::dynamic::{InputValue, ObjectAccessor, ResolverContext, TypeRef, ValueAccessor};
 use async_graphql::{Error, Value};
 use dynamic_graphql::ScalarValue;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
@@ -311,4 +311,42 @@ pub async fn get_document_from_params(
         (Some(document_id), None) => store.get_document(&DocumentId::from(document_id)).await,
         _ => panic!("Invalid values passed from query field parent"),
     }
+}
+
+pub fn with_collection_arguments(
+    field: async_graphql::dynamic::Field,
+    schema_id: &SchemaId,
+) -> async_graphql::dynamic::Field {
+    field
+        .argument(
+            InputValue::new("filter", TypeRef::named(filter_name(schema_id)))
+                .description("Filter the query based on field values"),
+        )
+        .argument(
+            InputValue::new("meta", TypeRef::named("MetaFilterInput"))
+                .description("Filter the query based on meta field values"),
+        )
+        .argument(
+            InputValue::new("orderBy", TypeRef::named(order_by_name(schema_id)))
+                .description("Field by which items in the collection will be ordered")
+                .default_value("DOCUMENT_ID"),
+        )
+        .argument(
+            InputValue::new("orderDirection", TypeRef::named("OrderDirection"))
+                .description("Direction which items in the collection will be ordered")
+                .default_value("ASC"),
+        )
+        .argument(
+            InputValue::new("first", TypeRef::named(TypeRef::INT))
+                .description("Number of paginated items we want from this request")
+                .default_value(25),
+        )
+        .argument(
+            InputValue::new("after", TypeRef::named(TypeRef::STRING))
+                .description("The item we wish to start paginating from identified by a cursor"),
+        )
+        .description(format!(
+            "Get all {} documents with pagination, ordering and filtering.",
+            schema_id
+        ))
 }
