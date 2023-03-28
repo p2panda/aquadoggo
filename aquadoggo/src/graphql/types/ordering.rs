@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 //! Types used as inputs when specifying ordering parameters on collection queries.
-
 use async_graphql::dynamic::Enum;
 use dynamic_graphql::Enum;
 use p2panda_rs::schema::Schema;
