@@ -17,8 +17,8 @@ use crate::graphql::queries::{
     build_all_documents_query, build_document_query, build_next_args_query,
 };
 use crate::graphql::scalars::{
-    DocumentIdScalar, DocumentViewIdScalar, EncodedEntryScalar, EncodedOperationScalar,
-    EntryHashScalar, LogIdScalar, PublicKeyScalar, SeqNumScalar,
+    CursorScalar, DocumentIdScalar, DocumentViewIdScalar, EncodedEntryScalar,
+    EncodedOperationScalar, EntryHashScalar, LogIdScalar, PublicKeyScalar, SeqNumScalar,
 };
 use crate::graphql::types::{
     BooleanFilter, DocumentFields, DocumentMeta, DocumentSchema, FilterInput, FloatFilter,
@@ -59,6 +59,7 @@ pub async fn build_root_schema(
         .register::<OrderDirection>()
         .register::<MetaFilterInput>()
         // Register scalar types
+        .register::<CursorScalar>()
         .register::<DocumentIdScalar>()
         .register::<DocumentMeta>()
         .register::<DocumentViewIdScalar>()

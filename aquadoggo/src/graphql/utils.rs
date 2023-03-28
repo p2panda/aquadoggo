@@ -342,7 +342,7 @@ pub fn with_collection_arguments(
                 .default_value(25),
         )
         .argument(
-            InputValue::new("after", TypeRef::named(TypeRef::STRING))
+            InputValue::new("after", TypeRef::named("Cursor"))
                 .description("The item we wish to start paginating from identified by a cursor"),
         )
         .description(format!(

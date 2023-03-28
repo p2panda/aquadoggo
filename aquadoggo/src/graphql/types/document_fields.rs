@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use async_graphql::dynamic::{Field, FieldFuture, InputValue, Object, ResolverContext, TypeRef};
+use async_graphql::dynamic::{Field, FieldFuture, Object, ResolverContext};
 use async_graphql::Error;
 use dynamic_graphql::FieldValue;
 use p2panda_rs::document::traits::AsDocument;
@@ -12,8 +12,8 @@ use crate::db::query::{Field as FilterField, Filter, MetaField, Order, Paginatio
 use crate::db::SqlStore;
 use crate::graphql::scalars::CursorScalar;
 use crate::graphql::utils::{
-    downcast_document, fields_name, filter_name, gql_scalar, graphql_type, order_by_name,
-    parse_collection_arguments, with_collection_arguments,
+    downcast_document, fields_name, gql_scalar, graphql_type, parse_collection_arguments,
+    with_collection_arguments,
 };
 
 use crate::graphql::types::{DocumentValue, PaginationData};

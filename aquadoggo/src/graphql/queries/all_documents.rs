@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use async_graphql::dynamic::{Field, FieldFuture, FieldValue, InputValue, Object, TypeRef};
+use async_graphql::dynamic::{Field, FieldFuture, FieldValue, Object, TypeRef};
 use log::{debug, info};
 use p2panda_rs::schema::Schema;
 use p2panda_rs::storage_provider::traits::DocumentStore;
@@ -11,7 +11,7 @@ use crate::graphql::constants;
 use crate::graphql::scalars::CursorScalar;
 use crate::graphql::types::{DocumentValue, PaginationData};
 use crate::graphql::utils::{
-    filter_name, order_by_name, paginated_response_name, parse_collection_arguments, with_collection_arguments,
+    paginated_response_name, parse_collection_arguments, with_collection_arguments,
 };
 use crate::schema::SchemaProvider;
 
@@ -21,8 +21,8 @@ use crate::schema::SchemaProvider;
 /// The query follows the format `all_<SCHEMA_ID>`.
 pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
     let schema_id = schema.id().clone();
-    query.field(
-        with_collection_arguments(Field::new(
+    query.field(with_collection_arguments(
+        Field::new(
             format!("{}{}", constants::QUERY_ALL_PREFIX, schema_id),
             TypeRef::named_list(paginated_response_name(&schema_id)),
             move |ctx| {
@@ -83,8 +83,9 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                     Ok(Some(FieldValue::list(documents)))
                 })
             },
-        ), schema.id())
-    )
+        ),
+        schema.id(),
+    ))
 }
 
 #[cfg(test)]
