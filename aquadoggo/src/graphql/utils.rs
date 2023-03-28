@@ -129,7 +129,7 @@ pub fn parse_collection_arguments(
 ) -> Result<(), Error> {
     for (name, value) in ctx.args.iter() {
         match name.as_str() {
-            constants::PAGINATION_CURSOR_ARG => {
+            constants::PAGINATION_AFTER_ARG => {
                 let cursor = CursorScalar::from_value(Value::String(value.string()?.to_string()))?;
                 pagination.after = Some(cursor);
             }
@@ -315,30 +315,45 @@ pub fn with_collection_arguments(
 ) -> async_graphql::dynamic::Field {
     field
         .argument(
-            InputValue::new("filter", TypeRef::named(filter_name(schema_id)))
-                .description("Filter the query based on field values"),
+            InputValue::new(
+                constants::FILTER_ARG,
+                TypeRef::named(filter_name(schema_id)),
+            )
+            .description("Filter the query based on field values"),
         )
         .argument(
-            InputValue::new("meta", TypeRef::named("MetaFilterInput"))
-                .description("Filter the query based on meta field values"),
+            InputValue::new(
+                constants::META_FILTER_ARG,
+                TypeRef::named("MetaFilterInput"),
+            )
+            .description("Filter the query based on meta field values"),
         )
         .argument(
-            InputValue::new("orderBy", TypeRef::named(order_by_name(schema_id)))
-                .description("Field by which items in the collection will be ordered")
-                .default_value("DOCUMENT_ID"),
+            InputValue::new(
+                constants::ORDER_BY_ARG,
+                TypeRef::named(order_by_name(schema_id)),
+            )
+            .description("Field by which items in the collection will be ordered")
+            .default_value("DOCUMENT_ID"),
         )
         .argument(
-            InputValue::new("orderDirection", TypeRef::named("OrderDirection"))
-                .description("Direction which items in the collection will be ordered")
-                .default_value("ASC"),
+            InputValue::new(
+                constants::ORDER_DIRECTION_ARG,
+                TypeRef::named("OrderDirection"),
+            )
+            .description("Direction which items in the collection will be ordered")
+            .default_value("ASC"),
         )
         .argument(
-            InputValue::new("first", TypeRef::named(TypeRef::INT))
-                .description("Number of paginated items we want from this request")
-                .default_value(25),
+            InputValue::new(
+                constants::PAGINATION_FIRST_ARG,
+                TypeRef::named(TypeRef::INT),
+            )
+            .description("Number of paginated items we want from this request")
+            .default_value(25),
         )
         .argument(
-            InputValue::new("after", TypeRef::named("Cursor"))
+            InputValue::new(constants::PAGINATION_AFTER_ARG, TypeRef::named("Cursor"))
                 .description("The item we wish to start paginating from identified by a cursor"),
         )
         .description(format!(

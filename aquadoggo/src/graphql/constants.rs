@@ -44,7 +44,7 @@ pub const FILTER_ARG: &str = "filter";
 pub const META_FILTER_ARG: &str = "meta";
 
 /// Argument string used for passing a pagination cursor into a query.
-pub const PAGINATION_CURSOR_ARG: &str = "after";
+pub const PAGINATION_AFTER_ARG: &str = "after";
 
 /// Argument string used for passing number of paginated items requested to query.
 pub const PAGINATION_FIRST_ARG: &str = "first";
