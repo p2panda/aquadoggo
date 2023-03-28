@@ -18,17 +18,18 @@ use crate::graphql::utils::{
 
 use crate::graphql::types::{DocumentValue, PaginationData};
 use crate::schema::SchemaProvider;
-
-/// GraphQL object which represents the fields of a document document type as described by it's
-/// p2panda schema. A type is added to the root GraphQL schema for every document, as these types
-/// are not known at compile time we make use of the `async-graphql ` `dynamic` module.
+/// A constructor for dynamically building objects describing the application fields of a p2panda
+/// schema. Each generated object has a type name with the formatting `<schema_id>Fields`.
+///
+/// A type should be added to the root GraphQL schema for every schema supported on a node, as
+/// these types are not known at compile time we make use of the `async-graphql` `dynamic` module.
 pub struct DocumentFields;
 
 impl DocumentFields {
-    /// Build the fields of a document from the related p2panda schema. Constructs an object which
+    /// Build the fields object from the related p2panda schema. Constructs an object which
     /// can then be added to the root GraphQL schema.
     pub fn build(schema: &Schema) -> Object {
-        // Construct the document fields object which will be named `<schema_id>Field`.
+        // Construct the document fields object which will be named `<schema_id>Fields`.
         let schema_field_name = fields_name(schema.id());
         let mut document_schema_fields = Object::new(&schema_field_name);
 
@@ -47,9 +48,16 @@ impl DocumentFields {
                 }
                 _ => Field::new(name, graphql_type(field_type), move |ctx| {
                     FieldFuture::new(async move { Self::resolve(ctx).await })
-                }),
+                })
+                .description(format!(
+                    "The `{}` field of a {} document.",
+                    name,
+                    schema.id().name()
+                )),
             };
-            document_schema_fields = document_schema_fields.field(field);
+            document_schema_fields = document_schema_fields
+                .field(field)
+                .description(format!("The application fields of a `{}` document.", schema.id().name()));
         }
 
         document_schema_fields
