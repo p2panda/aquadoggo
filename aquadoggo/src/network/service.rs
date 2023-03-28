@@ -283,7 +283,7 @@ pub async fn network_service(
                                 debug!("NAT status changed from {:?} to {:?}", old, new);
                             }
                         },
-                        autonat::Event::InboundProbe(_) | autonat::Event::OutboundProbe(_) => (),
+                        other => debug!("Unhandled autonat event: {other:?}"),
                     }
                 }
             }
