@@ -72,7 +72,7 @@ impl PaginatedDocumentSchema {
                     })
                 },
             )
-            .description("The pagination cursor for this document."),
+            .description(format!("The pagination `cursor` for this `{}` document.", schema.id().name())),
         )
     }
 }
@@ -95,7 +95,7 @@ fn with_document_fields(fields: Object, schema: &Schema) -> Object {
                     })
                 },
             )
-            .description("Application fields of the queried document."),
+            .description(format!("Application fields of a `{}` document.", schema.id().name())),
         )
         // The `meta` field of a document, resolves the `DocumentMeta` object.
         .field(
@@ -104,7 +104,7 @@ fn with_document_fields(fields: Object, schema: &Schema) -> Object {
                 TypeRef::named(constants::DOCUMENT_META),
                 move |ctx| FieldFuture::new(async move { DocumentMeta::resolve(ctx).await }),
             )
-            .description("Meta fields of the queried document."),
+            .description(format!("Meta fields of a `{}` document.", schema.id().name())),
         )
         .description(schema.description().to_string())
 }
