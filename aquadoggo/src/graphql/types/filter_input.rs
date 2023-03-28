@@ -2,7 +2,6 @@
 
 //! Input types used in `filter` and `meta` arguments of document collection queries and list
 //! fields in order to apply filters based on document field values to the requested collection.
-
 use async_graphql::dynamic::{InputObject, InputValue, TypeRef};
 use dynamic_graphql::InputObject;
 use p2panda_rs::schema::Schema;

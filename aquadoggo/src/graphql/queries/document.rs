@@ -331,7 +331,6 @@ mod test {
                         "__typename" : format!("{}Paginated", schema.id()),
                         "meta": { "__typename": "DocumentMeta" },
                         "fields": { "__typename": format!("{}Fields", schema.id()), }
-
                     }
                 }]
             });

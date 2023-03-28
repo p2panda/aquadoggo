@@ -5,7 +5,6 @@
 //! p2panda core types: `String`, `Integer`, `Float`, `Boolean`, `Relation`, `PinnedRelation`,
 //! `RelationList` and `PinnedRelationList` as well as for `OWNER`, `DOCUMENT_ID` and
 //! `DOCUMENT_VIEW_ID` meta fields.
-
 use dynamic_graphql::InputObject;
 
 use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar, PublicKeyScalar};

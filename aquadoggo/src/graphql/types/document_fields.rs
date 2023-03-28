@@ -18,6 +18,7 @@ use crate::graphql::utils::{
 
 use crate::graphql::types::{DocumentValue, PaginationData};
 use crate::schema::SchemaProvider;
+
 /// A constructor for dynamically building objects describing the application fields of a p2panda
 /// schema. Each generated object has a type name with the formatting `<schema_id>Fields`.
 ///
