@@ -14,8 +14,9 @@ pub use document_fields::DocumentFields;
 pub use document_meta::DocumentMeta;
 pub use filter_input::{FilterInput, MetaFilterInput};
 pub use filters::{
-    BooleanFilter, FloatFilter, IntegerFilter, PinnedRelationFilter, PinnedRelationListFilter,
-    RelationFilter, RelationListFilter, StringFilter,
+    BooleanFilter, DocumentIdFilter, DocumentViewIdFilter, FloatFilter, IntegerFilter, OwnerFilter,
+    PinnedRelationFilter, PinnedRelationListFilter, RelationFilter, RelationListFilter,
+    StringFilter,
 };
 pub use next_arguments::NextArguments;
 pub use ordering::{OrderBy, OrderDirection};

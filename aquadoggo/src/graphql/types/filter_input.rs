@@ -4,21 +4,20 @@ use async_graphql::dynamic::{InputObject, InputValue, TypeRef};
 use dynamic_graphql::InputObject;
 use p2panda_rs::schema::Schema;
 
-use crate::graphql::types::BooleanFilter;
+use crate::graphql::types::{BooleanFilter, DocumentIdFilter, DocumentViewIdFilter, OwnerFilter};
 use crate::graphql::utils::filter_name;
 
-use super::filters::OwnerFilter;
-
-/// GraphQL object which represents a filter input type which contains a filter object for every
-/// field on the passed p2panda schema.
-///  
+/// A constructor for dynamically building an an input object containing all application fields
+/// which a collection of documents can be filtered by. The resulting input objects are used
+/// passed to the `filter` argument on a document collection query or list relation fields.
+///
 /// A type is added to the root GraphQL schema for every filter, as these types
 /// are not known at compile time we make use of the `async-graphql ` `dynamic` module.
 pub struct FilterInput;
 
 impl FilterInput {
-    /// Build a filter input object for a p2panda schema. It can be used to filter results based
-    /// on field values when querying for documents of this schema.
+    /// Build a filter input object for a p2panda schema. It can be used to filter collection
+    /// queries based on the values each document contains.
     pub fn build(schema: &Schema) -> InputObject {
         // Construct the document fields object which will be named `<schema_id>Filter`.
         let schema_field_name = filter_name(schema.id());
@@ -70,9 +69,22 @@ impl FilterInput {
     }
 }
 
+/// Filter input containing all meta fields a collection of documents can be filtered by. Is
+/// passed to the `meta` argument on a document collection query or list relation fields.
 #[derive(InputObject)]
 pub struct MetaFilterInput {
+    /// Document id filter.
+    document_id: Option<DocumentIdFilter>,
+
+    /// Document view id filter.
+    document_view_id: Option<DocumentViewIdFilter>,
+
+    /// Owner filter.
     owner: Option<OwnerFilter>,
+
+    /// Edited filter.
     edited: Option<BooleanFilter>,
+
+    /// Deleted filter.
     deleted: Option<BooleanFilter>,
 }

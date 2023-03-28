@@ -1,5 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+//! Filter inputs used to specify filter parameters in collection queries. Different document
+//! field types have different filter capabilities, this module contains filter objects for all
+//! p2panda core types: `String`, `Integer`, `Float`, `Boolean`, `Relation`, `PinnedRelation`,
+//! `RelationList` and `PinnedRelationList` as well as for `OWNER`, `DOCUMENT_ID` and
+//! `DOCUMENT_VIEW_ID` meta fields. 
+
 use dynamic_graphql::InputObject;
 
 use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar, PublicKeyScalar};
@@ -22,6 +28,46 @@ pub struct OwnerFilter {
     /// Filter by not equal to.
     #[graphql(name = "notEq")]
     not_eq: Option<PublicKeyScalar>,
+}
+
+/// A filter input type for document id field on meta object.
+#[derive(InputObject)]
+pub struct DocumentIdFilter {
+    /// Filter by values in set.
+    #[graphql(name = "in")]
+    is_in: Option<Vec<DocumentIdScalar>>,
+
+    /// Filter by values not in set.
+    #[graphql(name = "notIn")]
+    is_not_in: Option<Vec<DocumentIdScalar>>,
+
+    /// Filter by equal to.
+    #[graphql(name = "eq")]
+    eq: Option<DocumentIdScalar>,
+
+    /// Filter by not equal to.
+    #[graphql(name = "notEq")]
+    not_eq: Option<DocumentIdScalar>,
+}
+
+/// A filter input type for document view id field on meta object.
+#[derive(InputObject)]
+pub struct DocumentViewIdFilter {
+    /// Filter by values in set.
+    #[graphql(name = "in")]
+    is_in: Option<Vec<DocumentViewIdScalar>>,
+
+    /// Filter by values not in set.
+    #[graphql(name = "notIn")]
+    is_not_in: Option<Vec<DocumentViewIdScalar>>,
+
+    /// Filter by equal to.
+    #[graphql(name = "eq")]
+    eq: Option<DocumentViewIdScalar>,
+
+    /// Filter by not equal to.
+    #[graphql(name = "notEq")]
+    not_eq: Option<DocumentViewIdScalar>,
 }
 
 /// A filter input type for string field values.

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+//! Return type for `next_args` and `publish` queries.
+
 use dynamic_graphql::SimpleObject;
 
 use crate::graphql::scalars::{EntryHashScalar, LogIdScalar, SeqNumScalar};
