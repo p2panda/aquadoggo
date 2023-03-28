@@ -245,11 +245,15 @@ fn parse_meta_filter(filter: &mut Filter, filter_object: &ObjectAccessor) -> Res
         let filter_field = Field::Meta(meta_field);
         let filters = filters.object()?;
         for (name, value) in filters.iter() {
+            let field_type = match field.as_str() {
+                "edited" | "deleted" => FieldType::Boolean,
+                _ => FieldType::String,
+            };
             match name.as_str() {
                 "in" => {
                     let mut list_items: Vec<OperationValue> = vec![];
                     for value in value.list()?.iter() {
-                        let item = filter_to_operation_value(&value, &FieldType::String)?;
+                        let item = filter_to_operation_value(&value, &field_type)?;
                         list_items.push(item);
                     }
                     filter.add_in(&filter_field, &list_items);
@@ -257,24 +261,16 @@ fn parse_meta_filter(filter: &mut Filter, filter_object: &ObjectAccessor) -> Res
                 "notIn" => {
                     let mut list_items: Vec<OperationValue> = vec![];
                     for value in value.list()?.iter() {
-                        let item = filter_to_operation_value(&value, &FieldType::String)?;
+                        let item = filter_to_operation_value(&value, &field_type)?;
                         list_items.push(item);
                     }
                     filter.add_not_in(&filter_field, &list_items);
                 }
                 "eq" => {
-                    let field_type = match field.as_str() {
-                        "edited" | "deleted" => FieldType::Boolean,
-                        _ => FieldType::String,
-                    };
                     let value = filter_to_operation_value(&value, &field_type)?;
                     filter.add(&filter_field, &value);
                 }
                 "notEq" => {
-                    let field_type = match field.as_str() {
-                        "edited" | "deleted" => FieldType::Boolean,
-                        _ => FieldType::String,
-                    };
                     let value = filter_to_operation_value(&value, &field_type)?;
                     filter.add_not(&filter_field, &value);
                 }
