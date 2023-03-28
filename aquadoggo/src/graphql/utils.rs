@@ -140,6 +140,8 @@ pub fn parse_collection_arguments(
             constants::ORDER_BY_ARG => {
                 let order_by = match value.enum_name()? {
                     "OWNER" => Field::Meta(MetaField::Owner),
+                    "DOCUMENT_ID" => Field::Meta(MetaField::DocumentId),
+                    "DOCUMENT_VIEW_ID" => Field::Meta(MetaField::DocumentViewId),
                     field_name => Field::new(field_name),
                 };
                 order.field = order_by;

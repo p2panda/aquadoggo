@@ -17,6 +17,8 @@ pub struct OrderBy;
 impl OrderBy {
     pub fn build(schema: &Schema) -> Enum {
         let mut input_values = Enum::new(order_by_name(schema.id())).item("OWNER");
+        let mut input_values = Enum::new(order_by_name(schema.id())).item("DOCUMENT_ID");
+        let mut input_values = Enum::new(order_by_name(schema.id())).item("DOCUMENT_VIEW_ID");
         for (name, _) in schema.fields().iter() {
             input_values = input_values.item(name)
         }
