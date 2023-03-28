@@ -381,7 +381,7 @@ mod tests {
                 name: Some("age".to_string()),
                 field_type: Some("int".to_string()),
                 value: Some("28".to_string()),
-                list_index: Some(0)
+                list_index: Some(0),
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -399,7 +399,7 @@ mod tests {
                 name: Some("height".to_string()),
                 field_type: Some("float".to_string()),
                 value: Some("3.5".to_string()),
-                list_index: Some(0)
+                list_index: Some(0),
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -417,7 +417,7 @@ mod tests {
                 name: Some("is_admin".to_string()),
                 field_type: Some("bool".to_string()),
                 value: Some("false".to_string()),
-                list_index: Some(0)
+                list_index: Some(0),
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -438,7 +438,7 @@ mod tests {
                     "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                         .to_string(),
                 ),
-                list_index: Some(0)
+                list_index: Some(0),
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -459,7 +459,7 @@ mod tests {
                     "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
                         .to_string(),
                 ),
-                list_index: Some(1)
+                list_index: Some(1),
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -480,7 +480,7 @@ mod tests {
                     "0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
                         .to_string(),
                 ),
-                list_index: Some(0)
+                list_index: Some(0),
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -501,7 +501,7 @@ mod tests {
                     "0020dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
                         .to_string(),
                 ),
-                list_index: Some(1)
+                list_index: Some(1),
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -522,7 +522,7 @@ mod tests {
                     "0020bcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbc"
                         .to_string(),
                 ),
-                list_index: Some(0)
+                list_index: Some(0),
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -543,7 +543,7 @@ mod tests {
                     "0020abababababababababababababababababababababababababababababababab"
                         .to_string(),
                 ),
-                list_index: Some(1)
+                list_index: Some(1),
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -564,7 +564,7 @@ mod tests {
                     "0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
                         .to_string(),
                 ),
-                list_index: Some(0)
+                list_index: Some(0),
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -585,7 +585,7 @@ mod tests {
                     "0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
                         .to_string(),
                 ),
-                list_index: Some(0)
+                list_index: Some(0),
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
