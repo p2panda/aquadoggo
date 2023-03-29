@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! This module offers a query API to find one or many p2panda documents, filtered or sorted by
-//! custom parameters. Multiple results are batched via cursor-based pagination.
-use std::cmp::min;
-
+//! This module offers a query API to find many p2panda documents, filtered or sorted by custom
+//! parameters. The results are batched via cursor-based pagination.
 use p2panda_rs::document::DocumentViewFields;
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{Schema, SchemaId};
@@ -36,7 +34,7 @@ where
 
 /// Helper method to determine the field type of the given field by looking at the schema and
 /// derive a SQL type cast function from it.
-fn typecast_field(sql_field: &str, field_name: &str, schema: &Schema) -> String {
+fn typecast_field_sql(sql_field: &str, field_name: &str, schema: &Schema) -> String {
     let field_type = schema
         .fields()
         .iter()
@@ -64,7 +62,8 @@ fn typecast_field(sql_field: &str, field_name: &str, schema: &Schema) -> String 
     }
 }
 
-fn value_str(value: &OperationValue) -> String {
+/// Helper method to convert an operation value into the right representation in SQL.
+fn value_sql(value: &OperationValue) -> String {
     match &value {
         OperationValue::Boolean(value) => (if *value { "1" } else { "0" }).to_string(),
         OperationValue::Integer(value) => value.to_string(),
@@ -87,13 +86,14 @@ fn value_str(value: &OperationValue) -> String {
     }
 }
 
-fn filter_by_str(sql_field: &str, filter_setting: &FilterSetting) -> String {
+/// Helper method to convert filter settings into SQL comparison operations.
+fn cmp_sql(sql_field: &str, filter_setting: &FilterSetting) -> String {
     match &filter_setting.by {
         FilterBy::Element(value) => {
             if !filter_setting.exclusive {
-                format!("{sql_field} = {}", value_str(value))
+                format!("{sql_field} = {}", value_sql(value))
             } else {
-                format!("{sql_field} != {}", value_str(value))
+                format!("{sql_field} != {}", value_sql(value))
             }
         }
         FilterBy::Set(values_vec) => {
@@ -101,7 +101,7 @@ fn filter_by_str(sql_field: &str, filter_setting: &FilterSetting) -> String {
             // "flattens" relation lists
             let value_sql = values_vec
                 .iter()
-                .map(value_str)
+                .map(value_sql)
                 .collect::<Vec<String>>()
                 .join(",");
 
@@ -117,20 +117,20 @@ fn filter_by_str(sql_field: &str, filter_setting: &FilterSetting) -> String {
             match lower_value {
                 LowerBound::Unbounded => (),
                 LowerBound::Greater(value) => {
-                    values.push(format!("{sql_field} > {}", value_str(value)));
+                    values.push(format!("{sql_field} > {}", value_sql(value)));
                 }
                 LowerBound::GreaterEqual(value) => {
-                    values.push(format!("{sql_field} >= {}", value_str(value)));
+                    values.push(format!("{sql_field} >= {}", value_sql(value)));
                 }
             }
 
             match upper_value {
                 UpperBound::Unbounded => (),
                 UpperBound::Lower(value) => {
-                    values.push(format!("{sql_field} < {}", value_str(value)));
+                    values.push(format!("{sql_field} < {}", value_sql(value)));
                 }
                 UpperBound::LowerEqual(value) => {
-                    values.push(format!("{sql_field} <= {}", value_str(value)));
+                    values.push(format!("{sql_field} <= {}", value_sql(value)));
                 }
             }
 
@@ -143,6 +143,240 @@ fn filter_by_str(sql_field: &str, filter_setting: &FilterSetting) -> String {
     }
 }
 
+fn filter_sql(filter: &Filter) -> String {
+    filter
+        .iter()
+        .filter_map(|filter_setting| {
+            match &filter_setting.field {
+                Field::Meta(MetaField::Edited) => {
+                    // @TODO: This is not supported yet
+                    None
+                }
+                Field::Meta(MetaField::Owner) => {
+                    // @TODO: This is not supported yet
+                    None
+                }
+                Field::Meta(MetaField::Deleted) => {
+                    // @TODO: Make sure that deleted is by default always set to false,
+                    // this can be handled on a layer above this
+                    if let FilterBy::Element(OperationValue::Boolean(filter_value)) =
+                        filter_setting.by
+                    {
+                        let deleted_flag = if filter_value { "true" } else { "false" };
+                        Some(format!("AND documents.is_deleted = {deleted_flag}"))
+                    } else {
+                        None
+                    }
+                }
+                Field::Meta(MetaField::DocumentId) => Some(format!(
+                    "AND {}",
+                    cmp_sql("documents.document_id", filter_setting)
+                )),
+                Field::Meta(MetaField::DocumentViewId) => Some(format!(
+                    "AND {}",
+                    cmp_sql("documents.document_view_id", filter_setting)
+                )),
+                Field::Field(field_name) => {
+                    let filter_cmp = cmp_sql("operation_fields_v1.value", filter_setting);
+
+                    Some(format!(
+                        r#"
+                    AND EXISTS (
+                        SELECT
+                            value
+                        FROM
+                            operation_fields_v1
+                        WHERE
+                            operation_fields_v1.name = '{field_name}'
+                            AND
+                                operation_fields_v1.operation_id = document_view_fields.operation_id
+                            AND
+                                {filter_cmp}
+                    )
+                    "#
+                    ))
+                }
+            }
+        })
+        .collect::<Vec<String>>()
+        .join("\n")
+}
+
+fn pagination_sql<C>(pagination: &Pagination<C>, order: &Order) -> String
+where
+    C: Cursor,
+{
+    match &pagination.after {
+        Some(cursor) => {
+            let cursor_str = cursor.encode();
+
+            match &order.field {
+                Field::Meta(MetaField::DocumentViewId) => {
+                    format!("AND documents.document_view_id > '{cursor_str}'")
+                }
+                Field::Meta(MetaField::DocumentId) => {
+                    format!("AND documents.document_id > '{cursor_str}'")
+                }
+                Field::Meta(MetaField::Owner) => {
+                    todo!("Not implemented yet");
+                }
+                Field::Meta(MetaField::Edited) => {
+                    todo!("Not implemented yet");
+                }
+                Field::Meta(MetaField::Deleted) => {
+                    todo!("not implemented yet");
+                }
+                Field::Field(order_field_name) => {
+                    format!(
+                        r#"
+                        AND EXISTS (
+                            SELECT
+                                operation_fields_v1.value
+                            FROM
+                                operation_fields_v1
+                            WHERE
+                                operation_fields_v1.name = '{order_field_name}'
+                                AND
+                                    operation_fields_v1.operation_id = document_view_fields.operation_id
+                                AND
+                                (
+                                    operation_fields_v1.value > (
+                                        SELECT
+                                            operation_fields_v1.value
+                                        FROM
+                                            operation_fields_v1
+                                        WHERE
+                                            operation_fields_v1.name = '{order_field_name}'
+                                            AND
+                                                documents.document_id > '{cursor_str}'
+                                    )
+                                )
+                                OR
+                                (
+                                    operation_fields_v1.value = (
+                                        SELECT
+                                            operation_fields_v1.value
+                                        FROM
+                                            operation_fields_v1
+                                        WHERE
+                                            operation_fields_v1.name = '{order_field_name}'
+                                            AND
+                                                documents.document_id > '{cursor_str}'
+                                    )
+                                    AND
+                                        documents.document_id > '{order_field_name}'
+                                )
+                        )
+                        "#
+                    )
+                }
+            }
+        }
+        None => "".to_string(),
+    }
+}
+
+fn group_sql(fields: &Vec<String>) -> String {
+    // When no field was selected we can group the results by document id, this allows us to
+    // paginate the results easily
+    if fields.is_empty() {
+        "GROUP BY documents.document_id".to_string()
+    } else {
+        "".to_string()
+    }
+}
+
+fn order_sql(order: &Order, schema: &Schema) -> String {
+    let direction = match order.direction {
+        Direction::Ascending => "ASC",
+        Direction::Descending => "DESC",
+    };
+
+    match &order.field {
+        Field::Meta(MetaField::DocumentViewId) => {
+            "ORDER BY documents.document_view_id {direction}".to_string()
+        }
+        Field::Meta(MetaField::DocumentId) => {
+            "ORDER BY documents.document_id {direction}".to_string()
+        }
+        Field::Meta(MetaField::Owner) => {
+            todo!("Not implemented yet");
+        }
+        Field::Meta(MetaField::Edited) => {
+            todo!("Not implemented yet");
+        }
+        Field::Meta(MetaField::Deleted) => {
+            todo!("not implemented yet");
+        }
+        Field::Field(field_name) => {
+            format!(
+                r#"
+                ORDER BY
+                    (
+                        SELECT
+                            {}
+                        FROM
+                            operation_fields_v1
+                        WHERE
+                            operation_fields_v1.operation_id = document_view_fields.operation_id
+                            AND
+                                operation_fields_v1.name = '{}'
+                    )
+                    {},
+
+                    -- On top we sort always by id in case the previous order
+                    -- value is equal between two rows
+                    documents.document_id ASC
+                "#,
+                typecast_field_sql("value", field_name, schema),
+                field_name,
+                direction,
+            )
+        }
+    }
+}
+
+fn limit_sql<C>(pagination: &Pagination<C>, fields: &Vec<String>) -> String
+where
+    C: Cursor,
+{
+    // We multiply the value by the number of fields we selected. If no fields have
+    // been selected we just take the page size as is
+    let page_size = pagination.first.get() * std::cmp::max(1, fields.len() as u64);
+
+    // ... and add + 1 for the "has next page" flag
+    format!("LIMIT {page_size} + 1")
+}
+
+fn application_select_sql(fields: &Vec<String>) -> String {
+    if fields.is_empty() {
+        "".to_string()
+    } else {
+        format!("AND operation_fields_v1.name IN ({})", fields.join(", "))
+    }
+}
+
+fn meta_select_sql(select: &Select, fields: &Vec<String>) -> String {
+    // We _always_ want the document id to be able to map data to the right document
+    let mut meta_fields = vec!["documents.document_id"];
+
+    // As soon as we're asking for application data we want the name and the value of the
+    // application fields
+    if !fields.is_empty() {
+        meta_fields.push("operation_fields_v1.name");
+        meta_fields.push("operation_fields_v1.value");
+    }
+
+    for field in select.iter() {
+        if let Field::Meta(MetaField::DocumentViewId) = field {
+            meta_fields.push("documents.document_view_id");
+        }
+        // Everything else is not supported (yet)
+    }
+
+    meta_fields.join("\n")
+}
+
 impl SqlStore {
     pub async fn query<C: Cursor>(
         &self,
@@ -151,68 +385,12 @@ impl SqlStore {
     ) -> Result<Vec<DocumentViewFields>, DocumentStorageError> {
         let schema_id = schema.id();
 
-        let and_filters = args
-            .filter
-            .iter()
-            .filter_map(|filter_setting| {
-                match &filter_setting.field {
-                    Field::Meta(MetaField::Edited) => {
-                        // @TODO: This is not supported yet
-                        None
-                    }
-                    Field::Meta(MetaField::Owner) => {
-                        // @TODO: This is not supported yet
-                        None
-                    }
-                    Field::Meta(MetaField::Deleted) => {
-                        // @TODO: Make sure that deleted is by default always set to false,
-                        // this can be handled on a layer above this
-                        if let FilterBy::Element(OperationValue::Boolean(filter_value)) =
-                            filter_setting.by
-                        {
-                            let deleted_flag = if filter_value { "true" } else { "false" };
-                            Some(format!("AND documents.is_deleted = {deleted_flag}"))
-                        } else {
-                            None
-                        }
-                    }
-                    Field::Meta(MetaField::DocumentId) => {
-                        Some(format!("AND {}", filter_by_str("documents.document_id", filter_setting)))
-                    }
-                    Field::Meta(MetaField::DocumentViewId) => {
-                        Some(format!("AND {}", filter_by_str("documents.document_view_id", filter_setting)))
-                    }
-                    Field::Field(field_name) => {
-                        let filter_cmp = filter_by_str("operation_fields_v1.value", filter_setting);
-
-                        Some(format!(
-                            r#"
-                                AND
-                                    EXISTS (
-                                        SELECT
-                                            value
-                                        FROM
-                                            operation_fields_v1
-                                        WHERE
-                                            operation_fields_v1.name = '{field_name}'
-                                            AND
-                                                operation_fields_v1.operation_id = document_view_fields.operation_id
-                                            AND
-                                                {filter_cmp}
-                                    )
-                            "#
-                        ))
-                    }
-                }
-            })
-            .collect::<Vec<String>>()
-            .join("\n");
-
-        // Prepare SQL to only select only specific document fields (default is to select no fields)
-        let select_fields_vec: Vec<String> = args
+        // Get all selected application fields from query
+        let select_fields: Vec<String> = args
             .select
             .iter()
             .filter_map(|field| {
+                // Remove all meta fields
                 if let Field::Field(field_name) = field {
                     Some(field_name.clone())
                 } else {
@@ -221,152 +399,14 @@ impl SqlStore {
             })
             .collect();
 
-        let and_application_fields = if select_fields_vec.is_empty() {
-            "".to_string()
-        } else {
-            format!(
-                "AND operation_fields_v1.name IN ({})",
-                select_fields_vec.join(", ")
-            )
-        };
-
-        // When no field was selected we can group the results by document id, this allows us to
-        // paginate the results easily
-        let group = if select_fields_vec.is_empty() {
-            "GROUP BY documents.document_id"
-        } else {
-            ""
-        };
-
-        let and_pagination = match &args.pagination.after {
-            Some(cursor) => {
-                let cursor_str = cursor.encode();
-
-                match &args.order.field {
-                    Field::Meta(MetaField::DocumentViewId) => {
-                        format!("AND documents.document_view_id > '{cursor_str}'")
-                    }
-                    Field::Meta(MetaField::DocumentId) => {
-                        format!("AND documents.document_id > '{cursor_str}'")
-                    }
-                    Field::Meta(MetaField::Owner) => {
-                        todo!("Not implemented yet");
-                    }
-                    Field::Meta(MetaField::Edited) => {
-                        todo!("Not implemented yet");
-                    }
-                    Field::Meta(MetaField::Deleted) => {
-                        todo!("not implemented yet");
-                    }
-                    Field::Field(order_field_name) => {
-                        format!(
-                            r#"
-                                AND
-                                    EXISTS (
-                                        SELECT
-                                            operation_fields_v1.value
-                                        FROM
-                                            operation_fields_v1
-                                        WHERE
-                                            operation_fields_v1.name = '{order_field_name}'
-                                            AND
-                                                operation_fields_v1.operation_id = document_view_fields.operation_id
-                                            AND
-                                                (
-                                                    operation_fields_v1.value > (
-                                                        SELECT
-                                                            operation_fields_v1.value
-                                                        FROM
-                                                            operation_fields_v1
-                                                        WHERE
-                                                            operation_fields_v1.name = '{order_field_name}'
-                                                            AND
-                                                                documents.document_id > '{cursor_str}'
-                                                    )
-                                                )
-                                                OR
-                                                (
-                                                    operation_fields_v1.value = (
-                                                        SELECT
-                                                            operation_fields_v1.value
-                                                        FROM
-                                                            operation_fields_v1
-                                                        WHERE
-                                                            operation_fields_v1.name = '{order_field_name}'
-                                                            AND
-                                                                documents.document_id > '{cursor_str}'
-                                                    )
-                                                    AND
-                                                    documents.document_id > '{order_field_name}'
-                                                )
-                                    )
-                            "#
-                        )
-                    }
-                }
-            }
-            None => "".to_string(),
-        };
-
-        let direction = match args.order.direction {
-            Direction::Ascending => "ASC",
-            Direction::Descending => "DESC",
-        };
-
-        let order = match &args.order.field {
-            Field::Meta(MetaField::DocumentViewId) => {
-                "ORDER BY documents.document_view_id {direction}".to_string()
-            }
-            Field::Meta(MetaField::DocumentId) => {
-                "ORDER BY documents.document_id {direction}".to_string()
-            }
-            Field::Meta(MetaField::Owner) => {
-                todo!("Not implemented yet");
-            }
-            Field::Meta(MetaField::Edited) => {
-                todo!("Not implemented yet");
-            }
-            Field::Meta(MetaField::Deleted) => {
-                todo!("not implemented yet");
-            }
-            Field::Field(field_name) => {
-                format!(
-                    r#"
-                        ORDER BY
-                            (
-                                SELECT
-                                    {}
-                                FROM
-                                    operation_fields_v1
-                                WHERE
-                                    operation_fields_v1.operation_id = document_view_fields.operation_id
-                                    AND
-                                        operation_fields_v1.name = '{}'
-                            )
-                            {},
-
-                            -- On top we sort always by id in case the previous order
-                            -- value is equal between two rows
-                            documents.document_id ASC
-                    "#,
-                    typecast_field("value", field_name, &schema),
-                    field_name,
-                    direction,
-                )
-            }
-        };
-
-        let page_size =
-            args.pagination.first.get() * std::cmp::max(1, select_fields_vec.len() as u64);
-
-        let limit = format!(
-            r#"
-                -- We multiply the value by the number of fields we selected
-                -- and add + 1 for the "has next page" flag
-                LIMIT
-                {page_size} + 1
-            "#
-        );
+        // Generate SQL based on the given schema and query
+        let select = meta_select_sql(&args.select, &select_fields);
+        let and_select = application_select_sql(&select_fields);
+        let and_filters = filter_sql(&args.filter);
+        let and_pagination = pagination_sql(&args.pagination, &args.order);
+        let group = group_sql(&select_fields);
+        let order = order_sql(&args.order, &schema);
+        let limit = limit_sql(&args.pagination, &select_fields);
 
         let query_rows = query_as::<_, QueryRow>(&format!(
             "
@@ -390,10 +430,7 @@ impl SqlStore {
             -- annoying as myself.
 
             SELECT
-                operation_fields_v1.name,
-                operation_fields_v1.value,
-                documents.document_view_id,
-                documents.document_id
+                {select}
 
             FROM
                 documents
@@ -409,16 +446,12 @@ impl SqlStore {
                         operation_fields_v1.name = document_view_fields.name
 
             WHERE
-                -- Schema id of the collection we're looking at
                 documents.schema_id = '{schema_id}'
 
-                -- application fields get selected here
-                {and_application_fields}
+                {and_select}
 
-                -- cursor pagination
                 {and_pagination}
 
-                -- .. now all the filters come ...
                 {and_filters}
 
             {group}
