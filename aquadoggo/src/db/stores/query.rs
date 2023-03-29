@@ -5,6 +5,7 @@
 use std::collections::HashMap;
 
 use p2panda_rs::document::DocumentViewFields;
+use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{Schema, SchemaId};
 use p2panda_rs::storage_provider::error::DocumentStorageError;
@@ -17,6 +18,7 @@ use crate::db::query::{
     Cursor, Direction, Field, Filter, FilterBy, FilterSetting, LowerBound, MetaField, Order,
     Pagination, Select, UpperBound,
 };
+use crate::db::types::StorageDocument;
 use crate::db::SqlStore;
 
 #[derive(Default, Debug, Clone)]
@@ -28,6 +30,25 @@ where
     pub select: Select,
     pub filter: Filter,
     pub order: Order,
+}
+
+impl<C> Query<C>
+where
+    C: Cursor,
+{
+    pub fn new(
+        pagination: &Pagination<C>,
+        select: &Select,
+        filter: &Filter,
+        order: &Order,
+    ) -> Self {
+        Self {
+            pagination: pagination.clone(),
+            select: select.clone(),
+            filter: filter.clone(),
+            order: order.clone(),
+        }
+    }
 }
 
 /// Helper method to determine the field type of the given field by looking at the schema and
@@ -292,10 +313,10 @@ fn order_sql(order: &Order, schema: &Schema) -> String {
 
     match &order.field {
         Field::Meta(MetaField::DocumentViewId) => {
-            "ORDER BY documents.document_view_id {direction}".to_string()
+            format!("ORDER BY documents.document_view_id {direction}")
         }
         Field::Meta(MetaField::DocumentId) => {
-            "ORDER BY documents.document_id {direction}".to_string()
+            format!("ORDER BY documents.document_id {direction}")
         }
         Field::Meta(MetaField::Owner) => {
             todo!("Not implemented yet");
@@ -311,14 +332,14 @@ fn order_sql(order: &Order, schema: &Schema) -> String {
                 r#"
                 ORDER BY
                     (
-                        SELECT
-                            {}
-                        FROM
-                            operation_fields_v1
-                        WHERE
-                            operation_fields_v1.operation_id = document_view_fields.operation_id
-                            AND
-                                operation_fields_v1.name = '{}'
+                    SELECT
+                        {}
+                    FROM
+                        operation_fields_v1
+                    WHERE
+                        operation_fields_v1.operation_id = document_view_fields.operation_id
+                        AND
+                            operation_fields_v1.name = '{}'
                     )
                     {},
 
@@ -361,9 +382,9 @@ fn application_select_sql(fields: &Vec<String>) -> String {
 impl SqlStore {
     pub async fn query<C: Cursor>(
         &self,
-        schema: Schema,
+        schema: &Schema,
         args: &Query<C>,
-    ) -> Result<Vec<DocumentViewFields>, DocumentStorageError> {
+    ) -> Result<Vec<StorageDocument>, DocumentStorageError> {
         let schema_id = schema.id();
 
         // Get all selected application fields from query
@@ -445,34 +466,47 @@ impl SqlStore {
         "#
         );
 
+        println!("{sea_quel}");
+
         let rows: Vec<DocumentViewFieldRow> = query_as::<_, DocumentViewFieldRow>(&sea_quel)
             .fetch_all(&self.pool)
             .await
             .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
 
-        let view_fields = {
-            let mut view_map: HashMap<String, Vec<DocumentViewFieldRow>> = HashMap::new();
+        let documents =
+            {
+                let mut view_map: HashMap<String, Vec<DocumentViewFieldRow>> = HashMap::new();
 
-            for row in rows {
-                match view_map.get_mut(&row.document_id) {
-                    Some(field_vec) => {
-                        field_vec.push(row);
-                    }
-                    None => {
-                        view_map.insert(row.document_id.clone(), vec![row.clone()]);
+                for row in rows {
+                    match view_map.get_mut(&row.document_id) {
+                        Some(field_vec) => {
+                            field_vec.push(row);
+                        }
+                        None => {
+                            view_map.insert(row.document_id.clone(), vec![row.clone()]);
+                        }
                     }
                 }
-            }
 
-            view_map
-                .into_iter()
-                .map(|(document_id, document_field_rows)| {
-                    parse_document_view_field_rows(document_field_rows)
-                })
-                .collect()
-        };
+                view_map
+                    .into_iter()
+                    .map(|(document_id, document_field_rows)| {
+                        let row = document_field_rows[0].clone();
+                        let fields = parse_document_view_field_rows(document_field_rows);
 
-        Ok(view_fields)
+                        StorageDocument {
+                        id: document_id.parse().unwrap(),
+                        fields: Some(fields),
+                        schema_id: schema.id().clone(),
+                        view_id: row.document_view_id.parse().unwrap(),
+                        author: PublicKey::new("302A300506032B657003210095F3B5CE87755462869A9F983874DFC8A91818A75C2A").unwrap(), // @TODO
+                        deleted: false,           // @TODO
+                    }
+                    })
+                    .collect()
+            };
+
+        Ok(documents)
     }
 }
 

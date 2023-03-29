@@ -11,12 +11,11 @@ use p2panda_rs::storage_provider::traits::DocumentStore;
 use crate::db::query::{Field as FilterField, Filter, MetaField, Order, Pagination};
 use crate::db::SqlStore;
 use crate::graphql::scalars::CursorScalar;
+use crate::graphql::types::DocumentValue;
 use crate::graphql::utils::{
     downcast_document, fields_name, gql_scalar, graphql_type, parse_collection_arguments,
     with_collection_arguments,
 };
-
-use crate::graphql::types::{DocumentValue, PaginationData};
 use crate::schema::SchemaProvider;
 
 /// A constructor for dynamically building objects describing the application fields of a p2panda
@@ -27,8 +26,8 @@ use crate::schema::SchemaProvider;
 pub struct DocumentFields;
 
 impl DocumentFields {
-    /// Build the fields object from the related p2panda schema. Constructs an object which
-    /// can then be added to the root GraphQL schema.
+    /// Build the fields object from the related p2panda schema. Constructs an object which can
+    /// then be added to the root GraphQL schema.
     pub fn build(schema: &Schema) -> Object {
         // Construct the document fields object which will be named `<schema_id>Fields`.
         let schema_field_name = fields_name(schema.id());
@@ -66,8 +65,9 @@ impl DocumentFields {
     }
 
     /// Resolve a document field value as a graphql `FieldValue`. If the value is a relation, then
-    /// the relevant document id or document view id is determined and passed along the query chain.
-    /// If the value is a simple type (meaning it is also a query leaf) then it is directly resolved.
+    /// the relevant document id or document view id is determined and passed along the query
+    /// chain. If the value is a simple type (meaning it is also a query leaf) then it is directly
+    /// resolved.
     ///
     /// Requires a `ResolverContext` to be passed into the method.
     async fn resolve(ctx: ResolverContext<'_>) -> Result<Option<FieldValue<'_>>, Error> {
@@ -76,160 +76,129 @@ impl DocumentFields {
 
         let name = ctx.field().name();
 
-        // Parse the bubble up value.
-        let document = downcast_document(&ctx);
+        // Parse the bubble up value
+        match downcast_document(&ctx) {
+            DocumentValue::Single(document) => {
+                let schema = schema_provider
+                    .get(document.schema_id())
+                    .await
+                    .expect("Schema should be in store");
 
-        let document = match document {
-            DocumentValue::Single(document) => document,
-            DocumentValue::Paginated(_, _, document) => document,
-        };
+                // Get the field this query is concerned with.
+                match document.get(name).unwrap() {
+                    // Relation fields are expected to resolve to the related document so we pass
+                    // along the document id which will be processed through it's own resolver.
+                    OperationValue::Relation(rel) => {
+                        // Get the whole document from the store.
+                        let document = match store.get_document(rel.document_id()).await? {
+                            Some(document) => document,
+                            None => return Ok(FieldValue::NONE),
+                        };
 
-        let schema = schema_provider
-            .get(document.schema_id())
-            .await
-            .expect("Schema should be in store");
-
-        // Get the field this query is concerned with.
-        match document.get(name).unwrap() {
-            // Relation fields are expected to resolve to the related document so we pass
-            // along the document id which will be processed through it's own resolver.
-            OperationValue::Relation(rel) => {
-                // Get the whole document from the store.
-                let document = match store.get_document(rel.document_id()).await? {
-                    Some(document) => document,
-                    None => return Ok(FieldValue::NONE),
-                };
-
-                let document = DocumentValue::Single(document);
-                Ok(Some(FieldValue::owned_any(document)))
-            }
-            // Relation lists are handled by collecting and returning a list of all document
-            // id's in the relation list. Each of these in turn are processed and queries
-            // forwarded up the tree via their own respective resolvers.
-            OperationValue::RelationList(rel) => {
-                // Get the schema of documents in this relation list.
-                let relation_field_schema = schema
-                    .fields()
-                    .get(name)
-                    .expect("Document field should exist on schema");
-
-                // Get the schema itself
-                let schema = match relation_field_schema {
-                    FieldType::RelationList(schema_id) => {
-                        // We can unwrap here as the schema should exist in the store already.
-                        schema_provider.get(schema_id).await.unwrap()
+                        let document = DocumentValue::Single(document);
+                        Ok(Some(FieldValue::owned_any(document)))
                     }
-                    _ => panic!(), // Should never reach here.
-                };
+                    // Relation lists are handled by collecting and returning a list of all document
+                    // id's in the relation list. Each of these in turn are processed and queries
+                    // forwarded up the tree via their own respective resolvers.
+                    OperationValue::RelationList(rel) => {
+                        // Get the schema of documents in this relation list
+                        let relation_field_schema = schema
+                            .fields()
+                            .get(name)
+                            .expect("Document field should exist on schema");
 
-                // Default pagination, filtering and ordering values.
-                let mut pagination = Pagination::<CursorScalar>::default();
-                let mut order = Order::default();
-                let mut filter = Filter::new();
+                        // Get the schema itself
+                        let schema = match relation_field_schema {
+                            FieldType::RelationList(schema_id) => {
+                                // We can unwrap here as the schema should exist in the store already
+                                schema_provider.get(schema_id).await.unwrap()
+                            }
+                            _ => panic!(), // Should never reach here.
+                        };
 
-                // Add all items in the list to the meta_filter `in` filter.
-                let list: Vec<OperationValue> =
-                    rel.iter().map(|item| item.to_owned().into()).collect();
-                filter.add_in(&FilterField::Meta(MetaField::DocumentId), &list);
+                        // Default pagination, filtering and ordering values
+                        let mut pagination = Pagination::<CursorScalar>::default();
+                        let mut order = Order::default();
+                        let mut filter = Filter::new();
 
-                // Parse arguments.
-                parse_collection_arguments(
-                    &ctx,
-                    &schema,
-                    &mut pagination,
-                    &mut order,
-                    &mut filter,
-                )?;
+                        // Add all items in the list to the meta_filter `in` filter
+                        let list: Vec<OperationValue> =
+                            rel.iter().map(|item| item.to_owned().into()).collect();
+                        filter.add_in(&FilterField::Meta(MetaField::DocumentId), &list);
 
-                // TODO: This needs be be replaced with a query to the db which retrieves a
-                // paginated, ordered, filtered collection.
-                let mut fields = vec![];
-                for document_id in rel.iter() {
-                    // Get the whole document from the store.
-                    let document = match store.get_document(document_id).await? {
-                        Some(document) => document,
-                        None => continue,
-                    };
+                        // Parse arguments
+                        parse_collection_arguments(
+                            &ctx,
+                            &schema,
+                            &mut pagination,
+                            &mut order,
+                            &mut filter,
+                        )?;
 
-                    let document = DocumentValue::Paginated(
-                        "CURSOR".to_string(),
-                        PaginationData::default(),
-                        document,
-                    );
-
-                    fields.push(FieldValue::owned_any(document));
-                }
-                Ok(Some(FieldValue::list(fields)))
-            }
-            // Pinned relation behaves the same as relation but passes along a document view id.
-            OperationValue::PinnedRelation(rel) => {
-                // Get the whole document from the store.
-                let document = match store.get_document_by_view_id(rel.view_id()).await? {
-                    Some(document) => document,
-                    None => return Ok(FieldValue::NONE),
-                };
-
-                let document = DocumentValue::Single(document);
-                Ok(Some(FieldValue::owned_any(document)))
-            }
-            // Pinned relation lists behave the same as relation lists but pass along view ids.
-            OperationValue::PinnedRelationList(rel) => {
-                // Get the schema of documents in this relation list.
-                let relation_field_schema = schema
-                    .fields()
-                    .get(name)
-                    .expect("Document field should exist on schema");
-
-                // Get the schema itself
-                let schema = match relation_field_schema {
-                    FieldType::PinnedRelationList(schema_id) => {
-                        // We can unwrap here as the schema should exist in the store already.
-                        schema_provider.get(schema_id).await.unwrap()
+                        // @TODO
+                        todo!();
                     }
-                    _ => panic!(), // Should never reach here.
-                };
+                    // Pinned relation behaves the same as relation but passes along a document view id.
+                    OperationValue::PinnedRelation(rel) => {
+                        // Get the whole document from the store.
+                        let document = match store.get_document_by_view_id(rel.view_id()).await? {
+                            Some(document) => document,
+                            None => return Ok(FieldValue::NONE),
+                        };
 
-                // Default pagination, filtering and ordering values.
-                let mut pagination = Pagination::<CursorScalar>::default();
-                let mut order = Order::default();
-                let mut filter = Filter::new();
+                        let document = DocumentValue::Single(document);
+                        Ok(Some(FieldValue::owned_any(document)))
+                    }
+                    // Pinned relation lists behave the same as relation lists but pass along view ids.
+                    OperationValue::PinnedRelationList(rel) => {
+                        // Get the schema of documents in this relation list
+                        let relation_field_schema = schema
+                            .fields()
+                            .get(name)
+                            .expect("Document field should exist on schema");
 
-                // Add all items in the list to the filter.
-                let list: Vec<OperationValue> =
-                    rel.iter().map(|item| item.to_owned().into()).collect();
-                filter.add_in(&FilterField::Meta(MetaField::DocumentId), &list);
+                        // Get the schema itself
+                        let schema = match relation_field_schema {
+                            FieldType::PinnedRelationList(schema_id) => {
+                                // We can unwrap here as the schema should exist in the store
+                                // already
+                                schema_provider.get(schema_id).await.unwrap()
+                            }
+                            _ => panic!(), // Should never reach here.
+                        };
 
-                // Parse arguments.
-                parse_collection_arguments(
-                    &ctx,
-                    &schema,
-                    &mut pagination,
-                    &mut order,
-                    &mut filter,
-                )?;
+                        // Default pagination, filtering and ordering values
+                        let mut pagination = Pagination::<CursorScalar>::default();
+                        let mut order = Order::default();
+                        let mut filter = Filter::new();
 
-                // TODO: This needs be be replaced with a query to the db which retrieves a
-                // paginated, ordered, filtered collection.
-                let mut fields = vec![];
-                for document_view_id in rel.iter() {
-                    // Get the whole document from the store.
-                    let document = match store.get_document_by_view_id(document_view_id).await? {
-                        Some(document) => document,
-                        None => continue,
-                    };
+                        // Add all items in the list to the filter
+                        let list: Vec<OperationValue> =
+                            rel.iter().map(|item| item.to_owned().into()).collect();
+                        filter.add_in(&FilterField::Meta(MetaField::DocumentId), &list);
 
-                    let document = DocumentValue::Paginated(
-                        "CURSOR".to_string(),
-                        PaginationData::default(),
-                        document,
-                    );
+                        // Parse arguments
+                        parse_collection_arguments(
+                            &ctx,
+                            &schema,
+                            &mut pagination,
+                            &mut order,
+                            &mut filter,
+                        )?;
 
-                    fields.push(FieldValue::owned_any(document));
+                        // @TODO
+                        todo!()
+                    }
+                    // All other fields are simply resolved to their scalar value.
+                    value => Ok(Some(FieldValue::value(gql_scalar(value)))),
                 }
-                Ok(Some(FieldValue::list(fields)))
             }
-            // All other fields are simply resolved to their scalar value.
-            value => Ok(Some(FieldValue::value(gql_scalar(value)))),
+            DocumentValue::Paginated(_, _, document) => {
+                // @TODO: Handle deleted case here?
+                let field = document.fields().unwrap().get(&name).unwrap();
+                Ok(Some(FieldValue::value(gql_scalar(field.value()))))
+            }
         }
     }
 }
@@ -247,16 +216,16 @@ mod test {
     // when we do.
     #[case(
         r#"(
-            first: 10, 
-            after: "1_00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331", 
-            orderBy: OWNER, 
-            orderDirection: ASC, 
-            filter: { 
-                name : { 
-                    eq: "hello" 
-                } 
-            }, 
-        )"#.to_string(), 
+            first: 10,
+            after: "1_00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331",
+            orderBy: OWNER,
+            orderDirection: ASC,
+            filter: {
+                name : {
+                    eq: "hello"
+                }
+            },
+        )"#.to_string(),
         value!({
             "collection": value!([]),
         }),
@@ -276,13 +245,13 @@ mod test {
                     collection: all_schema_definition_v1 {{
                         hasNextPage
                         totalCount
-                        document {{ 
+                        document {{
                             cursor
                             fields {{
                                 fields{query_args} {{
                                     document {{
                                         cursor
-                                    }}    
+                                    }}
                                 }}
                             }}
                         }}

@@ -10,3 +10,5 @@ mod operation;
 mod query;
 mod schema;
 mod task;
+
+pub use query::Query;

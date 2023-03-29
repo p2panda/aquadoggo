@@ -44,7 +44,6 @@ use crate::db::types::StorageDocument;
 use crate::db::Pool;
 use crate::db::SqlStore;
 
-/// Implementation of
 #[async_trait]
 impl DocumentStore for SqlStore {
     type Document = StorageDocument;
