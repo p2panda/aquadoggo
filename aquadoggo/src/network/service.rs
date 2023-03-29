@@ -36,8 +36,8 @@ pub async fn network_service(
     // Read the network configuration parameters from the application context
     let network_config = context.config.network.clone();
 
-    // Build the network swarm
-    let mut swarm = swarm::build_swarm(&network_config, key_pair).await?;
+    // Build the network swarm and retrieve the local peer ID
+    let (mut swarm, local_peer_id) = swarm::build_swarm(&network_config, key_pair).await?;
 
     // Define the QUIC multiaddress on which the swarm will listen for connections
     let quic_multiaddr =
@@ -46,7 +46,30 @@ pub async fn network_service(
     // Listen for incoming connection requests over the QUIC transport
     swarm.listen_on(quic_multiaddr)?;
 
-    // Dial each peer identified by the multi-address provided via `--remote-node-addresses` if given
+    let mut external_circuit_addr = None;
+
+    // Construct circuit relay addresses and listen on relayed address
+    if swarm.behaviour().relay_client.is_enabled() {
+        if let Some(addr) = &network_config.relay_address {
+            let circuit_addr = addr
+                .clone()
+                .with(Protocol::P2p(
+                    network_config.rendezvous_peer_id.unwrap().into(),
+                ))
+                .with(Protocol::P2pCircuit);
+
+            // Dialable circuit relay address for local node
+            external_circuit_addr = Some(
+                circuit_addr
+                    .clone()
+                    .with(Protocol::P2p(local_peer_id.into())),
+            );
+
+            swarm.listen_on(circuit_addr)?;
+        }
+    }
+
+    // Dial each peer identified by the multi-address provided via `--remote-peers` if given
     for addr in network_config.remote_peers.clone() {
         swarm.dial(addr)?
     }
@@ -58,9 +81,6 @@ pub async fn network_service(
 
     // Create a cookie holder for the identify service
     let mut cookie = None;
-
-    // Create a public address holder for the local node, to be updated via AutoNAT
-    let mut _public_addr: Option<Multiaddr> = None;
 
     // Spawn a task to handle swarm events
     let handle = tokio::spawn(async move {
@@ -93,13 +113,15 @@ pub async fn network_service(
                 } => {
                     debug!("ConnectionClosed: {peer_id} {endpoint:?} {num_established} {cause:?}")
                 }
-                SwarmEvent::ConnectionEstablished { peer_id, .. }
+                SwarmEvent::ConnectionEstablished { peer_id, endpoint, num_established, .. }
                     // Match on a connection with the rendezvous server
                     if network_config.rendezvous_client
                         // Should be safe to unwrap rendezvous_peer_id because the CLI parser ensures
                         // it's provided if rendezvous_client is set to true
                         && network_config.rendezvous_peer_id.unwrap() == peer_id =>
                 {
+                    info!("ConnectionEstablished: {peer_id} {endpoint:?} {num_established}");
+
                     if let Some(rendezvous_client) =
                         swarm.behaviour_mut().rendezvous_client.as_mut()
                     {
@@ -122,7 +144,7 @@ pub async fn network_service(
                     endpoint,
                     num_established,
                     ..
-                } => debug!("ConnectionEstablished: {peer_id} {endpoint:?} {num_established}"),
+                } => info!("ConnectionEstablished: {peer_id} {endpoint:?} {num_established}"),
                 SwarmEvent::Dialing(peer_id) => info!("Dialing: {peer_id}"),
                 SwarmEvent::ExpiredListenAddr {
                     listener_id,
@@ -161,7 +183,7 @@ pub async fn network_service(
                         ttl,
                         rendezvous_node,
                     } => {
-                        debug!("Registered for namespace '{namespace}' at rendezvous point {rendezvous_node} for the next {ttl} seconds")
+                        debug!("Registered for '{namespace}' namespace at rendezvous point {rendezvous_node} for the next {ttl} seconds")
                     }
                     rendezvous::client::Event::Discovered {
                         registrations,
@@ -174,19 +196,25 @@ pub async fn network_service(
 
                         for registration in registrations {
                             for address in registration.record.addresses() {
-                                let peer = registration.record.peer_id();
-                                debug!("Discovered peer {peer} at {address}");
+                                let peer_id = registration.record.peer_id();
 
-                                let p2p_suffix = Protocol::P2p(*peer.as_ref());
-                                let address_with_p2p = if !address
-                                    .ends_with(&Multiaddr::empty().with(p2p_suffix.clone()))
-                                {
-                                    address.clone().with(p2p_suffix)
-                                } else {
-                                    address.clone()
-                                };
+                                // Only dial remote peers discovered via rendezvous server
+                                if peer_id != local_peer_id {
+                                    debug!("Discovered peer {peer_id} at {address}");
 
-                                swarm.dial(address_with_p2p).unwrap();
+                                    let p2p_suffix = Protocol::P2p(*peer_id.as_ref());
+                                    let address_with_p2p = if !address
+                                        .ends_with(&Multiaddr::empty().with(p2p_suffix.clone()))
+                                    {
+                                        address.clone().with(p2p_suffix)
+                                    } else {
+                                        address.clone()
+                                    };
+
+                                    if let Err(err) = swarm.dial(address_with_p2p) {
+                                        warn!("Failed to dial: {}", err);
+                                    }
+                                }
                             }
                         }
                     }
@@ -217,18 +245,13 @@ pub async fn network_service(
                     match event {
                         identify::Event::Received { peer_id, info } => {
                             debug!("Received identify information from peer {peer_id}");
-                            debug!(
-                                "Peer {peer_id} reported local external address: {}",
-                                info.observed_addr
-                            );
 
-                            swarm.add_external_address(info.observed_addr, AddressScore::Infinite);
+                            debug!("Adding external listen address: {}", info.observed_addr);
+                            swarm.add_external_address(info.observed_addr, AddressScore::Finite(1));
 
                             // Only attempt registration if the local node is running as a rendezvous client
                             if network_config.rendezvous_client {
-                                // Once `identify` information is received from a remote peer, the external
-                                // address of the local node is known and registration with the rendezvous
-                                // server can be carried out.
+                                // Register with the rendezvous server.
 
                                 // We call `as_mut()` on the rendezvous client network behaviour in
                                 // order to get a mutable reference out of the `Toggle`
@@ -262,28 +285,34 @@ pub async fn network_service(
                 SwarmEvent::Behaviour(BehaviourEvent::Autonat(event)) => {
                     match event {
                         autonat::Event::StatusChanged { old, new } => match (old, new) {
-                            (autonat::NatStatus::Unknown, autonat::NatStatus::Private) => {
-                                if swarm.behaviour().relay_client.is_enabled() {
-                                    if let Some(addr) = &network_config.relay_address {
-                                        let circuit_addr = addr.clone().with(Protocol::P2pCircuit);
-                                        debug!("Private NAT detected. Listening on relay circuit address");
-                                        swarm
-                                            .listen_on(circuit_addr)
-                                            .expect("Failed to listen on relay circuit address");
+                            (_, autonat::NatStatus::Private) => {
+                                debug!("Private NAT detected");
+                                if let Some(addr) = external_circuit_addr.clone() {
+                                    debug!("Adding external relayed listen address: {}", addr);
+                                    swarm.add_external_address(addr, AddressScore::Finite(1));
+
+                                    if network_config.rendezvous_client {
+                                        // Invoke registration of relayed client address with the rendezvous server
+                                        if let Some (rendezvous_client) = swarm.behaviour_mut().rendezvous_client.as_mut() {
+                                            rendezvous_client.register(
+                                                rendezvous::Namespace::from_static(NODE_NAMESPACE),
+                                                network_config
+                                                    .rendezvous_peer_id
+                                                    .expect("Rendezvous server peer ID was provided"),
+                                                None,
+                                            );
+                                        }
                                     }
                                 }
                             }
-                            (_, autonat::NatStatus::Public(addr)) => {
-                                info!("Public NAT verified! Public listening address: {}", addr);
-                                // TODO: Check if we're already listening on this address
-                                // If not, start listening
-                                _public_addr = Some(addr);
+                            (_, autonat::NatStatus::Public(_)) => {
+                                debug!("Public NAT detected");
                             }
                             (old, new) => {
                                 debug!("NAT status changed from {:?} to {:?}", old, new);
                             }
                         },
-                        other => debug!("Unhandled autonat event: {other:?}"),
+                        autonat::Event::InboundProbe(_) | autonat::Event::OutboundProbe(_) => (),
                     }
                 }
             }
