@@ -5,36 +5,42 @@ use sqlx::FromRow;
 /// A struct representing a single row with joins from the document_view_fields table.
 #[derive(FromRow, Debug, Clone)]
 pub struct DocumentViewFieldRow {
-    /// The id of this operation.
+    /// Id of the document.
+    pub document_id: String,
+
+    /// Id of the view id representing the document version with this field value.
     pub document_view_id: String,
 
-    /// The id of this operation.
+    /// Id of operation which set that field value.
     pub operation_id: String,
 
-    /// The name of this field.
+    /// Name of field.
     pub name: String,
 
-    /// The type of this field.
+    /// Name of field.
+    pub list_index: i32,
+
+    /// Type of field.
     pub field_type: String,
 
-    /// The actual value contained in this field.
+    /// Actual value contained in field.
     pub value: String,
 }
 
 /// A struct representing a single row of a document table.
 #[derive(FromRow, Debug, Clone)]
 pub struct DocumentRow {
-    /// The id of this document
+    /// Id of this document
     pub document_id: String,
 
-    /// The id of this documents most recent view.
+    /// Id of this documents most recent view.
     pub document_view_id: String,
 
-    /// The id of the author of this document.
-    pub public_key: String,
-
-    /// The id of this documents schema.
+    /// Id of this documents schema.
     pub schema_id: String,
+
+    /// Id of the author of this document.
+    pub public_key: String,
 
     /// Flag for if this document is deleted.
     pub is_deleted: bool,

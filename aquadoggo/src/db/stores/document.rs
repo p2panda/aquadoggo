@@ -381,6 +381,7 @@ async fn get_document_view_field_rows(
     query_as::<_, DocumentViewFieldRow>(
         "
         SELECT
+            documents.document_id,
             document_view_fields.document_view_id,
             document_view_fields.operation_id,
             document_view_fields.name,
@@ -388,14 +389,17 @@ async fn get_document_view_field_rows(
             operation_fields_v1.field_type,
             operation_fields_v1.value
         FROM
-            document_view_fields
+            documents
+        LEFT JOIN document_view_fields
+            ON
+                document_view_fields.document_view_id = documents.document_view_id
         LEFT JOIN operation_fields_v1
             ON
                 document_view_fields.operation_id = operation_fields_v1.operation_id
             AND
                 document_view_fields.name = operation_fields_v1.name
         WHERE
-            document_view_fields.document_view_id = $1
+            documents.document_view_id = $1
         ORDER BY
             operation_fields_v1.list_index ASC
         ",

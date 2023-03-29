@@ -2,24 +2,22 @@
 
 //! This module offers a query API to find many p2panda documents, filtered or sorted by custom
 //! parameters. The results are batched via cursor-based pagination.
+use std::collections::HashMap;
+
 use p2panda_rs::document::DocumentViewFields;
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{Schema, SchemaId};
 use p2panda_rs::storage_provider::error::DocumentStorageError;
-use sqlx::{query_as, FromRow};
+use sqlx::any::AnyRow;
+use sqlx::query_as;
 
+use crate::db::models::utils::parse_document_view_field_rows;
+use crate::db::models::DocumentViewFieldRow;
 use crate::db::query::{
     Cursor, Direction, Field, Filter, FilterBy, FilterSetting, LowerBound, MetaField, Order,
     Pagination, Select, UpperBound,
 };
 use crate::db::SqlStore;
-
-#[derive(FromRow, Debug, Clone)]
-pub struct QueryRow {
-    pub name: String,
-    pub value: String,
-    pub document_view_id: String,
-}
 
 #[derive(Default, Debug, Clone)]
 pub struct Query<C>
@@ -326,7 +324,11 @@ fn order_sql(order: &Order, schema: &Schema) -> String {
 
                     -- On top we sort always by id in case the previous order
                     -- value is equal between two rows
-                    documents.document_id ASC
+                    documents.document_id ASC,
+
+                    -- Lastly we should order them by list index, which preserves
+                    -- the ordering of (pinned) relation list values
+                    operation_fields_v1.list_index ASC
                 "#,
                 typecast_field_sql("value", field_name, schema),
                 field_name,
@@ -356,27 +358,6 @@ fn application_select_sql(fields: &Vec<String>) -> String {
     }
 }
 
-fn meta_select_sql(select: &Select, fields: &Vec<String>) -> String {
-    // We _always_ want the document id to be able to map data to the right document
-    let mut meta_fields = vec!["documents.document_id"];
-
-    // As soon as we're asking for application data we want the name and the value of the
-    // application fields
-    if !fields.is_empty() {
-        meta_fields.push("operation_fields_v1.name");
-        meta_fields.push("operation_fields_v1.value");
-    }
-
-    for field in select.iter() {
-        if let Field::Meta(MetaField::DocumentViewId) = field {
-            meta_fields.push("documents.document_view_id");
-        }
-        // Everything else is not supported (yet)
-    }
-
-    meta_fields.join("\n")
-}
-
 impl SqlStore {
     pub async fn query<C: Cursor>(
         &self,
@@ -400,7 +381,6 @@ impl SqlStore {
             .collect();
 
         // Generate SQL based on the given schema and query
-        let select = meta_select_sql(&args.select, &select_fields);
         let and_select = application_select_sql(&select_fields);
         let and_filters = filter_sql(&args.filter);
         let and_pagination = pagination_sql(&args.pagination, &args.order);
@@ -408,8 +388,8 @@ impl SqlStore {
         let order = order_sql(&args.order, &schema);
         let limit = limit_sql(&args.pagination, &select_fields);
 
-        let query_rows = query_as::<_, QueryRow>(&format!(
-            "
+        let sea_quel = format!(
+            r#"
             -- ░░░░░▄▀▀▀▄░░░░░░░░░░░░░░░░░
             -- ▄███▀░◐░░░▌░░░░░░░░░░░░░░░░
             -- ░░░░▌░░░░░▐░░░░░░░░░░░░░░░░
@@ -430,21 +410,24 @@ impl SqlStore {
             -- annoying as myself.
 
             SELECT
-                {select}
+                documents.document_id,
+                document_view_fields.document_view_id,
+                document_view_fields.operation_id,
+                operation_fields_v1.name,
+                operation_fields_v1.list_index,
+                operation_fields_v1.field_type,
+                operation_fields_v1.value
 
             FROM
                 documents
-                LEFT JOIN
-                    document_view_fields
+                LEFT JOIN document_view_fields
                     ON
                         document_view_fields.document_view_id = documents.document_view_id
-                LEFT JOIN
-                    operation_fields_v1
+                LEFT JOIN operation_fields_v1
                     ON
                         operation_fields_v1.operation_id = document_view_fields.operation_id
                     AND
                         operation_fields_v1.name = document_view_fields.name
-
             WHERE
                 documents.schema_id = '{schema_id}'
 
@@ -459,13 +442,37 @@ impl SqlStore {
             {order}
 
             {limit}
-            ",
-        ))
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+        "#
+        );
 
-        Ok(vec![])
+        let rows: Vec<DocumentViewFieldRow> = query_as::<_, DocumentViewFieldRow>(&sea_quel)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
+
+        let view_fields = {
+            let mut view_map: HashMap<String, Vec<DocumentViewFieldRow>> = HashMap::new();
+
+            for row in rows {
+                match view_map.get_mut(&row.document_id) {
+                    Some(field_vec) => {
+                        field_vec.push(row);
+                    }
+                    None => {
+                        view_map.insert(row.document_id.clone(), vec![row.clone()]);
+                    }
+                }
+            }
+
+            view_map
+                .into_iter()
+                .map(|(document_id, document_field_rows)| {
+                    parse_document_view_field_rows(document_field_rows)
+                })
+                .collect()
+        };
+
+        Ok(view_fields)
     }
 }
 

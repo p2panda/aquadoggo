@@ -344,13 +344,14 @@ mod tests {
         config: PopulateStoreConfig,
     ) {
         test_runner(move |node: TestNode| async move {
-            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            // Populate the store with some entries and operations but DON'T materialise any
+            // resulting documents
             let (_, document_ids) = populate_store(&node.context.store, &config).await;
             let document_id = document_ids
                 .get(0)
                 .expect("There should be at least one document id");
 
-            // Get the operations.
+            // Get the operations
             let document_operations = node
                 .context
                 .store
@@ -358,7 +359,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            // Sort the operations into their ready for reducing order.
+            // Sort the operations into their ready for reducing order
             let document_builder = DocumentBuilder::from(&document_operations);
             let sorted_document_operations = build_graph(&document_builder.operations())
                 .unwrap()
@@ -366,11 +367,11 @@ mod tests {
                 .unwrap()
                 .sorted();
 
-            // Reduce document to it's current view and insert into database.
+            // Reduce document to it's current view and insert into database
             let input = TaskInput::new(Some(document_id.clone()), None);
             assert!(reduce_task(node.context.clone(), input).await.is_ok());
 
-            // We should be able to query this specific view now and receive the expected state.
+            // We should be able to query this specific view now and receive the expected state
             let document_view_id: DocumentViewId =
                 sorted_document_operations.get(1).unwrap().clone().0.into();
             let document = node
