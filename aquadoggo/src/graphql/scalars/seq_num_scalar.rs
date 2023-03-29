@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 /// Sequence number of an entry.
 #[derive(Scalar, Clone, Copy, Debug, Eq, PartialEq)]
-#[graphql(name = "SeqNum")]
+#[graphql(name = "SeqNum", validator(validate))]
 pub struct SeqNumScalar(SeqNum);
 
 impl SeqNumScalar {
@@ -101,6 +101,12 @@ impl Display for SeqNumScalar {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0.as_u64())
     }
+}
+
+/// Validation method used internally in `async-graphql` to check scalar values passed into the
+/// public api.
+fn validate(value: &Value) -> bool {
+    SeqNumScalar::from_value(value.to_owned()).is_ok()
 }
 
 #[cfg(test)]
