@@ -375,7 +375,11 @@ fn application_select_sql(fields: &Vec<String>) -> String {
     if fields.is_empty() {
         "".to_string()
     } else {
-        format!("AND operation_fields_v1.name IN ({})", fields.join(", "))
+        let fields_sql: Vec<String> = fields.iter().map(|field| format!("'{field}'")).collect();
+        format!(
+            "AND operation_fields_v1.name IN ({})",
+            fields_sql.join(", ")
+        )
     }
 }
 
@@ -405,6 +409,7 @@ impl SqlStore {
         let and_select = application_select_sql(&select_fields);
         let and_filters = filter_sql(&args.filter);
         let and_pagination = pagination_sql(&args.pagination, &args.order);
+
         let group = group_sql(&select_fields);
         let order = order_sql(&args.order, &schema);
         let limit = limit_sql(&args.pagination, &select_fields);
@@ -473,38 +478,40 @@ impl SqlStore {
             .await
             .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
 
-        let documents =
-            {
-                let mut view_map: HashMap<String, Vec<DocumentViewFieldRow>> = HashMap::new();
+        let documents = {
+            let mut view_map: HashMap<String, Vec<DocumentViewFieldRow>> = HashMap::new();
 
-                for row in rows {
-                    match view_map.get_mut(&row.document_id) {
-                        Some(field_vec) => {
-                            field_vec.push(row);
-                        }
-                        None => {
-                            view_map.insert(row.document_id.clone(), vec![row.clone()]);
-                        }
+            for row in rows {
+                match view_map.get_mut(&row.document_id) {
+                    Some(field_vec) => {
+                        field_vec.push(row);
+                    }
+                    None => {
+                        view_map.insert(row.document_id.clone(), vec![row.clone()]);
                     }
                 }
+            }
 
-                view_map
-                    .into_iter()
-                    .map(|(document_id, document_field_rows)| {
-                        let row = document_field_rows[0].clone();
-                        let fields = parse_document_view_field_rows(document_field_rows);
+            view_map
+                .into_iter()
+                .map(|(document_id, document_field_rows)| {
+                    let row = document_field_rows[0].clone();
+                    let fields = parse_document_view_field_rows(document_field_rows);
 
-                        StorageDocument {
+                    StorageDocument {
                         id: document_id.parse().unwrap(),
                         fields: Some(fields),
                         schema_id: schema.id().clone(),
                         view_id: row.document_view_id.parse().unwrap(),
-                        author: PublicKey::new("2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96").unwrap(), // @TODO
-                        deleted: false,           // @TODO
+                        author: PublicKey::new(
+                            "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96",
+                        )
+                        .unwrap(), // @TODO
+                        deleted: false, // @TODO
                     }
-                    })
-                    .collect()
-            };
+                })
+                .collect()
+        };
 
         Ok(documents)
     }
