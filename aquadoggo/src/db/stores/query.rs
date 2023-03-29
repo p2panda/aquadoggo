@@ -499,7 +499,7 @@ impl SqlStore {
                         fields: Some(fields),
                         schema_id: schema.id().clone(),
                         view_id: row.document_view_id.parse().unwrap(),
-                        author: PublicKey::new("302A300506032B657003210095F3B5CE87755462869A9F983874DFC8A91818A75C2A").unwrap(), // @TODO
+                        author: PublicKey::new("2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96").unwrap(), // @TODO
                         deleted: false,           // @TODO
                     }
                     })
