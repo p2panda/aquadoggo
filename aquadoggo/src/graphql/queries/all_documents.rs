@@ -4,7 +4,7 @@ use async_graphql::dynamic::{Field, FieldFuture, FieldValue, Object, TypeRef};
 use log::debug;
 use p2panda_rs::schema::Schema;
 
-use crate::db::query::{Filter, Order, Pagination, Select};
+use crate::db::query::{Field as QueryField, Filter, Order, Pagination, Select};
 use crate::db::stores::Query;
 use crate::db::SqlStore;
 use crate::graphql::constants;
@@ -61,7 +61,10 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
 
                     // @TODO: We need a way to determine which fields have been selected in the
                     // GraphQL query (is it "lookahead")?
-                    let select = Select::default();
+                    let fields: Vec<QueryField> = schema.fields().iter().map(|(field_name, _)| {
+                        QueryField::new(field_name)
+                    }).collect();
+                    let select = Select::new(fields.as_slice());
 
                     // Fetch all queried documents and compose the field value list
                     // which will bubble up the query tree.
