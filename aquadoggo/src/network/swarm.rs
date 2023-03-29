@@ -16,7 +16,7 @@ use crate::network::NetworkConfiguration;
 pub async fn build_swarm(
     network_config: &NetworkConfiguration,
     key_pair: Keypair,
-) -> Result<Swarm<Behaviour>> {
+) -> Result<(Swarm<Behaviour>, PeerId)> {
     // Read the peer ID (public key) from the key pair
     let peer_id = PeerId::from(key_pair.public());
     info!("Network service peer ID: {peer_id}");
@@ -37,5 +37,5 @@ pub async fn build_swarm(
         .notify_handler_buffer_size(network_config.notify_handler_buffer_size.try_into()?)
         .build();
 
-    Ok(swarm)
+    Ok((swarm, peer_id))
 }
