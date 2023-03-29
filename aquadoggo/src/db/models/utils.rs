@@ -794,7 +794,8 @@ mod tests {
                     .to_string(),
             },
             DocumentViewFieldRow {
-                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0".to_string(),
+                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
+                    .to_string(),
                 document_view_id:
                     "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
                         .to_string(),
@@ -808,7 +809,8 @@ mod tests {
                     .to_string(),
             },
             DocumentViewFieldRow {
-                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0".to_string(),
+                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
+                    .to_string(),
                 document_view_id:
                     "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
                         .to_string(),
@@ -822,7 +824,8 @@ mod tests {
                     .to_string(),
             },
             DocumentViewFieldRow {
-                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0".to_string(),
+                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
+                    .to_string(),
                 document_view_id:
                     "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
                         .to_string(),
@@ -836,7 +839,8 @@ mod tests {
                     .to_string(),
             },
             DocumentViewFieldRow {
-                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0".to_string(),
+                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
+                    .to_string(),
                 document_view_id:
                     "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
                         .to_string(),
@@ -850,7 +854,8 @@ mod tests {
                     .to_string(),
             },
             DocumentViewFieldRow {
-                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0".to_string(),
+                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
+                    .to_string(),
                 document_view_id:
                     "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
                         .to_string(),
