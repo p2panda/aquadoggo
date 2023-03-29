@@ -13,12 +13,11 @@ use p2panda_rs::storage_provider::error::DocumentStorageError;
 use p2panda_rs::storage_provider::traits::DocumentStore;
 
 use crate::db::query::{Direction, Field, Filter, MetaField, Order, Pagination};
-use crate::db::{types::StorageDocument, SqlStore};
-use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
+use crate::db::types::StorageDocument;
+use crate::db::SqlStore;
+use crate::graphql::constants;
+use crate::graphql::scalars::{CursorScalar, DocumentIdScalar, DocumentViewIdScalar};
 use crate::graphql::types::DocumentValue;
-
-use super::constants;
-use super::scalars::CursorScalar;
 
 // Type name suffixes.
 const DOCUMENT_FIELDS_SUFFIX: &str = "Fields";
@@ -229,7 +228,7 @@ fn parse_filter(
                     filter.add_contains(&filter_field, value.string()?);
                 }
                 "notContains" => {
-                    filter.add_contains(&filter_field, value.string()?);
+                    filter.add_not_contains(&filter_field, value.string()?);
                 }
                 _ => panic!("Unknown filter type received"),
             }

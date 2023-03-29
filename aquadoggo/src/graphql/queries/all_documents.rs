@@ -101,7 +101,7 @@ mod test {
     // TODO: We don't actually perform any queries yet, these tests will need to be updated
     // when we do.
     #[case(
-        "".to_string(), 
+        "".to_string(),
         value!({
             "collection": value!([{ "hasNextPage": false, "totalCount": 0, "document": { "cursor": "CURSOR", "fields": { "bool": true, } } }]),
         }),
@@ -109,129 +109,129 @@ mod test {
     )]
     #[case(
         r#"(
-            first: 10, 
-            after: "1_00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331", 
-            orderBy: OWNER, 
-            orderDirection: ASC, 
-            filter: { 
-                bool : { 
-                    eq: true 
-                } 
-            }, 
-            meta: { 
-                owner: { 
-                    in: ["7cf4f58a2d89e93313f2de99604a814ecea9800cf217b140e9c3a7ba59a5d982"] 
+            first: 10,
+            after: "1_00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331",
+            orderBy: OWNER,
+            orderDirection: ASC,
+            filter: {
+                bool : {
+                    eq: true
+                }
+            },
+            meta: {
+                owner: {
+                    in: ["7cf4f58a2d89e93313f2de99604a814ecea9800cf217b140e9c3a7ba59a5d982"]
                 },
-                documentId: { 
-                    eq: "00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331" 
+                documentId: {
+                    eq: "00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331"
                 },
-                viewId: { 
-                    notIn: ["00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331"] 
+                viewId: {
+                    notIn: ["00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331"]
                 }
             }
-        )"#.to_string(), 
+        )"#.to_string(),
         value!({
             "collection": value!([{ "hasNextPage": false, "totalCount": 0, "document": { "cursor": "CURSOR", "fields": { "bool": true, } } }]),
         }),
         vec![]
     )]
     #[case(
-        r#"(first: 0)"#.to_string(), 
+        r#"(first: 0)"#.to_string(),
         Value::Null,
         vec!["out of range integral type conversion attempted".to_string()]
     )]
     #[case(
-        r#"(first: "hello")"#.to_string(), 
+        r#"(first: "hello")"#.to_string(),
         Value::Null,
         vec!["Invalid value for argument \"first\", expected type \"Int\"".to_string()]
     )]
     #[case(
-        r#"(after: HELLO)"#.to_string(), 
+        r#"(after: HELLO)"#.to_string(),
         Value::Null,
         vec!["internal: not a string".to_string()]
     )]
     #[case(
-        r#"(after: "00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331")"#.to_string(), 
+        r#"(after: "00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331")"#.to_string(),
         Value::Null,
         vec!["Invalid amount of cursor parts".to_string()]
     )]
     #[case(
-        r#"(after: 27)"#.to_string(), 
+        r#"(after: 27)"#.to_string(),
         Value::Null,
         vec!["internal: not a string".to_string()]
     )]
     #[case(
-        r#"(orderBy: HELLO)"#.to_string(), 
+        r#"(orderBy: HELLO)"#.to_string(),
         Value::Null,
         vec!["Invalid value for argument \"orderBy\", enumeration type \"schema_name_00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331OrderBy\" does not contain the value \"HELLO\"".to_string()]
     )]
     #[case(
-        r#"(orderBy: "hello")"#.to_string(), 
+        r#"(orderBy: "hello")"#.to_string(),
         Value::Null,
         vec!["Invalid value for argument \"orderBy\", enumeration type \"schema_name_00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331OrderBy\" does not contain the value \"hello\"".to_string()]
     )]
     #[case(
-        r#"(orderDirection: HELLO)"#.to_string(), 
+        r#"(orderDirection: HELLO)"#.to_string(),
         Value::Null,
         vec!["Invalid value for argument \"orderDirection\", enumeration type \"OrderDirection\" does not contain the value \"HELLO\"".to_string()]
     )]
     #[case(
-        r#"(orderDirection: "hello")"#.to_string(), 
+        r#"(orderDirection: "hello")"#.to_string(),
         Value::Null,
         vec!["Invalid value for argument \"orderDirection\", enumeration type \"OrderDirection\" does not contain the value \"hello\"".to_string()]
     )]
     #[case(
-        r#"(filter: "hello")"#.to_string(), 
+        r#"(filter: "hello")"#.to_string(),
         Value::Null,
         vec!["internal: is not an object".to_string()]
     )]
     #[case(
-        r#"(filter: { bool: { in: ["hello"] }})"#.to_string(), 
+        r#"(filter: { bool: { in: ["hello"] }})"#.to_string(),
         Value::Null,
         vec!["Invalid value for argument \"filter.bool\", unknown field \"in\" of type \"BooleanFilter\"".to_string()]
     )]
     #[case(
-        r#"(filter: { hello: { eq: true }})"#.to_string(), 
+        r#"(filter: { hello: { eq: true }})"#.to_string(),
         Value::Null,
         vec!["Invalid value for argument \"filter\", unknown field \"hello\" of type \"schema_name_00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331Filter\"".to_string()]
     )]
     #[case(
-        r#"(filter: { bool: { contains: "hello" }})"#.to_string(), 
+        r#"(filter: { bool: { contains: "hello" }})"#.to_string(),
         Value::Null,
         vec!["Invalid value for argument \"filter.bool\", unknown field \"contains\" of type \"BooleanFilter\"".to_string()]
     )]
     #[case(
-        r#"(meta: "hello")"#.to_string(), 
+        r#"(meta: "hello")"#.to_string(),
         Value::Null,
         vec!["internal: is not an object".to_string()]
     )]
     #[case(
-        r#"(meta: { bool: { in: ["hello"] }})"#.to_string(), 
+        r#"(meta: { bool: { in: ["hello"] }})"#.to_string(),
         Value::Null,
         vec!["Invalid value for argument \"meta\", unknown field \"bool\" of type \"MetaFilterInput\"".to_string()]
     )]
     #[case(
-        r#"(meta: { owner: { contains: "hello" }})"#.to_string(), 
+        r#"(meta: { owner: { contains: "hello" }})"#.to_string(),
         Value::Null,
         vec!["Invalid value for argument \"meta.owner\", unknown field \"contains\" of type \"OwnerFilter\"".to_string()]
     )]
     #[case(
-        r#"(meta: { documentId: { contains: "hello" }})"#.to_string(), 
+        r#"(meta: { documentId: { contains: "hello" }})"#.to_string(),
         Value::Null,
         vec!["Invalid value for argument \"meta.documentId\", unknown field \"contains\" of type \"DocumentIdFilter\"".to_string()]
     )]
     #[case(
-        r#"(meta: { viewId: { contains: "hello" }})"#.to_string(), 
+        r#"(meta: { viewId: { contains: "hello" }})"#.to_string(),
         Value::Null,
         vec!["Invalid value for argument \"meta.viewId\", unknown field \"contains\" of type \"DocumentViewIdFilter\"".to_string()]
     )]
     #[case(
-        r#"(meta: { documentId: { eq: 27 }})"#.to_string(), 
+        r#"(meta: { documentId: { eq: 27 }})"#.to_string(),
         Value::Null,
         vec!["internal: not a string".to_string()]
     )]
     #[case(
-        r#"(meta: { viewId: { in: "hello" }})"#.to_string(), 
+        r#"(meta: { viewId: { in: "hello" }})"#.to_string(),
         Value::Null,
         vec!["internal: not a list".to_string()]
     )]
@@ -276,7 +276,7 @@ mod test {
                 collection: all_{type_name}{query_args} {{
                     hasNextPage
                     totalCount
-                    document {{ 
+                    document {{
                         cursor
                         fields {{ bool }}
                     }}
