@@ -10,10 +10,10 @@ use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{Schema, SchemaId};
 use p2panda_rs::storage_provider::error::DocumentStorageError;
 use sqlx::any::AnyRow;
-use sqlx::query_as;
+use sqlx::{query_as, FromRow};
 
 use crate::db::models::utils::parse_document_view_field_rows;
-use crate::db::models::DocumentViewFieldRow;
+use crate::db::models::{DocumentViewFieldRow, QueryRow};
 use crate::db::query::{
     Cursor, Direction, Field, Filter, FilterBy, FilterSetting, LowerBound, MetaField, Order,
     Pagination, Select, UpperBound,
@@ -167,13 +167,11 @@ fn filter_sql(filter: &Filter) -> String {
         .iter()
         .filter_map(|filter_setting| {
             match &filter_setting.field {
-                Field::Meta(MetaField::Edited) => {
-                    // @TODO: This is not supported yet
-                    None
-                }
                 Field::Meta(MetaField::Owner) => {
-                    // @TODO: This is not supported yet
-                    None
+                    Some(format!("AND {}", cmp_sql("owner", filter_setting)))
+                }
+                Field::Meta(MetaField::Edited) => {
+                    Some(format!("AND {}", cmp_sql("is_edited", filter_setting)))
                 }
                 Field::Meta(MetaField::Deleted) => {
                     // @TODO: Make sure that deleted is by default always set to false,
@@ -312,20 +310,33 @@ fn order_sql(order: &Order, schema: &Schema) -> String {
     };
 
     match &order.field {
-        Field::Meta(MetaField::DocumentViewId) => {
-            format!("ORDER BY documents.document_view_id {direction}")
-        }
         Field::Meta(MetaField::DocumentId) => {
             format!("ORDER BY documents.document_id {direction}")
         }
-        Field::Meta(MetaField::Owner) => {
-            todo!("Not implemented yet");
-        }
-        Field::Meta(MetaField::Edited) => {
-            todo!("Not implemented yet");
-        }
-        Field::Meta(MetaField::Deleted) => {
-            todo!("not implemented yet");
+        Field::Meta(meta_field) => {
+            let sql_field = match meta_field {
+                MetaField::DocumentViewId => "documents.document_view_id",
+                MetaField::Owner => "owner",
+                MetaField::Edited => "is_edited",
+                MetaField::Deleted => "documents.is_deleted",
+                // Other cases are handled above
+                _ => panic!("Unhandled meta field order case"),
+            };
+
+            format!(
+                r#"
+                ORDER BY
+                    {sql_field} {direction},
+
+                    -- On top we sort always by id in case the previous order
+                    -- value is equal between two rows
+                    documents.document_id ASC,
+
+                    -- Lastly we should order them by list index, which preserves
+                    -- the ordering of (pinned) relation list values
+                    operation_fields_v1.list_index ASC
+                "#
+            )
         }
         Field::Field(field_name) => {
             format!(
@@ -411,7 +422,7 @@ impl SqlStore {
         let and_pagination = pagination_sql(&args.pagination, &args.order);
 
         let group = group_sql(&select_fields);
-        let order = order_sql(&args.order, &schema);
+        let order = order_sql(&args.order, schema);
         let limit = limit_sql(&args.pagination, &select_fields);
 
         let sea_quel = format!(
@@ -436,13 +447,46 @@ impl SqlStore {
             -- annoying as myself.
 
             SELECT
+                -- We get all the meta informations first, let's start with the document id and
+                -- document view id, schema id and id of the operation which holds the data
                 documents.document_id,
                 document_view_fields.document_view_id,
                 document_view_fields.operation_id,
+
+                -- If a document got deleted we already store in the database, the edited state we
+                -- find out by checking if there is more operations next to the initial "create"
+                -- operation
+                documents.is_deleted,
+                EXISTS (
+                    SELECT
+                        operations_v1.public_key
+                    FROM
+                        operations_v1
+                    WHERE
+                        operations_v1.action != "create"
+                        AND
+                            operations_v1.document_id = documents.document_id
+                    LIMIT 1
+                ) AS is_edited,
+
+                -- The original owner of a document we get by checking which public key signed the
+                -- "create" operation, the hash of that operation is the same as the document id
+                (
+                    SELECT
+                        operations_v1.public_key
+                    FROM
+                        operations_v1
+                    WHERE
+                        operations_v1.operation_id = documents.document_id
+                ) AS owner,
+
+                -- Finally we get the application data by selecting the name and value field. We
+                -- need the field type and list index to understand what the type of the data is and
+                -- if it is a relation, in what order the entries occur
                 operation_fields_v1.name,
-                operation_fields_v1.list_index,
+                operation_fields_v1.value,
                 operation_fields_v1.field_type,
-                operation_fields_v1.value
+                operation_fields_v1.list_index
 
             FROM
                 documents
@@ -454,32 +498,43 @@ impl SqlStore {
                         operation_fields_v1.operation_id = document_view_fields.operation_id
                     AND
                         operation_fields_v1.name = document_view_fields.name
+
             WHERE
+                -- We always filter by the queried schema of that collection
                 documents.schema_id = '{schema_id}'
 
+                -- .. and select only the operation fields we're interested in
                 {and_select}
 
-                {and_pagination}
-
+                -- .. and further filter the data by custom parameters
                 {and_filters}
 
+                -- Lastly we batch all results into smaller chunks via cursor pagination
+                {and_pagination}
+
+            -- In case we did not select any fields of interest we can group the results by
+            -- document id, since we're only interested in the meta data we get from simply SELECTing
+            -- them per row
             {group}
 
+            -- We always order the rows by document id and list_index, but there might also be
+            -- user-defined ordering on top of that
             {order}
 
+            -- Connected to cursor pagination we limit the number of rows
             {limit}
         "#
         );
 
         println!("{sea_quel}");
 
-        let rows: Vec<DocumentViewFieldRow> = query_as::<_, DocumentViewFieldRow>(&sea_quel)
+        let rows: Vec<QueryRow> = query_as::<_, QueryRow>(&sea_quel)
             .fetch_all(&self.pool)
             .await
             .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
 
         let documents = {
-            let mut view_map: HashMap<String, Vec<DocumentViewFieldRow>> = HashMap::new();
+            let mut view_map: HashMap<String, Vec<QueryRow>> = HashMap::new();
 
             for row in rows {
                 match view_map.get_mut(&row.document_id) {
@@ -493,21 +548,36 @@ impl SqlStore {
             }
 
             view_map
-                .into_iter()
-                .map(|(document_id, document_field_rows)| {
-                    let row = document_field_rows[0].clone();
+                .into_values()
+                .map(|rows| {
+                    // Unwrap conversions as we trust that values from database have been checked
+                    let id = rows[0].document_id.parse().unwrap();
+                    let view_id = rows[0].document_view_id.parse().unwrap();
+                    let author = rows[0].owner.parse().unwrap();
+                    let deleted = rows[0].is_deleted;
+
+                    let document_field_rows: Vec<DocumentViewFieldRow> = rows
+                        .into_iter()
+                        .map(|query_row| DocumentViewFieldRow {
+                            document_id: query_row.document_id,
+                            document_view_id: query_row.document_view_id,
+                            operation_id: query_row.operation_id,
+                            name: query_row.name,
+                            list_index: query_row.list_index,
+                            field_type: query_row.field_type,
+                            value: query_row.value,
+                        })
+                        .collect();
+
                     let fields = parse_document_view_field_rows(document_field_rows);
 
                     StorageDocument {
-                        id: document_id.parse().unwrap(),
+                        id,
                         fields: Some(fields),
                         schema_id: schema.id().clone(),
-                        view_id: row.document_view_id.parse().unwrap(),
-                        author: PublicKey::new(
-                            "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96",
-                        )
-                        .unwrap(), // @TODO
-                        deleted: false, // @TODO
+                        view_id,
+                        author,
+                        deleted,
                     }
                 })
                 .collect()
