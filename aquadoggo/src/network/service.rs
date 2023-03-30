@@ -113,38 +113,38 @@ pub async fn network_service(
                 } => {
                     debug!("ConnectionClosed: {peer_id} {endpoint:?} {num_established} {cause:?}")
                 }
-                SwarmEvent::ConnectionEstablished { peer_id, endpoint, num_established, .. }
-                    // Match on a connection with the rendezvous server
-                    if network_config.rendezvous_client
-                        // Should be safe to unwrap rendezvous_peer_id because the CLI parser ensures
-                        // it's provided if rendezvous_client is set to true
-                        && network_config.rendezvous_peer_id.unwrap() == peer_id =>
-                {
-                    info!("ConnectionEstablished: {peer_id} {endpoint:?} {num_established}");
-
-                    if let Some(rendezvous_client) =
-                        swarm.behaviour_mut().rendezvous_client.as_mut()
-                    {
-                        debug!(
-                            "Connected to rendezvous point, discovering nodes in '{NODE_NAMESPACE}' namespace ..."
-                        );
-
-                        rendezvous_client.discover(
-                            Some(rendezvous::Namespace::from_static(NODE_NAMESPACE)),
-                            None,
-                            None,
-                            network_config
-                                .rendezvous_peer_id
-                                .expect("Rendezvous server peer ID was provided"),
-                        );
-                    }
-                }
                 SwarmEvent::ConnectionEstablished {
                     peer_id,
                     endpoint,
                     num_established,
                     ..
-                } => info!("ConnectionEstablished: {peer_id} {endpoint:?} {num_established}"),
+                } => {
+                    info!("ConnectionEstablished: {peer_id} {endpoint:?} {num_established}");
+
+                    // Match on a connection with the rendezvous server
+                    if network_config.rendezvous_client
+                        // Should be safe to unwrap rendezvous_peer_id because the CLI parser ensures
+                        // it's provided if rendezvous_client is set to true
+                        && network_config.rendezvous_peer_id.unwrap() == peer_id
+                    {
+                        if let Some(rendezvous_client) =
+                            swarm.behaviour_mut().rendezvous_client.as_mut()
+                        {
+                            debug!(
+                            "Connected to rendezvous point, discovering nodes in '{NODE_NAMESPACE}' namespace ..."
+                        );
+
+                            rendezvous_client.discover(
+                                Some(rendezvous::Namespace::from_static(NODE_NAMESPACE)),
+                                None,
+                                None,
+                                network_config
+                                    .rendezvous_peer_id
+                                    .expect("Rendezvous server peer ID was provided"),
+                            );
+                        }
+                    }
+                }
                 SwarmEvent::Dialing(peer_id) => info!("Dialing: {peer_id}"),
                 SwarmEvent::ExpiredListenAddr {
                     listener_id,
@@ -211,6 +211,8 @@ pub async fn network_service(
                                         address.clone()
                                     };
 
+                                    debug!("Preparing to dial peer {peer_id} at {address}");
+
                                     if let Err(err) = swarm.dial(address_with_p2p) {
                                         warn!("Failed to dial: {}", err);
                                     }
@@ -243,11 +245,8 @@ pub async fn network_service(
                 },
                 SwarmEvent::Behaviour(BehaviourEvent::Identify(event)) => {
                     match event {
-                        identify::Event::Received { peer_id, info } => {
+                        identify::Event::Received { peer_id, .. } => {
                             debug!("Received identify information from peer {peer_id}");
-
-                            debug!("Adding external listen address: {}", info.observed_addr);
-                            swarm.add_external_address(info.observed_addr, AddressScore::Finite(1));
 
                             // Only attempt registration if the local node is running as a rendezvous client
                             if network_config.rendezvous_client {
@@ -255,7 +254,9 @@ pub async fn network_service(
 
                                 // We call `as_mut()` on the rendezvous client network behaviour in
                                 // order to get a mutable reference out of the `Toggle`
-                                if let Some (rendezvous_client) = swarm.behaviour_mut().rendezvous_client.as_mut() {
+                                if let Some(rendezvous_client) =
+                                    swarm.behaviour_mut().rendezvous_client.as_mut()
+                                {
                                     rendezvous_client.register(
                                         rendezvous::Namespace::from_static(NODE_NAMESPACE),
                                         network_config
@@ -284,34 +285,29 @@ pub async fn network_service(
                 }
                 SwarmEvent::Behaviour(BehaviourEvent::Autonat(event)) => {
                     match event {
-                        autonat::Event::StatusChanged { old, new } => match (old, new) {
-                            (_, autonat::NatStatus::Private) => {
-                                debug!("Private NAT detected");
-                                if let Some(addr) = external_circuit_addr.clone() {
-                                    debug!("Adding external relayed listen address: {}", addr);
-                                    swarm.add_external_address(addr, AddressScore::Finite(1));
+                        autonat::Event::StatusChanged { old, new } => {
+                            debug!("NAT status changed from {:?} to {:?}", old, new);
 
-                                    if network_config.rendezvous_client {
-                                        // Invoke registration of relayed client address with the rendezvous server
-                                        if let Some (rendezvous_client) = swarm.behaviour_mut().rendezvous_client.as_mut() {
-                                            rendezvous_client.register(
-                                                rendezvous::Namespace::from_static(NODE_NAMESPACE),
-                                                network_config
-                                                    .rendezvous_peer_id
-                                                    .expect("Rendezvous server peer ID was provided"),
-                                                None,
-                                            );
-                                        }
+                            if let Some(addr) = external_circuit_addr.clone() {
+                                debug!("Adding external relayed listen address: {}", addr);
+                                swarm.add_external_address(addr, AddressScore::Finite(1));
+
+                                if network_config.rendezvous_client {
+                                    // Invoke registration of relayed client address with the rendezvous server
+                                    if let Some(rendezvous_client) =
+                                        swarm.behaviour_mut().rendezvous_client.as_mut()
+                                    {
+                                        rendezvous_client.register(
+                                            rendezvous::Namespace::from_static(NODE_NAMESPACE),
+                                            network_config
+                                                .rendezvous_peer_id
+                                                .expect("Rendezvous server peer ID was provided"),
+                                            None,
+                                        );
                                     }
                                 }
                             }
-                            (_, autonat::NatStatus::Public(_)) => {
-                                debug!("Public NAT detected");
-                            }
-                            (old, new) => {
-                                debug!("NAT status changed from {:?} to {:?}", old, new);
-                            }
-                        },
+                        }
                         autonat::Event::InboundProbe(_) | autonat::Event::OutboundProbe(_) => (),
                     }
                 }
