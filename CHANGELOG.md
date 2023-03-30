@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Introduce `autonat` and `relay` network protocols [#314](https://github.com/p2panda/aquadoggo/pull/314) 
 - Introduce `identify` and `rendezvous` network protocols / behaviours [#304](https://github.com/p2panda/aquadoggo/pull/304)
 
 ### Added
