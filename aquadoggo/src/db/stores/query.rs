@@ -156,7 +156,11 @@ fn cmp_sql(sql_field: &str, filter_setting: &FilterSetting) -> String {
             values.join(" AND ")
         }
         FilterBy::Contains(OperationValue::String(value)) => {
-            format!("{sql_field} LIKE '%{value}%'")
+            if !filter_setting.exclusive {
+                format!("{sql_field} LIKE '%{value}%'")
+            } else {
+                format!("{sql_field} NOT LIKE '%{value}%'")
+            }
         }
         _ => panic!("Unsupported filter"),
     }
@@ -546,58 +550,69 @@ impl SqlStore {
             false
         };
 
-        // Finally convert everything to the expected types
-        let documents = {
-            let mut view_map: HashMap<String, Vec<QueryRow>> = HashMap::new();
-
-            for row in rows {
-                match view_map.get_mut(&row.document_id) {
-                    Some(field_vec) => {
-                        field_vec.push(row);
-                    }
-                    None => {
-                        view_map.insert(row.document_id.clone(), vec![row.clone()]);
-                    }
-                }
-            }
-
-            view_map
-                .into_values()
-                .map(|rows| {
-                    // Unwrap conversions as we trust that values from database have been checked
-                    let id = rows[0].document_id.parse().unwrap();
-                    let view_id = rows[0].document_view_id.parse().unwrap();
-                    let author = rows[0].owner.parse().unwrap();
-                    let deleted = rows[0].is_deleted;
-
-                    let document_field_rows: Vec<DocumentViewFieldRow> = rows
-                        .into_iter()
-                        .map(|query_row| DocumentViewFieldRow {
-                            document_id: query_row.document_id,
-                            document_view_id: query_row.document_view_id,
-                            operation_id: query_row.operation_id,
-                            name: query_row.name,
-                            list_index: query_row.list_index,
-                            field_type: query_row.field_type,
-                            value: query_row.value,
-                        })
-                        .collect();
-
-                    let fields = parse_document_view_field_rows(document_field_rows);
-
-                    StorageDocument {
-                        id,
-                        fields: Some(fields),
-                        schema_id: schema.id().clone(),
-                        view_id,
-                        author,
-                        deleted,
-                    }
-                })
-                .collect()
-        };
+        // Finally convert everything into the right format
+        let documents = Self::convert_rows(rows, schema.id());
 
         Ok(documents)
+    }
+
+    /// Merges all fields from the database into documents.
+    fn convert_rows(rows: Vec<QueryRow>, schema_id: &SchemaId) -> Vec<StorageDocument> {
+        let mut converted: Vec<StorageDocument> = Vec::new();
+
+        if rows.is_empty() {
+            converted
+        } else {
+            let finalize_document =
+                |row: &QueryRow, collected_fields: Vec<DocumentViewFieldRow>| -> StorageDocument {
+                    let fields = parse_document_view_field_rows(collected_fields);
+
+                    StorageDocument {
+                        id: row.document_id.parse().unwrap(),
+                        fields: Some(fields),
+                        schema_id: schema_id.clone(),
+                        view_id: row.document_view_id.parse().unwrap(),
+                        author: row.owner.parse().unwrap(),
+                        deleted: row.is_deleted,
+                    }
+                };
+
+            let last_row = rows.last().unwrap().clone();
+
+            let mut current = rows[0].clone();
+            let mut current_fields = Vec::new();
+
+            for row in rows {
+                // We observed a new document coming up in the next row, time to change
+                if current.document_id != row.document_id {
+                    // Finalize the current document, convert it and push it into the final
+                    // array
+                    let document = finalize_document(&current, current_fields);
+                    converted.push(document);
+
+                    // Change the pointer to the next document
+                    current = row.clone();
+                    current_fields = Vec::new();
+                }
+
+                // Collect every field of the document
+                current_fields.push(DocumentViewFieldRow {
+                    document_id: row.document_id,
+                    document_view_id: row.document_view_id,
+                    operation_id: row.operation_id,
+                    name: row.name,
+                    list_index: row.list_index,
+                    field_type: row.field_type,
+                    value: row.value,
+                });
+            }
+
+            // Do it one last time at the end for the last document
+            let document = finalize_document(&last_row, current_fields);
+            converted.push(document);
+
+            converted
+        }
     }
 }
 
