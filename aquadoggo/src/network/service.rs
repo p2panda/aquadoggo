@@ -6,7 +6,7 @@ use libp2p::multiaddr::Protocol;
 use libp2p::ping::Event;
 use libp2p::swarm::{AddressScore, SwarmEvent};
 use libp2p::{autonat, identify, mdns, rendezvous, Multiaddr};
-use log::{debug, info, warn};
+use log::{debug, info, trace, warn};
 
 use crate::bus::ServiceSender;
 use crate::context::Context;
@@ -98,7 +98,7 @@ pub async fn network_service(
                     }
                     mdns::Event::Expired(list) => {
                         for (peer, _multiaddr) in list {
-                            debug!("mDNS peer has expired: {peer}");
+                            trace!("mDNS peer has expired: {peer}");
                         }
                     }
                 },
@@ -111,7 +111,7 @@ pub async fn network_service(
                     num_established,
                     cause,
                 } => {
-                    debug!("ConnectionClosed: {peer_id} {endpoint:?} {num_established} {cause:?}")
+                    info!("ConnectionClosed: {peer_id} {endpoint:?} {num_established} {cause:?}")
                 }
                 SwarmEvent::ConnectionEstablished {
                     peer_id,
@@ -130,7 +130,7 @@ pub async fn network_service(
                         if let Some(rendezvous_client) =
                             swarm.behaviour_mut().rendezvous_client.as_mut()
                         {
-                            debug!(
+                            trace!(
                             "Connected to rendezvous point, discovering nodes in '{NODE_NAMESPACE}' namespace ..."
                         );
 
@@ -149,7 +149,7 @@ pub async fn network_service(
                 SwarmEvent::ExpiredListenAddr {
                     listener_id,
                     address,
-                } => debug!("ExpiredListenAddr: {listener_id:?} {address}"),
+                } => trace!("ExpiredListenAddr: {listener_id:?} {address}"),
 
                 SwarmEvent::IncomingConnection {
                     local_addr,
@@ -164,7 +164,7 @@ pub async fn network_service(
                     listener_id,
                     addresses,
                     reason,
-                } => debug!("ListenerClosed: {listener_id:?} {addresses:?} {reason:?}"),
+                } => trace!("ListenerClosed: {listener_id:?} {addresses:?} {reason:?}"),
                 SwarmEvent::ListenerError { listener_id, error } => {
                     warn!("ListenerError: {listener_id:?} {error:?}")
                 }
@@ -183,14 +183,14 @@ pub async fn network_service(
                         ttl,
                         rendezvous_node,
                     } => {
-                        debug!("Registered for '{namespace}' namespace at rendezvous point {rendezvous_node} for the next {ttl} seconds")
+                        trace!("Registered for '{namespace}' namespace at rendezvous point {rendezvous_node} for the next {ttl} seconds")
                     }
                     rendezvous::client::Event::Discovered {
                         registrations,
                         cookie: new_cookie,
                         ..
                     } => {
-                        debug!("Rendezvous point responded with peer registration data");
+                        trace!("Rendezvous point responded with peer registration data");
 
                         cookie.replace(new_cookie);
 
@@ -223,11 +223,11 @@ pub async fn network_service(
                     rendezvous::client::Event::RegisterFailed(error) => {
                         warn!("Failed to register with rendezvous point: {error}");
                     }
-                    other => debug!("Unhandled rendezvous client event: {other:?}"),
+                    other => trace!("Unhandled rendezvous client event: {other:?}"),
                 },
                 SwarmEvent::Behaviour(BehaviourEvent::RendezvousServer(event)) => match event {
                     rendezvous::server::Event::PeerRegistered { peer, registration } => {
-                        debug!(
+                        trace!(
                             "Peer {peer} registered for namespace '{}'",
                             registration.namespace
                         );
@@ -236,17 +236,17 @@ pub async fn network_service(
                         enquirer,
                         registrations,
                     } => {
-                        debug!(
+                        trace!(
                             "Served peer {enquirer} with {} registrations",
                             registrations.len()
                         );
                     }
-                    other => debug!("Unhandled rendezvous server event: {other:?}"),
+                    other => trace!("Unhandled rendezvous server event: {other:?}"),
                 },
                 SwarmEvent::Behaviour(BehaviourEvent::Identify(event)) => {
                     match event {
                         identify::Event::Received { peer_id, .. } => {
-                            debug!("Received identify information from peer {peer_id}");
+                            trace!("Received identify information from peer {peer_id}");
 
                             // Only attempt registration if the local node is running as a rendezvous client
                             if network_config.rendezvous_client {
@@ -268,7 +268,7 @@ pub async fn network_service(
                             }
                         }
                         identify::Event::Sent { peer_id } | identify::Event::Pushed { peer_id } => {
-                            debug!(
+                            trace!(
                                 "Sent identification information of the local node to peer {peer_id}"
                             )
                         }
@@ -286,10 +286,10 @@ pub async fn network_service(
                 SwarmEvent::Behaviour(BehaviourEvent::Autonat(event)) => {
                     match event {
                         autonat::Event::StatusChanged { old, new } => {
-                            debug!("NAT status changed from {:?} to {:?}", old, new);
+                            trace!("NAT status changed from {:?} to {:?}", old, new);
 
                             if let Some(addr) = external_circuit_addr.clone() {
-                                debug!("Adding external relayed listen address: {}", addr);
+                                trace!("Adding external relayed listen address: {}", addr);
                                 swarm.add_external_address(addr, AddressScore::Finite(1));
 
                                 if network_config.rendezvous_client {
