@@ -373,7 +373,7 @@ fn order_sql(order: &Order, schema: &Schema) -> String {
     }
 }
 
-fn limit_sql<C>(pagination: &Pagination<C>, fields: &Vec<String>) -> String
+fn limit_sql<C>(pagination: &Pagination<C>, fields: &Vec<String>) -> (u64, String)
 where
     C: Cursor,
 {
@@ -382,7 +382,7 @@ where
     let page_size = pagination.first.get() * std::cmp::max(1, fields.len() as u64);
 
     // ... and add + 1 for the "has next page" flag
-    format!("LIMIT {page_size} + 1")
+    (page_size, format!("LIMIT {page_size} + 1"))
 }
 
 fn application_select_sql(fields: &Vec<String>) -> String {
@@ -426,7 +426,7 @@ impl SqlStore {
 
         let group = group_sql(&select_fields);
         let order = order_sql(&args.order, schema);
-        let limit = limit_sql(&args.pagination, &select_fields);
+        let (page_size, limit) = limit_sql(&args.pagination, &select_fields);
 
         let sea_quel = format!(
             r#"
@@ -531,11 +531,22 @@ impl SqlStore {
 
         println!("{sea_quel}");
 
-        let rows: Vec<QueryRow> = query_as::<_, QueryRow>(&sea_quel)
+        let mut rows: Vec<QueryRow> = query_as::<_, QueryRow>(&sea_quel)
             .fetch_all(&self.pool)
             .await
             .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
 
+        // We always query one more row than needed to find out if there's more data. This
+        // information aids the user during pagination
+        let has_next_page = if rows.len() as u64 > page_size {
+            // Remove that last row from final results if it exists
+            rows.pop();
+            true
+        } else {
+            false
+        };
+
+        // Finally convert everything to the expected types
         let documents = {
             let mut view_map: HashMap<String, Vec<QueryRow>> = HashMap::new();
 
