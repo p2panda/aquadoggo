@@ -6,9 +6,9 @@ use std::str::FromStr;
 use dynamic_graphql::{Error, Result, Scalar, ScalarValue, Value};
 use p2panda_rs::document::DocumentId;
 
-/// Id of a p2panda document.
+/// The id of a p2panda document.
 #[derive(Scalar, Clone, Debug, Eq, PartialEq)]
-#[graphql(name = "DocumentId")]
+#[graphql(name = "DocumentId", validator(validate))]
 pub struct DocumentIdScalar(DocumentId);
 
 impl ScalarValue for DocumentIdScalar {
@@ -48,4 +48,10 @@ impl Display for DocumentIdScalar {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0.as_str())
     }
+}
+
+/// Validation method used internally in `async-graphql` to check scalar values passed into the
+/// public api.
+fn validate(value: &Value) -> bool {
+    DocumentIdScalar::from_value(value.to_owned()).is_ok()
 }

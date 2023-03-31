@@ -26,7 +26,7 @@ deadqueue = { version = "^0.2.3", default-features = false, features = [
     "unlimited",
 ] }
 directories = "^4.0.1"
-dynamic-graphql = "^0.7.1"
+dynamic-graphql = "^0.7.3"
 envy = "^0.4.2"
 futures = "^0.3.23"
 hex = "^0.4.3"
