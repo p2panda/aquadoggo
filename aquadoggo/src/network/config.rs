@@ -74,6 +74,11 @@ pub struct NetworkConfiguration {
     /// QUIC transport port.
     pub quic_port: u16,
 
+    /// Relay client behaviour enabled.
+    ///
+    /// Engage in relayed connections to remote peers.
+    pub relay_client: bool,
+
     /// Relay server behaviour enabled.
     ///
     /// Serve as a relay point for peer connections.
@@ -122,6 +127,7 @@ impl Default for NetworkConfiguration {
             per_connection_event_buffer_size: 8,
             ping: false,
             quic_port: 2022,
+            relay_client: false,
             relay_server: false,
             relay_address: None,
             remote_peers: Vec::new(),
