@@ -49,13 +49,11 @@ pub async fn network_service(
     let mut external_circuit_addr = None;
 
     // Construct circuit relay addresses and listen on relayed address
-    if swarm.behaviour().relay_client.is_enabled() {
-        if let Some(addr) = &network_config.relay_address {
-            let circuit_addr = addr
+    if let Some(relay_addr) = &network_config.relay_address {
+        if let Some(rendezvous_peer_id) = network_config.rendezvous_peer_id {
+            let circuit_addr = relay_addr
                 .clone()
-                .with(Protocol::P2p(
-                    network_config.rendezvous_peer_id.unwrap().into(),
-                ))
+                .with(Protocol::P2p(rendezvous_peer_id.into()))
                 .with(Protocol::P2pCircuit);
 
             // Dialable circuit relay address for local node
@@ -66,6 +64,8 @@ pub async fn network_service(
             );
 
             swarm.listen_on(circuit_addr)?;
+        } else {
+            warn!("Unable to construct relay circuit address because rendezvous server peer ID was not provided");
         }
     }
 
@@ -122,26 +122,22 @@ pub async fn network_service(
                     info!("ConnectionEstablished: {peer_id} {endpoint:?} {num_established}");
 
                     // Match on a connection with the rendezvous server
-                    if network_config.rendezvous_client
-                        // Should be safe to unwrap rendezvous_peer_id because the CLI parser ensures
-                        // it's provided if rendezvous_client is set to true
-                        && network_config.rendezvous_peer_id.unwrap() == peer_id
-                    {
-                        if let Some(rendezvous_client) =
-                            swarm.behaviour_mut().rendezvous_client.as_mut()
-                        {
-                            trace!(
+                    if let Some(rendezvous_peer_id) = network_config.rendezvous_peer_id {
+                        if peer_id == rendezvous_peer_id {
+                            if let Some(rendezvous_client) =
+                                swarm.behaviour_mut().rendezvous_client.as_mut()
+                            {
+                                trace!(
                             "Connected to rendezvous point, discovering nodes in '{NODE_NAMESPACE}' namespace ..."
                         );
 
-                            rendezvous_client.discover(
-                                Some(rendezvous::Namespace::from_static(NODE_NAMESPACE)),
-                                None,
-                                None,
-                                network_config
-                                    .rendezvous_peer_id
-                                    .expect("Rendezvous server peer ID was provided"),
-                            );
+                                rendezvous_client.discover(
+                                    Some(rendezvous::Namespace::from_static(NODE_NAMESPACE)),
+                                    None,
+                                    None,
+                                    rendezvous_peer_id,
+                                );
+                            }
                         }
                     }
                 }
@@ -249,7 +245,7 @@ pub async fn network_service(
                             trace!("Received identify information from peer {peer_id}");
 
                             // Only attempt registration if the local node is running as a rendezvous client
-                            if network_config.rendezvous_client {
+                            if let Some(rendezvous_peer_id) = network_config.rendezvous_peer_id {
                                 // Register with the rendezvous server.
 
                                 // We call `as_mut()` on the rendezvous client network behaviour in
@@ -259,9 +255,7 @@ pub async fn network_service(
                                 {
                                     rendezvous_client.register(
                                         rendezvous::Namespace::from_static(NODE_NAMESPACE),
-                                        network_config
-                                            .rendezvous_peer_id
-                                            .expect("Rendezvous server peer ID was provided"),
+                                        rendezvous_peer_id,
                                         None,
                                     );
                                 }
@@ -292,16 +286,15 @@ pub async fn network_service(
                                 trace!("Adding external relayed listen address: {}", addr);
                                 swarm.add_external_address(addr, AddressScore::Finite(1));
 
-                                if network_config.rendezvous_client {
+                                if let Some(rendezvous_peer_id) = network_config.rendezvous_peer_id
+                                {
                                     // Invoke registration of relayed client address with the rendezvous server
                                     if let Some(rendezvous_client) =
                                         swarm.behaviour_mut().rendezvous_client.as_mut()
                                     {
                                         rendezvous_client.register(
                                             rendezvous::Namespace::from_static(NODE_NAMESPACE),
-                                            network_config
-                                                .rendezvous_peer_id
-                                                .expect("Rendezvous server peer ID was provided"),
+                                            rendezvous_peer_id,
                                             None,
                                         );
                                     }
