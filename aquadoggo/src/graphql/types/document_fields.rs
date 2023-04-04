@@ -5,33 +5,60 @@ use async_graphql::Error;
 use dynamic_graphql::FieldValue;
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::operation::OperationValue;
-use p2panda_rs::schema::Schema;
+use p2panda_rs::schema::{FieldType, Schema};
+use p2panda_rs::storage_provider::traits::DocumentStore;
 
+use crate::db::query::{Field as FilterField, Filter, MetaField, Order, Pagination};
 use crate::db::SqlStore;
-use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
+use crate::graphql::scalars::CursorScalar;
 use crate::graphql::utils::{
-    downcast_document_id_arguments, fields_name, get_document_from_params, gql_scalar, graphql_type,
+    downcast_document, fields_name, gql_scalar, graphql_type, parse_collection_arguments,
+    with_collection_arguments,
 };
 
-/// GraphQL object which represents the fields of a document document type as described by it's
-/// p2panda schema. A type is added to the root GraphQL schema for every document, as these types
-/// are not known at compile time we make use of the `async-graphql ` `dynamic` module.
+use crate::graphql::types::{DocumentValue, PaginationData};
+use crate::schema::SchemaProvider;
+
+/// A constructor for dynamically building objects describing the application fields of a p2panda
+/// schema. Each generated object has a type name with the formatting `<schema_id>Fields`.
+///
+/// A type should be added to the root GraphQL schema for every schema supported on a node, as
+/// these types are not known at compile time we make use of the `async-graphql` `dynamic` module.
 pub struct DocumentFields;
 
 impl DocumentFields {
-    /// Build the fields of a document from the related p2panda schema. Constructs an object which
+    /// Build the fields object from the related p2panda schema. Constructs an object which
     /// can then be added to the root GraphQL schema.
     pub fn build(schema: &Schema) -> Object {
-        // Construct the document fields object which will be named `<schema_id>Field`.
+        // Construct the document fields object which will be named `<schema_id>Fields`.
         let schema_field_name = fields_name(schema.id());
         let mut document_schema_fields = Object::new(&schema_field_name);
 
         // For every field in the schema we create a type with a resolver.
         for (name, field_type) in schema.fields().iter() {
-            document_schema_fields = document_schema_fields.field(Field::new(
-                name,
-                graphql_type(field_type),
-                move |ctx| FieldFuture::new(async move { Self::resolve(ctx).await }),
+            // If this is a relation list type we add an argument for filtering items in the list.
+            let field = match field_type {
+                p2panda_rs::schema::FieldType::RelationList(schema_id)
+                | p2panda_rs::schema::FieldType::PinnedRelationList(schema_id) => {
+                    with_collection_arguments(
+                        Field::new(name, graphql_type(field_type), move |ctx| {
+                            FieldFuture::new(async move { Self::resolve(ctx).await })
+                        }),
+                        schema_id,
+                    )
+                }
+                _ => Field::new(name, graphql_type(field_type), move |ctx| {
+                    FieldFuture::new(async move { Self::resolve(ctx).await })
+                })
+                .description(format!(
+                    "The `{}` field of a {} document.",
+                    name,
+                    schema.id().name()
+                )),
+            };
+            document_schema_fields = document_schema_fields.field(field).description(format!(
+                "The application fields of a `{}` document.",
+                schema.id().name()
             ));
         }
 
@@ -45,57 +72,236 @@ impl DocumentFields {
     /// Requires a `ResolverContext` to be passed into the method.
     async fn resolve(ctx: ResolverContext<'_>) -> Result<Option<FieldValue<'_>>, Error> {
         let store = ctx.data_unchecked::<SqlStore>();
+        let schema_provider = ctx.data_unchecked::<SchemaProvider>();
+
         let name = ctx.field().name();
 
-        // Parse the bubble up message.
-        let (document_id, document_view_id) = downcast_document_id_arguments(&ctx);
+        // Parse the bubble up value.
+        let document = downcast_document(&ctx);
 
-        // Get the whole document from the store.
-        let document =
-            match get_document_from_params(store, &document_id, &document_view_id).await? {
-                Some(document) => document,
-                None => return Ok(FieldValue::NONE),
-            };
+        let document = match document {
+            DocumentValue::Single(document) => document,
+            DocumentValue::Paginated(_, _, document) => document,
+        };
+
+        let schema = schema_provider
+            .get(document.schema_id())
+            .await
+            .expect("Schema should be in store");
 
         // Get the field this query is concerned with.
         match document.get(name).unwrap() {
             // Relation fields are expected to resolve to the related document so we pass
             // along the document id which will be processed through it's own resolver.
-            OperationValue::Relation(rel) => Ok(Some(FieldValue::owned_any((
-                Some(DocumentIdScalar::from(rel.document_id())),
-                None::<DocumentViewIdScalar>,
-            )))),
+            OperationValue::Relation(rel) => {
+                // Get the whole document from the store.
+                let document = match store.get_document(rel.document_id()).await? {
+                    Some(document) => document,
+                    None => return Ok(FieldValue::NONE),
+                };
+
+                let document = DocumentValue::Single(document);
+                Ok(Some(FieldValue::owned_any(document)))
+            }
             // Relation lists are handled by collecting and returning a list of all document
             // id's in the relation list. Each of these in turn are processed and queries
             // forwarded up the tree via their own respective resolvers.
             OperationValue::RelationList(rel) => {
+                // Get the schema of documents in this relation list.
+                let relation_field_schema = schema
+                    .fields()
+                    .get(name)
+                    .expect("Document field should exist on schema");
+
+                // Get the schema itself
+                let schema = match relation_field_schema {
+                    FieldType::RelationList(schema_id) => {
+                        // We can unwrap here as the schema should exist in the store already.
+                        schema_provider.get(schema_id).await.unwrap()
+                    }
+                    _ => panic!(), // Should never reach here.
+                };
+
+                // Default pagination, filtering and ordering values.
+                let mut pagination = Pagination::<CursorScalar>::default();
+                let mut order = Order::default();
+                let mut filter = Filter::new();
+
+                // Add all items in the list to the meta_filter `in` filter.
+                let list: Vec<OperationValue> =
+                    rel.iter().map(|item| item.to_owned().into()).collect();
+                filter.add_in(&FilterField::Meta(MetaField::DocumentId), &list);
+
+                // Parse arguments.
+                parse_collection_arguments(
+                    &ctx,
+                    &schema,
+                    &mut pagination,
+                    &mut order,
+                    &mut filter,
+                )?;
+
+                // TODO: This needs be be replaced with a query to the db which retrieves a
+                // paginated, ordered, filtered collection.
                 let mut fields = vec![];
                 for document_id in rel.iter() {
-                    fields.push(FieldValue::owned_any((
-                        Some(DocumentIdScalar::from(document_id)),
-                        None::<DocumentViewIdScalar>,
-                    )));
+                    // Get the whole document from the store.
+                    let document = match store.get_document(document_id).await? {
+                        Some(document) => document,
+                        None => continue,
+                    };
+
+                    let document = DocumentValue::Paginated(
+                        "CURSOR".to_string(),
+                        PaginationData::default(),
+                        document,
+                    );
+
+                    fields.push(FieldValue::owned_any(document));
                 }
                 Ok(Some(FieldValue::list(fields)))
             }
             // Pinned relation behaves the same as relation but passes along a document view id.
-            OperationValue::PinnedRelation(rel) => Ok(Some(FieldValue::owned_any((
-                None::<DocumentIdScalar>,
-                Some(DocumentViewIdScalar::from(rel.view_id())),
-            )))),
+            OperationValue::PinnedRelation(rel) => {
+                // Get the whole document from the store.
+                let document = match store.get_document_by_view_id(rel.view_id()).await? {
+                    Some(document) => document,
+                    None => return Ok(FieldValue::NONE),
+                };
+
+                let document = DocumentValue::Single(document);
+                Ok(Some(FieldValue::owned_any(document)))
+            }
             // Pinned relation lists behave the same as relation lists but pass along view ids.
             OperationValue::PinnedRelationList(rel) => {
+                // Get the schema of documents in this relation list.
+                let relation_field_schema = schema
+                    .fields()
+                    .get(name)
+                    .expect("Document field should exist on schema");
+
+                // Get the schema itself
+                let schema = match relation_field_schema {
+                    FieldType::PinnedRelationList(schema_id) => {
+                        // We can unwrap here as the schema should exist in the store already.
+                        schema_provider.get(schema_id).await.unwrap()
+                    }
+                    _ => panic!(), // Should never reach here.
+                };
+
+                // Default pagination, filtering and ordering values.
+                let mut pagination = Pagination::<CursorScalar>::default();
+                let mut order = Order::default();
+                let mut filter = Filter::new();
+
+                // Add all items in the list to the filter.
+                let list: Vec<OperationValue> =
+                    rel.iter().map(|item| item.to_owned().into()).collect();
+                filter.add_in(&FilterField::Meta(MetaField::DocumentId), &list);
+
+                // Parse arguments.
+                parse_collection_arguments(
+                    &ctx,
+                    &schema,
+                    &mut pagination,
+                    &mut order,
+                    &mut filter,
+                )?;
+
+                // TODO: This needs be be replaced with a query to the db which retrieves a
+                // paginated, ordered, filtered collection.
                 let mut fields = vec![];
                 for document_view_id in rel.iter() {
-                    fields.push(FieldValue::owned_any((
-                        None::<DocumentIdScalar>,
-                        Some(DocumentViewIdScalar::from(document_view_id)),
-                    )));
+                    // Get the whole document from the store.
+                    let document = match store.get_document_by_view_id(document_view_id).await? {
+                        Some(document) => document,
+                        None => continue,
+                    };
+
+                    let document = DocumentValue::Paginated(
+                        "CURSOR".to_string(),
+                        PaginationData::default(),
+                        document,
+                    );
+
+                    fields.push(FieldValue::owned_any(document));
                 }
                 Ok(Some(FieldValue::list(fields)))
             }
             // All other fields are simply resolved to their scalar value.
             value => Ok(Some(FieldValue::value(gql_scalar(value)))),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use async_graphql::{value, Response, Value};
+    use rstest::rstest;
+    use serde_json::json;
+
+    use crate::test_utils::{graphql_test_client, test_runner, TestNode};
+
+    #[rstest]
+    // TODO: We don't actually perform any queries yet, these tests will need to be updated
+    // when we do.
+    #[case(
+        r#"(
+            first: 10, 
+            after: "1_00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331", 
+            orderBy: OWNER, 
+            orderDirection: ASC, 
+            filter: { 
+                name : { 
+                    eq: "hello" 
+                } 
+            }, 
+        )"#.to_string(), 
+        value!({
+            "collection": value!([]),
+        }),
+        vec![]
+    )]
+    fn collection_query(
+        #[case] query_args: String,
+        #[case] expected_data: Value,
+        #[case] _expected_errors: Vec<String>,
+    ) {
+        // Test collection query parameter variations.
+        test_runner(move |node: TestNode| async move {
+            // Configure and send test query.
+            let client = graphql_test_client(&node).await;
+            let query = format!(
+                r#"{{
+                    collection: all_schema_definition_v1 {{
+                        hasNextPage
+                        totalCount
+                        document {{ 
+                            cursor
+                            fields {{
+                                fields{query_args} {{
+                                    document {{
+                                        cursor
+                                    }}    
+                                }}
+                            }}
+                        }}
+                    }},
+                }}"#,
+                query_args = query_args
+            );
+
+            let response = client
+                .post("/graphql")
+                .json(&json!({
+                    "query": query,
+                }))
+                .send()
+                .await;
+
+            let response: Response = response.json().await;
+
+            assert_eq!(response.data, expected_data, "{:#?}", response.errors);
+        });
     }
 }

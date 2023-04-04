@@ -11,7 +11,7 @@ use crate::graphql::constants;
 use crate::graphql::scalars::{DocumentViewIdScalar, PublicKeyScalar};
 use crate::graphql::types::NextArguments;
 
-/// Add "nextArgs" to the query object.
+/// Add "nextArgs" query to the root query object.
 pub fn build_next_args_query(query: Object) -> Object {
     query.field(
         Field::new(
@@ -19,8 +19,8 @@ pub fn build_next_args_query(query: Object) -> Object {
             TypeRef::named(constants::NEXT_ARGS),
             |ctx| {
                 FieldFuture::new(async move {
-                    // Get and validate arguments.
-                    let (public_key, document_view_id) = validate_args(&ctx)?;
+                    // Parse arguments.
+                    let (public_key, document_view_id) = parse_arguments(&ctx)?;
                     let store = ctx.data_unchecked::<SqlStore>();
 
                     // Calculate next entry's arguments.
@@ -31,6 +31,7 @@ pub fn build_next_args_query(query: Object) -> Object {
                     )
                     .await?;
 
+                    // Construct and return the next args.
                     let next_args = NextArguments {
                         log_id: log_id.into(),
                         seq_num: seq_num.into(),
@@ -45,17 +46,17 @@ pub fn build_next_args_query(query: Object) -> Object {
         .argument(InputValue::new(
             constants::PUBLIC_KEY_ARG,
             TypeRef::named_nn(constants::PUBLIC_KEY),
-        ))
+        ).description("The public key of the author next args are being requested for."))
         .argument(InputValue::new(
             constants::DOCUMENT_VIEW_ID_ARG,
             TypeRef::named(constants::DOCUMENT_VIEW_ID),
-        ))
-        .description("Return required arguments for publishing the next entry."),
+        ).description("Optional field for specifying an existing document next args are being requested for."))
+        .description("Return required arguments for publishing a entry to a node."),
     )
 }
 
-/// Validate and return the arguments passed to next_args.
-fn validate_args(
+/// Parse and validate the arguments passed to next_args.
+fn parse_arguments(
     ctx: &ResolverContext,
 ) -> Result<(PublicKeyScalar, Option<DocumentViewIdScalar>), Error> {
     let mut args = ctx.field().arguments()?.into_iter().map(|(_, value)| value);
@@ -217,7 +218,7 @@ mod tests {
             let response: Response = response.json().await;
             assert_eq!(
                 response.errors[0].message,
-                "invalid hex encoding in public key string"
+                "Invalid value for argument \"publicKey\", expected type \"PublicKey\""
             )
         })
     }

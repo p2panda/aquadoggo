@@ -17,10 +17,15 @@ use crate::graphql::queries::{
     build_all_documents_query, build_document_query, build_next_args_query,
 };
 use crate::graphql::scalars::{
-    DocumentIdScalar, DocumentViewIdScalar, EncodedEntryScalar, EncodedOperationScalar,
-    EntryHashScalar, LogIdScalar, PublicKeyScalar, SeqNumScalar,
+    CursorScalar, DocumentIdScalar, DocumentViewIdScalar, EncodedEntryScalar,
+    EncodedOperationScalar, EntryHashScalar, LogIdScalar, PublicKeyScalar, SeqNumScalar,
 };
-use crate::graphql::types::{Document, DocumentFields, DocumentMeta, NextArguments};
+use crate::graphql::types::{
+    BooleanFilter, DocumentFields, DocumentMeta, DocumentSchema, FilterInput, FloatFilter,
+    IntegerFilter, MetaFilterInput, NextArguments, OrderBy, OrderDirection,
+    PaginatedDocumentSchema, PaginatedResponse, PinnedRelationFilter, PinnedRelationListFilter,
+    RelationFilter, RelationListFilter, StringFilter,
+};
 use crate::schema::SchemaProvider;
 
 /// Returns GraphQL API schema for p2panda node.
@@ -37,9 +42,24 @@ pub async fn build_root_schema(
 
     // Using dynamic-graphql we create a registry and add types.
     let registry = Registry::new()
-        .register::<NextArguments>()
+        // Register mutations
         .register::<MutationRoot>()
         .register::<Publish>()
+        // Register return types
+        .register::<NextArguments>()
+        // Register input types
+        .register::<StringFilter>()
+        .register::<IntegerFilter>()
+        .register::<BooleanFilter>()
+        .register::<FloatFilter>()
+        .register::<RelationFilter>()
+        .register::<RelationListFilter>()
+        .register::<PinnedRelationFilter>()
+        .register::<PinnedRelationListFilter>()
+        .register::<OrderDirection>()
+        .register::<MetaFilterInput>()
+        // Register scalar types
+        .register::<CursorScalar>()
         .register::<DocumentIdScalar>()
         .register::<DocumentMeta>()
         .register::<DocumentViewIdScalar>()
@@ -63,16 +83,33 @@ pub async fn build_root_schema(
     // Loop through all schema retrieved from the schema store, create types and a root query for the
     // documents they describe.
     for schema in all_schema {
-        // Construct the document fields object which will be named `<schema_id>Field`.
+        // Construct the fields type object which will be named `<schema_id>Field`.
         let document_schema_fields = DocumentFields::build(&schema);
 
-        // Construct the document schema which has "fields" and "meta" fields.
-        let document_schema = Document::build(&schema);
+        // Construct the schema type object which contains "fields" and "meta" fields.
+        let document_schema = DocumentSchema::build(&schema);
 
-        // Register a schema and schema fields type for every schema.
+        // Construct the paginated response wrapper for this document schema type.
+        let paginated_response_schema = PaginatedResponse::build(&schema);
+
+        // Construct the schema type object which contains "fields" and "meta" fields
+        // as well as cursor pagination fields.
+        let paginated_document_schema = PaginatedDocumentSchema::build(&schema);
+
+        // Construct the filter input type object.
+        let filter_input = FilterInput::build(&schema);
+
+        // Construct the filter input type object.
+        let ordering_input = OrderBy::build(&schema);
+
+        // Register a schema, schema fields and filter type for every schema.
         schema_builder = schema_builder
             .register(document_schema_fields)
-            .register(document_schema);
+            .register(document_schema)
+            .register(paginated_response_schema)
+            .register(paginated_document_schema)
+            .register(ordering_input)
+            .register(filter_input);
 
         // Add a query object for each schema. It offers an interface to retrieve a single
         // document of this schema by it's document id or view id. Its resolver parses and

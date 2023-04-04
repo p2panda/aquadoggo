@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Introduce libp2p networking service and configuration [#282](https://github.com/p2panda/aquadoggo/pull/282)
+- Create and validate abstract queries [#302](https://github.com/p2panda/aquadoggo/pull/302)
+- Support paginated, ordered and filtered collection queries [#308](https://github.com/p2panda/aquadoggo/pull/308)
+- Add custom validation to GraphQL scalar types [#318](https://github.com/p2panda/aquadoggo/pull/318)
 
 ### Changed
 
