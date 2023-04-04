@@ -4,8 +4,6 @@ Node server with GraphQL API for the p2panda network.
 
 ## Usage
 
-When running the node as a rendezvous client (`--rendezvous-client true`) both the rendezvous address and peer ID must be provided.
-
 ```
 Options:
   -d, --data-dir <DATA_DIR>
@@ -30,40 +28,21 @@ Options:
 
           [possible values: true, false]
 
-  -C, --rendezvous-client <RENDEZVOUS_CLIENT>
-          Enable rendezvous client to facilitate peer discovery via a rendezvous server, false by default
-
-          [possible values: true, false]
-
-  -S, --rendezvous-server <RENDEZVOUS_SERVER>
+      --enable-rendezvous-server
           Enable rendezvous server to facilitate peer discovery for remote peers, false by default
 
-          [possible values: true, false]
-
       --rendezvous-address <RENDEZVOUS_ADDRESS>
-          The IP address of a rendezvous server in the form of a multiaddress.
+          The IP address and peer ID of a rendezvous server in the form of a multiaddress.
 
-          eg. --rendezvous-address "/ip4/127.0.0.1/udp/12345/quic-v1"
+          eg. --rendezvous-address "/ip4/127.0.0.1/udp/12345/quic-v1/p2p/12D3KooWD3eckifWpRn9wQpMG9R9hX3sD158z7EqHWmweQAJU5SA"
 
-      --rendezvous-peer-id <RENDEZVOUS_PEER_ID>
-          The peer ID of a rendezvous server in the form of an Ed25519 key encoded as a raw base58btc multihash.
-
-          eg. --rendezvous-peer-id "12D3KooWD3eckifWpRn9wQpMG9R9hX3sD158z7EqHWmweQAJU5SA"
-
-      --relay-client <RELAY_CLIENT>
-          Enable relay client to facilitate peer connectivity via a relay server, false by default
-
-          [possible values: true, false]
-
-      --relay-server <RELAY_SERVER>
+      --enable-relay-server
           Enable relay server to facilitate peer connectivity, false by default
 
-          [possible values: true, false]
-
       --relay-address <RELAY_ADDRESS>
-          The IP address of a relay server in the form of a multiaddress.
+          The IP address and peer ID of a relay server in the form of a multiaddress.
 
-          eg. --relay-address "/ip4/127.0.0.1/udp/12345/quic-v1"
+          eg. --relay-address "/ip4/127.0.0.1/udp/12345/quic-v1/p2p/12D3KooWD3eckifWpRn9wQpMG9R9hX3sD158z7EqHWmweQAJU5SA"
 
   -h, --help
           Print help (see a summary with '-h')

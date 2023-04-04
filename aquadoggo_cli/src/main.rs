@@ -37,38 +37,23 @@ struct Cli {
     #[arg(long)]
     ping: Option<bool>,
 
-    /// Enable rendezvous client to facilitate peer discovery via a rendezvous server, false by default.
-    #[arg(short = 'C', long)]
-    rendezvous_client: Option<bool>,
-
     /// Enable rendezvous server to facilitate peer discovery for remote peers, false by default.
-    #[arg(short = 'S', long)]
-    rendezvous_server: Option<bool>,
+    #[arg(long)]
+    enable_rendezvous_server: bool,
 
-    /// The IP address of a rendezvous server in the form of a multiaddress.
+    /// The IP address and peer ID of a rendezvous server in the form of a multiaddress.
     ///
-    /// eg. --rendezvous-address "/ip4/127.0.0.1/udp/12345/quic-v1"
+    /// eg. --rendezvous-address "/ip4/127.0.0.1/udp/12345/quic-v1/p2p/12D3KooWD3eckifWpRn9wQpMG9R9hX3sD158z7EqHWmweQAJU5SA"
     #[arg(long)]
     rendezvous_address: Option<Multiaddr>,
 
-    /// The peer ID of a rendezvous server in the form of an Ed25519 key encoded as a raw
-    /// base58btc multihash.
-    ///
-    /// eg. --rendezvous-peer-id "12D3KooWD3eckifWpRn9wQpMG9R9hX3sD158z7EqHWmweQAJU5SA"
-    #[arg(long)]
-    rendezvous_peer_id: Option<PeerId>,
-
-    /// Enable relay client to facilitate peer connectivity via a relay server, false by default.
-    #[arg(long)]
-    relay_client: Option<bool>,
-
     /// Enable relay server to facilitate peer connectivity, false by default.
     #[arg(long)]
-    relay_server: Option<bool>,
+    enable_relay_server: bool,
 
-    /// The IP address of a relay server in the form of a multiaddress.
+    /// The IP address and peer ID of a relay server in the form of a multiaddress.
     ///
-    /// eg. --relay-address "/ip4/127.0.0.1/udp/12345/quic-v1"
+    /// eg. --relay-address "/ip4/127.0.0.1/udp/12345/quic-v1/p2p/12D3KooWD3eckifWpRn9wQpMG9R9hX3sD158z7EqHWmweQAJU5SA"
     #[arg(long)]
     relay_address: Option<Multiaddr>,
 
@@ -79,18 +64,31 @@ struct Cli {
 impl Cli {
     // Run custom validators on parsed CLI input
     fn validate(self) -> Self {
-        // Ensure rendezvous server address and peer ID are both provided if
-        // rendezvous client mode has been set to `true`. Both values are required
-        // to dial the rendezvous server.
-        if let Some(true) = self.rendezvous_client {
-            if self.rendezvous_address.is_none() || self.rendezvous_peer_id.is_none() {
+        // Ensure rendezvous server address includes a peer ID.
+        if let Some(addr) = &self.rendezvous_address {
+            // Check if the given `Multiaddr` contains a `PeerId`.
+            if PeerId::try_from_multiaddr(addr).is_none() {
                 // Print a help message about the missing value(s) and exit
                 Cli::command()
-                .error(
-                    ClapErrorKind::MissingRequiredArgument,
-                    "'--rendezvous-address' and '--rendezvous-peer-id' must both be provided if '--rendezvous-client true'",
-                )
-                .exit()
+                    .error(
+                        ClapErrorKind::ValueValidation,
+                        "'--rendezvous-address' must include the peer ID of the server",
+                    )
+                    .exit()
+            }
+        }
+
+        // Ensure relay server address includes a peer ID.
+        if let Some(addr) = &self.relay_address {
+            // Check if the given `Multiaddr` contains a `PeerId`.
+            if PeerId::try_from_multiaddr(addr).is_none() {
+                // Print a help message about the missing value(s) and exit
+                Cli::command()
+                    .error(
+                        ClapErrorKind::ValueValidation,
+                        "'--relay-address' must include the peer ID of the server",
+                    )
+                    .exit()
             }
         }
 
@@ -103,6 +101,19 @@ impl TryFrom<Cli> for Configuration {
 
     fn try_from(cli: Cli) -> Result<Self, Self::Error> {
         let mut config = Configuration::new(cli.data_dir)?;
+
+        let relay_peer_id = if let Some(addr) = &cli.relay_address {
+            PeerId::try_from_multiaddr(addr)
+        } else {
+            None
+        };
+
+        let rendezvous_peer_id = if let Some(addr) = &cli.rendezvous_address {
+            PeerId::try_from_multiaddr(addr)
+        } else {
+            None
+        };
+
         config.http_port = cli.http_port.unwrap_or(2020);
 
         config.network = NetworkConfiguration {
@@ -110,14 +121,13 @@ impl TryFrom<Cli> for Configuration {
             mdns: cli.mdns.unwrap_or(true),
             ping: cli.ping.unwrap_or(true),
             quic_port: cli.quic_port.unwrap_or(2022),
-            relay_client: cli.relay_client.unwrap_or(false),
-            relay_server: cli.relay_server.unwrap_or(false),
             relay_address: cli.relay_address,
+            relay_peer_id,
+            relay_server_enabled: cli.enable_relay_server,
             remote_peers: cli.remote_node_addresses,
-            rendezvous_client: cli.rendezvous_client.unwrap_or(false),
-            rendezvous_server: cli.rendezvous_server.unwrap_or(false),
             rendezvous_address: cli.rendezvous_address,
-            rendezvous_peer_id: cli.rendezvous_peer_id,
+            rendezvous_peer_id,
+            rendezvous_server_enabled: cli.enable_rendezvous_server,
             ..NetworkConfiguration::default()
         };
 
