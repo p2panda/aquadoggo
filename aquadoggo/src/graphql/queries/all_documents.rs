@@ -5,10 +5,10 @@ use log::debug;
 use p2panda_rs::schema::Schema;
 
 use crate::db::query::{Field as QueryField, Filter, Order, Pagination, Select};
-use crate::db::stores::Query;
+use crate::db::stores::{DocumentCursor, Query};
+use crate::db::types::StorageDocument;
 use crate::db::SqlStore;
 use crate::graphql::constants;
-use crate::graphql::scalars::CursorScalar;
 use crate::graphql::types::{DocumentValue, PaginationData};
 use crate::graphql::utils::{
     paginated_response_name, parse_collection_arguments, with_collection_arguments,
@@ -40,7 +40,7 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                     let store = ctx.data_unchecked::<SqlStore>();
 
                     // Default pagination, filtering and ordering values.
-                    let mut pagination = Pagination::<CursorScalar>::default();
+                    let mut pagination = Pagination::<DocumentCursor>::default();
                     let mut order = Order::default();
                     let mut filter = Filter::new();
 
@@ -70,15 +70,18 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                     // which will bubble up the query tree.
                     let query = Query::new(&pagination, &select, &filter, &order);
 
-                    let document_view_fields: Vec<FieldValue> = store
+                    let (pagination_data, documents): (PaginationData, Vec<(DocumentCursor, StorageDocument)>) = store
                         .query(&schema, &query)
-                        .await?
+                        .await?;
+
+                    let document_view_fields: Vec<FieldValue> =
+                        documents
                         .iter()
-                        .map(|document| {
+                        .map(|(cursor, document)| {
                             FieldValue::owned_any(DocumentValue::Paginated(
-                                "CURSOR".to_string(),
-                                PaginationData::default(),
-                                document.to_owned(),
+                                cursor.clone(),
+                                pagination_data.clone(),
+                                document.clone(),
                             ))
                         })
                         .collect();

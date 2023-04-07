@@ -9,8 +9,8 @@ use p2panda_rs::schema::{FieldType, Schema};
 use p2panda_rs::storage_provider::traits::DocumentStore;
 
 use crate::db::query::{Field as FilterField, Filter, MetaField, Order, Pagination};
+use crate::db::stores::DocumentCursor;
 use crate::db::SqlStore;
-use crate::graphql::scalars::CursorScalar;
 use crate::graphql::types::DocumentValue;
 use crate::graphql::utils::{
     downcast_document, fields_name, gql_scalar, graphql_type, parse_collection_arguments,
@@ -118,7 +118,7 @@ impl DocumentFields {
                         };
 
                         // Default pagination, filtering and ordering values
-                        let mut pagination = Pagination::<CursorScalar>::default();
+                        let mut pagination = Pagination::<DocumentCursor>::default();
                         let mut order = Order::default();
                         let mut filter = Filter::new();
 
@@ -169,7 +169,7 @@ impl DocumentFields {
                         };
 
                         // Default pagination, filtering and ordering values
-                        let mut pagination = Pagination::<CursorScalar>::default();
+                        let mut pagination = Pagination::<DocumentCursor>::default();
                         let mut order = Order::default();
                         let mut filter = Filter::new();
 

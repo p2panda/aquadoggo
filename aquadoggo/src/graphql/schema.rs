@@ -96,11 +96,9 @@ pub async fn build_root_schema(
         // as well as cursor pagination fields.
         let paginated_document_schema = PaginatedDocumentSchema::build(&schema);
 
-        // Construct the filter input type object.
+        // Construct the filter and ordering input type object.
         let filter_input = FilterInput::build(&schema);
-
-        // Construct the filter input type object.
-        let ordering_input = OrderBy::build(&schema);
+        let order_input = OrderBy::build(&schema);
 
         // Register a schema, schema fields and filter type for every schema.
         schema_builder = schema_builder
@@ -108,7 +106,7 @@ pub async fn build_root_schema(
             .register(document_schema)
             .register(paginated_response_schema)
             .register(paginated_document_schema)
-            .register(ordering_input)
+            .register(order_input)
             .register(filter_input);
 
         // Add a query object for each schema. It offers an interface to retrieve a single

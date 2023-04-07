@@ -5,18 +5,18 @@ use std::num::NonZeroU64;
 
 use async_graphql::dynamic::{InputValue, ObjectAccessor, ResolverContext, TypeRef, ValueAccessor};
 use async_graphql::{Error, Value};
-use dynamic_graphql::ScalarValue;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{FieldType, Schema, SchemaId};
 use p2panda_rs::storage_provider::error::DocumentStorageError;
 use p2panda_rs::storage_provider::traits::DocumentStore;
 
-use crate::db::query::{Direction, Field, Filter, MetaField, Order, Pagination};
+use crate::db::query::{Cursor, Direction, Field, Filter, MetaField, Order, Pagination};
+use crate::db::stores::DocumentCursor;
 use crate::db::types::StorageDocument;
 use crate::db::SqlStore;
 use crate::graphql::constants;
-use crate::graphql::scalars::{CursorScalar, DocumentIdScalar, DocumentViewIdScalar};
+use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
 use crate::graphql::types::DocumentValue;
 
 // Type name suffixes.
@@ -123,14 +123,14 @@ pub fn filter_to_operation_value(
 pub fn parse_collection_arguments(
     ctx: &ResolverContext,
     schema: &Schema,
-    pagination: &mut Pagination<CursorScalar>,
+    pagination: &mut Pagination<DocumentCursor>,
     order: &mut Order,
     filter: &mut Filter,
 ) -> Result<(), Error> {
     for (name, value) in ctx.args.iter() {
         match name.as_str() {
             constants::PAGINATION_AFTER_ARG => {
-                let cursor = CursorScalar::from_value(Value::String(value.string()?.to_string()))?;
+                let cursor = DocumentCursor::decode(value.string()?)?;
                 pagination.after = Some(cursor);
             }
             constants::PAGINATION_FIRST_ARG => {

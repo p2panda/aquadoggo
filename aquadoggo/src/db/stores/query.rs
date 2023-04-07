@@ -3,8 +3,10 @@
 //! This module offers a query API to find many p2panda documents, filtered or sorted by custom
 //! parameters. The results are batched via cursor-based pagination.
 use std::collections::HashMap;
+use std::str::FromStr;
 
-use p2panda_rs::document::DocumentViewFields;
+use anyhow::bail;
+use p2panda_rs::document::{DocumentId, DocumentViewFields};
 use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{Schema, SchemaId};
@@ -20,6 +22,45 @@ use crate::db::query::{
 };
 use crate::db::types::StorageDocument;
 use crate::db::SqlStore;
+use crate::graphql::types::PaginationData;
+
+#[derive(Debug, Clone)]
+pub struct DocumentCursor {
+    pub list_index: u64,
+    pub document_id: DocumentId,
+}
+
+impl DocumentCursor {
+    pub fn new(list_index: u64, document_id: DocumentId) -> Self {
+        Self {
+            list_index,
+            document_id,
+        }
+    }
+}
+
+impl Cursor for DocumentCursor {
+    type Error = anyhow::Error;
+
+    fn decode(value: &str) -> Result<Self, Self::Error> {
+        // @TODO: Decode base64 string
+        let parts: Vec<&str> = value.split('_').collect();
+
+        if parts.len() != 2 {
+            bail!("Invalid amount of cursor parts");
+        }
+
+        Ok(Self::new(
+            u64::from_str(parts[0])?,
+            DocumentId::from_str(parts[1])?,
+        ))
+    }
+
+    fn encode(&self) -> String {
+        // @TODO: Generate base64 string
+        format!("{}_{}", self.list_index, self.document_id)
+    }
+}
 
 #[derive(Default, Debug, Clone)]
 pub struct Query<C>
@@ -402,11 +443,12 @@ fn application_select_sql(fields: &Vec<String>) -> String {
 }
 
 impl SqlStore {
-    pub async fn query<C: Cursor>(
+    pub async fn query(
         &self,
         schema: &Schema,
-        args: &Query<C>,
-    ) -> Result<Vec<StorageDocument>, DocumentStorageError> {
+        args: &Query<DocumentCursor>,
+    ) -> Result<(PaginationData, Vec<(DocumentCursor, StorageDocument)>), DocumentStorageError>
+    {
         let schema_id = schema.id();
 
         // Get all selected application fields from query
@@ -552,30 +594,44 @@ impl SqlStore {
 
         // Finally convert everything into the right format
         let documents = Self::convert_rows(rows, schema.id());
+        let pagination_data = PaginationData {
+            // @TODO
+            total_count: 0,
+            has_next_page,
+        };
 
-        Ok(documents)
+        Ok((pagination_data, documents))
     }
 
     /// Merges all fields from the database into documents.
-    fn convert_rows(rows: Vec<QueryRow>, schema_id: &SchemaId) -> Vec<StorageDocument> {
-        let mut converted: Vec<StorageDocument> = Vec::new();
+    fn convert_rows(
+        rows: Vec<QueryRow>,
+        schema_id: &SchemaId,
+    ) -> Vec<(DocumentCursor, StorageDocument)> {
+        let mut converted: Vec<(DocumentCursor, StorageDocument)> = Vec::new();
 
         if rows.is_empty() {
             converted
         } else {
-            let finalize_document =
-                |row: &QueryRow, collected_fields: Vec<DocumentViewFieldRow>| -> StorageDocument {
-                    let fields = parse_document_view_field_rows(collected_fields);
+            let finalize_document = |row: &QueryRow,
+                                     collected_fields: Vec<DocumentViewFieldRow>|
+             -> (DocumentCursor, StorageDocument) {
+                let fields = parse_document_view_field_rows(collected_fields);
+                let document_id: DocumentId = row.document_id.parse().unwrap();
 
-                    StorageDocument {
-                        id: row.document_id.parse().unwrap(),
-                        fields: Some(fields),
-                        schema_id: schema_id.clone(),
-                        view_id: row.document_view_id.parse().unwrap(),
-                        author: row.owner.parse().unwrap(),
-                        deleted: row.is_deleted,
-                    }
+                let cursor = DocumentCursor::new(row.list_index as u64, document_id.clone());
+
+                let document = StorageDocument {
+                    id: document_id,
+                    fields: Some(fields),
+                    schema_id: schema_id.clone(),
+                    view_id: row.document_view_id.parse().unwrap(),
+                    author: row.owner.parse().unwrap(),
+                    deleted: row.is_deleted,
                 };
+
+                (cursor, document)
+            };
 
             let last_row = rows.last().unwrap().clone();
 
@@ -587,8 +643,8 @@ impl SqlStore {
                 if current.document_id != row.document_id {
                     // Finalize the current document, convert it and push it into the final
                     // array
-                    let document = finalize_document(&current, current_fields);
-                    converted.push(document);
+                    let (cursor, document) = finalize_document(&current, current_fields);
+                    converted.push((cursor, document));
 
                     // Change the pointer to the next document
                     current = row.clone();
@@ -608,8 +664,8 @@ impl SqlStore {
             }
 
             // Do it one last time at the end for the last document
-            let document = finalize_document(&last_row, current_fields);
-            converted.push(document);
+            let (cursor, document) = finalize_document(&last_row, current_fields);
+            converted.push((cursor, document));
 
             converted
         }

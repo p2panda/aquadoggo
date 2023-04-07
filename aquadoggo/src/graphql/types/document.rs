@@ -4,6 +4,8 @@ use async_graphql::dynamic::{Field, FieldFuture, FieldValue, Object, TypeRef};
 use async_graphql::Value;
 use p2panda_rs::schema::Schema;
 
+use crate::db::query::Cursor;
+use crate::db::stores::DocumentCursor;
 use crate::db::types::StorageDocument;
 use crate::graphql::constants;
 use crate::graphql::types::{DocumentMeta, PaginationData};
@@ -12,12 +14,12 @@ use crate::graphql::utils::{downcast_document, fields_name, paginated_document_n
 #[derive(Clone, Debug)]
 pub enum DocumentValue {
     Single(StorageDocument),
-    Paginated(String, PaginationData, StorageDocument),
+    Paginated(DocumentCursor, PaginationData, StorageDocument),
 }
 
 /// A constructor for dynamically building objects describing documents which conform to the shape
-/// of a p2panda schema. Each object contains contains `fields` and `meta` fields and defines
-/// their resolution logic.
+/// of a p2panda schema. Each object contains contains `fields` and `meta` fields and defines their
+/// resolution logic.
 ///
 /// A type should be added to the root GraphQL schema for every schema supported on a node, as
 /// these types are not known at compile time we make use of the `async-graphql` `dynamic` module.
@@ -28,9 +30,9 @@ pub struct DocumentSchema;
 impl DocumentSchema {
     /// Build a GraphQL object type from a p2panda schema.
     ///
-    /// Constructs resolvers for both `fields` and `meta` fields. The former simply passes up the query
-    /// arguments to it's children query fields. The latter calls the `resolve` method defined on
-    /// `DocumentMeta` type.
+    /// Constructs resolvers for both `fields` and `meta` fields. The former simply passes up the
+    /// query arguments to it's children query fields. The latter calls the `resolve` method
+    /// defined on `DocumentMeta` type.
     pub fn build(schema: &Schema) -> Object {
         let fields = Object::new(schema.id().to_string());
         with_document_fields(fields, schema)
@@ -38,8 +40,8 @@ impl DocumentSchema {
 }
 
 /// A constructor for dynamically building objects describing documents which conform to the shape
-/// of a p2panda schema and are contained in a paginated collection. Each object contains
-/// contains `fields`, `meta` and `cursor` fields and defines their resolution logic.
+/// of a p2panda schema and are contained in a paginated collection. Each object contains contains
+/// `fields`, `meta` and `cursor` fields and defines their resolution logic.
 ///
 /// A type should be added to the root GraphQL schema for every schema supported on a node, as
 /// these types are not known at compile time we make use of the `async-graphql` `dynamic` module.
@@ -68,7 +70,7 @@ impl PaginatedDocumentSchema {
                             DocumentValue::Paginated(cursor, _, _) => cursor,
                         };
 
-                        Ok(Some(FieldValue::from(Value::String(cursor.to_owned()))))
+                        Ok(Some(FieldValue::from(Value::String(cursor.encode()))))
                     })
                 },
             )
