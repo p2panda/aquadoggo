@@ -70,7 +70,7 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                     // which will bubble up the query tree.
                     let query = Query::new(&pagination, &select, &filter, &order);
 
-                    let (pagination_data, documents): (PaginationData, Vec<(DocumentCursor, StorageDocument)>) = store
+                    let (pagination_data, documents) = store
                         .query(&schema, &query)
                         .await?;
 

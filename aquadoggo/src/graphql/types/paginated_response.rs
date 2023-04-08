@@ -4,18 +4,31 @@ use async_graphql::dynamic::{Field, FieldFuture, FieldValue, Object, TypeRef};
 use async_graphql::Value;
 use p2panda_rs::schema::Schema;
 
+use crate::db::query::Cursor;
 use crate::graphql::constants;
 use crate::graphql::types::DocumentValue;
 use crate::graphql::utils::{downcast_document, paginated_document_name, paginated_response_name};
 
 /// Pagination data passed from parent to child query fields.
 #[derive(Default, Clone, Debug)]
-pub struct PaginationData {
-    /// The total page count.
+pub struct PaginationData<C>
+where
+    C: Cursor,
+{
+    /// Number of all documents in queried collection.
     pub total_count: u64,
 
-    /// Whether this query has a next page waiting.
+    /// Flag indicating if `endCursor` will return another page.
     pub has_next_page: bool,
+
+    /// Flag indicating if `startCursor` will return another page.
+    pub has_previous_page: bool,
+
+    /// Cursor which can be used to paginate backwards.
+    pub start_cursor: C,
+
+    /// Cursor which can be used to paginate forwards.
+    pub end_cursor: C,
 }
 
 /// A constructor for dynamically building objects describing a paginated collection of documents.
@@ -27,6 +40,7 @@ pub struct PaginationData {
 /// these types are not known at compile time we make use of the `async-graphql` `dynamic` module.
 pub struct PaginatedResponse;
 
+// @TODO: Add missing fields here
 impl PaginatedResponse {
     pub fn build(schema: &Schema) -> Object {
         Object::new(paginated_response_name(schema.id()))

@@ -14,7 +14,11 @@ use crate::graphql::utils::{downcast_document, fields_name, paginated_document_n
 #[derive(Clone, Debug)]
 pub enum DocumentValue {
     Single(StorageDocument),
-    Paginated(DocumentCursor, PaginationData, StorageDocument),
+    Paginated(
+        DocumentCursor,
+        PaginationData<DocumentCursor>,
+        StorageDocument,
+    ),
 }
 
 /// A constructor for dynamically building objects describing documents which conform to the shape

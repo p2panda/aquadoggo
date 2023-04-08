@@ -39,6 +39,13 @@ impl DocumentCursor {
     }
 }
 
+impl From<&QueryRow> for DocumentCursor {
+    fn from(row: &QueryRow) -> Self {
+        let document_id = row.document_id.parse().unwrap();
+        Self::new(row.list_index as u64, document_id)
+    }
+}
+
 impl Cursor for DocumentCursor {
     type Error = anyhow::Error;
 
@@ -456,8 +463,13 @@ impl SqlStore {
         &self,
         schema: &Schema,
         args: &Query<DocumentCursor>,
-    ) -> Result<(PaginationData, Vec<(DocumentCursor, StorageDocument)>), DocumentStorageError>
-    {
+    ) -> Result<
+        (
+            PaginationData<DocumentCursor>,
+            Vec<(DocumentCursor, StorageDocument)>,
+        ),
+        DocumentStorageError,
+    > {
         let schema_id = schema.id();
 
         // Get all selected application fields from query
@@ -598,13 +610,21 @@ impl SqlStore {
             false
         };
 
-        // Finally convert everything into the right format
-        let documents = Self::convert_rows(rows, schema.id());
+        let start_cursor: DocumentCursor = rows.first().unwrap().into();
+        let end_cursor: DocumentCursor = rows.last().unwrap().into();
+
         let pagination_data = PaginationData {
             // @TODO
             total_count: 0,
             has_next_page,
+            // @TODO
+            has_previous_page: false,
+            start_cursor,
+            end_cursor,
         };
+
+        // Finally convert everything into the right format
+        let documents = Self::convert_rows(rows, schema.id());
 
         Ok((pagination_data, documents))
     }
@@ -623,18 +643,17 @@ impl SqlStore {
                                      collected_fields: Vec<DocumentViewFieldRow>|
              -> (DocumentCursor, StorageDocument) {
                 let fields = parse_document_view_field_rows(collected_fields);
-                let document_id: DocumentId = row.document_id.parse().unwrap();
-
-                let cursor = DocumentCursor::new(row.list_index as u64, document_id.clone());
 
                 let document = StorageDocument {
-                    id: document_id,
+                    id: row.document_id.parse().unwrap(),
                     fields: Some(fields),
                     schema_id: schema_id.clone(),
                     view_id: row.document_view_id.parse().unwrap(),
                     author: row.owner.parse().unwrap(),
                     deleted: row.is_deleted,
                 };
+
+                let cursor: DocumentCursor = row.into();
 
                 (cursor, document)
             };
