@@ -194,11 +194,13 @@ impl DocumentFields {
                     value => Ok(Some(FieldValue::value(gql_scalar(value)))),
                 }
             }
-            DocumentValue::Paginated(_, _, document) => {
-                // @TODO: Handle deleted case here?
-                let field = document.fields().unwrap().get(name).unwrap();
-                Ok(Some(FieldValue::value(gql_scalar(field.value()))))
-            }
+            DocumentValue::Paginated(_, _, document) => match document.fields() {
+                Some(fields) => match fields.get(name) {
+                    Some(field) => Ok(Some(FieldValue::value(gql_scalar(field.value())))),
+                    None => Ok(FieldValue::NONE),
+                },
+                None => Ok(FieldValue::NONE),
+            },
         }
     }
 }

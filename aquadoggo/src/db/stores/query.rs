@@ -118,7 +118,7 @@ fn typecast_field_sql(sql_field: &str, field_name: &str, schema: &Schema) -> Str
         }
         // All other types (booleans, relations, etc.) we keep as strings. We can not convert
         // booleans easily as they don't have their own datatype in SQLite
-        _ => field_name.to_string(),
+        _ => sql_field.to_string(),
     }
 }
 
@@ -243,19 +243,19 @@ fn filter_sql(filter: &Filter) -> String {
 
                     Some(format!(
                         r#"
-                    AND EXISTS (
-                        SELECT
-                            value
-                        FROM
-                            operation_fields_v1
-                        WHERE
-                            operation_fields_v1.name = '{field_name}'
-                            AND
-                                operation_fields_v1.operation_id = document_view_fields.operation_id
-                            AND
-                                {filter_cmp}
-                    )
-                    "#
+                        AND EXISTS (
+                            SELECT
+                                value
+                            FROM
+                                operation_fields_v1
+                            WHERE
+                                operation_fields_v1.name = '{field_name}'
+                                AND
+                                    operation_fields_v1.operation_id = operations_v1.operation_id
+                                AND
+                                    {filter_cmp}
+                        )
+                        "#
                     ))
                 }
             }
@@ -264,20 +264,18 @@ fn filter_sql(filter: &Filter) -> String {
         .join("\n")
 }
 
-fn pagination_sql<C>(pagination: &Pagination<C>, order: &Order) -> String
-where
-    C: Cursor,
-{
+fn pagination_sql(pagination: &Pagination<DocumentCursor>, order: &Order) -> String {
     match &pagination.after {
         Some(cursor) => {
-            let cursor_str = cursor.encode();
+            let cursor_str = cursor.document_id.to_string();
 
             match &order.field {
-                Field::Meta(MetaField::DocumentViewId) => {
-                    format!("AND documents.document_view_id > '{cursor_str}'")
-                }
                 Field::Meta(MetaField::DocumentId) => {
                     format!("AND documents.document_id > '{cursor_str}'")
+                }
+                Field::Meta(MetaField::DocumentViewId) => {
+                    // @TODO
+                    todo!("Not implemented yet");
                 }
                 Field::Meta(MetaField::Owner) => {
                     // @TODO
@@ -304,32 +302,40 @@ where
                                 AND
                                     operation_fields_v1.operation_id = document_view_fields.operation_id
                                 AND
-                                (
+                                    (
                                     operation_fields_v1.value > (
                                         SELECT
                                             operation_fields_v1.value
                                         FROM
                                             operation_fields_v1
+                                        LEFT JOIN
+                                            operations_v1
+                                            ON
+                                                operations_v1.operation_id = operation_fields_v1.operation_id
                                         WHERE
                                             operation_fields_v1.name = '{order_field_name}'
                                             AND
-                                                documents.document_id > '{cursor_str}'
+                                                operations_v1.document_id = '{cursor_str}'
                                     )
-                                )
-                                OR
-                                (
-                                    operation_fields_v1.value = (
-                                        SELECT
-                                            operation_fields_v1.value
-                                        FROM
-                                            operation_fields_v1
-                                        WHERE
-                                            operation_fields_v1.name = '{order_field_name}'
-                                            AND
-                                                documents.document_id > '{cursor_str}'
+                                    OR
+                                    (
+                                        operation_fields_v1.value = (
+                                            SELECT
+                                                operation_fields_v1.value
+                                            FROM
+                                                operation_fields_v1
+                                            LEFT JOIN
+                                                operations_v1
+                                                ON
+                                                    operations_v1.operation_id = operation_fields_v1.operation_id
+                                            WHERE
+                                                operation_fields_v1.name = '{order_field_name}'
+                                                AND
+                                                    operations_v1.document_id = '{cursor_str}'
+                                        )
+                                        AND
+                                            documents.document_id > '{cursor_str}'
                                     )
-                                    AND
-                                        documents.document_id > '{order_field_name}'
                                 )
                         )
                         "#
@@ -395,10 +401,13 @@ fn order_sql(order: &Order, schema: &Schema) -> String {
                         {}
                     FROM
                         operation_fields_v1
+                        LEFT JOIN operations_v1
+                            ON operations_v1.document_id = documents.document_id
                     WHERE
-                        operation_fields_v1.operation_id = document_view_fields.operation_id
+                        operation_fields_v1.operation_id = operations_v1.operation_id
                         AND
                             operation_fields_v1.name = '{}'
+                    LIMIT 1
                     )
                     {},
 
@@ -495,12 +504,12 @@ impl SqlStore {
             -- is as smart, as big and as
             -- annoying as myself.
 
-            SELECT
+            SELECT DISTINCT
                 -- We get all the meta informations first, let's start with the document id and
                 -- document view id, schema id and id of the operation which holds the data
                 documents.document_id,
-                document_view_fields.document_view_id,
-                document_view_fields.operation_id,
+                documents.document_view_id,
+                operation_fields_v1.operation_id,
 
                 -- If a document got deleted we already store in the database, the edited state we
                 -- find out by checking if there is more operations next to the initial "create"
@@ -540,13 +549,10 @@ impl SqlStore {
             FROM
                 documents
                 LEFT JOIN document_view_fields
-                    ON
-                        document_view_fields.document_view_id = documents.document_view_id
+                    ON documents.document_view_id = document_view_fields.document_view_id
                 LEFT JOIN operation_fields_v1
                     ON
-                        operation_fields_v1.operation_id = document_view_fields.operation_id
-                    AND
-                        operation_fields_v1.name = document_view_fields.name
+                        document_view_fields.operation_id = operation_fields_v1.operation_id
 
             WHERE
                 -- We always filter by the queried schema of that collection
