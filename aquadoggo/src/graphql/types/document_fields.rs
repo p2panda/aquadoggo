@@ -176,7 +176,7 @@ impl DocumentFields {
                         // Add all items in the list to the filter
                         let list: Vec<OperationValue> =
                             rel.iter().map(|item| item.to_owned().into()).collect();
-                        filter.add_in(&FilterField::Meta(MetaField::DocumentId), &list);
+                        filter.add_in(&FilterField::Meta(MetaField::DocumentViewId), &list);
 
                         // Parse arguments
                         parse_collection_arguments(

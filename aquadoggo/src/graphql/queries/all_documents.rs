@@ -6,10 +6,9 @@ use p2panda_rs::schema::Schema;
 
 use crate::db::query::{Field as QueryField, Filter, Order, Pagination, Select};
 use crate::db::stores::{DocumentCursor, Query};
-use crate::db::types::StorageDocument;
 use crate::db::SqlStore;
 use crate::graphql::constants;
-use crate::graphql::types::{DocumentValue, PaginationData};
+use crate::graphql::types::DocumentValue;
 use crate::graphql::utils::{
     paginated_response_name, parse_collection_arguments, with_collection_arguments,
 };
