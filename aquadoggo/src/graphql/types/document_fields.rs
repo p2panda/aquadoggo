@@ -8,8 +8,8 @@ use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{FieldType, Schema};
 use p2panda_rs::storage_provider::traits::DocumentStore;
 
-use crate::db::query::{Field as FilterField, Filter, MetaField, Order, Pagination};
-use crate::db::stores::DocumentCursor;
+use crate::db::query::{Field as QueryField, Filter, MetaField, Order, Pagination, Select};
+use crate::db::stores::{DocumentCursor, Query};
 use crate::db::SqlStore;
 use crate::graphql::types::DocumentValue;
 use crate::graphql::utils::{
@@ -77,130 +77,176 @@ impl DocumentFields {
         let name = ctx.field().name();
 
         // Parse the bubble up value
-        match downcast_document(&ctx) {
-            DocumentValue::Single(document) => {
-                let schema = schema_provider
-                    .get(document.schema_id())
-                    .await
-                    .expect("Schema should be in store");
+        let document = match downcast_document(&ctx) {
+            DocumentValue::Single(document) => document,
+            DocumentValue::Paginated(_, _, document) => document,
+        };
 
-                // Get the field this query is concerned with.
-                match document.get(name).unwrap() {
-                    // Relation fields are expected to resolve to the related document so we pass
-                    // along the document id which will be processed through it's own resolver.
-                    OperationValue::Relation(rel) => {
-                        // Get the whole document from the store.
-                        let document = match store.get_document(rel.document_id()).await? {
-                            Some(document) => document,
-                            None => return Ok(FieldValue::NONE),
-                        };
+        let schema = schema_provider
+            .get(document.schema_id())
+            .await
+            .expect("Schema should be in store");
 
-                        let document = DocumentValue::Single(document);
-                        Ok(Some(FieldValue::owned_any(document)))
-                    }
-                    // Relation lists are handled by collecting and returning a list of all document
-                    // id's in the relation list. Each of these in turn are processed and queries
-                    // forwarded up the tree via their own respective resolvers.
-                    OperationValue::RelationList(rel) => {
-                        // Get the schema of documents in this relation list
-                        let relation_field_schema = schema
-                            .fields()
-                            .get(name)
-                            .expect("Document field should exist on schema");
+        println!("{:?} {}", document, name);
 
-                        // Get the schema itself
-                        let schema = match relation_field_schema {
-                            FieldType::RelationList(schema_id) => {
-                                // We can unwrap here as the schema should exist in the store already
-                                schema_provider.get(schema_id).await.unwrap()
-                            }
-                            _ => panic!(), // Should never reach here.
-                        };
+        // Get the field this query is concerned with.
+        match document.get(name).unwrap() {
+            // Relation fields are expected to resolve to the related document so we pass
+            // along the document id which will be processed through it's own resolver.
+            OperationValue::Relation(rel) => {
+                // Get the whole document from the store.
+                let document = match store.get_document(rel.document_id()).await? {
+                    Some(document) => document,
+                    None => return Ok(FieldValue::NONE),
+                };
 
-                        // Default pagination, filtering and ordering values
-                        let mut pagination = Pagination::<DocumentCursor>::default();
-                        let mut order = Order::default();
-                        let mut filter = Filter::new();
-
-                        // Add all items in the list to the meta_filter `in` filter
-                        let list: Vec<OperationValue> =
-                            rel.iter().map(|item| item.to_owned().into()).collect();
-                        filter.add_in(&FilterField::Meta(MetaField::DocumentId), &list);
-
-                        // Parse arguments
-                        parse_collection_arguments(
-                            &ctx,
-                            &schema,
-                            &mut pagination,
-                            &mut order,
-                            &mut filter,
-                        )?;
-
-                        // @TODO
-                        todo!();
-                    }
-                    // Pinned relation behaves the same as relation but passes along a document view id.
-                    OperationValue::PinnedRelation(rel) => {
-                        // Get the whole document from the store.
-                        let document = match store.get_document_by_view_id(rel.view_id()).await? {
-                            Some(document) => document,
-                            None => return Ok(FieldValue::NONE),
-                        };
-
-                        let document = DocumentValue::Single(document);
-                        Ok(Some(FieldValue::owned_any(document)))
-                    }
-                    // Pinned relation lists behave the same as relation lists but pass along view ids.
-                    OperationValue::PinnedRelationList(rel) => {
-                        // Get the schema of documents in this relation list
-                        let relation_field_schema = schema
-                            .fields()
-                            .get(name)
-                            .expect("Document field should exist on schema");
-
-                        // Get the schema itself
-                        let schema = match relation_field_schema {
-                            FieldType::PinnedRelationList(schema_id) => {
-                                // We can unwrap here as the schema should exist in the store
-                                // already
-                                schema_provider.get(schema_id).await.unwrap()
-                            }
-                            _ => panic!(), // Should never reach here.
-                        };
-
-                        // Default pagination, filtering and ordering values
-                        let mut pagination = Pagination::<DocumentCursor>::default();
-                        let mut order = Order::default();
-                        let mut filter = Filter::new();
-
-                        // Add all items in the list to the filter
-                        let list: Vec<OperationValue> =
-                            rel.iter().map(|item| item.to_owned().into()).collect();
-                        filter.add_in(&FilterField::Meta(MetaField::DocumentViewId), &list);
-
-                        // Parse arguments
-                        parse_collection_arguments(
-                            &ctx,
-                            &schema,
-                            &mut pagination,
-                            &mut order,
-                            &mut filter,
-                        )?;
-
-                        // @TODO
-                        todo!()
-                    }
-                    // All other fields are simply resolved to their scalar value.
-                    value => Ok(Some(FieldValue::value(gql_scalar(value)))),
-                }
+                let document = DocumentValue::Single(document);
+                Ok(Some(FieldValue::owned_any(document)))
             }
-            DocumentValue::Paginated(_, _, document) => match document.fields() {
-                Some(fields) => match fields.get(name) {
-                    Some(field) => Ok(Some(FieldValue::value(gql_scalar(field.value())))),
-                    None => Ok(FieldValue::NONE),
-                },
-                None => Ok(FieldValue::NONE),
-            },
+            // Relation lists are handled by collecting and returning a list of all document
+            // id's in the relation list. Each of these in turn are processed and queries
+            // forwarded up the tree via their own respective resolvers.
+            OperationValue::RelationList(rel) => {
+                // Get the schema of documents in this relation list
+                let relation_field_schema = schema
+                    .fields()
+                    .get(name)
+                    .expect("Document field should exist on schema");
+
+                // Get the schema itself
+                let schema = match relation_field_schema {
+                    FieldType::RelationList(schema_id) => {
+                        // We can unwrap here as the schema should exist in the store already
+                        schema_provider.get(schema_id).await.unwrap()
+                    }
+                    _ => panic!(), // Should never reach here.
+                };
+
+                // Default pagination, filtering and ordering values
+                let mut pagination = Pagination::<DocumentCursor>::default();
+                let mut order = Order::default();
+                let mut filter = Filter::new();
+
+                // @TODO: We need a way to determine which fields have been selected in the
+                // GraphQL query (is it "lookahead")?
+                let fields: Vec<QueryField> = schema
+                    .fields()
+                    .iter()
+                    .map(|(field_name, _)| QueryField::new(field_name))
+                    .collect();
+                let select = Select::new(fields.as_slice());
+
+                // Add all items in the list to the meta_filter `in` filter
+                let list: Vec<OperationValue> =
+                    rel.iter().map(|item| item.to_owned().into()).collect();
+                filter.add_in(&QueryField::Meta(MetaField::DocumentId), &list);
+
+                // Parse arguments
+                parse_collection_arguments(
+                    &ctx,
+                    &schema,
+                    &mut pagination,
+                    &mut order,
+                    &mut filter,
+                )?;
+
+                // Fetch all queried documents and compose the field value list which will
+                // bubble up the query tree
+                let query = Query::new(&pagination, &select, &filter, &order);
+                let (pagination_data, documents) = store.query(&schema, &query).await?;
+
+                let document_view_fields: Vec<FieldValue> = documents
+                    .iter()
+                    .map(|(cursor, document)| {
+                        FieldValue::owned_any(DocumentValue::Paginated(
+                            cursor.clone(),
+                            pagination_data.clone(),
+                            document.clone(),
+                        ))
+                    })
+                    .collect();
+
+                // Pass the list up to the children query fields.
+                Ok(Some(FieldValue::list(document_view_fields)))
+            }
+            // Pinned relation behaves the same as relation but passes along a document view id.
+            OperationValue::PinnedRelation(rel) => {
+                // Get the whole document from the store.
+                let document = match store.get_document_by_view_id(rel.view_id()).await? {
+                    Some(document) => document,
+                    None => return Ok(FieldValue::NONE),
+                };
+
+                let document = DocumentValue::Single(document);
+                Ok(Some(FieldValue::owned_any(document)))
+            }
+            // Pinned relation lists behave the same as relation lists but pass along view ids.
+            OperationValue::PinnedRelationList(rel) => {
+                // Get the schema of documents in this relation list
+                let relation_field_schema = schema
+                    .fields()
+                    .get(name)
+                    .expect("Document field should exist on schema");
+
+                // Get the schema itself
+                let schema = match relation_field_schema {
+                    FieldType::PinnedRelationList(schema_id) => {
+                        // We can unwrap here as the schema should exist in the store
+                        // already
+                        schema_provider.get(schema_id).await.unwrap()
+                    }
+                    _ => panic!(), // Should never reach here.
+                };
+
+                // Default pagination, filtering and ordering values
+                let mut pagination = Pagination::<DocumentCursor>::default();
+                let mut order = Order::default();
+                let mut filter = Filter::new();
+
+                // @TODO: We need a way to determine which fields have been selected in the
+                // GraphQL query (is it "lookahead")?
+                let fields: Vec<QueryField> = schema
+                    .fields()
+                    .iter()
+                    .map(|(field_name, _)| QueryField::new(field_name))
+                    .collect();
+                let select = Select::new(fields.as_slice());
+
+                // Add all items in the list to the filter
+                let list: Vec<OperationValue> =
+                    rel.iter().map(|item| item.to_owned().into()).collect();
+                filter.add_in(&QueryField::Meta(MetaField::DocumentViewId), &list);
+
+                // Parse arguments
+                parse_collection_arguments(
+                    &ctx,
+                    &schema,
+                    &mut pagination,
+                    &mut order,
+                    &mut filter,
+                )?;
+
+                // Fetch all queried documents and compose the field value list which will
+                // bubble up the query tree
+                let query = Query::new(&pagination, &select, &filter, &order);
+                let (pagination_data, documents) = store.query(&schema, &query).await?;
+
+                let document_view_fields: Vec<FieldValue> = documents
+                    .iter()
+                    .map(|(cursor, document)| {
+                        FieldValue::owned_any(DocumentValue::Paginated(
+                            cursor.clone(),
+                            pagination_data.clone(),
+                            document.clone(),
+                        ))
+                    })
+                    .collect();
+
+                // Pass the list up to the children query fields
+                Ok(Some(FieldValue::list(document_view_fields)))
+            }
+            // All other fields are simply resolved to their scalar value.
+            value => Ok(Some(FieldValue::value(gql_scalar(value)))),
         }
     }
 }
