@@ -263,8 +263,6 @@ fn filter_sql(filter: &Filter) -> String {
                             WHERE
                                 operation_fields_v1.name = '{field_name}'
                                 AND
-                                    operation_fields_v1.operation_id = operations_v1.operation_id
-                                AND
                                     {filter_cmp}
                         )
                         "#
@@ -409,17 +407,16 @@ fn order_sql(order: &Order, schema: &Schema) -> String {
                 r#"
                 ORDER BY
                     (
-                    SELECT
-                        {}
-                    FROM
-                        operation_fields_v1
-                        LEFT JOIN operations_v1
-                            ON operations_v1.document_id = documents.document_id
-                    WHERE
-                        operation_fields_v1.operation_id = operations_v1.operation_id
-                        AND
+                        SELECT
+                            {}
+                        FROM
+                            operation_fields_v1
+                            LEFT JOIN document_view_fields
+                                ON operation_fields_v1.operation_id = document_view_fields.operation_id
+                        WHERE
                             operation_fields_v1.name = '{}'
-                    LIMIT 1
+                            AND document_view_fields.document_view_id = documents.document_view_id
+                        LIMIT 1
                     )
                     {},
 
@@ -515,7 +512,7 @@ impl SqlStore {
             -- is as smart, as big and as
             -- annoying as myself.
 
-            SELECT DISTINCT
+            SELECT
                 -- We get all the meta informations first, let's start with the document id and
                 -- document view id, schema id and id of the operation which holds the data
                 documents.document_id,
@@ -559,11 +556,13 @@ impl SqlStore {
 
             FROM
                 documents
-                LEFT JOIN document_view_fields
+                INNER JOIN document_view_fields
                     ON documents.document_view_id = document_view_fields.document_view_id
-                LEFT JOIN operation_fields_v1
+                INNER JOIN operation_fields_v1
                     ON
                         document_view_fields.operation_id = operation_fields_v1.operation_id
+                        AND
+                            document_view_fields.name = operation_fields_v1.name
 
             WHERE
                 -- We always filter by the queried schema of that collection
@@ -609,8 +608,8 @@ impl SqlStore {
             false
         };
 
-        let start_cursor: DocumentCursor = rows.first().unwrap().into();
-        let end_cursor: DocumentCursor = rows.last().unwrap().into();
+        let start_cursor = rows.first().map(DocumentCursor::from);
+        let end_cursor = rows.last().map(DocumentCursor::from);
 
         let pagination_data = PaginationData {
             // @TODO

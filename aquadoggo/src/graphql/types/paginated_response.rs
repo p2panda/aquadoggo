@@ -25,10 +25,10 @@ where
     pub has_previous_page: bool,
 
     /// Cursor which can be used to paginate backwards.
-    pub start_cursor: C,
+    pub start_cursor: Option<C>,
 
     /// Cursor which can be used to paginate forwards.
-    pub end_cursor: C,
+    pub end_cursor: Option<C>,
 }
 
 /// A constructor for dynamically building objects describing a paginated collection of documents.
