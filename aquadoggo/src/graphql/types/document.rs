@@ -95,11 +95,11 @@ fn with_document_fields(fields: Object, schema: &Schema) -> Object {
                 TypeRef::named(fields_name(schema.id())),
                 move |ctx| {
                     FieldFuture::new(async move {
-                        // Downcast the document which has already been retrieved from the store
-                        // by the root query resolver and passed down to the `fields` field here.
+                        // Downcast the document which has already been retrieved from the store by
+                        // the root query resolver and passed down to the `fields` field here.
                         let document_value = downcast_document(&ctx);
 
-                        // We continue to pass it down to all the fields' children.
+                        // We continue to pass it down to all the fields' children
                         Ok(Some(FieldValue::owned_any(document_value)))
                     })
                 },

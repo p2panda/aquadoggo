@@ -14,84 +14,90 @@ use crate::graphql::utils::{
 };
 use crate::schema::SchemaProvider;
 
-/// Adds a GraphQL query for retrieving a paginated, ordered and filtered collection of
-/// documents by schema to the passed root query object.
+/// Adds a GraphQL query for retrieving a paginated, ordered and filtered collection of documents
+/// by schema to the passed root query object.
 ///
 /// The query follows the format `all_<SCHEMA_ID>(<...ARGS>)`.
 pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
     let schema_id = schema.id().clone();
-    query.field(with_collection_arguments(
-        Field::new(
-            format!("{}{}", constants::QUERY_ALL_PREFIX, schema_id),
-            TypeRef::named_list(paginated_response_name(&schema_id)),
-            move |ctx| {
-                // Take ownership of the schema id in the resolver.
-                let schema_id = schema_id.clone();
+    query
+        .field(with_collection_arguments(
+            Field::new(
+                format!("{}{}", constants::QUERY_ALL_PREFIX, schema_id),
+                TypeRef::named_list(paginated_response_name(&schema_id)),
+                move |ctx| {
+                    // Take ownership of the schema id in the resolver
+                    let schema_id = schema_id.clone();
 
-                debug!(
-                    "Query to {}{} received",
-                    constants::QUERY_ALL_PREFIX,
-                    schema_id
-                );
+                    debug!(
+                        "Query to {}{} received",
+                        constants::QUERY_ALL_PREFIX,
+                        schema_id
+                    );
 
-                FieldFuture::new(async move {
-                    let schema_provider = ctx.data_unchecked::<SchemaProvider>();
-                    let store = ctx.data_unchecked::<SqlStore>();
+                    FieldFuture::new(async move {
+                        let schema_provider = ctx.data_unchecked::<SchemaProvider>();
+                        let store = ctx.data_unchecked::<SqlStore>();
 
-                    // Default pagination, filtering and ordering values.
-                    let mut pagination = Pagination::<DocumentCursor>::default();
-                    let mut order = Order::default();
-                    let mut filter = Filter::new();
+                        // Get the schema for the document type being queried
+                        let schema = schema_provider
+                            .get(&schema_id)
+                            .await
+                            .expect("Schema should exist in schema provider");
 
-                    // Get the schema for the document type being queried.
-                    let schema = schema_provider
-                        .get(&schema_id)
-                        .await
-                        .expect("Schema should exist in schema provider");
+                        // Default pagination, selection, filtering and ordering values
+                        let mut pagination = Pagination::<DocumentCursor>::default();
+                        let mut order = Order::default();
+                        let mut filter = Filter::new();
 
-                    // Parse arguments.
-                    parse_collection_arguments(
-                        &ctx,
-                        &schema,
-                        &mut pagination,
-                        &mut order,
-                        &mut filter,
-                    )?;
+                        // @TODO: We need a way to determine which fields have been selected in the
+                        // GraphQL query (is it "lookahead")?
+                        let fields: Vec<QueryField> = schema
+                            .fields()
+                            .iter()
+                            .map(|(field_name, _)| QueryField::new(field_name))
+                            .collect();
+                        let select = Select::new(fields.as_slice());
 
-                    // @TODO: We need a way to determine which fields have been selected in the
-                    // GraphQL query (is it "lookahead")?
-                    let fields: Vec<QueryField> = schema.fields().iter().map(|(field_name, _)| {
-                        QueryField::new(field_name)
-                    }).collect();
-                    let select = Select::new(fields.as_slice());
+                        // Populate query arguments with values from GraphQL query
+                        parse_collection_arguments(
+                            &ctx,
+                            &schema,
+                            &mut pagination,
+                            &mut order,
+                            &mut filter,
+                        )?;
 
-                    // Fetch all queried documents and compose the field value list
-                    // which will bubble up the query tree.
-                    let query = Query::new(&pagination, &select, &filter, &order);
+                        let query = Query::new(&pagination, &select, &filter, &order);
 
-                    let (pagination_data, documents) = store
-                        .query(&schema, &query)
-                        .await?;
+                        // Fetch all queried documents and compose the field value list which will
+                        // bubble up the query tree
+                        let (pagination_data, documents) = store.query(&schema, &query).await?;
 
-                    let document_view_fields: Vec<FieldValue> =
-                        documents
-                        .iter()
-                        .map(|(cursor, document)| {
-                            FieldValue::owned_any(DocumentValue::Paginated(
-                                cursor.clone(),
-                                pagination_data.clone(),
-                                document.clone(),
-                            ))
-                        })
-                        .collect();
+                        let results: Vec<FieldValue> = documents
+                            .into_iter()
+                            .map(|(cursor, document)| {
+                                FieldValue::owned_any(DocumentValue::Paginated(
+                                    cursor,
+                                    pagination_data.clone(),
+                                    document,
+                                ))
+                            })
+                            .collect();
 
-                    // Pass the list up to the children query fields.
-                    Ok(Some(FieldValue::list(document_view_fields)))
-                })
-            },
-        ),
-        schema.id(),
-    )).description(format!("Query a paginated collection of `{}` documents. The requested collection is filtered and ordered following parameters passed into the query via the available arguments.", schema.id().name()))
+                        // Pass the list up to the children query fields
+                        Ok(Some(FieldValue::list(results)))
+                    })
+                },
+            ),
+            schema.id(),
+        ))
+        .description(format!(
+            "Query a paginated collection of `{}` documents. \
+               The requested collection is filtered and ordered following \
+               parameters passed into the query via the available arguments.",
+            schema.id().name()
+        ))
 }
 
 #[cfg(test)]

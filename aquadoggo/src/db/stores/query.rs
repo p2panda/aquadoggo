@@ -24,6 +24,11 @@ use crate::db::types::StorageDocument;
 use crate::db::SqlStore;
 use crate::graphql::types::PaginationData;
 
+pub type QueryResponse = (
+    PaginationData<DocumentCursor>,
+    Vec<(DocumentCursor, StorageDocument)>,
+);
+
 #[derive(Debug, Clone)]
 pub struct DocumentCursor {
     pub list_index: u64,
@@ -463,13 +468,7 @@ impl SqlStore {
         &self,
         schema: &Schema,
         args: &Query<DocumentCursor>,
-    ) -> Result<
-        (
-            PaginationData<DocumentCursor>,
-            Vec<(DocumentCursor, StorageDocument)>,
-        ),
-        DocumentStorageError,
-    > {
+    ) -> Result<QueryResponse, DocumentStorageError> {
         let schema_id = schema.id();
 
         // Get all selected application fields from query

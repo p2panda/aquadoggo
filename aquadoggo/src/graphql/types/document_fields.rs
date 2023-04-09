@@ -26,16 +26,17 @@ use crate::schema::SchemaProvider;
 pub struct DocumentFields;
 
 impl DocumentFields {
-    /// Build the fields object from the related p2panda schema. Constructs an object which can
-    /// then be added to the root GraphQL schema.
+    /// Build the fields object from the related p2panda schema.
+    ///
+    /// Constructs an object which can then be added to the root GraphQL schema.
     pub fn build(schema: &Schema) -> Object {
-        // Construct the document fields object which will be named `<schema_id>Fields`.
+        // Construct the document fields object which will be named `<schema_id>Fields`
         let schema_field_name = fields_name(schema.id());
         let mut document_schema_fields = Object::new(&schema_field_name);
 
-        // For every field in the schema we create a type with a resolver.
+        // For every field in the schema we create a type with a resolver
         for (name, field_type) in schema.fields().iter() {
-            // If this is a relation list type we add an argument for filtering items in the list.
+            // If this is a relation list type we add an argument for filtering items in the list
             let field = match field_type {
                 p2panda_rs::schema::FieldType::RelationList(schema_id)
                 | p2panda_rs::schema::FieldType::PinnedRelationList(schema_id) => {
@@ -87,15 +88,13 @@ impl DocumentFields {
             .await
             .expect("Schema should be in store");
 
-        println!("{:?} {}", document, name);
-
-        // Get the field this query is concerned with.
+        // Get the field this query is concerned with
         match document.get(name).unwrap() {
-            // Relation fields are expected to resolve to the related document so we pass
-            // along the document id which will be processed through it's own resolver.
-            OperationValue::Relation(rel) => {
+            // Relation fields are expected to resolve to the related document so we pass along the
+            // document id which will be processed through it's own resolver
+            OperationValue::Relation(relation) => {
                 // Get the whole document from the store.
-                let document = match store.get_document(rel.document_id()).await? {
+                let document = match store.get_document(relation.document_id()).await? {
                     Some(document) => document,
                     None => return Ok(FieldValue::NONE),
                 };
@@ -103,10 +102,9 @@ impl DocumentFields {
                 let document = DocumentValue::Single(document);
                 Ok(Some(FieldValue::owned_any(document)))
             }
-            // Relation lists are handled by collecting and returning a list of all document
-            // id's in the relation list. Each of these in turn are processed and queries
-            // forwarded up the tree via their own respective resolvers.
-            OperationValue::RelationList(rel) => {
+            // Relation lists are handled by collecting and returning a list of all document ids in
+            // the relation list
+            OperationValue::RelationList(relations) => {
                 // Get the schema of documents in this relation list
                 let relation_field_schema = schema
                     .fields()
@@ -119,7 +117,7 @@ impl DocumentFields {
                         // We can unwrap here as the schema should exist in the store already
                         schema_provider.get(schema_id).await.unwrap()
                     }
-                    _ => panic!(), // Should never reach here.
+                    _ => panic!("Schema should exist"),
                 };
 
                 // Default pagination, filtering and ordering values
@@ -137,8 +135,10 @@ impl DocumentFields {
                 let select = Select::new(fields.as_slice());
 
                 // Add all items in the list to the meta_filter `in` filter
-                let list: Vec<OperationValue> =
-                    rel.iter().map(|item| item.to_owned().into()).collect();
+                let list: Vec<OperationValue> = relations
+                    .iter()
+                    .map(|item| item.to_owned().into())
+                    .collect();
                 filter.add_in(&QueryField::Meta(MetaField::DocumentId), &list);
 
                 // Parse arguments
@@ -155,7 +155,7 @@ impl DocumentFields {
                 let query = Query::new(&pagination, &select, &filter, &order);
                 let (pagination_data, documents) = store.query(&schema, &query).await?;
 
-                let document_view_fields: Vec<FieldValue> = documents
+                let results: Vec<FieldValue> = documents
                     .iter()
                     .map(|(cursor, document)| {
                         FieldValue::owned_any(DocumentValue::Paginated(
@@ -166,13 +166,13 @@ impl DocumentFields {
                     })
                     .collect();
 
-                // Pass the list up to the children query fields.
-                Ok(Some(FieldValue::list(document_view_fields)))
+                // Pass the list up to the children query fields
+                Ok(Some(FieldValue::list(results)))
             }
             // Pinned relation behaves the same as relation but passes along a document view id.
-            OperationValue::PinnedRelation(rel) => {
+            OperationValue::PinnedRelation(relation) => {
                 // Get the whole document from the store.
-                let document = match store.get_document_by_view_id(rel.view_id()).await? {
+                let document = match store.get_document_by_view_id(relation.view_id()).await? {
                     Some(document) => document,
                     None => return Ok(FieldValue::NONE),
                 };
@@ -181,7 +181,7 @@ impl DocumentFields {
                 Ok(Some(FieldValue::owned_any(document)))
             }
             // Pinned relation lists behave the same as relation lists but pass along view ids.
-            OperationValue::PinnedRelationList(rel) => {
+            OperationValue::PinnedRelationList(relations) => {
                 // Get the schema of documents in this relation list
                 let relation_field_schema = schema
                     .fields()
@@ -213,8 +213,10 @@ impl DocumentFields {
                 let select = Select::new(fields.as_slice());
 
                 // Add all items in the list to the filter
-                let list: Vec<OperationValue> =
-                    rel.iter().map(|item| item.to_owned().into()).collect();
+                let list: Vec<OperationValue> = relations
+                    .iter()
+                    .map(|item| item.to_owned().into())
+                    .collect();
                 filter.add_in(&QueryField::Meta(MetaField::DocumentViewId), &list);
 
                 // Parse arguments
