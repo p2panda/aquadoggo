@@ -122,7 +122,7 @@ impl DocumentStore for SqlStore {
     /// An error is returned only if a fatal database error occurs.
     async fn get_document_by_view_id(
         &self,
-        id: &DocumentViewId,
+        view_id: &DocumentViewId,
     ) -> Result<Option<StorageDocument>, DocumentStorageError> {
         // Retrieve the id of the document which the passed view id comes from.
         let document_id: Option<String> = query_scalar(
@@ -135,7 +135,7 @@ impl DocumentStore for SqlStore {
                 document_view_id = $1
             ",
         )
-        .bind(id.to_string())
+        .bind(view_id.to_string())
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
@@ -176,15 +176,16 @@ impl DocumentStore for SqlStore {
         // We now want to retrieve the view (current key-value map) for this document, as we
         // already filtered out deleted documents in the query above we can expect all documents
         // we handle here to have an associated view in the database.
-        let document_view_field_rows = get_document_view_field_rows(&self.pool, id).await?;
-        // this method assumes all values coming from the db are already validated and so
+        let document_view_field_rows = get_document_view_field_rows(&self.pool, view_id).await?;
+
+        // This method assumes all values coming from the db are already validated and so
         // unwraps where errors might occur.
         let document_view_fields = Some(parse_document_view_field_rows(document_view_field_rows));
 
-        // Construct a `StorageDocument` based on the retrieved values.
+        // Construct a `StorageDocument` based on the retrieved values
         let document = StorageDocument {
             id: document_row.document_id.parse().unwrap(),
-            view_id: id.to_owned(), /* set the requested document view id not the current */
+            view_id: view_id.to_owned(), // Set to requested document view id, not the current
             schema_id: document_row.schema_id.parse().unwrap(),
             fields: document_view_fields,
             author: document_row.public_key.parse().unwrap(),
@@ -380,7 +381,7 @@ async fn get_document_view_field_rows(
     query_as::<_, DocumentViewFieldRow>(
         "
         SELECT
-            documents.document_id,
+            document_views.document_id,
             document_view_fields.document_view_id,
             document_view_fields.operation_id,
             document_view_fields.name,
@@ -388,17 +389,17 @@ async fn get_document_view_field_rows(
             operation_fields_v1.field_type,
             operation_fields_v1.value
         FROM
-            documents
-        LEFT JOIN document_view_fields
+            document_view_fields
+        LEFT JOIN document_views
             ON
-                document_view_fields.document_view_id = documents.document_view_id
+                document_view_fields.document_view_id = document_views.document_view_id
         LEFT JOIN operation_fields_v1
             ON
                 document_view_fields.operation_id = operation_fields_v1.operation_id
             AND
                 document_view_fields.name = operation_fields_v1.name
         WHERE
-            documents.document_view_id = $1
+            document_view_fields.document_view_id = $1
         ORDER BY
             operation_fields_v1.list_index ASC
         ",
