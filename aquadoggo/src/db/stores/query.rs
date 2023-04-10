@@ -630,6 +630,11 @@ impl SqlStore {
                 -- We always filter by the queried schema of that collection
                 documents.schema_id = '{schema_id}'
 
+                -- Never return more than one row per operation field (even when it is a
+                -- relation list) to not break pagination
+                AND
+                    operation_fields_v1.list_index = 0
+
                 -- .. and select only the operation fields we're interested in
                 {and_select}
 
