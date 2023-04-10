@@ -4,8 +4,6 @@ use async_graphql::dynamic::{Field, FieldFuture, FieldValue, Object, TypeRef};
 use log::debug;
 use p2panda_rs::schema::Schema;
 
-use crate::db::query::{Field as QueryField, Filter, Order, Pagination, Select};
-use crate::db::stores::{DocumentCursor, Query};
 use crate::db::SqlStore;
 use crate::graphql::constants;
 use crate::graphql::types::DocumentValue;
@@ -45,30 +43,8 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                             .await
                             .expect("Schema should exist in schema provider");
 
-                        // Default pagination, selection, filtering and ordering values
-                        let mut pagination = Pagination::<DocumentCursor>::default();
-                        let mut order = Order::default();
-                        let mut filter = Filter::new();
-
-                        // @TODO: We need a way to determine which fields have been selected in the
-                        // GraphQL query (is it "lookahead")?
-                        let fields: Vec<QueryField> = schema
-                            .fields()
-                            .iter()
-                            .map(|(field_name, _)| QueryField::new(field_name))
-                            .collect();
-                        let select = Select::new(fields.as_slice());
-
                         // Populate query arguments with values from GraphQL query
-                        parse_collection_arguments(
-                            &ctx,
-                            &schema,
-                            &mut pagination,
-                            &mut order,
-                            &mut filter,
-                        )?;
-
-                        let query = Query::new(&pagination, &select, &filter, &order);
+                        let query = parse_collection_arguments(&ctx, &schema)?;
 
                         // Fetch all queried documents and compose the field value list which will
                         // bubble up the query tree

@@ -16,7 +16,7 @@ where
     C: Cursor,
 {
     /// Number of all documents in queried collection.
-    pub total_count: u64,
+    pub total_count: Option<u64>,
 
     /// Flag indicating if `endCursor` will return another page.
     pub has_next_page: bool,
@@ -57,7 +57,9 @@ impl PaginatedResponse {
                                 _ => panic!("Expected paginated value"),
                             };
 
-                            Ok(Some(FieldValue::from(Value::from(total_count))))
+                            Ok(Some(FieldValue::from(Value::from(
+                                total_count.expect("Value needs to be set when requested"),
+                            ))))
                         })
                     },
                 )

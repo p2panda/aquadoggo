@@ -10,7 +10,7 @@ use crate::db::query::{Field, MetaField};
 /// A selection determines which fields get returned in the response.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Select {
-    fields: HashSet<Field>,
+    pub fields: HashSet<Field>,
 }
 
 impl Select {

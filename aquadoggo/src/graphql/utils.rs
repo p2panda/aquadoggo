@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::num::NonZeroU64;
 
 use async_graphql::dynamic::{InputValue, ObjectAccessor, ResolverContext, TypeRef, ValueAccessor};
@@ -11,8 +11,10 @@ use p2panda_rs::schema::{FieldType, Schema, SchemaId};
 use p2panda_rs::storage_provider::error::DocumentStorageError;
 use p2panda_rs::storage_provider::traits::DocumentStore;
 
-use crate::db::query::{Cursor, Direction, Field, Filter, MetaField, Order, Pagination};
-use crate::db::stores::DocumentCursor;
+use crate::db::query::{
+    Cursor, Direction, Field, Filter, MetaField, Order, Pagination, PaginationField, Select,
+};
+use crate::db::stores::{DocumentCursor, Query};
 use crate::db::types::StorageDocument;
 use crate::db::SqlStore;
 use crate::graphql::constants;
@@ -123,10 +125,11 @@ pub fn filter_to_operation_value(
 pub fn parse_collection_arguments(
     ctx: &ResolverContext,
     schema: &Schema,
-    pagination: &mut Pagination<DocumentCursor>,
-    order: &mut Order,
-    filter: &mut Filter,
-) -> Result<(), Error> {
+) -> Result<Query<DocumentCursor>, Error> {
+    let mut pagination = Pagination::<DocumentCursor>::default();
+    let mut order = Order::default();
+    let mut filter = Filter::new();
+
     for (name, value) in ctx.args.iter() {
         match name.as_str() {
             constants::PAGINATION_AFTER_ARG => {
@@ -157,18 +160,27 @@ pub fn parse_collection_arguments(
                 let filter_object = value
                     .object()
                     .map_err(|_| Error::new("internal: is not an object"))?;
-                parse_meta_filter(filter, &filter_object)?;
+                parse_meta_filter(&mut filter, &filter_object)?;
             }
             constants::FILTER_ARG => {
                 let filter_object = value
                     .object()
                     .map_err(|_| Error::new("internal: is not an object"))?;
-                parse_filter(filter, schema, &filter_object)?;
+                parse_filter(&mut filter, schema, &filter_object)?;
             }
             _ => panic!("Unknown argument key received"),
         }
     }
-    Ok(())
+
+    // Parse selected fields in GraphQL query
+    let (pagination_fields, fields) = look_ahead_selected_fields(&ctx);
+    let select = Select::new(fields.as_slice());
+    pagination.fields = pagination_fields;
+
+    // Finally put it all together
+    let query = Query::new(&pagination, &select, &filter, &order);
+
+    Ok(query)
 }
 
 /// Parse a filter object received from the graphql api into an abstract filter type based on the
@@ -361,4 +373,53 @@ pub fn with_collection_arguments(
             "Get all {} documents with pagination, ordering and filtering.",
             schema_id
         ))
+}
+
+/// Helper method to extract selected pagination and application fields from query.
+pub fn look_ahead_selected_fields(ctx: &ResolverContext) -> (Vec<PaginationField>, Vec<Field>) {
+    let selection_field = ctx
+        .look_ahead()
+        .selection_fields()
+        .first()
+        .expect("Needs always root selection field")
+        .to_owned();
+
+    let pagination = selection_field
+        .selection_set()
+        .filter_map(|field| match field.name() {
+            constants::DOCUMENT_FIELD => None,
+            value => Some(value.into()),
+        })
+        .collect::<Vec<PaginationField>>();
+
+    let mut selected_fields = Vec::new();
+    selection_field
+        .selection_set()
+        .find(|field| field.name() == constants::DOCUMENT_FIELD)
+        .map(|document| {
+            // Parse selected application fields
+            document
+                .selection_set()
+                .find(|field| field.name() == constants::FIELDS_FIELD)
+                .map(|fields| {
+                    fields.selection_set().for_each(|field| {
+                        selected_fields.push(Field::Field(field.name().to_string()));
+                    });
+                });
+
+            // Parse selected meta fields
+            document
+                .selection_set()
+                .find(|field| field.name() == constants::META_FIELD)
+                .map(|fields| {
+                    fields
+                        .selection_set()
+                        .filter_map(|field| field.name().try_into().ok())
+                        .for_each(|field| {
+                            selected_fields.push(Field::Meta(field));
+                        });
+                });
+        });
+
+    (pagination, selected_fields)
 }

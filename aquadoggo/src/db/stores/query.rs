@@ -12,13 +12,13 @@ use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{Schema, SchemaId};
 use p2panda_rs::storage_provider::error::DocumentStorageError;
 use sqlx::any::AnyRow;
-use sqlx::{query_as, FromRow};
+use sqlx::{query, query_as, FromRow};
 
 use crate::db::models::utils::parse_document_view_field_rows;
 use crate::db::models::{DocumentViewFieldRow, QueryRow};
 use crate::db::query::{
     Cursor, Direction, Field, Filter, FilterBy, FilterSetting, LowerBound, MetaField, Order,
-    Pagination, Select, UpperBound,
+    Pagination, PaginationField, Select, UpperBound,
 };
 use crate::db::types::StorageDocument;
 use crate::db::SqlStore;
@@ -460,6 +460,86 @@ fn application_select_sql(fields: &Vec<String>) -> String {
     }
 }
 
+fn total_count_sql(schema_id: &SchemaId, filter: &Filter) -> String {
+    let and_filters = filter_sql(&filter);
+
+    format!(
+        r#"
+            SELECT
+                COUNT(documents.document_id)
+
+            FROM
+                documents
+                INNER JOIN document_view_fields
+                    ON documents.document_view_id = document_view_fields.document_view_id
+                INNER JOIN operation_fields_v1
+                    ON
+                        document_view_fields.operation_id = operation_fields_v1.operation_id
+                        AND
+                            document_view_fields.name = operation_fields_v1.name
+
+            WHERE
+                documents.schema_id = '{schema_id}'
+                {and_filters}
+
+            -- Group application fields by name to make sure we get actual number of documents
+            GROUP BY operation_fields_v1.name
+        "#
+    )
+}
+
+fn edited_sql(select: &Select) -> String {
+    if select.fields.contains(&Field::Meta(MetaField::Edited)) {
+        format!(
+            r#"
+            -- Check if there is more operations next to the initial "create" operation
+            (
+                SELECT
+                    operations_v1.public_key
+                FROM
+                    operations_v1
+                WHERE
+                    operations_v1.action != "create"
+                    AND
+                        operations_v1.document_id = documents.document_id
+                LIMIT 1
+            )
+            "#
+        )
+    } else {
+        // Use constant when we do not query for edited status. This is useful for keeping the
+        // resulting row type in shape, otherwise we would need to dynamically change it depending
+        // on what meta fields were selected.
+        "0".to_string()
+    }
+}
+
+fn owner_sql(select: &Select) -> String {
+    if select.fields.contains(&Field::Meta(MetaField::Owner)) {
+        format!(
+            r#"
+            -- The original owner of a document we get by checking which public key signed the
+            -- "create" operation, the hash of that operation is the same as the document id
+            (
+                SELECT
+                    operations_v1.public_key
+                FROM
+                    operations_v1
+                WHERE
+                    operations_v1.operation_id = documents.document_id
+            )
+            "#
+        )
+    } else {
+        // Use constant when we do not query owner. This is useful for keeping the resulting row
+        // type in shape, otherwise we would need to dynamically change it depending on what meta
+        // fields were selected.
+        //
+        // The value is so funny to make sure it passes ed25519 public key validation.
+        "'0000000000000000000000000000000000000000000000000000000000000000'".to_string()
+    }
+}
+
 impl SqlStore {
     pub async fn query(
         &self,
@@ -469,7 +549,7 @@ impl SqlStore {
         let schema_id = schema.id();
 
         // Get all selected application fields from query
-        let select_fields: Vec<String> = args
+        let application_fields: Vec<String> = args
             .select
             .iter()
             .filter_map(|field| {
@@ -483,13 +563,16 @@ impl SqlStore {
             .collect();
 
         // Generate SQL based on the given schema and query
-        let and_select = application_select_sql(&select_fields);
+        let and_select = application_select_sql(&application_fields);
         let and_filters = filter_sql(&args.filter);
         let and_pagination = pagination_sql(&args.pagination, &args.order);
 
-        let group = group_sql(&select_fields);
+        let select_edited = edited_sql(&args.select);
+        let select_owner = owner_sql(&args.select);
+
+        let group = group_sql(&application_fields);
         let order = order_sql(&args.order, schema);
-        let (page_size, limit) = limit_sql(&args.pagination, &select_fields);
+        let (page_size, limit) = limit_sql(&args.pagination, &application_fields);
 
         let sea_quel = format!(
             r#"
@@ -519,32 +602,13 @@ impl SqlStore {
                 documents.document_view_id,
                 operation_fields_v1.operation_id,
 
-                -- If a document got deleted we already store in the database, the edited state we
-                -- find out by checking if there is more operations next to the initial "create"
-                -- operation
+                -- If a document got deleted we already store in the database, let's get it in any
+                -- case ince we get it for free
                 documents.is_deleted,
-                EXISTS (
-                    SELECT
-                        operations_v1.public_key
-                    FROM
-                        operations_v1
-                    WHERE
-                        operations_v1.action != "create"
-                        AND
-                            operations_v1.document_id = documents.document_id
-                    LIMIT 1
-                ) AS is_edited,
 
-                -- The original owner of a document we get by checking which public key signed the
-                -- "create" operation, the hash of that operation is the same as the document id
-                (
-                    SELECT
-                        operations_v1.public_key
-                    FROM
-                        operations_v1
-                    WHERE
-                        operations_v1.operation_id = documents.document_id
-                ) AS owner,
+                -- Optionally we check for the edited status and owner of the document
+                {select_edited} AS is_edited,
+                {select_owner} AS owner,
 
                 -- Finally we get the application data by selecting the name and value field. We
                 -- need the field type and list index to understand what the type of the data is and
@@ -608,14 +672,30 @@ impl SqlStore {
             false
         };
 
+        let total_count = if args
+            .pagination
+            .fields
+            .contains(&PaginationField::TotalCount)
+        {
+            // Make separate query for getting the total number of documents (without pagination)
+            let result: (i32,) = query_as(&total_count_sql(&schema_id, &args.filter))
+                .fetch_one(&self.pool)
+                .await
+                .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
+
+            Some(result.0 as u64)
+        } else {
+            None
+        };
+
+        // Determine cursors for pagination by looking at beginning and end of results
         let start_cursor = rows.first().map(DocumentCursor::from);
         let end_cursor = rows.last().map(DocumentCursor::from);
 
         let pagination_data = PaginationData {
-            // @TODO
-            total_count: 0,
+            total_count,
             has_next_page,
-            // @TODO
+            // @TODO: Implement backwards pagination
             has_previous_page: false,
             start_cursor,
             end_cursor,
@@ -706,8 +786,11 @@ mod tests {
     #[test]
     fn create_find_many_query() {
         let order = Order::new(&Field::Meta(MetaField::Owner), &Direction::Descending);
-        let pagination =
-            Pagination::<String>::new(&NonZeroU64::new(50).unwrap(), Some(&"cursor".into()));
+        let pagination = Pagination::<String>::new(
+            &NonZeroU64::new(50).unwrap(),
+            Some(&"cursor".into()),
+            &vec![],
+        );
 
         let query = Query {
             order: order.clone(),

@@ -3,6 +3,8 @@
 use std::fmt::Display;
 use std::num::NonZeroU64;
 
+use crate::graphql::constants;
+
 /// Default page size as defined by the p2panda specification.
 pub const DEFAULT_PAGE_SIZE: u64 = 25;
 
@@ -34,6 +36,29 @@ impl Cursor for String {
     }
 }
 
+/// Fields which can be selected to retrieve information about pagination state.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PaginationField {
+    TotalCount,
+    HasNextPage,
+    HasPreviousPage,
+    StartCursor,
+    EndCursor,
+}
+
+impl From<&str> for PaginationField {
+    fn from(value: &str) -> Self {
+        match value {
+            constants::TOTAL_COUNT_FIELD => PaginationField::TotalCount,
+            constants::HAS_NEXT_PAGE_FIELD => PaginationField::HasNextPage,
+            // @TODO: Add the others here as well
+            value => {
+                panic!("Unknown pagination field '{}' selected", value)
+            }
+        }
+    }
+}
+
 /// Pagination settings which can be used further to construct a database query.
 ///
 /// This object represents all required values to allow cursor-based pagination, while the cursor
@@ -45,6 +70,7 @@ where
 {
     pub first: NonZeroU64,
     pub after: Option<C>,
+    pub fields: Vec<PaginationField>,
 }
 
 impl<C> Pagination<C>
@@ -52,10 +78,11 @@ where
     C: Cursor,
 {
     /// Returns a new instance of pagination settings.
-    pub fn new(first: &NonZeroU64, after: Option<&C>) -> Self {
+    pub fn new(first: &NonZeroU64, after: Option<&C>, fields: &Vec<PaginationField>) -> Self {
         Self {
             first: *first,
             after: after.cloned(),
+            fields: fields.to_owned(),
         }
     }
 }
@@ -69,6 +96,7 @@ where
             // Unwrap here because we know that the default is non-zero
             first: NonZeroU64::new(DEFAULT_PAGE_SIZE).unwrap(),
             after: None,
+            fields: vec![],
         }
     }
 }
@@ -85,7 +113,11 @@ mod tests {
     #[test]
     fn create_pagination() {
         assert_eq!(
-            Pagination::<String>::new(&NonZeroU64::new(DEFAULT_PAGE_SIZE).unwrap(), None),
+            Pagination::<String>::new(
+                &NonZeroU64::new(DEFAULT_PAGE_SIZE).unwrap(),
+                None,
+                &Vec::new()
+            ),
             Pagination::<String>::default()
         )
     }

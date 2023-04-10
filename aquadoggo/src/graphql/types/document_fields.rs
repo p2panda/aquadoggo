@@ -8,8 +8,7 @@ use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{FieldType, Schema};
 use p2panda_rs::storage_provider::traits::DocumentStore;
 
-use crate::db::query::{Field as QueryField, Filter, MetaField, Order, Pagination, Select};
-use crate::db::stores::{DocumentCursor, Query};
+use crate::db::query::{Field as QueryField, MetaField};
 use crate::db::SqlStore;
 use crate::graphql::types::DocumentValue;
 use crate::graphql::utils::{
@@ -120,39 +119,20 @@ impl DocumentFields {
                     _ => panic!("Schema should exist"),
                 };
 
-                // Default pagination, filtering and ordering values
-                let mut pagination = Pagination::<DocumentCursor>::default();
-                let mut order = Order::default();
-                let mut filter = Filter::new();
-
-                // @TODO: We need a way to determine which fields have been selected in the
-                // GraphQL query (is it "lookahead")?
-                let fields: Vec<QueryField> = schema
-                    .fields()
-                    .iter()
-                    .map(|(field_name, _)| QueryField::new(field_name))
-                    .collect();
-                let select = Select::new(fields.as_slice());
+                // Populate query arguments with values from GraphQL query
+                let mut query = parse_collection_arguments(&ctx, &schema)?;
 
                 // Add all items in the list to the meta_filter `in` filter
                 let list: Vec<OperationValue> = relations
                     .iter()
                     .map(|item| item.to_owned().into())
                     .collect();
-                filter.add_in(&QueryField::Meta(MetaField::DocumentId), &list);
-
-                // Parse arguments
-                parse_collection_arguments(
-                    &ctx,
-                    &schema,
-                    &mut pagination,
-                    &mut order,
-                    &mut filter,
-                )?;
+                query
+                    .filter
+                    .add_in(&QueryField::Meta(MetaField::DocumentId), &list);
 
                 // Fetch all queried documents and compose the field value list which will
                 // bubble up the query tree
-                let query = Query::new(&pagination, &select, &filter, &order);
                 let (pagination_data, documents) = store.query(&schema, &query).await?;
 
                 let results: Vec<FieldValue> = documents
@@ -198,39 +178,20 @@ impl DocumentFields {
                     _ => panic!(), // Should never reach here.
                 };
 
-                // Default pagination, filtering and ordering values
-                let mut pagination = Pagination::<DocumentCursor>::default();
-                let mut order = Order::default();
-                let mut filter = Filter::new();
-
-                // @TODO: We need a way to determine which fields have been selected in the
-                // GraphQL query (is it "lookahead")?
-                let fields: Vec<QueryField> = schema
-                    .fields()
-                    .iter()
-                    .map(|(field_name, _)| QueryField::new(field_name))
-                    .collect();
-                let select = Select::new(fields.as_slice());
+                // Populate query arguments with values from GraphQL query
+                let mut query = parse_collection_arguments(&ctx, &schema)?;
 
                 // Add all items in the list to the filter
                 let list: Vec<OperationValue> = relations
                     .iter()
                     .map(|item| item.to_owned().into())
                     .collect();
-                filter.add_in(&QueryField::Meta(MetaField::DocumentViewId), &list);
-
-                // Parse arguments
-                parse_collection_arguments(
-                    &ctx,
-                    &schema,
-                    &mut pagination,
-                    &mut order,
-                    &mut filter,
-                )?;
+                query
+                    .filter
+                    .add_in(&QueryField::Meta(MetaField::DocumentViewId), &list);
 
                 // Fetch all queried documents and compose the field value list which will
                 // bubble up the query tree
-                let query = Query::new(&pagination, &select, &filter, &order);
                 let (pagination_data, documents) = store.query(&schema, &query).await?;
 
                 let document_view_fields: Vec<FieldValue> = documents
