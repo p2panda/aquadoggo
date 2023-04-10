@@ -11,4 +11,4 @@ mod query;
 mod schema;
 mod task;
 
-pub use query::{DocumentCursor, Query, QueryResponse};
+pub use query::{DocumentCursor, Query, QueryResponse, SelectList, SelectListType};

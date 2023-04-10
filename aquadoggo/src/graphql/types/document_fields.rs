@@ -8,7 +8,7 @@ use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{FieldType, Schema};
 use p2panda_rs::storage_provider::traits::DocumentStore;
 
-use crate::db::query::{Field as QueryField, MetaField};
+use crate::db::stores::SelectList;
 use crate::db::SqlStore;
 use crate::graphql::types::DocumentValue;
 use crate::graphql::utils::{
@@ -103,7 +103,7 @@ impl DocumentFields {
             }
             // Relation lists are handled by collecting and returning a list of all document ids in
             // the relation list
-            OperationValue::RelationList(relations) => {
+            OperationValue::RelationList(_) => {
                 // Get the schema of documents in this relation list
                 let relation_field_schema = schema
                     .fields()
@@ -120,20 +120,15 @@ impl DocumentFields {
                 };
 
                 // Populate query arguments with values from GraphQL query
-                let mut query = parse_collection_arguments(&ctx, &schema)?;
+                let query = parse_collection_arguments(&ctx, &schema)?;
 
-                // Add all items in the list to the meta_filter `in` filter
-                let list: Vec<OperationValue> = relations
-                    .iter()
-                    .map(|item| item.to_owned().into())
-                    .collect();
-                query
-                    .filter
-                    .add_in(&QueryField::Meta(MetaField::DocumentId), &list);
+                // Select relation field containing list of documents
+                let list = SelectList::new_unpinned(document.view_id(), name);
 
                 // Fetch all queried documents and compose the field value list which will
                 // bubble up the query tree
-                let (pagination_data, documents) = store.query(&schema, &query).await?;
+                let (pagination_data, documents) =
+                    store.query(&schema, &query, Some(&list)).await?;
 
                 let results: Vec<FieldValue> = documents
                     .iter()
@@ -161,7 +156,7 @@ impl DocumentFields {
                 Ok(Some(FieldValue::owned_any(document)))
             }
             // Pinned relation lists behave the same as relation lists but pass along view ids.
-            OperationValue::PinnedRelationList(relations) => {
+            OperationValue::PinnedRelationList(_) => {
                 // Get the schema of documents in this relation list
                 let relation_field_schema = schema
                     .fields()
@@ -179,20 +174,15 @@ impl DocumentFields {
                 };
 
                 // Populate query arguments with values from GraphQL query
-                let mut query = parse_collection_arguments(&ctx, &schema)?;
+                let query = parse_collection_arguments(&ctx, &schema)?;
 
-                // Add all items in the list to the filter
-                let list: Vec<OperationValue> = relations
-                    .iter()
-                    .map(|item| item.to_owned().into())
-                    .collect();
-                query
-                    .filter
-                    .add_in(&QueryField::Meta(MetaField::DocumentViewId), &list);
+                // Select relation field containing list of pinned document views
+                let list = SelectList::new_pinned(document.view_id(), name);
 
                 // Fetch all queried documents and compose the field value list which will
                 // bubble up the query tree
-                let (pagination_data, documents) = store.query(&schema, &query).await?;
+                let (pagination_data, documents) =
+                    store.query(&schema, &query, Some(&list)).await?;
 
                 let document_view_fields: Vec<FieldValue> = documents
                     .iter()

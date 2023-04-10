@@ -48,7 +48,8 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
 
                         // Fetch all queried documents and compose the field value list which will
                         // bubble up the query tree
-                        let (pagination_data, documents) = store.query(&schema, &query).await?;
+                        let (pagination_data, documents) =
+                            store.query(&schema, &query, None).await?;
 
                         let results: Vec<FieldValue> = documents
                             .into_iter()

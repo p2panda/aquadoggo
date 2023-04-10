@@ -6,10 +6,10 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use anyhow::bail;
-use p2panda_rs::document::{DocumentId, DocumentViewFields};
+use p2panda_rs::document::{DocumentId, DocumentViewFields, DocumentViewId};
 use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::OperationValue;
-use p2panda_rs::schema::{Schema, SchemaId};
+use p2panda_rs::schema::{FieldName, Schema, SchemaId};
 use p2panda_rs::storage_provider::error::DocumentStorageError;
 use sqlx::any::AnyRow;
 use sqlx::{query, query_as, FromRow};
@@ -28,6 +28,40 @@ pub type QueryResponse = (
     PaginationData<DocumentCursor>,
     Vec<(DocumentCursor, StorageDocument)>,
 );
+
+pub enum SelectListType {
+    Pinned,
+    Unpinned,
+}
+
+pub struct SelectList {
+    /// View id of document which holds relation list field.
+    pub root: DocumentViewId,
+
+    /// Field which contains the relation list values.
+    pub field: FieldName,
+
+    /// Type of relation list.
+    pub list_type: SelectListType,
+}
+
+impl SelectList {
+    pub fn new_unpinned(root: &DocumentViewId, field: &str) -> Self {
+        Self {
+            root: root.to_owned(),
+            field: field.to_string(),
+            list_type: SelectListType::Unpinned,
+        }
+    }
+
+    pub fn new_pinned(root: &DocumentViewId, field: &str) -> Self {
+        Self {
+            root: root.to_owned(),
+            field: field.to_string(),
+            list_type: SelectListType::Pinned,
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct DocumentCursor {
@@ -357,16 +391,6 @@ fn pagination_sql(pagination: &Pagination<DocumentCursor>, order: &Order) -> Str
     }
 }
 
-fn group_sql(fields: &Vec<String>) -> String {
-    // When no field was selected we can group the results by document id, this allows us to
-    // paginate the results easily
-    if fields.is_empty() {
-        "GROUP BY documents.document_id".to_string()
-    } else {
-        "".to_string()
-    }
-}
-
 fn order_sql(order: &Order, schema: &Schema) -> String {
     let direction = match order.direction {
         Direction::Ascending => "ASC",
@@ -460,7 +484,8 @@ fn application_select_sql(fields: &Vec<String>) -> String {
     }
 }
 
-fn total_count_sql(schema_id: &SchemaId, filter: &Filter) -> String {
+fn total_count_sql(schema_id: &SchemaId, list: Option<&SelectList>, filter: &Filter) -> String {
+    let and_select_list = select_list_sql(list);
     let and_filters = filter_sql(filter);
 
     format!(
@@ -480,6 +505,7 @@ fn total_count_sql(schema_id: &SchemaId, filter: &Filter) -> String {
 
             WHERE
                 documents.schema_id = '{schema_id}'
+                {and_select_list}
                 {and_filters}
 
             -- Group application fields by name to make sure we get actual number of documents
@@ -538,11 +564,48 @@ fn owner_sql(select: &Select) -> String {
     }
 }
 
+fn select_list_sql(list: Option<&SelectList>) -> String {
+    match list {
+        Some(select_list) => {
+            let field_name = &select_list.field;
+            let view_id = &select_list.root;
+            let (field_type, filter_sql) = match select_list.list_type {
+                SelectListType::Pinned => ("pinned_relation_list", "documents.document_view_id"),
+                SelectListType::Unpinned => ("relation_list", "documents.document_id"),
+            };
+
+            format!(
+                r#"
+                AND {filter_sql} IN (
+                    SELECT operation_fields_v1.value
+
+                    FROM document_view_fields
+                        INNER JOIN operation_fields_v1
+                            ON
+                                document_view_fields.operation_id = operation_fields_v1.operation_id
+                                AND
+                                    document_view_fields.name = operation_fields_v1.name
+
+                    WHERE
+                        operation_fields_v1.name = '{field_name}'
+                        AND
+                            operation_fields_v1.field_type = '{field_type}'
+                        AND
+                            document_view_fields.document_view_id = '{view_id}'
+                )
+            "#
+            )
+        }
+        None => "".to_string(),
+    }
+}
+
 impl SqlStore {
     pub async fn query(
         &self,
         schema: &Schema,
         args: &Query<DocumentCursor>,
+        list: Option<&SelectList>,
     ) -> Result<QueryResponse, DocumentStorageError> {
         let schema_id = schema.id();
 
@@ -561,6 +624,7 @@ impl SqlStore {
             .collect();
 
         // Generate SQL based on the given schema and query
+        let and_select_list = select_list_sql(list);
         let and_select = application_select_sql(&application_fields);
         let and_filters = filter_sql(&args.filter);
         let and_pagination = pagination_sql(&args.pagination, &args.order);
@@ -568,7 +632,6 @@ impl SqlStore {
         let select_edited = edited_sql(&args.select);
         let select_owner = owner_sql(&args.select);
 
-        let group = group_sql(&application_fields);
         let order = order_sql(&args.order, schema);
         let (page_size, limit) = limit_sql(&args.pagination, &application_fields);
 
@@ -630,10 +693,8 @@ impl SqlStore {
                 -- We always filter by the queried schema of that collection
                 documents.schema_id = '{schema_id}'
 
-                -- Never return more than one row per operation field (even when it is a
-                -- relation list) to not break pagination
-                AND
-                    operation_fields_v1.list_index = 0
+                -- If we're querying a nested list we select the documents of that list before
+                {and_select_list}
 
                 -- .. and select only the operation fields we're interested in
                 {and_select}
@@ -644,10 +705,9 @@ impl SqlStore {
                 -- Lastly we batch all results into smaller chunks via cursor pagination
                 {and_pagination}
 
-            -- In case we did not select any fields of interest we can group the results by
-            -- document id, since we're only interested in the meta data we get from simply SELECTing
-            -- them per row
-            {group}
+            -- Never return more than one row per operation field (even when it is a
+            -- relation list) to not break pagination
+            GROUP BY documents.document_id, operation_fields_v1.name
 
             -- We always order the rows by document id and list_index, but there might also be
             -- user-defined ordering on top of that
@@ -682,7 +742,7 @@ impl SqlStore {
             .contains(&PaginationField::TotalCount)
         {
             // Make separate query for getting the total number of documents (without pagination)
-            let result: (i32,) = query_as(&total_count_sql(schema_id, &args.filter))
+            let result: (i32,) = query_as(&total_count_sql(schema_id, list, &args.filter))
                 .fetch_one(&self.pool)
                 .await
                 .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
