@@ -461,7 +461,7 @@ fn application_select_sql(fields: &Vec<String>) -> String {
 }
 
 fn total_count_sql(schema_id: &SchemaId, filter: &Filter) -> String {
-    let and_filters = filter_sql(&filter);
+    let and_filters = filter_sql(filter);
 
     format!(
         r#"
@@ -490,8 +490,7 @@ fn total_count_sql(schema_id: &SchemaId, filter: &Filter) -> String {
 
 fn edited_sql(select: &Select) -> String {
     if select.fields.contains(&Field::Meta(MetaField::Edited)) {
-        format!(
-            r#"
+        r#"
             -- Check if there is more operations next to the initial "create" operation
             (
                 SELECT
@@ -504,8 +503,8 @@ fn edited_sql(select: &Select) -> String {
                         operations_v1.document_id = documents.document_id
                 LIMIT 1
             )
-            "#
-        )
+        "#
+        .to_string()
     } else {
         // Use constant when we do not query for edited status. This is useful for keeping the
         // resulting row type in shape, otherwise we would need to dynamically change it depending
@@ -516,8 +515,7 @@ fn edited_sql(select: &Select) -> String {
 
 fn owner_sql(select: &Select) -> String {
     if select.fields.contains(&Field::Meta(MetaField::Owner)) {
-        format!(
-            r#"
+        r#"
             -- The original owner of a document we get by checking which public key signed the
             -- "create" operation, the hash of that operation is the same as the document id
             (
@@ -528,8 +526,8 @@ fn owner_sql(select: &Select) -> String {
                 WHERE
                     operations_v1.operation_id = documents.document_id
             )
-            "#
-        )
+        "#
+        .to_string()
     } else {
         // Use constant when we do not query owner. This is useful for keeping the resulting row
         // type in shape, otherwise we would need to dynamically change it depending on what meta
@@ -678,7 +676,7 @@ impl SqlStore {
             .contains(&PaginationField::TotalCount)
         {
             // Make separate query for getting the total number of documents (without pagination)
-            let result: (i32,) = query_as(&total_count_sql(&schema_id, &args.filter))
+            let result: (i32,) = query_as(&total_count_sql(schema_id, &args.filter))
                 .fetch_one(&self.pool)
                 .await
                 .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;

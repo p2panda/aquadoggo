@@ -173,7 +173,7 @@ pub fn parse_collection_arguments(
     }
 
     // Parse selected fields in GraphQL query
-    let (pagination_fields, fields) = look_ahead_selected_fields(&ctx);
+    let (pagination_fields, fields) = look_ahead_selected_fields(ctx);
     let select = Select::new(fields.as_slice());
     pagination.fields = pagination_fields;
 
@@ -393,33 +393,32 @@ pub fn look_ahead_selected_fields(ctx: &ResolverContext) -> (Vec<PaginationField
         .collect::<Vec<PaginationField>>();
 
     let mut selected_fields = Vec::new();
-    selection_field
+
+    if let Some(document) = selection_field
         .selection_set()
         .find(|field| field.name() == constants::DOCUMENT_FIELD)
-        .map(|document| {
-            // Parse selected application fields
-            if let Some(fields) = document
-                .selection_set()
-                .find(|field| field.name() == constants::FIELDS_FIELD)
-            {
-                fields.selection_set().for_each(|field| {
-                    selected_fields.push(Field::Field(field.name().to_string()));
-                });
-            }
-
-            // Parse selected meta fields
-            if let Some(fields) = document
-                .selection_set()
-                .find(|field| field.name() == constants::META_FIELD)
-            {
-                fields
-                    .selection_set()
-                    .filter_map(|field| field.name().try_into().ok())
-                    .for_each(|field| {
-                        selected_fields.push(Field::Meta(field));
+    {
+        document
+            .selection_set()
+            .for_each(|field| match field.name() {
+                // Parse selected application fields
+                constants::FIELDS_FIELD => {
+                    field.selection_set().for_each(|field| {
+                        selected_fields.push(Field::Field(field.name().to_string()));
                     });
-            }
-        });
+                }
+                // Parse selected meta fields
+                constants::META_FIELD => {
+                    field
+                        .selection_set()
+                        .filter_map(|field| field.name().try_into().ok())
+                        .for_each(|field| {
+                            selected_fields.push(Field::Meta(field));
+                        });
+                }
+                _ => (),
+            });
+    }
 
     (pagination, selected_fields)
 }
