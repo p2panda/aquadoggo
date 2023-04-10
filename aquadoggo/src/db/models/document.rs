@@ -17,7 +17,7 @@ pub struct DocumentViewFieldRow {
     /// Name of field.
     pub name: String,
 
-    /// Name of field.
+    /// Position index of value when it is in a relation list.
     pub list_index: i32,
 
     /// Type of field.
@@ -39,7 +39,7 @@ pub struct DocumentRow {
     /// Id of this documents schema.
     pub schema_id: String,
 
-    /// Id of the author of this document.
+    /// Author of this document.
     pub public_key: String,
 
     /// Flag for if this document is deleted.
