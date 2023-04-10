@@ -592,6 +592,8 @@ fn select_list_sql(list: Option<&SelectList>) -> String {
                             operation_fields_v1.field_type = '{field_type}'
                         AND
                             document_view_fields.document_view_id = '{view_id}'
+
+                    ORDER BY operation_fields_v1.list_index ASC
                 )
             "#
             )
