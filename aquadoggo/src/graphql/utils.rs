@@ -398,27 +398,27 @@ pub fn look_ahead_selected_fields(ctx: &ResolverContext) -> (Vec<PaginationField
         .find(|field| field.name() == constants::DOCUMENT_FIELD)
         .map(|document| {
             // Parse selected application fields
-            document
+            if let Some(fields) = document
                 .selection_set()
                 .find(|field| field.name() == constants::FIELDS_FIELD)
-                .map(|fields| {
-                    fields.selection_set().for_each(|field| {
-                        selected_fields.push(Field::Field(field.name().to_string()));
-                    });
+            {
+                fields.selection_set().for_each(|field| {
+                    selected_fields.push(Field::Field(field.name().to_string()));
                 });
+            }
 
             // Parse selected meta fields
-            document
+            if let Some(fields) = document
                 .selection_set()
                 .find(|field| field.name() == constants::META_FIELD)
-                .map(|fields| {
-                    fields
-                        .selection_set()
-                        .filter_map(|field| field.name().try_into().ok())
-                        .for_each(|field| {
-                            selected_fields.push(Field::Meta(field));
-                        });
-                });
+            {
+                fields
+                    .selection_set()
+                    .filter_map(|field| field.name().try_into().ok())
+                    .for_each(|field| {
+                        selected_fields.push(Field::Meta(field));
+                    });
+            }
         });
 
     (pagination, selected_fields)
