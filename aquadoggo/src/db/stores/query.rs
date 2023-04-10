@@ -653,6 +653,7 @@ impl SqlStore {
         "#
         );
 
+        // @TODO: Remove this
         println!("{sea_quel}");
 
         let mut rows: Vec<QueryRow> = query_as::<_, QueryRow>(&sea_quel)
@@ -700,14 +701,18 @@ impl SqlStore {
         };
 
         // Finally convert everything into the right format
-        let documents = Self::convert_rows(rows, schema.id());
+        let documents = Self::convert_rows(rows, &application_fields, schema.id());
 
         Ok((pagination_data, documents))
     }
 
-    /// Merges all fields from the database into documents.
+    /// Merges all operation fields from the database into documents.
+    ///
+    /// Due to the special table layout we receive one row per operation field in the query.
+    /// Usually we need to merge multiple rows / operation fields fields into one document.
     fn convert_rows(
         rows: Vec<QueryRow>,
+        fields: &Vec<String>,
         schema_id: &SchemaId,
     ) -> Vec<(DocumentCursor, StorageDocument)> {
         let mut converted: Vec<(DocumentCursor, StorageDocument)> = Vec::new();
@@ -739,9 +744,11 @@ impl SqlStore {
             let mut current = rows[0].clone();
             let mut current_fields = Vec::new();
 
-            for row in rows {
+            let rows_per_document = std::cmp::max(fields.len(), 1);
+
+            for (index, row) in rows.into_iter().enumerate() {
                 // We observed a new document coming up in the next row, time to change
-                if current.document_id != row.document_id {
+                if index % rows_per_document == 0 && index > 0 {
                     // Finalize the current document, convert it and push it into the final
                     // array
                     let (cursor, document) = finalize_document(&current, current_fields);
