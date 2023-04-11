@@ -7,7 +7,7 @@ mod filter_input;
 mod filters;
 mod next_arguments;
 mod ordering;
-mod paginated_response;
+mod document_collection;
 
 pub use document::{DocumentSchema, DocumentValue, PaginatedDocumentSchema};
 pub use document_fields::DocumentFields;
@@ -20,4 +20,4 @@ pub use filters::{
 };
 pub use next_arguments::NextArguments;
 pub use ordering::{OrderBy, OrderDirection};
-pub use paginated_response::{PaginatedResponse, PaginationData};
+pub use document_collection::{DocumentCollection, PaginationData};

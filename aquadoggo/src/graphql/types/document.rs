@@ -9,7 +9,7 @@ use crate::db::stores::DocumentCursor;
 use crate::db::types::StorageDocument;
 use crate::graphql::constants;
 use crate::graphql::types::{DocumentMeta, PaginationData};
-use crate::graphql::utils::{downcast_document, fields_name, paginated_document_name};
+use crate::graphql::utils::{downcast_document, fields_name, collection_item_name};
 
 #[derive(Clone, Debug)]
 pub enum DocumentValue {
@@ -60,7 +60,7 @@ impl PaginatedDocumentSchema {
     /// arguments to it's children query fields. The latter calls the `resolve` method defined on
     /// `DocumentMeta` type.
     pub fn build(schema: &Schema) -> Object {
-        let fields = Object::new(paginated_document_name(schema.id()));
+        let fields = Object::new(collection_item_name(schema.id()));
         with_document_fields(fields, schema).field(
             Field::new(
                 constants::CURSOR_FIELD,

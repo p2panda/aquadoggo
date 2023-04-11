@@ -8,7 +8,7 @@ use crate::db::SqlStore;
 use crate::graphql::constants;
 use crate::graphql::types::DocumentValue;
 use crate::graphql::utils::{
-    paginated_response_name, parse_collection_arguments, with_collection_arguments,
+    document_collection_name, parse_collection_arguments, with_collection_arguments,
 };
 use crate::schema::SchemaProvider;
 
@@ -22,7 +22,7 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
         .field(with_collection_arguments(
             Field::new(
                 format!("{}{}", constants::QUERY_ALL_PREFIX, schema_id),
-                TypeRef::named_list(paginated_response_name(&schema_id)),
+                TypeRef::named_list(document_collection_name(&schema_id)),
                 move |ctx| {
                     // Take ownership of the schema id in the resolver
                     let schema_id = schema_id.clone();

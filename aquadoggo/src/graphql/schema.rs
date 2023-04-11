@@ -23,7 +23,7 @@ use crate::graphql::scalars::{
 use crate::graphql::types::{
     BooleanFilter, DocumentFields, DocumentMeta, DocumentSchema, FilterInput, FloatFilter,
     IntegerFilter, MetaFilterInput, NextArguments, OrderBy, OrderDirection,
-    PaginatedDocumentSchema, PaginatedResponse, PinnedRelationFilter, PinnedRelationListFilter,
+    PaginatedDocumentSchema, DocumentCollection, PinnedRelationFilter, PinnedRelationListFilter,
     RelationFilter, RelationListFilter, StringFilter,
 };
 use crate::schema::SchemaProvider;
@@ -90,7 +90,7 @@ pub async fn build_root_schema(
         let document_schema = DocumentSchema::build(&schema);
 
         // Construct the paginated response wrapper for this document schema type.
-        let paginated_response_schema = PaginatedResponse::build(&schema);
+        let paginated_response_schema = DocumentCollection::build(&schema);
 
         // Construct the schema type object which contains "fields" and "meta" fields
         // as well as cursor pagination fields.

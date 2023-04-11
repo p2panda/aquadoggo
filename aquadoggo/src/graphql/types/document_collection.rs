@@ -7,7 +7,7 @@ use p2panda_rs::schema::Schema;
 use crate::db::query::Cursor;
 use crate::graphql::constants;
 use crate::graphql::types::DocumentValue;
-use crate::graphql::utils::{downcast_document, paginated_document_name, paginated_response_name};
+use crate::graphql::utils::{downcast_document, collection_item_name, document_collection_name};
 
 /// Pagination data passed from parent to child query fields.
 #[derive(Default, Clone, Debug)]
@@ -34,16 +34,16 @@ where
 /// A constructor for dynamically building objects describing a paginated collection of documents.
 /// Each object contains a `document`, `totalCount` and `hasNextPage` fields and defines their
 /// resolution logic. Each generated object has a type name with the formatting
-/// `<schema_id>PaginatedResponse`.
+/// `<schema_id>DocumentCollection`.
 ///
 /// A type should be added to the root GraphQL schema for every schema supported on a node, as
 /// these types are not known at compile time we make use of the `async-graphql` `dynamic` module.
-pub struct PaginatedResponse;
+pub struct DocumentCollection;
 
 // @TODO: Add missing fields here
-impl PaginatedResponse {
+impl DocumentCollection {
     pub fn build(schema: &Schema) -> Object {
-        Object::new(paginated_response_name(schema.id()))
+        Object::new(document_collection_name(schema.id()))
             .field(
                 Field::new(
                     constants::TOTAL_COUNT_FIELD,
@@ -91,7 +91,7 @@ impl PaginatedResponse {
             .field(
                 Field::new(
                     constants::DOCUMENT_FIELD,
-                    TypeRef::named(paginated_document_name(schema.id())),
+                    TypeRef::named(collection_item_name(schema.id())),
                     move |ctx| {
                         FieldFuture::new(async move {
                             // Here we just pass up the root query parameters to be used in the fields
