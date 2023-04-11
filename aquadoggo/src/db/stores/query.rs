@@ -712,15 +712,19 @@ impl SqlStore {
                 {select_edited} AS is_edited,
                 {select_owner} AS owner,
 
-                -- Finally we get the application data by selecting the name and value field. We
-                -- need the field type and list index to understand what the type of the data is and
-                -- if it is a relation, in what order the entries occur
+                -- Finally we get the application data by selecting the name, value and type.
                 operation_fields_v1.name,
                 operation_fields_v1.value,
                 operation_fields_v1.field_type,
+
+                -- The list index is slightly uninteresting for regular queries. When we query
+                -- relation list it suddenly gets very important, as we need to determine the position
+                -- of the document in the list
                 {select_list_index}
 
             FROM
+                -- Usually we query the documents table first. In case we're looking at a relation
+                -- list this gets slighly more complicated and we need to do some additional JOINs
                 {from}
                 JOIN document_view_fields
                     ON documents.document_view_id = document_view_fields.document_view_id
@@ -731,7 +735,7 @@ impl SqlStore {
                             document_view_fields.name = operation_fields_v1.name
 
             WHERE
-                -- We filter by the queried schema of that collection, if it is a nested relation
+                -- We filter by the queried schema of that collection, if it is a relation
                 -- list we filter by the view id of the parent document
                 {where_}
 
@@ -744,8 +748,7 @@ impl SqlStore {
                 -- Lastly we batch all results into smaller chunks via cursor pagination
                 {and_pagination}
 
-            -- Never return more than one row per operation field (even when it is a
-            -- relation list) to not break pagination
+            -- Never return more than one row per operation field to not break pagination
             {group}
 
             -- We always order the rows by document id and list_index, but there might also be
