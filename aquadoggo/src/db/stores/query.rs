@@ -399,7 +399,7 @@ fn order_sql(order: &Order, schema: &Schema) -> String {
 
     match &order.field {
         Field::Meta(MetaField::DocumentId) => {
-            format!("ORDER BY documents.document_id {direction}")
+            format!("ORDER BY documents.document_id {direction}, list_index ASC")
         }
         Field::Meta(meta_field) => {
             let sql_field = match meta_field {
@@ -422,7 +422,7 @@ fn order_sql(order: &Order, schema: &Schema) -> String {
 
                     -- Lastly we should order them by list index, which preserves
                     -- the ordering of (pinned) relation list values
-                    operation_fields_v1.list_index ASC
+                    list_index ASC
                 "#
             )
         }
@@ -485,7 +485,8 @@ fn application_select_sql(fields: &Vec<String>) -> String {
 }
 
 fn total_count_sql(schema_id: &SchemaId, list: Option<&SelectList>, filter: &Filter) -> String {
-    let and_select_list = select_list_sql(list);
+    let from = from_sql(list);
+    let and_where = where_sql(schema_id, list);
     let and_filters = filter_sql(filter);
 
     format!(
@@ -494,7 +495,7 @@ fn total_count_sql(schema_id: &SchemaId, list: Option<&SelectList>, filter: &Fil
                 COUNT(documents.document_id)
 
             FROM
-                documents
+                {from}
                 JOIN document_view_fields
                     ON documents.document_view_id = document_view_fields.document_view_id
                 JOIN operation_fields_v1
@@ -504,8 +505,7 @@ fn total_count_sql(schema_id: &SchemaId, list: Option<&SelectList>, filter: &Fil
                             document_view_fields.name = operation_fields_v1.name
 
             WHERE
-                documents.schema_id = '{schema_id}'
-                {and_select_list}
+                {and_where}
                 {and_filters}
 
             -- Group application fields by name to make sure we get actual number of documents
@@ -564,41 +564,76 @@ fn owner_sql(select: &Select) -> String {
     }
 }
 
-fn select_list_sql(list: Option<&SelectList>) -> String {
+fn where_sql(schema_id: &SchemaId, list: Option<&SelectList>) -> String {
     match list {
         Some(select_list) => {
+            // We filter by the parent document view id of this relation list
             let field_name = &select_list.field;
             let view_id = &select_list.root;
-            let (field_type, filter_sql) = match select_list.list_type {
-                SelectListType::Pinned => ("pinned_relation_list", "documents.document_view_id"),
-                SelectListType::Unpinned => ("relation_list", "documents.document_id"),
+            let field_type = match select_list.list_type {
+                SelectListType::Pinned => "pinned_relation_list",
+                SelectListType::Unpinned => "relation_list",
             };
 
             format!(
                 r#"
-                AND {filter_sql} IN (
-                    SELECT operation_fields_v1.value
-
-                    FROM document_view_fields
-                        JOIN operation_fields_v1
-                            ON
-                                document_view_fields.operation_id = operation_fields_v1.operation_id
-                                AND
-                                    document_view_fields.name = operation_fields_v1.name
-
-                    WHERE
-                        operation_fields_v1.name = '{field_name}'
-                        AND
-                            operation_fields_v1.field_type = '{field_type}'
-                        AND
-                            document_view_fields.document_view_id = '{view_id}'
-
-                    ORDER BY operation_fields_v1.list_index ASC
-                )
-            "#
+                    document_view_fields_list.document_view_id = '{view_id}'
+                    AND
+                        operation_fields_v1_list.field_type = '{field_type}'
+                    AND
+                        operation_fields_v1_list.name = '{field_name}'
+                "#
             )
         }
-        None => "".to_string(),
+        None => {
+            // We filter by the queried schema of that collection
+            format!("documents.schema_id = '{schema_id}'")
+        }
+    }
+}
+
+fn from_sql(list: Option<&SelectList>) -> String {
+    match list {
+        Some(select_list) => {
+            let filter_sql = match select_list.list_type {
+                SelectListType::Pinned => "documents.document_view_id",
+                SelectListType::Unpinned => "documents.document_id",
+            };
+
+            // Select relation list of parent document first and join the related documents
+            // afterwards
+            format!(
+                r#"
+                    document_view_fields document_view_fields_list
+                    INNER JOIN operation_fields_v1 operation_fields_v1_list
+                        ON
+                            document_view_fields_list.operation_id = operation_fields_v1_list.operation_id
+                        AND
+                            document_view_fields_list.name = operation_fields_v1_list.name
+                    INNER JOIN documents
+                        ON
+                            operation_fields_v1_list.value = {filter_sql}
+                "#
+            )
+        }
+        // Otherwise just query the documents directly
+        None => "documents".to_string(),
+    }
+}
+
+fn list_index_sql(list: Option<&SelectList>) -> String {
+    match list {
+        // Use the list index of the parent document when we query a relation list
+        Some(_) => "operation_fields_v1_list.list_index AS list_index".to_string(),
+        None => "operation_fields_v1.list_index AS list_index".to_string(),
+    }
+}
+
+fn group_sql(list: Option<&SelectList>) -> String {
+    match list {
+        // Include list index of the parent document relation list
+        Some(_) => "GROUP BY documents.document_id, operation_fields_v1.name, operation_fields_v1_list.list_index".to_string(),
+        None => "GROUP BY documents.document_id, operation_fields_v1.name".to_string(),
     }
 }
 
@@ -626,14 +661,18 @@ impl SqlStore {
             .collect();
 
         // Generate SQL based on the given schema and query
-        let and_select_list = select_list_sql(list);
+        let select_edited = edited_sql(&args.select);
+        let select_owner = owner_sql(&args.select);
+        let select_list_index = list_index_sql(list);
+
+        let from = from_sql(list);
+
+        let where_ = where_sql(schema.id(), list);
         let and_select = application_select_sql(&application_fields);
         let and_filters = filter_sql(&args.filter);
         let and_pagination = pagination_sql(&args.pagination, &args.order);
 
-        let select_edited = edited_sql(&args.select);
-        let select_owner = owner_sql(&args.select);
-
+        let group = group_sql(list);
         let order = order_sql(&args.order, schema);
         let (page_size, limit) = limit_sql(&args.pagination, &application_fields);
 
@@ -679,10 +718,10 @@ impl SqlStore {
                 operation_fields_v1.name,
                 operation_fields_v1.value,
                 operation_fields_v1.field_type,
-                operation_fields_v1.list_index
+                {select_list_index}
 
             FROM
-                documents
+                {from}
                 JOIN document_view_fields
                     ON documents.document_view_id = document_view_fields.document_view_id
                 JOIN operation_fields_v1
@@ -692,11 +731,9 @@ impl SqlStore {
                             document_view_fields.name = operation_fields_v1.name
 
             WHERE
-                -- We always filter by the queried schema of that collection
-                documents.schema_id = '{schema_id}'
-
-                -- If we're querying a nested list we select the documents of that list before
-                {and_select_list}
+                -- We filter by the queried schema of that collection, if it is a nested relation
+                -- list we filter by the view id of the parent document
+                {where_}
 
                 -- .. and select only the operation fields we're interested in
                 {and_select}
@@ -709,7 +746,7 @@ impl SqlStore {
 
             -- Never return more than one row per operation field (even when it is a
             -- relation list) to not break pagination
-            GROUP BY documents.document_id, operation_fields_v1.name
+            {group}
 
             -- We always order the rows by document id and list_index, but there might also be
             -- user-defined ordering on top of that
