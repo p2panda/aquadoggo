@@ -495,9 +495,9 @@ fn total_count_sql(schema_id: &SchemaId, list: Option<&SelectList>, filter: &Fil
 
             FROM
                 documents
-                INNER JOIN document_view_fields
+                JOIN document_view_fields
                     ON documents.document_view_id = document_view_fields.document_view_id
-                INNER JOIN operation_fields_v1
+                JOIN operation_fields_v1
                     ON
                         document_view_fields.operation_id = operation_fields_v1.operation_id
                         AND
@@ -580,7 +580,7 @@ fn select_list_sql(list: Option<&SelectList>) -> String {
                     SELECT operation_fields_v1.value
 
                     FROM document_view_fields
-                        INNER JOIN operation_fields_v1
+                        JOIN operation_fields_v1
                             ON
                                 document_view_fields.operation_id = operation_fields_v1.operation_id
                                 AND
@@ -683,9 +683,9 @@ impl SqlStore {
 
             FROM
                 documents
-                INNER JOIN document_view_fields
+                JOIN document_view_fields
                     ON documents.document_view_id = document_view_fields.document_view_id
-                INNER JOIN operation_fields_v1
+                JOIN operation_fields_v1
                     ON
                         document_view_fields.operation_id = operation_fields_v1.operation_id
                         AND
