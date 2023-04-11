@@ -85,13 +85,16 @@ impl From<&QueryRow> for DocumentCursor {
     }
 }
 
+const CURSOR_SEPARATOR: char = '_';
+
 impl Cursor for DocumentCursor {
     type Error = anyhow::Error;
 
-    fn decode(value: &str) -> Result<Self, Self::Error> {
-        // @TODO: Decode base64 string
-        let parts: Vec<&str> = value.split('_').collect();
+    fn decode(encoded: &str) -> Result<Self, Self::Error> {
+        let bytes = bs58::decode(encoded).into_vec()?;
+        let decoded = std::str::from_utf8(&bytes)?;
 
+        let parts: Vec<&str> = decoded.split(CURSOR_SEPARATOR).collect();
         if parts.len() != 2 {
             bail!("Invalid amount of cursor parts");
         }
@@ -103,8 +106,14 @@ impl Cursor for DocumentCursor {
     }
 
     fn encode(&self) -> String {
-        // @TODO: Generate base64 string
-        format!("{}_{}", self.list_index, self.document_id)
+        bs58::encode(
+            format!(
+                "{}{}{}",
+                self.list_index, CURSOR_SEPARATOR, self.document_id
+            )
+            .as_bytes(),
+        )
+        .into_string()
     }
 }
 

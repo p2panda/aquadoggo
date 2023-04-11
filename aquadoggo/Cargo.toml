@@ -23,6 +23,7 @@ async-recursion = "^1.0.0"
 async-trait = "^0.1.64"
 axum = "^0.6.10"
 bamboo-rs-core-ed25519-yasmf = "^0.1.1"
+bs58 = "^0.4.0"
 deadqueue = { version = "^0.2.3", default-features = false, features = [
     "unlimited",
 ] }
