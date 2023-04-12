@@ -335,7 +335,7 @@ mod tests {
     #[case::invalid_entry_hex_encoding(
         "-/74='4,.=4-=235m-0   34.6-3",
         &OPERATION_ENCODED,
-        "Invalid value for argument \"entry\": Failed to parse \"EncodedEntry\": Invalid character '-' at position 0"
+        "Invalid value for argument \"entry\", expected type \"EncodedEntry\""
     )]
     #[case::no_entry(
         "",
@@ -373,12 +373,12 @@ mod tests {
     #[case::valid_entry_with_extra_hex_char_at_end(
         &{EncodedEntry::from_bytes(&ENTRY_ENCODED).to_string() + "A"},
         &OPERATION_ENCODED,
-        "Invalid value for argument \"entry\": Failed to parse \"EncodedEntry\": Odd number of digits"
+        "Invalid value for argument \"entry\", expected type \"EncodedEntry\""
     )]
     #[case::valid_entry_with_extra_hex_char_at_start(
         &{"A".to_string() + &EncodedEntry::from_bytes(&ENTRY_ENCODED).to_string()},
         &OPERATION_ENCODED,
-        "Invalid value for argument \"entry\": Failed to parse \"EncodedEntry\": Odd number of digits"
+        "Invalid value for argument \"entry\", expected type \"EncodedEntry\""
     )]
     #[case::should_not_have_skiplink(
         &entry_signed_encoded_unvalidated(

@@ -5,9 +5,10 @@ use std::{fmt::Display, str::FromStr};
 use dynamic_graphql::{Error, Result, Scalar, ScalarValue, Value};
 use p2panda_rs::document::DocumentViewId;
 
-/// Document view id as a GraphQL scalar.
+/// The document view id of a p2panda document. Refers to a specific point in a documents history
+/// and can be used to deterministically reconstruct it's state at that time.
 #[derive(Scalar, Clone, Debug, Eq, PartialEq)]
-#[graphql(name = "DocumentViewId")]
+#[graphql(name = "DocumentViewId", validator(validate))]
 pub struct DocumentViewIdScalar(DocumentViewId);
 
 impl ScalarValue for DocumentViewIdScalar {
@@ -47,4 +48,10 @@ impl Display for DocumentViewIdScalar {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
+}
+
+/// Validation method used internally in `async-graphql` to check scalar values passed into the
+/// public api.
+fn validate(value: &Value) -> bool {
+    DocumentViewIdScalar::from_value(value.to_owned()).is_ok()
 }
