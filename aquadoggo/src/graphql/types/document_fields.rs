@@ -8,7 +8,7 @@ use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{FieldType, Schema};
 use p2panda_rs::storage_provider::traits::DocumentStore;
 
-use crate::db::stores::SelectList;
+use crate::db::stores::RelationList;
 use crate::db::SqlStore;
 use crate::graphql::types::DocumentValue;
 use crate::graphql::utils::{
@@ -123,7 +123,7 @@ impl DocumentFields {
                 let query = parse_collection_arguments(&ctx, &schema)?;
 
                 // Select relation field containing list of documents
-                let list = SelectList::new_unpinned(document.view_id(), name);
+                let list = RelationList::new_unpinned(document.view_id(), name);
 
                 // Fetch all queried documents and compose the field value list which will
                 // bubble up the query tree
@@ -177,7 +177,7 @@ impl DocumentFields {
                 let query = parse_collection_arguments(&ctx, &schema)?;
 
                 // Select relation field containing list of pinned document views
-                let list = SelectList::new_pinned(document.view_id(), name);
+                let list = RelationList::new_pinned(document.view_id(), name);
 
                 // Fetch all queried documents and compose the field value list which will
                 // bubble up the query tree

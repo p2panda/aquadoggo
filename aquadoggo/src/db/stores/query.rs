@@ -24,17 +24,8 @@ use crate::db::types::StorageDocument;
 use crate::db::SqlStore;
 use crate::graphql::types::PaginationData;
 
-pub type QueryResponse = (
-    PaginationData<DocumentCursor>,
-    Vec<(DocumentCursor, StorageDocument)>,
-);
-
-pub enum SelectListType {
-    Pinned,
-    Unpinned,
-}
-
-pub struct SelectList {
+/// Configure query to select documents based on a relation list field.
+pub struct RelationList {
     /// View id of document which holds relation list field.
     pub root: DocumentViewId,
 
@@ -42,15 +33,20 @@ pub struct SelectList {
     pub field: FieldName,
 
     /// Type of relation list.
-    pub list_type: SelectListType,
+    pub list_type: RelationListType,
 }
 
-impl SelectList {
+pub enum RelationListType {
+    Pinned,
+    Unpinned,
+}
+
+impl RelationList {
     pub fn new_unpinned(root: &DocumentViewId, field: &str) -> Self {
         Self {
             root: root.to_owned(),
             field: field.to_string(),
-            list_type: SelectListType::Unpinned,
+            list_type: RelationListType::Unpinned,
         }
     }
 
@@ -58,15 +54,26 @@ impl SelectList {
         Self {
             root: root.to_owned(),
             field: field.to_string(),
-            list_type: SelectListType::Pinned,
+            list_type: RelationListType::Pinned,
         }
     }
 }
 
+/// Cursor aiding pagination, represented as a base58-encoded string.
+///
+/// The encoding ensures that the cursor stays "opaque", API consumers to not read any further
+/// semantic meaning into it, even though we keep some crucial information in it which help us
+/// internally during pagination.
 #[derive(Debug, Clone)]
 pub struct DocumentCursor {
-    pub list_index: u64,
+    /// For regular collection queries the id helps us to determine the current row. In relation
+    /// list queries we use this field to represent the parent document holding that list.
     pub document_id: DocumentId,
+
+    /// This value is not interesting for collection queries, it will always be "0". For relation
+    /// list queries we need it though as it represents the current row. In this case the list
+    /// index becomes the actual cursor.
+    pub list_index: u64,
 }
 
 impl DocumentCursor {
@@ -117,6 +124,13 @@ impl Cursor for DocumentCursor {
     }
 }
 
+pub type QueryResponse = (
+    PaginationData<DocumentCursor>,
+    Vec<(DocumentCursor, StorageDocument)>,
+);
+
+/// Query configuration to determine pagination cursor, selected fields, filters and order of
+/// results.
 #[derive(Default, Debug, Clone)]
 pub struct Query<C>
 where
@@ -343,6 +357,7 @@ fn pagination_sql(pagination: &Pagination<DocumentCursor>, order: &Order) -> Str
                     todo!("not implemented yet");
                 }
                 Field::Field(order_field_name) => {
+                    // @TODO: Make sure this works for relation lists as well
                     format!(
                         r#"
                         AND EXISTS (
@@ -473,8 +488,8 @@ fn limit_sql<C>(pagination: &Pagination<C>, fields: &Vec<String>) -> (u64, Strin
 where
     C: Cursor,
 {
-    // We multiply the value by the number of fields we selected. If no fields have
-    // been selected we just take the page size as is
+    // We multiply the value by the number of fields we selected. If no fields have been selected
+    // we just take the page size as is
     let page_size = pagination.first.get() * std::cmp::max(1, fields.len() as u64);
 
     // ... and add + 1 for the "has next page" flag
@@ -493,7 +508,7 @@ fn application_select_sql(fields: &Vec<String>) -> String {
     }
 }
 
-fn total_count_sql(schema_id: &SchemaId, list: Option<&SelectList>, filter: &Filter) -> String {
+fn total_count_sql(schema_id: &SchemaId, list: Option<&RelationList>, filter: &Filter) -> String {
     let from = from_sql(list);
     let and_where = where_sql(schema_id, list);
     let and_filters = filter_sql(filter);
@@ -505,6 +520,7 @@ fn total_count_sql(schema_id: &SchemaId, list: Option<&SelectList>, filter: &Fil
 
             FROM
                 {from}
+
                 JOIN document_view_fields
                     ON documents.document_view_id = document_view_fields.document_view_id
                 JOIN operation_fields_v1
@@ -542,8 +558,7 @@ fn edited_sql(select: &Select) -> String {
         .to_string()
     } else {
         // Use constant when we do not query for edited status. This is useful for keeping the
-        // resulting row type in shape, otherwise we would need to dynamically change it depending
-        // on what meta fields were selected.
+        // resulting SQL row type in shape.
         "0".to_string()
     }
 }
@@ -564,24 +579,23 @@ fn owner_sql(select: &Select) -> String {
         "#
         .to_string()
     } else {
-        // Use constant when we do not query owner. This is useful for keeping the resulting row
-        // type in shape, otherwise we would need to dynamically change it depending on what meta
-        // fields were selected.
+        // Use constant when we do not query owner. This is useful for keeping the resulting SQL
+        // row type in shape.
         //
-        // The value is so funny to make sure it passes ed25519 public key validation.
+        // The value looks funny and exists to still pass as a ed25519 public key.
         "'0000000000000000000000000000000000000000000000000000000000000000'".to_string()
     }
 }
 
-fn where_sql(schema_id: &SchemaId, list: Option<&SelectList>) -> String {
+fn where_sql(schema_id: &SchemaId, list: Option<&RelationList>) -> String {
     match list {
         Some(select_list) => {
             // We filter by the parent document view id of this relation list
             let field_name = &select_list.field;
             let view_id = &select_list.root;
             let field_type = match select_list.list_type {
-                SelectListType::Pinned => "pinned_relation_list",
-                SelectListType::Unpinned => "relation_list",
+                RelationListType::Pinned => "pinned_relation_list",
+                RelationListType::Unpinned => "relation_list",
             };
 
             format!(
@@ -601,12 +615,12 @@ fn where_sql(schema_id: &SchemaId, list: Option<&SelectList>) -> String {
     }
 }
 
-fn from_sql(list: Option<&SelectList>) -> String {
+fn from_sql(list: Option<&RelationList>) -> String {
     match list {
         Some(select_list) => {
             let filter_sql = match select_list.list_type {
-                SelectListType::Pinned => "documents.document_view_id",
-                SelectListType::Unpinned => "documents.document_id",
+                RelationListType::Pinned => "documents.document_view_id",
+                RelationListType::Unpinned => "documents.document_id",
             };
 
             // Select relation list of parent document first and join the related documents
@@ -630,7 +644,7 @@ fn from_sql(list: Option<&SelectList>) -> String {
     }
 }
 
-fn list_index_sql(list: Option<&SelectList>) -> String {
+fn list_index_sql(list: Option<&RelationList>) -> String {
     match list {
         // Use the list index of the parent document when we query a relation list
         Some(_) => "operation_fields_v1_list.list_index AS list_index".to_string(),
@@ -638,7 +652,7 @@ fn list_index_sql(list: Option<&SelectList>) -> String {
     }
 }
 
-fn group_sql(list: Option<&SelectList>) -> String {
+fn group_sql(list: Option<&RelationList>) -> String {
     match list {
         // Include list index of the parent document relation list
         Some(_) => "GROUP BY documents.document_id, operation_fields_v1.name, operation_fields_v1_list.list_index".to_string(),
@@ -647,11 +661,16 @@ fn group_sql(list: Option<&SelectList>) -> String {
 }
 
 impl SqlStore {
+    /// Returns a paginated collection of documents from the database which can be filtered and
+    /// ordered by custom parameters.
+    ///
+    /// When passing a `list` configuration the query will run against the documents of a (pinned)
+    /// relation list instead.
     pub async fn query(
         &self,
         schema: &Schema,
         args: &Query<DocumentCursor>,
-        list: Option<&SelectList>,
+        list: Option<&RelationList>,
     ) -> Result<QueryResponse, DocumentStorageError> {
         let schema_id = schema.id();
 
@@ -707,14 +726,14 @@ impl SqlStore {
             -- annoying as myself.
 
             SELECT
-                -- We get all the meta informations first, let's start with the document id and
-                -- document view id, schema id and id of the operation which holds the data
+                -- We get all the meta informations first, let's start with the document id,
+                -- document view id and id of the operation which holds the data
                 documents.document_id,
                 documents.document_view_id,
                 operation_fields_v1.operation_id,
 
-                -- If a document got deleted we already store in the database, let's get it in any
-                -- case ince we get it for free
+                -- The deletion status of a document we already store in the database, let's select it in
+                -- any case since we get it for free
                 documents.is_deleted,
 
                 -- Optionally we check for the edited status and owner of the document
@@ -726,15 +745,17 @@ impl SqlStore {
                 operation_fields_v1.value,
                 operation_fields_v1.field_type,
 
-                -- The list index is slightly uninteresting for regular queries. When we query
-                -- relation list it suddenly gets very important, as we need to determine the position
-                -- of the document in the list
+                -- When we query relation list the index value becomes important, as we need to
+                -- determine the position of the document in the list
                 {select_list_index}
 
             FROM
-                -- Usually we query the documents table first. In case we're looking at a relation
-                -- list this gets slighly more complicated and we need to do some additional JOINs
+                -- Usually we query the "documents" table first. In case we're looking at a relation
+                -- list this is slighly more complicated and we need to do some additional JOINs
                 {from}
+
+                -- In any case we want to get the (latest) operation values for each document in
+                -- the end
                 JOIN document_view_fields
                     ON documents.document_view_id = document_view_fields.document_view_id
                 JOIN operation_fields_v1
@@ -760,7 +781,7 @@ impl SqlStore {
             -- Never return more than one row per operation field to not break pagination
             {group}
 
-            -- We always order the rows by document id and list_index, but there might also be
+            -- We always order the rows by document id and list index, but there might also be
             -- user-defined ordering on top of that
             {order}
 
@@ -865,8 +886,7 @@ impl SqlStore {
             for (index, row) in rows.into_iter().enumerate() {
                 // We observed a new document coming up in the next row, time to change
                 if index % rows_per_document == 0 && index > 0 {
-                    // Finalize the current document, convert it and push it into the final
-                    // array
+                    // Finalize the current document, convert it and push it into the final array
                     let (cursor, document) = finalize_document(&current, current_fields);
                     converted.push((cursor, document));
 
