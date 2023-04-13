@@ -57,6 +57,23 @@ struct Cli {
     /// eg. --rendezvous-peer-id "12D3KooWD3eckifWpRn9wQpMG9R9hX3sD158z7EqHWmweQAJU5SA"
     #[arg(long)]
     rendezvous_peer_id: Option<PeerId>,
+
+    /// Enable relay client to facilitate peer connectivity via a relay server, false by default.
+    #[arg(long)]
+    relay_client: Option<bool>,
+
+    /// Enable relay server to facilitate peer connectivity, false by default.
+    #[arg(long)]
+    relay_server: Option<bool>,
+
+    /// The IP address of a relay server in the form of a multiaddress.
+    ///
+    /// eg. --relay-address "/ip4/127.0.0.1/udp/12345/quic-v1"
+    #[arg(long)]
+    relay_address: Option<Multiaddr>,
+
+    /// Enable AutoNAT to facilitate NAT status determination, true by default.
+    autonat: Option<bool>,
 }
 
 impl Cli {
@@ -89,9 +106,13 @@ impl TryFrom<Cli> for Configuration {
         config.http_port = cli.http_port.unwrap_or(2020);
 
         config.network = NetworkConfiguration {
+            autonat: cli.autonat.unwrap_or(true),
             mdns: cli.mdns.unwrap_or(true),
             ping: cli.ping.unwrap_or(true),
             quic_port: cli.quic_port.unwrap_or(2022),
+            relay_client: cli.relay_client.unwrap_or(false),
+            relay_server: cli.relay_server.unwrap_or(false),
+            relay_address: cli.relay_address,
             remote_peers: cli.remote_node_addresses,
             rendezvous_client: cli.rendezvous_client.unwrap_or(false),
             rendezvous_server: cli.rendezvous_server.unwrap_or(false),

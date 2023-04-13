@@ -19,7 +19,6 @@ edition = "2018"
 anyhow = "^1.0.62"
 async-graphql = { version = "^5.0.6", features = ["dynamic-schema"] }
 async-graphql-axum = "^5.0.6"
-async-recursion = "^1.0.0"
 async-trait = "^0.1.64"
 axum = "^0.6.10"
 bamboo-rs-core-ed25519-yasmf = "^0.1.1"
@@ -30,18 +29,21 @@ directories = "^4.0.1"
 dynamic-graphql = "^0.7.3"
 envy = "^0.4.2"
 futures = "^0.3.23"
-gql_client = "^1.0.6"
 hex = "^0.4.3"
 http = "^0.2.8"
 libp2p = { version = "^0.51.0", features = [
-    "tokio",
-    "macros",
-    "quic",
-    "ping",
-    "mdns",
+    "autonat",
     "identify",
+    "macros",
+    "mdns",
+    "noise",
+    "ping",
+    "quic",
+    "relay",
     "rendezvous",
     "serde",
+    "tokio",
+    "yamux",
 ] }
 lipmaa-link = "^0.2.2"
 log = "^0.4.17"
