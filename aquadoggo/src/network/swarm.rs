@@ -21,8 +21,10 @@ pub async fn build_swarm(
     let peer_id = PeerId::from(key_pair.public());
     info!("Network service peer ID: {peer_id}");
 
+    let relay_client_enabled = network_config.relay_address.is_some();
+
     let (transport, relay_client) =
-        transport::build_transport(&key_pair, network_config.relay_client).await;
+        transport::build_transport(&key_pair, relay_client_enabled).await;
 
     // Instantiate the custom network behaviour with default configuration
     // and the libp2p peer ID
