@@ -364,49 +364,44 @@ fn pagination_sql(pagination: &Pagination<DocumentCursor>, order: &Order) -> Str
                         r#"
                         AND EXISTS (
                             SELECT
-                                operation_fields_v1.value
+                                operation_fields_v1.value,
+
+                                -- When ordering is activated we need to compare against the value
+                                -- of the ordered field - but of the row where the cursor points at
+                                (
+                                    SELECT
+                                        operation_fields_v1.value
+                                    FROM
+                                        operation_fields_v1
+                                    LEFT JOIN
+                                        operations_v1
+                                        ON
+                                            operations_v1.operation_id = operation_fields_v1.operation_id
+                                    WHERE
+                                        operation_fields_v1.name = '{order_field_name}'
+                                        AND
+                                            operations_v1.document_view_id = '{cursor_str}'
+                                ) AS cmp_value
+
                             FROM
                                 operation_fields_v1
+
                             WHERE
                                 operation_fields_v1.name = '{order_field_name}'
+
                                 AND
                                     operation_fields_v1.operation_id = document_view_fields.operation_id
+
                                 AND
                                     (
-                                    operation_fields_v1.value > (
-                                        SELECT
-                                            operation_fields_v1.value
-                                        FROM
-                                            operation_fields_v1
-                                        LEFT JOIN
-                                            operations_v1
-                                            ON
-                                                operations_v1.operation_id = operation_fields_v1.operation_id
-                                        WHERE
-                                            operation_fields_v1.name = '{order_field_name}'
+                                        operation_fields_v1.value > cmp_value
+                                        OR
+                                        (
+                                            operation_fields_v1.value = cmp_value
                                             AND
-                                                operations_v1.document_view_id = '{cursor_str}'
-                                    )
-                                    OR
-                                    (
-                                        operation_fields_v1.value = (
-                                            SELECT
-                                                operation_fields_v1.value
-                                            FROM
-                                                operation_fields_v1
-                                            LEFT JOIN
-                                                operations_v1
-                                                ON
-                                                    operations_v1.operation_id = operation_fields_v1.operation_id
-                                            WHERE
-                                                operation_fields_v1.name = '{order_field_name}'
-                                                AND
-                                                    operations_v1.document_view_id = '{cursor_str}'
+                                                documents.document_view_id > '{cursor_str}'
                                         )
-                                        AND
-                                            documents.document_view_id > '{cursor_str}'
                                     )
-                                )
                         )
                         "#
                     )
@@ -656,7 +651,7 @@ fn list_index_sql(list: Option<&RelationList>) -> String {
 
 fn group_sql(list: Option<&RelationList>) -> String {
     match list {
-        // Include list index of the parent document relation list
+        // Include list index of the parent document relation list to allow duplicate documents
         Some(_) => "GROUP BY documents.document_id, operation_fields_v1.name, operation_fields_v1_list.list_index".to_string(),
         None => "GROUP BY documents.document_id, operation_fields_v1.name".to_string(),
     }
