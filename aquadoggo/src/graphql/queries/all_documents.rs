@@ -58,7 +58,7 @@ mod test {
     #[case(
         "".to_string(),
         value!({
-            "collection": value!([{ "hasNextPage": false, "totalCount": 0, "document": { "cursor": "CURSOR", "fields": { "bool": true, } } }]),
+            "collection": value!({ "hasNextPage": false, "totalCount": 0, "documents": [{ "cursor": "CURSOR", "fields": { "bool": true, } }] }),
         }),
         vec![]
     )]
@@ -86,7 +86,7 @@ mod test {
             }
         )"#.to_string(),
         value!({
-            "collection": value!([{ "hasNextPage": false, "totalCount": 0, "document": { "cursor": "CURSOR", "fields": { "bool": true, } } }]),
+            "collection": value!({ "hasNextPage": false, "totalCount": 0, "documents": [{ "cursor": "CURSOR", "fields": { "bool": true, } }] }),
         }),
         vec![]
     )]
@@ -231,7 +231,7 @@ mod test {
                 collection: all_{type_name}{query_args} {{
                     hasNextPage
                     totalCount
-                    document {{
+                    documents {{
                         cursor
                         fields {{ bool }}
                     }}
