@@ -126,10 +126,10 @@ impl DocumentCollection {
     }
 
     /// Resolver to be used when processing a query for a document collection.
-    pub async fn resolve<'a>(
-        ctx: ResolverContext<'a>,
+    pub async fn resolve(
+        ctx: ResolverContext<'_>,
         schema: Schema,
-    ) -> Result<Option<FieldValue<'a>>, Error> {
+    ) -> Result<Option<FieldValue>, Error> {
         let store = ctx.data_unchecked::<SqlStore>();
 
         // Populate query arguments with values from GraphQL query
