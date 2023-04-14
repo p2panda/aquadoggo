@@ -359,6 +359,17 @@ fn pagination_sql(
     list: Option<&RelationList>,
     order: &Order,
 ) -> String {
+    // Ignore pagination if we're in a relation list query and the cursor does not match the parent
+    // document view id
+    match (list, pagination.after.as_ref()) {
+        (Some(relation_list), Some(cursor)) => {
+            if Some(&relation_list.root) != cursor.root.as_ref() {
+                return "".to_string();
+            }
+        }
+        _ => (),
+    }
+
     match &pagination.after {
         Some(cursor) => {
             let view_id = cursor.document_view_id.to_string();
