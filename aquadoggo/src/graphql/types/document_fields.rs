@@ -8,14 +8,14 @@ use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{FieldType, Schema};
 use p2panda_rs::storage_provider::traits::DocumentStore;
 
-use crate::db::stores::SelectList;
 use crate::db::SqlStore;
 use crate::graphql::types::DocumentValue;
 use crate::graphql::utils::{
-    downcast_document, fields_name, gql_scalar, graphql_type, parse_collection_arguments,
-    with_collection_arguments,
+    downcast_document, fields_name, gql_scalar, graphql_type, with_collection_arguments,
 };
 use crate::schema::SchemaProvider;
+
+use super::DocumentCollection;
 
 /// A constructor for dynamically building objects describing the application fields of a p2panda
 /// schema. Each generated object has a type name with the formatting `<schema_id>Fields`.
@@ -79,7 +79,8 @@ impl DocumentFields {
         // Parse the bubble up value
         let document = match downcast_document(&ctx) {
             DocumentValue::Single(document) => document,
-            DocumentValue::Paginated(_, _, document) => document,
+            DocumentValue::Item(_, document) => document,
+            DocumentValue::Collection(_, _) => panic!("Expected list item or single document"),
         };
 
         let schema = schema_provider
@@ -119,30 +120,7 @@ impl DocumentFields {
                     _ => panic!("Schema should exist"),
                 };
 
-                // Populate query arguments with values from GraphQL query
-                let query = parse_collection_arguments(&ctx, &schema)?;
-
-                // Select relation field containing list of documents
-                let list = SelectList::new_unpinned(document.view_id(), name);
-
-                // Fetch all queried documents and compose the field value list which will
-                // bubble up the query tree
-                let (pagination_data, documents) =
-                    store.query(&schema, &query, Some(&list)).await?;
-
-                let results: Vec<FieldValue> = documents
-                    .iter()
-                    .map(|(cursor, document)| {
-                        FieldValue::owned_any(DocumentValue::Paginated(
-                            cursor.clone(),
-                            pagination_data.clone(),
-                            document.clone(),
-                        ))
-                    })
-                    .collect();
-
-                // Pass the list up to the children query fields
-                Ok(Some(FieldValue::list(results)))
+                DocumentCollection::resolve(ctx, schema).await
             }
             // Pinned relation behaves the same as relation but passes along a document view id.
             OperationValue::PinnedRelation(relation) => {
@@ -173,30 +151,7 @@ impl DocumentFields {
                     _ => panic!(), // Should never reach here.
                 };
 
-                // Populate query arguments with values from GraphQL query
-                let query = parse_collection_arguments(&ctx, &schema)?;
-
-                // Select relation field containing list of pinned document views
-                let list = SelectList::new_pinned(document.view_id(), name);
-
-                // Fetch all queried documents and compose the field value list which will
-                // bubble up the query tree
-                let (pagination_data, documents) =
-                    store.query(&schema, &query, Some(&list)).await?;
-
-                let document_view_fields: Vec<FieldValue> = documents
-                    .iter()
-                    .map(|(cursor, document)| {
-                        FieldValue::owned_any(DocumentValue::Paginated(
-                            cursor.clone(),
-                            pagination_data.clone(),
-                            document.clone(),
-                        ))
-                    })
-                    .collect();
-
-                // Pass the list up to the children query fields
-                Ok(Some(FieldValue::list(document_view_fields)))
+                DocumentCollection::resolve(ctx, schema).await
             }
             // All other fields are simply resolved to their scalar value.
             value => Ok(Some(FieldValue::value(gql_scalar(value)))),

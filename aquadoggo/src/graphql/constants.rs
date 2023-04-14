@@ -55,8 +55,8 @@ pub const ORDER_BY_ARG: &str = "orderBy";
 /// Argument string used for passing ordering direction to query.
 pub const ORDER_DIRECTION_ARG: &str = "orderDirection";
 
-/// Name of field on a document where it's fields can be accessed.
-pub const DOCUMENT_FIELD: &str = "document";
+/// Name of field where a collection of documents can be accessed.
+pub const DOCUMENTS_FIELD: &str = "documents";
 
 /// Name of field on a document where it's fields can be accessed.
 pub const FIELDS_FIELD: &str = "fields";

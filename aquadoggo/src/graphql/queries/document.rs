@@ -326,7 +326,7 @@ mod test {
                     "fields": { "__typename": format!("{}Fields", schema.id()), }
                 },
                 "collection": [{
-                    "__typename": format!("{}PaginatedResponse", schema.id()),
+                    "__typename": format!("{}DocumentCollection", schema.id()),
                     "document" : {
                         "__typename" : format!("{}Paginated", schema.id()),
                         "meta": { "__typename": "DocumentMeta" },

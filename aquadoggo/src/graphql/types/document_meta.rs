@@ -35,7 +35,8 @@ impl DocumentMeta {
         // Extract the document in the case of a single or paginated request.
         let document = match document {
             DocumentValue::Single(document) => document,
-            DocumentValue::Paginated(_, _, document) => document,
+            DocumentValue::Item(_, document) => document,
+            DocumentValue::Collection(_, _) => panic!("Expected list item or single document"),
         };
 
         // Construct `DocumentMeta` and return it. We defined the document meta

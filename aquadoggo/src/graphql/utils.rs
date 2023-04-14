@@ -29,7 +29,7 @@ const COLLECTION_ITEM_SUFFIX: &str = "Item";
 const COLLECTION_SUFFIX: &str = "Collection";
 
 // Correctly formats the name of a document collection type.
-pub fn document_collection_name(schema_id: &SchemaId) -> String {
+pub fn collection_name(schema_id: &SchemaId) -> String {
     format!("{}{COLLECTION_SUFFIX}", schema_id)
 }
 
@@ -76,12 +76,10 @@ pub fn graphql_type(field_type: &FieldType) -> TypeRef {
         FieldType::Float => TypeRef::named(TypeRef::FLOAT),
         FieldType::String => TypeRef::named(TypeRef::STRING),
         FieldType::Relation(schema_id) => TypeRef::named(schema_id.to_string()),
-        FieldType::RelationList(schema_id) => {
-            TypeRef::named_list(document_collection_name(schema_id))
-        }
+        FieldType::RelationList(schema_id) => TypeRef::named(collection_name(schema_id)),
         FieldType::PinnedRelation(schema_id) => TypeRef::named(schema_id.to_string()),
         FieldType::PinnedRelationList(schema_id) => {
-            TypeRef::named_list(document_collection_name(schema_id))
+            TypeRef::named(collection_name(schema_id))
         }
     }
 }
@@ -387,7 +385,7 @@ pub fn look_ahead_selected_fields(ctx: &ResolverContext) -> (Vec<PaginationField
     let pagination = selection_field
         .selection_set()
         .filter_map(|field| match field.name() {
-            constants::DOCUMENT_FIELD => None,
+            constants::DOCUMENTS_FIELD => None,
             value => Some(value.into()),
         })
         .collect::<Vec<PaginationField>>();
@@ -396,7 +394,7 @@ pub fn look_ahead_selected_fields(ctx: &ResolverContext) -> (Vec<PaginationField
 
     if let Some(document) = selection_field
         .selection_set()
-        .find(|field| field.name() == constants::DOCUMENT_FIELD)
+        .find(|field| field.name() == constants::DOCUMENTS_FIELD)
     {
         document
             .selection_set()
