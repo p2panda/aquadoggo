@@ -49,9 +49,11 @@ pub enum PaginationField {
 impl From<&str> for PaginationField {
     fn from(value: &str) -> Self {
         match value {
-            constants::TOTAL_COUNT_FIELD => PaginationField::TotalCount,
+            constants::END_CURSOR_FIELD => PaginationField::EndCursor,
             constants::HAS_NEXT_PAGE_FIELD => PaginationField::HasNextPage,
-            // @TODO: Add the others here as well
+            constants::HAS_PREVIOUS_PAGE_FIELD => PaginationField::HasPreviousPage,
+            constants::START_CURSOR_FIELD => PaginationField::StartCursor,
+            constants::TOTAL_COUNT_FIELD => PaginationField::TotalCount,
             value => {
                 panic!("Unknown pagination field '{}' selected", value)
             }

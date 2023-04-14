@@ -44,7 +44,6 @@ where
 /// these types are not known at compile time we make use of the `async-graphql` `dynamic` module.
 pub struct DocumentCollection;
 
-// @TODO: Add missing fields here
 impl DocumentCollection {
     pub fn build(schema: &Schema) -> Object {
         Object::new(collection_name(schema.id()))
@@ -70,6 +69,30 @@ impl DocumentCollection {
                 .description(
                     "The total number of documents available in this paginated collection.",
                 ),
+            )
+            .field(
+                Field::new(
+                    constants::END_CURSOR_FIELD,
+                    TypeRef::named_nn(TypeRef::STRING),
+                    move |ctx| {
+                        FieldFuture::new(async move {
+                            let document_value = downcast_document(&ctx);
+
+                            let end_cursor = match document_value {
+                                DocumentValue::Collection(data, _) => data.end_cursor,
+                                _ => panic!("Expected document collection"),
+                            };
+
+                            match end_cursor {
+                                Some(cursor) => {
+                                    Ok(Some(FieldValue::from(Value::from(cursor.encode()))))
+                                }
+                                None => Ok(Some(FieldValue::NULL)),
+                            }
+                        })
+                    },
+                )
+                .description("Cursor for the next page"),
             )
             .field(
                 Field::new(

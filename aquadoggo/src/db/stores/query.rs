@@ -249,8 +249,6 @@ fn cmp_sql(sql_field: &str, filter_setting: &FilterSetting) -> String {
             }
         }
         FilterBy::Set(values_vec) => {
-            // @TODO: Write a test for this to check if this correctly
-            // "flattens" relation lists
             let value_sql = values_vec
                 .iter()
                 .map(value_sql)
@@ -886,8 +884,8 @@ impl SqlStore {
         };
 
         // Determine cursors for pagination by looking at beginning and end of results
-        let start_cursor = rows.first().map(DocumentCursor::from);
-        let end_cursor = rows.last().map(DocumentCursor::from);
+        let start_cursor = rows.first().map(|row| Self::row_to_cursor(row, list));
+        let end_cursor = rows.last().map(|row| Self::row_to_cursor(row, list));
 
         let pagination_data = PaginationData {
             total_count,
@@ -933,19 +931,7 @@ impl SqlStore {
                     deleted: row.is_deleted,
                 };
 
-                let cursor: DocumentCursor = match list {
-                    Some(relation_list) => {
-                        // If we're querying a relation list then we mention the document view id
-                        // of the parent document. This helps us later to understand _which_ of the
-                        // potentially many relation lists we want to paginate
-                        DocumentCursor::new(
-                            row.list_index as u64,
-                            row.document_view_id.parse().unwrap(),
-                            Some(relation_list.root.clone()),
-                        )
-                    }
-                    None => row.into(),
-                };
+                let cursor = Self::row_to_cursor(&row, list);
 
                 (cursor, document)
             };
@@ -986,6 +972,23 @@ impl SqlStore {
             converted.push((cursor, document));
 
             converted
+        }
+    }
+
+    /// Get a cursor from a document row.
+    fn row_to_cursor(row: &QueryRow, list: Option<&RelationList>) -> DocumentCursor {
+        match list {
+            Some(relation_list) => {
+                // If we're querying a relation list then we mention the document view id
+                // of the parent document. This helps us later to understand _which_ of the
+                // potentially many relation lists we want to paginate
+                DocumentCursor::new(
+                    row.list_index as u64,
+                    row.document_view_id.parse().unwrap(),
+                    Some(relation_list.root.clone()),
+                )
+            }
+            None => row.into(),
         }
     }
 }
