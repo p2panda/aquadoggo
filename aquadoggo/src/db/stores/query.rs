@@ -68,7 +68,7 @@ impl RelationList {
 pub struct DocumentCursor {
     /// For regular collection queries the id helps us to determine the current row. In relation
     /// list queries we use this field to represent the parent document holding that list.
-    pub document_id: DocumentId,
+    pub document_view_id: DocumentViewId,
 
     /// This value is not interesting for collection queries, it will always be "0". For relation
     /// list queries we need it though as it represents the current row. In this case the list
@@ -77,10 +77,10 @@ pub struct DocumentCursor {
 }
 
 impl DocumentCursor {
-    pub fn new(list_index: u64, document_id: DocumentId) -> Self {
+    pub fn new(list_index: u64, document_view_id: DocumentViewId) -> Self {
         Self {
             list_index,
-            document_id,
+            document_view_id,
         }
     }
 }
@@ -92,7 +92,9 @@ impl From<&QueryRow> for DocumentCursor {
     }
 }
 
-const CURSOR_SEPARATOR: char = '_';
+// This should _not_ be an underscore character since we're also parsing document view ids in the
+// string which contain that character already
+const CURSOR_SEPARATOR: char = '-';
 
 impl Cursor for DocumentCursor {
     type Error = anyhow::Error;
@@ -108,7 +110,7 @@ impl Cursor for DocumentCursor {
 
         Ok(Self::new(
             u64::from_str(parts[0])?,
-            DocumentId::from_str(parts[1])?,
+            DocumentViewId::from_str(parts[1])?,
         ))
     }
 
@@ -116,7 +118,7 @@ impl Cursor for DocumentCursor {
         bs58::encode(
             format!(
                 "{}{}{}",
-                self.list_index, CURSOR_SEPARATOR, self.document_id
+                self.list_index, CURSOR_SEPARATOR, self.document_view_id
             )
             .as_bytes(),
         )
@@ -334,11 +336,11 @@ fn filter_sql(filter: &Filter) -> String {
 fn pagination_sql(pagination: &Pagination<DocumentCursor>, order: &Order) -> String {
     match &pagination.after {
         Some(cursor) => {
-            let cursor_str = cursor.document_id.to_string();
+            let cursor_str = cursor.document_view_id.to_string();
 
             match &order.field {
                 Field::Meta(MetaField::DocumentId) => {
-                    format!("AND documents.document_id > '{cursor_str}'")
+                    format!("AND documents.document_view_id > '{cursor_str}'")
                 }
                 Field::Meta(MetaField::DocumentViewId) => {
                     // @TODO
@@ -383,7 +385,7 @@ fn pagination_sql(pagination: &Pagination<DocumentCursor>, order: &Order) -> Str
                                         WHERE
                                             operation_fields_v1.name = '{order_field_name}'
                                             AND
-                                                operations_v1.document_id = '{cursor_str}'
+                                                operations_v1.document_view_id = '{cursor_str}'
                                     )
                                     OR
                                     (
@@ -399,10 +401,10 @@ fn pagination_sql(pagination: &Pagination<DocumentCursor>, order: &Order) -> Str
                                             WHERE
                                                 operation_fields_v1.name = '{order_field_name}'
                                                 AND
-                                                    operations_v1.document_id = '{cursor_str}'
+                                                    operations_v1.document_view_id = '{cursor_str}'
                                         )
                                         AND
-                                            documents.document_id > '{cursor_str}'
+                                            documents.document_view_id > '{cursor_str}'
                                     )
                                 )
                         )
@@ -589,11 +591,11 @@ fn owner_sql(select: &Select) -> String {
 
 fn where_sql(schema_id: &SchemaId, list: Option<&RelationList>) -> String {
     match list {
-        Some(select_list) => {
+        Some(relation_list) => {
             // We filter by the parent document view id of this relation list
-            let field_name = &select_list.field;
-            let view_id = &select_list.root;
-            let field_type = match select_list.list_type {
+            let field_name = &relation_list.field;
+            let view_id = &relation_list.root;
+            let field_type = match relation_list.list_type {
                 RelationListType::Pinned => "pinned_relation_list",
                 RelationListType::Unpinned => "relation_list",
             };
@@ -617,8 +619,8 @@ fn where_sql(schema_id: &SchemaId, list: Option<&RelationList>) -> String {
 
 fn from_sql(list: Option<&RelationList>) -> String {
     match list {
-        Some(select_list) => {
-            let filter_sql = match select_list.list_type {
+        Some(relation_list) => {
+            let filter_sql = match relation_list.list_type {
                 RelationListType::Pinned => "documents.document_view_id",
                 RelationListType::Unpinned => "documents.document_id",
             };
@@ -838,7 +840,7 @@ impl SqlStore {
         };
 
         // Finally convert everything into the right format
-        let documents = Self::convert_rows(rows, &application_fields, schema.id());
+        let documents = Self::convert_rows(rows, list, &application_fields, schema.id());
 
         Ok((pagination_data, documents))
     }
@@ -849,6 +851,7 @@ impl SqlStore {
     /// Usually we need to merge multiple rows / operation fields fields into one document.
     fn convert_rows(
         rows: Vec<QueryRow>,
+        list: Option<&RelationList>,
         fields: &Vec<String>,
         schema_id: &SchemaId,
     ) -> Vec<(DocumentCursor, StorageDocument)> {
@@ -871,7 +874,15 @@ impl SqlStore {
                     deleted: row.is_deleted,
                 };
 
-                let cursor: DocumentCursor = row.into();
+                let cursor: DocumentCursor = match list {
+                    Some(relation_list) => {
+                        // If we're querying a relation list then we use the document view id of
+                        // the parent document. This helps us later to understand _which_ of the
+                        // potentially many relation lists we want to paginate
+                        DocumentCursor::new(row.list_index as u64, relation_list.root.clone())
+                    }
+                    None => row.into(),
+                };
 
                 (cursor, document)
             };
