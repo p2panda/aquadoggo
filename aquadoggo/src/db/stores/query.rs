@@ -354,7 +354,11 @@ fn filter_sql(filter: &Filter) -> String {
         .join("\n")
 }
 
-fn pagination_sql(pagination: &Pagination<DocumentCursor>, order: &Order) -> String {
+fn pagination_sql(
+    pagination: &Pagination<DocumentCursor>,
+    list: Option<&RelationList>,
+    order: &Order,
+) -> String {
     match &pagination.after {
         Some(cursor) => {
             let view_id = cursor.document_view_id.to_string();
@@ -381,7 +385,34 @@ fn pagination_sql(pagination: &Pagination<DocumentCursor>, order: &Order) -> Str
                     todo!("not implemented yet");
                 }
                 Field::Field(order_field_name) => {
-                    // @TODO: Make sure this works for relation lists as well
+                    let from = match list {
+                        Some(relation_list) => {
+                            format!(
+                                r#"
+                                    document_view_fields document_view_fields_list
+
+                                    JOIN operation_fields_v1 operation_fields_v1_list
+                                        ON
+                                            document_view_fields_list.operation_id = operation_fields_v1_list.operation_id
+                                        AND
+                                            document_view_fields_list.name = operation_fields_v1_list.name
+
+                                    JOIN document_view_fields
+                                        ON
+                                            operation_fields_v1_list.value = document_view_fields.document_view_id
+                                "#
+                            )
+                        }
+                        None => "document_view_fields".to_string(),
+                    };
+
+                    let and_list_index = match list {
+                        Some(relation_list) => {
+                            format!("AND operation_fields_v1_list.list_index = {list_index}")
+                        }
+                        None => "".to_string(),
+                    };
+
                     format!(
                         r#"
                         AND EXISTS (
@@ -394,8 +425,9 @@ fn pagination_sql(pagination: &Pagination<DocumentCursor>, order: &Order) -> Str
                                     SELECT
                                         operation_fields_v1.value
                                     FROM
-                                        document_view_fields
-                                        LEFT JOIN
+                                        {from}
+
+                                        JOIN
                                             operation_fields_v1
                                             ON
                                                 document_view_fields.operation_id = operation_fields_v1.operation_id
@@ -403,6 +435,8 @@ fn pagination_sql(pagination: &Pagination<DocumentCursor>, order: &Order) -> Str
                                         operation_fields_v1.name = '{order_field_name}'
                                         AND
                                             document_view_fields.document_view_id = '{view_id}'
+                                        {and_list_index}
+
                                 ) AS cmp_value
 
                             FROM
@@ -658,7 +692,7 @@ fn from_sql(list: Option<&RelationList>) -> String {
 fn list_index_sql(list: Option<&RelationList>) -> String {
     match list {
         // Use the list index of the parent document when we query a relation list
-        Some(_) => "operation_fields_v1.list_index AS list_index".to_string(),
+        Some(_) => "operation_fields_v1_list.list_index AS list_index".to_string(),
         None => "operation_fields_v1.list_index AS list_index".to_string(),
     }
 }
@@ -709,7 +743,7 @@ impl SqlStore {
         let where_ = where_sql(schema.id(), list);
         let and_select = application_select_sql(&application_fields);
         let and_filters = filter_sql(&args.filter);
-        let and_pagination = pagination_sql(&args.pagination, &args.order);
+        let and_pagination = pagination_sql(&args.pagination, list, &args.order);
 
         let group = group_sql(list);
         let order = order_sql(&args.order, schema);
