@@ -344,6 +344,8 @@ fn filter_sql(filter: &Filter) -> String {
                                 operation_fields_v1.name = '{field_name}'
                                 AND
                                     {filter_cmp}
+                                AND
+                                    operation_fields_v1.operation_id = document_view_fields.operation_id
                         )
                         "#
                     ))
@@ -870,12 +872,15 @@ impl SqlStore {
             .contains(&PaginationField::TotalCount)
         {
             // Make separate query for getting the total number of documents (without pagination)
-            let result: (i32,) = query_as(&total_count_sql(schema_id, list, &args.filter))
-                .fetch_one(&self.pool)
+            let result: Option<(i32,)> = query_as(&total_count_sql(schema_id, list, &args.filter))
+                .fetch_optional(&self.pool)
                 .await
                 .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
 
-            Some(result.0 as u64)
+            match result {
+                Some(result) => Some(result.0 as u64),
+                None => Some(0),
+            }
         } else {
             None
         };
