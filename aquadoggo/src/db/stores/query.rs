@@ -380,19 +380,15 @@ fn pagination_sql(
                     format!("AND documents.document_view_id > '{view_id}'")
                 }
                 Field::Meta(MetaField::DocumentViewId) => {
-                    // @TODO
-                    todo!("Not implemented yet");
+                    format!("AND documents.document_view_id > '{view_id}'")
                 }
                 Field::Meta(MetaField::Owner) => {
-                    // @TODO
                     todo!("Not implemented yet");
                 }
                 Field::Meta(MetaField::Edited) => {
-                    // @TODO
                     todo!("Not implemented yet");
                 }
                 Field::Meta(MetaField::Deleted) => {
-                    // @TODO
                     todo!("not implemented yet");
                 }
                 Field::Field(order_field_name) => {
@@ -528,9 +524,9 @@ fn order_sql(order: &Order, schema: &Schema) -> String {
                     )
                     {},
 
-                    -- On top we sort always by id in case the previous order
+                    -- On top we sort always by view id in case the previous order
                     -- value is equal between two rows
-                    documents.document_id ASC
+                    documents.document_view_id ASC
                 "#,
                 typecast_field_sql("value", field_name, schema),
                 field_name,
@@ -997,27 +993,103 @@ impl SqlStore {
 mod tests {
     use std::num::NonZeroU64;
 
-    use crate::db::query::{Direction, Field, Filter, MetaField, Order, Pagination};
+    use p2panda_rs::document::traits::AsDocument;
+    use p2panda_rs::document::{DocumentViewFields, DocumentViewId};
+    use p2panda_rs::identity::KeyPair;
+    use p2panda_rs::operation::{OperationFields, OperationId, OperationValue};
+    use p2panda_rs::schema::FieldType;
+    use p2panda_rs::test_utils::fixtures::key_pair;
+    use rstest::rstest;
 
-    use super::Query;
+    use crate::db::query::{Direction, Field, Filter, MetaField, Order, Pagination, Select};
+    use crate::db::types::StorageDocument;
+    use crate::graphql::types::OrderDirection;
+    use crate::test_utils::{add_document, add_schema, test_runner, TestNode};
 
-    #[test]
-    fn create_find_many_query() {
-        let order = Order::new(&Field::Meta(MetaField::Owner), &Direction::Descending);
-        let pagination = Pagination::<String>::new(
-            &NonZeroU64::new(50).unwrap(),
-            Some(&"cursor".into()),
-            &vec![],
-        );
+    use super::{DocumentCursor, Query};
 
-        let query = Query {
-            order: order.clone(),
-            pagination: pagination.clone(),
-            ..Query::default()
-        };
+    fn get_view_fields(
+        view_id: &DocumentViewId,
+        fields: &[(&str, OperationValue)],
+    ) -> DocumentViewFields {
+        let operation_id: OperationId = view_id.to_string().parse().unwrap();
+        let mut operation_fields = OperationFields::new();
 
-        assert_eq!(query.pagination, pagination);
-        assert_eq!(query.order, order);
-        assert_eq!(query.filter, Filter::default());
+        for field in fields {
+            operation_fields.insert(field.0, field.1.clone());
+        }
+
+        DocumentViewFields::new_from_operation_fields(&operation_id, &operation_fields)
+    }
+
+    #[rstest]
+    fn ordered_query(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            let events_schema = add_schema(
+                &mut node,
+                "events",
+                vec![
+                    ("title", FieldType::String),
+                    ("date", FieldType::String),
+                    ("ticket_price", FieldType::Float),
+                ],
+                &key_pair,
+            )
+            .await;
+
+            let first_document = add_document(
+                &mut node,
+                events_schema.id(),
+                vec![
+                    ("title", "Kids Bits! Chiptune for baby squirrels".into()),
+                    ("date", "2023-04-17".into()),
+                    ("ticket_price", 5.75.into()),
+                ],
+                &key_pair,
+            )
+            .await;
+
+            let second_document = add_document(
+                &mut node,
+                events_schema.id(),
+                vec![
+                    ("title", "The Pandadoodle Flute Trio".into()),
+                    ("date", "2023-04-14".into()),
+                    ("ticket_price", 12.5.into()),
+                ],
+                &key_pair,
+            )
+            .await;
+
+            let args = Query::new(
+                &Pagination::default(),
+                &Select::new(&["title".into()]),
+                &Filter::new(),
+                &Order::new(&"date".into(), &Direction::Ascending),
+            );
+
+            let (pagination_data, documents) = node
+                .context
+                .store
+                .query(&events_schema, &args, None)
+                .await
+                .unwrap();
+
+            assert_eq!(documents.len(), 2);
+            assert_eq!(
+                documents[0].1.fields(),
+                Some(&get_view_fields(
+                    &second_document,
+                    &[("title", "The Pandadoodle Flute Trio".into())]
+                ))
+            );
+            assert_eq!(
+                documents[1].1.fields(),
+                Some(&get_view_fields(
+                    &first_document,
+                    &[("title", "Kids Bits! Chiptune for baby squirrels".into())]
+                ))
+            );
+        });
     }
 }
