@@ -78,9 +78,7 @@ pub fn graphql_type(field_type: &FieldType) -> TypeRef {
         FieldType::Relation(schema_id) => TypeRef::named(schema_id.to_string()),
         FieldType::RelationList(schema_id) => TypeRef::named(collection_name(schema_id)),
         FieldType::PinnedRelation(schema_id) => TypeRef::named(schema_id.to_string()),
-        FieldType::PinnedRelationList(schema_id) => {
-            TypeRef::named(collection_name(schema_id))
-        }
+        FieldType::PinnedRelationList(schema_id) => TypeRef::named(collection_name(schema_id)),
     }
 }
 

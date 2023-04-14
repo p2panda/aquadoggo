@@ -21,10 +21,10 @@ use crate::graphql::scalars::{
     EncodedOperationScalar, EntryHashScalar, LogIdScalar, PublicKeyScalar, SeqNumScalar,
 };
 use crate::graphql::types::{
-    BooleanFilter, DocumentFields, DocumentMeta, DocumentSchema, FilterInput, FloatFilter,
-    IntegerFilter, MetaFilterInput, NextArguments, OrderBy, OrderDirection,
-    PaginatedDocumentSchema, DocumentCollection, PinnedRelationFilter, PinnedRelationListFilter,
-    RelationFilter, RelationListFilter, StringFilter,
+    BooleanFilter, DocumentCollection, DocumentFields, DocumentMeta, DocumentSchema, FilterInput,
+    FloatFilter, IntegerFilter, MetaFilterInput, NextArguments, OrderBy, OrderDirection,
+    PaginatedDocumentSchema, PinnedRelationFilter, PinnedRelationListFilter, RelationFilter,
+    RelationListFilter, StringFilter,
 };
 use crate::schema::SchemaProvider;
 
