@@ -361,13 +361,10 @@ fn pagination_sql(
 ) -> String {
     // Ignore pagination if we're in a relation list query and the cursor does not match the parent
     // document view id
-    match (list, pagination.after.as_ref()) {
-        (Some(relation_list), Some(cursor)) => {
-            if Some(&relation_list.root) != cursor.root.as_ref() {
-                return "".to_string();
-            }
+    if let (Some(relation_list), Some(cursor)) = (list, pagination.after.as_ref()) {
+        if Some(&relation_list.root) != cursor.root.as_ref() {
+            return "".to_string();
         }
-        _ => (),
     }
 
     match &pagination.after {
@@ -394,21 +391,19 @@ fn pagination_sql(
                 Field::Field(order_field_name) => {
                     let from = match list {
                         Some(relation_list) => {
-                            format!(
-                                r#"
-                                    document_view_fields document_view_fields_list
+                            r#"
+                            document_view_fields document_view_fields_list
 
-                                    JOIN operation_fields_v1 operation_fields_v1_list
-                                        ON
-                                            document_view_fields_list.operation_id = operation_fields_v1_list.operation_id
-                                        AND
-                                            document_view_fields_list.name = operation_fields_v1_list.name
+                            JOIN operation_fields_v1 operation_fields_v1_list
+                                ON
+                                    document_view_fields_list.operation_id = operation_fields_v1_list.operation_id
+                                AND
+                                    document_view_fields_list.name = operation_fields_v1_list.name
 
-                                    JOIN document_view_fields
-                                        ON
-                                            operation_fields_v1_list.value = document_view_fields.document_view_id
-                                "#
-                            )
+                            JOIN document_view_fields
+                                ON
+                                    operation_fields_v1_list.value = document_view_fields.document_view_id
+                            "#.to_string()
                         }
                         None => "document_view_fields".to_string(),
                     };
