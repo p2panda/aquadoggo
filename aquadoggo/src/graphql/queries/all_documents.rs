@@ -105,17 +105,17 @@ mod test {
     #[case(
         r#"(after: HELLO)"#.to_string(),
         Value::Null,
-        vec!["internal: not a string".to_string()]
+        vec!["Invalid value for argument \"after\", expected type \"Cursor\"".to_string()]
     )]
     #[case(
         r#"(after: "00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331")"#.to_string(),
         Value::Null,
-        vec!["Invalid amount of cursor parts".to_string()]
+        vec!["Invalid value for argument \"after\", expected type \"Cursor\"".to_string()]
     )]
     #[case(
         r#"(after: 27)"#.to_string(),
         Value::Null,
-        vec!["internal: not a string".to_string()]
+        vec!["Invalid value for argument \"after\", expected type \"Cursor\"".to_string()]
     )]
     #[case(
         r#"(orderBy: HELLO)"#.to_string(),
@@ -185,20 +185,18 @@ mod test {
     #[case(
         r#"(meta: { documentId: { eq: 27 }})"#.to_string(),
         Value::Null,
-        vec!["internal: not a string".to_string()]
+        vec!["Invalid value for argument \"meta.documentId.eq\", expected type \"DocumentId\"".to_string()]
     )]
     #[case(
         r#"(meta: { viewId: { in: "hello" }})"#.to_string(),
         Value::Null,
-        vec!["internal: not a list".to_string()]
+        vec!["Invalid value for argument \"meta.viewId.in\", expected type \"DocumentViewId\"".to_string()]
     )]
-    // TODO: When we have a way to add custom validation to scalar types then this case should
-    // fail as we pass in an invalid public key string. Same for documentId and viewId meta fields.
-    // #[case(
-    //     r#"(meta: { owner: { eq: "hello" }})"#.to_string(),
-    //     Value::Null,
-    //     vec!["Invalid value for argument \"meta.owner\", unknown field \"contains\" of type \"OwnerFilter\"".to_string()]
-    // )]
+    #[case(
+        r#"(meta: { owner: { eq: "hello" }})"#.to_string(),
+        Value::Null,
+        vec!["Invalid value for argument \"meta.owner.eq\", expected type \"PublicKey\"".to_string()]
+    )]
 
     fn collection_query(
         key_pair: KeyPair,

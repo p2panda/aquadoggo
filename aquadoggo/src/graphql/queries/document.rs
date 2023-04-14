@@ -207,12 +207,12 @@ mod test {
     #[case::malformed_document_id(
         "(id: \"verboten\")",
         Value::Null,
-        vec!["invalid hex encoding in hash string".to_string()]
+        vec!["Invalid value for argument \"id\", expected type \"DocumentId\"".to_string()]
     )]
     #[case::malformed_view_id(
         "(viewId: \"verboten\")",
         Value::Null,
-        vec!["invalid hex encoding in hash string".to_string()]
+        vec!["Invalid value for argument \"viewId\", expected type \"DocumentViewId\"".to_string()]
     )]
     #[case::missing_parameters(
         "",

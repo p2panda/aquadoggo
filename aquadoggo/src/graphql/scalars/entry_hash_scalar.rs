@@ -9,7 +9,7 @@ use serde::Serialize;
 
 /// Hash of a signed bamboo entry.
 #[derive(Scalar, Clone, Debug, Eq, PartialEq, Serialize)]
-#[graphql(name = "EntryHash")]
+#[graphql(name = "EntryHash", validator(validate))]
 pub struct EntryHashScalar(Hash);
 
 impl ScalarValue for EntryHashScalar {
@@ -68,4 +68,10 @@ mod tests {
             hash.0.into()
         }
     }
+}
+
+/// Validation method used internally in `async-graphql` to check scalar values passed into the
+/// public api.
+fn validate(value: &Value) -> bool {
+    EntryHashScalar::from_value(value.to_owned()).is_ok()
 }

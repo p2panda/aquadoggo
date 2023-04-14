@@ -218,7 +218,7 @@ mod tests {
             let response: Response = response.json().await;
             assert_eq!(
                 response.errors[0].message,
-                "invalid hex encoding in public key string"
+                "Invalid value for argument \"publicKey\", expected type \"PublicKey\""
             )
         })
     }
