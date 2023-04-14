@@ -17,7 +17,8 @@ pub async fn build_transport(
     Boxed<(PeerId, StreamMuxerBox)>,
     Option<relay::client::Behaviour>,
 ) {
-    // Create QUIC transport (provides transport, security and multiplexing in a single protocol)
+    // Create QUIC transport (provides transport, security and multiplexing in a single protocol).
+    // The QUIC transport will also be used for any relayed connections
     let quic_config = quic::Config::new(key_pair);
     let quic_transport = quic::tokio::Transport::new(quic_config);
 
@@ -32,9 +33,9 @@ pub async fn build_transport(
             .authenticate(NoiseAuthenticated::xx(key_pair).unwrap())
             .multiplex(YamuxConfig::default());
 
-        // The appropriate transport will be matched and utilised for connections (ie.
-        // relayed-connections will utilise the relay transport while all other incoming
-        // and outgoing connections will utilise QUIC)
+        // The relay transport only handles listening and dialing on a relayed Multiaddr; it depends
+        // on another transport to do the actual transmission of data. The relay transport is combined
+        // with the QUIC transport by calling `OrTransport`.
         let transport = OrTransport::new(quic_transport, relay_transport)
             .map(|either_output, _| match either_output {
                 Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),

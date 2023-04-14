@@ -3,9 +3,10 @@
 use p2panda_rs::schema::error::{SchemaError, SchemaIdError};
 use p2panda_rs::schema::system::SystemSchemaError;
 use p2panda_rs::storage_provider::error::{DocumentStorageError, OperationStorageError};
+use thiserror::Error;
 
 /// `SQLStorage` errors.
-#[derive(thiserror::Error, Debug)]
+#[derive(Error, Debug)]
 pub enum SqlStoreError {
     #[error("SQL query failed: {0}")]
     Transaction(String),
@@ -15,7 +16,7 @@ pub enum SqlStoreError {
 }
 
 /// `SchemaStore` errors.
-#[derive(thiserror::Error, Debug)]
+#[derive(Error, Debug)]
 pub enum SchemaStoreError {
     /// Catch all error which implementers can use for passing their own errors up the chain.
     #[error("Error occured in DocumentStore: {0}")]

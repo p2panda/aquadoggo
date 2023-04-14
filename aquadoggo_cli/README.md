@@ -44,6 +44,21 @@ Options:
 
           eg. --relay-address "/ip4/127.0.0.1/udp/12345/quic-v1/p2p/12D3KooWD3eckifWpRn9wQpMG9R9hX3sD158z7EqHWmweQAJU5SA"
 
+      --relay-client <RELAY_CLIENT>
+          Enable relay client to facilitate peer connectivity via a relay server, false by default
+
+          [possible values: true, false]
+
+      --relay-server <RELAY_SERVER>
+          Enable relay server to facilitate peer connectivity, false by default
+
+          [possible values: true, false]
+
+      --relay-address <RELAY_ADDRESS>
+          The IP address of a relay server in the form of a multiaddress.
+
+          eg. --relay-address "/ip4/127.0.0.1/udp/12345/quic-v1"
+
   -h, --help
           Print help (see a summary with '-h')
 

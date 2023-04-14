@@ -156,8 +156,8 @@ fn relation_fields() {
                     fields {{
                         by_relation {{ fields {{ it_works }} }},
                         by_pinned_relation {{ fields {{ it_works }} }},
-                        by_relation_list {{ fields {{ it_works }} }},
-                        by_pinned_relation_list {{ fields {{ it_works }} }},
+                        by_relation_list {{ document {{ fields {{ it_works }} }} }},
+                        by_pinned_relation_list {{ document {{ fields {{ it_works }} }} }},
                     }}
                 }}
             }}"#,
@@ -189,13 +189,17 @@ fn relation_fields() {
                         }
                     },
                     "by_relation_list": [{
-                        "fields": {
-                            "it_works": true
+                        "document" : {
+                            "fields": {
+                                "it_works": true
+                            }
                         }
                     }],
                     "by_pinned_relation_list": [{
-                        "fields": {
-                            "it_works": true
+                        "document" : {
+                            "fields": {
+                                "it_works": true
+                            }
                         }
                     }]
                 }
