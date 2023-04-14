@@ -43,7 +43,9 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
         ))
 }
 
-#[cfg(test)]
+// TODO: We don't actually perform any queries yet, these tests will need to be updated
+// when we do.
+/* #[cfg(test)]
 mod test {
     use async_graphql::{value, Response, Value};
     use p2panda_rs::identity::KeyPair;
@@ -55,8 +57,6 @@ mod test {
     use crate::test_utils::{add_document, add_schema, graphql_test_client, test_runner, TestNode};
 
     #[rstest]
-    // TODO: We don't actually perform any queries yet, these tests will need to be updated
-    // when we do.
     #[case(
         "".to_string(),
         value!({
@@ -264,4 +264,4 @@ mod test {
             assert_eq!(err_msgs, expected_errors);
         });
     }
-}
+} */

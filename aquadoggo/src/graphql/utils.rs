@@ -383,7 +383,13 @@ pub fn look_ahead_selected_fields(ctx: &ResolverContext) -> (Vec<PaginationField
     let pagination = selection_field
         .selection_set()
         .filter_map(|field| match field.name() {
+            // Remove special GraphQL meta fields
+            "__typename" => None,
+
+            // Remove all other fields which are not related to pagination
             constants::DOCUMENTS_FIELD => None,
+
+            // Convert pagination fields finally
             value => Some(value.into()),
         })
         .collect::<Vec<PaginationField>>();
