@@ -922,7 +922,7 @@ impl SqlStore {
                     deleted: row.is_deleted,
                 };
 
-                let cursor = Self::row_to_cursor(&row, list);
+                let cursor = Self::row_to_cursor(row, list);
 
                 (cursor, document)
             };
