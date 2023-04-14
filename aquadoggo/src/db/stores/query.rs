@@ -66,21 +66,29 @@ impl RelationList {
 /// internally during pagination.
 #[derive(Debug, Clone)]
 pub struct DocumentCursor {
-    /// For regular collection queries the id helps us to determine the current row. In relation
-    /// list queries we use this field to represent the parent document holding that list.
+    /// Id aiding us to determine the current row.
     pub document_view_id: DocumentViewId,
 
     /// This value is not interesting for collection queries, it will always be "0". For relation
-    /// list queries we need it though as it represents the current row. In this case the list
-    /// index becomes the actual cursor.
+    /// list queries we need it though as we might have duplicate document view ids in the list,
+    /// through the list index we can keep them apart from each other.
     pub list_index: u64,
+
+    /// In relation list queries we use this field to represent the parent document holding that
+    /// list.
+    pub root: Option<DocumentViewId>,
 }
 
 impl DocumentCursor {
-    pub fn new(list_index: u64, document_view_id: DocumentViewId) -> Self {
+    pub fn new(
+        list_index: u64,
+        document_view_id: DocumentViewId,
+        root: Option<DocumentViewId>,
+    ) -> Self {
         Self {
             list_index,
             document_view_id,
+            root,
         }
     }
 }
@@ -88,7 +96,7 @@ impl DocumentCursor {
 impl From<&QueryRow> for DocumentCursor {
     fn from(row: &QueryRow) -> Self {
         let document_id = row.document_id.parse().unwrap();
-        Self::new(row.list_index as u64, document_id)
+        Self::new(row.list_index as u64, document_id, None)
     }
 }
 
@@ -104,21 +112,34 @@ impl Cursor for DocumentCursor {
         let decoded = std::str::from_utf8(&bytes)?;
 
         let parts: Vec<&str> = decoded.split(CURSOR_SEPARATOR).collect();
-        if parts.len() != 2 {
-            bail!("Invalid amount of cursor parts");
+        match parts.len() {
+            2 => Ok(Self::new(
+                u64::from_str(parts[0])?,
+                DocumentViewId::from_str(parts[1])?,
+                None,
+            )),
+            3 => Ok(Self::new(
+                u64::from_str(parts[0])?,
+                DocumentViewId::from_str(parts[1])?,
+                Some(DocumentViewId::from_str(parts[2])?),
+            )),
+            _ => {
+                bail!("Invalid amount of cursor parts");
+            }
         }
-
-        Ok(Self::new(
-            u64::from_str(parts[0])?,
-            DocumentViewId::from_str(parts[1])?,
-        ))
     }
 
     fn encode(&self) -> String {
         bs58::encode(
             format!(
-                "{}{}{}",
-                self.list_index, CURSOR_SEPARATOR, self.document_view_id
+                "{}{}{}{}",
+                self.list_index,
+                CURSOR_SEPARATOR,
+                self.document_view_id,
+                self.root.as_ref().map_or("".to_string(), |view_id| format!(
+                    "{}{}",
+                    CURSOR_SEPARATOR, view_id
+                ))
             )
             .as_bytes(),
         )
@@ -336,11 +357,12 @@ fn filter_sql(filter: &Filter) -> String {
 fn pagination_sql(pagination: &Pagination<DocumentCursor>, order: &Order) -> String {
     match &pagination.after {
         Some(cursor) => {
-            let cursor_str = cursor.document_view_id.to_string();
+            let view_id = cursor.document_view_id.to_string();
+            let list_index = cursor.list_index;
 
             match &order.field {
                 Field::Meta(MetaField::DocumentId) => {
-                    format!("AND documents.document_view_id > '{cursor_str}'")
+                    format!("AND documents.document_view_id > '{view_id}'")
                 }
                 Field::Meta(MetaField::DocumentViewId) => {
                     // @TODO
@@ -367,20 +389,20 @@ fn pagination_sql(pagination: &Pagination<DocumentCursor>, order: &Order) -> Str
                                 operation_fields_v1.value,
 
                                 -- When ordering is activated we need to compare against the value
-                                -- of the ordered field - but of the row where the cursor points at
+                                -- of the ordered field - but from the row where the cursor points at
                                 (
                                     SELECT
                                         operation_fields_v1.value
                                     FROM
-                                        operation_fields_v1
-                                    LEFT JOIN
-                                        operations_v1
-                                        ON
-                                            operations_v1.operation_id = operation_fields_v1.operation_id
+                                        document_view_fields
+                                        LEFT JOIN
+                                            operation_fields_v1
+                                            ON
+                                                document_view_fields.operation_id = operation_fields_v1.operation_id
                                     WHERE
                                         operation_fields_v1.name = '{order_field_name}'
                                         AND
-                                            operations_v1.document_view_id = '{cursor_str}'
+                                            document_view_fields.document_view_id = '{view_id}'
                                 ) AS cmp_value
 
                             FROM
@@ -399,7 +421,7 @@ fn pagination_sql(pagination: &Pagination<DocumentCursor>, order: &Order) -> Str
                                         (
                                             operation_fields_v1.value = cmp_value
                                             AND
-                                                documents.document_view_id > '{cursor_str}'
+                                                documents.document_view_id > '{view_id}'
                                         )
                                     )
                         )
@@ -439,11 +461,7 @@ fn order_sql(order: &Order, schema: &Schema) -> String {
 
                     -- On top we sort always by id in case the previous order
                     -- value is equal between two rows
-                    documents.document_id ASC,
-
-                    -- Lastly we should order them by list index, which preserves
-                    -- the ordering of (pinned) relation list values
-                    list_index ASC
+                    documents.document_id ASC
                 "#
             )
         }
@@ -467,11 +485,7 @@ fn order_sql(order: &Order, schema: &Schema) -> String {
 
                     -- On top we sort always by id in case the previous order
                     -- value is equal between two rows
-                    documents.document_id ASC,
-
-                    -- Lastly we should order them by list index, which preserves
-                    -- the ordering of (pinned) relation list values
-                    operation_fields_v1.list_index ASC
+                    documents.document_id ASC
                 "#,
                 typecast_field_sql("value", field_name, schema),
                 field_name,
@@ -625,12 +639,12 @@ fn from_sql(list: Option<&RelationList>) -> String {
             format!(
                 r#"
                     document_view_fields document_view_fields_list
-                    INNER JOIN operation_fields_v1 operation_fields_v1_list
+                    JOIN operation_fields_v1 operation_fields_v1_list
                         ON
                             document_view_fields_list.operation_id = operation_fields_v1_list.operation_id
                         AND
                             document_view_fields_list.name = operation_fields_v1_list.name
-                    INNER JOIN documents
+                    JOIN documents
                         ON
                             operation_fields_v1_list.value = {filter_sql}
                 "#
@@ -644,7 +658,7 @@ fn from_sql(list: Option<&RelationList>) -> String {
 fn list_index_sql(list: Option<&RelationList>) -> String {
     match list {
         // Use the list index of the parent document when we query a relation list
-        Some(_) => "operation_fields_v1_list.list_index AS list_index".to_string(),
+        Some(_) => "operation_fields_v1.list_index AS list_index".to_string(),
         None => "operation_fields_v1.list_index AS list_index".to_string(),
     }
 }
@@ -871,10 +885,14 @@ impl SqlStore {
 
                 let cursor: DocumentCursor = match list {
                     Some(relation_list) => {
-                        // If we're querying a relation list then we use the document view id of
-                        // the parent document. This helps us later to understand _which_ of the
+                        // If we're querying a relation list then we mention the document view id
+                        // of the parent document. This helps us later to understand _which_ of the
                         // potentially many relation lists we want to paginate
-                        DocumentCursor::new(row.list_index as u64, relation_list.root.clone())
+                        DocumentCursor::new(
+                            row.list_index as u64,
+                            row.document_view_id.parse().unwrap(),
+                            Some(relation_list.root.clone()),
+                        )
                     }
                     None => row.into(),
                 };
