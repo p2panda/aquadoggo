@@ -1,13 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use async_graphql::dynamic::{Field, FieldFuture, FieldValue, Object, TypeRef};
-use async_graphql::Value;
+use async_graphql::dynamic::{Field, FieldFuture, FieldValue, Object, ResolverContext, TypeRef};
+use async_graphql::{Error, Value};
 use p2panda_rs::schema::Schema;
 
 use crate::db::query::Cursor;
+use crate::db::stores::RelationList;
+use crate::db::SqlStore;
 use crate::graphql::constants;
 use crate::graphql::types::DocumentValue;
-use crate::graphql::utils::{downcast_document, paginated_document_name, paginated_response_name};
+use crate::graphql::utils::{
+    collection_item_name, collection_name, downcast_document, parse_collection_arguments,
+};
 
 /// Pagination data passed from parent to child query fields.
 #[derive(Default, Clone, Debug)]
@@ -32,18 +36,18 @@ where
 }
 
 /// A constructor for dynamically building objects describing a paginated collection of documents.
-/// Each object contains a `document`, `totalCount` and `hasNextPage` fields and defines their
+/// Each object contains a `documents`, `totalCount` and `hasNextPage` fields and defines their
 /// resolution logic. Each generated object has a type name with the formatting
-/// `<schema_id>PaginatedResponse`.
+/// `<schema_id>Collection`.
 ///
 /// A type should be added to the root GraphQL schema for every schema supported on a node, as
 /// these types are not known at compile time we make use of the `async-graphql` `dynamic` module.
-pub struct PaginatedResponse;
+pub struct DocumentCollection;
 
 // @TODO: Add missing fields here
-impl PaginatedResponse {
+impl DocumentCollection {
     pub fn build(schema: &Schema) -> Object {
-        Object::new(paginated_response_name(schema.id()))
+        Object::new(collection_name(schema.id()))
             .field(
                 Field::new(
                     constants::TOTAL_COUNT_FIELD,
@@ -53,8 +57,8 @@ impl PaginatedResponse {
                             let document_value = downcast_document(&ctx);
 
                             let total_count = match document_value {
-                                DocumentValue::Paginated(_, data, _) => data.total_count,
-                                _ => panic!("Expected paginated value"),
+                                DocumentValue::Collection(data, _) => data.total_count,
+                                _ => panic!("Expected document collection"),
                             };
 
                             Ok(Some(FieldValue::from(Value::from(
@@ -76,8 +80,8 @@ impl PaginatedResponse {
                             let document_value = downcast_document(&ctx);
 
                             let has_next_page = match document_value {
-                                DocumentValue::Paginated(_, data, _) => data.has_next_page,
-                                _ => panic!("Expected paginated value"),
+                                DocumentValue::Collection(data, _) => data.has_next_page,
+                                _ => panic!("Expected document collection"),
                             };
 
                             Ok(Some(FieldValue::from(Value::from(has_next_page))))
@@ -90,14 +94,27 @@ impl PaginatedResponse {
             )
             .field(
                 Field::new(
-                    constants::DOCUMENT_FIELD,
-                    TypeRef::named(paginated_document_name(schema.id())),
+                    constants::DOCUMENTS_FIELD,
+                    TypeRef::named_nn_list_nn(collection_item_name(schema.id())),
                     move |ctx| {
                         FieldFuture::new(async move {
                             // Here we just pass up the root query parameters to be used in the fields
                             // resolver
                             let document_value = downcast_document(&ctx);
-                            Ok(Some(FieldValue::owned_any(document_value)))
+                            let documents = match document_value {
+                                DocumentValue::Collection(_, documents) => documents,
+                                _ => panic!("Expected document collection"),
+                            };
+
+                            let documents_list: Vec<FieldValue> = documents
+                                .into_iter()
+                                .map(|(cursor, document)| {
+                                    FieldValue::owned_any(DocumentValue::Item(cursor, document))
+                                })
+                                .collect();
+
+                            // Pass the list up to the children fields
+                            Ok(Some(FieldValue::list(documents_list)))
                         })
                     },
                 )
@@ -107,5 +124,23 @@ impl PaginatedResponse {
                 "A single page response returned when querying a collection of `{}` documents.",
                 schema.id().name()
             ))
+    }
+
+    /// Resolver to be used when processing a query for a document collection.
+    pub async fn resolve(
+        ctx: ResolverContext<'_>,
+        schema: Schema,
+        list: Option<RelationList>,
+    ) -> Result<Option<FieldValue>, Error> {
+        let store = ctx.data_unchecked::<SqlStore>();
+
+        // Populate query arguments with values from GraphQL query
+        let query = parse_collection_arguments(&ctx, &schema)?;
+
+        // Fetch all queried documents and compose the value to be passed up the query tree
+        let (pagination_data, documents) = store.query(&schema, &query, list.as_ref()).await?;
+        let collection = DocumentValue::Collection(pagination_data, documents);
+
+        Ok(Some(FieldValue::owned_any(collection)))
     }
 }

@@ -9,16 +9,16 @@ use crate::db::stores::DocumentCursor;
 use crate::db::types::StorageDocument;
 use crate::graphql::constants;
 use crate::graphql::types::{DocumentMeta, PaginationData};
-use crate::graphql::utils::{downcast_document, fields_name, paginated_document_name};
+use crate::graphql::utils::{collection_item_name, downcast_document, fields_name};
 
 #[derive(Clone, Debug)]
 pub enum DocumentValue {
     Single(StorageDocument),
-    Paginated(
-        DocumentCursor,
+    Collection(
         PaginationData<DocumentCursor>,
-        StorageDocument,
+        Vec<(DocumentCursor, StorageDocument)>,
     ),
+    Item(DocumentCursor, StorageDocument),
 }
 
 /// A constructor for dynamically building objects describing documents which conform to the shape
@@ -60,7 +60,7 @@ impl PaginatedDocumentSchema {
     /// arguments to it's children query fields. The latter calls the `resolve` method defined on
     /// `DocumentMeta` type.
     pub fn build(schema: &Schema) -> Object {
-        let fields = Object::new(paginated_document_name(schema.id()));
+        let fields = Object::new(collection_item_name(schema.id()));
         with_document_fields(fields, schema).field(
             Field::new(
                 constants::CURSOR_FIELD,
@@ -70,8 +70,8 @@ impl PaginatedDocumentSchema {
                         let document_value = downcast_document(&ctx);
 
                         let cursor = match &document_value {
-                            DocumentValue::Single(_) => panic!("Paginated document expected"),
-                            DocumentValue::Paginated(cursor, _, _) => cursor,
+                            DocumentValue::Item(cursor, _) => cursor,
+                            _ => panic!("Paginated document expected"),
                         };
 
                         Ok(Some(FieldValue::from(Value::String(cursor.encode()))))

@@ -25,17 +25,17 @@ use crate::graphql::types::DocumentValue;
 const DOCUMENT_FIELDS_SUFFIX: &str = "Fields";
 const FILTER_INPUT_SUFFIX: &str = "Filter";
 const ORDER_BY_SUFFIX: &str = "OrderBy";
-const PAGINATED_DOCUMENT_SUFFIX: &str = "Paginated";
-const PAGINATED_RESPONSE_SUFFIX: &str = "PaginatedResponse";
+const COLLECTION_ITEM_SUFFIX: &str = "Item";
+const COLLECTION_SUFFIX: &str = "Collection";
 
-// Correctly formats the name of a paginated response type.
-pub fn paginated_response_name(schema_id: &SchemaId) -> String {
-    format!("{}{PAGINATED_RESPONSE_SUFFIX}", schema_id)
+// Correctly formats the name of a document collection type.
+pub fn collection_name(schema_id: &SchemaId) -> String {
+    format!("{}{COLLECTION_SUFFIX}", schema_id)
 }
 
-// Correctly formats the name of a paginated document type.
-pub fn paginated_document_name(schema_id: &SchemaId) -> String {
-    format!("{}{PAGINATED_DOCUMENT_SUFFIX}", schema_id)
+// Correctly formats the name of a collection item type.
+pub fn collection_item_name(schema_id: &SchemaId) -> String {
+    format!("{}{COLLECTION_ITEM_SUFFIX}", schema_id)
 }
 
 // Correctly formats the name of a document fields type.
@@ -76,13 +76,9 @@ pub fn graphql_type(field_type: &FieldType) -> TypeRef {
         FieldType::Float => TypeRef::named(TypeRef::FLOAT),
         FieldType::String => TypeRef::named(TypeRef::STRING),
         FieldType::Relation(schema_id) => TypeRef::named(schema_id.to_string()),
-        FieldType::RelationList(schema_id) => {
-            TypeRef::named_list(paginated_response_name(schema_id))
-        }
+        FieldType::RelationList(schema_id) => TypeRef::named(collection_name(schema_id)),
         FieldType::PinnedRelation(schema_id) => TypeRef::named(schema_id.to_string()),
-        FieldType::PinnedRelationList(schema_id) => {
-            TypeRef::named_list(paginated_response_name(schema_id))
-        }
+        FieldType::PinnedRelationList(schema_id) => TypeRef::named(collection_name(schema_id)),
     }
 }
 
@@ -387,7 +383,7 @@ pub fn look_ahead_selected_fields(ctx: &ResolverContext) -> (Vec<PaginationField
     let pagination = selection_field
         .selection_set()
         .filter_map(|field| match field.name() {
-            constants::DOCUMENT_FIELD => None,
+            constants::DOCUMENTS_FIELD => None,
             value => Some(value.into()),
         })
         .collect::<Vec<PaginationField>>();
@@ -396,7 +392,7 @@ pub fn look_ahead_selected_fields(ctx: &ResolverContext) -> (Vec<PaginationField
 
     if let Some(document) = selection_field
         .selection_set()
-        .find(|field| field.name() == constants::DOCUMENT_FIELD)
+        .find(|field| field.name() == constants::DOCUMENTS_FIELD)
     {
         document
             .selection_set()

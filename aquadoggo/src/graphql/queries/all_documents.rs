@@ -1,16 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use async_graphql::dynamic::{Field, FieldFuture, FieldValue, Object, TypeRef};
+use async_graphql::dynamic::{Field, FieldFuture, Object, TypeRef};
 use log::debug;
 use p2panda_rs::schema::Schema;
 
-use crate::db::SqlStore;
 use crate::graphql::constants;
-use crate::graphql::types::DocumentValue;
-use crate::graphql::utils::{
-    paginated_response_name, parse_collection_arguments, with_collection_arguments,
-};
-use crate::schema::SchemaProvider;
+use crate::graphql::types::DocumentCollection;
+use crate::graphql::utils::{collection_name, with_collection_arguments};
 
 /// Adds a GraphQL query for retrieving a paginated, ordered and filtered collection of documents
 /// by schema to the passed root query object.
@@ -18,62 +14,32 @@ use crate::schema::SchemaProvider;
 /// The query follows the format `all_<SCHEMA_ID>(<...ARGS>)`.
 pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
     let schema_id = schema.id().clone();
+    let schema = schema.clone();
     query
         .field(with_collection_arguments(
             Field::new(
                 format!("{}{}", constants::QUERY_ALL_PREFIX, schema_id),
-                TypeRef::named_list(paginated_response_name(&schema_id)),
+                TypeRef::named_nn(collection_name(&schema_id)),
                 move |ctx| {
-                    // Take ownership of the schema id in the resolver
-                    let schema_id = schema_id.clone();
-
+                    let schema = schema.clone();
                     debug!(
                         "Query to {}{} received",
                         constants::QUERY_ALL_PREFIX,
-                        schema_id
+                        schema.id()
                     );
 
-                    FieldFuture::new(async move {
-                        let schema_provider = ctx.data_unchecked::<SchemaProvider>();
-                        let store = ctx.data_unchecked::<SqlStore>();
-
-                        // Get the schema for the document type being queried
-                        let schema = schema_provider
-                            .get(&schema_id)
-                            .await
-                            .expect("Schema should exist in schema provider");
-
-                        // Populate query arguments with values from GraphQL query
-                        let query = parse_collection_arguments(&ctx, &schema)?;
-
-                        // Fetch all queried documents and compose the field value list which will
-                        // bubble up the query tree
-                        let (pagination_data, documents) =
-                            store.query(&schema, &query, None).await?;
-
-                        let results: Vec<FieldValue> = documents
-                            .into_iter()
-                            .map(|(cursor, document)| {
-                                FieldValue::owned_any(DocumentValue::Paginated(
-                                    cursor,
-                                    pagination_data.clone(),
-                                    document,
-                                ))
-                            })
-                            .collect();
-
-                        // Pass the list up to the children query fields
-                        Ok(Some(FieldValue::list(results)))
-                    })
+                    FieldFuture::new(
+                        async move { DocumentCollection::resolve(ctx, schema, None).await },
+                    )
                 },
             ),
-            schema.id(),
+            &schema_id,
         ))
         .description(format!(
             "Query a paginated collection of `{}` documents. \
                The requested collection is filtered and ordered following \
                parameters passed into the query via the available arguments.",
-            schema.id().name()
+            schema_id.name()
         ))
 }
 
@@ -94,7 +60,7 @@ mod test {
     #[case(
         "".to_string(),
         value!({
-            "collection": value!([{ "hasNextPage": false, "totalCount": 0, "document": { "cursor": "CURSOR", "fields": { "bool": true, } } }]),
+            "collection": value!({ "hasNextPage": false, "totalCount": 0, "documents": [{ "cursor": "CURSOR", "fields": { "bool": true, } }] }),
         }),
         vec![]
     )]
@@ -122,7 +88,7 @@ mod test {
             }
         )"#.to_string(),
         value!({
-            "collection": value!([{ "hasNextPage": false, "totalCount": 0, "document": { "cursor": "CURSOR", "fields": { "bool": true, } } }]),
+            "collection": value!({ "hasNextPage": false, "totalCount": 0, "documents": [{ "cursor": "CURSOR", "fields": { "bool": true, } }] }),
         }),
         vec![]
     )]
@@ -267,7 +233,7 @@ mod test {
                 collection: all_{type_name}{query_args} {{
                     hasNextPage
                     totalCount
-                    document {{
+                    documents {{
                         cursor
                         fields {{ bool }}
                     }}
