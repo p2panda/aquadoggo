@@ -45,7 +45,7 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
 
 // TODO: We don't actually perform any queries yet, these tests will need to be updated
 // when we do.
-/* #[cfg(test)]
+#[cfg(test)]
 mod test {
     use async_graphql::{value, Response, Value};
     use p2panda_rs::identity::KeyPair;
@@ -60,35 +60,74 @@ mod test {
     #[case(
         "".to_string(),
         value!({
-            "collection": value!({ "hasNextPage": false, "totalCount": 0, "documents": [{ "cursor": "CURSOR", "fields": { "bool": true, } }] }),
+            "collection": value!({ 
+                "hasNextPage": false,
+                "totalCount": 2,
+                "endCursor": "37noEdXyAbyJ1XBekhNdcxouDLcsBNvcidCxwBCuCQCgUtUhKuoZCXu17aq5aYvbmWzY5YqHf1JJKzrwTyfNYfQXeCbGxcw3",
+                "documents": [
+                    { 
+                        "cursor": "37noEdXy9ZT3iKkvL6mHub4bUgzEuzfkDVBsQuvdN9BVnHK1BofjBXRRzCsYrtcku2VVhSdtvS8AzHd4VWGS7jAec88pQX98", 
+                        "fields": { "bool": true, },
+                        "meta": { 
+                            "owner": "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96",
+                            "documentId": "00200436216389856afb3f3a7d8cb2d2981be85787aebed02031c72eb9c216406c57",
+                            "viewId": "00200436216389856afb3f3a7d8cb2d2981be85787aebed02031c72eb9c216406c57",
+                        }
+                    },
+                    { 
+                        "cursor": "37noEdXyAbyJ1XBekhNdcxouDLcsBNvcidCxwBCuCQCgUtUhKuoZCXu17aq5aYvbmWzY5YqHf1JJKzrwTyfNYfQXeCbGxcw3", 
+                        "fields": { "bool": false, },
+                        "meta": { 
+                            "owner": "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96",
+                            "documentId": "0020de552d81948f220d09127dc42963071d086a142c9547e701674d4cac83f29872",
+                            "viewId": "0020de552d81948f220d09127dc42963071d086a142c9547e701674d4cac83f29872",
+                        }
+                    }
+                ]
+            }),
         }),
         vec![]
     )]
     #[case(
         r#"(
-            first: 10,
-            after: "1_00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331",
-            orderBy: OWNER,
+            first: 1,
+            after: "37noEdXy9ZT3iKkvL6mHub4bUgzEuzfkDVBsQuvdN9BVnHK1BofjBXRRzCsYrtcku2VVhSdtvS8AzHd4VWGS7jAec88pQX98",
+            orderBy: DOCUMENT_ID,
             orderDirection: ASC,
             filter: {
                 bool : {
-                    eq: true
+                    eq: false
                 }
             },
             meta: {
                 owner: {
-                    in: ["7cf4f58a2d89e93313f2de99604a814ecea9800cf217b140e9c3a7ba59a5d982"]
+                    in: ["2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"]
                 },
                 documentId: {
-                    eq: "00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331"
+                    eq: "00200436216389856afb3f3a7d8cb2d2981be85787aebed02031c72eb9c216406c57"
                 },
                 viewId: {
-                    notIn: ["00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331"]
+                    notIn: ["00200436216389856afb3f3a7d8cb2d2981be85787aebed02031c72eb9c216406c57"]
                 }
             }
         )"#.to_string(),
         value!({
-            "collection": value!({ "hasNextPage": false, "totalCount": 0, "documents": [{ "cursor": "CURSOR", "fields": { "bool": true, } }] }),
+            "collection": value!({ 
+                "hasNextPage": false,
+                "totalCount": 1,
+                "endCursor": "37noEdXyAbyJ1XBekhNdcxouDLcsBNvcidCxwBCuCQCgUtUhKuoZCXu17aq5aYvbmWzY5YqHf1JJKzrwTyfNYfQXeCbGxcw3",
+                "documents": [
+                    { 
+                        "cursor": "37noEdXyAbyJ1XBekhNdcxouDLcsBNvcidCxwBCuCQCgUtUhKuoZCXu17aq5aYvbmWzY5YqHf1JJKzrwTyfNYfQXeCbGxcw3", 
+                        "fields": { "bool": false, },
+                        "meta": { 
+                            "owner": "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96",
+                            "documentId": "00200436216389856afb3f3a7d8cb2d2981be85787aebed02031c72eb9c216406c57",
+                            "viewId": "0020de552d81948f220d09127dc42963071d086a142c9547e701674d4cac83f29872",
+                        }
+                    }
+                ]
+            }),
         }),
         vec![]
     )]
@@ -224,6 +263,15 @@ mod test {
             )
             .await;
 
+            // Publish another document on node.
+            add_document(
+                &mut node,
+                schema.id(),
+                vec![("bool", false.into())],
+                &key_pair,
+            )
+            .await;
+
             // Configure and send test query.
             let client = graphql_test_client(&node).await;
             let query = format!(
@@ -231,9 +279,15 @@ mod test {
                 collection: all_{type_name}{query_args} {{
                     hasNextPage
                     totalCount
+                    endCursor
                     documents {{
                         cursor
                         fields {{ bool }}
+                        meta {{
+                            owner
+                            documentId
+                            viewId
+                        }}
                     }}
                 }},
             }}"#,
@@ -262,4 +316,4 @@ mod test {
             assert_eq!(err_msgs, expected_errors);
         });
     }
-} */
+}
