@@ -86,10 +86,6 @@ pub async fn network_service(
     let handle = tokio::spawn(async move {
         loop {
             match swarm.select_next_some().await {
-                SwarmEvent::BannedPeer {
-                    peer_id,
-                    endpoint: _,
-                } => debug!("BannedPeer: {peer_id}"),
                 SwarmEvent::Behaviour(BehaviourEvent::Mdns(event)) => match event {
                     mdns::Event::Discovered(list) => {
                         for (peer, _multiaddr) in list {
@@ -304,6 +300,10 @@ pub async fn network_service(
                         autonat::Event::InboundProbe(_) | autonat::Event::OutboundProbe(_) => (),
                     }
                 }
+                SwarmEvent::Behaviour(BehaviourEvent::Limits(event)) => {
+                    debug!("Unhandled connection limit event: {event:?}")
+                }
+                event => debug!("Unhandled swarm event: {event:?}"),
             }
         }
     });
