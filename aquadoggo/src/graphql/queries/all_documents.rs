@@ -65,7 +65,7 @@ mod test {
                 "totalCount": 2,
                 "endCursor": "37noEdXyAbyJ1XBekhNdcxouDLcsBNvcidCxwBCuCQCgUtUhKuoZCXu17aq5aYvbmWzY5YqHf1JJKzrwTyfNYfQXeCbGxcw3",
                 "documents": [
-                    { 
+                    {
                         "cursor": "37noEdXy9ZT3iKkvL6mHub4bUgzEuzfkDVBsQuvdN9BVnHK1BofjBXRRzCsYrtcku2VVhSdtvS8AzHd4VWGS7jAec88pQX98", 
                         "fields": { "bool": true, },
                         "meta": { 
@@ -74,7 +74,7 @@ mod test {
                             "viewId": "00200436216389856afb3f3a7d8cb2d2981be85787aebed02031c72eb9c216406c57",
                         }
                     },
-                    { 
+                    {
                         "cursor": "37noEdXyAbyJ1XBekhNdcxouDLcsBNvcidCxwBCuCQCgUtUhKuoZCXu17aq5aYvbmWzY5YqHf1JJKzrwTyfNYfQXeCbGxcw3", 
                         "fields": { "bool": false, },
                         "meta": { 
@@ -117,7 +117,7 @@ mod test {
                 "totalCount": 1,
                 "endCursor": "37noEdXyAbyJ1XBekhNdcxouDLcsBNvcidCxwBCuCQCgUtUhKuoZCXu17aq5aYvbmWzY5YqHf1JJKzrwTyfNYfQXeCbGxcw3",
                 "documents": [
-                    { 
+                    {
                         "cursor": "37noEdXyAbyJ1XBekhNdcxouDLcsBNvcidCxwBCuCQCgUtUhKuoZCXu17aq5aYvbmWzY5YqHf1JJKzrwTyfNYfQXeCbGxcw3", 
                         "fields": { "bool": false, },
                         "meta": { 
