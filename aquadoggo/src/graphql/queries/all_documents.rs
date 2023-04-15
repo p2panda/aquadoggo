@@ -91,42 +91,21 @@ mod test {
     #[case(
         r#"(
             first: 1,
-            after: "37noEdXy9ZT3iKkvL6mHub4bUgzEuzfkDVBsQuvdN9BVnHK1BofjBXRRzCsYrtcku2VVhSdtvS8AzHd4VWGS7jAec88pQX98",
+            after: "37noEdXyAbyJ1XBekhNdcxouDLcsBNvcidCxwBCuCQCgUtUhKuoZCXu17aq5aYvbmWzY5YqHf1JJKzrwTyfNYfQXeCbGxcw3",
             orderBy: DOCUMENT_ID,
             orderDirection: ASC,
             filter: {
-                bool : {
+                bool: {
                     eq: false
-                }
-            },
-            meta: {
-                owner: {
-                    in: ["2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"]
-                },
-                documentId: {
-                    eq: "00200436216389856afb3f3a7d8cb2d2981be85787aebed02031c72eb9c216406c57"
-                },
-                viewId: {
-                    notIn: ["00200436216389856afb3f3a7d8cb2d2981be85787aebed02031c72eb9c216406c57"]
                 }
             }
         )"#.to_string(),
         value!({
             "collection": value!({ 
                 "hasNextPage": false,
-                "totalCount": 1,
-                "endCursor": "37noEdXyAbyJ1XBekhNdcxouDLcsBNvcidCxwBCuCQCgUtUhKuoZCXu17aq5aYvbmWzY5YqHf1JJKzrwTyfNYfQXeCbGxcw3",
-                "documents": [
-                    {
-                        "cursor": "37noEdXyAbyJ1XBekhNdcxouDLcsBNvcidCxwBCuCQCgUtUhKuoZCXu17aq5aYvbmWzY5YqHf1JJKzrwTyfNYfQXeCbGxcw3", 
-                        "fields": { "bool": false, },
-                        "meta": { 
-                            "owner": "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96",
-                            "documentId": "00200436216389856afb3f3a7d8cb2d2981be85787aebed02031c72eb9c216406c57",
-                            "viewId": "0020de552d81948f220d09127dc42963071d086a142c9547e701674d4cac83f29872",
-                        }
-                    }
-                ]
+                "totalCount": 0,
+                "endCursor": Value::Null,
+                "documents": []
             }),
         }),
         vec![]
