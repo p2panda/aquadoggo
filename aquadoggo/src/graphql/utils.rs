@@ -14,11 +14,11 @@ use p2panda_rs::storage_provider::traits::DocumentStore;
 use crate::db::query::{
     Cursor, Direction, Field, Filter, MetaField, Order, Pagination, PaginationField, Select,
 };
-use crate::db::stores::{Query, DocumentCursor};
+use crate::db::stores::{DocumentCursor, Query};
 use crate::db::types::StorageDocument;
 use crate::db::SqlStore;
 use crate::graphql::constants;
-use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar, CursorScalar};
+use crate::graphql::scalars::{CursorScalar, DocumentIdScalar, DocumentViewIdScalar};
 use crate::graphql::types::DocumentValue;
 
 // Type name suffixes.
