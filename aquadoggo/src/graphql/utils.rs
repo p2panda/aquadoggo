@@ -14,11 +14,11 @@ use p2panda_rs::storage_provider::traits::DocumentStore;
 use crate::db::query::{
     Cursor, Direction, Field, Filter, MetaField, Order, Pagination, PaginationField, Select,
 };
-use crate::db::stores::{DocumentCursor, Query};
+use crate::db::stores::{Query, DocumentCursor};
 use crate::db::types::StorageDocument;
 use crate::db::SqlStore;
 use crate::graphql::constants;
-use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
+use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar, CursorScalar};
 use crate::graphql::types::DocumentValue;
 
 // Type name suffixes.
@@ -129,8 +129,8 @@ pub fn parse_collection_arguments(
     for (name, value) in ctx.args.iter() {
         match name.as_str() {
             constants::PAGINATION_AFTER_ARG => {
-                let cursor = DocumentCursor::decode(value.string()?)?;
-                pagination.after = Some(cursor);
+                let cursor = CursorScalar::decode(value.string()?)?;
+                pagination.after = Some(DocumentCursor::from(&cursor));
             }
             constants::PAGINATION_FIRST_ARG => {
                 pagination.first = NonZeroU64::try_from(value.u64()?)?;

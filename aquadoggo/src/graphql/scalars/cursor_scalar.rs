@@ -50,6 +50,20 @@ impl Cursor for CursorScalar {
     }
 }
 
+
+impl From<&DocumentCursor> for CursorScalar {
+    fn from(cursor: &DocumentCursor) -> Self {
+        Self(cursor.clone())
+    }
+}
+
+impl From<&CursorScalar> for DocumentCursor {
+    fn from(cursor: &CursorScalar) -> DocumentCursor {
+        cursor.0.clone()
+    }
+}
+
+
 /// Validation method used internally in `async-graphql` to check scalar values passed into the
 /// public api.
 fn validate(value: &Value) -> bool {
