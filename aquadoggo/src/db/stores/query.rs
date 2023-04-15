@@ -64,7 +64,7 @@ impl RelationList {
 /// The encoding ensures that the cursor stays "opaque", API consumers to not read any further
 /// semantic meaning into it, even though we keep some crucial information in it which help us
 /// internally during pagination.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DocumentCursor {
     /// Id aiding us to determine the current row.
     pub document_view_id: DocumentViewId,
