@@ -31,20 +31,20 @@ envy = "^0.4.2"
 futures = "^0.3.23"
 hex = "^0.4.3"
 http = "^0.2.8"
-libp2p = { version = "^0.51.0", features = [
+libp2p = { version = "^0.51.3", features = [
     "autonat",
     "identify",
     "macros",
     "mdns",
     "noise",
     "ping",
-    "quic",
     "relay",
     "rendezvous",
     "serde",
     "tokio",
     "yamux",
 ] }
+libp2p-quic = { version = "^0.7.0-alpha.3", features = ["tokio"] }
 lipmaa-link = "^0.2.2"
 log = "^0.4.17"
 once_cell = "^1.12.0"

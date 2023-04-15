@@ -7,7 +7,8 @@ use libp2p::core::transport::{Boxed, OrTransport};
 use libp2p::identity::Keypair;
 use libp2p::noise::NoiseAuthenticated;
 use libp2p::yamux::YamuxConfig;
-use libp2p::{quic, relay, PeerId, Transport};
+use libp2p::{relay, PeerId, Transport};
+use libp2p_quic as quic;
 
 // Build the transport stack to be used by the network swarm
 pub async fn build_transport(

@@ -231,6 +231,7 @@ dependencies = [
  "http",
  "hyper",
  "libp2p",
+ "libp2p-quic",
  "lipmaa-link 0.2.2",
  "log",
  "once_cell",
