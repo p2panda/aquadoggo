@@ -3,8 +3,8 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
+use libp2p::connection_limits::ConnectionLimits;
 use libp2p::identity::Keypair;
-use libp2p::swarm::ConnectionLimits;
 use libp2p::{Multiaddr, PeerId};
 use log::info;
 use serde::{Deserialize, Serialize};
