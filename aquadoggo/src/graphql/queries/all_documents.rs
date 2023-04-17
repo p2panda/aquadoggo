@@ -105,7 +105,7 @@ mod test {
         value!({
             "collection": value!({
                 "hasNextPage": false,
-                "totalCount": 0,
+                "totalCount": 1,
                 "endCursor": Value::Null,
                 "documents": []
             }),
