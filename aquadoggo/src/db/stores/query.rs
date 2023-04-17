@@ -217,7 +217,7 @@ fn typecast_field_sql(sql_field: &str, field_name: &str, schema: &Schema) -> Str
 /// Helper method to convert an operation value into the right representation in SQL.
 fn value_sql(value: &OperationValue) -> String {
     match &value {
-        OperationValue::Boolean(value) => (if *value { "true" } else { "false" }).to_string(),
+        OperationValue::Boolean(value) => (if *value { "'true'" } else { "'false'" }).to_string(),
         OperationValue::Integer(value) => value.to_string(),
         OperationValue::Float(value) => value.to_string(),
         OperationValue::String(value) => format!("'{value}'"),
