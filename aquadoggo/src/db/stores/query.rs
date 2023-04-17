@@ -415,47 +415,45 @@ fn pagination_sql(
                         None => "".to_string(),
                     };
 
+                    let cmp_value = format!(
+                        r#"
+                            -- When ordering is activated we need to compare against the value
+                            -- of the ordered field - but from the row where the cursor points at
+                            SELECT
+                                operation_fields_v1.value
+                            FROM
+                                {from}
+                                JOIN
+                                    operation_fields_v1
+                                    ON
+                                        document_view_fields.operation_id = operation_fields_v1.operation_id
+                                        AND
+                                            document_view_fields.name = operation_fields_v1.name
+                            WHERE
+                                operation_fields_v1.name = '{order_field_name}'
+                                AND
+                                    document_view_fields.document_view_id = '{view_id}'
+                                {and_list_index}
+                        "#
+                    );
+
                     format!(
                         r#"
                         AND EXISTS (
                             SELECT
-                                operation_fields_v1.value,
-
-                                -- When ordering is activated we need to compare against the value
-                                -- of the ordered field - but from the row where the cursor points at
-                                (
-                                    SELECT
-                                        operation_fields_v1.value
-                                    FROM
-                                        {from}
-
-                                        JOIN
-                                            operation_fields_v1
-                                            ON
-                                                document_view_fields.operation_id = operation_fields_v1.operation_id
-                                    WHERE
-                                        operation_fields_v1.name = '{order_field_name}'
-                                        AND
-                                            document_view_fields.document_view_id = '{view_id}'
-                                        {and_list_index}
-
-                                ) AS cmp_value
-
+                                operation_fields_v1.value
                             FROM
                                 operation_fields_v1
-
                             WHERE
                                 operation_fields_v1.name = '{order_field_name}'
-
                                 AND
                                     operation_fields_v1.operation_id = document_view_fields.operation_id
-
                                 AND
                                     (
-                                        operation_fields_v1.value > cmp_value
+                                        operation_fields_v1.value > ({cmp_value})
                                         OR
                                         (
-                                            operation_fields_v1.value = cmp_value
+                                            operation_fields_v1.value = ({cmp_value})
                                             AND
                                                 documents.document_view_id > '{view_id}'
                                         )
