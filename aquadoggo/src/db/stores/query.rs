@@ -64,7 +64,7 @@ impl RelationList {
 /// The encoding ensures that the cursor stays "opaque", API consumers to not read any further
 /// semantic meaning into it, even though we keep some crucial information in it which help us
 /// internally during pagination.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct DocumentCursor {
     /// Id aiding us to determine the current row.
     pub document_view_id: DocumentViewId,
@@ -579,6 +579,9 @@ fn total_count_sql(schema_id: &SchemaId, list: Option<&RelationList>, filter: &F
             WHERE
                 {where_}
                 {and_filters}
+
+            -- Group application fields by name to make sure we get actual number of documents
+            GROUP BY operation_fields_v1.name
         "#
     )
 }
