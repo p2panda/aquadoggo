@@ -60,24 +60,24 @@ mod test {
     #[case(
         "".to_string(),
         value!({
-            "collection": value!({ 
+            "collection": value!({
                 "hasNextPage": false,
                 "totalCount": 2,
                 "endCursor": "37noEdXyAbyJ1XBekhNdcxouDLcsBNvcidCxwBCuCQCgUtUhKuoZCXu17aq5aYvbmWzY5YqHf1JJKzrwTyfNYfQXeCbGxcw3",
                 "documents": [
                     {
-                        "cursor": "37noEdXy9ZT3iKkvL6mHub4bUgzEuzfkDVBsQuvdN9BVnHK1BofjBXRRzCsYrtcku2VVhSdtvS8AzHd4VWGS7jAec88pQX98", 
+                        "cursor": "37noEdXy9ZT3iKkvL6mHub4bUgzEuzfkDVBsQuvdN9BVnHK1BofjBXRRzCsYrtcku2VVhSdtvS8AzHd4VWGS7jAec88pQX98",
                         "fields": { "bool": true, },
-                        "meta": { 
+                        "meta": {
                             "owner": "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96",
                             "documentId": "00200436216389856afb3f3a7d8cb2d2981be85787aebed02031c72eb9c216406c57",
                             "viewId": "00200436216389856afb3f3a7d8cb2d2981be85787aebed02031c72eb9c216406c57",
                         }
                     },
                     {
-                        "cursor": "37noEdXyAbyJ1XBekhNdcxouDLcsBNvcidCxwBCuCQCgUtUhKuoZCXu17aq5aYvbmWzY5YqHf1JJKzrwTyfNYfQXeCbGxcw3", 
+                        "cursor": "37noEdXyAbyJ1XBekhNdcxouDLcsBNvcidCxwBCuCQCgUtUhKuoZCXu17aq5aYvbmWzY5YqHf1JJKzrwTyfNYfQXeCbGxcw3",
                         "fields": { "bool": false, },
-                        "meta": { 
+                        "meta": {
                             "owner": "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96",
                             "documentId": "0020de552d81948f220d09127dc42963071d086a142c9547e701674d4cac83f29872",
                             "viewId": "0020de552d81948f220d09127dc42963071d086a142c9547e701674d4cac83f29872",
@@ -89,19 +89,21 @@ mod test {
         vec![]
     )]
     #[case(
-        r#"(
-            first: 1,
-            after: "37noEdXyAbyJ1XBekhNdcxouDLcsBNvcidCxwBCuCQCgUtUhKuoZCXu17aq5aYvbmWzY5YqHf1JJKzrwTyfNYfQXeCbGxcw3",
-            orderBy: DOCUMENT_ID,
-            orderDirection: ASC,
-            filter: {
-                bool: {
-                    eq: false
+        r#"
+            (
+                first: 1,
+                after: "37noEdXyAbyJ1XBekhNdcxouDLcsBNvcidCxwBCuCQCgUtUhKuoZCXu17aq5aYvbmWzY5YqHf1JJKzrwTyfNYfQXeCbGxcw3",
+                orderBy: DOCUMENT_ID,
+                orderDirection: ASC,
+                filter: {
+                    bool: {
+                        eq: false
+                    }
                 }
-            }
-        )"#.to_string(),
+            )
+        "#.to_string(),
         value!({
-            "collection": value!({ 
+            "collection": value!({
                 "hasNextPage": false,
                 "totalCount": 0,
                 "endCursor": Value::Null,
@@ -261,7 +263,9 @@ mod test {
                     endCursor
                     documents {{
                         cursor
-                        fields {{ bool }}
+                        fields {{
+                            bool
+                        }}
                         meta {{
                             owner
                             documentId
