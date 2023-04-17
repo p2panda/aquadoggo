@@ -557,7 +557,7 @@ fn application_select_sql(fields: &Vec<String>) -> String {
 
 fn total_count_sql(schema_id: &SchemaId, list: Option<&RelationList>, filter: &Filter) -> String {
     let from = from_sql(list);
-    let and_where = where_sql(schema_id, list);
+    let where_ = where_sql(schema_id, list);
     let and_filters = filter_sql(filter);
 
     format!(
@@ -577,11 +577,8 @@ fn total_count_sql(schema_id: &SchemaId, list: Option<&RelationList>, filter: &F
                             document_view_fields.name = operation_fields_v1.name
 
             WHERE
-                {and_where}
+                {where_}
                 {and_filters}
-
-            -- Group application fields by name to make sure we get actual number of documents
-            GROUP BY operation_fields_v1.name
         "#
     )
 }
@@ -606,7 +603,7 @@ fn edited_sql(select: &Select) -> String {
     } else {
         // Use constant when we do not query for edited status. This is useful for keeping the
         // resulting SQL row type in shape.
-        "0".to_string()
+        "false".to_string()
     }
 }
 
@@ -652,12 +649,22 @@ fn where_sql(schema_id: &SchemaId, list: Option<&RelationList>) -> String {
                         operation_fields_v1_list.field_type = '{field_type}'
                     AND
                         operation_fields_v1_list.name = '{field_name}'
+                    AND
+                        -- Only one row per field: restrict relation lists to first list item
+                        operation_fields_v1.list_index = 0
                 "#
             )
         }
         None => {
             // We filter by the queried schema of that collection
-            format!("documents.schema_id = '{schema_id}'")
+            format!(
+                r#"
+                    documents.schema_id = '{schema_id}'
+                    AND
+                        -- Only one row per field: restrict relation lists to first list item
+                        operation_fields_v1.list_index = 0
+                "#
+            )
         }
     }
 }
@@ -696,14 +703,6 @@ fn list_index_sql(list: Option<&RelationList>) -> String {
         // Use the list index of the parent document when we query a relation list
         Some(_) => "operation_fields_v1_list.list_index AS list_index".to_string(),
         None => "operation_fields_v1.list_index AS list_index".to_string(),
-    }
-}
-
-fn group_sql(list: Option<&RelationList>) -> String {
-    match list {
-        // Include list index of the parent document relation list to allow duplicate documents
-        Some(_) => "GROUP BY documents.document_id, operation_fields_v1.operation_id, operation_fields_v1.name, operation_fields_v1_list.list_index".to_string(),
-        None => "GROUP BY documents.document_id, operation_fields_v1.operation_id, operation_fields_v1.name".to_string(),
     }
 }
 
@@ -747,7 +746,6 @@ impl SqlStore {
         let and_filters = filter_sql(&args.filter);
         let and_pagination = pagination_sql(&args.pagination, list, &args.order);
 
-        let group = group_sql(list);
         let order = order_sql(&args.order, schema);
         let (page_size, limit) = limit_sql(&args.pagination, &application_fields);
 
@@ -825,9 +823,6 @@ impl SqlStore {
                 -- Lastly we batch all results into smaller chunks via cursor pagination
                 {and_pagination}
 
-            -- Never return more than one row per operation field to not break pagination
-            {group}
-
             -- We always order the rows by document id and list index, but there might also be
             -- user-defined ordering on top of that
             {order}
@@ -861,7 +856,7 @@ impl SqlStore {
             .contains(&PaginationField::TotalCount)
         {
             // Make separate query for getting the total number of documents (without pagination)
-            let result: Option<(i32,)> = query_as(&total_count_sql(schema_id, list, &args.filter))
+            let result: Option<(i64,)> = query_as(&total_count_sql(schema_id, list, &args.filter))
                 .fetch_optional(&self.pool)
                 .await
                 .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
