@@ -57,6 +57,8 @@ mod schema;
 mod test_utils;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod proptests;
 
 pub use crate::config::Configuration;
 pub use crate::network::NetworkConfiguration;

@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc c45ffd6117fb005eff05e7f5af93e74ffdf70e9abf28c35bcfc6981774bc7cd4 # shrinks to (schema, values) = (SchemaAST([SchemaField { name: FieldName("aI0X"), field_type: PinnedRelation, relation_schema: Some(SchemaAST([SchemaField { name: FieldName("FBma3_r_V_J79P_OyO__hr_eO0i_r8cg1L"), field_type: Integer, relation_schema: None }])) }]), [PinnedRelation([Integer(703590349006)])])
