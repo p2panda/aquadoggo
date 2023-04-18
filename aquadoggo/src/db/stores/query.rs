@@ -484,15 +484,20 @@ fn pagination_sql(
     }
 }
 
-fn order_sql(order: &Order, schema: &Schema) -> String {
+fn order_sql(order: &Order, schema: &Schema, list: Option<&RelationList>) -> String {
     let direction = match order.direction {
         Direction::Ascending => "ASC",
         Direction::Descending => "DESC",
     };
 
+    let list_sql = match list {
+        Some(_) => "operation_fields_v1_list.list_index ASC,",
+        None => "",
+    };
+
     match &order.field {
         Field::Meta(MetaField::DocumentId) => {
-            format!("ORDER BY documents.document_id {direction}, list_index ASC")
+            format!("ORDER BY {list_sql} documents.document_id {direction}")
         }
         Field::Meta(meta_field) => {
             let sql_field = match meta_field {
@@ -508,6 +513,9 @@ fn order_sql(order: &Order, schema: &Schema) -> String {
                 r#"
                 ORDER BY
                     {sql_field} {direction},
+
+                    -- .. and by relation list index, in case we're querying one
+                    {list_sql}
 
                     -- On top we sort always by id in case the previous order
                     -- value is equal between two rows
@@ -532,6 +540,9 @@ fn order_sql(order: &Order, schema: &Schema) -> String {
                         LIMIT 1
                     )
                     {},
+
+                    -- .. and by relation list index, in case we're querying one
+                    {list_sql}
 
                     -- On top we sort always by view id in case the previous order
                     -- value is equal between two rows
@@ -763,7 +774,7 @@ impl SqlStore {
         let and_filters = filter_sql(&args.filter, schema);
         let and_pagination = pagination_sql(&args.pagination, list, &args.order);
 
-        let order = order_sql(&args.order, schema);
+        let order = order_sql(&args.order, schema, list);
         let (page_size, limit) = limit_sql(&args.pagination, &application_fields);
 
         let sea_quel = format!(
@@ -1005,37 +1016,34 @@ mod tests {
     use p2panda_rs::document::{DocumentViewFields, DocumentViewId};
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::{OperationFields, OperationId, OperationValue};
-    use p2panda_rs::schema::{FieldType, Schema};
+    use p2panda_rs::schema::{FieldType, Schema, SchemaId};
     use p2panda_rs::test_utils::fixtures::key_pair;
     use rstest::rstest;
 
     use crate::db::query::{
         Direction, Field, Filter, MetaField, Order, Pagination, PaginationField, Select,
     };
+    use crate::db::stores::RelationList;
     use crate::db::types::StorageDocument;
     use crate::graphql::types::OrderDirection;
     use crate::test_utils::{add_document, add_schema, test_runner, TestNode};
 
     use super::{DocumentCursor, Query};
 
-    fn get_view_fields(
-        view_id: &DocumentViewId,
-        fields: &[(&str, OperationValue)],
-    ) -> DocumentViewFields {
-        let operation_id: OperationId = view_id.to_string().parse().unwrap();
-        let mut operation_fields = OperationFields::new();
-
-        for field in fields {
-            operation_fields.insert(field.0, field.1.clone());
-        }
-
-        DocumentViewFields::new_from_operation_fields(&operation_id, &operation_fields)
+    fn get_document_value(document: &StorageDocument, field: &str) -> OperationValue {
+        document
+            .fields()
+            .expect("Expected document fields")
+            .get(field)
+            .expect(&format!("Expected '{field}' field to exist in document"))
+            .value()
+            .to_owned()
     }
 
     async fn add_schema_and_documents(
         node: &mut TestNode,
         schema_name: &str,
-        documents: Vec<Vec<(&str, OperationValue)>>,
+        documents: Vec<Vec<(&str, OperationValue, Option<SchemaId>)>>,
         key_pair: &KeyPair,
     ) -> (Schema, Vec<DocumentViewId>) {
         assert!(documents.len() > 0);
@@ -1043,9 +1051,18 @@ mod tests {
         // Look at first document to automatically derive schema
         let schema_fields = documents[0]
             .iter()
-            .map(|(field_name, field_value)| {
+            .map(|(field_name, field_value, schema_id)| {
                 // Get field type from operation value
-                let field_type: FieldType = field_value.field_type().parse().unwrap();
+                let field_type = match field_value.field_type() {
+                    "relation" => FieldType::Relation(schema_id.clone().unwrap()),
+                    "pinned_relation" => FieldType::PinnedRelation(schema_id.clone().unwrap()),
+                    "relation_list" => FieldType::RelationList(schema_id.clone().unwrap()),
+                    "pinned_relation_list" => {
+                        FieldType::PinnedRelationList(schema_id.clone().unwrap())
+                    }
+                    _ => field_value.field_type().parse().unwrap(),
+                };
+
                 (*field_name, field_type)
             })
             .collect();
@@ -1056,7 +1073,11 @@ mod tests {
         // Add all documents and return created view ids
         let mut view_ids = Vec::new();
         for document in documents {
-            let view_id = add_document(node, schema.id(), document, key_pair).await;
+            let fields = document
+                .iter()
+                .map(|field| (field.0, field.1.clone()))
+                .collect();
+            let view_id = add_document(node, schema.id(), fields, key_pair).await;
             view_ids.push(view_id);
         }
 
@@ -1072,29 +1093,37 @@ mod tests {
             "events",
             vec![
                 vec![
-                    ("title", "Kids Bits! Chiptune for baby squirrels".into()),
-                    ("date", "2023-04-17".into()),
-                    ("ticket_price", 5.75.into()),
+                    (
+                        "title",
+                        "Kids Bits! Chiptune for baby squirrels".into(),
+                        None,
+                    ),
+                    ("date", "2023-04-17".into(), None),
+                    ("ticket_price", 5.75.into(), None),
                 ],
                 vec![
-                    ("title", "The Pandadoodle Flute Trio".into()),
-                    ("date", "2023-04-14".into()),
-                    ("ticket_price", 12.5.into()),
+                    ("title", "The Pandadoodle Flute Trio".into(), None),
+                    ("date", "2023-04-14".into(), None),
+                    ("ticket_price", 12.5.into(), None),
                 ],
                 vec![
-                    ("title", "Eventual Consistent Grapefruit".into()),
-                    ("date", "2023-05-02".into()),
-                    ("ticket_price", 24.99.into()),
+                    ("title", "Eventual Consistent Grapefruit".into(), None),
+                    ("date", "2023-05-02".into(), None),
+                    ("ticket_price", 24.99.into(), None),
                 ],
                 vec![
-                    ("title", "Bamboo-Scrumble Rumba Night - Xmas special".into()),
-                    ("date", "2023-12-20".into()),
-                    ("ticket_price", 99.0.into()),
+                    (
+                        "title",
+                        "Bamboo-Scrumble Rumba Night - Xmas special".into(),
+                        None,
+                    ),
+                    ("date", "2023-12-20".into(), None),
+                    ("ticket_price", 99.0.into(), None),
                 ],
                 vec![
-                    ("title", "Shoebill - Non-migratory Shoegaze".into()),
-                    ("date", "2023-09-09".into()),
-                    ("ticket_price", 10.00.into()),
+                    ("title", "Shoebill - Non-migratory Shoegaze".into(), None),
+                    ("date", "2023-09-09".into(), None),
+                    ("ticket_price", 10.00.into(), None),
                 ],
             ],
             key_pair,
@@ -1186,16 +1215,8 @@ mod tests {
             // Compare expected field values over all returned documents
             for (index, expected_value) in expected_fields.into_iter().enumerate() {
                 assert_eq!(
-                    documents[index]
-                        .1
-                        .fields()
-                        .expect("Expected query to return document fields")
-                        .get(&selected_field)
-                        .expect(&format!(
-                            "Expected response to contain '{selected_field}' field"
-                        ))
-                        .value(),
-                    &expected_value
+                    get_document_value(&documents[index].1, &selected_field),
+                    expected_value
                 );
             }
         });
@@ -1275,6 +1296,119 @@ mod tests {
             assert_eq!(pagination_data.end_cursor, None);
             assert_eq!(pagination_data.has_next_page, false);
             assert_eq!(documents.len(), 0);
+        });
+    }
+
+    #[rstest]
+    fn pinned_relation_list(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            let (venues_schema, mut venues_view_ids) = add_schema_and_documents(
+                &mut node,
+                "venues",
+                vec![
+                    vec![("name", "World Wide Feld".into(), None)],
+                    vec![("name", "Internet Explorer".into(), None)],
+                    vec![("name", "p4p space".into(), None)],
+                ],
+                &key_pair,
+            )
+            .await;
+
+            let (visited_schema, mut visited_view_ids) = add_schema_and_documents(
+                &mut node,
+                "visited",
+                vec![
+                    vec![
+                        ("user", "seagull".into(), None),
+                        (
+                            "venues",
+                            vec![
+                                venues_view_ids[0].clone(),
+                                venues_view_ids[0].clone(),
+                                venues_view_ids[1].clone(),
+                                venues_view_ids[2].clone(),
+                                venues_view_ids[0].clone(),
+                                venues_view_ids[0].clone(),
+                                venues_view_ids[1].clone(),
+                            ]
+                            .into(),
+                            Some(venues_schema.id().to_owned()),
+                        ),
+                    ],
+                    vec![
+                        ("user", "panda".into(), None),
+                        (
+                            "venues",
+                            vec![
+                                venues_view_ids[1].clone(),
+                                venues_view_ids[1].clone(),
+                                venues_view_ids[2].clone(),
+                            ]
+                            .into(),
+                            Some(venues_schema.id().to_owned()),
+                        ),
+                    ],
+                ],
+                &key_pair,
+            )
+            .await;
+
+            let args = Query::new(
+                &Pagination::new(
+                    &NonZeroU64::new(10).unwrap(),
+                    None,
+                    &vec![PaginationField::TotalCount],
+                ),
+                &Select::new(&["name".into()]),
+                &Filter::default(),
+                &Order::default(),
+            );
+
+            // Select the pinned relation list "venues" of the first visited document
+            let list = RelationList::new_pinned(&visited_view_ids[0], "venues".into());
+
+            let (pagination_data, documents) = node
+                .context
+                .store
+                .query(&visited_schema, &args, Some(&list))
+                .await
+                .expect("Query failed");
+
+            assert_eq!(documents.len(), 7);
+            assert_eq!(pagination_data.total_count, Some(7));
+            assert_eq!(
+                get_document_value(&documents[0].1, "name"),
+                OperationValue::String("World Wide Feld".to_string())
+            );
+            assert_eq!(
+                get_document_value(&documents[4].1, "name"),
+                OperationValue::String("World Wide Feld".to_string())
+            );
+
+            // Select the pinned relation list "venues" of the second visited document
+            let list = RelationList::new_pinned(&visited_view_ids[1], "venues".into());
+
+            let (pagination_data, documents) = node
+                .context
+                .store
+                .query(&visited_schema, &args, Some(&list))
+                .await
+                .expect("Query failed");
+
+            assert_eq!(documents.len(), 3);
+            assert_eq!(pagination_data.total_count, Some(3));
+            assert_eq!(
+                get_document_value(&documents[0].1, "name"),
+                OperationValue::String("Internet Explorer".to_string())
+            );
+            assert_eq!(
+                get_document_value(&documents[1].1, "name"),
+                OperationValue::String("Internet Explorer".to_string())
+            );
+            assert_eq!(
+                get_document_value(&documents[2].1, "name"),
+                OperationValue::String("p4p space".to_string())
+            );
         });
     }
 }
