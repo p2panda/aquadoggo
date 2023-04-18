@@ -987,7 +987,7 @@ mod tests {
     use p2panda_rs::document::{DocumentViewFields, DocumentViewId};
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::{OperationFields, OperationId, OperationValue};
-    use p2panda_rs::schema::FieldType;
+    use p2panda_rs::schema::{FieldType, Schema};
     use p2panda_rs::test_utils::fixtures::key_pair;
     use rstest::rstest;
 
@@ -1012,40 +1012,54 @@ mod tests {
         DocumentViewFields::new_from_operation_fields(&operation_id, &operation_fields)
     }
 
+    async fn add_schema_and_documents(
+        node: &mut TestNode,
+        schema_name: &str,
+        documents: Vec<Vec<(&str, OperationValue)>>,
+        key_pair: &KeyPair,
+    ) -> (Schema, Vec<DocumentViewId>) {
+        assert!(documents.len() > 0);
+
+        // Look at first document to automatically derive schema
+        let schema_fields = documents[0]
+            .iter()
+            .map(|(field_name, field_value)| {
+                // Get field type from operation value
+                let field_type: FieldType = field_value.field_type().parse().unwrap();
+                (*field_name, field_type)
+            })
+            .collect();
+
+        // Create schema
+        let schema = add_schema(node, schema_name, schema_fields, &key_pair).await;
+
+        // Add all documents and return created view ids
+        let mut view_ids = Vec::new();
+        for document in documents {
+            let view_id = add_document(node, schema.id(), document, &key_pair).await;
+            view_ids.push(view_id);
+        }
+
+        (schema, view_ids)
+    }
+
     #[rstest]
     fn ordered_query(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
-            let events_schema = add_schema(
+            let (schema, view_ids) = add_schema_and_documents(
                 &mut node,
                 "events",
                 vec![
-                    ("title", FieldType::String),
-                    ("date", FieldType::String),
-                    ("ticket_price", FieldType::Float),
-                ],
-                &key_pair,
-            )
-            .await;
-
-            let first_document = add_document(
-                &mut node,
-                events_schema.id(),
-                vec![
-                    ("title", "Kids Bits! Chiptune for baby squirrels".into()),
-                    ("date", "2023-04-17".into()),
-                    ("ticket_price", 5.75.into()),
-                ],
-                &key_pair,
-            )
-            .await;
-
-            let second_document = add_document(
-                &mut node,
-                events_schema.id(),
-                vec![
-                    ("title", "The Pandadoodle Flute Trio".into()),
-                    ("date", "2023-04-14".into()),
-                    ("ticket_price", 12.5.into()),
+                    vec![
+                        ("title", "Kids Bits! Chiptune for baby squirrels".into()),
+                        ("date", "2023-04-17".into()),
+                        ("ticket_price", 5.75.into()),
+                    ],
+                    vec![
+                        ("title", "The Pandadoodle Flute Trio".into()),
+                        ("date", "2023-04-14".into()),
+                        ("ticket_price", 12.5.into()),
+                    ],
                 ],
                 &key_pair,
             )
@@ -1061,7 +1075,7 @@ mod tests {
             let (pagination_data, documents) = node
                 .context
                 .store
-                .query(&events_schema, &args, None)
+                .query(&schema, &args, None)
                 .await
                 .unwrap();
 
@@ -1069,14 +1083,14 @@ mod tests {
             assert_eq!(
                 documents[0].1.fields(),
                 Some(&get_view_fields(
-                    &second_document,
+                    &view_ids[1],
                     &[("title", "The Pandadoodle Flute Trio".into())]
                 ))
             );
             assert_eq!(
                 documents[1].1.fields(),
                 Some(&get_view_fields(
-                    &first_document,
+                    &view_ids[0],
                     &[("title", "Kids Bits! Chiptune for baby squirrels".into())]
                 ))
             );
