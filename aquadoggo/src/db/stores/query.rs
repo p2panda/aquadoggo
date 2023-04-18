@@ -877,7 +877,8 @@ impl SqlStore {
         let pagination_data = PaginationData {
             total_count,
             has_next_page,
-            // @TODO: Implement backwards pagination
+            // @TODO: Implement backwards pagination, see related issue:
+            // https://github.com/p2panda/aquadoggo/issues/325
             has_previous_page: false,
             start_cursor,
             end_cursor,

@@ -124,7 +124,7 @@ pub fn parse_collection_arguments(
 ) -> Result<Query<DocumentCursor>, Error> {
     let mut pagination = Pagination::<DocumentCursor>::default();
     let mut order = Order::default();
-    let mut filter = Filter::new();
+    let mut filter = Filter::default();
 
     for (name, value) in ctx.args.iter() {
         match name.as_str() {

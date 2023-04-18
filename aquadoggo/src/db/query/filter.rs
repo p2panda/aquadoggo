@@ -9,7 +9,7 @@ use p2panda_rs::operation::OperationValue;
 
 #[cfg(test)]
 use crate::db::query::test_utils::parse_str;
-use crate::db::query::Field;
+use crate::db::query::{Field, MetaField};
 
 /// Options to represent the upper bound of an unbounded, open, closed or half-open interval.
 #[derive(Debug, Clone, PartialEq)]
@@ -321,7 +321,15 @@ impl Filter {
 
 impl Default for Filter {
     fn default() -> Self {
-        Self::new()
+        let mut filter = Self::new();
+
+        // Do not query deleted documents by default
+        filter.add(
+            &Field::Meta(MetaField::Deleted),
+            &OperationValue::Boolean(true),
+        );
+
+        filter
     }
 }
 
