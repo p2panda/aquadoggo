@@ -131,11 +131,7 @@ impl Filter {
     fn upsert_filter_item(&mut self, new_item: FilterSetting) {
         // Check if a field exists we potentially can extend. For this the field needs to:
         // - Have the same field name
-        // - Be also exclusive or non-exclusive
-        let index = self
-            .0
-            .iter()
-            .position(|item| item.field == new_item.field && item.exclusive == new_item.exclusive);
+        let index = self.0.iter().position(|item| item.field == new_item.field);
 
         // We haven't found anything matching, just add it to the array
         if index.is_none() {
@@ -147,7 +143,20 @@ impl Filter {
         // and the element exists at this point
         let current_item = self.0.get_mut(index.unwrap()).unwrap();
 
-        // Merge or extend potentially overlapping filters
+        // Boolean values for the same field we can always easily overwrite
+        if let FilterBy::Element(OperationValue::Boolean(value)) = current_item.by {
+            *current_item = new_item;
+            return;
+        }
+
+        // We don't merge other fields with different exclusivity, in this case just add it and
+        // return early
+        if current_item.exclusive != new_item.exclusive {
+            self.0.push(new_item);
+            return;
+        }
+
+        // If exclusivity setting is the same, merge or extend potentially overlapping filters
         let updated_filter = match (current_item.clone().by, new_item.clone().by) {
             (FilterBy::Element(element_a), FilterBy::Element(element_b)) => {
                 if element_a != element_b {
@@ -359,13 +368,13 @@ mod tests {
     use p2panda_rs::operation::OperationValue;
     use p2panda_rs::schema::FieldName;
 
-    use crate::db::query::Field;
+    use crate::db::query::{Field, MetaField};
 
     use super::{Filter, FilterBy, LowerBound, UpperBound};
 
     #[test]
     fn element_filters() {
-        let mut filter = Filter::default();
+        let mut filter = Filter::new();
         filter.add(&"animal".into(), &"panda".into());
         filter.add_in(&"city".into(), &["tokyo".into(), "osaka".into()]);
 
@@ -379,7 +388,7 @@ mod tests {
 
     #[test]
     fn range_filters() {
-        let mut filter = Filter::default();
+        let mut filter = Filter::new();
         filter.add_gt(&"year".into(), &2004.into());
         filter.add_lte(&"temperature".into(), &15.75.into());
 
@@ -396,7 +405,7 @@ mod tests {
 
     #[test]
     fn contains_filters() {
-        let mut filter = Filter::default();
+        let mut filter = Filter::new();
         filter.add_contains(&"description".into(), "Panda is the best");
         filter.add_not_contains(&"description".into(), "Llama");
 
@@ -415,7 +424,7 @@ mod tests {
 
     #[test]
     fn convert_single_element_filter() {
-        let mut filter = Filter::default();
+        let mut filter = Filter::new();
         let field: Field = "animal".into();
         let panda: OperationValue = "panda".into();
 
@@ -427,7 +436,7 @@ mod tests {
 
     #[test]
     fn merge_element_filters() {
-        let mut filter = Filter::default();
+        let mut filter = Filter::new();
         let field: Field = "animal".into();
 
         let panda: OperationValue = "panda".into();
@@ -450,7 +459,7 @@ mod tests {
 
     #[test]
     fn merge_multiple_element_filters() {
-        let mut filter = Filter::default();
+        let mut filter = Filter::new();
         let field: Field = "animal".into();
 
         let panda: OperationValue = "panda".into();
@@ -473,7 +482,7 @@ mod tests {
 
     #[test]
     fn merge_range_filters() {
-        let mut filter = Filter::default();
+        let mut filter = Filter::new();
         let field: Field = "year".into();
 
         let from: OperationValue = 2020.into();
@@ -492,7 +501,7 @@ mod tests {
 
     #[test]
     fn overwrite_range_filters() {
-        let mut filter = Filter::default();
+        let mut filter = Filter::new();
         let field: Field = "year".into();
 
         let from: OperationValue = 2020.into();
@@ -511,5 +520,88 @@ mod tests {
             filter.get(0).unwrap().by,
             FilterBy::Interval(LowerBound::Greater(from), UpperBound::LowerEqual(to_new))
         );
+    }
+
+    #[test]
+    fn overwrite_deleted_filter() {
+        let mut filter = Filter::default();
+
+        // Check if filter is set to true by default
+        assert_eq!(
+            filter.get(0).unwrap().field,
+            Field::Meta(MetaField::Deleted)
+        );
+        assert_eq!(
+            filter.get(0).unwrap().by,
+            FilterBy::Element(OperationValue::Boolean(true))
+        );
+        assert_eq!(filter.get(0).unwrap().exclusive, false);
+
+        // Change exclusive filter manually
+        filter.add_not(
+            &Field::Meta(MetaField::Deleted),
+            &OperationValue::Boolean(true),
+        );
+
+        // Make sure that it's still only one filter, but with the exclusive flag flipped
+        assert_eq!(filter.len(), 1);
+        assert_eq!(
+            filter.get(0).unwrap().by,
+            FilterBy::Element(OperationValue::Boolean(true))
+        );
+        assert_eq!(filter.get(0).unwrap().exclusive, true);
+
+        // Change filter manually again
+        filter.add(
+            &Field::Meta(MetaField::Deleted),
+            &OperationValue::Boolean(false),
+        );
+
+        // Make sure that it's still only one filter
+        assert_eq!(filter.len(), 1);
+        assert_eq!(
+            filter.get(0).unwrap().by,
+            FilterBy::Element(OperationValue::Boolean(false))
+        );
+        assert_eq!(filter.get(0).unwrap().exclusive, false);
+    }
+
+    #[test]
+    fn overwrite_bool_fields() {
+        let mut filter = Filter::new();
+
+        // Add boolean filter
+        filter.add(
+            &Field::new("is_admin".into()),
+            &OperationValue::Boolean(true),
+        );
+
+        // Overwrite the same filter with other value
+        filter.add(
+            &Field::new("is_admin".into()),
+            &OperationValue::Boolean(false),
+        );
+
+        // .. check if it got correctly overwritten
+        assert_eq!(filter.len(), 1);
+        assert_eq!(
+            filter.get(0).unwrap().by,
+            FilterBy::Element(OperationValue::Boolean(false))
+        );
+        assert_eq!(filter.get(0).unwrap().exclusive, false);
+
+        // Overwrite it again, but with an exclusive filter
+        filter.add_not(
+            &Field::new("is_admin".into()),
+            &OperationValue::Boolean(false),
+        );
+
+        // .. check if it got correctly overwritten
+        assert_eq!(filter.len(), 1);
+        assert_eq!(
+            filter.get(0).unwrap().by,
+            FilterBy::Element(OperationValue::Boolean(false))
+        );
+        assert_eq!(filter.get(0).unwrap().exclusive, true);
     }
 }
