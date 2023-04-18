@@ -217,6 +217,12 @@ fn typecast_field_sql(sql_field: &str, field_name: &str, schema: &Schema) -> Str
 /// Helper method to convert an operation value into the right representation in SQL.
 fn value_sql(value: &OperationValue) -> String {
     match &value {
+        // Note that we wrap boolean values into a string here, as our operation field values are
+        // stored as strings in themselves and we can't typecast them to booleans due to a
+        // limitation in SQLite (see typecast_field_sql method).
+        //
+        // When comparing meta fields like `is_edited` etc. do _not_ use this method since we're
+        // dealing there with native boolean values instead of strings.
         OperationValue::Boolean(value) => (if *value { "'true'" } else { "'false'" }).to_string(),
         OperationValue::Integer(value) => value.to_string(),
         OperationValue::Float(value) => value.to_string(),
@@ -297,7 +303,7 @@ fn cmp_sql(sql_field: &str, filter_setting: &FilterSetting) -> String {
     }
 }
 
-fn filter_sql(filter: &Filter) -> String {
+fn filter_sql(filter: &Filter, schema: &Schema) -> String {
     filter
         .iter()
         .filter_map(|filter_setting| {
@@ -306,12 +312,23 @@ fn filter_sql(filter: &Filter) -> String {
                     Some(format!("AND {}", cmp_sql("owner", filter_setting)))
                 }
                 Field::Meta(MetaField::Edited) => {
-                    Some(format!("AND {}", cmp_sql("is_edited", filter_setting)))
+                    if let FilterBy::Element(OperationValue::Boolean(filter_value)) =
+                        filter_setting.by
+                    {
+                        // Convert the boolean value manually here since we're dealing with native
+                        // boolean values instead of operation field value strings
+                        let edited_flag = if filter_value { "true" } else { "false" };
+                        Some(format!("AND is_edited = {edited_flag}"))
+                    } else {
+                        None
+                    }
                 }
                 Field::Meta(MetaField::Deleted) => {
                     if let FilterBy::Element(OperationValue::Boolean(filter_value)) =
                         filter_setting.by
                     {
+                        // Convert the boolean value manually here since we're dealing with native
+                        // boolean values instead of operation field value strings
                         let deleted_flag = if filter_value { "true" } else { "false" };
                         Some(format!("AND documents.is_deleted = {deleted_flag}"))
                     } else {
@@ -327,13 +344,14 @@ fn filter_sql(filter: &Filter) -> String {
                     cmp_sql("documents.document_view_id", filter_setting)
                 )),
                 Field::Field(field_name) => {
-                    let filter_cmp = cmp_sql("operation_fields_v1.value", filter_setting);
+                    let field_sql = typecast_field_sql("operation_fields_v1.value", field_name, schema);
+                    let filter_cmp = cmp_sql(&field_sql, filter_setting);
 
                     Some(format!(
                         r#"
                         AND EXISTS (
                             SELECT
-                                value
+                                operation_fields_v1.value
                             FROM
                                 operation_fields_v1
                             WHERE
@@ -551,10 +569,10 @@ fn application_select_sql(fields: &Vec<String>) -> String {
     }
 }
 
-fn total_count_sql(schema_id: &SchemaId, list: Option<&RelationList>, filter: &Filter) -> String {
+fn total_count_sql(schema: &Schema, list: Option<&RelationList>, filter: &Filter) -> String {
     let from = from_sql(list);
-    let where_ = where_sql(schema_id, list);
-    let and_filters = filter_sql(filter);
+    let where_ = where_sql(schema.id(), list);
+    let and_filters = filter_sql(filter, schema);
 
     format!(
         r#"
@@ -742,7 +760,7 @@ impl SqlStore {
 
         let where_ = where_sql(schema.id(), list);
         let and_select = application_select_sql(&application_fields);
-        let and_filters = filter_sql(&args.filter);
+        let and_filters = filter_sql(&args.filter, schema);
         let and_pagination = pagination_sql(&args.pagination, list, &args.order);
 
         let order = order_sql(&args.order, schema);
@@ -855,7 +873,7 @@ impl SqlStore {
             .contains(&PaginationField::TotalCount)
         {
             // Make separate query for getting the total number of documents (without pagination)
-            let result: Option<(i64,)> = query_as(&total_count_sql(schema_id, list, &args.filter))
+            let result: Option<(i64,)> = query_as(&total_count_sql(schema, list, &args.filter))
                 .fetch_optional(&self.pool)
                 .await
                 .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
@@ -1031,69 +1049,137 @@ mod tests {
             .collect();
 
         // Create schema
-        let schema = add_schema(node, schema_name, schema_fields, &key_pair).await;
+        let schema = add_schema(node, schema_name, schema_fields, key_pair).await;
 
         // Add all documents and return created view ids
         let mut view_ids = Vec::new();
         for document in documents {
-            let view_id = add_document(node, schema.id(), document, &key_pair).await;
+            let view_id = add_document(node, schema.id(), document, key_pair).await;
             view_ids.push(view_id);
         }
 
         (schema, view_ids)
     }
 
-    #[rstest]
-    fn ordered_query(key_pair: KeyPair) {
-        test_runner(|mut node: TestNode| async move {
-            let (schema, view_ids) = add_schema_and_documents(
-                &mut node,
-                "events",
+    async fn create_events_test_data(
+        node: &mut TestNode,
+        key_pair: &KeyPair,
+    ) -> (Schema, Vec<DocumentViewId>) {
+        add_schema_and_documents(
+            node,
+            "events",
+            vec![
                 vec![
-                    vec![
-                        ("title", "Kids Bits! Chiptune for baby squirrels".into()),
-                        ("date", "2023-04-17".into()),
-                        ("ticket_price", 5.75.into()),
-                    ],
-                    vec![
-                        ("title", "The Pandadoodle Flute Trio".into()),
-                        ("date", "2023-04-14".into()),
-                        ("ticket_price", 12.5.into()),
-                    ],
+                    ("title", "Kids Bits! Chiptune for baby squirrels".into()),
+                    ("date", "2023-04-17".into()),
+                    ("ticket_price", 5.75.into()),
                 ],
-                &key_pair,
-            )
-            .await;
+                vec![
+                    ("title", "The Pandadoodle Flute Trio".into()),
+                    ("date", "2023-04-14".into()),
+                    ("ticket_price", 12.5.into()),
+                ],
+                vec![
+                    ("title", "Eventual Consistent Grapefruit".into()),
+                    ("date", "2023-05-02".into()),
+                    ("ticket_price", 24.99.into()),
+                ],
+                vec![
+                    ("title", "Bamboo-Scrumble Rumba Night - Xmas special".into()),
+                    ("date", "2023-12-20".into()),
+                    ("ticket_price", 99.0.into()),
+                ],
+                vec![
+                    ("title", "Shoebill - Non-migratory Shoegaze".into()),
+                    ("date", "2023-09-09".into()),
+                    ("ticket_price", 10.00.into()),
+                ],
+            ],
+            key_pair,
+        )
+        .await
+    }
 
-            let args = Query::new(
-                &Pagination::default(),
-                &Select::new(&["title".into()]),
-                &Filter::new(),
-                &Order::new(&"date".into(), &Direction::Ascending),
-            );
+    #[rstest]
+    #[case::order_by_date_asc(
+        Query::new(
+            &Pagination::default(),
+            &Select::new(&["title".into()]),
+            &Filter::new(),
+            &Order::new(&"date".into(), &Direction::Ascending),
+        ),
+        "title".into(),
+        vec![
+            "The Pandadoodle Flute Trio".into(),
+            "Kids Bits! Chiptune for baby squirrels".into(),
+            "Eventual Consistent Grapefruit".into(),
+            "Shoebill - Non-migratory Shoegaze".into(),
+            "Bamboo-Scrumble Rumba Night - Xmas special".into(),
+        ],
+    )]
+    #[case::order_by_date_desc(
+        Query::new(
+            &Pagination::default(),
+            &Select::new(&["date".into()]),
+            &Filter::new(),
+            &Order::new(&"date".into(), &Direction::Descending),
+        ),
+        "date".into(),
+        vec![
+            "2023-12-20".into(),
+            "2023-09-09".into(),
+            "2023-05-02".into(),
+            "2023-04-17".into(),
+            "2023-04-14".into(),
+        ],
+    )]
+    #[case::filter_by_ticket_price_range(
+        Query::new(
+            &Pagination::default(),
+            &Select::new(&["ticket_price".into()]),
+            &Filter::new().fields(&[
+                ("ticket_price_gt", &[10.0.into()]),
+                ("ticket_price_lt", &[50.0.into()]),
+            ]),
+            &Order::new(&"ticket_price".into(), &Direction::Ascending),
+        ),
+        "ticket_price".into(),
+        vec![
+            12.5.into(),
+            24.99.into(),
+        ],
+    )]
+    fn basic_queries(
+        key_pair: KeyPair,
+        #[case] args: Query<DocumentCursor>,
+        #[case] selected_field: String,
+        #[case] expected_fields: Vec<OperationValue>,
+    ) {
+        test_runner(|mut node: TestNode| async move {
+            let (schema, view_ids) = create_events_test_data(&mut node, &key_pair).await;
 
-            let (pagination_data, documents) = node
+            let (_pagination_data, documents) = node
                 .context
                 .store
                 .query(&schema, &args, None)
                 .await
                 .unwrap();
 
-            assert_eq!(documents.len(), 2);
-            assert_eq!(
-                documents[0].1.fields(),
-                Some(&get_view_fields(
-                    &view_ids[1],
-                    &[("title", "The Pandadoodle Flute Trio".into())]
-                ))
-            );
-            assert_eq!(
-                documents[1].1.fields(),
-                Some(&get_view_fields(
-                    &view_ids[0],
-                    &[("title", "Kids Bits! Chiptune for baby squirrels".into())]
-                ))
-            );
+            assert_eq!(documents.len(), expected_fields.len());
+
+            // Compare expected "title" values over all returned documents
+            for (index, expected_value) in expected_fields.into_iter().enumerate() {
+                assert_eq!(
+                    documents[index]
+                        .1
+                        .fields()
+                        .expect("Expected query to return document fields")
+                        .get(&selected_field)
+                        .expect("Expected response to contain '{selected_field}' field")
+                        .value(),
+                    &expected_value
+                );
+            }
         });
     }
 }
