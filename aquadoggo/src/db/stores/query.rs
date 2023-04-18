@@ -1149,6 +1149,20 @@ mod tests {
             24.99.into(),
         ],
     )]
+    #[case::filter_by_search_string(
+        Query::new(
+            &Pagination::default(),
+            &Select::new(&["title".into()]),
+            &Filter::new().fields(&[
+                ("title_contains", &["baby".into()]),
+            ]),
+            &Order::default(),
+        ),
+        "title".into(),
+        vec![
+            "Kids Bits! Chiptune for baby squirrels".into(),
+        ],
+    )]
     fn basic_queries(
         key_pair: KeyPair,
         #[case] args: Query<DocumentCursor>,
@@ -1167,7 +1181,7 @@ mod tests {
 
             assert_eq!(documents.len(), expected_fields.len());
 
-            // Compare expected "title" values over all returned documents
+            // Compare expected field values over all returned documents
             for (index, expected_value) in expected_fields.into_iter().enumerate() {
                 assert_eq!(
                     documents[index]
@@ -1175,7 +1189,9 @@ mod tests {
                         .fields()
                         .expect("Expected query to return document fields")
                         .get(&selected_field)
-                        .expect("Expected response to contain '{selected_field}' field")
+                        .expect(&format!(
+                            "Expected response to contain '{selected_field}' field"
+                        ))
                         .value(),
                     &expected_value
                 );
