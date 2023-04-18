@@ -1009,7 +1009,9 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::key_pair;
     use rstest::rstest;
 
-    use crate::db::query::{Direction, Field, Filter, MetaField, Order, Pagination, Select};
+    use crate::db::query::{
+        Direction, Field, Filter, MetaField, Order, Pagination, PaginationField, Select,
+    };
     use crate::db::types::StorageDocument;
     use crate::graphql::types::OrderDirection;
     use crate::test_utils::{add_document, add_schema, test_runner, TestNode};
@@ -1177,7 +1179,7 @@ mod tests {
                 .store
                 .query(&schema, &args, None)
                 .await
-                .unwrap();
+                .expect("Query failed");
 
             assert_eq!(documents.len(), expected_fields.len());
 
@@ -1196,6 +1198,83 @@ mod tests {
                     &expected_value
                 );
             }
+        });
+    }
+
+    #[rstest]
+    fn pagination(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            let (schema, mut view_ids) = create_events_test_data(&mut node, &key_pair).await;
+
+            // Sort created documents by document view id, to compare to similarily sorted query
+            // results
+            view_ids.sort();
+
+            let mut cursor: Option<DocumentCursor> = None;
+
+            // Go through all pages, one document at a time
+            for view_id in view_ids {
+                let args = Query::new(
+                    &Pagination::new(
+                        &NonZeroU64::new(1).unwrap(),
+                        cursor.as_ref(),
+                        &vec![PaginationField::TotalCount],
+                    ),
+                    &Select::new(&[Field::Meta(MetaField::DocumentViewId)]),
+                    &Filter::default(),
+                    &Order::new(
+                        &Field::Meta(MetaField::DocumentViewId),
+                        &Direction::Ascending,
+                    ),
+                );
+
+                let (pagination_data, documents) = node
+                    .context
+                    .store
+                    .query(&schema, &args, None)
+                    .await
+                    .expect("Query failed");
+
+                match pagination_data.end_cursor {
+                    Some(end_cursor) => {
+                        cursor = Some(end_cursor);
+                    }
+                    None => (),
+                }
+
+                assert_eq!(pagination_data.total_count, Some(5));
+                assert_eq!(pagination_data.has_next_page, true);
+                assert_eq!(documents.len(), 1);
+                assert_eq!(documents[0].1.view_id, view_id);
+                assert_eq!(cursor.as_ref(), Some(&documents[0].0));
+            }
+
+            // Query one last time after we paginated through everything
+            let args = Query::new(
+                &Pagination::new(
+                    &NonZeroU64::new(1).unwrap(),
+                    cursor.as_ref(),
+                    &vec![PaginationField::TotalCount],
+                ),
+                &Select::default(),
+                &Filter::default(),
+                &Order::new(
+                    &Field::Meta(MetaField::DocumentViewId),
+                    &Direction::Ascending,
+                ),
+            );
+
+            let (pagination_data, documents) = node
+                .context
+                .store
+                .query(&schema, &args, None)
+                .await
+                .expect("Query failed");
+
+            assert_eq!(pagination_data.total_count, Some(5));
+            assert_eq!(pagination_data.end_cursor, None);
+            assert_eq!(pagination_data.has_next_page, false);
+            assert_eq!(documents.len(), 0);
         });
     }
 }
