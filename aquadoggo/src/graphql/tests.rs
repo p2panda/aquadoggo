@@ -85,7 +85,7 @@ fn scalar_fields() {
 
 // Test querying application documents across a parent-child relation using different kinds of
 // relation fields.
-// @TODO: Needs updating after API changes
+// @TODO: Needs updating after API changes: https://github.com/p2panda/aquadoggo/issues/330
 /* #[rstest]
 fn relation_fields() {
     test_runner(|mut node: TestNode| async move {

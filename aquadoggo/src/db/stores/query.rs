@@ -309,8 +309,6 @@ fn filter_sql(filter: &Filter) -> String {
                     Some(format!("AND {}", cmp_sql("is_edited", filter_setting)))
                 }
                 Field::Meta(MetaField::Deleted) => {
-                    // @TODO: Make sure that deleted is by default always set to false,
-                    // this can be handled on a layer above this
                     if let FilterBy::Element(OperationValue::Boolean(filter_value)) =
                         filter_setting.by
                     {

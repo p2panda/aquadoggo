@@ -167,6 +167,7 @@ impl DocumentFields {
 }
 
 // TODO: We don't actually perform any queries yet, these tests will need to be updated when we do.
+// See issue: https://github.com/p2panda/aquadoggo/issues/330
 /* #[cfg(test)]
 mod test {
     use async_graphql::{value, Response, Value};

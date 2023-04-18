@@ -43,8 +43,6 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
         ))
 }
 
-// TODO: We don't actually perform any queries yet, these tests will need to be updated
-// when we do.
 #[cfg(test)]
 mod test {
     use async_graphql::{value, Response, Value};
@@ -217,7 +215,6 @@ mod test {
         Value::Null,
         vec!["Invalid value for argument \"meta.owner.eq\", expected type \"PublicKey\"".to_string()]
     )]
-
     fn collection_query(
         key_pair: KeyPair,
         #[case] query_args: String,

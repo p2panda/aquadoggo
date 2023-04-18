@@ -265,7 +265,8 @@ mod test {
         });
     }
 
-    // @TODO: Needs to be fixed after GraphQL API change
+    // @TODO: Needs to be fixed after GraphQL API change:
+    // See issue: https://github.com/p2panda/aquadoggo/issues/330
     /* #[rstest]
         fn type_name(#[from(random_key_pair)] key_pair: KeyPair) {
             // Test availability of `__typename` on all objects.
