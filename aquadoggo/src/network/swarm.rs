@@ -21,8 +21,10 @@ pub async fn build_swarm(
     let peer_id = PeerId::from(key_pair.public());
     info!("Network service peer ID: {peer_id}");
 
+    let relay_client_enabled = network_config.relay_address.is_some();
+
     let (transport, relay_client) =
-        transport::build_transport(&key_pair, network_config.relay_client).await;
+        transport::build_transport(&key_pair, relay_client_enabled).await;
 
     // Instantiate the custom network behaviour with default configuration
     // and the libp2p peer ID
@@ -31,7 +33,6 @@ pub async fn build_swarm(
     // Initialise a swarm with QUIC transports, our composed network behaviour
     // and the default configuration parameters
     let swarm = SwarmBuilder::with_tokio_executor(transport, behaviour, peer_id)
-        .connection_limits(network_config.connection_limits())
         // This method expects a NonZeroU8 as input, hence the try_into conversion
         .dial_concurrency_factor(network_config.dial_concurrency_factor.try_into()?)
         .per_connection_event_buffer_size(network_config.per_connection_event_buffer_size)
