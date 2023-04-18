@@ -88,8 +88,12 @@ pub async fn network_service(
             match swarm.select_next_some().await {
                 SwarmEvent::Behaviour(BehaviourEvent::Mdns(event)) => match event {
                     mdns::Event::Discovered(list) => {
-                        for (peer, _multiaddr) in list {
+                        for (peer, multiaddr) in list {
                             debug!("mDNS discovered a new peer: {peer}");
+
+                            if let Err(err) = swarm.dial(multiaddr) {
+                                warn!("Failed to dial: {}", err);
+                            }
                         }
                     }
                     mdns::Event::Expired(list) => {
