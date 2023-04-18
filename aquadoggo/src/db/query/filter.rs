@@ -526,14 +526,14 @@ mod tests {
     fn overwrite_deleted_filter() {
         let mut filter = Filter::default();
 
-        // Check if filter is set to true by default
+        // Check if filter is set to false by default
         assert_eq!(
             filter.get(0).unwrap().field,
             Field::Meta(MetaField::Deleted)
         );
         assert_eq!(
             filter.get(0).unwrap().by,
-            FilterBy::Element(OperationValue::Boolean(true))
+            FilterBy::Element(OperationValue::Boolean(false))
         );
         assert_eq!(filter.get(0).unwrap().exclusive, false);
 
