@@ -335,7 +335,7 @@ impl Default for Filter {
         // Do not query deleted documents by default
         filter.add(
             &Field::Meta(MetaField::Deleted),
-            &OperationValue::Boolean(true),
+            &OperationValue::Boolean(false),
         );
 
         filter
