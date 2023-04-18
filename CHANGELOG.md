@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Dial peers discovered via mDNS [#331](https://github.com/p2panda/aquadoggo/pull/331)
 - Simplify network CLI options and configuration [#322](https://github.com/p2panda/aquadoggo/pull/322) 
 - Introduce `autonat` and `relay` network protocols [#314](https://github.com/p2panda/aquadoggo/pull/314) 
 - Introduce `identify` and `rendezvous` network protocols / behaviours [#304](https://github.com/p2panda/aquadoggo/pull/304)
