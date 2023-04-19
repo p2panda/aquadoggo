@@ -516,20 +516,30 @@ prop_compose! {
 proptest! {
     #[test]
     fn test_add((schema, documents) in fields_and_values()) {
+        // The proptest strategies for generating schema and deriving collections of documents for each injects
+        // the raw AST types into the test. Here we convert these into p2panda `Entries`, `Operations` and `Schema`
+        // which we can then use to populate a store and run queries against.
+ 
         let mut schema_entries_and_operations = Vec::new();
-        let mut schemas = HashMap::new();
-        let schema = encode_schema_ast(&schema, &mut schema_entries_and_operations, &mut schemas);
-        schemas.insert(schema.id().clone(), schema);
         let mut document_entries_and_operations = Vec::new();
+        let mut schemas = HashMap::new();
+
+        // Encode entries and operations for all generated schema, as well as converting into the p2panda `Schema` themselves.
+        encode_schema_ast(&schema, &mut schema_entries_and_operations, &mut schemas);
+
+        // For each derived document, encode entries and operations.
         for document in documents {
             encode_document_ast(&document, &mut document_entries_and_operations);
         }
 
+        // Now we start up a test runner and inject a test node we can populate.
         test_runner(|node: TestNode| async move {
+            // Add all schema to the schema provider.
             for (_, schema) in schemas.clone() {
                 node.context.schema_provider.update(schema.clone()).await;
             };
 
+            // Publish all schema entries and operations to the node.
             for (entry, operation) in schema_entries_and_operations {
                 let plain_operation = decode_operation(&operation).unwrap();
                 let schema = node.context.schema_provider.get(plain_operation.schema_id()).await.unwrap();
@@ -537,6 +547,7 @@ proptest! {
                 assert!(result.is_ok());
             }
 
+            // Publish all document entries and operations to the node.
             for (entry, operation) in document_entries_and_operations {
                 let plain_operation = decode_operation(&operation).unwrap();
                 let schema = node.context.schema_provider.get(plain_operation.schema_id()).await.unwrap();
@@ -563,7 +574,7 @@ proptest! {
                         }}
                     }},
                 }}"#,
-                    type_name = schema.id()
+                    type_name = schema.id(),
                 );
 
                 let response = client

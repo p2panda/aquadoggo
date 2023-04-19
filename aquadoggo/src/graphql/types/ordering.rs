@@ -39,7 +39,7 @@ impl OrderBy {
         //
         // Application fields are lowercase formatted strings.
         for (name, _) in schema.fields().iter() {
-            input_values = input_values.item(name.to_lowercase())
+            input_values = input_values.item(name)
         }
         input_values
     }
