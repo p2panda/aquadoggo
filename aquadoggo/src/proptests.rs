@@ -8,12 +8,11 @@ use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::entry::encode::encode_entry;
 use p2panda_rs::entry::traits::AsEncodedEntry;
 use p2panda_rs::entry::{EncodedEntry, EntryBuilder};
-use p2panda_rs::hash::Hash;
 use p2panda_rs::operation::decode::decode_operation;
 use p2panda_rs::operation::encode::encode_operation;
 use p2panda_rs::operation::traits::Schematic;
 use p2panda_rs::operation::{
-    EncodedOperation, OperationBuilder, OperationFields, OperationId, OperationValue,
+    EncodedOperation, OperationBuilder, OperationId, OperationValue,
 };
 use p2panda_rs::schema::{FieldType, Schema, SchemaDescription, SchemaId, SchemaName};
 use p2panda_rs::test_utils::fixtures::{random_document_view_id, random_key_pair};
@@ -63,7 +62,6 @@ struct DocumentAST {
 
 #[derive(Debug, Clone)]
 struct SchemaAST {
-    name: SchemaName,
     description: SchemaDescription,
     id: SchemaId,
     fields: Vec<SchemaField>,
@@ -71,11 +69,10 @@ struct SchemaAST {
 
 impl SchemaAST {
     fn new(fields: Vec<SchemaField>) -> Self {
-        let name = SchemaName::new("test_schema").unwrap();
-        let description = SchemaDescription::new("My test schema").unwrap();
+        let name = SchemaName::new(SCHEMA_NAME).unwrap();
+        let description = SchemaDescription::new(SCHEMA_DESCRIPTION).unwrap();
         let schema_id = SchemaId::Application(name.clone(), random_document_view_id());
         Self {
-            name,
             description,
             id: schema_id,
             fields,
