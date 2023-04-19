@@ -149,31 +149,31 @@ fn schema_field() -> impl Strategy<Value = SchemaField> {
     leaf.prop_recursive(
         2,  // 2 levels deep
         25, // Shoot for maximum size of 25 nodes
-        2,  // We put up to 6 items per collection
+        6,  // We put up to 6 items per collection
         |inner| {
             prop_oneof![
-                (any::<FieldName>(), vec(inner.clone(), 1..2)).prop_map(|(field_name, fields)| {
+                (any::<FieldName>(), vec(inner.clone(), 1..6)).prop_map(|(field_name, fields)| {
                     SchemaField {
                         name: field_name,
                         field_type: SchemaFieldType::Relation,
                         relation_schema: Some(Box::new(SchemaAST::new(fields))),
                     }
                 }),
-                (any::<FieldName>(), vec(inner.clone(), 1..2)).prop_map(|(field_name, fields)| {
+                (any::<FieldName>(), vec(inner.clone(), 1..6)).prop_map(|(field_name, fields)| {
                     SchemaField {
                         name: field_name,
                         field_type: SchemaFieldType::RelationList,
                         relation_schema: Some(Box::new(SchemaAST::new(fields))),
                     }
                 }),
-                (any::<FieldName>(), vec(inner.clone(), 1..2)).prop_map(|(field_name, fields)| {
+                (any::<FieldName>(), vec(inner.clone(), 1..6)).prop_map(|(field_name, fields)| {
                     SchemaField {
                         name: field_name,
                         field_type: SchemaFieldType::PinnedRelation,
                         relation_schema: Some(Box::new(SchemaAST::new(fields))),
                     }
                 }),
-                (any::<FieldName>(), vec(inner.clone(), 1..2)).prop_map(|(field_name, fields)| {
+                (any::<FieldName>(), vec(inner.clone(), 1..6)).prop_map(|(field_name, fields)| {
                     SchemaField {
                         name: field_name,
                         field_type: SchemaFieldType::PinnedRelationList,
