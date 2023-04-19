@@ -17,6 +17,7 @@ const SCHEMA_DEPTH: u32 = 2;
 
 #[derive(Debug, Clone)]
 pub struct SchemaAST {
+    pub name: SchemaName,
     pub description: SchemaDescription,
     pub id: SchemaId,
     pub fields: Vec<SchemaField>,
@@ -28,6 +29,7 @@ impl SchemaAST {
         let description = SchemaDescription::new(SCHEMA_DESCRIPTION).unwrap();
         let schema_id = SchemaId::Application(name.clone(), random_document_view_id());
         Self {
+            name,
             description,
             id: schema_id,
             fields,
