@@ -519,7 +519,7 @@ proptest! {
         // The proptest strategies for generating schema and deriving collections of documents for each injects
         // the raw AST types into the test. Here we convert these into p2panda `Entries`, `Operations` and `Schema`
         // which we can then use to populate a store and run queries against.
- 
+
         let mut schema_entries_and_operations = Vec::new();
         let mut document_entries_and_operations = Vec::new();
         let mut schemas = HashMap::new();
@@ -528,9 +528,15 @@ proptest! {
         encode_schema_ast(&schema, &mut schema_entries_and_operations, &mut schemas);
 
         // For each derived document, encode entries and operations.
-        for document in documents {
-            encode_document_ast(&document, &mut document_entries_and_operations);
+        for document in documents.iter() {
+            encode_document_ast(document, &mut document_entries_and_operations);
         }
+
+        // Some sanity checks
+        assert!(schemas.len() > 0);
+        assert!(schema_entries_and_operations.len() > 0);
+        assert!(documents.len() > 0);
+        assert!(document_entries_and_operations.len() > 0);
 
         // Now we start up a test runner and inject a test node we can populate.
         test_runner(|node: TestNode| async move {
@@ -555,12 +561,10 @@ proptest! {
                 assert!(result.is_ok());
             }
 
-            for (_, schema) in schemas {
-                // Configure and send test query.
-                let client = graphql_test_client(&node).await;
-                let query = format!(
+            let query = |type_name: &SchemaId, args: &str| -> String {
+                format!(
                     r#"{{
-                    collection: all_{type_name} {{
+                    collection: all_{type_name}{args} {{
                         hasNextPage
                         totalCount
                         endCursor
@@ -573,15 +577,17 @@ proptest! {
                             }}
                         }}
                     }},
-                }}"#,
-                    type_name = schema.id(),
-                );
+                }}"#
+                )
+            };
+
+            for (_, schema) in schemas {
+                // Configure and send test query.
+                let client = graphql_test_client(&node).await;
 
                 let response = client
                     .post("/graphql")
-                    .json(&json!({
-                        "query": query,
-                    }))
+                    .json(&json!({"query": query(schema.id(), ""),}))
                     .send()
                     .await;
 
