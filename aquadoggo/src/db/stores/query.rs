@@ -389,20 +389,18 @@ fn pagination_sql(
             let list_index = cursor.list_index;
 
             match &order.field {
-                Field::Meta(MetaField::DocumentId) => {
-                    format!("AND documents.document_view_id > '{view_id}'")
+                Field::Meta(MetaField::DocumentId) | Field::Meta(MetaField::DocumentViewId) => {
+                    match list {
+                        Some(relation_list) => {
+                            format!("AND operation_fields_v1_list.list_index > {list_index}")
+                        }
+                        None => format!("AND documents.document_view_id > '{view_id}'"),
+                    }
                 }
-                Field::Meta(MetaField::DocumentViewId) => {
-                    format!("AND documents.document_view_id > '{view_id}'")
-                }
-                Field::Meta(MetaField::Owner) => {
+                Field::Meta(MetaField::Owner)
+                | Field::Meta(MetaField::Edited)
+                | Field::Meta(MetaField::Deleted) => {
                     todo!("Not implemented yet");
-                }
-                Field::Meta(MetaField::Edited) => {
-                    todo!("Not implemented yet");
-                }
-                Field::Meta(MetaField::Deleted) => {
-                    todo!("not implemented yet");
                 }
                 Field::Field(order_field_name) => {
                     let from = match list {
@@ -481,6 +479,15 @@ fn pagination_sql(
             }
         }
         None => "".to_string(),
+    }
+}
+
+fn group_sql(fields: &Vec<String>) -> String {
+    if fields.is_empty() {
+        // Group by document if no fields have been selected
+        "GROUP BY documents.document_id".to_string()
+    } else {
+        "".to_string()
     }
 }
 
@@ -774,6 +781,7 @@ impl SqlStore {
         let and_filters = filter_sql(&args.filter, schema);
         let and_pagination = pagination_sql(&args.pagination, list, &args.order);
 
+        let group = group_sql(&application_fields);
         let order = order_sql(&args.order, schema, list);
         let (page_size, limit) = limit_sql(&args.pagination, &application_fields);
 
@@ -850,6 +858,8 @@ impl SqlStore {
 
                 -- Lastly we batch all results into smaller chunks via cursor pagination
                 {and_pagination}
+
+            {group}
 
             -- We always order the rows by document id and list index, but there might also be
             -- user-defined ordering on top of that
@@ -1131,6 +1141,69 @@ mod tests {
         .await
     }
 
+    async fn create_venues_test_data(
+        node: &mut TestNode,
+        key_pair: &KeyPair,
+    ) -> (Schema, Vec<DocumentViewId>) {
+        add_schema_and_documents(
+            node,
+            "venues",
+            vec![
+                vec![("name", "World Wide Feld".into(), None)],
+                vec![("name", "Internet Explorer".into(), None)],
+                vec![("name", "p4p space".into(), None)],
+            ],
+            key_pair,
+        )
+        .await
+    }
+
+    async fn create_visited_test_data(
+        node: &mut TestNode,
+        venues_view_ids: Vec<DocumentViewId>,
+        venues_schema: Schema,
+        key_pair: &KeyPair,
+    ) -> (Schema, Vec<DocumentViewId>) {
+        add_schema_and_documents(
+            node,
+            "visited",
+            vec![
+                vec![
+                    ("user", "seagull".into(), None),
+                    (
+                        "venues",
+                        vec![
+                            venues_view_ids[0].clone(),
+                            venues_view_ids[0].clone(),
+                            venues_view_ids[1].clone(),
+                            venues_view_ids[2].clone(),
+                            venues_view_ids[0].clone(),
+                            venues_view_ids[0].clone(),
+                            venues_view_ids[1].clone(),
+                        ]
+                        .into(),
+                        Some(venues_schema.id().to_owned()),
+                    ),
+                ],
+                vec![
+                    ("user", "panda".into(), None),
+                    (
+                        "venues",
+                        vec![
+                            venues_view_ids[1].clone(),
+                            venues_view_ids[1].clone(),
+                            venues_view_ids[2].clone(),
+                        ]
+                        .into(),
+                        Some(venues_schema.id().to_owned()),
+                    ),
+                ],
+            ],
+            &key_pair,
+        )
+        .await
+    }
+
     #[rstest]
     #[case::order_by_date_asc(
         Query::new(
@@ -1226,6 +1299,7 @@ mod tests {
     fn pagination(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
             let (schema, mut view_ids) = create_events_test_data(&mut node, &key_pair).await;
+            let view_ids_len = view_ids.len();
 
             // Sort created documents by document view id, to compare to similarily sorted query
             // results
@@ -1234,7 +1308,7 @@ mod tests {
             let mut cursor: Option<DocumentCursor> = None;
 
             // Go through all pages, one document at a time
-            for view_id in view_ids {
+            for (index, view_id) in view_ids.into_iter().enumerate() {
                 let args = Query::new(
                     &Pagination::new(
                         &NonZeroU64::new(1).unwrap(),
@@ -1260,11 +1334,16 @@ mod tests {
                     Some(end_cursor) => {
                         cursor = Some(end_cursor);
                     }
-                    None => (),
+                    None => panic!("Expected cursor"),
+                }
+
+                if view_ids_len - 1 == index {
+                    assert_eq!(pagination_data.has_next_page, false);
+                } else {
+                    assert_eq!(pagination_data.has_next_page, true);
                 }
 
                 assert_eq!(pagination_data.total_count, Some(5));
-                assert_eq!(pagination_data.has_next_page, true);
                 assert_eq!(documents.len(), 1);
                 assert_eq!(documents[0].1.view_id, view_id);
                 assert_eq!(cursor.as_ref(), Some(&documents[0].0));
@@ -1302,53 +1381,13 @@ mod tests {
     #[rstest]
     fn pinned_relation_list(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
-            let (venues_schema, mut venues_view_ids) = add_schema_and_documents(
-                &mut node,
-                "venues",
-                vec![
-                    vec![("name", "World Wide Feld".into(), None)],
-                    vec![("name", "Internet Explorer".into(), None)],
-                    vec![("name", "p4p space".into(), None)],
-                ],
-                &key_pair,
-            )
-            .await;
+            let (venues_schema, mut venues_view_ids) =
+                create_venues_test_data(&mut node, &key_pair).await;
 
-            let (visited_schema, mut visited_view_ids) = add_schema_and_documents(
+            let (visited_schema, mut visited_view_ids) = create_visited_test_data(
                 &mut node,
-                "visited",
-                vec![
-                    vec![
-                        ("user", "seagull".into(), None),
-                        (
-                            "venues",
-                            vec![
-                                venues_view_ids[0].clone(),
-                                venues_view_ids[0].clone(),
-                                venues_view_ids[1].clone(),
-                                venues_view_ids[2].clone(),
-                                venues_view_ids[0].clone(),
-                                venues_view_ids[0].clone(),
-                                venues_view_ids[1].clone(),
-                            ]
-                            .into(),
-                            Some(venues_schema.id().to_owned()),
-                        ),
-                    ],
-                    vec![
-                        ("user", "panda".into(), None),
-                        (
-                            "venues",
-                            vec![
-                                venues_view_ids[1].clone(),
-                                venues_view_ids[1].clone(),
-                                venues_view_ids[2].clone(),
-                            ]
-                            .into(),
-                            Some(venues_schema.id().to_owned()),
-                        ),
-                    ],
-                ],
+                venues_view_ids,
+                venues_schema.to_owned(),
                 &key_pair,
             )
             .await;
@@ -1409,6 +1448,101 @@ mod tests {
                 get_document_value(&documents[2].1, "name"),
                 OperationValue::String("p4p space".to_string())
             );
+        });
+    }
+
+    #[rstest]
+    fn paginated_pinned_relation_list(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            let (venues_schema, mut venues_view_ids) =
+                create_venues_test_data(&mut node, &key_pair).await;
+
+            let (visited_schema, mut visited_view_ids) = create_visited_test_data(
+                &mut node,
+                venues_view_ids.clone(),
+                venues_schema.clone(),
+                &key_pair,
+            )
+            .await;
+
+            let mut expected_view_ids = vec![
+                venues_view_ids[0].clone(),
+                venues_view_ids[0].clone(),
+                venues_view_ids[1].clone(),
+                venues_view_ids[2].clone(),
+                venues_view_ids[0].clone(),
+                venues_view_ids[0].clone(),
+                venues_view_ids[1].clone(),
+            ];
+            let view_ids_len = expected_view_ids.len();
+
+            // Select the pinned relation list "venues" of the first visited document
+            let list = RelationList::new_pinned(&visited_view_ids[0], "venues".into());
+
+            let mut cursor: Option<DocumentCursor> = None;
+
+            // Go through all pages, one document at a time
+            for (index, view_id) in expected_view_ids.into_iter().enumerate() {
+                let args = Query::new(
+                    &Pagination::new(
+                        &NonZeroU64::new(1).unwrap(),
+                        cursor.as_ref(),
+                        &vec![PaginationField::TotalCount],
+                    ),
+                    &Select::new(&[Field::Meta(MetaField::DocumentViewId), "name".into()]),
+                    &Filter::default(),
+                    &Order::default(),
+                );
+
+                let (pagination_data, documents) = node
+                    .context
+                    .store
+                    .query(&venues_schema, &args, Some(&list))
+                    .await
+                    .expect("Query failed");
+
+                match pagination_data.end_cursor {
+                    Some(end_cursor) => {
+                        cursor = Some(end_cursor);
+                    }
+                    None => panic!("Expected cursor"),
+                }
+
+                if view_ids_len - 1 == index {
+                    assert_eq!(pagination_data.has_next_page, false);
+                } else {
+                    assert_eq!(pagination_data.has_next_page, true);
+                }
+
+                assert_eq!(pagination_data.total_count, Some(7));
+                assert_eq!(documents.len(), 1);
+                assert_eq!(documents[0].1.view_id, view_id);
+                assert_eq!(cursor.as_ref(), Some(&documents[0].0));
+            }
+
+            // Go to end of pagination
+            let args = Query::new(
+                &Pagination::new(
+                    &NonZeroU64::new(1).unwrap(),
+                    cursor.as_ref(),
+                    &vec![PaginationField::TotalCount],
+                ),
+                &Select::new(&[Field::Meta(MetaField::DocumentViewId), "name".into()]),
+                &Filter::default(),
+                &Order::default(),
+            );
+
+            let (pagination_data, documents) = node
+                .context
+                .store
+                .query(&venues_schema, &args, Some(&list))
+                .await
+                .expect("Query failed");
+
+            assert_eq!(pagination_data.has_next_page, false);
+            assert_eq!(pagination_data.total_count, Some(7));
+            assert_eq!(pagination_data.end_cursor, None);
+            assert_eq!(documents.len(), 0);
         });
     }
 }
