@@ -200,7 +200,7 @@ fn typecast_field_sql(sql_field: &str, field_name: &str, schema: &Schema) -> Str
         })
         // We expect that at this stage we only deal with fields which really exist in the schema,
         // everything has been validated before
-        .expect(&format!("Field '{field_name}' not given in Schema"));
+        .unwrap_or_else(|| panic!("Field '{}' not given in Schema", field_name));
 
     match field_type {
         p2panda_rs::schema::FieldType::Integer => {
@@ -882,7 +882,7 @@ impl SqlStore {
             .fields
             .contains(&PaginationField::TotalCount)
         {
-            Some(self.count(&schema, &args, list).await?)
+            Some(self.count(schema, args, list).await?)
         } else {
             None
         };
