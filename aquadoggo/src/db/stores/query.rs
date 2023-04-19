@@ -2,7 +2,7 @@
 
 //! This module offers a query API to find many p2panda documents, filtered or sorted by custom
 //! parameters. The results are batched via cursor-based pagination.
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
 use anyhow::bail;
@@ -96,7 +96,8 @@ impl DocumentCursor {
 impl From<&QueryRow> for DocumentCursor {
     fn from(row: &QueryRow) -> Self {
         let document_id = row.document_id.parse().unwrap();
-        Self::new(row.list_index as u64, document_id, None)
+        let list_index = row.list_index;
+        Self::new(list_index as u64, document_id, None)
     }
 }
 
@@ -151,6 +152,8 @@ pub type QueryResponse = (
     PaginationData<DocumentCursor>,
     Vec<(DocumentCursor, StorageDocument)>,
 );
+
+type SelectedFields = Vec<String>;
 
 /// Query configuration to determine pagination cursor, selected fields, filters and order of
 /// results.
@@ -482,10 +485,13 @@ fn pagination_sql(
     }
 }
 
-fn group_sql(fields: &Vec<String>) -> String {
+fn group_sql(fields: &SelectedFields) -> String {
     if fields.is_empty() {
-        // Group by document if no fields have been selected
-        "GROUP BY documents.document_id".to_string()
+        r#"
+            -- Make sure to only return one row per document when no fields have been selected
+            GROUP BY documents.document_id, document_view_fields.operation_id
+        "#
+        .to_string()
     } else {
         "".to_string()
     }
@@ -563,7 +569,7 @@ fn order_sql(order: &Order, schema: &Schema, list: Option<&RelationList>) -> Str
     }
 }
 
-fn limit_sql<C>(pagination: &Pagination<C>, fields: &Vec<String>) -> (u64, String)
+fn limit_sql<C>(pagination: &Pagination<C>, fields: &SelectedFields) -> (u64, String)
 where
     C: Cursor,
 {
@@ -575,7 +581,7 @@ where
     (page_size, format!("LIMIT {page_size} + 1"))
 }
 
-fn application_select_sql(fields: &Vec<String>) -> String {
+fn application_select_sql(fields: &SelectedFields) -> String {
     if fields.is_empty() {
         "".to_string()
     } else {
@@ -587,9 +593,14 @@ fn application_select_sql(fields: &Vec<String>) -> String {
     }
 }
 
-fn total_count_sql(schema: &Schema, list: Option<&RelationList>, filter: &Filter) -> String {
+fn total_count_sql(
+    schema: &Schema,
+    fields: &SelectedFields,
+    list: Option<&RelationList>,
+    filter: &Filter,
+) -> String {
     let from = from_sql(list);
-    let where_ = where_sql(schema.id(), list);
+    let where_ = where_sql(schema.id(), fields, list);
     let and_filters = filter_sql(filter, schema);
 
     format!(
@@ -621,6 +632,7 @@ fn total_count_sql(schema: &Schema, list: Option<&RelationList>, filter: &Filter
 fn edited_sql(select: &Select) -> String {
     if select.fields.contains(&Field::Meta(MetaField::Edited)) {
         r#"
+            ,
             -- Check if there is more operations next to the initial "create" operation
             (
                 SELECT
@@ -632,19 +644,18 @@ fn edited_sql(select: &Select) -> String {
                     AND
                         operations_v1.document_id = documents.document_id
                 LIMIT 1
-            )
+            ) AS is_edited
         "#
         .to_string()
     } else {
-        // Use constant when we do not query for edited status. This is useful for keeping the
-        // resulting SQL row type in shape.
-        "false".to_string()
+        "".to_string()
     }
 }
 
 fn owner_sql(select: &Select) -> String {
     if select.fields.contains(&Field::Meta(MetaField::Owner)) {
         r#"
+            ,
             -- The original owner of a document we get by checking which public key signed the
             -- "create" operation, the hash of that operation is the same as the document id
             (
@@ -654,19 +665,50 @@ fn owner_sql(select: &Select) -> String {
                     operations_v1
                 WHERE
                     operations_v1.operation_id = documents.document_id
-            )
+            ) AS owner
         "#
         .to_string()
     } else {
-        // Use constant when we do not query owner. This is useful for keeping the resulting SQL
-        // row type in shape.
-        //
-        // The value looks funny and exists to still pass as a ed25519 public key.
-        "'0000000000000000000000000000000000000000000000000000000000000000'".to_string()
+        "".to_string()
     }
 }
 
-fn where_sql(schema_id: &SchemaId, list: Option<&RelationList>) -> String {
+fn fields_sql(fields: &SelectedFields, list: Option<&RelationList>) -> String {
+    if fields.is_empty() {
+        "".to_string()
+    } else {
+        let select_list_index = match list {
+            // Use the list index of the parent document when we query a relation list
+            Some(_) => "operation_fields_v1_list.list_index AS list_index".to_string(),
+            None => "operation_fields_v1.list_index AS list_index".to_string(),
+        };
+
+        format!(
+            r#"
+            ,
+            -- Finally we get the application data by selecting the name, value and type.
+            operation_fields_v1.name,
+            operation_fields_v1.value,
+            operation_fields_v1.field_type,
+
+            -- When we query relation list the index value becomes important, as we need to
+            -- determine the position of the document in the list
+            {select_list_index}
+            "#
+        )
+    }
+}
+
+fn where_sql(schema_id: &SchemaId, fields: &SelectedFields, list: Option<&RelationList>) -> String {
+    let list_index_sql = if fields.is_empty() {
+        ""
+    } else {
+        "AND
+            -- Only one row per field: restrict relation lists to first list item
+            operation_fields_v1.list_index = 0
+        "
+    };
+
     match list {
         Some(relation_list) => {
             // We filter by the parent document view id of this relation list
@@ -684,9 +726,7 @@ fn where_sql(schema_id: &SchemaId, list: Option<&RelationList>) -> String {
                         operation_fields_v1_list.field_type = '{field_type}'
                     AND
                         operation_fields_v1_list.name = '{field_name}'
-                    AND
-                        -- Only one row per field: restrict relation lists to first list item
-                        operation_fields_v1.list_index = 0
+                    {list_index_sql}
                 "#
             )
         }
@@ -695,9 +735,7 @@ fn where_sql(schema_id: &SchemaId, list: Option<&RelationList>) -> String {
             format!(
                 r#"
                     documents.schema_id = '{schema_id}'
-                    AND
-                        -- Only one row per field: restrict relation lists to first list item
-                        operation_fields_v1.list_index = 0
+                    {list_index_sql}
                 "#
             )
         }
@@ -733,12 +771,19 @@ fn from_sql(list: Option<&RelationList>) -> String {
     }
 }
 
-fn list_index_sql(list: Option<&RelationList>) -> String {
-    match list {
-        // Use the list index of the parent document when we query a relation list
-        Some(_) => "operation_fields_v1_list.list_index AS list_index".to_string(),
-        None => "operation_fields_v1.list_index AS list_index".to_string(),
+fn from_fields_sql(fields: &SelectedFields) -> String {
+    if fields.is_empty() {
+        ""
+    } else {
+        r#"
+        JOIN operation_fields_v1
+            ON
+                document_view_fields.operation_id = operation_fields_v1.operation_id
+                AND
+                    document_view_fields.name = operation_fields_v1.name
+        "#
     }
+    .to_string()
 }
 
 impl SqlStore {
@@ -756,7 +801,7 @@ impl SqlStore {
         let schema_id = schema.id();
 
         // Get all selected application fields from query
-        let application_fields: Vec<String> = args
+        let application_fields: SelectedFields = args
             .select
             .iter()
             .filter_map(|field| {
@@ -772,11 +817,12 @@ impl SqlStore {
         // Generate SQL based on the given schema and query
         let select_edited = edited_sql(&args.select);
         let select_owner = owner_sql(&args.select);
-        let select_list_index = list_index_sql(list);
+        let select_fields = fields_sql(&application_fields, list);
 
         let from = from_sql(list);
+        let from_fields = from_fields_sql(&application_fields);
 
-        let where_ = where_sql(schema.id(), list);
+        let where_ = where_sql(schema.id(), &application_fields, list);
         let and_select = application_select_sql(&application_fields);
         let and_filters = filter_sql(&args.filter, schema);
         let and_pagination = pagination_sql(&args.pagination, list, &args.order);
@@ -811,24 +857,16 @@ impl SqlStore {
                 -- document view id and id of the operation which holds the data
                 documents.document_id,
                 documents.document_view_id,
-                operation_fields_v1.operation_id,
+                document_view_fields.operation_id,
 
                 -- The deletion status of a document we already store in the database, let's select it in
                 -- any case since we get it for free
-                documents.is_deleted,
+                documents.is_deleted
 
-                -- Optionally we check for the edited status and owner of the document
-                {select_edited} AS is_edited,
-                {select_owner} AS owner,
+                {select_edited}
+                {select_owner}
+                {select_fields}
 
-                -- Finally we get the application data by selecting the name, value and type.
-                operation_fields_v1.name,
-                operation_fields_v1.value,
-                operation_fields_v1.field_type,
-
-                -- When we query relation list the index value becomes important, as we need to
-                -- determine the position of the document in the list
-                {select_list_index}
 
             FROM
                 -- Usually we query the "documents" table first. In case we're looking at a relation
@@ -839,11 +877,8 @@ impl SqlStore {
                 -- the end
                 JOIN document_view_fields
                     ON documents.document_view_id = document_view_fields.document_view_id
-                JOIN operation_fields_v1
-                    ON
-                        document_view_fields.operation_id = operation_fields_v1.operation_id
-                        AND
-                            document_view_fields.name = operation_fields_v1.name
+
+                {from_fields}
 
             WHERE
                 -- We filter by the queried schema of that collection, if it is a relation
@@ -894,10 +929,15 @@ impl SqlStore {
             .contains(&PaginationField::TotalCount)
         {
             // Make separate query for getting the total number of documents (without pagination)
-            let result: Option<(i64,)> = query_as(&total_count_sql(schema, list, &args.filter))
-                .fetch_optional(&self.pool)
-                .await
-                .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
+            let result: Option<(i64,)> = query_as(&total_count_sql(
+                schema,
+                &application_fields,
+                list,
+                &args.filter,
+            ))
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
 
             match result {
                 Some(result) => Some(result.0 as u64),
@@ -934,7 +974,7 @@ impl SqlStore {
     fn convert_rows(
         rows: Vec<QueryRow>,
         list: Option<&RelationList>,
-        fields: &Vec<String>,
+        fields: &SelectedFields,
         schema_id: &SchemaId,
     ) -> Vec<(DocumentCursor, StorageDocument)> {
         let mut converted: Vec<(DocumentCursor, StorageDocument)> = Vec::new();
@@ -952,7 +992,7 @@ impl SqlStore {
                     fields: Some(fields),
                     schema_id: schema_id.clone(),
                     view_id: row.document_view_id.parse().unwrap(),
-                    author: row.owner.parse().unwrap(),
+                    author: (&row.owner).into(),
                     deleted: row.is_deleted,
                 };
 
