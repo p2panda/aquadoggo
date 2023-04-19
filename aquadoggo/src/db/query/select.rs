@@ -5,6 +5,8 @@ use std::collections::HashSet;
 
 use crate::db::query::{Field, MetaField};
 
+pub type ApplicationFields = Vec<String>;
+
 /// Selection settings which can be used further to construct a database query.
 ///
 /// A selection determines which fields get returned in the response.
@@ -42,6 +44,21 @@ impl Select {
     /// Returns an iterator over the selected fields.
     pub fn iter(&self) -> Iter<Field> {
         self.fields.iter()
+    }
+
+    /// Returns all selected application fields from query.
+    pub fn application_fields(&self) -> ApplicationFields {
+        self.fields
+            .iter()
+            .filter_map(|field| {
+                // Remove all meta fields
+                if let Field::Field(field_name) = field {
+                    Some(field_name.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 }
 

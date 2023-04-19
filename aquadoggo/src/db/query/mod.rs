@@ -14,5 +14,5 @@ pub use field::{Field, MetaField};
 pub use filter::{Filter, FilterBy, FilterSetting, LowerBound, UpperBound};
 pub use order::{Direction, Order};
 pub use pagination::{Cursor, Pagination, PaginationField};
-pub use select::Select;
+pub use select::{ApplicationFields, Select};
 pub use validate::validate_query;

@@ -17,8 +17,8 @@ use sqlx::{query, query_as, FromRow};
 use crate::db::models::utils::parse_document_view_field_rows;
 use crate::db::models::{DocumentViewFieldRow, QueryRow};
 use crate::db::query::{
-    Cursor, Direction, Field, Filter, FilterBy, FilterSetting, LowerBound, MetaField, Order,
-    Pagination, PaginationField, Select, UpperBound,
+    ApplicationFields, Cursor, Direction, Field, Filter, FilterBy, FilterSetting, LowerBound,
+    MetaField, Order, Pagination, PaginationField, Select, UpperBound,
 };
 use crate::db::types::StorageDocument;
 use crate::db::SqlStore;
@@ -153,11 +153,9 @@ pub type QueryResponse = (
     Vec<(DocumentCursor, StorageDocument)>,
 );
 
-type SelectedFields = Vec<String>;
-
 /// Query configuration to determine pagination cursor, selected fields, filters and order of
 /// results.
-#[derive(Default, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct Query<C>
 where
     C: Cursor,
@@ -202,7 +200,7 @@ fn typecast_field_sql(sql_field: &str, field_name: &str, schema: &Schema) -> Str
         })
         // We expect that at this stage we only deal with fields which really exist in the schema,
         // everything has been validated before
-        .expect("Field name not given in Schema");
+        .expect(&format!("Field '{field_name}' not given in Schema"));
 
     match field_type {
         p2panda_rs::schema::FieldType::Integer => {
@@ -485,7 +483,7 @@ fn pagination_sql(
     }
 }
 
-fn group_sql(fields: &SelectedFields) -> String {
+fn group_sql(fields: &ApplicationFields) -> String {
     if fields.is_empty() {
         r#"
             -- Make sure to only return one row per document when no fields have been selected
@@ -569,7 +567,7 @@ fn order_sql(order: &Order, schema: &Schema, list: Option<&RelationList>) -> Str
     }
 }
 
-fn limit_sql<C>(pagination: &Pagination<C>, fields: &SelectedFields) -> (u64, String)
+fn limit_sql<C>(pagination: &Pagination<C>, fields: &ApplicationFields) -> (u64, String)
 where
     C: Cursor,
 {
@@ -581,7 +579,7 @@ where
     (page_size, format!("LIMIT {page_size} + 1"))
 }
 
-fn application_select_sql(fields: &SelectedFields) -> String {
+fn application_select_sql(fields: &ApplicationFields) -> String {
     if fields.is_empty() {
         "".to_string()
     } else {
@@ -591,42 +589,6 @@ fn application_select_sql(fields: &SelectedFields) -> String {
             fields_sql.join(", ")
         )
     }
-}
-
-fn total_count_sql(
-    schema: &Schema,
-    fields: &SelectedFields,
-    list: Option<&RelationList>,
-    filter: &Filter,
-) -> String {
-    let from = from_sql(list);
-    let where_ = where_sql(schema.id(), fields, list);
-    let and_filters = filter_sql(filter, schema);
-
-    format!(
-        r#"
-            SELECT
-                COUNT(documents.document_id)
-
-            FROM
-                {from}
-
-                JOIN document_view_fields
-                    ON documents.document_view_id = document_view_fields.document_view_id
-                JOIN operation_fields_v1
-                    ON
-                        document_view_fields.operation_id = operation_fields_v1.operation_id
-                        AND
-                            document_view_fields.name = operation_fields_v1.name
-
-            WHERE
-                {where_}
-                {and_filters}
-
-            -- Group application fields by name to make sure we get actual number of documents
-            GROUP BY operation_fields_v1.name
-        "#
-    )
 }
 
 fn edited_sql(select: &Select) -> String {
@@ -673,7 +635,7 @@ fn owner_sql(select: &Select) -> String {
     }
 }
 
-fn fields_sql(fields: &SelectedFields, list: Option<&RelationList>) -> String {
+fn fields_sql(fields: &ApplicationFields, list: Option<&RelationList>) -> String {
     if fields.is_empty() {
         "".to_string()
     } else {
@@ -699,7 +661,11 @@ fn fields_sql(fields: &SelectedFields, list: Option<&RelationList>) -> String {
     }
 }
 
-fn where_sql(schema_id: &SchemaId, fields: &SelectedFields, list: Option<&RelationList>) -> String {
+fn where_sql(
+    schema_id: &SchemaId,
+    fields: &ApplicationFields,
+    list: Option<&RelationList>,
+) -> String {
     let list_index_sql = if fields.is_empty() {
         ""
     } else {
@@ -771,7 +737,7 @@ fn from_sql(list: Option<&RelationList>) -> String {
     }
 }
 
-fn from_fields_sql(fields: &SelectedFields) -> String {
+fn from_fields_sql(fields: &ApplicationFields) -> String {
     if fields.is_empty() {
         ""
     } else {
@@ -801,18 +767,7 @@ impl SqlStore {
         let schema_id = schema.id();
 
         // Get all selected application fields from query
-        let application_fields: SelectedFields = args
-            .select
-            .iter()
-            .filter_map(|field| {
-                // Remove all meta fields
-                if let Field::Field(field_name) = field {
-                    Some(field_name.clone())
-                } else {
-                    None
-                }
-            })
-            .collect();
+        let application_fields = args.select.application_fields();
 
         // Generate SQL based on the given schema and query
         let select_edited = edited_sql(&args.select);
@@ -927,21 +882,7 @@ impl SqlStore {
             .fields
             .contains(&PaginationField::TotalCount)
         {
-            // Make separate query for getting the total number of documents (without pagination)
-            let result: Option<(i64,)> = query_as(&total_count_sql(
-                schema,
-                &application_fields,
-                list,
-                &args.filter,
-            ))
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
-
-            match result {
-                Some(result) => Some(result.0 as u64),
-                None => Some(0),
-            }
+            Some(self.count(&schema, &args, list).await?)
         } else {
             None
         };
@@ -966,6 +907,57 @@ impl SqlStore {
         Ok((pagination_data, documents))
     }
 
+    /// Query number of documents in filtered collection.
+    pub async fn count(
+        &self,
+        schema: &Schema,
+        args: &Query<DocumentCursor>,
+        list: Option<&RelationList>,
+    ) -> Result<u64, DocumentStorageError> {
+        let application_fields = args.select.application_fields();
+
+        let from = from_sql(list);
+        let where_ = where_sql(schema.id(), &application_fields, list);
+        let and_filters = filter_sql(&args.filter, schema);
+
+        let count_sql = format!(
+            r#"
+                SELECT
+                    COUNT(documents.document_id)
+
+                FROM
+                    {from}
+
+                    JOIN document_view_fields
+                        ON documents.document_view_id = document_view_fields.document_view_id
+                    JOIN operation_fields_v1
+                        ON
+                            document_view_fields.operation_id = operation_fields_v1.operation_id
+                            AND
+                                document_view_fields.name = operation_fields_v1.name
+
+                WHERE
+                    {where_}
+                    {and_filters}
+
+                -- Group application fields by name to make sure we get actual number of documents
+                GROUP BY operation_fields_v1.name
+            "#
+        );
+
+        let result: Option<(i64,)> = query_as(&count_sql)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
+
+        let count = match result {
+            Some(result) => result.0 as u64,
+            None => 0,
+        };
+
+        Ok(count)
+    }
+
     /// Merges all operation fields from the database into documents.
     ///
     /// Due to the special table layout we receive one row per operation field in the query.
@@ -973,7 +965,7 @@ impl SqlStore {
     fn convert_rows(
         rows: Vec<QueryRow>,
         list: Option<&RelationList>,
-        fields: &SelectedFields,
+        fields: &ApplicationFields,
         schema_id: &SchemaId,
     ) -> Vec<(DocumentCursor, StorageDocument)> {
         let mut converted: Vec<(DocumentCursor, StorageDocument)> = Vec::new();
@@ -1068,6 +1060,7 @@ mod tests {
     use p2panda_rs::schema::{FieldType, Schema, SchemaId};
     use p2panda_rs::test_utils::fixtures::key_pair;
     use rstest::rstest;
+    use sqlx::query_as;
 
     use crate::db::query::{
         Direction, Field, Filter, MetaField, Order, Pagination, PaginationField, Select,
@@ -1491,7 +1484,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::defaults(
+    #[case::default(
         Filter::default(),
         Order::default(),
         vec![
@@ -1522,7 +1515,7 @@ mod tests {
             )
             .await;
 
-            let documents_len = expected_venues.len();
+            let documents_len = expected_venues.len() as u64;
 
             // Select the pinned relation list "venues" of the first visited document
             let list = RelationList::new_pinned(&visited_view_ids[0], "venues".into());
@@ -1536,7 +1529,11 @@ mod tests {
                         cursor.as_ref(),
                         &vec![PaginationField::TotalCount],
                     ),
-                    &Select::new(&[Field::Meta(MetaField::DocumentViewId), "name".into()]),
+                    &Select::new(&[
+                        Field::Meta(MetaField::DocumentViewId),
+                        Field::Meta(MetaField::Owner),
+                        "name".into(),
+                    ]),
                     &filter,
                     &order,
                 );
@@ -1556,18 +1553,21 @@ mod tests {
                     None => panic!("Expected cursor"),
                 }
 
+                println!("{:?}", get_document_value(&documents[0].1, "name"));
+
                 // Check if `has_next_page` flag is correct
-                if documents_len - 1 == index {
+                if documents_len - 1 == index as u64 {
                     assert_eq!(pagination_data.has_next_page, false);
                 } else {
                     assert_eq!(pagination_data.has_next_page, true);
                 }
 
                 // Check if pagination info is correct
-                assert_eq!(pagination_data.total_count, Some(7));
+                assert_eq!(pagination_data.total_count, Some(documents_len));
                 assert_eq!(cursor.as_ref(), Some(&documents[0].0));
 
                 // Check if resulting document is correct
+                assert_eq!(documents[0].1.author(), &key_pair.public_key());
                 assert_eq!(documents.len(), 1);
                 assert_eq!(
                     get_document_value(&documents[0].1, "name"),
@@ -1595,9 +1595,79 @@ mod tests {
                 .expect("Query failed");
 
             assert_eq!(pagination_data.has_next_page, false);
-            assert_eq!(pagination_data.total_count, Some(7));
+            assert_eq!(pagination_data.total_count, Some(documents_len));
             assert_eq!(pagination_data.end_cursor, None);
             assert_eq!(documents.len(), 0);
+        });
+    }
+
+    #[rstest]
+    #[case::default(Filter::default(), 3)]
+    #[case::filtered(Filter::new().fields(&[("name_contains", &["Internet".into()])]), 1)]
+    #[case::no_results(Filter::new().fields(&[("name", &["doesnotexist".into()])]), 0)]
+    fn count(#[case] filter: Filter, #[case] expected_result: u64, key_pair: KeyPair) {
+        test_runner(move |mut node: TestNode| async move {
+            let (venues_schema, mut venues_view_ids) =
+                create_venues_test_data(&mut node, &key_pair).await;
+
+            let args = Query::new(
+                &Pagination::default(),
+                &Select::default(),
+                &filter,
+                &Order::default(),
+            );
+
+            let result = node
+                .context
+                .store
+                .count(&venues_schema, &args, None)
+                .await
+                .unwrap();
+
+            assert_eq!(result, expected_result);
+        });
+    }
+
+    #[rstest]
+    #[case::default(Filter::default(), 7)]
+    #[case::filtered_1(Filter::new().fields(&[("name_contains", &["Internet".into()])]), 2)]
+    #[case::filtered_2(Filter::new().fields(&[("name_not", &["World Wide Feld".into()])]), 3)]
+    #[case::no_results(Filter::new().fields(&[("name", &["doesnotexist".into()])]), 0)]
+    fn count_relation_list(
+        #[case] filter: Filter,
+        #[case] expected_result: u64,
+        key_pair: KeyPair,
+    ) {
+        test_runner(move |mut node: TestNode| async move {
+            let (venues_schema, mut venues_view_ids) =
+                create_venues_test_data(&mut node, &key_pair).await;
+
+            let (visited_schema, mut visited_view_ids) = create_visited_test_data(
+                &mut node,
+                venues_view_ids.clone(),
+                venues_schema.clone(),
+                &key_pair,
+            )
+            .await;
+
+            let args = Query::new(
+                &Pagination::default(),
+                &Select::default(),
+                &filter,
+                &Order::default(),
+            );
+
+            // Select the pinned relation list "venues" of the first visited document
+            let list = RelationList::new_pinned(&visited_view_ids[0], "venues".into());
+
+            let result = node
+                .context
+                .store
+                .count(&venues_schema, &args, Some(&list))
+                .await
+                .unwrap();
+
+            assert_eq!(result, expected_result);
         });
     }
 }
