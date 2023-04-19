@@ -94,6 +94,20 @@ proptest! {
 
                 let response: Response = response.json().await;
                 assert!(response.is_ok());
+
+                let query_str = query(
+                    schema.id(),
+                    &format!("(orderDirection: ASC, orderBy: {0})", schema.fields().keys().first().unwrap())
+                );
+
+                let response = client
+                    .post("/graphql")
+                    .json(&json!({"query": query_str}))
+                    .send()
+                    .await;
+
+                let response: Response = response.json().await;
+                assert!(response.is_ok());
             };
         });
     }
