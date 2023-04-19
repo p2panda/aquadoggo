@@ -310,121 +310,51 @@ fn values_from_schema(schema: SchemaAST) -> impl Strategy<Value = Vec<DocumentFi
     field_values
 }
 
-fn encode_schema_field(
-    name: &FieldName,
-    field_type: FieldType,
-) -> (EncodedEntry, EncodedOperation) {
-    let field_operation =
-        encode_operation(&Schema::create_field(name.0.as_str(), field_type.clone()))
-            .expect("Valid operations encode");
-    let field_entry = EntryBuilder::new()
-        .sign(&field_operation, &random_key_pair())
-        .expect("Construct and sign entry");
-    let field_entry = encode_entry(&field_entry).expect("Encode entry");
-    (field_entry, field_operation)
-}
-
-fn encode_schema_ast(
-    schema: &SchemaAST,
-    entries_and_operations: &mut Vec<(EncodedEntry, EncodedOperation)>,
-    schemas: &mut HashMap<SchemaId, Schema>,
-) -> Schema {
+fn convert_schema_ast(schema: &SchemaAST, schemas: &mut HashMap<SchemaId, Schema>) -> Schema {
     let mut schema_fields: Vec<(FieldName, FieldType)> = vec![];
-    let mut field_hash_ids = vec![];
 
     for field in schema.fields.clone() {
         match field.field_type {
             SchemaFieldType::Boolean => {
-                let entry_and_operation = encode_schema_field(&field.name, FieldType::Boolean);
                 schema_fields.push((field.name, FieldType::Boolean));
-                field_hash_ids.push(entry_and_operation.0.hash());
-                entries_and_operations.push(entry_and_operation);
             }
             SchemaFieldType::Integer => {
-                let entry_and_operation = encode_schema_field(&field.name, FieldType::Integer);
                 schema_fields.push((field.name, FieldType::Integer));
-                field_hash_ids.push(entry_and_operation.0.hash());
-                entries_and_operations.push(entry_and_operation);
             }
             SchemaFieldType::Float => {
-                let entry_and_operation = encode_schema_field(&field.name, FieldType::Float);
                 schema_fields.push((field.name, FieldType::Float));
-                field_hash_ids.push(entry_and_operation.0.hash());
-                entries_and_operations.push(entry_and_operation);
             }
             SchemaFieldType::String => {
-                let entry_and_operation = encode_schema_field(&field.name, FieldType::String);
                 schema_fields.push((field.name, FieldType::String));
-                field_hash_ids.push(entry_and_operation.0.hash());
-                entries_and_operations.push(entry_and_operation);
             }
             SchemaFieldType::Relation => {
                 let schema_ast = field.relation_schema.unwrap();
-                let schema = encode_schema_ast(&schema_ast, entries_and_operations, schemas);
-                let entry_and_operation =
-                    encode_schema_field(&field.name, FieldType::Relation(schema.id().to_owned()));
+                let schema = convert_schema_ast(&schema_ast, schemas);
                 schema_fields.push((field.name, FieldType::Relation(schema.id().to_owned())));
-                field_hash_ids.push(entry_and_operation.0.hash());
-                entries_and_operations.push(entry_and_operation);
             }
             SchemaFieldType::RelationList => {
                 let schema_ast = field.relation_schema.unwrap();
-                let schema = encode_schema_ast(&schema_ast, entries_and_operations, schemas);
-                let entry_and_operation = encode_schema_field(
-                    &field.name,
-                    FieldType::RelationList(schema.id().to_owned()),
-                );
+                let schema = convert_schema_ast(&schema_ast, schemas);
                 schema_fields.push((field.name, FieldType::RelationList(schema.id().to_owned())));
-                field_hash_ids.push(entry_and_operation.0.hash());
-                entries_and_operations.push(entry_and_operation);
             }
             SchemaFieldType::PinnedRelation => {
                 let schema_ast = field.relation_schema.unwrap();
-                let schema = encode_schema_ast(&schema_ast, entries_and_operations, schemas);
-                let entry_and_operation = encode_schema_field(
-                    &field.name,
-                    FieldType::PinnedRelation(schema.id().to_owned()),
-                );
+                let schema = convert_schema_ast(&schema_ast, schemas);
                 schema_fields.push((
                     field.name,
                     FieldType::PinnedRelation(schema.id().to_owned()),
                 ));
-                field_hash_ids.push(entry_and_operation.0.hash());
-                entries_and_operations.push(entry_and_operation);
             }
             SchemaFieldType::PinnedRelationList => {
                 let schema_ast = field.relation_schema.unwrap();
-                let schema = encode_schema_ast(&schema_ast, entries_and_operations, schemas);
-                let entry_and_operation = encode_schema_field(
-                    &field.name,
-                    FieldType::PinnedRelationList(schema.id().to_owned()),
-                );
+                let schema = convert_schema_ast(&schema_ast, schemas);
                 schema_fields.push((
                     field.name,
                     FieldType::PinnedRelationList(schema.id().to_owned()),
                 ));
-                field_hash_ids.push(entry_and_operation.0.hash());
-                entries_and_operations.push(entry_and_operation);
             }
         }
     }
-
-    let schema_operation = encode_operation(&Schema::create(
-        &schema.name.to_string(),
-        &schema.description.to_string(),
-        field_hash_ids
-            .into_iter()
-            .map(|hash| DocumentViewId::new(&vec![hash.into()]))
-            .collect(),
-    ))
-    .expect("Valid operations encode");
-
-    let schema_entry = EntryBuilder::new()
-        .sign(&schema_operation, &random_key_pair())
-        .expect("Construct and sign entry");
-    let schema_entry = encode_entry(&schema_entry).expect("Encode entry");
-
-    entries_and_operations.push((schema_entry, schema_operation));
 
     let schema = Schema::new(
         &schema.id,
@@ -520,12 +450,11 @@ proptest! {
         // the raw AST types into the test. Here we convert these into p2panda `Entries`, `Operations` and `Schema`
         // which we can then use to populate a store and run queries against.
 
-        let mut schema_entries_and_operations = Vec::new();
-        let mut document_entries_and_operations = Vec::new();
         let mut schemas = HashMap::new();
+        let mut document_entries_and_operations = Vec::new();
 
         // Encode entries and operations for all generated schema, as well as converting into the p2panda `Schema` themselves.
-        encode_schema_ast(&schema, &mut schema_entries_and_operations, &mut schemas);
+        convert_schema_ast(&schema, &mut schemas);
 
         // For each derived document, encode entries and operations.
         for document in documents.iter() {
@@ -534,7 +463,6 @@ proptest! {
 
         // Some sanity checks
         assert!(schemas.len() > 0);
-        assert!(schema_entries_and_operations.len() > 0);
         assert!(documents.len() > 0);
         assert!(document_entries_and_operations.len() > 0);
 
@@ -544,14 +472,6 @@ proptest! {
             for (_, schema) in schemas.clone() {
                 node.context.schema_provider.update(schema.clone()).await;
             };
-
-            // Publish all schema entries and operations to the node.
-            for (entry, operation) in schema_entries_and_operations {
-                let plain_operation = decode_operation(&operation).unwrap();
-                let schema = node.context.schema_provider.get(plain_operation.schema_id()).await.unwrap();
-                let result = publish(&node.context.store, &schema, &entry,  &plain_operation, &operation).await;
-                assert!(result.is_ok());
-            }
 
             // Publish all document entries and operations to the node.
             for (entry, operation) in document_entries_and_operations {
