@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 
+use async_graphql::Response;
 use p2panda_rs::api::publish;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::entry::encode::encode_entry;
@@ -19,8 +20,9 @@ use p2panda_rs::test_utils::fixtures::{random_document_view_id, random_key_pair}
 use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest_derive::Arbitrary;
+use serde_json::json;
 
-use crate::test_utils::{test_runner, TestNode};
+use crate::test_utils::{graphql_test_client, test_runner, TestNode};
 
 const SCHEMA_NAME: &str = "test_schema";
 const SCHEMA_DESCRIPTION: &str = "My test schema";
@@ -473,10 +475,7 @@ fn encode_document_ast(
             }
             FieldValue::PinnedRelation(value) => {
                 let operation_id = encode_document_ast(&value, entries_and_operations);
-                operation_fields.push((
-                    &field.name.0,
-                    DocumentViewId::new(&[operation_id]).into(),
-                ));
+                operation_fields.push((&field.name.0, DocumentViewId::new(&[operation_id]).into()));
             }
             FieldValue::PinnedRelationList(value) => {
                 let mut document_view_ids = vec![];
@@ -527,10 +526,10 @@ proptest! {
         }
 
         test_runner(|node: TestNode| async move {
-            for (_, schema) in schemas {
+            for (_, schema) in schemas.clone() {
                 node.context.schema_provider.update(schema.clone()).await;
             };
-            
+
             for (entry, operation) in schema_entries_and_operations {
                 let plain_operation = decode_operation(&operation).unwrap();
                 let schema = node.context.schema_provider.get(plain_operation.schema_id()).await.unwrap();
@@ -544,6 +543,40 @@ proptest! {
                 let result = publish(&node.context.store, &schema, &entry,  &plain_operation, &operation).await;
                 assert!(result.is_ok());
             }
+
+            for (_, schema) in schemas {
+                // Configure and send test query.
+                let client = graphql_test_client(&node).await;
+                let query = format!(
+                    r#"{{
+                    collection: all_{type_name} {{
+                        hasNextPage
+                        totalCount
+                        endCursor
+                        documents {{
+                            cursor
+                            meta {{
+                                owner
+                                documentId
+                                viewId
+                            }}
+                        }}
+                    }},
+                }}"#,
+                    type_name = schema.id()
+                );
+
+                let response = client
+                    .post("/graphql")
+                    .json(&json!({
+                        "query": query,
+                    }))
+                    .send()
+                    .await;
+
+                let response: Response = response.json().await;
+                assert!(response.is_ok());
+            };
         });
     }
 }
