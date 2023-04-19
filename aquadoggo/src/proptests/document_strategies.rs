@@ -47,16 +47,23 @@ pub enum FieldValue {
 }
 
 pub fn documents_strategy(schema: SchemaAST) -> impl Strategy<Value = Vec<DocumentAST>> {
-    let schema_id = schema.id.clone();
-    vec(values_from_schema(schema), 1..2).prop_map(move |documents| {
-        documents
-            .iter()
-            .map(|document_fields| DocumentAST {
+    let mut document_collection = vec![];
+    for _ in 0..10 {
+        let schema = schema.clone();
+        let schema_id = schema.id.clone();
+        document_collection.push(values_from_schema(schema).prop_map(move |document_fields| {
+            println!(
+                "Create document ast with schema id: {}",
+                schema_id.to_string()
+            );
+
+            DocumentAST {
                 fields: document_fields.to_owned(),
                 schema_id: schema_id.clone(),
-            })
-            .collect::<Vec<DocumentAST>>()
-    })
+            }
+        }))
+    }
+    document_collection
 }
 
 fn values_from_schema(schema: SchemaAST) -> impl Strategy<Value = Vec<DocumentFieldValue>> {
