@@ -26,7 +26,7 @@ prop_compose! {
 
 proptest! {
     #[test]
-    fn test_add((schema, documents) in schema_with_documents_strategy()) {
+    fn test_query((schema, documents) in schema_with_documents_strategy()) {
         // The proptest strategies for generating schema and deriving collections of documents for each injects
         // the raw AST types into the test. Here we convert these into p2panda `Entries`, `Operations` and `Schema`
         // which we can then use to populate a store and run queries against.
