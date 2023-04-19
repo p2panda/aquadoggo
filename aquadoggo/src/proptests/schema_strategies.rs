@@ -11,6 +11,9 @@ use crate::proptests::utils::FieldName;
 
 const SCHEMA_NAME: &str = "test_schema";
 const SCHEMA_DESCRIPTION: &str = "My test schema";
+const FIELDS_PER_SCHEMA: usize = 6;
+const DESIRED_SCHEMA_NODES: u32 = 25;
+const SCHEMA_DEPTH: u32 = 2;
 
 #[derive(Debug, Clone)]
 pub struct SchemaAST {
@@ -52,7 +55,7 @@ pub enum SchemaFieldType {
 }
 
 pub fn schema_strategy() -> impl Strategy<Value = SchemaAST> {
-    vec(schema_field(), 1..2).prop_map(|schema| SchemaAST::new(schema))
+    vec(schema_field(), 1..FIELDS_PER_SCHEMA).prop_map(|schema| SchemaAST::new(schema))
 }
 
 fn schema_field() -> impl Strategy<Value = SchemaField> {
@@ -88,33 +91,33 @@ fn schema_field() -> impl Strategy<Value = SchemaField> {
     ];
 
     leaf.prop_recursive(
-        2,  // 2 levels deep
-        25, // Shoot for maximum size of 25 nodes
-        6,  // We put up to 6 items per collection
+        SCHEMA_DEPTH,
+        DESIRED_SCHEMA_NODES,
+        FIELDS_PER_SCHEMA as u32,
         |inner| {
             prop_oneof![
-                (any::<FieldName>(), vec(inner.clone(), 1..6)).prop_map(|(field_name, fields)| {
+                (any::<FieldName>(), vec(inner.clone(), 1..FIELDS_PER_SCHEMA)).prop_map(|(field_name, fields)| {
                     SchemaField {
                         name: field_name,
                         field_type: SchemaFieldType::Relation,
                         relation_schema: Some(Box::new(SchemaAST::new(fields))),
                     }
                 }),
-                (any::<FieldName>(), vec(inner.clone(), 1..6)).prop_map(|(field_name, fields)| {
+                (any::<FieldName>(), vec(inner.clone(), 1..FIELDS_PER_SCHEMA)).prop_map(|(field_name, fields)| {
                     SchemaField {
                         name: field_name,
                         field_type: SchemaFieldType::RelationList,
                         relation_schema: Some(Box::new(SchemaAST::new(fields))),
                     }
                 }),
-                (any::<FieldName>(), vec(inner.clone(), 1..6)).prop_map(|(field_name, fields)| {
+                (any::<FieldName>(), vec(inner.clone(), 1..FIELDS_PER_SCHEMA)).prop_map(|(field_name, fields)| {
                     SchemaField {
                         name: field_name,
                         field_type: SchemaFieldType::PinnedRelation,
                         relation_schema: Some(Box::new(SchemaAST::new(fields))),
                     }
                 }),
-                (any::<FieldName>(), vec(inner.clone(), 1..6)).prop_map(|(field_name, fields)| {
+                (any::<FieldName>(), vec(inner.clone(), 1..FIELDS_PER_SCHEMA)).prop_map(|(field_name, fields)| {
                     SchemaField {
                         name: field_name,
                         field_type: SchemaFieldType::PinnedRelationList,
