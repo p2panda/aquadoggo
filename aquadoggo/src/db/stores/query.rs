@@ -867,7 +867,6 @@ impl SqlStore {
                 {select_owner}
                 {select_fields}
 
-
             FROM
                 -- Usually we query the "documents" table first. In case we're looking at a relation
                 -- list this is slighly more complicated and we need to do some additional JOINs
@@ -1492,7 +1491,25 @@ mod tests {
     }
 
     #[rstest]
-    fn paginated_pinned_relation_list(key_pair: KeyPair) {
+    #[case::defaults(
+        Filter::default(),
+        Order::default(),
+        vec![
+            "World Wide Feld".to_string(),
+            "World Wide Feld".to_string(),
+            "Internet Explorer".to_string(),
+            "p4p space".to_string(),
+            "World Wide Feld".to_string(),
+            "World Wide Feld".to_string(),
+            "Internet Explorer".to_string(),
+        ]
+    )]
+    fn paginated_pinned_relation_list(
+        key_pair: KeyPair,
+        #[case] filter: Filter,
+        #[case] order: Order,
+        #[case] expected_venues: Vec<String>,
+    ) {
         test_runner(|mut node: TestNode| async move {
             let (venues_schema, mut venues_view_ids) =
                 create_venues_test_data(&mut node, &key_pair).await;
@@ -1505,24 +1522,14 @@ mod tests {
             )
             .await;
 
-            let mut expected_view_ids = vec![
-                venues_view_ids[0].clone(),
-                venues_view_ids[0].clone(),
-                venues_view_ids[1].clone(),
-                venues_view_ids[2].clone(),
-                venues_view_ids[0].clone(),
-                venues_view_ids[0].clone(),
-                venues_view_ids[1].clone(),
-            ];
-            let view_ids_len = expected_view_ids.len();
+            let documents_len = expected_venues.len();
 
             // Select the pinned relation list "venues" of the first visited document
             let list = RelationList::new_pinned(&visited_view_ids[0], "venues".into());
 
-            let mut cursor: Option<DocumentCursor> = None;
-
             // Go through all pages, one document at a time
-            for (index, view_id) in expected_view_ids.into_iter().enumerate() {
+            let mut cursor: Option<DocumentCursor> = None;
+            for (index, expected_venue) in expected_venues.into_iter().enumerate() {
                 let args = Query::new(
                     &Pagination::new(
                         &NonZeroU64::new(1).unwrap(),
@@ -1530,8 +1537,8 @@ mod tests {
                         &vec![PaginationField::TotalCount],
                     ),
                     &Select::new(&[Field::Meta(MetaField::DocumentViewId), "name".into()]),
-                    &Filter::default(),
-                    &Order::default(),
+                    &filter,
+                    &order,
                 );
 
                 let (pagination_data, documents) = node
@@ -1541,6 +1548,7 @@ mod tests {
                     .await
                     .expect("Query failed");
 
+                // Check if next cursor exists and prepare it for next iteration
                 match pagination_data.end_cursor {
                     Some(end_cursor) => {
                         cursor = Some(end_cursor);
@@ -1548,19 +1556,26 @@ mod tests {
                     None => panic!("Expected cursor"),
                 }
 
-                if view_ids_len - 1 == index {
+                // Check if `has_next_page` flag is correct
+                if documents_len - 1 == index {
                     assert_eq!(pagination_data.has_next_page, false);
                 } else {
                     assert_eq!(pagination_data.has_next_page, true);
                 }
 
+                // Check if pagination info is correct
                 assert_eq!(pagination_data.total_count, Some(7));
-                assert_eq!(documents.len(), 1);
-                assert_eq!(documents[0].1.view_id, view_id);
                 assert_eq!(cursor.as_ref(), Some(&documents[0].0));
+
+                // Check if resulting document is correct
+                assert_eq!(documents.len(), 1);
+                assert_eq!(
+                    get_document_value(&documents[0].1, "name"),
+                    expected_venue.into()
+                );
             }
 
-            // Go to end of pagination
+            // Go to final, empty page
             let args = Query::new(
                 &Pagination::new(
                     &NonZeroU64::new(1).unwrap(),
@@ -1568,8 +1583,8 @@ mod tests {
                     &vec![PaginationField::TotalCount],
                 ),
                 &Select::new(&[Field::Meta(MetaField::DocumentViewId), "name".into()]),
-                &Filter::default(),
-                &Order::default(),
+                &filter,
+                &order,
             );
 
             let (pagination_data, documents) = node
