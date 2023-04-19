@@ -935,8 +935,6 @@ impl SqlStore {
         "#
         );
 
-        println!("{sea_quel}");
-
         let mut rows: Vec<QueryRow> = query_as::<_, QueryRow>(&sea_quel)
             .fetch_all(&self.pool)
             .await
