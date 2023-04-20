@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use async_graphql::{Name, Response, Value};
 use p2panda_rs::schema::SchemaId;
-use proptest::test_runner::Config;
+use proptest::test_runner::{Config, FailurePersistence, FileFailurePersistence};
 use proptest::{prop_compose, proptest, strategy::Just};
 use serde_json::{json, Value as JsonValue};
 
@@ -24,7 +24,11 @@ prop_compose! {
 
 proptest! {
     #![proptest_config(Config {
-        cases: 3, max_shrink_time: 60000, .. Config::default()
+        cases: 3, 
+        max_shrink_time: 60000, 
+        max_shrink_iters: 1000, 
+        failure_persistence: Some(Box::new(FileFailurePersistence::WithSource("regressions"))), 
+        .. Config::default()
       })]
     #[test]
     fn test_query((schema_ast, document_ast_collection) in schema_with_documents_strategy()) {
