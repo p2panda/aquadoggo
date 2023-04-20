@@ -470,6 +470,7 @@ fn where_pagination_sql(
                                 On operation_fields_v1.operation_id = operations_v1.operation_id
                         WHERE
                             operation_fields_v1.cursor = '{operation_cursor}'
+                        LIMIT 1
                         "#
                     );
 
@@ -486,6 +487,7 @@ fn where_pagination_sql(
                                 On operation_fields_v1.operation_id = document_view_fields.operation_id
                         WHERE
                             operation_fields_v1.cursor = '{operation_cursor}'
+                        LIMIT 1
                         "#
                     );
 
