@@ -2,11 +2,12 @@
 
 use std::collections::HashMap;
 
-use async_graphql::{Response, Value};
+use async_graphql::indexmap::IndexMap;
+use async_graphql::{Name, Response, Value};
 use p2panda_rs::schema::SchemaId;
 use proptest::test_runner::Config;
 use proptest::{prop_compose, proptest, strategy::Just};
-use serde_json::json;
+use serde_json::{json, Value as JsonValue};
 
 use crate::proptests::document_strategies::{documents_strategy, DocumentAST};
 use crate::proptests::schema_strategies::{schema_strategy, SchemaAST};
@@ -72,7 +73,6 @@ proptest! {
                 let total_documents = documents.len();
                 let schema = node.context.schema_provider.get(&schema_id).await.unwrap();
 
-                // Configure and send test query.
                 let client = graphql_test_client(&node).await;
 
                 let response = client
@@ -83,7 +83,20 @@ proptest! {
 
                 let response: Response = response.json().await;
                 assert!(response.is_ok());
-                let documents = get_documents_from_response(&response);
+                let (has_next_page, total_count, end_cursor, documents) = unwrap_response(&response);
+                assert_eq!(documents.len(), 25);
+
+                let client = graphql_test_client(&node).await;
+
+                let response = client
+                    .post("/graphql")
+                    .json(&json!({"query": query(&schema_id, "(first: 10000)")}))
+                    .send()
+                    .await;
+
+                let response: Response = response.json().await;
+                assert!(response.is_ok());
+                let (has_next_page, total_count, end_cursor, documents) = unwrap_response(&response);
                 assert_eq!(documents.len(), total_documents);
 
                 let query_str = query(
@@ -99,26 +112,37 @@ proptest! {
 
                 let response: Response = response.json().await;
                 assert!(response.is_ok());
-                let documents = get_documents_from_response(&response);
+                let (has_next_page, total_count, end_cursor, documents) = unwrap_response(&response);
                 assert_eq!(documents.len(), total_documents);
             };
         });
     }
 }
 
-fn get_documents_from_response(response: &Response) -> Vec<Value> {
-    let response = match &response.data {
-        async_graphql::Value::Object(response) => response.get("query").unwrap().to_owned(),
-        _ => panic!("Expected object in response"),
-    };
+fn unwrap_response(response: &Response) -> (JsonValue, JsonValue, JsonValue, Vec<JsonValue>) {
+    let query_response = response
+        .data
+        .to_owned()
+        .into_json()
+        .expect("Can convert to json")
+        .as_object()
+        .expect("Query response is object")
+        .to_owned();
 
-    let documents = match &response {
-        async_graphql::Value::Object(response) => response.get("documents").unwrap().to_owned(),
-        _ => panic!("Expected object in response"),
-    };
+    let pagination_root = query_response.get("query").unwrap();
 
-    match documents {
-        async_graphql::Value::List(collection) => collection.into_iter().map(Value::from).collect(),
-        _ => panic!("Expected list in response"),
-    }
+    let has_next_page = pagination_root.get("hasNextPage").unwrap();
+    let total_count = pagination_root.get("totalCount").unwrap();
+    let end_cursor = pagination_root.get("endCursor").unwrap();
+    let documents = pagination_root
+        .get("documents")
+        .unwrap()
+        .as_array()
+        .expect("Documents fields is array");
+    (
+        has_next_page.clone(),
+        total_count.clone(),
+        end_cursor.clone(),
+        documents.clone(),
+    )
 }
