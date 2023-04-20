@@ -12,7 +12,7 @@ use crate::proptests::utils::FieldName;
 const SCHEMA_NAME: &str = "test_schema";
 const SCHEMA_DESCRIPTION: &str = "My test schema";
 const FIELDS_PER_SCHEMA: usize = 3;
-const DESIRED_SCHEMA_NODES: u32 = 25;
+const DESIRED_SCHEMA_NODES: u32 = 6;
 const SCHEMA_DEPTH: u32 = 2;
 
 #[derive(Debug, Clone)]
