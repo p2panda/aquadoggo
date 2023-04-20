@@ -800,8 +800,8 @@ impl SqlStore {
     /// Returns a paginated collection of documents from the database which can be filtered and
     /// ordered by custom parameters.
     ///
-    /// When passing a `list` configuration the query will run against the documents of a (pinned)
-    /// relation list instead.
+    /// When passing a `list` configuration the query will run against the documents of a (pinned
+    /// and unpinned) relation list instead.
     pub async fn query(
         &self,
         schema: &Schema,
