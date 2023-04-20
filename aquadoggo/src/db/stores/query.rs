@@ -304,7 +304,7 @@ fn cmp_sql(sql_field: &str, filter_setting: &FilterSetting) -> String {
     }
 }
 
-fn filter_sql(filter: &Filter, schema: &Schema) -> String {
+fn where_filter_sql(filter: &Filter, schema: &Schema) -> String {
     filter
         .iter()
         .filter_map(|filter_setting| {
@@ -371,7 +371,7 @@ fn filter_sql(filter: &Filter, schema: &Schema) -> String {
         .join("\n")
 }
 
-fn pagination_sql(
+fn where_pagination_sql(
     pagination: &Pagination<DocumentCursor>,
     list: Option<&RelationList>,
     order: &Order,
@@ -401,6 +401,7 @@ fn pagination_sql(
                 Field::Meta(MetaField::Owner)
                 | Field::Meta(MetaField::Edited)
                 | Field::Meta(MetaField::Deleted) => {
+                    // @TODO: See issue: https://github.com/p2panda/aquadoggo/issues/326
                     todo!("Not implemented yet");
                 }
                 Field::Field(order_field_name) => {
@@ -432,25 +433,32 @@ fn pagination_sql(
 
                     let cmp_value = format!(
                         r#"
-                            -- When ordering is activated we need to compare against the value
-                            -- of the ordered field - but from the row where the cursor points at
-                            SELECT
-                                operation_fields_v1.value
-                            FROM
-                                {from}
-                                JOIN
-                                    operation_fields_v1
-                                    ON
-                                        document_view_fields.operation_id = operation_fields_v1.operation_id
-                                        AND
-                                            document_view_fields.name = operation_fields_v1.name
-                            WHERE
-                                operation_fields_v1.name = '{order_field_name}'
-                                AND
-                                    document_view_fields.document_view_id = '{view_id}'
-                                {and_list_index}
+                        -- When ordering is activated we need to compare against the value
+                        -- of the ordered field - but from the row where the cursor points at
+                        SELECT
+                            operation_fields_v1.value
+                        FROM
+                            {from}
+                            JOIN
+                                operation_fields_v1
+                                ON
+                                    document_view_fields.operation_id = operation_fields_v1.operation_id
+                                    AND
+                                        document_view_fields.name = operation_fields_v1.name
+                        WHERE
+                            operation_fields_v1.name = '{order_field_name}'
+                            AND
+                                document_view_fields.document_view_id = '{view_id}'
+                            {and_list_index}
                         "#
                     );
+
+                    let and_list_index_gt = match list {
+                        Some(relation_list) => {
+                            format!("AND operation_fields_v1_list.list_index > {list_index}")
+                        }
+                        None => "".to_string(),
+                    };
 
                     format!(
                         r#"
@@ -471,6 +479,7 @@ fn pagination_sql(
                                             operation_fields_v1.value = ({cmp_value})
                                             AND
                                                 documents.document_view_id > '{view_id}'
+                                            {and_list_index_gt}
                                         )
                                     )
                         )
@@ -486,8 +495,8 @@ fn pagination_sql(
 fn group_sql(fields: &ApplicationFields) -> String {
     if fields.is_empty() {
         r#"
-            -- Make sure to only return one row per document when no fields have been selected
-            GROUP BY documents.document_id, document_view_fields.operation_id
+        -- Make sure to only return one row per document when no fields have been selected
+        GROUP BY documents.document_id, document_view_fields.operation_id, list_index
         "#
         .to_string()
     } else {
@@ -579,7 +588,7 @@ where
     (page_size, format!("LIMIT {page_size} + 1"))
 }
 
-fn application_select_sql(fields: &ApplicationFields) -> String {
+fn where_fields_sql(fields: &ApplicationFields) -> String {
     if fields.is_empty() {
         "".to_string()
     } else {
@@ -591,22 +600,22 @@ fn application_select_sql(fields: &ApplicationFields) -> String {
     }
 }
 
-fn edited_sql(select: &Select) -> String {
+fn select_edited_sql(select: &Select) -> String {
     if select.fields.contains(&Field::Meta(MetaField::Edited)) {
         r#"
-            ,
-            -- Check if there is more operations next to the initial "create" operation
-            (
-                SELECT
-                    operations_v1.public_key
-                FROM
-                    operations_v1
-                WHERE
-                    operations_v1.action != "create"
-                    AND
-                        operations_v1.document_id = documents.document_id
-                LIMIT 1
-            ) AS is_edited
+        -- Check if there is more operations next to the initial "create" operation
+        ,
+        (
+            SELECT
+                operations_v1.public_key
+            FROM
+                operations_v1
+            WHERE
+                operations_v1.action != "create"
+                AND
+                    operations_v1.document_id = documents.document_id
+            LIMIT 1
+        ) AS is_edited
         "#
         .to_string()
     } else {
@@ -614,20 +623,20 @@ fn edited_sql(select: &Select) -> String {
     }
 }
 
-fn owner_sql(select: &Select) -> String {
+fn select_owner_sql(select: &Select) -> String {
     if select.fields.contains(&Field::Meta(MetaField::Owner)) {
         r#"
-            ,
-            -- The original owner of a document we get by checking which public key signed the
-            -- "create" operation, the hash of that operation is the same as the document id
-            (
-                SELECT
-                    operations_v1.public_key
-                FROM
-                    operations_v1
-                WHERE
-                    operations_v1.operation_id = documents.document_id
-            ) AS owner
+        -- The original owner of a document we get by checking which public key signed the
+        -- "create" operation, the hash of that operation is the same as the document id
+        ,
+        (
+            SELECT
+                operations_v1.public_key
+            FROM
+                operations_v1
+            WHERE
+                operations_v1.operation_id = documents.document_id
+        ) AS owner
         "#
         .to_string()
     } else {
@@ -635,20 +644,21 @@ fn owner_sql(select: &Select) -> String {
     }
 }
 
-fn fields_sql(fields: &ApplicationFields, list: Option<&RelationList>) -> String {
-    if fields.is_empty() {
-        "".to_string()
-    } else {
-        let select_list_index = match list {
-            // Use the list index of the parent document when we query a relation list
-            Some(_) => "operation_fields_v1_list.list_index AS list_index".to_string(),
-            None => "operation_fields_v1.list_index AS list_index".to_string(),
-        };
+fn select_fields_sql(fields: &ApplicationFields, list: Option<&RelationList>) -> String {
+    let select_list_index = match list {
+        // Use the list index of the parent document when we query a relation list
+        Some(_) => "operation_fields_v1_list.list_index AS list_index".to_string(),
+        // In any other case this will always be 0
+        None => "0 AS list_index".to_string(),
+    };
 
+    if fields.is_empty() {
+        format!(", {select_list_index}")
+    } else {
         format!(
             r#"
-            ,
             -- Finally we get the application data by selecting the name, value and type.
+            ,
             operation_fields_v1.name,
             operation_fields_v1.value,
             operation_fields_v1.field_type,
@@ -687,12 +697,12 @@ fn where_sql(
 
             format!(
                 r#"
-                    document_view_fields_list.document_view_id = '{view_id}'
-                    AND
-                        operation_fields_v1_list.field_type = '{field_type}'
-                    AND
-                        operation_fields_v1_list.name = '{field_name}'
-                    {list_index_sql}
+                document_view_fields_list.document_view_id = '{view_id}'
+                AND
+                    operation_fields_v1_list.field_type = '{field_type}'
+                AND
+                    operation_fields_v1_list.name = '{field_name}'
+                {list_index_sql}
                 "#
             )
         }
@@ -700,8 +710,8 @@ fn where_sql(
             // We filter by the queried schema of that collection
             format!(
                 r#"
-                    documents.schema_id = '{schema_id}'
-                    {list_index_sql}
+                documents.schema_id = '{schema_id}'
+                {list_index_sql}
                 "#
             )
         }
@@ -716,24 +726,32 @@ fn from_sql(list: Option<&RelationList>) -> String {
                 RelationListType::Unpinned => "documents.document_id",
             };
 
-            // Select relation list of parent document first and join the related documents
-            // afterwards
             format!(
                 r#"
-                    document_view_fields document_view_fields_list
-                    JOIN operation_fields_v1 operation_fields_v1_list
-                        ON
-                            document_view_fields_list.operation_id = operation_fields_v1_list.operation_id
-                        AND
-                            document_view_fields_list.name = operation_fields_v1_list.name
-                    JOIN documents
-                        ON
-                            operation_fields_v1_list.value = {filter_sql}
+                -- Select relation list of parent document first ..
+                document_view_fields document_view_fields_list
+                JOIN operation_fields_v1 operation_fields_v1_list
+                    ON
+                        document_view_fields_list.operation_id = operation_fields_v1_list.operation_id
+                    AND
+                        document_view_fields_list.name = operation_fields_v1_list.name
+
+                -- .. and join the related documents afterwards
+                JOIN documents
+                    ON
+                        operation_fields_v1_list.value = {filter_sql}
+                JOIN document_view_fields
+                    ON documents.document_view_id = document_view_fields.document_view_id
                 "#
             )
         }
         // Otherwise just query the documents directly
-        None => "documents".to_string(),
+        None => r#"
+            documents
+            JOIN document_view_fields
+                ON documents.document_view_id = document_view_fields.document_view_id
+        "#
+        .to_string(),
     }
 }
 
@@ -770,17 +788,17 @@ impl SqlStore {
         let application_fields = args.select.application_fields();
 
         // Generate SQL based on the given schema and query
-        let select_edited = edited_sql(&args.select);
-        let select_owner = owner_sql(&args.select);
-        let select_fields = fields_sql(&application_fields, list);
+        let select_edited = select_edited_sql(&args.select);
+        let select_owner = select_owner_sql(&args.select);
+        let select_fields = select_fields_sql(&application_fields, list);
 
         let from = from_sql(list);
         let from_fields = from_fields_sql(&application_fields);
 
         let where_ = where_sql(schema.id(), &application_fields, list);
-        let and_select = application_select_sql(&application_fields);
-        let and_filters = filter_sql(&args.filter, schema);
-        let and_pagination = pagination_sql(&args.pagination, list, &args.order);
+        let and_fields = where_fields_sql(&application_fields);
+        let and_filters = where_filter_sql(&args.filter, schema);
+        let and_pagination = where_pagination_sql(&args.pagination, list, &args.order);
 
         let group = group_sql(&application_fields);
         let order = order_sql(&args.order, schema, list);
@@ -818,6 +836,7 @@ impl SqlStore {
                 -- any case since we get it for free
                 documents.is_deleted
 
+                -- All other fields we optionally select depending on the query
                 {select_edited}
                 {select_owner}
                 {select_fields}
@@ -827,11 +846,8 @@ impl SqlStore {
                 -- list this is slighly more complicated and we need to do some additional JOINs
                 {from}
 
-                -- In any case we want to get the (latest) operation values for each document in
-                -- the end
-                JOIN document_view_fields
-                    ON documents.document_view_id = document_view_fields.document_view_id
-
+                -- If we queried application fields, we need to add some more JOINs to get the
+                -- values from the operations
                 {from_fields}
 
             WHERE
@@ -840,7 +856,7 @@ impl SqlStore {
                 {where_}
 
                 -- .. and select only the operation fields we're interested in
-                {and_select}
+                {and_fields}
 
                 -- .. and further filter the data by custom parameters
                 {and_filters}
@@ -848,6 +864,8 @@ impl SqlStore {
                 -- Lastly we batch all results into smaller chunks via cursor pagination
                 {and_pagination}
 
+            -- If we queried only meta data we need to group the resulting rows by document id,
+            -- to assure we only receive one row per document
             {group}
 
             -- We always order the rows by document id and list index, but there might also be
@@ -877,6 +895,7 @@ impl SqlStore {
             false
         };
 
+        // Calculate the total number of (filtered) documents in this query
         let total_count = if args
             .pagination
             .fields
@@ -888,8 +907,21 @@ impl SqlStore {
         };
 
         // Determine cursors for pagination by looking at beginning and end of results
-        let start_cursor = rows.first().map(|row| Self::row_to_cursor(row, list));
-        let end_cursor = rows.last().map(|row| Self::row_to_cursor(row, list));
+        let start_cursor = if args
+            .pagination
+            .fields
+            .contains(&PaginationField::StartCursor)
+        {
+            rows.first().map(|row| Self::row_to_cursor(row, list))
+        } else {
+            None
+        };
+
+        let end_cursor = if args.pagination.fields.contains(&PaginationField::EndCursor) {
+            rows.last().map(|row| Self::row_to_cursor(row, list))
+        } else {
+            None
+        };
 
         let pagination_data = PaginationData {
             total_count,
@@ -918,30 +950,28 @@ impl SqlStore {
 
         let from = from_sql(list);
         let where_ = where_sql(schema.id(), &application_fields, list);
-        let and_filters = filter_sql(&args.filter, schema);
+        let and_filters = where_filter_sql(&args.filter, schema);
 
         let count_sql = format!(
             r#"
-                SELECT
-                    COUNT(documents.document_id)
+            SELECT
+                COUNT(documents.document_id)
 
-                FROM
-                    {from}
+            FROM
+                {from}
 
-                    JOIN document_view_fields
-                        ON documents.document_view_id = document_view_fields.document_view_id
-                    JOIN operation_fields_v1
-                        ON
-                            document_view_fields.operation_id = operation_fields_v1.operation_id
-                            AND
-                                document_view_fields.name = operation_fields_v1.name
+                JOIN operation_fields_v1
+                    ON
+                        document_view_fields.operation_id = operation_fields_v1.operation_id
+                        AND
+                            document_view_fields.name = operation_fields_v1.name
 
-                WHERE
-                    {where_}
-                    {and_filters}
+            WHERE
+                {where_}
+                {and_filters}
 
-                -- Group application fields by name to make sure we get actual number of documents
-                GROUP BY operation_fields_v1.name
+            -- Group application fields by name to make sure we get actual number of documents
+            GROUP BY operation_fields_v1.name
             "#
         );
 
@@ -971,64 +1001,66 @@ impl SqlStore {
         let mut converted: Vec<(DocumentCursor, StorageDocument)> = Vec::new();
 
         if rows.is_empty() {
-            converted
-        } else {
-            let finalize_document = |row: &QueryRow,
-                                     collected_fields: Vec<DocumentViewFieldRow>|
-             -> (DocumentCursor, StorageDocument) {
-                let fields = parse_document_view_field_rows(collected_fields);
+            return converted;
+        }
 
-                let document = StorageDocument {
-                    id: row.document_id.parse().unwrap(),
-                    fields: Some(fields),
-                    schema_id: schema_id.clone(),
-                    view_id: row.document_view_id.parse().unwrap(),
-                    author: (&row.owner).into(),
-                    deleted: row.is_deleted,
-                };
+        // Helper method to convert database row into final document and cursor type
+        let finalize_document = |row: &QueryRow,
+                                 collected_fields: Vec<DocumentViewFieldRow>|
+         -> (DocumentCursor, StorageDocument) {
+            let fields = parse_document_view_field_rows(collected_fields);
 
-                let cursor = Self::row_to_cursor(row, list);
-
-                (cursor, document)
+            let document = StorageDocument {
+                id: row.document_id.parse().unwrap(),
+                fields: Some(fields),
+                schema_id: schema_id.clone(),
+                view_id: row.document_view_id.parse().unwrap(),
+                author: (&row.owner).into(),
+                deleted: row.is_deleted,
             };
 
-            let last_row = rows.last().unwrap().clone();
+            let cursor = Self::row_to_cursor(row, list);
 
-            let mut current = rows[0].clone();
-            let mut current_fields = Vec::new();
+            (cursor, document)
+        };
 
-            let rows_per_document = std::cmp::max(fields.len(), 1);
+        // Iterate over all database rows and collect fields for each document
+        let last_row = rows.last().unwrap().clone();
 
-            for (index, row) in rows.into_iter().enumerate() {
-                // We observed a new document coming up in the next row, time to change
-                if index % rows_per_document == 0 && index > 0 {
-                    // Finalize the current document, convert it and push it into the final array
-                    let (cursor, document) = finalize_document(&current, current_fields);
-                    converted.push((cursor, document));
+        let mut current = rows[0].clone();
+        let mut current_fields = Vec::new();
 
-                    // Change the pointer to the next document
-                    current = row.clone();
-                    current_fields = Vec::new();
-                }
+        let rows_per_document = std::cmp::max(fields.len(), 1);
 
-                // Collect every field of the document
-                current_fields.push(DocumentViewFieldRow {
-                    document_id: row.document_id,
-                    document_view_id: row.document_view_id,
-                    operation_id: row.operation_id,
-                    name: row.name,
-                    list_index: row.list_index,
-                    field_type: row.field_type,
-                    value: row.value,
-                });
+        for (index, row) in rows.into_iter().enumerate() {
+            // We observed a new document coming up in the next row, time to change
+            if index % rows_per_document == 0 && index > 0 {
+                // Finalize the current document, convert it and push it into the final array
+                let (cursor, document) = finalize_document(&current, current_fields);
+                converted.push((cursor, document));
+
+                // Change the pointer to the next document
+                current = row.clone();
+                current_fields = Vec::new();
             }
 
-            // Do it one last time at the end for the last document
-            let (cursor, document) = finalize_document(&last_row, current_fields);
-            converted.push((cursor, document));
-
-            converted
+            // Collect every field of the document
+            current_fields.push(DocumentViewFieldRow {
+                document_id: row.document_id,
+                document_view_id: row.document_view_id,
+                operation_id: row.operation_id,
+                name: row.name,
+                list_index: row.list_index,
+                field_type: row.field_type,
+                value: row.value,
+            });
         }
+
+        // Do it one last time at the end for the last document
+        let (cursor, document) = finalize_document(&last_row, current_fields);
+        converted.push((cursor, document));
+
+        converted
     }
 
     /// Get a cursor from a document row.
@@ -1345,7 +1377,7 @@ mod tests {
                     &Pagination::new(
                         &NonZeroU64::new(1).unwrap(),
                         cursor.as_ref(),
-                        &vec![PaginationField::TotalCount],
+                        &vec![PaginationField::TotalCount, PaginationField::EndCursor],
                     ),
                     &Select::new(&[Field::Meta(MetaField::DocumentViewId)]),
                     &Filter::default(),
@@ -1386,7 +1418,7 @@ mod tests {
                 &Pagination::new(
                     &NonZeroU64::new(1).unwrap(),
                     cursor.as_ref(),
-                    &vec![PaginationField::TotalCount],
+                    &vec![PaginationField::TotalCount, PaginationField::EndCursor],
                 ),
                 &Select::default(),
                 &Filter::default(),
@@ -1428,7 +1460,7 @@ mod tests {
                 &Pagination::new(
                     &NonZeroU64::new(10).unwrap(),
                     None,
-                    &vec![PaginationField::TotalCount],
+                    &vec![PaginationField::TotalCount, PaginationField::EndCursor],
                 ),
                 &Select::new(&["name".into()]),
                 &Filter::default(),
@@ -1527,7 +1559,7 @@ mod tests {
                     &Pagination::new(
                         &NonZeroU64::new(1).unwrap(),
                         cursor.as_ref(),
-                        &vec![PaginationField::TotalCount],
+                        &vec![PaginationField::TotalCount, PaginationField::EndCursor],
                     ),
                     &Select::new(&[
                         Field::Meta(MetaField::DocumentViewId),
@@ -1552,8 +1584,6 @@ mod tests {
                     }
                     None => panic!("Expected cursor"),
                 }
-
-                println!("{:?}", get_document_value(&documents[0].1, "name"));
 
                 // Check if `has_next_page` flag is correct
                 if documents_len - 1 == index as u64 {
@@ -1580,7 +1610,7 @@ mod tests {
                 &Pagination::new(
                     &NonZeroU64::new(1).unwrap(),
                     cursor.as_ref(),
-                    &vec![PaginationField::TotalCount],
+                    &vec![PaginationField::TotalCount, PaginationField::EndCursor],
                 ),
                 &Select::new(&[Field::Meta(MetaField::DocumentViewId), "name".into()]),
                 &filter,
