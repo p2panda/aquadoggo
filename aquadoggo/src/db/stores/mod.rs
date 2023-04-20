@@ -11,4 +11,5 @@ mod query;
 mod schema;
 mod task;
 
-pub use query::{DocumentCursor, Query, QueryResponse, RelationList, RelationListType};
+pub use operation::OperationCursor;
+pub use query::{PaginationCursor, Query, QueryResponse, RelationList, RelationListType};

@@ -14,5 +14,5 @@ pub use self::log::LogRow;
 pub use document::{DocumentRow, DocumentViewFieldRow};
 pub use entry::EntryRow;
 pub use operation::{OperationFieldsJoinedRow, OperationRow};
-pub use query::QueryRow;
+pub use query::{OptionalOwner, QueryRow};
 pub use task::TaskRow;

@@ -5,7 +5,7 @@ use async_graphql::Value;
 use p2panda_rs::schema::Schema;
 
 use crate::db::query::Cursor;
-use crate::db::stores::DocumentCursor;
+use crate::db::stores::PaginationCursor;
 use crate::db::types::StorageDocument;
 use crate::graphql::constants;
 use crate::graphql::types::{DocumentMeta, PaginationData};
@@ -15,10 +15,10 @@ use crate::graphql::utils::{collection_item_name, downcast_document, fields_name
 pub enum DocumentValue {
     Single(StorageDocument),
     Collection(
-        PaginationData<DocumentCursor>,
-        Vec<(DocumentCursor, StorageDocument)>,
+        PaginationData<PaginationCursor>,
+        Vec<(PaginationCursor, StorageDocument)>,
     ),
-    Item(DocumentCursor, StorageDocument),
+    Item(PaginationCursor, StorageDocument),
 }
 
 /// A constructor for dynamically building objects describing documents which conform to the shape

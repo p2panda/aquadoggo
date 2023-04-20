@@ -21,6 +21,14 @@ pub struct QueryRow {
     /// Flag if document is deleted.
     pub is_deleted: bool,
 
+    /// Unique identifier aiding cursor-based pagination.
+    ///
+    /// This value gets especially useful if we need to paginate over duplicate documents.
+    pub cmp_value_cursor: String,
+
+    #[sqlx(default)]
+    pub root_cursor: String,
+
     /// Flag if document was at least changed once (more than one operation).
     #[sqlx(default)]
     pub is_edited: bool,

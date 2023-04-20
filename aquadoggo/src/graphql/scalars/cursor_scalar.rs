@@ -7,12 +7,12 @@ use async_graphql::{Error, Result};
 use dynamic_graphql::{Scalar, ScalarValue, Value};
 
 use crate::db::query::Cursor;
-use crate::db::stores::DocumentCursor;
+use crate::db::stores::PaginationCursor;
 
 /// The cursor used in paginated queries.
 #[derive(Scalar, Clone, Debug, Eq, PartialEq)]
 #[graphql(name = "Cursor", validator(validate))]
-pub struct CursorScalar(DocumentCursor);
+pub struct CursorScalar(PaginationCursor);
 
 impl ScalarValue for CursorScalar {
     fn from_value(value: Value) -> Result<Self>
@@ -20,7 +20,7 @@ impl ScalarValue for CursorScalar {
         Self: Sized,
     {
         match &value {
-            Value::String(str_value) => Ok(Self(DocumentCursor::decode(str_value)?)),
+            Value::String(str_value) => Ok(Self(PaginationCursor::decode(str_value)?)),
             _ => Err(Error::new(format!("Expected a valid cursor, got: {value}"))),
         }
     }
@@ -50,14 +50,14 @@ impl Cursor for CursorScalar {
     }
 }
 
-impl From<&DocumentCursor> for CursorScalar {
-    fn from(cursor: &DocumentCursor) -> Self {
+impl From<&PaginationCursor> for CursorScalar {
+    fn from(cursor: &PaginationCursor) -> Self {
         Self(cursor.clone())
     }
 }
 
-impl From<&CursorScalar> for DocumentCursor {
-    fn from(cursor: &CursorScalar) -> DocumentCursor {
+impl From<&CursorScalar> for PaginationCursor {
+    fn from(cursor: &CursorScalar) -> PaginationCursor {
         cursor.0.clone()
     }
 }

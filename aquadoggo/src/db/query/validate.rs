@@ -54,10 +54,10 @@ pub fn validate_query(
 
     // Make sure field to order actually exists in schema
     match &order.field {
-        Field::Meta(_) => {
-            // Ordering any meta field is always okay
+        None | Some(Field::Meta(_)) => {
+            // Ordering any meta field or none is always okay
         }
-        Field::Field(field_name) => {
+        Some(Field::Field(field_name)) => {
             if !schema_fields.contains_key(field_name) {
                 return Err(QueryError::OrderFieldUnknown(field_name.clone()));
             }

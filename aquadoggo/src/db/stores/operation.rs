@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::collections::BTreeMap;
+use std::fmt::Display;
 
 use async_trait::async_trait;
 use p2panda_rs::document::DocumentId;
+use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::traits::AsOperation;
 use p2panda_rs::operation::{Operation, OperationId};
@@ -13,7 +15,7 @@ use p2panda_rs::storage_provider::traits::OperationStore;
 use sqlx::{query, query_as, query_scalar};
 
 use crate::db::models::utils::{parse_operation_rows, parse_value_to_string_vec};
-use crate::db::models::OperationFieldsJoinedRow;
+use crate::db::models::{DocumentViewFieldRow, OperationFieldsJoinedRow};
 use crate::db::types::StorageOperation;
 use crate::db::SqlStore;
 
@@ -117,33 +119,36 @@ impl OperationStore for SqlStore {
         let mut results = Vec::new();
         if let Some(fields) = operation.fields() {
             for (name, value) in fields.iter() {
-                // If the value is a relation_list or pinned_relation_list we need to insert a
-                // new field row for every item in the list. Here we collect these items and
-                // return them in a vector. If this operation value is anything except for the
-                // above list types, we will return a vec containing a single item.
+                // If the value is a relation_list or pinned_relation_list we need to insert a new
+                // field row for every item in the list. Here we collect these items and return
+                // them in a vector. If this operation value is anything except for the above list
+                // types, we will return a vec containing a single item.
                 let db_values = parse_value_to_string_vec(value);
 
                 for (index, db_value) in db_values.into_iter().enumerate() {
-                    // Compose the query and return it's future.
+                    let cursor = OperationCursor::new(index, name, id);
+
                     let result = query(
                         "
-                            INSERT INTO
-                                operation_fields_v1 (
-                                    operation_id,
-                                    name,
-                                    field_type,
-                                    value,
-                                    list_index
-                                )
-                            VALUES
-                                ($1, $2, $3, $4, $5)
-                            ",
+                        INSERT INTO
+                            operation_fields_v1 (
+                                operation_id,
+                                name,
+                                field_type,
+                                value,
+                                list_index,
+                                cursor
+                            )
+                        VALUES
+                            ($1, $2, $3, $4, $5, $6)
+                        ",
                     )
                     .bind(id.as_str().to_owned())
                     .bind(name.to_owned())
                     .bind(value.field_type().to_string())
                     .bind(db_value)
                     .bind(index as i32)
+                    .bind(cursor.to_string())
                     .execute(&mut tx)
                     .await
                     .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
@@ -315,6 +320,43 @@ impl OperationStore for SqlStore {
     }
 }
 
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct OperationCursor(String);
+
+impl OperationCursor {
+    /// Generate an unique cursor for each document.
+    ///
+    /// This helps us to aid cursor-based pagination, especially over duplicate documents in
+    /// relation lists
+    pub fn new(list_index: usize, field_name: &str, operation_id: &OperationId) -> Self {
+        let cursor =
+            Hash::new_from_bytes(format!("{list_index}{field_name}{operation_id}").as_bytes());
+        Self(cursor.as_str()[4..].to_owned())
+    }
+}
+
+impl Display for OperationCursor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<&str> for OperationCursor {
+    fn from(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+}
+
+impl From<&DocumentViewFieldRow> for OperationCursor {
+    fn from(row: &DocumentViewFieldRow) -> Self {
+        Self::new(
+            row.list_index as usize,
+            &row.name,
+            &row.operation_id.parse().unwrap(),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use p2panda_rs::document::DocumentId;
@@ -333,6 +375,8 @@ mod tests {
     use rstest::rstest;
 
     use crate::test_utils::{doggo_fields, populate_store_config, test_runner, TestNode};
+
+    use super::OperationCursor;
 
     #[rstest]
     #[case::create_operation(operation_with_schema(
@@ -502,5 +546,11 @@ mod tests {
             // We expect the number of operations returned to match the expected number.
             assert_eq!(operations_by_document_id.len(), 10)
         });
+    }
+
+    #[rstest]
+    fn operation_cursor(operation_id: OperationId) {
+        let cursor = OperationCursor::new(5, "username", &operation_id);
+        assert_eq!(cursor.to_string().len(), 64);
     }
 }

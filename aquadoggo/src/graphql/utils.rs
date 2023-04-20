@@ -14,7 +14,7 @@ use p2panda_rs::storage_provider::traits::DocumentStore;
 use crate::db::query::{
     Cursor, Direction, Field, Filter, MetaField, Order, Pagination, PaginationField, Select,
 };
-use crate::db::stores::{DocumentCursor, Query};
+use crate::db::stores::{PaginationCursor, Query};
 use crate::db::types::StorageDocument;
 use crate::db::SqlStore;
 use crate::graphql::constants;
@@ -121,8 +121,8 @@ pub fn filter_to_operation_value(
 pub fn parse_collection_arguments(
     ctx: &ResolverContext,
     schema: &Schema,
-) -> Result<Query<DocumentCursor>, Error> {
-    let mut pagination = Pagination::<DocumentCursor>::default();
+) -> Result<Query<PaginationCursor>, Error> {
+    let mut pagination = Pagination::<PaginationCursor>::default();
     let mut order = Order::default();
     let mut filter = Filter::default();
 
@@ -130,7 +130,7 @@ pub fn parse_collection_arguments(
         match name.as_str() {
             constants::PAGINATION_AFTER_ARG => {
                 let cursor = CursorScalar::decode(value.string()?)?;
-                pagination.after = Some(DocumentCursor::from(&cursor));
+                pagination.after = Some(PaginationCursor::from(&cursor));
             }
             constants::PAGINATION_FIRST_ARG => {
                 pagination.first = NonZeroU64::try_from(value.u64()?)?;
@@ -142,7 +142,7 @@ pub fn parse_collection_arguments(
                     "DOCUMENT_VIEW_ID" => Field::Meta(MetaField::DocumentViewId),
                     field_name => Field::new(field_name),
                 };
-                order.field = order_by;
+                order.field = Some(order_by);
             }
             constants::ORDER_DIRECTION_ARG => {
                 let direction = match value.enum_name()? {
