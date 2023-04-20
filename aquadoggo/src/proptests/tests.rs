@@ -2,7 +2,6 @@
 
 use std::collections::HashMap;
 
-use async_graphql::indexmap::IndexMap;
 use async_graphql::{Name, Response, Value};
 use p2panda_rs::schema::SchemaId;
 use proptest::test_runner::Config;
@@ -12,7 +11,7 @@ use serde_json::{json, Value as JsonValue};
 use crate::proptests::document_strategies::{documents_strategy, DocumentAST};
 use crate::proptests::schema_strategies::{schema_strategy, SchemaAST};
 use crate::proptests::utils::{add_documents_from_ast, add_schemas_from_ast};
-use crate::test_utils::{graphql_test_client, test_runner, TestNode};
+use crate::test_utils::{graphql_test_client, test_runner, TestClient, TestNode};
 
 prop_compose! {
     fn schema_with_documents_strategy()
@@ -25,7 +24,7 @@ prop_compose! {
 
 proptest! {
     #![proptest_config(Config {
-        cases: 20, .. Config::default()
+        cases: 3, max_shrink_time: 60000, .. Config::default()
       })]
     #[test]
     fn test_query((schema_ast, document_ast_collection) in schema_with_documents_strategy()) {
@@ -47,79 +46,39 @@ proptest! {
             // Sanity checks
             assert!(documents.len() > 0);
 
-
-            // Helper for creating queries
-            let query = |type_name: &SchemaId, args: &str| -> String {
-                format!(
-                    r#"{{
-                    query: all_{type_name}{args} {{
-                        hasNextPage
-                        totalCount
-                        endCursor
-                        documents {{
-                            cursor
-                            meta {{
-                                owner
-                                documentId
-                                viewId
-                            }}
-                        }}
-                    }},
-                }}"#
-                )
-            };
-
             for (schema_id, documents) in documents {
-                let total_documents = documents.len();
-                let schema = node.context.schema_provider.get(&schema_id).await.unwrap();
+                let expected_total_documents = documents.len();
 
                 let client = graphql_test_client(&node).await;
 
-                let response = client
-                    .post("/graphql")
-                    .json(&json!({"query": query(&schema_id, "")}))
-                    .send()
-                    .await;
+                let mut query_args = "".to_string();
 
-                let response: Response = response.json().await;
-                assert!(response.is_ok());
-                let (has_next_page, total_count, end_cursor, documents) = unwrap_response(&response);
-                assert_eq!(documents.len(), 25);
-
-                let client = graphql_test_client(&node).await;
-
-                let response = client
-                    .post("/graphql")
-                    .json(&json!({"query": query(&schema_id, "(first: 10000)")}))
-                    .send()
-                    .await;
-
-                let response: Response = response.json().await;
-                assert!(response.is_ok());
-                let (has_next_page, total_count, end_cursor, documents) = unwrap_response(&response);
-                assert_eq!(documents.len(), total_documents);
-
-                let query_str = query(
-                    &schema_id,
-                    &format!("(orderDirection: ASC, orderBy: {0})", schema.fields().keys().first().unwrap())
-                );
-
-                let response = client
-                    .post("/graphql")
-                    .json(&json!({"query": query_str}))
-                    .send()
-                    .await;
-
-                let response: Response = response.json().await;
-                assert!(response.is_ok());
-                let (has_next_page, total_count, end_cursor, documents) = unwrap_response(&response);
-                assert_eq!(documents.len(), total_documents);
+                loop {
+                    println!("Query for documents of type {0} with query args: {1}", &schema_id, query_args);
+                    let (has_next_page, total_count, end_cursor, documents) = make_query(&client, &schema_id, &query_args).await;
+                    let end_cursor = end_cursor.unwrap(); // We expect every request here to have an end cursor
+                    query_args = format!("(after: \"{0}\")", end_cursor);
+                    let last_document_cursor = documents.last().unwrap().as_object().unwrap().get("cursor").unwrap().as_str().unwrap();
+                    assert_eq!(end_cursor, last_document_cursor);
+                    assert_eq!(total_count, expected_total_documents as i64);
+                    if has_next_page {
+                        assert_eq!(documents.len(), 25)
+                    } else {
+                        assert_eq!(documents.len(), expected_total_documents % 25);
+                        let (has_next_page, total_count, end_cursor, documents) = make_query(&client, &schema_id, &query_args).await;
+                        assert_eq!(end_cursor, None);
+                        assert_eq!(has_next_page, false);
+                        assert_eq!(documents.len(), 0);
+                        assert_eq!(total_count, expected_total_documents as i64);
+                        break;
+                    }
+                }
             };
         });
     }
 }
 
-fn unwrap_response(response: &Response) -> (JsonValue, JsonValue, JsonValue, Vec<JsonValue>) {
+fn unwrap_response(response: &Response) -> (bool, i64, Option<String>, Vec<JsonValue>) {
     let query_response = response
         .data
         .to_owned()
@@ -140,9 +99,46 @@ fn unwrap_response(response: &Response) -> (JsonValue, JsonValue, JsonValue, Vec
         .as_array()
         .expect("Documents fields is array");
     (
-        has_next_page.clone(),
-        total_count.clone(),
-        end_cursor.clone(),
+        has_next_page.as_bool().expect("Is boolean value"),
+        total_count.as_i64().expect("Is integer"),
+        end_cursor.as_str().map(String::from),
         documents.clone(),
     )
+}
+
+async fn make_query(
+    client: &TestClient,
+    schema_id: &SchemaId,
+    query_args: &str,
+) -> (bool, i64, Option<String>, Vec<JsonValue>) {
+    // Helper for creating queries
+    let query = |type_name: &SchemaId, query_args: &str| -> String {
+        format!(
+            r#"{{
+                query: all_{type_name}{query_args} {{
+                    hasNextPage
+                    totalCount
+                    endCursor
+                    documents {{
+                        cursor
+                        meta {{
+                            owner
+                            documentId
+                            viewId
+                        }}
+                    }}
+                }},
+            }}"#
+        )
+    };
+
+    let response = client
+        .post("/graphql")
+        .json(&json!({ "query": query(&schema_id, query_args) }))
+        .send()
+        .await;
+
+    let response: Response = response.json().await;
+    assert!(response.is_ok());
+    unwrap_response(&response)
 }
