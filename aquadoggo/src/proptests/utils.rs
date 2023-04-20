@@ -11,7 +11,7 @@ use proptest_derive::Arbitrary;
 
 use crate::proptests::document_strategies::{DocumentAST, FieldValue};
 use crate::proptests::schema_strategies::{SchemaAST, SchemaFieldType};
-use crate::test_utils::{add_document, add_schema, TestNode};
+use crate::test_utils::{add_document, TestNode};
 
 #[derive(Arbitrary, Debug, Clone)]
 pub struct FieldName(#[proptest(regex = "[A-Za-z]{1}[A-Za-z0-9_]{0,63}")] String);
@@ -139,16 +139,9 @@ pub async fn add_documents_from_ast(
     )
     .await;
 
-    println!("Added document with view id: {} to the store", document_view_id);
-    println!("Schema id: {}", &document_ast.schema_id);
-
     match documents.get_mut(&document_ast.schema_id) {
-        Some(documents) => {
-            println!("Insert document view into collection");
-            documents.push(document_view_id.clone())
-        }
+        Some(documents) => documents.push(document_view_id.clone()),
         None => {
-            println!("Create new document collection with initial view");
             documents.insert(
                 document_ast.schema_id.clone(),
                 vec![document_view_id.clone()],

@@ -4,7 +4,6 @@ use std::collections::HashMap;
 
 use async_graphql::{Response, Value};
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::storage_provider::traits::DocumentStore;
 use proptest::test_runner::Config;
 use proptest::{prop_compose, proptest, strategy::Just};
 use serde_json::json;
@@ -25,7 +24,7 @@ prop_compose! {
 
 proptest! {
     #![proptest_config(Config {
-        cases: 1, .. Config::default()
+        cases: 20, .. Config::default()
       })]
     #[test]
     fn test_query((schema_ast, document_ast_collection) in schema_with_documents_strategy()) {
@@ -42,7 +41,6 @@ proptest! {
             let mut documents = HashMap::new();
             for document_ast in document_ast_collection.iter() {
                 add_documents_from_ast(&mut node, &document_ast, &mut documents).await;
-                // println!("{:?}", document_ast_collection);
             }
 
             // Sanity checks
@@ -74,8 +72,6 @@ proptest! {
                 let total_documents = documents.len();
                 let schema = node.context.schema_provider.get(&schema_id).await.unwrap();
 
-                let documents_by_schema = node.context.store.get_documents_by_schema(&schema_id).await.unwrap();
-
                 // Configure and send test query.
                 let client = graphql_test_client(&node).await;
 
@@ -88,8 +84,6 @@ proptest! {
                 let response: Response = response.json().await;
                 assert!(response.is_ok());
                 let documents = get_documents_from_response(&response);
-                // println!("{documents:#?}");
-                assert_eq!(documents_by_schema.len(), total_documents);
                 assert_eq!(documents.len(), total_documents);
 
                 let query_str = query(
@@ -106,7 +100,6 @@ proptest! {
                 let response: Response = response.json().await;
                 assert!(response.is_ok());
                 let documents = get_documents_from_response(&response);
-                assert_eq!(documents_by_schema.len(), total_documents);
                 assert_eq!(documents.len(), total_documents);
             };
         });

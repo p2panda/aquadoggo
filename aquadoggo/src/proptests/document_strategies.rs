@@ -7,6 +7,9 @@ use proptest::prelude::{any, Strategy};
 use crate::proptests::schema_strategies::{SchemaAST, SchemaFieldType};
 use crate::proptests::utils::FieldName;
 
+const MAX_DOCUMENTS_PER_ROOT_SCHEMA: usize = 100;
+const MAX_DOCUMENTS_PER_RELATION_LIST: usize = 10;
+
 #[derive(Debug, Clone)]
 pub struct DocumentAST {
     pub schema_id: SchemaId,
@@ -47,23 +50,16 @@ pub enum FieldValue {
 }
 
 pub fn documents_strategy(schema: SchemaAST) -> impl Strategy<Value = Vec<DocumentAST>> {
-    let mut document_collection = vec![];
-    for _ in 0..10 {
-        let schema = schema.clone();
-        let schema_id = schema.id.clone();
-        document_collection.push(values_from_schema(schema).prop_map(move |document_fields| {
-            println!(
-                "Create document ast with schema id: {}",
-                schema_id.to_string()
-            );
-
-            DocumentAST {
+    let schema_id = schema.id.clone();
+    vec(values_from_schema(schema), 0..MAX_DOCUMENTS_PER_ROOT_SCHEMA).prop_map(move |documents| {
+        documents
+            .iter()
+            .map(|document_fields| DocumentAST {
                 fields: document_fields.to_owned(),
                 schema_id: schema_id.clone(),
-            }
-        }))
-    }
-    document_collection
+            })
+            .collect::<Vec<DocumentAST>>()
+    })
 }
 
 fn values_from_schema(schema: SchemaAST) -> impl Strategy<Value = Vec<DocumentFieldValue>> {
@@ -121,24 +117,25 @@ fn values_from_schema(schema: SchemaAST) -> impl Strategy<Value = Vec<DocumentFi
                     }
                 })
                 .boxed(),
-            SchemaFieldType::RelationList => {
-                vec(values_from_schema(*relation_schema.clone().unwrap()), 1..2)
-                    .prop_map(move |value| {
-                        let schema_id = relation_schema.clone().unwrap().id.clone();
-                        let document_asts = value
-                            .into_iter()
-                            .map(|document_fields| DocumentAST {
-                                schema_id: schema_id.clone(),
-                                fields: document_fields,
-                            })
-                            .collect();
-                        DocumentFieldValue {
-                            name: field_name.clone(),
-                            value: FieldValue::RelationList(document_asts),
-                        }
+            SchemaFieldType::RelationList => vec(
+                values_from_schema(*relation_schema.clone().unwrap()),
+                0..MAX_DOCUMENTS_PER_RELATION_LIST,
+            )
+            .prop_map(move |value| {
+                let schema_id = relation_schema.clone().unwrap().id.clone();
+                let document_asts = value
+                    .into_iter()
+                    .map(|document_fields| DocumentAST {
+                        schema_id: schema_id.clone(),
+                        fields: document_fields,
                     })
-                    .boxed()
-            }
+                    .collect();
+                DocumentFieldValue {
+                    name: field_name.clone(),
+                    value: FieldValue::RelationList(document_asts),
+                }
+            })
+            .boxed(),
             SchemaFieldType::PinnedRelation => {
                 values_from_schema(*relation_schema.clone().unwrap())
                     .prop_map(move |value| {
@@ -154,24 +151,25 @@ fn values_from_schema(schema: SchemaAST) -> impl Strategy<Value = Vec<DocumentFi
                     })
                     .boxed()
             }
-            SchemaFieldType::PinnedRelationList => {
-                vec(values_from_schema(*relation_schema.clone().unwrap()), 1..2)
-                    .prop_map(move |value| {
-                        let schema_id = relation_schema.clone().unwrap().id.clone();
-                        let document_asts = value
-                            .into_iter()
-                            .map(|document_fields| DocumentAST {
-                                schema_id: schema_id.clone(),
-                                fields: document_fields,
-                            })
-                            .collect();
-                        DocumentFieldValue {
-                            name: field_name.clone(),
-                            value: FieldValue::PinnedRelationList(document_asts),
-                        }
+            SchemaFieldType::PinnedRelationList => vec(
+                values_from_schema(*relation_schema.clone().unwrap()),
+                0..MAX_DOCUMENTS_PER_RELATION_LIST,
+            )
+            .prop_map(move |value| {
+                let schema_id = relation_schema.clone().unwrap().id.clone();
+                let document_asts = value
+                    .into_iter()
+                    .map(|document_fields| DocumentAST {
+                        schema_id: schema_id.clone(),
+                        fields: document_fields,
                     })
-                    .boxed()
-            }
+                    .collect();
+                DocumentFieldValue {
+                    name: field_name.clone(),
+                    value: FieldValue::PinnedRelationList(document_asts),
+                }
+            })
+            .boxed(),
         };
         field_values.push(value);
     }
