@@ -24,7 +24,8 @@ pub struct DocumentViewFieldRow {
     pub field_type: String,
 
     /// Actual value contained in field.
-    pub value: String,
+    /// This is optional as row representing an empty relation list has no value.
+    pub value: Option<String>,
 }
 
 /// A struct representing a single row of a document table.
