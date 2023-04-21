@@ -46,7 +46,7 @@ pub fn parse_operation_rows(
     //  operation_fields
     //  - if it is a relation list value type:
     //    - if the row.value is None then this list is empty and we should create a relation list with no items
-    //    - otherwise safely unwrap each item and parse into a DocumentId/DocumentViewId then push to the suitable 
+    //    - otherwise safely unwrap each item and parse into a DocumentId/DocumentViewId then push to the suitable
     //      list vec
     if first_row.action != "delete" {
         operation_rows.iter().for_each(|row| {
@@ -254,7 +254,7 @@ pub fn parse_document_view_field_rows(
     //  document_view_fields
     //  - if it is a relation list value type:
     //    - if the row.value is None then this list is empty and we should create a relation list with no items
-    //    - otherwise safely unwrap each item and parse into a DocumentId/DocumentViewId then push to the suitable 
+    //    - otherwise safely unwrap each item and parse into a DocumentId/DocumentViewId then push to the suitable
     //      list vec
     document_field_rows.iter().for_each(|row| {
         match row.field_type.as_str() {
@@ -263,7 +263,9 @@ pub fn parse_document_view_field_rows(
                     &row.name,
                     DocumentViewValue::new(
                         &row.operation_id.parse::<OperationId>().unwrap(),
-                        &OperationValue::Boolean(row.value.as_ref().unwrap().parse::<bool>().unwrap()),
+                        &OperationValue::Boolean(
+                            row.value.as_ref().unwrap().parse::<bool>().unwrap(),
+                        ),
                     ),
                 );
             }
@@ -272,7 +274,9 @@ pub fn parse_document_view_field_rows(
                     &row.name,
                     DocumentViewValue::new(
                         &row.operation_id.parse::<OperationId>().unwrap(),
-                        &OperationValue::Integer(row.value.as_ref().unwrap().parse::<i64>().unwrap()),
+                        &OperationValue::Integer(
+                            row.value.as_ref().unwrap().parse::<i64>().unwrap(),
+                        ),
                     ),
                 );
             }
@@ -309,7 +313,9 @@ pub fn parse_document_view_field_rows(
             // to the document_view_fields yet.
             "relation_list" => {
                 match relation_lists.get_mut(&row.name) {
-                    Some((_, list)) => list.push(row.value.as_ref().unwrap().parse::<DocumentId>().unwrap()),
+                    Some((_, list)) => {
+                        list.push(row.value.as_ref().unwrap().parse::<DocumentId>().unwrap())
+                    }
                     None => {
                         let list = match row.value.as_ref() {
                             Some(document_id) => {
@@ -328,7 +334,11 @@ pub fn parse_document_view_field_rows(
                     DocumentViewValue::new(
                         &row.operation_id.parse::<OperationId>().unwrap(),
                         &OperationValue::PinnedRelation(PinnedRelation::new(
-                            row.value.as_ref().unwrap().parse::<DocumentViewId>().unwrap(),
+                            row.value
+                                .as_ref()
+                                .unwrap()
+                                .parse::<DocumentViewId>()
+                                .unwrap(),
                         )),
                     ),
                 );
@@ -337,9 +347,13 @@ pub fn parse_document_view_field_rows(
             // document_view_fields yet.
             "pinned_relation_list" => {
                 match pinned_relation_lists.get_mut(&row.name) {
-                    Some((_, list)) => {
-                        list.push(row.value.as_ref().unwrap().parse::<DocumentViewId>().unwrap())
-                    }
+                    Some((_, list)) => list.push(
+                        row.value
+                            .as_ref()
+                            .unwrap()
+                            .parse::<DocumentViewId>()
+                            .unwrap(),
+                    ),
                     None => {
                         let list = match row.value.as_ref() {
                             Some(document_view_id) => {
@@ -381,17 +395,19 @@ pub fn parse_document_view_field_rows(
 
 #[cfg(test)]
 mod tests {
+    use std::vec;
+
     use p2panda_rs::document::DocumentViewValue;
     use p2panda_rs::operation::traits::AsOperation;
     use p2panda_rs::operation::{
         OperationId, OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList,
     };
     use p2panda_rs::schema::SchemaId;
-    use p2panda_rs::test_utils::constants::test_fields;
     use p2panda_rs::test_utils::fixtures::{create_operation, schema_id};
     use rstest::rstest;
 
     use crate::db::models::{DocumentViewFieldRow, OperationFieldsJoinedRow};
+    use crate::test_utils::doggo_fields;
 
     use super::{parse_document_view_field_rows, parse_operation_rows, parse_value_to_string_vec};
 
@@ -638,6 +654,23 @@ mod tests {
                 value: Some("bubu".to_string()),
                 list_index: Some(0),
             },
+            OperationFieldsJoinedRow {
+                public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
+                    .to_string(),
+                document_id: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                    .to_string(),
+                operation_id:
+                    "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                        .to_string(),
+                action: "create".to_string(),
+                schema_id:
+                    "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
+                        .to_string(),
+                previous: None,
+                name: Some("an_empty_relation_list".to_string()),
+                field_type: Some("pinned_relation_list".to_string()),
+                value: None,
+            },
         ];
 
         let operation = parse_operation_rows(operation_rows).unwrap();
@@ -723,35 +756,44 @@ mod tests {
                     .parse()
                     .unwrap()
             ))
+        );
+        assert_eq!(
+            operation
+                .fields()
+                .unwrap()
+                .get("an_empty_relation_list")
+                .unwrap(),
+            &OperationValue::PinnedRelationList(PinnedRelationList::new(vec![]))
         )
     }
 
     #[rstest]
     fn operation_values_to_string_vec(schema_id: SchemaId) {
-        let expected_list  = vec![
-            "28",
-            "00204f0dd3a1b8205b6d4ce3fd4c158bb91c9e131bd842e727164ea220b5b6d09346",
-            "002019ed3e9b39cd17f1dbc0f6e31a6e7b9c9ab7e349332e710c946a441b7d308eb5_0020995d53f460293c5686c42037b72787ed28668ad8b6d18e9d5f02c5d3301161f0",
-            "3.5",
-            "false",
-            "00209a2149589672fa1ac2348e48b4c56fc208a0eff44938464dd2091850f444a323",
-            "0020475488c0e2bbb9f5a81929e2fe11de81c1f83c8045de41da43899d25ad0d4afa_0020f7a17e14b9a5e87435decdbc28d562662fbf37da39b94e8469d8e1873336e80e",
-            "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543",
-            "bubu"
+        let expected_list = vec![
+            Some("28".to_string()),
+            None,
+            Some("0020abababababababababababababababababababababababababababababababab".to_string()),
+            Some("0020cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd".to_string()),
+            Some("3.5".to_string()),
+            Some("false".to_string()),
+            Some("0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string()),
+            Some("0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string()),
+            Some("0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc".to_string()),
+            Some("0020dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd".to_string()),
+            Some("0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee".to_string()),
+            Some("0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".to_string()),
+            Some("bubu".to_string()),
         ];
 
-        let operation = create_operation(test_fields(), schema_id);
+        let operation = create_operation(doggo_fields(), schema_id);
 
         let mut string_value_list = vec![];
         for (_, value) in operation.fields().unwrap().iter() {
             string_value_list.push(parse_value_to_string_vec(value));
         }
 
-        let string_value_list: Vec<String> = string_value_list
-            .into_iter()
-            .flatten()
-            .filter_map(|item| item)
-            .collect();
+        let string_value_list: Vec<Option<String>> =
+            string_value_list.into_iter().flatten().collect();
         assert_eq!(expected_list, string_value_list)
     }
 
@@ -938,6 +980,17 @@ mod tests {
                 field_type: "str".to_string(),
                 value: Some("bubu".to_string()),
             },
+            DocumentViewFieldRow {
+                document_view_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                operation_id:
+                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
+                        .to_string(),
+                name: "an_empty_relation_list".to_string(),
+                field_type: "pinned_relation_list".to_string(),
+                value: None,
+            },
         ];
 
         let document_fields = parse_document_view_field_rows(document_field_rows);
@@ -1012,6 +1065,13 @@ mod tests {
                         .parse()
                         .unwrap()
                 ))
+            )
+        );
+        assert_eq!(
+            document_fields.get("an_empty_relation_list").unwrap(),
+            &DocumentViewValue::new(
+                &operation_id,
+                &OperationValue::PinnedRelationList(PinnedRelationList::new(vec![]))
             )
         )
     }
