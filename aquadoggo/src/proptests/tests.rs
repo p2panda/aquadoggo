@@ -113,7 +113,11 @@ async fn paginated_query_meta_fields_only(
         if has_next_page {
             assert_eq!(documents.len(), 25)
         } else {
-            assert_eq!(documents.len(), expected_total_documents % 25);
+            let remaining_documents = match expected_total_documents % 25 {
+                0 => 25,
+                remaining => remaining,
+            };
+            assert_eq!(documents.len(), remaining_documents);
             let (has_next_page, total_count, end_cursor, documents) =
                 make_query(&client, &schema_id, &query_args).await;
             assert_eq!(end_cursor, None);
