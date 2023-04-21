@@ -100,21 +100,23 @@ mod tests {
     use once_cell::sync::Lazy;
     use p2panda_rs::api::next_args;
     use p2panda_rs::document::{DocumentId, DocumentViewId};
-    use p2panda_rs::entry::encode::sign_and_encode_entry;
+    use p2panda_rs::entry::encode::{encode_entry, sign_and_encode_entry};
     use p2panda_rs::entry::traits::AsEncodedEntry;
-    use p2panda_rs::entry::EncodedEntry;
+    use p2panda_rs::entry::{EncodedEntry, EntryBuilder, LogId};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{KeyPair, PublicKey};
     use p2panda_rs::operation::encode::encode_operation;
-    use p2panda_rs::operation::{EncodedOperation, OperationValue};
+    use p2panda_rs::operation::{
+        EncodedOperation, OperationBuilder, OperationValue, PinnedRelationList,
+    };
     use p2panda_rs::schema::{FieldType, Schema, SchemaId};
     use p2panda_rs::serde::serialize_value;
     use p2panda_rs::storage_provider::traits::EntryStore;
     use p2panda_rs::test_utils::constants::{HASH, PRIVATE_KEY};
     use p2panda_rs::test_utils::fixtures::{
         create_operation, delete_operation, encoded_entry, encoded_operation,
-        entry_signed_encoded_unvalidated, key_pair, operation_fields, random_hash,
-        update_operation,
+        entry_signed_encoded_unvalidated, key_pair, operation_fields, random_hash, schema,
+        schema_id, update_operation,
     };
     use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
     use rstest::{fixture, rstest};
@@ -125,7 +127,7 @@ mod tests {
     use crate::graphql::GraphQLSchemaManager;
     use crate::http::HttpServiceContext;
     use crate::test_utils::{
-        doggo_fields, doggo_schema, graphql_test_client, populate_and_materialize,
+        add_schema, doggo_fields, doggo_schema, graphql_test_client, populate_and_materialize,
         populate_store_config, test_runner, TestNode,
     };
 
@@ -250,6 +252,60 @@ mod tests {
                     }
                 })
             );
+        });
+    }
+
+    #[rstest]
+    fn publish_entry_with_empty_relation_list(
+        #[from(populate_store_config)]
+        #[with(0, 0, 0, false, test_schema())]
+        config: PopulateStoreConfig,
+        key_pair: KeyPair,
+    ) {
+        test_runner(|mut node: TestNode| async move {
+            // Adds the test_schema to the store and schema provider.
+            populate_and_materialize(&mut node, &config).await;
+
+            let schema = add_schema(
+                &mut node,
+                "test_schema",
+                vec![(
+                    "pinned_relation_list_field",
+                    FieldType::PinnedRelationList(test_schema().id().to_owned()),
+                )],
+                &key_pair,
+            )
+            .await;
+
+            let operation = OperationBuilder::new(schema.id())
+                .fields(&[(
+                    "pinned_relation_list_field",
+                    OperationValue::PinnedRelationList(PinnedRelationList::new(vec![])),
+                )])
+                .build()
+                .unwrap();
+            let operation = encode_operation(&operation).unwrap();
+
+            let entry = EntryBuilder::new()
+                .sign(&operation, &KeyPair::new())
+                .unwrap();
+            let entry = encode_entry(&entry).unwrap();
+
+            let (tx, _rx) = broadcast::channel(120);
+            let manager = GraphQLSchemaManager::new(
+                node.context.store.clone(),
+                tx,
+                node.context.schema_provider.clone(),
+            )
+            .await;
+            let context = HttpServiceContext::new(manager);
+
+            let response = context
+                .schema
+                .execute(publish_request(&entry.to_string(), &operation.to_string()))
+                .await;
+
+            assert!(response.is_ok(), "{:?}", response.errors[0].message);
         });
     }
 
