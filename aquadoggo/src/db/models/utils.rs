@@ -772,16 +772,32 @@ mod tests {
         let expected_list = vec![
             Some("28".to_string()),
             None,
-            Some("0020abababababababababababababababababababababababababababababababab".to_string()),
-            Some("0020cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd".to_string()),
+            Some(
+                "0020abababababababababababababababababababababababababababababababab".to_string(),
+            ),
+            Some(
+                "0020cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd".to_string(),
+            ),
             Some("3.5".to_string()),
             Some("false".to_string()),
-            Some("0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string()),
-            Some("0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string()),
-            Some("0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc".to_string()),
-            Some("0020dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd".to_string()),
-            Some("0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee".to_string()),
-            Some("0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".to_string()),
+            Some(
+                "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+            ),
+            Some(
+                "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
+            ),
+            Some(
+                "0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc".to_string(),
+            ),
+            Some(
+                "0020dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd".to_string(),
+            ),
+            Some(
+                "0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee".to_string(),
+            ),
+            Some(
+                "0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".to_string(),
+            ),
             Some("bubu".to_string()),
         ];
 
