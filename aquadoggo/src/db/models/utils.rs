@@ -44,8 +44,10 @@ pub fn parse_operation_rows(
     // Iterate over returned field values, for each value:
     //  - if it is a simple value type, parse it into an OperationValue and add it to the
     //  operation_fields
-    //  - if it is a relation list value type parse each item into a DocumentId/DocumentViewId and
-    //  push to the suitable vec (instantiated above)
+    //  - if it is a relation list value type:
+    //    - if the row.value is None then this list is empty and we should create a relation list with no items
+    //    - otherwise safely unwrap each item and parse into a DocumentId/DocumentViewId then push to the suitable 
+    //      list vec
     if first_row.action != "delete" {
         operation_rows.iter().for_each(|row| {
             let field_type = row.field_type.as_ref().unwrap().as_str();
@@ -254,7 +256,6 @@ pub fn parse_document_view_field_rows(
     //    - if the row.value is None then this list is empty and we should create a relation list with no items
     //    - otherwise safely unwrap each item and parse into a DocumentId/DocumentViewId then push to the suitable 
     //      list vec
-    //
     document_field_rows.iter().for_each(|row| {
         match row.field_type.as_str() {
             "bool" => {
