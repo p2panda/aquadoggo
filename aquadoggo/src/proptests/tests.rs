@@ -132,8 +132,6 @@ async fn paginated_query_meta_fields_only(
 proptest! {
     #![proptest_config(Config {
         cases: 100,
-        max_shrink_time: 60000,
-        max_shrink_iters: 1000,
         failure_persistence: Some(Box::new(FileFailurePersistence::WithSource("regressions"))),
         .. Config::default()
       })]
