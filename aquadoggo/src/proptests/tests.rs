@@ -3,7 +3,9 @@
 use std::collections::HashMap;
 
 use async_graphql::Response;
+use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::schema::SchemaId;
+use p2panda_rs::storage_provider::traits::DocumentStore;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use proptest::{prop_compose, proptest, strategy::Just};
 use serde_json::{json, Value as JsonValue};
@@ -12,6 +14,15 @@ use crate::proptests::document_strategies::{documents_strategy, DocumentAST};
 use crate::proptests::schema_strategies::{schema_strategy, SchemaAST};
 use crate::proptests::utils::{add_documents_from_ast, add_schemas_from_ast};
 use crate::test_utils::{graphql_test_client, test_runner, TestClient, TestNode};
+
+async fn sanity_checks(node: &TestNode, documents_by_schema: &HashMap<SchemaId, Vec<DocumentViewId>>) {
+    let schemas = node.context.schema_provider.all().await;
+    assert_eq!(schemas.len(), documents_by_schema.len() + 2); // plus 2 for system schema
+    for (schema_id, documents) in documents_by_schema {
+        let result = node.context.store.get_documents_by_schema(schema_id).await.expect("Documents of this schema expected on node");
+        assert_eq!(result.len(), documents.len());
+    }
+}
 
 fn unwrap_response(response: &Response) -> (bool, i64, Option<String>, Vec<JsonValue>) {
     let query_response = response
@@ -92,13 +103,13 @@ async fn paginated_query_meta_fields_only(
     schema_id: &SchemaId,
     expected_total_documents: usize,
 ) {
-    let mut query_args = "".to_string();
+    let mut query_args = "(first: 5)".to_string();
 
     loop {
         let (has_next_page, total_count, end_cursor, documents) =
             make_query(&client, &schema_id, &query_args).await;
         let end_cursor = end_cursor.unwrap(); // We expect every request here to have an end cursor
-        query_args = format!("(after: \"{0}\")", end_cursor);
+        query_args = format!("(first: 5, after: \"{0}\")", end_cursor);
         let last_document_cursor = documents
             .last()
             .unwrap()
@@ -111,10 +122,10 @@ async fn paginated_query_meta_fields_only(
         assert_eq!(end_cursor, last_document_cursor);
         assert_eq!(total_count, expected_total_documents as i64);
         if has_next_page {
-            assert_eq!(documents.len(), 25)
+            assert_eq!(documents.len(), 5)
         } else {
-            let remaining_documents = match expected_total_documents % 25 {
-                0 => 25,
+            let remaining_documents = match expected_total_documents % 5 {
+                0 => 5,
                 remaining => remaining,
             };
             assert_eq!(documents.len(), remaining_documents);
@@ -151,6 +162,10 @@ proptest! {
             for document_ast in document_ast_collection.iter() {
                 add_documents_from_ast(&mut node, &document_ast, &mut documents).await;
             }
+
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+            sanity_checks(&node, &documents).await;
 
             let client = graphql_test_client(&node).await;
 

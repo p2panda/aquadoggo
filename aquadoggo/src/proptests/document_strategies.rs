@@ -7,8 +7,8 @@ use proptest::prelude::{any, Strategy};
 use crate::proptests::schema_strategies::{SchemaAST, SchemaFieldType};
 use crate::proptests::utils::FieldName;
 
-const MAX_DOCUMENTS_PER_ROOT_SCHEMA: usize = 40;
-const MAX_DOCUMENTS_PER_RELATION_LIST: usize = 3;
+const MAX_DOCUMENTS_PER_ROOT_SCHEMA: usize = 15;
+const MAX_DOCUMENTS_PER_RELATION_LIST: usize = 2;
 
 #[derive(Debug, Clone)]
 pub struct DocumentAST {
