@@ -13,9 +13,11 @@ use crate::proptests::document_strategies::{DocumentAST, FieldValue};
 use crate::proptests::schema_strategies::{SchemaAST, SchemaFieldType};
 use crate::test_utils::{add_document, TestNode};
 
+/// A fieldname which will follow the expected regex rules.
 #[derive(Arbitrary, Debug, Clone)]
 pub struct FieldName(#[proptest(regex = "[A-Za-z]{1}[A-Za-z0-9_]{0,63}")] String);
 
+/// Add schemas from a schema AST to a test node. 
 #[async_recursion]
 pub async fn add_schemas_from_ast(
     node: &mut TestNode,
@@ -78,11 +80,14 @@ pub async fn add_schemas_from_ast(
     .expect("Generated schema is valid");
 
     node.context.schema_provider.update(schema.clone()).await;
+
+    // We also populate a list of schema for easy checking.
     schemas.push(schema.id().to_owned());
 
     schema
 }
 
+/// Add documents from a document AST to the test node.
 #[async_recursion]
 pub async fn add_documents_from_ast(
     node: &mut TestNode,
@@ -146,14 +151,9 @@ pub async fn add_documents_from_ast(
 
     match documents.get_mut(&document_ast.schema_id) {
         Some(documents) => {
-            println!(
-                "Insert document for existing schema: {}",
-                document_ast.schema_id
-            );
             documents.push(document_view_id.clone())
         }
         None => {
-            println!("Insert document for new schema: {}", document_ast.schema_id);
             documents.insert(
                 document_ast.schema_id.clone(),
                 vec![document_view_id.clone()],
