@@ -18,7 +18,7 @@ const SCHEMA_DESCRIPTION: &str = "My test schema";
 /// Number of fields per schema. This value is shrunk during prop testing.
 const FIELDS_PER_SCHEMA: usize = 2;
 
-/// Desired number of nodes present in the schema AST. 
+/// Desired number of nodes present in the schema AST.
 const DESIRED_SCHEMA_NODES: u32 = 4;
 
 /// Schema AST depth. This value is shrunk during prop testing.
