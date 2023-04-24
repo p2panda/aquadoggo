@@ -53,7 +53,10 @@ mod tests {
 
         assert_eq!(
             order,
-            Order::new(&Field::Meta(MetaField::DocumentId), &Direction::Ascending)
+            Order {
+                field: None,
+                direction: Direction::Ascending
+            }
         )
     }
 }
