@@ -1886,6 +1886,43 @@ mod tests {
         });
     }
 
+    #[rstest]
+    fn total_count_of_document_with_relation_list_field(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            let (venues_schema, mut venues_view_ids) =
+                create_venues_test_data(&mut node, &key_pair).await;
+
+            let (visited_schema, mut visited_view_ids) = create_visited_test_data(
+                &mut node,
+                venues_view_ids,
+                venues_schema.to_owned(),
+                &key_pair,
+            )
+            .await;
+
+            let args = Query::new(
+                &Pagination::new(
+                    &NonZeroU64::new(25).unwrap(),
+                    None,
+                    &vec![PaginationField::TotalCount],
+                ),
+                &Select::new(&[Field::Meta(MetaField::DocumentId)]),
+                &Filter::default(),
+                &Order::default(),
+            );
+
+            let (pagination_data, documents) = node
+                .context
+                .store
+                .query(&visited_schema, &args, None)
+                .await
+                .expect("Query failed");
+
+            assert_eq!(documents.len(), 2);
+            assert_eq!(pagination_data.total_count, Some(2));
+        });
+    }
+
     /* #[rstest]
     fn select_cursor_during_conversion(schema_id: SchemaId) {
         let first_document_hash = Hash::new_from_bytes(&[0]).to_string();
