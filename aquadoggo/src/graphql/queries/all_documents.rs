@@ -61,10 +61,10 @@ mod test {
             "collection": value!({
                 "hasNextPage": false,
                 "totalCount": 2,
-                "endCursor": "37noEdXyAbyJ1XBekhNdcxouDLcsBNvcidCxwBCuCQCgUtUhKuoZCXu17aq5aYvbmWzY5YqHf1JJKzrwTyfNYfQXeCbGxcw3",
+                "endCursor": "31Ch6qa4mdKcxpWJG4X9Wf5iMvSSxmSGg8cyg9teNR6yKmLncZCmyVUaPFjRNoWcxpeASGqrRiJGR8HSqjWBz5HE",
                 "documents": [
                     {
-                        "cursor": "37noEdXy9ZT3iKkvL6mHub4bUgzEuzfkDVBsQuvdN9BVnHK1BofjBXRRzCsYrtcku2VVhSdtvS8AzHd4VWGS7jAec88pQX98",
+                        "cursor": "273AmFQTk7w6134GhzKUS5tY8qDuaMYBPgbaftZ43G7saiKa73MPapFvjNDixbNjCr5ucNqzNsx2fYdRqRod9U2W",
                         "fields": { "bool": true, },
                         "meta": {
                             "owner": "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96",
@@ -73,7 +73,7 @@ mod test {
                         }
                     },
                     {
-                        "cursor": "37noEdXyAbyJ1XBekhNdcxouDLcsBNvcidCxwBCuCQCgUtUhKuoZCXu17aq5aYvbmWzY5YqHf1JJKzrwTyfNYfQXeCbGxcw3",
+                        "cursor": "31Ch6qa4mdKcxpWJG4X9Wf5iMvSSxmSGg8cyg9teNR6yKmLncZCmyVUaPFjRNoWcxpeASGqrRiJGR8HSqjWBz5HE",
                         "fields": { "bool": false, },
                         "meta": {
                             "owner": "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96",
@@ -90,7 +90,7 @@ mod test {
         r#"
             (
                 first: 1,
-                after: "37noEdXyAbyJ1XBekhNdcxouDLcsBNvcidCxwBCuCQCgUtUhKuoZCXu17aq5aYvbmWzY5YqHf1JJKzrwTyfNYfQXeCbGxcw3",
+                after: "31Ch6qa4mdKcxpWJG4X9Wf5iMvSSxmSGg8cyg9teNR6yKmLncZCmyVUaPFjRNoWcxpeASGqrRiJGR8HSqjWBz5HE",
                 orderBy: DOCUMENT_ID,
                 orderDirection: ASC,
                 filter: {
