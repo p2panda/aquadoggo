@@ -387,6 +387,7 @@ fn where_filter_sql(filter: &Filter, schema: &Schema) -> String {
 
 fn where_pagination_sql(
     pagination: &Pagination<PaginationCursor>,
+    fields: &ApplicationFields,
     list: Option<&RelationList>,
     schema: &Schema,
     order: &Order,
@@ -500,21 +501,25 @@ fn where_pagination_sql(
                 }
             };
 
-            // @TODO: Write a test for relation lists where we order by document view id and see if
-            // we might need to also add the OR case again
-            format!(
-                r#"
-                AND (
-                    {cmp_field} {cmp_direction} ({cmp_value})
-                    OR
-                    (
-                        {cmp_field} = ({cmp_value})
-                        AND
-                            {cursor_sql}
+            if fields.is_empty() && list.is_none() {
+                // When a root query was grouped by documents / no fields have been selected we can
+                // assume that document id and view id are unique
+                format!("AND {cmp_field} {cmp_direction} ({cmp_value})")
+            } else {
+                format!(
+                    r#"
+                    AND (
+                        {cmp_field} {cmp_direction} ({cmp_value})
+                        OR
+                        (
+                            {cmp_field} = ({cmp_value})
+                            AND
+                                {cursor_sql}
+                        )
                     )
+                    "#
                 )
-                "#
-            )
+            }
         }
 
         // Ordering over an application field
@@ -822,16 +827,26 @@ impl SqlStore {
         let application_fields = args.select.application_fields();
 
         // Generate SQL based on the given schema and query
-        let mut select_vec = vec![
+        let mut select_vec = vec![];
+
+        // @TODO: How to make this work for SQLite?
+        if application_fields.is_empty() && list.is_none() {
+            select_vec.push(Some(
+                "DISTINCT ON (documents.document_view_id) documents.document_view_id".to_string(),
+            ));
+        } else {
+            select_vec.push(Some("documents.document_view_id".to_string()));
+        };
+
+        select_vec.append(&mut vec![
             // We get all the meta informations first, let's start with the document id, document
             // view id and id of the operation which holds the data
             Some("documents.document_id".to_string()),
-            Some("documents.document_view_id".to_string()),
             Some("document_view_fields.operation_id".to_string()),
             // The deletion status of a document we already store in the database, let's select it
             // in any case since we get it for free
             Some("documents.is_deleted".to_string()),
-        ];
+        ]);
 
         // .. also the unique cursor is very important, it will help us with cursor-based
         // pagination, especially over relation lists with duplicate documents
@@ -844,19 +859,18 @@ impl SqlStore {
 
         let select = concatenate_sql(&select_vec);
 
-        // @TODO: How to make this work for SQLite?
-        let distinct = if application_fields.is_empty() && list.is_none() {
-            "DISTINCT ON (documents.document_view_id)"
-        } else {
-            ""
-        };
-
         let from = from_sql(list);
 
         let where_ = where_sql(schema.id(), &application_fields, list);
         let and_fields = where_fields_sql(&application_fields);
         let and_filters = where_filter_sql(&args.filter, schema);
-        let and_pagination = where_pagination_sql(&args.pagination, list, schema, &args.order);
+        let and_pagination = where_pagination_sql(
+            &args.pagination,
+            &application_fields,
+            list,
+            schema,
+            &args.order,
+        );
 
         let group = group_sql(&application_fields);
         let order = order_sql(&args.order, schema, list);
@@ -883,7 +897,7 @@ impl SqlStore {
             -- is as smart, as big and as
             -- annoying as myself.
 
-            SELECT {distinct}
+            SELECT
                 {select}
 
             FROM
@@ -1416,25 +1430,27 @@ mod tests {
 
             let mut cursor: Option<PaginationCursor> = None;
 
+            let mut args = Query::new(
+                &Pagination::new(
+                    &NonZeroU64::new(1).unwrap(),
+                    cursor.as_ref(),
+                    &vec![
+                        PaginationField::TotalCount,
+                        PaginationField::EndCursor,
+                        PaginationField::HasNextPage,
+                    ],
+                ),
+                &Select::new(&[Field::Meta(MetaField::DocumentViewId)]),
+                &Filter::default(),
+                &Order::new(
+                    &Field::Meta(MetaField::DocumentViewId),
+                    &Direction::Ascending,
+                ),
+            );
+
             // Go through all pages, one document at a time
             for (index, view_id) in view_ids.into_iter().enumerate() {
-                let args = Query::new(
-                    &Pagination::new(
-                        &NonZeroU64::new(1).unwrap(),
-                        cursor.as_ref(),
-                        &vec![
-                            PaginationField::TotalCount,
-                            PaginationField::EndCursor,
-                            PaginationField::HasNextPage,
-                        ],
-                    ),
-                    &Select::new(&[Field::Meta(MetaField::DocumentViewId)]),
-                    &Filter::default(),
-                    &Order::new(
-                        &Field::Meta(MetaField::DocumentViewId),
-                        &Direction::Ascending,
-                    ),
-                );
+                args.pagination.after = cursor;
 
                 let (pagination_data, documents) = node
                     .context
@@ -1463,23 +1479,7 @@ mod tests {
             }
 
             // Query one last time after we paginated through everything
-            let args = Query::new(
-                &Pagination::new(
-                    &NonZeroU64::new(1).unwrap(),
-                    cursor.as_ref(),
-                    &vec![
-                        PaginationField::TotalCount,
-                        PaginationField::EndCursor,
-                        PaginationField::HasNextPage,
-                    ],
-                ),
-                &Select::default(),
-                &Filter::default(),
-                &Order::new(
-                    &Field::Meta(MetaField::DocumentViewId),
-                    &Direction::Ascending,
-                ),
-            );
+            args.pagination.after = cursor;
 
             let (pagination_data, documents) = node
                 .context
@@ -1530,7 +1530,7 @@ mod tests {
             let (pagination_data, documents) = node
                 .context
                 .store
-                .query(&visited_schema, &args, Some(&list))
+                .query(&venues_schema, &args, Some(&list))
                 .await
                 .expect("Query failed");
 
@@ -1551,7 +1551,7 @@ mod tests {
             let (pagination_data, documents) = node
                 .context
                 .store
-                .query(&visited_schema, &args, Some(&list))
+                .query(&venues_schema, &args, Some(&list))
                 .await
                 .expect("Query failed");
 
@@ -1569,6 +1569,105 @@ mod tests {
                 get_document_value(&documents[2].1, "name"),
                 OperationValue::String("p4p space".to_string())
             );
+        });
+    }
+
+    #[rstest]
+    fn relation_list_pagination_over_ordered_view_ids(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            let (venues_schema, venues_view_ids) =
+                create_venues_test_data(&mut node, &key_pair).await;
+
+            let (visited_schema, visited_view_ids) = create_visited_test_data(
+                &mut node,
+                venues_view_ids.clone(),
+                venues_schema.to_owned(),
+                &key_pair,
+            )
+            .await;
+
+            let mut view_ids = [
+                venues_view_ids[0].clone(),
+                venues_view_ids[0].clone(),
+                venues_view_ids[1].clone(),
+                venues_view_ids[2].clone(),
+                venues_view_ids[0].clone(),
+                venues_view_ids[0].clone(),
+                venues_view_ids[1].clone(),
+            ];
+            let view_ids_len = view_ids.len();
+
+            // Sort created documents by document view id, to compare to similarily sorted query
+            // results
+            view_ids.sort();
+
+            let mut cursor: Option<PaginationCursor> = None;
+
+            // Select the pinned relation list "venues" of the second visited document
+            let list = RelationList::new_pinned(&visited_view_ids[0], "venues".into());
+
+            let mut args = Query::new(
+                &Pagination::new(
+                    &NonZeroU64::new(1).unwrap(),
+                    cursor.as_ref(),
+                    &vec![
+                        PaginationField::TotalCount,
+                        PaginationField::EndCursor,
+                        PaginationField::HasNextPage,
+                    ],
+                ),
+                &Select::new(&[Field::Meta(MetaField::DocumentViewId)]),
+                &Filter::default(),
+                &Order::new(
+                    &Field::Meta(MetaField::DocumentViewId),
+                    &Direction::Ascending,
+                ),
+            );
+
+            // Go through all pages, one document at a time
+            for (index, view_id) in view_ids.iter().enumerate() {
+                args.pagination.after = cursor;
+
+                let (pagination_data, documents) = node
+                    .context
+                    .store
+                    .query(&venues_schema, &args, Some(&list))
+                    .await
+                    .expect("Query failed");
+
+                match pagination_data.end_cursor {
+                    Some(end_cursor) => {
+                        cursor = Some(end_cursor);
+                    }
+                    None => panic!("Expected cursor"),
+                }
+
+                if view_ids_len - 1 == index {
+                    assert_eq!(pagination_data.has_next_page, false);
+                } else {
+                    assert_eq!(pagination_data.has_next_page, true);
+                }
+
+                assert_eq!(pagination_data.total_count, Some(7));
+                assert_eq!(documents.len(), 1);
+                assert_eq!(&documents[0].1.view_id, view_id);
+                assert_eq!(cursor.as_ref(), Some(&documents[0].0));
+            }
+
+            // Query one last time after we paginated through everything
+            args.pagination.after = cursor;
+
+            let (pagination_data, documents) = node
+                .context
+                .store
+                .query(&venues_schema, &args, Some(&list))
+                .await
+                .expect("Query failed");
+
+            assert_eq!(pagination_data.total_count, Some(7));
+            assert_eq!(pagination_data.end_cursor, None);
+            assert_eq!(pagination_data.has_next_page, false);
+            assert_eq!(documents.len(), 0);
         });
     }
 
@@ -1640,30 +1739,33 @@ mod tests {
 
             let documents_len = expected_venues.len() as u64;
 
+            let mut cursor: Option<PaginationCursor> = None;
+
             // Select the pinned relation list "venues" of the first visited document
             let list = RelationList::new_pinned(&visited_view_ids[0], "venues".into());
 
+            let mut args = Query::new(
+                &Pagination::new(
+                    &NonZeroU64::new(1).unwrap(),
+                    cursor.as_ref(),
+                    &vec![
+                        PaginationField::TotalCount,
+                        PaginationField::EndCursor,
+                        PaginationField::HasNextPage,
+                    ],
+                ),
+                &Select::new(&[
+                    Field::Meta(MetaField::DocumentViewId),
+                    Field::Meta(MetaField::Owner),
+                    "name".into(),
+                ]),
+                &filter,
+                &order,
+            );
+
             // Go through all pages, one document at a time
-            let mut cursor: Option<PaginationCursor> = None;
             for (index, expected_venue) in expected_venues.into_iter().enumerate() {
-                let args = Query::new(
-                    &Pagination::new(
-                        &NonZeroU64::new(1).unwrap(),
-                        cursor.as_ref(),
-                        &vec![
-                            PaginationField::TotalCount,
-                            PaginationField::EndCursor,
-                            PaginationField::HasNextPage,
-                        ],
-                    ),
-                    &Select::new(&[
-                        Field::Meta(MetaField::DocumentViewId),
-                        Field::Meta(MetaField::Owner),
-                        "name".into(),
-                    ]),
-                    &filter,
-                    &order,
-                );
+                args.pagination.after = cursor;
 
                 let (pagination_data, documents) = node
                     .context
@@ -1701,20 +1803,7 @@ mod tests {
             }
 
             // Go to final, empty page
-            let args = Query::new(
-                &Pagination::new(
-                    &NonZeroU64::new(1).unwrap(),
-                    cursor.as_ref(),
-                    &vec![
-                        PaginationField::TotalCount,
-                        PaginationField::EndCursor,
-                        PaginationField::HasNextPage,
-                    ],
-                ),
-                &Select::new(&[Field::Meta(MetaField::DocumentViewId), "name".into()]),
-                &filter,
-                &order,
-            );
+            args.pagination.after = cursor;
 
             let (pagination_data, documents) = node
                 .context
