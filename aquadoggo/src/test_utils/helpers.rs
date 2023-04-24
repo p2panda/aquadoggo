@@ -85,6 +85,10 @@ pub fn doggo_fields() -> Vec<(&'static str, OperationValue)> {
                     .into(),
             ])),
         ),
+        (
+            "an_empty_relation_list",
+            OperationValue::PinnedRelationList(PinnedRelationList::new(vec![])),
+        ),
     ]
 }
 

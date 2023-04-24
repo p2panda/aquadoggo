@@ -1109,7 +1109,7 @@ fn convert_rows(
             name: row.name,
             list_index: 0,
             field_type: row.field_type,
-            value: row.value,
+            value: Some(row.value),
         });
     }
 

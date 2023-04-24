@@ -94,13 +94,18 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
             }
             p2panda_rs::operation::OperationValue::PinnedRelationList(pinned_relation_list) => {
                 // same as above...
-                for document_view_id in pinned_relation_list.iter() {
-                    debug!(
-                        "Pinned relation list field found containing view id: {}",
-                        document_view_id
-                    );
-                    next_tasks
-                        .push(construct_relation_task(&context, document_view_id.clone()).await?);
+                if pinned_relation_list.len() == 0 {
+                    debug!("Pinned relation list field containing no items");
+                } else {
+                    for document_view_id in pinned_relation_list.iter() {
+                        debug!(
+                            "Pinned relation list field found containing view id: {}",
+                            document_view_id
+                        );
+                        next_tasks.push(
+                            construct_relation_task(&context, document_view_id.clone()).await?,
+                        );
+                    }
                 }
             }
             _ => (),
