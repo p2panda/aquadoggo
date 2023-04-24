@@ -102,7 +102,7 @@ mod tests {
     use p2panda_rs::document::{DocumentId, DocumentViewId};
     use p2panda_rs::entry::encode::{encode_entry, sign_and_encode_entry};
     use p2panda_rs::entry::traits::AsEncodedEntry;
-    use p2panda_rs::entry::{EncodedEntry, EntryBuilder, LogId};
+    use p2panda_rs::entry::{EncodedEntry, EntryBuilder};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{KeyPair, PublicKey};
     use p2panda_rs::operation::encode::encode_operation;
@@ -115,8 +115,8 @@ mod tests {
     use p2panda_rs::test_utils::constants::{HASH, PRIVATE_KEY};
     use p2panda_rs::test_utils::fixtures::{
         create_operation, delete_operation, encoded_entry, encoded_operation,
-        entry_signed_encoded_unvalidated, key_pair, operation_fields, random_hash, schema,
-        schema_id, update_operation,
+        entry_signed_encoded_unvalidated, key_pair, operation_fields, random_hash,
+        update_operation,
     };
     use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
     use rstest::{fixture, rstest};
