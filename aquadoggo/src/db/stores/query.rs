@@ -181,7 +181,12 @@ where
 
 /// Helper method to determine the field type of the given field by looking at the schema and
 /// derive a SQL type cast function from it.
-fn typecast_field_sql(sql_field: &str, field_name: &str, schema: &Schema) -> String {
+fn typecast_field_sql(
+    sql_field: &str,
+    field_name: &str,
+    schema: &Schema,
+    case_sensitive: bool,
+) -> String {
     let field_type = schema
         .fields()
         .iter()
@@ -205,7 +210,13 @@ fn typecast_field_sql(sql_field: &str, field_name: &str, schema: &Schema) -> Str
         }
         // All other types (booleans, relations, etc.) we keep as strings. We can not convert
         // booleans easily as they don't have their own datatype in SQLite
-        _ => sql_field.to_string(),
+        _ => {
+            if case_sensitive {
+                sql_field.to_string()
+            } else {
+                format!("LOWER({sql_field})")
+            }
+        }
     }
 }
 
@@ -348,7 +359,7 @@ fn where_filter_sql(filter: &Filter, schema: &Schema) -> String {
                     cmp_sql("documents.document_view_id", filter_setting)
                 )),
                 Field::Field(field_name) => {
-                    let field_sql = typecast_field_sql("operation_fields_v1.value", field_name, schema);
+                    let field_sql = typecast_field_sql("operation_fields_v1.value", field_name, schema, true);
                     let filter_cmp = cmp_sql(&field_sql, filter_setting);
 
                     Some(format!(
@@ -377,6 +388,7 @@ fn where_filter_sql(filter: &Filter, schema: &Schema) -> String {
 fn where_pagination_sql(
     pagination: &Pagination<PaginationCursor>,
     list: Option<&RelationList>,
+    schema: &Schema,
     order: &Order,
 ) -> String {
     // Ignore pagination if we're in a relation list query and the cursor does not match the parent
@@ -499,27 +511,24 @@ fn where_pagination_sql(
                 }
             };
 
+            // @TODO: Write a test for relation lists where we order by document view id and see if
+            // we might need to also add the OR case again
             format!(
                 r#"
-                AND (
-                    {cmp_field} {cmp_direction} ({cmp_value})
-                    OR
-                    (
-                        {cmp_field} = ({cmp_value})
-                        AND
-                            {cursor_sql}
-                    )
-                )
+                AND {cmp_field} {cmp_direction} ({cmp_value})
                 "#
             )
         }
 
         // Ordering over an application field
         Some(Field::Field(order_field_name)) => {
+            let cmp_field =
+                typecast_field_sql("operation_fields_v1.value", order_field_name, schema, false);
+
             let cmp_value = format!(
                 r#"
                 SELECT
-                    operation_fields_v1.value
+                    {cmp_field}
                 FROM
                     operation_fields_v1
                 WHERE
@@ -540,10 +549,10 @@ fn where_pagination_sql(
                             operation_fields_v1.operation_id = document_view_fields.operation_id
                         AND
                             (
-                                operation_fields_v1.value {cmp_direction} ({cmp_value})
+                                {cmp_field} {cmp_direction} ({cmp_value})
                                 OR
                                 (
-                                    operation_fields_v1.value = ({cmp_value})
+                                    {cmp_field} = ({cmp_value})
                                     AND
                                         {cursor_sql}
                                 )
@@ -578,20 +587,20 @@ fn order_sql(order: &Order, schema: &Schema, list: Option<&RelationList>) -> Str
             Field::Field(field_name) => {
                 format!(
                     r#"
-                (
-                    SELECT
-                        {}
-                    FROM
-                        operation_fields_v1
-                        LEFT JOIN document_view_fields
-                            ON operation_fields_v1.operation_id = document_view_fields.operation_id
-                    WHERE
-                        operation_fields_v1.name = '{}'
-                        AND document_view_fields.document_view_id = documents.document_view_id
-                    LIMIT 1
-                )
-                "#,
-                    typecast_field_sql("value", field_name, schema),
+                    (
+                        SELECT
+                            {}
+                        FROM
+                            operation_fields_v1
+                            LEFT JOIN document_view_fields
+                                ON operation_fields_v1.operation_id = document_view_fields.operation_id
+                        WHERE
+                            operation_fields_v1.name = '{}'
+                            AND document_view_fields.document_view_id = documents.document_view_id
+                        LIMIT 1
+                    )
+                    "#,
+                    typecast_field_sql("operation_fields_v1.value", field_name, schema, false),
                     field_name,
                 )
             }
@@ -673,9 +682,9 @@ fn select_edited_sql(select: &Select) -> Option<String> {
 
 fn select_owner_sql(select: &Select) -> Option<String> {
     if select.fields.contains(&Field::Meta(MetaField::Owner)) {
+        // The original owner of a document we get by checking which public key signed the
+        // "create" operation, the hash of that operation is the same as the document id
         let sql = r#"
-        -- The original owner of a document we get by checking which public key signed the
-        -- "create" operation, the hash of that operation is the same as the document id
         (
             SELECT
                 operations_v1.public_key
@@ -838,12 +847,19 @@ impl SqlStore {
 
         let select = concatenate_sql(&select_vec);
 
+        // @TODO: How to make this work for SQLite?
+        let distinct = if application_fields.is_empty() && list.is_none() {
+            "DISTINCT ON (documents.document_view_id)"
+        } else {
+            ""
+        };
+
         let from = from_sql(list);
 
         let where_ = where_sql(schema.id(), &application_fields, list);
         let and_fields = where_fields_sql(&application_fields);
         let and_filters = where_filter_sql(&args.filter, schema);
-        let and_pagination = where_pagination_sql(&args.pagination, list, &args.order);
+        let and_pagination = where_pagination_sql(&args.pagination, list, schema, &args.order);
 
         let group = group_sql(&application_fields);
         let order = order_sql(&args.order, schema, list);
@@ -870,7 +886,7 @@ impl SqlStore {
             -- is as smart, as big and as
             -- annoying as myself.
 
-            SELECT
+            SELECT {distinct}
                 {select}
 
             FROM
@@ -1401,8 +1417,6 @@ mod tests {
             // results
             view_ids.sort();
 
-            println!("{:?}", view_ids);
-
             let mut cursor: Option<PaginationCursor> = None;
 
             // Go through all pages, one document at a time
@@ -1431,8 +1445,6 @@ mod tests {
                     .query(&schema, &args, None)
                     .await
                     .expect("Query failed");
-
-                println!("{:?} {:?}", cursor, pagination_data);
 
                 match pagination_data.end_cursor {
                     Some(end_cursor) => {
@@ -1583,11 +1595,11 @@ mod tests {
         vec![
             "Internet Explorer".to_string(),
             "Internet Explorer".to_string(),
-            "World Wide Feld".to_string(),
-            "World Wide Feld".to_string(),
-            "World Wide Feld".to_string(),
-            "World Wide Feld".to_string(),
             "p4p space".to_string(),
+            "World Wide Feld".to_string(),
+            "World Wide Feld".to_string(),
+            "World Wide Feld".to_string(),
+            "World Wide Feld".to_string(),
         ]
     )]
     #[case::search_for_text(
