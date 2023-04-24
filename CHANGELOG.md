@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix race-condition of mutably shared static schema store during testing [#269](https://github.com/p2panda/aquadoggo/pull/269)
 - Introduce flag to requeue tasks in worker queue, fixes race-condition in materialization logic [#286](https://github.com/p2panda/aquadoggo/pull/286)
 - Update breaking API calls for new `p2panda-rs` 0.7.0 version [#293](https://github.com/p2panda/aquadoggo/pull/293)
+- Handle decoding and parsing empty pinned relation lists [#336](https://github.com/p2panda/aquadoggo/pull/336)
 
 ## [0.4.0]
 
