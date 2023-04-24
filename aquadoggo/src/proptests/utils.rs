@@ -17,7 +17,11 @@ use crate::test_utils::{add_document, TestNode};
 pub struct FieldName(#[proptest(regex = "[A-Za-z]{1}[A-Za-z0-9_]{0,63}")] String);
 
 #[async_recursion]
-pub async fn add_schemas_from_ast(node: &mut TestNode, schema: &SchemaAST, schemas: &mut Vec<SchemaId>) -> Schema {
+pub async fn add_schemas_from_ast(
+    node: &mut TestNode,
+    schema: &SchemaAST,
+    schemas: &mut Vec<SchemaId>,
+) -> Schema {
     let mut schema_fields: Vec<(FieldName, FieldType)> = vec![];
 
     for field in schema.fields.clone() {

@@ -52,13 +52,13 @@ mod manager;
 mod materializer;
 mod network;
 mod node;
+#[cfg(test)]
+mod proptests;
 mod schema;
 #[cfg(test)]
 mod test_utils;
 #[cfg(test)]
 mod tests;
-#[cfg(test)]
-mod proptests;
 
 pub use crate::config::Configuration;
 pub use crate::network::NetworkConfiguration;

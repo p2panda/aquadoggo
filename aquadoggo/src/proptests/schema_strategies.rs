@@ -98,34 +98,42 @@ fn schema_field() -> impl Strategy<Value = SchemaField> {
         FIELDS_PER_SCHEMA as u32,
         |inner| {
             prop_oneof![
-                (any::<FieldName>(), vec(inner.clone(), 1..FIELDS_PER_SCHEMA)).prop_map(|(field_name, fields)| {
-                    SchemaField {
-                        name: field_name,
-                        field_type: SchemaFieldType::Relation,
-                        relation_schema: Some(Box::new(SchemaAST::new(fields))),
+                (any::<FieldName>(), vec(inner.clone(), 1..FIELDS_PER_SCHEMA)).prop_map(
+                    |(field_name, fields)| {
+                        SchemaField {
+                            name: field_name,
+                            field_type: SchemaFieldType::Relation,
+                            relation_schema: Some(Box::new(SchemaAST::new(fields))),
+                        }
                     }
-                }),
-                (any::<FieldName>(), vec(inner.clone(), 1..FIELDS_PER_SCHEMA)).prop_map(|(field_name, fields)| {
-                    SchemaField {
-                        name: field_name,
-                        field_type: SchemaFieldType::RelationList,
-                        relation_schema: Some(Box::new(SchemaAST::new(fields))),
+                ),
+                (any::<FieldName>(), vec(inner.clone(), 1..FIELDS_PER_SCHEMA)).prop_map(
+                    |(field_name, fields)| {
+                        SchemaField {
+                            name: field_name,
+                            field_type: SchemaFieldType::RelationList,
+                            relation_schema: Some(Box::new(SchemaAST::new(fields))),
+                        }
                     }
-                }),
-                (any::<FieldName>(), vec(inner.clone(), 1..FIELDS_PER_SCHEMA)).prop_map(|(field_name, fields)| {
-                    SchemaField {
-                        name: field_name,
-                        field_type: SchemaFieldType::PinnedRelation,
-                        relation_schema: Some(Box::new(SchemaAST::new(fields))),
+                ),
+                (any::<FieldName>(), vec(inner.clone(), 1..FIELDS_PER_SCHEMA)).prop_map(
+                    |(field_name, fields)| {
+                        SchemaField {
+                            name: field_name,
+                            field_type: SchemaFieldType::PinnedRelation,
+                            relation_schema: Some(Box::new(SchemaAST::new(fields))),
+                        }
                     }
-                }),
-                (any::<FieldName>(), vec(inner.clone(), 1..FIELDS_PER_SCHEMA)).prop_map(|(field_name, fields)| {
-                    SchemaField {
-                        name: field_name,
-                        field_type: SchemaFieldType::PinnedRelationList,
-                        relation_schema: Some(Box::new(SchemaAST::new(fields))),
+                ),
+                (any::<FieldName>(), vec(inner.clone(), 1..FIELDS_PER_SCHEMA)).prop_map(
+                    |(field_name, fields)| {
+                        SchemaField {
+                            name: field_name,
+                            field_type: SchemaFieldType::PinnedRelationList,
+                            relation_schema: Some(Box::new(SchemaAST::new(fields))),
+                        }
                     }
-                })
+                )
             ]
         },
     )
