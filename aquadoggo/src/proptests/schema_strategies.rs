@@ -9,12 +9,22 @@ use proptest_derive::Arbitrary;
 
 use crate::proptests::utils::FieldName;
 
+/// Name used of each generated schema.
 const SCHEMA_NAME: &str = "test_schema";
+
+/// Description used for each generated schema.
 const SCHEMA_DESCRIPTION: &str = "My test schema";
+
+/// Number of fields per schema. This value is shrunk during prop testing.
 const FIELDS_PER_SCHEMA: usize = 2;
+
+/// Desired number of nodes present in the schema AST. 
 const DESIRED_SCHEMA_NODES: u32 = 4;
+
+/// Schema AST depth. This value is shrunk during prop testing.
 const SCHEMA_DEPTH: u32 = 2;
 
+/// Root of a schema AST.
 #[derive(Debug, Clone)]
 pub struct SchemaAST {
     pub name: SchemaName,
@@ -37,6 +47,7 @@ impl SchemaAST {
     }
 }
 
+/// Field on a schema.
 #[derive(Debug, Clone)]
 pub struct SchemaField {
     pub name: FieldName,
@@ -44,6 +55,7 @@ pub struct SchemaField {
     pub relation_schema: Option<Box<SchemaAST>>,
 }
 
+/// Types of field present on a schema.
 #[derive(Arbitrary, Debug, Clone)]
 pub enum SchemaFieldType {
     Boolean,
@@ -56,11 +68,14 @@ pub enum SchemaFieldType {
     PinnedRelationList,
 }
 
+/// Strategy for generating a collection of schema.
 pub fn schema_strategy() -> impl Strategy<Value = SchemaAST> {
     vec(schema_field(), 1..FIELDS_PER_SCHEMA).prop_map(|schema| SchemaAST::new(schema))
 }
 
+/// Generate a collection of schema fields and recurse into relation fields.
 fn schema_field() -> impl Strategy<Value = SchemaField> {
+    // Selections for document AST leaves.
     let leaf = prop_oneof![
         any::<FieldName>().prop_map(|field_name| {
             SchemaField {
@@ -92,6 +107,7 @@ fn schema_field() -> impl Strategy<Value = SchemaField> {
         }),
     ];
 
+    // Selections for the recursive fields.
     leaf.prop_recursive(
         SCHEMA_DEPTH,
         DESIRED_SCHEMA_NODES,

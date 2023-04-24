@@ -7,21 +7,29 @@ use proptest::prelude::{any, Strategy};
 use crate::proptests::schema_strategies::{SchemaAST, SchemaFieldType};
 use crate::proptests::utils::FieldName;
 
+/// The maximum number of documents which will be generated per schema.
+/// This is one value which will be shrunk if a failure occurs.
 const MAX_DOCUMENTS_PER_ROOT_SCHEMA: usize = 15;
+
+/// The maximum number of document relations which will be generated in a relation list.
+/// Same as above, this is a shrinking value.
 const MAX_DOCUMENTS_PER_RELATION_LIST: usize = 2;
 
+/// AST representing a document and it's relations.
 #[derive(Debug, Clone)]
 pub struct DocumentAST {
     pub schema_id: SchemaId,
     pub fields: Vec<DocumentFieldValue>,
 }
 
+/// A single field name and value from a document. Is used when building nested document representations.
 #[derive(Debug, Clone)]
 pub struct DocumentFieldValue {
     pub name: FieldName,
     pub value: FieldValue,
 }
 
+/// A Value on a document field.
 #[derive(Clone, Debug)]
 pub enum FieldValue {
     /// Boolean value.
@@ -49,6 +57,7 @@ pub enum FieldValue {
     PinnedRelationList(Vec<DocumentAST>),
 }
 
+/// Strategy for generating a collection af document ASTs from a single schema AST.
 pub fn documents_strategy(schema: SchemaAST) -> impl Strategy<Value = Vec<DocumentAST>> {
     let schema_id = schema.id.clone();
     vec(values_from_schema(schema), 0..MAX_DOCUMENTS_PER_ROOT_SCHEMA).prop_map(move |documents| {
@@ -62,8 +71,11 @@ pub fn documents_strategy(schema: SchemaAST) -> impl Strategy<Value = Vec<Docume
     })
 }
 
+/// Strategy for generating a collection of document field values from a schema AST.
 fn values_from_schema(schema: SchemaAST) -> impl Strategy<Value = Vec<DocumentFieldValue>> {
     let mut field_values = vec![];
+
+    // For every field in the document generate a field value. Recurses into relation fields.
     for schema_field in schema.fields {
         let field_name = schema_field.name.clone();
         let relation_schema = schema_field.relation_schema.clone();
