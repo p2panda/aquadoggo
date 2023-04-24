@@ -670,6 +670,7 @@ mod tests {
                 name: Some("an_empty_relation_list".to_string()),
                 field_type: Some("pinned_relation_list".to_string()),
                 value: None,
+                list_index: Some(0),
             },
         ];
 
@@ -997,6 +998,8 @@ mod tests {
                 value: Some("bubu".to_string()),
             },
             DocumentViewFieldRow {
+                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
+                    .to_string(),
                 document_view_id:
                     "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
                         .to_string(),
@@ -1004,6 +1007,7 @@ mod tests {
                     "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
                         .to_string(),
                 name: "an_empty_relation_list".to_string(),
+                list_index: 0,
                 field_type: "pinned_relation_list".to_string(),
                 value: None,
             },
