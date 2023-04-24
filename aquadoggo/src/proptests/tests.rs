@@ -15,15 +15,33 @@ use crate::proptests::schema_strategies::{schema_strategy, SchemaAST};
 use crate::proptests::utils::{add_documents_from_ast, add_schemas_from_ast};
 use crate::test_utils::{graphql_test_client, test_runner, TestClient, TestNode};
 
-async fn sanity_checks(node: &TestNode, documents_by_schema: &HashMap<SchemaId, Vec<DocumentViewId>>) {
-    let schemas = node.context.schema_provider.all().await;
-    assert_eq!(schemas.len(), documents_by_schema.len() + 2); // plus 2 for system schema
-    for (schema_id, documents) in documents_by_schema {
-        let result = node.context.store.get_documents_by_schema(schema_id).await.expect("Documents of this schema expected on node");
-        assert_eq!(result.len(), documents.len());
+/// Check the node is in the expected state.
+async fn sanity_checks(
+    node: &TestNode,
+    documents_by_schema: &HashMap<SchemaId, Vec<DocumentViewId>>,
+    schemas: &Vec<SchemaId>,
+) {
+    let node_schemas = node.context.schema_provider.all().await;
+    assert_eq!(schemas.len(), node_schemas.len() - 2); // minus 2 for system schema
+    for schema_id in schemas {
+        let result = node
+            .context
+            .store
+            .get_documents_by_schema(schema_id)
+            .await
+            .expect("Documents of this schema expected on node");
+        assert_eq!(
+            result.len(),
+            documents_by_schema
+                .get(&schema_id)
+                .cloned()
+                .unwrap_or_default()
+                .len()
+        );
     }
 }
 
+/// Unwrap values from a GraphQL response.
 fn unwrap_response(response: &Response) -> (bool, i64, Option<String>, Vec<JsonValue>) {
     let query_response = response
         .data
@@ -52,6 +70,7 @@ fn unwrap_response(response: &Response) -> (bool, i64, Option<String>, Vec<JsonV
     )
 }
 
+/// Perform a paginated query over a collection of documents.
 async fn make_query(
     client: &TestClient,
     schema_id: &SchemaId,
@@ -90,6 +109,7 @@ async fn make_query(
 }
 
 prop_compose! {
+    /// Strategy for generating schemas, and documents from these schema.
     fn schema_with_documents_strategy()
             (schema in schema_strategy())
             (documents in documents_strategy(schema.clone()), schema in Just(schema))
@@ -98,45 +118,69 @@ prop_compose! {
     }
 }
 
+/// Perform tests for querying paginated collections of documents identified by their schema.
 async fn paginated_query_meta_fields_only(
     client: &TestClient,
     schema_id: &SchemaId,
-    expected_total_documents: usize,
+    expected_documents: &Vec<DocumentViewId>,
 ) {
     let mut query_args = "(first: 5)".to_string();
+    let total_documents = expected_documents.len() as i64;
+    let mut remaining_documents = expected_documents.len();
 
     loop {
+        // Make a paginated query.
         let (has_next_page, total_count, end_cursor, documents) =
             make_query(&client, &schema_id, &query_args).await;
-        let end_cursor = end_cursor.unwrap(); // We expect every request here to have an end cursor
-        query_args = format!("(first: 5, after: \"{0}\")", end_cursor);
+
+        // Total count should match number of documents expected.
+        assert_eq!(total_count, total_documents);
+
+        // If the returned number of documents == 0....
+        if documents.is_empty() {
+            // There should be no next page.
+            assert!(!has_next_page);
+            // The end cursor should be None.
+            assert!(end_cursor.is_none());
+            // End the test here.
+            break;
+        }
+
+        // In all other cases there should be....
+
+        // A next cursor given which matches the cursor of the last returned document.
         let last_document_cursor = documents
             .last()
             .unwrap()
             .as_object()
             .unwrap()
             .get("cursor")
-            .unwrap()
-            .as_str()
             .unwrap();
-        assert_eq!(end_cursor, last_document_cursor);
-        assert_eq!(total_count, expected_total_documents as i64);
-        if has_next_page {
-            assert_eq!(documents.len(), 5)
-        } else {
-            let remaining_documents = match expected_total_documents % 5 {
-                0 => 5,
-                remaining => remaining,
-            };
-            assert_eq!(documents.len(), remaining_documents);
-            let (has_next_page, total_count, end_cursor, documents) =
-                make_query(&client, &schema_id, &query_args).await;
-            assert_eq!(end_cursor, None);
-            assert_eq!(has_next_page, false);
-            assert_eq!(documents.len(), 0);
-            assert_eq!(total_count, expected_total_documents as i64);
-            break;
+        assert_eq!(
+            end_cursor.as_ref().unwrap(),
+            last_document_cursor.as_str().unwrap()
+        );
+
+        // If there are more than 5 remaining documents then we expect...
+        if remaining_documents > 5 {
+            // The number of returned documents to match the pagination rate.
+            assert_eq!(documents.len(), 5);
+            // There should be a next page available.
+            assert!(has_next_page);
         }
+
+        // If there are fewer or equal than 5 documents remaingin...
+        if remaining_documents <= 5 {
+            // There should be no next page available.
+            assert!(!has_next_page);
+            // The number of documents returned should match the remaining documents.
+            assert_eq!(documents.len(), remaining_documents);
+        }
+
+        // De-increment the remaining documents count.
+        remaining_documents -= documents.len();
+        // Compose the next query arguments.
+        query_args = format!("(first: 5, after: \"{0}\")", end_cursor.unwrap());
     }
 }
 
@@ -155,7 +199,8 @@ proptest! {
         // Now we start up a test runner and inject a test node we can populate.
         test_runner(|mut node: TestNode| async move {
             // Add all schema to the node.
-            add_schemas_from_ast(&mut node, &schema_ast).await;
+            let mut schemas = Vec::new();
+            add_schemas_from_ast(&mut node, &schema_ast, &mut schemas).await;
 
             // Add all documents to the node.
             let mut documents = HashMap::new();
@@ -163,14 +208,16 @@ proptest! {
                 add_documents_from_ast(&mut node, &document_ast, &mut documents).await;
             }
 
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            // Perform a couple of sanity checks to make sure the test node is in the state we expect.
+            sanity_checks(&node, &documents, &schemas).await;
 
-            sanity_checks(&node, &documents).await;
-
+            // Create a GraphQL client.
             let client = graphql_test_client(&node).await;
 
-            for (schema_id, documents) in documents {
-                paginated_query_meta_fields_only(&client, &schema_id, documents.len()).await;
+            // Run the test for each schema and related documents that have been generated.
+            for schema_id in schemas {
+                let schema_documents = documents.get(&schema_id).cloned().unwrap_or_default();
+                paginated_query_meta_fields_only(&client, &schema_id, &schema_documents).await;
             };
         });
     }

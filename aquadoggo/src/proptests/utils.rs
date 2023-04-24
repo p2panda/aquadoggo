@@ -17,7 +17,7 @@ use crate::test_utils::{add_document, TestNode};
 pub struct FieldName(#[proptest(regex = "[A-Za-z]{1}[A-Za-z0-9_]{0,63}")] String);
 
 #[async_recursion]
-pub async fn add_schemas_from_ast(node: &mut TestNode, schema: &SchemaAST) -> Schema {
+pub async fn add_schemas_from_ast(node: &mut TestNode, schema: &SchemaAST, schemas: &mut Vec<SchemaId>) -> Schema {
     let mut schema_fields: Vec<(FieldName, FieldType)> = vec![];
 
     for field in schema.fields.clone() {
@@ -36,17 +36,17 @@ pub async fn add_schemas_from_ast(node: &mut TestNode, schema: &SchemaAST) -> Sc
             }
             SchemaFieldType::Relation => {
                 let schema_ast = field.relation_schema.unwrap();
-                let schema = add_schemas_from_ast(node, &schema_ast).await;
+                let schema = add_schemas_from_ast(node, &schema_ast, schemas).await;
                 schema_fields.push((field.name, FieldType::Relation(schema.id().to_owned())));
             }
             SchemaFieldType::RelationList => {
                 let schema_ast = field.relation_schema.unwrap();
-                let schema = add_schemas_from_ast(node, &schema_ast).await;
+                let schema = add_schemas_from_ast(node, &schema_ast, schemas).await;
                 schema_fields.push((field.name, FieldType::RelationList(schema.id().to_owned())));
             }
             SchemaFieldType::PinnedRelation => {
                 let schema_ast = field.relation_schema.unwrap();
-                let schema = add_schemas_from_ast(node, &schema_ast).await;
+                let schema = add_schemas_from_ast(node, &schema_ast, schemas).await;
                 schema_fields.push((
                     field.name,
                     FieldType::PinnedRelation(schema.id().to_owned()),
@@ -54,7 +54,7 @@ pub async fn add_schemas_from_ast(node: &mut TestNode, schema: &SchemaAST) -> Sc
             }
             SchemaFieldType::PinnedRelationList => {
                 let schema_ast = field.relation_schema.unwrap();
-                let schema = add_schemas_from_ast(node, &schema_ast).await;
+                let schema = add_schemas_from_ast(node, &schema_ast, schemas).await;
                 schema_fields.push((
                     field.name,
                     FieldType::PinnedRelationList(schema.id().to_owned()),
@@ -74,6 +74,7 @@ pub async fn add_schemas_from_ast(node: &mut TestNode, schema: &SchemaAST) -> Sc
     .expect("Generated schema is valid");
 
     node.context.schema_provider.update(schema.clone()).await;
+    schemas.push(schema.id().to_owned());
 
     schema
 }
@@ -140,8 +141,15 @@ pub async fn add_documents_from_ast(
     .await;
 
     match documents.get_mut(&document_ast.schema_id) {
-        Some(documents) => documents.push(document_view_id.clone()),
+        Some(documents) => {
+            println!(
+                "Insert document for existing schema: {}",
+                document_ast.schema_id
+            );
+            documents.push(document_view_id.clone())
+        }
         None => {
+            println!("Insert document for new schema: {}", document_ast.schema_id);
             documents.insert(
                 document_ast.schema_id.clone(),
                 vec![document_view_id.clone()],
