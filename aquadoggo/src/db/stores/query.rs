@@ -731,13 +731,21 @@ fn select_cursor_sql(list: Option<&RelationList>) -> Vec<Option<String>> {
     }
 }
 
-fn where_sql(
-    schema_id: &SchemaId,
-    fields: &ApplicationFields,
-    list: Option<&RelationList>,
-) -> String {
+fn where_sql(schema: &Schema, fields: &ApplicationFields, list: Option<&RelationList>) -> String {
+    let schema_id = schema.id();
+
     // Only one row per field: restrict relation lists to first list item
     let list_index_sql = "AND operation_fields_v1.list_index = 0";
+
+    // Always select at least one field, even if user didn't select one. If we wouldn't select a
+    // field we would potentially receive multiple rows per document even though when we're only
+    // interested in one per row.
+    let extra_field_select = if fields.is_empty() {
+        let (field_name, _) = schema.fields().iter().next().unwrap();
+        format!("AND operation_fields_v1.name = '{field_name}'")
+    } else {
+        "".to_string()
+    };
 
     match list {
         None => {
@@ -746,6 +754,7 @@ fn where_sql(
                 r#"
                 documents.schema_id = '{schema_id}'
                 {list_index_sql}
+                {extra_field_select}
                 "#
             )
         }
@@ -766,6 +775,7 @@ fn where_sql(
                 AND
                     operation_fields_v1_list.name = '{field_name}'
                 {list_index_sql}
+                {extra_field_select}
                 "#
             )
         }
@@ -827,26 +837,16 @@ impl SqlStore {
         let application_fields = args.select.application_fields();
 
         // Generate SQL based on the given schema and query
-        let mut select_vec = vec![];
-
-        // @TODO: How to make this work for SQLite?
-        if application_fields.is_empty() && list.is_none() {
-            select_vec.push(Some(
-                "DISTINCT ON (documents.document_view_id) documents.document_view_id".to_string(),
-            ));
-        } else {
-            select_vec.push(Some("documents.document_view_id".to_string()));
-        };
-
-        select_vec.append(&mut vec![
+        let mut select_vec = vec![
             // We get all the meta informations first, let's start with the document id, document
             // view id and id of the operation which holds the data
             Some("documents.document_id".to_string()),
+            Some("documents.document_view_id".to_string()),
             Some("document_view_fields.operation_id".to_string()),
             // The deletion status of a document we already store in the database, let's select it
             // in any case since we get it for free
             Some("documents.is_deleted".to_string()),
-        ]);
+        ];
 
         // .. also the unique cursor is very important, it will help us with cursor-based
         // pagination, especially over relation lists with duplicate documents
@@ -861,7 +861,7 @@ impl SqlStore {
 
         let from = from_sql(list);
 
-        let where_ = where_sql(schema.id(), &application_fields, list);
+        let where_ = where_sql(schema, &application_fields, list);
         let and_fields = where_fields_sql(&application_fields);
         let and_filters = where_filter_sql(&args.filter, schema);
         let and_pagination = where_pagination_sql(
@@ -1007,7 +1007,7 @@ impl SqlStore {
         let application_fields = args.select.application_fields();
 
         let from = from_sql(list);
-        let where_ = where_sql(schema.id(), &application_fields, list);
+        let where_ = where_sql(schema, &application_fields, list);
         let and_filters = where_filter_sql(&args.filter, schema);
 
         let count_sql = format!(
