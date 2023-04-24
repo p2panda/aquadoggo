@@ -47,6 +47,14 @@ pub struct OperationFieldRow {
     ///
     /// This is an Option as a DELETE operation contains no fields.
     pub value: Option<String>,
+
+    /// Index of document id or view id in (pinned) relation lists.
+    ///
+    /// This numeric value is a simple list index to represent multiple values within one operation
+    /// field.
+    ///
+    /// This is an Option as a DELETE operation contains no fields.
+    pub list_index: Option<i32>,
 }
 
 /// A struct representing a joined OperationRow and OperationFieldRow.
@@ -85,4 +93,10 @@ pub struct OperationFieldsJoinedRow {
     ///
     /// This is an Option as a DELETE operation contains no fields.
     pub value: Option<String>,
+
+    /// Index of document id or view id in (pinned) relation lists.
+    ///
+    /// This numeric value is a simple list index to represent multiple values within one operation
+    /// field.
+    pub list_index: Option<i32>,
 }

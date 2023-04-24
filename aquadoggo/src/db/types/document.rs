@@ -8,22 +8,22 @@ use p2panda_rs::schema::SchemaId;
 #[derive(Debug, Clone, PartialEq)]
 pub struct StorageDocument {
     /// The id for this document.
-    pub(crate) id: DocumentId,
+    pub id: DocumentId,
 
     /// The key-value mapping of this documents current view.
-    pub(crate) fields: Option<DocumentViewFields>,
+    pub fields: Option<DocumentViewFields>,
 
     /// The id of the schema this document follows.
-    pub(crate) schema_id: SchemaId,
+    pub schema_id: SchemaId,
 
     /// The id of the current view of this document.
-    pub(crate) view_id: DocumentViewId,
+    pub view_id: DocumentViewId,
 
     /// The public key of the author who created this document.
-    pub(crate) author: PublicKey,
+    pub author: PublicKey,
 
     /// Flag indicating if document was deleted.
-    pub(crate) deleted: bool,
+    pub deleted: bool,
 }
 
 impl AsDocument for StorageDocument {

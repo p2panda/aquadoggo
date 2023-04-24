@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::fmt::Display;
-use std::str::FromStr;
 
 use anyhow::{anyhow, Error as AnyhowError};
 use async_graphql::{Error, Result};
 use dynamic_graphql::{Scalar, ScalarValue, Value};
-use p2panda_rs::document::DocumentId;
 
 use crate::db::query::Cursor;
+use crate::db::stores::PaginationCursor;
 
 /// The cursor used in paginated queries.
 #[derive(Scalar, Clone, Debug, Eq, PartialEq)]
 #[graphql(name = "Cursor", validator(validate))]
-pub struct CursorScalar(String, DocumentId);
+pub struct CursorScalar(PaginationCursor);
 
 impl ScalarValue for CursorScalar {
     fn from_value(value: Value) -> Result<Self>
@@ -21,30 +20,19 @@ impl ScalarValue for CursorScalar {
         Self: Sized,
     {
         match &value {
-            Value::String(str_value) => {
-                let parts: Vec<String> = str_value.split('_').map(|part| part.to_owned()).collect();
-
-                if parts.len() != 2 {
-                    return Err(Error::new("Invalid amount of cursor parts"));
-                }
-
-                Ok(Self(
-                    parts[0].clone(),
-                    DocumentId::from_str(parts[1].as_str())?,
-                ))
-            }
+            Value::String(str_value) => Ok(Self(PaginationCursor::decode(str_value)?)),
             _ => Err(Error::new(format!("Expected a valid cursor, got: {value}"))),
         }
     }
 
     fn to_value(&self) -> Value {
-        Value::String(self.0.as_str().to_string())
+        Value::String(self.0.encode())
     }
 }
 
 impl Display for CursorScalar {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}_{}", self.0, self.1.as_str())
+        write!(f, "{}", self.0.encode())
     }
 }
 
@@ -58,7 +46,19 @@ impl Cursor for CursorScalar {
     }
 
     fn encode(&self) -> String {
-        format!("{}_{}", self.0, self.1)
+        self.0.encode()
+    }
+}
+
+impl From<&PaginationCursor> for CursorScalar {
+    fn from(cursor: &PaginationCursor) -> Self {
+        Self(cursor.clone())
+    }
+}
+
+impl From<&CursorScalar> for PaginationCursor {
+    fn from(cursor: &CursorScalar) -> PaginationCursor {
+        cursor.0.clone()
     }
 }
 

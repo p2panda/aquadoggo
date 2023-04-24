@@ -6,5 +6,10 @@ pub mod document;
 mod entry;
 mod log;
 mod operation;
+#[allow(unused)]
+mod query;
 mod schema;
 mod task;
+
+pub use operation::OperationCursor;
+pub use query::{PaginationCursor, Query, QueryResponse, RelationList, RelationListType};

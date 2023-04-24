@@ -1,89 +1,46 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use async_graphql::dynamic::{Field, FieldFuture, FieldValue, Object, TypeRef};
+use async_graphql::dynamic::{Field, FieldFuture, Object, TypeRef};
 use log::debug;
 use p2panda_rs::schema::Schema;
-use p2panda_rs::storage_provider::traits::DocumentStore;
 
-use crate::db::query::{Filter, Order, Pagination};
-use crate::db::SqlStore;
 use crate::graphql::constants;
-use crate::graphql::scalars::CursorScalar;
-use crate::graphql::types::{DocumentValue, PaginationData};
-use crate::graphql::utils::{
-    paginated_response_name, parse_collection_arguments, with_collection_arguments,
-};
-use crate::schema::SchemaProvider;
+use crate::graphql::types::DocumentCollection;
+use crate::graphql::utils::{collection_name, with_collection_arguments};
 
-/// Adds a GraphQL query for retrieving a paginated, ordered and filtered collection of
-/// documents by schema to the passed root query object.
+/// Adds a GraphQL query for retrieving a paginated, ordered and filtered collection of documents
+/// by schema to the passed root query object.
 ///
 /// The query follows the format `all_<SCHEMA_ID>(<...ARGS>)`.
 pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
     let schema_id = schema.id().clone();
-    query.field(with_collection_arguments(
-        Field::new(
-            format!("{}{}", constants::QUERY_ALL_PREFIX, schema_id),
-            TypeRef::named_list(paginated_response_name(&schema_id)),
-            move |ctx| {
-                // Take ownership of the schema id in the resolver.
-                let schema_id = schema_id.clone();
+    let schema = schema.clone();
+    query
+        .field(with_collection_arguments(
+            Field::new(
+                format!("{}{}", constants::QUERY_ALL_PREFIX, schema_id),
+                TypeRef::named_nn(collection_name(&schema_id)),
+                move |ctx| {
+                    let schema = schema.clone();
+                    debug!(
+                        "Query to {}{} received",
+                        constants::QUERY_ALL_PREFIX,
+                        schema.id()
+                    );
 
-                debug!(
-                    "Query to {}{} received",
-                    constants::QUERY_ALL_PREFIX,
-                    schema_id
-                );
-
-                FieldFuture::new(async move {
-                    let schema_provider = ctx.data_unchecked::<SchemaProvider>();
-                    let store = ctx.data_unchecked::<SqlStore>();
-
-                    // Default pagination, filtering and ordering values.
-                    let mut pagination = Pagination::<CursorScalar>::default();
-                    let mut order = Order::default();
-                    let mut filter = Filter::new();
-
-                    // Get the schema for the document type being queried.
-                    let schema = schema_provider
-                        .get(&schema_id)
-                        .await
-                        .expect("Schema should exist in schema provider");
-
-                    // Parse arguments.
-                    parse_collection_arguments(
-                        &ctx,
-                        &schema,
-                        &mut pagination,
-                        &mut order,
-                        &mut filter,
-                    )?;
-
-                    // Fetch all queried documents and compose the field value list
-                    // which will bubble up the query tree.
-                    //
-                    // TODO: This needs be be replaced with a query to the db which retrieves a
-                    // paginated, ordered, filtered collection.
-                    let documents: Vec<FieldValue> = store
-                        .get_documents_by_schema(&schema_id)
-                        .await?
-                        .iter()
-                        .map(|document| {
-                            FieldValue::owned_any(DocumentValue::Paginated(
-                                "CURSOR".to_string(),
-                                PaginationData::default(),
-                                document.to_owned(),
-                            ))
-                        })
-                        .collect();
-
-                    // Pass the list up to the children query fields.
-                    Ok(Some(FieldValue::list(documents)))
-                })
-            },
-        ),
-        schema.id(),
-    )).description(format!("Query a paginated collection of `{}` documents. The requested collection is filtered and ordered following parameters passed into the query via the available arguments.", schema.id().name()))
+                    FieldFuture::new(
+                        async move { DocumentCollection::resolve(ctx, schema, None).await },
+                    )
+                },
+            ),
+            &schema_id,
+        ))
+        .description(format!(
+            "Query a paginated collection of `{}` documents. \
+               The requested collection is filtered and ordered following \
+               parameters passed into the query via the available arguments.",
+            schema_id.name()
+        ))
 }
 
 #[cfg(test)]
@@ -98,140 +55,158 @@ mod test {
     use crate::test_utils::{add_document, add_schema, graphql_test_client, test_runner, TestNode};
 
     #[rstest]
-    // TODO: We don't actually perform any queries yet, these tests will need to be updated
-    // when we do.
     #[case(
-        "".to_string(), 
+        "".to_string(),
         value!({
-            "collection": value!([{ "hasNextPage": false, "totalCount": 0, "document": { "cursor": "CURSOR", "fields": { "bool": true, } } }]),
+            "collection": value!({
+                "hasNextPage": false,
+                "totalCount": 2,
+                "endCursor": "31Ch6qa4mdKcxpWJG4X9Wf5iMvSSxmSGg8cyg9teNR6yKmLncZCmyVUaPFjRNoWcxpeASGqrRiJGR8HSqjWBz5HE",
+                "documents": [
+                    {
+                        "cursor": "273AmFQTk7w6134GhzKUS5tY8qDuaMYBPgbaftZ43G7saiKa73MPapFvjNDixbNjCr5ucNqzNsx2fYdRqRod9U2W",
+                        "fields": { "bool": true, },
+                        "meta": {
+                            "owner": "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96",
+                            "documentId": "00200436216389856afb3f3a7d8cb2d2981be85787aebed02031c72eb9c216406c57",
+                            "viewId": "00200436216389856afb3f3a7d8cb2d2981be85787aebed02031c72eb9c216406c57",
+                        }
+                    },
+                    {
+                        "cursor": "31Ch6qa4mdKcxpWJG4X9Wf5iMvSSxmSGg8cyg9teNR6yKmLncZCmyVUaPFjRNoWcxpeASGqrRiJGR8HSqjWBz5HE",
+                        "fields": { "bool": false, },
+                        "meta": {
+                            "owner": "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96",
+                            "documentId": "0020de552d81948f220d09127dc42963071d086a142c9547e701674d4cac83f29872",
+                            "viewId": "0020de552d81948f220d09127dc42963071d086a142c9547e701674d4cac83f29872",
+                        }
+                    }
+                ]
+            }),
         }),
         vec![]
     )]
     #[case(
-        r#"(
-            first: 10, 
-            after: "1_00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331", 
-            orderBy: OWNER, 
-            orderDirection: ASC, 
-            filter: { 
-                bool : { 
-                    eq: true 
-                } 
-            }, 
-            meta: { 
-                owner: { 
-                    in: ["7cf4f58a2d89e93313f2de99604a814ecea9800cf217b140e9c3a7ba59a5d982"] 
-                },
-                documentId: { 
-                    eq: "00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331" 
-                },
-                viewId: { 
-                    notIn: ["00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331"] 
+        r#"
+            (
+                first: 1,
+                after: "31Ch6qa4mdKcxpWJG4X9Wf5iMvSSxmSGg8cyg9teNR6yKmLncZCmyVUaPFjRNoWcxpeASGqrRiJGR8HSqjWBz5HE",
+                orderBy: DOCUMENT_ID,
+                orderDirection: ASC,
+                filter: {
+                    bool: {
+                        eq: false
+                    }
                 }
-            }
-        )"#.to_string(), 
+            )
+        "#.to_string(),
         value!({
-            "collection": value!([{ "hasNextPage": false, "totalCount": 0, "document": { "cursor": "CURSOR", "fields": { "bool": true, } } }]),
+            "collection": value!({
+                "hasNextPage": false,
+                "totalCount": 1,
+                "endCursor": Value::Null,
+                "documents": []
+            }),
         }),
         vec![]
     )]
     #[case(
-        r#"(first: 0)"#.to_string(), 
+        r#"(first: 0)"#.to_string(),
         Value::Null,
         vec!["out of range integral type conversion attempted".to_string()]
     )]
     #[case(
-        r#"(first: "hello")"#.to_string(), 
+        r#"(first: "hello")"#.to_string(),
         Value::Null,
         vec!["Invalid value for argument \"first\", expected type \"Int\"".to_string()]
     )]
     #[case(
-        r#"(after: HELLO)"#.to_string(), 
+        r#"(after: HELLO)"#.to_string(),
         Value::Null,
         vec!["Invalid value for argument \"after\", expected type \"Cursor\"".to_string()]
     )]
     #[case(
-        r#"(after: "00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331")"#.to_string(), 
+        r#"(after: "00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331")"#.to_string(),
         Value::Null,
         vec!["Invalid value for argument \"after\", expected type \"Cursor\"".to_string()]
     )]
     #[case(
-        r#"(after: 27)"#.to_string(), 
+        r#"(after: 27)"#.to_string(),
         Value::Null,
         vec!["Invalid value for argument \"after\", expected type \"Cursor\"".to_string()]
     )]
     #[case(
-        r#"(orderBy: HELLO)"#.to_string(), 
+        r#"(orderBy: HELLO)"#.to_string(),
         Value::Null,
         vec!["Invalid value for argument \"orderBy\", enumeration type \"schema_name_00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331OrderBy\" does not contain the value \"HELLO\"".to_string()]
     )]
     #[case(
-        r#"(orderBy: "hello")"#.to_string(), 
+        r#"(orderBy: "hello")"#.to_string(),
         Value::Null,
         vec!["Invalid value for argument \"orderBy\", enumeration type \"schema_name_00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331OrderBy\" does not contain the value \"hello\"".to_string()]
     )]
     #[case(
-        r#"(orderDirection: HELLO)"#.to_string(), 
+        r#"(orderDirection: HELLO)"#.to_string(),
         Value::Null,
         vec!["Invalid value for argument \"orderDirection\", enumeration type \"OrderDirection\" does not contain the value \"HELLO\"".to_string()]
     )]
     #[case(
-        r#"(orderDirection: "hello")"#.to_string(), 
+        r#"(orderDirection: "hello")"#.to_string(),
         Value::Null,
         vec!["Invalid value for argument \"orderDirection\", enumeration type \"OrderDirection\" does not contain the value \"hello\"".to_string()]
     )]
     #[case(
-        r#"(filter: "hello")"#.to_string(), 
+        r#"(filter: "hello")"#.to_string(),
         Value::Null,
         vec!["internal: is not an object".to_string()]
     )]
     #[case(
-        r#"(filter: { bool: { in: ["hello"] }})"#.to_string(), 
+        r#"(filter: { bool: { in: ["hello"] }})"#.to_string(),
         Value::Null,
         vec!["Invalid value for argument \"filter.bool\", unknown field \"in\" of type \"BooleanFilter\"".to_string()]
     )]
     #[case(
-        r#"(filter: { hello: { eq: true }})"#.to_string(), 
+        r#"(filter: { hello: { eq: true }})"#.to_string(),
         Value::Null,
         vec!["Invalid value for argument \"filter\", unknown field \"hello\" of type \"schema_name_00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331Filter\"".to_string()]
     )]
     #[case(
-        r#"(filter: { bool: { contains: "hello" }})"#.to_string(), 
+        r#"(filter: { bool: { contains: "hello" }})"#.to_string(),
         Value::Null,
         vec!["Invalid value for argument \"filter.bool\", unknown field \"contains\" of type \"BooleanFilter\"".to_string()]
     )]
     #[case(
-        r#"(meta: "hello")"#.to_string(), 
+        r#"(meta: "hello")"#.to_string(),
         Value::Null,
         vec!["internal: is not an object".to_string()]
     )]
     #[case(
-        r#"(meta: { bool: { in: ["hello"] }})"#.to_string(), 
+        r#"(meta: { bool: { in: ["hello"] }})"#.to_string(),
         Value::Null,
         vec!["Invalid value for argument \"meta\", unknown field \"bool\" of type \"MetaFilterInput\"".to_string()]
     )]
     #[case(
-        r#"(meta: { owner: { contains: "hello" }})"#.to_string(), 
+        r#"(meta: { owner: { contains: "hello" }})"#.to_string(),
         Value::Null,
         vec!["Invalid value for argument \"meta.owner\", unknown field \"contains\" of type \"OwnerFilter\"".to_string()]
     )]
     #[case(
-        r#"(meta: { documentId: { contains: "hello" }})"#.to_string(), 
+        r#"(meta: { documentId: { contains: "hello" }})"#.to_string(),
         Value::Null,
         vec!["Invalid value for argument \"meta.documentId\", unknown field \"contains\" of type \"DocumentIdFilter\"".to_string()]
     )]
     #[case(
-        r#"(meta: { viewId: { contains: "hello" }})"#.to_string(), 
+        r#"(meta: { viewId: { contains: "hello" }})"#.to_string(),
         Value::Null,
         vec!["Invalid value for argument \"meta.viewId\", unknown field \"contains\" of type \"DocumentViewIdFilter\"".to_string()]
     )]
     #[case(
-        r#"(meta: { documentId: { eq: 27 }})"#.to_string(), 
+        r#"(meta: { documentId: { eq: 27 }})"#.to_string(),
         Value::Null,
         vec!["Invalid value for argument \"meta.documentId.eq\", expected type \"DocumentId\"".to_string()]
     )]
     #[case(
-        r#"(meta: { viewId: { in: "hello" }})"#.to_string(), 
+        r#"(meta: { viewId: { in: "hello" }})"#.to_string(),
         Value::Null,
         vec!["Invalid value for argument \"meta.viewId.in\", expected type \"DocumentViewId\"".to_string()]
     )]
@@ -240,7 +215,6 @@ mod test {
         Value::Null,
         vec!["Invalid value for argument \"meta.owner.eq\", expected type \"PublicKey\"".to_string()]
     )]
-
     fn collection_query(
         key_pair: KeyPair,
         #[case] query_args: String,
@@ -267,6 +241,15 @@ mod test {
             )
             .await;
 
+            // Publish another document on node.
+            add_document(
+                &mut node,
+                schema.id(),
+                vec![("bool", false.into())],
+                &key_pair,
+            )
+            .await;
+
             // Configure and send test query.
             let client = graphql_test_client(&node).await;
             let query = format!(
@@ -274,9 +257,17 @@ mod test {
                 collection: all_{type_name}{query_args} {{
                     hasNextPage
                     totalCount
-                    document {{ 
+                    endCursor
+                    documents {{
                         cursor
-                        fields {{ bool }}
+                        fields {{
+                            bool
+                        }}
+                        meta {{
+                            owner
+                            documentId
+                            viewId
+                        }}
                     }}
                 }},
             }}"#,

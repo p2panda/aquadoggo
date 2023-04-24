@@ -219,6 +219,7 @@ dependencies = [
  "async-trait",
  "axum",
  "bamboo-rs-core-ed25519-yasmf",
+ "bs58",
  "ciborium",
  "ctor",
  "deadqueue",

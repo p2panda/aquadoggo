@@ -8,7 +8,7 @@ use p2panda_rs::schema::Schema;
 use crate::graphql::utils::order_by_name;
 
 /// Meta fields by which a collection of documents can be sorted.
-pub const META_ORDER_FIELDS: [&str; 3] = ["OWNER", "DOCUMENT_ID", "DOCUMENT_VIEW_ID"];
+pub const META_ORDER_FIELDS: [&str; 2] = ["DOCUMENT_ID", "DOCUMENT_VIEW_ID"];
 
 /// Possible ordering direction for collection queries.
 #[derive(Enum, Debug)]

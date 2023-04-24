@@ -22,7 +22,7 @@
 //! As mentioned above, a useful property of documents is that they make it easy to retain past
 //! state, we call these states document views. When a document is updated it gets a new state, or
 //! view, which can be referred to by a globally unique document view id.
-//!  
+//!
 //! The getter methods allow retrieving a document by it's `DocumentId` or it's
 //! `DocumentViewId`. The former always returns the most current document state, the latter
 //! returns the specific document view if it has already been materialised and stored. Although it
@@ -44,7 +44,6 @@ use crate::db::types::StorageDocument;
 use crate::db::Pool;
 use crate::db::SqlStore;
 
-/// Implementation of
 #[async_trait]
 impl DocumentStore for SqlStore {
     type Document = StorageDocument;
@@ -123,7 +122,7 @@ impl DocumentStore for SqlStore {
     /// An error is returned only if a fatal database error occurs.
     async fn get_document_by_view_id(
         &self,
-        id: &DocumentViewId,
+        view_id: &DocumentViewId,
     ) -> Result<Option<StorageDocument>, DocumentStorageError> {
         // Retrieve the id of the document which the passed view id comes from.
         let document_id: Option<String> = query_scalar(
@@ -136,7 +135,7 @@ impl DocumentStore for SqlStore {
                 document_view_id = $1
             ",
         )
-        .bind(id.to_string())
+        .bind(view_id.to_string())
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
@@ -161,7 +160,7 @@ impl DocumentStore for SqlStore {
                 documents
             LEFT JOIN operations_v1
                 ON
-                    operations_v1.operation_id = $1    
+                    operations_v1.operation_id = $1
             WHERE
                 documents.document_id = $1 AND documents.is_deleted = false
             ",
@@ -177,15 +176,16 @@ impl DocumentStore for SqlStore {
         // We now want to retrieve the view (current key-value map) for this document, as we
         // already filtered out deleted documents in the query above we can expect all documents
         // we handle here to have an associated view in the database.
-        let document_view_field_rows = get_document_view_field_rows(&self.pool, id).await?;
-        // this method assumes all values coming from the db are already validated and so
+        let document_view_field_rows = get_document_view_field_rows(&self.pool, view_id).await?;
+
+        // This method assumes all values coming from the db are already validated and so
         // unwraps where errors might occur.
         let document_view_fields = Some(parse_document_view_field_rows(document_view_field_rows));
 
-        // Construct a `StorageDocument` based on the retrieved values.
+        // Construct a `StorageDocument` based on the retrieved values
         let document = StorageDocument {
             id: document_row.document_id.parse().unwrap(),
-            view_id: id.to_owned(), /* set the requested document view id not the current */
+            view_id: view_id.to_owned(), // Set to requested document view id, not the current
             schema_id: document_row.schema_id.parse().unwrap(),
             fields: document_view_fields,
             author: document_row.public_key.parse().unwrap(),
@@ -381,6 +381,7 @@ async fn get_document_view_field_rows(
     query_as::<_, DocumentViewFieldRow>(
         "
         SELECT
+            document_views.document_id,
             document_view_fields.document_view_id,
             document_view_fields.operation_id,
             document_view_fields.name,
@@ -389,6 +390,9 @@ async fn get_document_view_field_rows(
             operation_fields_v1.value
         FROM
             document_view_fields
+        LEFT JOIN document_views
+            ON
+                document_view_fields.document_view_id = document_views.document_view_id
         LEFT JOIN operation_fields_v1
             ON
                 document_view_fields.operation_id = operation_fields_v1.operation_id

@@ -6,6 +6,7 @@ use dynamic_graphql::{FieldValue, SimpleObject};
 use p2panda_rs::document::traits::AsDocument;
 
 use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar, PublicKeyScalar};
+use crate::graphql::types::DocumentValue;
 use crate::graphql::utils::downcast_document;
 
 /// Meta fields of a document, contains id and authorship information.
@@ -33,8 +34,9 @@ impl DocumentMeta {
 
         // Extract the document in the case of a single or paginated request.
         let document = match document {
-            super::DocumentValue::Single(document) => document,
-            super::DocumentValue::Paginated(_, _, document) => document,
+            DocumentValue::Single(document) => document,
+            DocumentValue::Item(_, document) => document,
+            DocumentValue::Collection(_, _) => panic!("Expected list item or single document"),
         };
 
         // Construct `DocumentMeta` and return it. We defined the document meta

@@ -381,6 +381,7 @@ mod tests {
                 name: Some("age".to_string()),
                 field_type: Some("int".to_string()),
                 value: Some("28".to_string()),
+                list_index: Some(0),
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -398,6 +399,7 @@ mod tests {
                 name: Some("height".to_string()),
                 field_type: Some("float".to_string()),
                 value: Some("3.5".to_string()),
+                list_index: Some(0),
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -415,6 +417,7 @@ mod tests {
                 name: Some("is_admin".to_string()),
                 field_type: Some("bool".to_string()),
                 value: Some("false".to_string()),
+                list_index: Some(0),
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -435,6 +438,7 @@ mod tests {
                     "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                         .to_string(),
                 ),
+                list_index: Some(0),
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -455,6 +459,7 @@ mod tests {
                     "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
                         .to_string(),
                 ),
+                list_index: Some(1),
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -475,6 +480,7 @@ mod tests {
                     "0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
                         .to_string(),
                 ),
+                list_index: Some(0),
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -495,6 +501,7 @@ mod tests {
                     "0020dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
                         .to_string(),
                 ),
+                list_index: Some(1),
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -515,6 +522,7 @@ mod tests {
                     "0020bcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbc"
                         .to_string(),
                 ),
+                list_index: Some(0),
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -535,6 +543,7 @@ mod tests {
                     "0020abababababababababababababababababababababababababababababababab"
                         .to_string(),
                 ),
+                list_index: Some(1),
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -555,6 +564,7 @@ mod tests {
                     "0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
                         .to_string(),
                 ),
+                list_index: Some(0),
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -575,6 +585,7 @@ mod tests {
                     "0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
                         .to_string(),
                 ),
+                list_index: Some(0),
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -592,6 +603,7 @@ mod tests {
                 name: Some("username".to_string()),
                 field_type: Some("str".to_string()),
                 value: Some("bubu".to_string()),
+                list_index: Some(0),
             },
         ];
 
@@ -710,6 +722,8 @@ mod tests {
     fn parses_document_field_rows() {
         let document_field_rows = vec![
             DocumentViewFieldRow {
+                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
+                    .to_string(),
                 document_view_id:
                     "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
                         .to_string(),
@@ -717,10 +731,13 @@ mod tests {
                     "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
                         .to_string(),
                 name: "age".to_string(),
+                list_index: 0,
                 field_type: "int".to_string(),
                 value: "28".to_string(),
             },
             DocumentViewFieldRow {
+                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
+                    .to_string(),
                 document_view_id:
                     "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
                         .to_string(),
@@ -728,10 +745,13 @@ mod tests {
                     "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
                         .to_string(),
                 name: "height".to_string(),
+                list_index: 0,
                 field_type: "float".to_string(),
                 value: "3.5".to_string(),
             },
             DocumentViewFieldRow {
+                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
+                    .to_string(),
                 document_view_id:
                     "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
                         .to_string(),
@@ -739,10 +759,13 @@ mod tests {
                     "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
                         .to_string(),
                 name: "is_admin".to_string(),
+                list_index: 0,
                 field_type: "bool".to_string(),
                 value: "false".to_string(),
             },
             DocumentViewFieldRow {
+                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
+                    .to_string(),
                 document_view_id:
                     "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
                         .to_string(),
@@ -750,11 +773,14 @@ mod tests {
                     "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
                         .to_string(),
                 name: "many_profile_pictures".to_string(),
+                list_index: 0,
                 field_type: "relation_list".to_string(),
                 value: "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                     .to_string(),
             },
             DocumentViewFieldRow {
+                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
+                    .to_string(),
                 document_view_id:
                     "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
                         .to_string(),
@@ -762,11 +788,14 @@ mod tests {
                     "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
                         .to_string(),
                 name: "many_profile_pictures".to_string(),
+                list_index: 1,
                 field_type: "relation_list".to_string(),
                 value: "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
                     .to_string(),
             },
             DocumentViewFieldRow {
+                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
+                    .to_string(),
                 document_view_id:
                     "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
                         .to_string(),
@@ -774,11 +803,14 @@ mod tests {
                     "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
                         .to_string(),
                 name: "many_special_profile_pictures".to_string(),
+                list_index: 0,
                 field_type: "pinned_relation_list".to_string(),
                 value: "0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
                     .to_string(),
             },
             DocumentViewFieldRow {
+                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
+                    .to_string(),
                 document_view_id:
                     "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
                         .to_string(),
@@ -786,11 +818,14 @@ mod tests {
                     "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
                         .to_string(),
                 name: "many_special_profile_pictures".to_string(),
+                list_index: 1,
                 field_type: "pinned_relation_list".to_string(),
                 value: "0020dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
                     .to_string(),
             },
             DocumentViewFieldRow {
+                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
+                    .to_string(),
                 document_view_id:
                     "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
                         .to_string(),
@@ -798,11 +833,14 @@ mod tests {
                     "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
                         .to_string(),
                 name: "profile_picture".to_string(),
+                list_index: 0,
                 field_type: "relation".to_string(),
                 value: "0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
                     .to_string(),
             },
             DocumentViewFieldRow {
+                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
+                    .to_string(),
                 document_view_id:
                     "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
                         .to_string(),
@@ -810,11 +848,14 @@ mod tests {
                     "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
                         .to_string(),
                 name: "special_profile_picture".to_string(),
+                list_index: 0,
                 field_type: "pinned_relation".to_string(),
                 value: "0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
                     .to_string(),
             },
             DocumentViewFieldRow {
+                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
+                    .to_string(),
                 document_view_id:
                     "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
                         .to_string(),
@@ -822,6 +863,7 @@ mod tests {
                     "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
                         .to_string(),
                 name: "username".to_string(),
+                list_index: 0,
                 field_type: "str".to_string(),
                 value: "bubu".to_string(),
             },

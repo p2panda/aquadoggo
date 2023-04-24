@@ -55,8 +55,8 @@ pub const ORDER_BY_ARG: &str = "orderBy";
 /// Argument string used for passing ordering direction to query.
 pub const ORDER_DIRECTION_ARG: &str = "orderDirection";
 
-/// Name of field on a document where it's fields can be accessed.
-pub const DOCUMENT_FIELD: &str = "document";
+/// Name of field where a collection of documents can be accessed.
+pub const DOCUMENTS_FIELD: &str = "documents";
 
 /// Name of field on a document where it's fields can be accessed.
 pub const FIELDS_FIELD: &str = "fields";
@@ -72,3 +72,12 @@ pub const TOTAL_COUNT_FIELD: &str = "totalCount";
 
 /// Name of field on a paginated response which shows if a next page exists.
 pub const HAS_NEXT_PAGE_FIELD: &str = "hasNextPage";
+
+/// Name of field on a paginated response which shows if a previous page exists.
+pub const HAS_PREVIOUS_PAGE_FIELD: &str = "hasPreviousPage";
+
+/// Name of field on a paginated response which contains the cursor for the previous page.
+pub const START_CURSOR_FIELD: &str = "startCursor";
+
+/// Name of field on a paginated response which contains the cursor for the next page.
+pub const END_CURSOR_FIELD: &str = "endCursor";

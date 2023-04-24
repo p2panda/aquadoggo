@@ -17,7 +17,7 @@ pub enum Direction {
 /// An ordering determines in which direction and based on what field the results are sorted.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Order {
-    pub field: Field,
+    pub field: Option<Field>,
     pub direction: Direction,
 }
 
@@ -25,7 +25,7 @@ impl Order {
     /// Returns a new instance of ordering settings.
     pub fn new(field: &Field, direction: &Direction) -> Self {
         Self {
-            field: field.clone(),
+            field: Some(field.clone()),
             direction: direction.clone(),
         }
     }
@@ -34,7 +34,7 @@ impl Order {
 impl Default for Order {
     fn default() -> Self {
         Self {
-            field: Field::Meta(MetaField::DocumentId),
+            field: None,
             direction: Direction::Ascending,
         }
     }
@@ -53,7 +53,10 @@ mod tests {
 
         assert_eq!(
             order,
-            Order::new(&Field::Meta(MetaField::DocumentId), &Direction::Ascending)
+            Order {
+                field: None,
+                direction: Direction::Ascending
+            }
         )
     }
 }

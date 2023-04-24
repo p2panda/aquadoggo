@@ -1,40 +1,41 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::num::NonZeroU64;
 
 use async_graphql::dynamic::{InputValue, ObjectAccessor, ResolverContext, TypeRef, ValueAccessor};
 use async_graphql::{Error, Value};
-use dynamic_graphql::ScalarValue;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{FieldType, Schema, SchemaId};
 use p2panda_rs::storage_provider::error::DocumentStorageError;
 use p2panda_rs::storage_provider::traits::DocumentStore;
 
-use crate::db::query::{Direction, Field, Filter, MetaField, Order, Pagination};
-use crate::db::{types::StorageDocument, SqlStore};
-use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
+use crate::db::query::{
+    Cursor, Direction, Field, Filter, MetaField, Order, Pagination, PaginationField, Select,
+};
+use crate::db::stores::{PaginationCursor, Query};
+use crate::db::types::StorageDocument;
+use crate::db::SqlStore;
+use crate::graphql::constants;
+use crate::graphql::scalars::{CursorScalar, DocumentIdScalar, DocumentViewIdScalar};
 use crate::graphql::types::DocumentValue;
-
-use super::constants;
-use super::scalars::CursorScalar;
 
 // Type name suffixes.
 const DOCUMENT_FIELDS_SUFFIX: &str = "Fields";
 const FILTER_INPUT_SUFFIX: &str = "Filter";
 const ORDER_BY_SUFFIX: &str = "OrderBy";
-const PAGINATED_DOCUMENT_SUFFIX: &str = "Paginated";
-const PAGINATED_RESPONSE_SUFFIX: &str = "PaginatedResponse";
+const COLLECTION_ITEM_SUFFIX: &str = "Item";
+const COLLECTION_SUFFIX: &str = "Collection";
 
-// Correctly formats the name of a paginated response type.
-pub fn paginated_response_name(schema_id: &SchemaId) -> String {
-    format!("{}{PAGINATED_RESPONSE_SUFFIX}", schema_id)
+// Correctly formats the name of a document collection type.
+pub fn collection_name(schema_id: &SchemaId) -> String {
+    format!("{}{COLLECTION_SUFFIX}", schema_id)
 }
 
-// Correctly formats the name of a paginated document type.
-pub fn paginated_document_name(schema_id: &SchemaId) -> String {
-    format!("{}{PAGINATED_DOCUMENT_SUFFIX}", schema_id)
+// Correctly formats the name of a collection item type.
+pub fn collection_item_name(schema_id: &SchemaId) -> String {
+    format!("{}{COLLECTION_ITEM_SUFFIX}", schema_id)
 }
 
 // Correctly formats the name of a document fields type.
@@ -75,13 +76,9 @@ pub fn graphql_type(field_type: &FieldType) -> TypeRef {
         FieldType::Float => TypeRef::named(TypeRef::FLOAT),
         FieldType::String => TypeRef::named(TypeRef::STRING),
         FieldType::Relation(schema_id) => TypeRef::named(schema_id.to_string()),
-        FieldType::RelationList(schema_id) => {
-            TypeRef::named_list(paginated_response_name(schema_id))
-        }
+        FieldType::RelationList(schema_id) => TypeRef::named(collection_name(schema_id)),
         FieldType::PinnedRelation(schema_id) => TypeRef::named(schema_id.to_string()),
-        FieldType::PinnedRelationList(schema_id) => {
-            TypeRef::named_list(paginated_response_name(schema_id))
-        }
+        FieldType::PinnedRelationList(schema_id) => TypeRef::named(collection_name(schema_id)),
     }
 }
 
@@ -124,15 +121,16 @@ pub fn filter_to_operation_value(
 pub fn parse_collection_arguments(
     ctx: &ResolverContext,
     schema: &Schema,
-    pagination: &mut Pagination<CursorScalar>,
-    order: &mut Order,
-    filter: &mut Filter,
-) -> Result<(), Error> {
+) -> Result<Query<PaginationCursor>, Error> {
+    let mut pagination = Pagination::<PaginationCursor>::default();
+    let mut order = Order::default();
+    let mut filter = Filter::default();
+
     for (name, value) in ctx.args.iter() {
         match name.as_str() {
             constants::PAGINATION_AFTER_ARG => {
-                let cursor = CursorScalar::from_value(Value::String(value.string()?.to_string()))?;
-                pagination.after = Some(cursor);
+                let cursor = CursorScalar::decode(value.string()?)?;
+                pagination.after = Some(PaginationCursor::from(&cursor));
             }
             constants::PAGINATION_FIRST_ARG => {
                 pagination.first = NonZeroU64::try_from(value.u64()?)?;
@@ -144,7 +142,7 @@ pub fn parse_collection_arguments(
                     "DOCUMENT_VIEW_ID" => Field::Meta(MetaField::DocumentViewId),
                     field_name => Field::new(field_name),
                 };
-                order.field = order_by;
+                order.field = Some(order_by);
             }
             constants::ORDER_DIRECTION_ARG => {
                 let direction = match value.enum_name()? {
@@ -158,18 +156,27 @@ pub fn parse_collection_arguments(
                 let filter_object = value
                     .object()
                     .map_err(|_| Error::new("internal: is not an object"))?;
-                parse_meta_filter(filter, &filter_object)?;
+                parse_meta_filter(&mut filter, &filter_object)?;
             }
             constants::FILTER_ARG => {
                 let filter_object = value
                     .object()
                     .map_err(|_| Error::new("internal: is not an object"))?;
-                parse_filter(filter, schema, &filter_object)?;
+                parse_filter(&mut filter, schema, &filter_object)?;
             }
             _ => panic!("Unknown argument key received"),
         }
     }
-    Ok(())
+
+    // Parse selected fields in GraphQL query
+    let (pagination_fields, fields) = look_ahead_selected_fields(ctx);
+    let select = Select::new(fields.as_slice());
+    pagination.fields = pagination_fields;
+
+    // Finally put it all together
+    let query = Query::new(&pagination, &select, &filter, &order);
+
+    Ok(query)
 }
 
 /// Parse a filter object received from the graphql api into an abstract filter type based on the
@@ -229,7 +236,7 @@ fn parse_filter(
                     filter.add_contains(&filter_field, value.string()?);
                 }
                 "notContains" => {
-                    filter.add_contains(&filter_field, value.string()?);
+                    filter.add_not_contains(&filter_field, value.string()?);
                 }
                 _ => panic!("Unknown filter type received"),
             }
@@ -362,4 +369,58 @@ pub fn with_collection_arguments(
             "Get all {} documents with pagination, ordering and filtering.",
             schema_id
         ))
+}
+
+/// Helper method to extract selected pagination and application fields from query.
+pub fn look_ahead_selected_fields(ctx: &ResolverContext) -> (Vec<PaginationField>, Vec<Field>) {
+    let selection_field = ctx
+        .look_ahead()
+        .selection_fields()
+        .first()
+        .expect("Needs always root selection field")
+        .to_owned();
+
+    let pagination = selection_field
+        .selection_set()
+        .filter_map(|field| match field.name() {
+            // Remove special GraphQL meta fields
+            "__typename" => None,
+
+            // Remove all other fields which are not related to pagination
+            constants::DOCUMENTS_FIELD => None,
+
+            // Convert pagination fields finally
+            value => Some(value.into()),
+        })
+        .collect::<Vec<PaginationField>>();
+
+    let mut selected_fields = Vec::new();
+
+    if let Some(document) = selection_field
+        .selection_set()
+        .find(|field| field.name() == constants::DOCUMENTS_FIELD)
+    {
+        document
+            .selection_set()
+            .for_each(|field| match field.name() {
+                // Parse selected application fields
+                constants::FIELDS_FIELD => {
+                    field.selection_set().for_each(|field| {
+                        selected_fields.push(Field::Field(field.name().to_string()));
+                    });
+                }
+                // Parse selected meta fields
+                constants::META_FIELD => {
+                    field
+                        .selection_set()
+                        .filter_map(|field| field.name().try_into().ok())
+                        .for_each(|field| {
+                            selected_fields.push(Field::Meta(field));
+                        });
+                }
+                _ => (),
+            });
+    }
+
+    (pagination, selected_fields)
 }
