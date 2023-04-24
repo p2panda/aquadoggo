@@ -17,7 +17,7 @@ use crate::test_utils::{add_document, TestNode};
 #[derive(Arbitrary, Debug, Clone)]
 pub struct FieldName(#[proptest(regex = "[A-Za-z]{1}[A-Za-z0-9_]{0,63}")] String);
 
-/// Add schemas from a schema AST to a test node. 
+/// Add schemas from a schema AST to a test node.
 #[async_recursion]
 pub async fn add_schemas_from_ast(
     node: &mut TestNode,
@@ -150,9 +150,7 @@ pub async fn add_documents_from_ast(
     .await;
 
     match documents.get_mut(&document_ast.schema_id) {
-        Some(documents) => {
-            documents.push(document_view_id.clone())
-        }
+        Some(documents) => documents.push(document_view_id.clone()),
         None => {
             documents.insert(
                 document_ast.schema_id.clone(),
