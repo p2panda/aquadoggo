@@ -427,8 +427,8 @@ fn where_pagination_sql(
     };
 
     match &order.field {
-        // If no ordering has been applied we can simply paginate over the cursor. If we're in a
-        // relation list we need to paginate over the list_index.
+        // If no ordering has been applied we can simply paginate over the unique cursor. If we're
+        // in a relation list we need to paginate over the unique list index.
         None => match list {
             None => {
                 format!("AND operation_fields_v1.cursor > '{operation_cursor}'")
@@ -452,19 +452,8 @@ fn where_pagination_sql(
                     "#
                 );
 
-                format!(
-                    r#"
-                    AND (
-                            operation_fields_v1_list.list_index > ({cmp_value})
-                            OR
-                            (
-                                operation_fields_v1_list.list_index = ({cmp_value})
-                                AND
-                                    {cursor_sql}
-                            )
-                        )
-                    "#
-                )
+                // List indexes are always unique so we can simply just compare them like that
+                format!("AND operation_fields_v1_list.list_index > ({cmp_value})")
             }
         },
 
@@ -515,7 +504,15 @@ fn where_pagination_sql(
             // we might need to also add the OR case again
             format!(
                 r#"
-                AND {cmp_field} {cmp_direction} ({cmp_value})
+                AND (
+                    {cmp_field} {cmp_direction} ({cmp_value})
+                    OR
+                    (
+                        {cmp_field} = ({cmp_value})
+                        AND
+                            {cursor_sql}
+                    )
+                )
                 "#
             )
         }
@@ -1408,7 +1405,7 @@ mod tests {
     }
 
     #[rstest]
-    fn pagination(key_pair: KeyPair) {
+    fn pagination_over_ordered_view_ids(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
             let (schema, mut view_ids) = create_events_test_data(&mut node, &key_pair).await;
             let view_ids_len = view_ids.len();
