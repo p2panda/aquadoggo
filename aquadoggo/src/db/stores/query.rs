@@ -2037,19 +2037,11 @@ mod tests {
         assert_eq!(result.len(), 2);
         assert_eq!(
             result[0].0,
-            PaginationCursor::new(
-                OperationCursor::from(cursor_1.as_str()),
-                None,
-                None
-            )
+            PaginationCursor::new(OperationCursor::from(cursor_1.as_str()), None, None)
         );
         assert_eq!(
             result[1].0,
-            PaginationCursor::new(
-                OperationCursor::from(cursor_2.as_str()),
-                None,
-                None
-            )
+            PaginationCursor::new(OperationCursor::from(cursor_2.as_str()), None, None)
         );
     }
 }
