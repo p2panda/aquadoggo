@@ -935,6 +935,8 @@ impl SqlStore {
         "#
         );
 
+        println!("{sea_quel}");
+
         let mut rows: Vec<QueryRow> = query_as::<_, QueryRow>(&sea_quel)
             .fetch_all(&self.pool)
             .await
@@ -1923,13 +1925,16 @@ mod tests {
         });
     }
 
-    /* #[rstest]
+    #[rstest]
     fn select_cursor_during_conversion(schema_id: SchemaId) {
-        let first_document_hash = Hash::new_from_bytes(&[0]).to_string();
-        let second_document_hash = Hash::new_from_bytes(&[1]).to_string();
+        let relation_list_hash = Hash::new_from_bytes(&[0]).to_string();
+        let first_document_hash = Hash::new_from_bytes(&[1]).to_string();
+        let second_document_hash = Hash::new_from_bytes(&[2]).to_string();
 
-        let cursor_1 = Hash::new_from_bytes(&[0, 1]).to_string();
-        let cursor_2 = Hash::new_from_bytes(&[0, 2]).to_string();
+        let root_cursor_1 = Hash::new_from_bytes(&[0, 1]).to_string();
+        let root_cursor_2 = Hash::new_from_bytes(&[0, 2]).to_string();
+        let cursor_1 = Hash::new_from_bytes(&[0, 3]).to_string();
+        let cursor_2 = Hash::new_from_bytes(&[0, 4]).to_string();
 
         let query_rows = vec![
             // First document
@@ -1939,7 +1944,8 @@ mod tests {
                 operation_id: first_document_hash.clone(),
                 is_deleted: false,
                 is_edited: false,
-                cursor: cursor_1.clone(),
+                root_cursor: root_cursor_1.clone(),
+                cmp_value_cursor: cursor_1.clone(),
                 owner: OptionalOwner::default(),
                 name: "username".to_string(),
                 value: "panda".to_string(),
@@ -1952,7 +1958,8 @@ mod tests {
                 operation_id: first_document_hash.clone(),
                 is_deleted: false,
                 is_edited: false,
-                cursor: cursor_1.clone(),
+                root_cursor: root_cursor_1.clone(),
+                cmp_value_cursor: cursor_1.clone(),
                 owner: OptionalOwner::default(),
                 name: "is_admin".to_string(),
                 value: "false".to_string(),
@@ -1966,7 +1973,8 @@ mod tests {
                 operation_id: second_document_hash.clone(),
                 is_deleted: false,
                 is_edited: false,
-                cursor: cursor_2.clone(),
+                root_cursor: root_cursor_2.clone(),
+                cmp_value_cursor: cursor_2.clone(),
                 owner: OptionalOwner::default(),
                 name: "username".to_string(),
                 value: "penguin".to_string(),
@@ -1979,7 +1987,8 @@ mod tests {
                 operation_id: second_document_hash.clone(),
                 is_deleted: false,
                 is_edited: false,
-                cursor: cursor_2.clone(),
+                root_cursor: root_cursor_2.clone(),
+                cmp_value_cursor: cursor_2.clone(),
                 owner: OptionalOwner::default(),
                 name: "is_admin".to_string(),
                 value: "true".to_string(),
@@ -1988,6 +1997,36 @@ mod tests {
             },
         ];
 
+        // convert as if this is a relation list query
+        let result = convert_rows(
+            query_rows.clone(),
+            Some(&RelationList::new_unpinned(
+                &relation_list_hash.parse().unwrap(),
+                "relation_list_field",
+            )),
+            &vec!["username".to_string(), "is_admin".to_string()],
+            &schema_id,
+        );
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(
+            result[0].0,
+            PaginationCursor::new(
+                OperationCursor::from(cursor_1.as_str()),
+                Some(OperationCursor::from(root_cursor_1.as_str())),
+                Some(relation_list_hash.parse().unwrap())
+            )
+        );
+        assert_eq!(
+            result[1].0,
+            PaginationCursor::new(
+                OperationCursor::from(cursor_2.as_str()),
+                Some(OperationCursor::from(root_cursor_2.as_str())),
+                Some(relation_list_hash.parse().unwrap())
+            )
+        );
+
+        // convert as if this is _not_ a relation list query
         let result = convert_rows(
             query_rows,
             None,
@@ -1998,11 +2037,19 @@ mod tests {
         assert_eq!(result.len(), 2);
         assert_eq!(
             result[0].0,
-            PaginationCursor::new(OperationCursor::from(cursor_1.as_str()), None)
+            PaginationCursor::new(
+                OperationCursor::from(cursor_1.as_str()),
+                None,
+                None
+            )
         );
         assert_eq!(
             result[1].0,
-            PaginationCursor::new(OperationCursor::from(cursor_2.as_str()), None)
+            PaginationCursor::new(
+                OperationCursor::from(cursor_2.as_str()),
+                None,
+                None
+            )
         );
-    } */
+    }
 }
