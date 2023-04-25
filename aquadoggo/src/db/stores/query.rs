@@ -1145,7 +1145,9 @@ mod tests {
     use p2panda_rs::document::{DocumentViewFields, DocumentViewId};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::KeyPair;
-    use p2panda_rs::operation::{OperationFields, OperationId, OperationValue};
+    use p2panda_rs::operation::{
+        OperationFields, OperationId, OperationValue, PinnedRelationList, Relation,
+    };
     use p2panda_rs::schema::{FieldType, Schema, SchemaId};
     use p2panda_rs::test_utils::fixtures::{key_pair, random_hash, schema_id};
     use rstest::rstest;
@@ -1568,6 +1570,61 @@ mod tests {
                 get_document_value(&documents[2].1, "name"),
                 OperationValue::String("p4p space".to_string())
             );
+        });
+    }
+
+    #[rstest]
+    fn empty_pinned_relation_list(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            let (venues_schema, mut venues_view_ids) =
+                create_venues_test_data(&mut node, &key_pair).await;
+
+            let visited_schema = add_schema(
+                &mut node,
+                "visited",
+                vec![(
+                    "venues",
+                    FieldType::PinnedRelationList(venues_schema.id().clone()),
+                )],
+                &key_pair,
+            )
+            .await;
+
+            let visited_view_id = add_document(
+                &mut node,
+                visited_schema.id(),
+                vec![(
+                    "venues",
+                    OperationValue::PinnedRelationList(PinnedRelationList::new(vec![])),
+                )],
+                &key_pair,
+            )
+            .await;
+
+            let args = Query::new(
+                &Pagination::new(
+                    &NonZeroU64::new(10).unwrap(),
+                    None,
+                    &vec![
+                        PaginationField::TotalCount,
+                        PaginationField::EndCursor,
+                        PaginationField::HasNextPage,
+                    ],
+                ),
+                &Select::new(&["name".into()]),
+                &Filter::default(),
+                &Order::default(),
+            );
+
+            // Select the pinned relation list "venues" for the visited document
+            let list = RelationList::new_pinned(&visited_view_id, "venues".into());
+
+            let (pagination_data, documents) = node
+                .context
+                .store
+                .query(&venues_schema, &args, Some(&list))
+                .await
+                .expect("Query failed");
         });
     }
 
