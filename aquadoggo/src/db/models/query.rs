@@ -43,7 +43,7 @@ pub struct QueryRow {
 
     /// Application field value.
     #[sqlx(default)]
-    pub value: String,
+    pub value: Option<String>,
 
     /// Type of the application field (string, boolean, float, int, relation etc.).
     #[sqlx(default)]
