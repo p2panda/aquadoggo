@@ -1062,6 +1062,8 @@ fn convert_rows(
         return converted;
     }
 
+    println!("{rows:?}");
+
     // Helper method to convert database row into final document and cursor type
     let finalize_document = |row: &QueryRow,
                              collected_fields: Vec<DocumentViewFieldRow>|
@@ -1601,6 +1603,35 @@ mod tests {
             )
             .await;
 
+            // Query selecting only meta field.
+            let args = Query::new(
+                &Pagination::new(
+                    &NonZeroU64::new(10).unwrap(),
+                    None,
+                    &vec![
+                        PaginationField::TotalCount,
+                        PaginationField::EndCursor,
+                        PaginationField::HasNextPage,
+                    ],
+                ),
+                &Select::new(&[Field::Meta(MetaField::DocumentId)]),
+                &Filter::default(),
+                &Order::default(),
+            );
+
+            // Select the pinned relation list "venues" for the visited document
+            let list = RelationList::new_pinned(&visited_view_id, "venues".into());
+
+            let (pagination_data, documents) = node
+                .context
+                .store
+                .query(&venues_schema, &args, Some(&list))
+                .await
+                .expect("Query failed");
+
+            assert!(documents.is_empty());
+
+            // Query selecting application field.
             let args = Query::new(
                 &Pagination::new(
                     &NonZeroU64::new(10).unwrap(),
@@ -1625,6 +1656,8 @@ mod tests {
                 .query(&venues_schema, &args, Some(&list))
                 .await
                 .expect("Query failed");
+
+            assert!(documents.is_empty());
         });
     }
 
