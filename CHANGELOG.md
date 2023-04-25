@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support paginated, ordered and filtered collection queries [#308](https://github.com/p2panda/aquadoggo/pull/308)
 - SQL query for collections [#311](https://github.com/p2panda/aquadoggo/pull/311)
 - Add custom validation to GraphQL scalar types [#318](https://github.com/p2panda/aquadoggo/pull/318)
+- Introduce property tests for GraphQL query API with `proptest` [#338](https://github.com/p2panda/aquadoggo/pull/338)
 
 ### Changed
 
