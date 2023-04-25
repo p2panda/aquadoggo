@@ -10,7 +10,6 @@ use proptest::test_runner::{Config, FileFailurePersistence};
 use proptest::{prop_compose, proptest, strategy::Just};
 use serde_json::{json, Value as JsonValue};
 
-use crate::graphql::queries::build_document_query;
 use crate::proptests::document_strategies::{documents_strategy, DocumentAST};
 use crate::proptests::schema_strategies::{schema_strategy, SchemaAST};
 use crate::proptests::utils::{add_documents_from_ast, add_schemas_from_ast};
@@ -190,12 +189,13 @@ proptest! {
         cases: 100,
         failure_persistence: Some(Box::new(FileFailurePersistence::WithSource("regressions"))),
         .. Config::default()
-      })]
+    })]
     #[test]
     fn test_query((schema_ast, document_ast_collection) in schema_with_documents_strategy()) {
-        // The proptest strategies for generating schema and deriving collections of documents for each injects
-        // the raw AST types into the test. Here we convert these into p2panda `Entries`, `Operations` and `Schema`
-        // which we can then use to populate a store and run queries against.
+        // The proptest strategies for generating schema and deriving collections of documents for
+        // each injects the raw AST types into the test. Here we convert these into p2panda
+        // `Entries`, `Operations` and `Schema` which we can then use to populate a store and run
+        // queries against.
 
         // Now we start up a test runner and inject a test node we can populate.
         test_runner(|mut node: TestNode| async move {
