@@ -10,13 +10,11 @@ use p2panda_rs::storage_provider::traits::DocumentStore;
 
 use crate::db::stores::RelationList;
 use crate::db::SqlStore;
-use crate::graphql::types::DocumentValue;
+use crate::graphql::types::{DocumentCollection, DocumentValue};
 use crate::graphql::utils::{
     downcast_document, fields_name, gql_scalar, graphql_type, with_collection_arguments,
 };
 use crate::schema::SchemaProvider;
-
-use super::DocumentCollection;
 
 /// A constructor for dynamically building objects describing the application fields of a p2panda
 /// schema. Each generated object has a type name with the formatting `<schema_id>Fields`.
@@ -174,6 +172,7 @@ mod tests {
 
     use crate::test_utils::{graphql_test_client, test_runner, TestNode};
 
+    // Test collection query parameter variations.
     #[rstest]
     #[case::inexistent_schema_name(
         r#"(
@@ -200,10 +199,9 @@ mod tests {
         #[case] expected_data: Value,
         #[case] _expected_errors: Vec<String>,
     ) {
-        // Test collection query parameter variations.
         test_runner(move |node: TestNode| async move {
-            // Configure and send test query.
             let client = graphql_test_client(&node).await;
+
             let query = format!(
                 r#"{{
                     collection: all_schema_definition_v1 {{
@@ -233,7 +231,6 @@ mod tests {
                 .await;
 
             let response: Response = response.json().await;
-
             assert_eq!(response.data, expected_data, "{:#?}", response.errors);
         });
     }
