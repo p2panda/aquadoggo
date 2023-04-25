@@ -10,6 +10,7 @@ use proptest::test_runner::{Config, FileFailurePersistence};
 use proptest::{prop_compose, proptest, strategy::Just};
 use serde_json::{json, Value as JsonValue};
 
+use crate::graphql::queries::build_document_query;
 use crate::proptests::document_strategies::{documents_strategy, DocumentAST};
 use crate::proptests::schema_strategies::{schema_strategy, SchemaAST};
 use crate::proptests::utils::{add_documents_from_ast, add_schemas_from_ast};
@@ -70,36 +71,14 @@ fn unwrap_response(response: &Response) -> (bool, i64, Option<String>, Vec<JsonV
     )
 }
 
-/// Perform a paginated query over a collection of documents.
+/// Make a GraphQL query to the node.
 async fn make_query(
     client: &TestClient,
-    schema_id: &SchemaId,
-    query_args: &str,
+    query_str: &str,
 ) -> (bool, i64, Option<String>, Vec<JsonValue>) {
-    // Helper for creating queries
-    let query = |type_name: &SchemaId, query_args: &str| -> String {
-        format!(
-            r#"{{
-                query: all_{type_name}{query_args} {{
-                    hasNextPage
-                    totalCount
-                    endCursor
-                    documents {{
-                        cursor
-                        meta {{
-                            owner
-                            documentId
-                            viewId
-                        }}
-                    }}
-                }},
-            }}"#
-        )
-    };
-
     let response = client
         .post("/graphql")
-        .json(&json!({ "query": query(&schema_id, query_args) }))
+        .json(&json!({ "query": query_str }))
         .send()
         .await;
 
@@ -108,21 +87,33 @@ async fn make_query(
     unwrap_response(&response)
 }
 
-prop_compose! {
-    /// Strategy for generating schemas, and documents from these schema.
-    fn schema_with_documents_strategy()
-            (schema in schema_strategy())
-            (documents in documents_strategy(schema.clone()), schema in Just(schema))
-            -> (SchemaAST, Vec<DocumentAST>) {
-        (schema, documents)
-    }
+// Helper for creating queries
+fn paginated_query_meta_fields_only(type_name: &SchemaId, query_args: &str) -> String {
+    format!(
+        r#"{{
+            query: all_{type_name}{query_args} {{
+                hasNextPage
+                totalCount
+                endCursor
+                documents {{
+                    cursor
+                    meta {{
+                        owner
+                        documentId
+                        viewId
+                    }}
+                }}
+            }},
+        }}"#
+    )
 }
 
 /// Perform tests for querying paginated collections of documents identified by their schema.
-async fn paginated_query_meta_fields_only(
+async fn paginated_query(
     client: &TestClient,
     schema_id: &SchemaId,
     expected_documents: &Vec<DocumentViewId>,
+    query_builder: impl Fn(&SchemaId, &str) -> String,
 ) {
     let mut query_args = "(first: 5)".to_string();
     let total_documents = expected_documents.len() as i64;
@@ -131,7 +122,7 @@ async fn paginated_query_meta_fields_only(
     loop {
         // Make a paginated query.
         let (has_next_page, total_count, end_cursor, documents) =
-            make_query(&client, &schema_id, &query_args).await;
+            make_query(&client, &query_builder(&schema_id, &query_args)).await;
 
         // Total count should match number of documents expected.
         assert_eq!(total_count, total_documents);
@@ -184,6 +175,16 @@ async fn paginated_query_meta_fields_only(
     }
 }
 
+prop_compose! {
+    /// Strategy for generating schemas, and documents from these schema.
+    fn schema_with_documents_strategy()
+            (schema in schema_strategy())
+            (documents in documents_strategy(schema.clone()), schema in Just(schema))
+            -> (SchemaAST, Vec<DocumentAST>) {
+        (schema, documents)
+    }
+}
+
 proptest! {
     #![proptest_config(Config {
         cases: 100,
@@ -217,7 +218,7 @@ proptest! {
             // Run the test for each schema and related documents that have been generated.
             for schema_id in schemas {
                 let schema_documents = documents.get(&schema_id).cloned().unwrap_or_default();
-                paginated_query_meta_fields_only(&client, &schema_id, &schema_documents).await;
+                paginated_query(&client, &schema_id, &schema_documents, paginated_query_meta_fields_only).await;
             };
         });
     }
