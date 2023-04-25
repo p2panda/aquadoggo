@@ -331,7 +331,39 @@ mod tests {
             )
             .await;
 
-            // Configure and send test query.
+            // Configure and send test query selecting only meta fields.
+            let client = graphql_test_client(&node).await;
+            let query = format!(
+                r#"{{
+                    collection: all_{type_name} {{
+                        hasNextPage
+                        totalCount
+                        endCursor
+                        documents {{
+                            cursor
+                            meta {{
+                                documentId
+                            }}
+                        }}
+                    }},
+                }}"#,
+                type_name = visited_schema.id(),
+            );
+
+            let response = client
+                .post("/graphql")
+                .json(&json!({
+                    "query": query,
+                }))
+                .send()
+                .await;
+
+            let response: Response = response.json().await;
+
+            assert!(response.is_ok(), response.errors);
+
+
+            // Configure and send test query selecting application fields.
             let client = graphql_test_client(&node).await;
             let query = format!(
                 r#"{{
@@ -366,9 +398,7 @@ mod tests {
 
             let response: Response = response.json().await;
 
-            assert!(response.is_ok());
-
-            println!("{:?}", response.data);
+            assert!(response.is_ok(), response.errors);
         });
     }
 }
