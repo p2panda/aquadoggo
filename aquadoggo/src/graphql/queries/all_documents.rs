@@ -44,11 +44,12 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use async_graphql::{value, Response, Value};
-    use p2panda_rs::identity::KeyPair;
+    use p2panda_rs::operation::PinnedRelationList;
     use p2panda_rs::schema::FieldType;
     use p2panda_rs::test_utils::fixtures::key_pair;
+    use p2panda_rs::{identity::KeyPair, operation::OperationValue};
     use rstest::rstest;
     use serde_json::json;
 
@@ -294,6 +295,94 @@ mod test {
                 .map(|err| err.message.to_string())
                 .collect();
             assert_eq!(err_msgs, expected_errors);
+        });
+    }
+
+    #[rstest]
+    #[case(
+        r#"fields {
+            venues {
+                documents {
+                    fields {
+                        name
+                    }
+                }
+            }
+        }"#
+    )]
+    #[case(
+        r#"fields {
+            venues {
+                documents {
+                    meta {
+                        documentId
+                    }
+                }
+            }
+        }"#
+    )]
+    fn empty_pinned_relation_list(#[case] query_fields: &str, key_pair: KeyPair) {
+        let query_fields = query_fields.to_string();
+        test_runner(|mut node: TestNode| async move {
+            let venues_schema = add_schema(
+                &mut node,
+                "venues",
+                vec![("name", FieldType::String)],
+                &key_pair,
+            )
+            .await;
+
+            let visited_schema = add_schema(
+                &mut node,
+                "visited",
+                vec![(
+                    "venues",
+                    FieldType::PinnedRelationList(venues_schema.id().clone()),
+                )],
+                &key_pair,
+            )
+            .await;
+
+            add_document(
+                &mut node,
+                visited_schema.id(),
+                vec![(
+                    "venues",
+                    OperationValue::PinnedRelationList(PinnedRelationList::new(vec![])),
+                )],
+                &key_pair,
+            )
+            .await;
+
+            // Configure and send test query.
+            let client = graphql_test_client(&node).await;
+            let query = format!(
+                r#"{{
+                    collection: all_{type_name} {{
+                        hasNextPage
+                        totalCount
+                        endCursor
+                        documents {{
+                            cursor
+                            {query_fields}
+                        }}
+                    }},
+                }}"#,
+                type_name = visited_schema.id(),
+                query_fields = query_fields
+            );
+
+            let response = client
+                .post("/graphql")
+                .json(&json!({
+                    "query": query,
+                }))
+                .send()
+                .await;
+
+            let response: Response = response.json().await;
+
+            assert!(response.is_ok());
         });
     }
 }

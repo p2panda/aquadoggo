@@ -1060,6 +1060,8 @@ fn convert_rows(
         return converted;
     }
 
+    println!("{rows:?}");
+
     // Helper method to convert database row into final document and cursor type
     let finalize_document = |row: &QueryRow,
                              collected_fields: Vec<DocumentViewFieldRow>|
@@ -1107,7 +1109,7 @@ fn convert_rows(
             name: row.name,
             list_index: 0,
             field_type: row.field_type,
-            value: Some(row.value),
+            value: row.value,
         });
     }
 
@@ -1143,7 +1145,9 @@ mod tests {
     use p2panda_rs::document::{DocumentViewFields, DocumentViewId};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::KeyPair;
-    use p2panda_rs::operation::{OperationFields, OperationId, OperationValue};
+    use p2panda_rs::operation::{
+        OperationFields, OperationId, OperationValue, PinnedRelationList, Relation,
+    };
     use p2panda_rs::schema::{FieldType, Schema, SchemaId};
     use p2panda_rs::test_utils::fixtures::{key_pair, random_hash, schema_id};
     use rstest::rstest;
@@ -1570,6 +1574,115 @@ mod tests {
     }
 
     #[rstest]
+    fn empty_pinned_relation_list(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            let (venues_schema, mut venues_view_ids) =
+                create_venues_test_data(&mut node, &key_pair).await;
+
+            let visited_schema = add_schema(
+                &mut node,
+                "visited",
+                vec![(
+                    "venues",
+                    FieldType::PinnedRelationList(venues_schema.id().clone()),
+                )],
+                &key_pair,
+            )
+            .await;
+
+            let visited_view_id = add_document(
+                &mut node,
+                visited_schema.id(),
+                vec![(
+                    "venues",
+                    OperationValue::PinnedRelationList(PinnedRelationList::new(vec![])),
+                )],
+                &key_pair,
+            )
+            .await;
+
+            // Query selecting only meta field.
+            let args = Query::new(
+                &Pagination::new(
+                    &NonZeroU64::new(10).unwrap(),
+                    None,
+                    &vec![
+                        PaginationField::TotalCount,
+                        PaginationField::EndCursor,
+                        PaginationField::HasNextPage,
+                    ],
+                ),
+                &Select::new(&[Field::Meta(MetaField::DocumentId)]),
+                &Filter::default(),
+                &Order::default(),
+            );
+
+            // Select the pinned relation list "venues" for the visited document
+            let list = RelationList::new_pinned(&visited_view_id, "venues".into());
+
+            let (pagination_data, documents) = node
+                .context
+                .store
+                .query(&venues_schema, &args, Some(&list))
+                .await
+                .expect("Query failed");
+
+            assert!(documents.is_empty());
+
+            // Query selecting application field.
+            let args = Query::new(
+                &Pagination::new(
+                    &NonZeroU64::new(10).unwrap(),
+                    None,
+                    &vec![
+                        PaginationField::TotalCount,
+                        PaginationField::EndCursor,
+                        PaginationField::HasNextPage,
+                    ],
+                ),
+                &Select::new(&["name".into()]),
+                &Filter::default(),
+                &Order::default(),
+            );
+
+            // Select the pinned relation list "venues" for the visited document
+            let list = RelationList::new_pinned(&visited_view_id, "venues".into());
+
+            let (pagination_data, documents) = node
+                .context
+                .store
+                .query(&venues_schema, &args, Some(&list))
+                .await
+                .expect("Query failed");
+
+            assert!(documents.is_empty());
+
+            // Query selecting application field.
+            let args = Query::new(
+                &Pagination::new(
+                    &NonZeroU64::new(10).unwrap(),
+                    None,
+                    &vec![
+                        PaginationField::TotalCount,
+                        PaginationField::EndCursor,
+                        PaginationField::HasNextPage,
+                    ],
+                ),
+                &Select::new(&["venues".into()]),
+                &Filter::default(),
+                &Order::default(),
+            );
+
+            let (pagination_data, documents) = node
+                .context
+                .store
+                .query(&visited_schema, &args, None)
+                .await
+                .expect("Query failed");
+        });
+    }
+
+    #[rstest]
     fn relation_list_pagination_over_ordered_view_ids(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
             let (venues_schema, venues_view_ids) =
@@ -1946,7 +2059,7 @@ mod tests {
                 cmp_value_cursor: cursor_1.clone(),
                 owner: OptionalOwner::default(),
                 name: "username".to_string(),
-                value: "panda".to_string(),
+                value: Some("panda".to_string()),
                 field_type: "str".to_string(),
                 list_index: 0,
             },
@@ -1960,7 +2073,7 @@ mod tests {
                 cmp_value_cursor: cursor_1.clone(),
                 owner: OptionalOwner::default(),
                 name: "is_admin".to_string(),
-                value: "false".to_string(),
+                value: Some("false".to_string()),
                 field_type: "bool".to_string(),
                 list_index: 0,
             },
@@ -1975,7 +2088,7 @@ mod tests {
                 cmp_value_cursor: cursor_2.clone(),
                 owner: OptionalOwner::default(),
                 name: "username".to_string(),
-                value: "penguin".to_string(),
+                value: Some("penguin".to_string()),
                 field_type: "str".to_string(),
                 list_index: 0,
             },
@@ -1989,7 +2102,7 @@ mod tests {
                 cmp_value_cursor: cursor_2.clone(),
                 owner: OptionalOwner::default(),
                 name: "is_admin".to_string(),
-                value: "true".to_string(),
+                value: Some("true".to_string()),
                 field_type: "bool".to_string(),
                 list_index: 0,
             },
