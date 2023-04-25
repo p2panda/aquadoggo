@@ -1060,8 +1060,6 @@ fn convert_rows(
         return converted;
     }
 
-    println!("{rows:?}");
-
     // Helper method to convert database row into final document and cursor type
     let finalize_document = |row: &QueryRow,
                              collected_fields: Vec<DocumentViewFieldRow>|
