@@ -166,10 +166,8 @@ impl DocumentFields {
     }
 }
 
-// TODO: We don't actually perform any queries yet, these tests will need to be updated when we do.
-// See issue: https://github.com/p2panda/aquadoggo/issues/330
-/* #[cfg(test)]
-mod test {
+#[cfg(test)]
+mod tests {
     use async_graphql::{value, Response, Value};
     use rstest::rstest;
     use serde_json::json;
@@ -177,10 +175,9 @@ mod test {
     use crate::test_utils::{graphql_test_client, test_runner, TestNode};
 
     #[rstest]
-    #[case(
+    #[case::inexistent_schema_name(
         r#"(
             first: 10,
-            after: "1_00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331",
             orderBy: "name",
             orderDirection: ASC,
             filter: {
@@ -190,7 +187,11 @@ mod test {
             },
         )"#.to_string(),
         value!({
-            "collection": value!([]),
+            "collection": value!({
+                "hasNextPage": false,
+                "totalCount": 0,
+                "documents": [],
+            }),
         }),
         vec![]
     )]
@@ -236,4 +237,4 @@ mod test {
             assert_eq!(response.data, expected_data, "{:#?}", response.errors);
         });
     }
-} */
+}
