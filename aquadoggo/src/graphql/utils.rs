@@ -405,8 +405,12 @@ pub fn look_ahead_selected_fields(ctx: &ResolverContext) -> (Vec<PaginationField
             .for_each(|field| match field.name() {
                 // Parse selected application fields
                 constants::FIELDS_FIELD => {
-                    field.selection_set().for_each(|field| {
-                        selected_fields.push(Field::Field(field.name().to_string()));
+                    field.selection_set().for_each(|field| match field.name() {
+                        // Remove special GraphQL meta fields
+                        "__typename" => (),
+                        field_name => {
+                            selected_fields.push(Field::Field(field_name.to_string()));
+                        }
                     });
                 }
                 // Parse selected meta fields

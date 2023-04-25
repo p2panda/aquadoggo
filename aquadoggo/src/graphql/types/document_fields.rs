@@ -10,13 +10,11 @@ use p2panda_rs::storage_provider::traits::DocumentStore;
 
 use crate::db::stores::RelationList;
 use crate::db::SqlStore;
-use crate::graphql::types::DocumentValue;
+use crate::graphql::types::{DocumentCollection, DocumentValue};
 use crate::graphql::utils::{
     downcast_document, fields_name, gql_scalar, graphql_type, with_collection_arguments,
 };
 use crate::schema::SchemaProvider;
-
-use super::DocumentCollection;
 
 /// A constructor for dynamically building objects describing the application fields of a p2panda
 /// schema. Each generated object has a type name with the formatting `<schema_id>Fields`.
@@ -165,75 +163,3 @@ impl DocumentFields {
         }
     }
 }
-
-// TODO: We don't actually perform any queries yet, these tests will need to be updated when we do.
-// See issue: https://github.com/p2panda/aquadoggo/issues/330
-/* #[cfg(test)]
-mod test {
-    use async_graphql::{value, Response, Value};
-    use rstest::rstest;
-    use serde_json::json;
-
-    use crate::test_utils::{graphql_test_client, test_runner, TestNode};
-
-    #[rstest]
-    #[case(
-        r#"(
-            first: 10,
-            after: "1_00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331",
-            orderBy: "name",
-            orderDirection: ASC,
-            filter: {
-                name : {
-                    eq: "hello"
-                }
-            },
-        )"#.to_string(),
-        value!({
-            "collection": value!([]),
-        }),
-        vec![]
-    )]
-    fn collection_query(
-        #[case] query_args: String,
-        #[case] expected_data: Value,
-        #[case] _expected_errors: Vec<String>,
-    ) {
-        // Test collection query parameter variations.
-        test_runner(move |node: TestNode| async move {
-            // Configure and send test query.
-            let client = graphql_test_client(&node).await;
-            let query = format!(
-                r#"{{
-                    collection: all_schema_definition_v1 {{
-                        hasNextPage
-                        totalCount
-                        documents {{
-                            cursor
-                            fields {{
-                                fields{query_args} {{
-                                    documents {{
-                                        cursor
-                                    }}
-                                }}
-                            }}
-                        }}
-                    }},
-                }}"#,
-                query_args = query_args
-            );
-
-            let response = client
-                .post("/graphql")
-                .json(&json!({
-                    "query": query,
-                }))
-                .send()
-                .await;
-
-            let response: Response = response.json().await;
-
-            assert_eq!(response.data, expected_data, "{:#?}", response.errors);
-        });
-    }
-} */

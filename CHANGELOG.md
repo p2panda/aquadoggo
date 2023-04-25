@@ -10,8 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Dial peers discovered via mDNS [#331](https://github.com/p2panda/aquadoggo/pull/331)
-- Simplify network CLI options and configuration [#322](https://github.com/p2panda/aquadoggo/pull/322) 
-- Introduce `autonat` and `relay` network protocols [#314](https://github.com/p2panda/aquadoggo/pull/314) 
+- Simplify network CLI options and configuration [#322](https://github.com/p2panda/aquadoggo/pull/322)
+- Introduce `autonat` and `relay` network protocols [#314](https://github.com/p2panda/aquadoggo/pull/314)
 - Introduce `identify` and `rendezvous` network protocols / behaviours [#304](https://github.com/p2panda/aquadoggo/pull/304)
 - Introduce libp2p networking service and configuration [#282](https://github.com/p2panda/aquadoggo/pull/282)
 - Create and validate abstract queries [#302](https://github.com/p2panda/aquadoggo/pull/302)
@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Use new version of `async-graphql` for dynamic schema generation [#287](https://github.com/p2panda/aquadoggo/pull/287)
 - Restructure `graphql` module [#307](https://github.com/p2panda/aquadoggo/pull/307)
 - Removed replication service for now, preparing for new replication protocol [#296](https://github.com/p2panda/aquadoggo/pull/296)
+- Bring back e2e GraphQL API tests [#342](https://github.com/p2panda/aquadoggo/pull/342)
 
 ### Fixed
 

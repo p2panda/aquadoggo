@@ -220,3 +220,46 @@ pub async fn add_schema(
         .await
         .expect("Failed adding schema to provider.")
 }
+
+/// Create a schema in the test database and multiple documents using it.
+pub async fn add_schema_and_documents(
+    node: &mut TestNode,
+    schema_name: &str,
+    documents: Vec<Vec<(&str, OperationValue, Option<SchemaId>)>>,
+    key_pair: &KeyPair,
+) -> (Schema, Vec<DocumentViewId>) {
+    assert!(documents.len() > 0);
+
+    // Look at first document to automatically derive schema
+    let schema_fields = documents[0]
+        .iter()
+        .map(|(field_name, field_value, schema_id)| {
+            // Get field type from operation value
+            let field_type = match field_value.field_type() {
+                "relation" => FieldType::Relation(schema_id.clone().unwrap()),
+                "pinned_relation" => FieldType::PinnedRelation(schema_id.clone().unwrap()),
+                "relation_list" => FieldType::RelationList(schema_id.clone().unwrap()),
+                "pinned_relation_list" => FieldType::PinnedRelationList(schema_id.clone().unwrap()),
+                _ => field_value.field_type().parse().unwrap(),
+            };
+
+            (*field_name, field_type)
+        })
+        .collect();
+
+    // Create schema
+    let schema = add_schema(node, schema_name, schema_fields, key_pair).await;
+
+    // Add all documents and return created view ids
+    let mut view_ids = Vec::new();
+    for document in documents {
+        let fields = document
+            .iter()
+            .map(|field| (field.0, field.1.clone()))
+            .collect();
+        let view_id = add_document(node, schema.id(), fields, key_pair).await;
+        view_ids.push(view_id);
+    }
+
+    (schema, view_ids)
+}

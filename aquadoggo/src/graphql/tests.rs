@@ -4,8 +4,9 @@
 use std::convert::TryInto;
 
 use async_graphql::{value, Response};
-use p2panda_rs::schema::FieldType;
 use p2panda_rs::test_utils::fixtures::random_key_pair;
+use p2panda_rs::{document::DocumentId, schema::FieldType};
+use rstest::rstest;
 use serde_json::json;
 
 use crate::test_utils::{add_document, add_schema, graphql_test_client, test_runner, TestNode};
@@ -17,7 +18,7 @@ fn scalar_fields() {
     test_runner(|mut node: TestNode| async move {
         let key_pair = random_key_pair();
 
-        // Add schema to node.
+        // Add schema to node
         let schema = add_schema(
             &mut node,
             "schema_name",
@@ -31,7 +32,7 @@ fn scalar_fields() {
         )
         .await;
 
-        // Publish document on node.
+        // Publish document on node
         let doc_fields = vec![
             ("bool", true.into()),
             ("float", (1.0).into()),
@@ -42,7 +43,7 @@ fn scalar_fields() {
         .unwrap();
         let view_id = add_document(&mut node, schema.id(), doc_fields, &key_pair).await;
 
-        // Configure and send test query.
+        // Configure and send test query
         let client = graphql_test_client(&node).await;
         let query = format!(
             r#"{{
@@ -85,13 +86,12 @@ fn scalar_fields() {
 
 // Test querying application documents across a parent-child relation using different kinds of
 // relation fields.
-// @TODO: Needs updating after API changes: https://github.com/p2panda/aquadoggo/issues/330
-/* #[rstest]
+#[rstest]
 fn relation_fields() {
     test_runner(|mut node: TestNode| async move {
         let key_pair = random_key_pair();
 
-        // Add schemas to node.
+        // Add schemas to node
         let child_schema = add_schema(
             &mut node,
             "child",
@@ -125,7 +125,7 @@ fn relation_fields() {
         )
         .await;
 
-        // Publish child document on node.
+        // Publish child document on node
         let child_view_id = add_document(
             &mut node,
             child_schema.id(),
@@ -133,10 +133,11 @@ fn relation_fields() {
             &key_pair,
         )
         .await;
-        // There is only one operation so view id = doc id.
+
+        // There is only one operation so view id = doc id
         let child_doc_id: DocumentId = child_view_id.to_string().parse().unwrap();
 
-        // Publish parent document on node.
+        // Publish parent document on node
         let parent_fields = vec![
             ("by_relation", child_doc_id.clone().into()),
             ("by_pinned_relation", child_view_id.clone().into()),
@@ -147,7 +148,7 @@ fn relation_fields() {
         let parent_view_id =
             add_document(&mut node, parent_schema.id(), parent_fields, &key_pair).await;
 
-        // Configure and send test query.
+        // Configure and send test query
         let client = graphql_test_client(&node).await;
         let query = format!(
             r#"{{
@@ -155,8 +156,8 @@ fn relation_fields() {
                     fields {{
                         by_relation {{ fields {{ it_works }} }},
                         by_pinned_relation {{ fields {{ it_works }} }},
-                        by_relation_list {{ document {{ fields {{ it_works }} }} }},
-                        by_pinned_relation_list {{ document {{ fields {{ it_works }} }} }},
+                        by_relation_list {{ documents {{ fields {{ it_works }} }} }},
+                        by_pinned_relation_list {{ documents {{ fields {{ it_works }} }} }},
                     }}
                 }}
             }}"#,
@@ -187,24 +188,24 @@ fn relation_fields() {
                             "it_works": true
                         }
                     },
-                    "by_relation_list": [{
-                        "document" : {
+                    "by_relation_list": {
+                        "documents": [{
                             "fields": {
                                 "it_works": true
                             }
-                        }
-                    }],
-                    "by_pinned_relation_list": [{
-                        "document" : {
+                        }]
+                    },
+                    "by_pinned_relation_list": {
+                        "documents": [{
                             "fields": {
                                 "it_works": true
                             }
-                        }
-                    }]
+                        }]
+                    }
                 }
             }
         });
 
         assert_eq!(response.data, expected_data,);
     });
-} */
+}

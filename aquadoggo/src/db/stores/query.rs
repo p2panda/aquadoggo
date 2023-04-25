@@ -1158,7 +1158,9 @@ mod tests {
     use crate::db::stores::{OperationCursor, RelationList};
     use crate::db::types::StorageDocument;
     use crate::graphql::types::OrderDirection;
-    use crate::test_utils::{add_document, add_schema, test_runner, TestNode};
+    use crate::test_utils::{
+        add_document, add_schema, add_schema_and_documents, test_runner, TestNode,
+    };
 
     use super::{convert_rows, PaginationCursor, Query};
 
@@ -1170,50 +1172,6 @@ mod tests {
             .expect(&format!("Expected '{field}' field to exist in document"))
             .value()
             .to_owned()
-    }
-
-    async fn add_schema_and_documents(
-        node: &mut TestNode,
-        schema_name: &str,
-        documents: Vec<Vec<(&str, OperationValue, Option<SchemaId>)>>,
-        key_pair: &KeyPair,
-    ) -> (Schema, Vec<DocumentViewId>) {
-        assert!(documents.len() > 0);
-
-        // Look at first document to automatically derive schema
-        let schema_fields = documents[0]
-            .iter()
-            .map(|(field_name, field_value, schema_id)| {
-                // Get field type from operation value
-                let field_type = match field_value.field_type() {
-                    "relation" => FieldType::Relation(schema_id.clone().unwrap()),
-                    "pinned_relation" => FieldType::PinnedRelation(schema_id.clone().unwrap()),
-                    "relation_list" => FieldType::RelationList(schema_id.clone().unwrap()),
-                    "pinned_relation_list" => {
-                        FieldType::PinnedRelationList(schema_id.clone().unwrap())
-                    }
-                    _ => field_value.field_type().parse().unwrap(),
-                };
-
-                (*field_name, field_type)
-            })
-            .collect();
-
-        // Create schema
-        let schema = add_schema(node, schema_name, schema_fields, key_pair).await;
-
-        // Add all documents and return created view ids
-        let mut view_ids = Vec::new();
-        for document in documents {
-            let fields = document
-                .iter()
-                .map(|field| (field.0, field.1.clone()))
-                .collect();
-            let view_id = add_document(node, schema.id(), fields, key_pair).await;
-            view_ids.push(view_id);
-        }
-
-        (schema, view_ids)
     }
 
     async fn create_events_test_data(

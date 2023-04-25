@@ -265,40 +265,38 @@ mod test {
         });
     }
 
-    // @TODO: Needs to be fixed after GraphQL API change:
-    // See issue: https://github.com/p2panda/aquadoggo/issues/330
-    /* #[rstest]
-        fn type_name(#[from(random_key_pair)] key_pair: KeyPair) {
-            // Test availability of `__typename` on all objects.
-            test_runner(move |mut node: TestNode| async move {
-                // Add schema to node.
-                let schema = add_schema(
-                    &mut node,
-                    "schema_name",
-                    vec![("bool", FieldType::Boolean)],
-                    &key_pair,
-                )
-                .await;
+    #[rstest]
+    fn type_name(#[from(random_key_pair)] key_pair: KeyPair) {
+        // Test availability of `__typename` on all objects.
+        test_runner(move |mut node: TestNode| async move {
+            // Add schema to node.
+            let schema = add_schema(
+                &mut node,
+                "schema_name",
+                vec![("bool", FieldType::Boolean)],
+                &key_pair,
+            )
+            .await;
 
-                // Publish document on node.
-                let view_id = add_document(
-                    &mut node,
-                    &schema.id(),
-                    vec![("bool", true.into())],
-                    &key_pair,
-                )
-                .await;
+            // Publish document on node.
+            let view_id = add_document(
+                &mut node,
+                &schema.id(),
+                vec![("bool", true.into())],
+                &key_pair,
+            )
+            .await;
 
-                // Configure and send test query.
-                let client = graphql_test_client(&node).await;
-                let query = format!(
-                    r#"{{
-                    single: {type_name}(id: "{view_id}") {{
+            // Configure and send test query.
+            let client = graphql_test_client(&node).await;
+            let query = format!(
+                r#"{{
+                    single: {schema_id}(id: "{view_id}") {{
                         __typename,
                         meta {{ __typename }}
                         fields {{ __typename }}
                     }},
-                    collection: all_{type_name} {{
+                    collection: all_{schema_id} {{
                         __typename,
                         documents {{
                             __typename,
@@ -307,36 +305,37 @@ mod test {
                         }}
                     }},
                 }}"#,
-                    type_name = schema.id(),
-    e               view_id = view_id,
-                );
+                schema_id = schema.id(),
+                view_id = view_id,
+            );
 
-                let response = client
-                    .post("/graphql")
-                    .json(&json!({
-                        "query": query,
-                    }))
-                    .send()
-                    .await;
+            let response = client
+                .post("/graphql")
+                .json(&json!({
+                    "query": query,
+                }))
+                .send()
+                .await;
 
-                let response: Response = response.json().await;
+            let response: Response = response.json().await;
 
-                let expected_data = value!({
-                    "single": {
-                        "__typename": schema.id(),
+            let expected_data = value!({
+                "single": {
+                    "__typename": schema.id(),
+                    "meta": { "__typename": "DocumentMeta" },
+                    "fields": { "__typename": format!("{}Fields", schema.id()), }
+                },
+                "collection": {
+                    "__typename": format!("{}Collection", schema.id()),
+                    "documents": [{
+                        "__typename" : format!("{}Item", schema.id()),
                         "meta": { "__typename": "DocumentMeta" },
                         "fields": { "__typename": format!("{}Fields", schema.id()), }
-                    },
-                    "collection": [{
-                        "__typename": format!("{}DocumentCollection", schema.id()),
-                        "documents" : {
-                            "__typename" : format!("{}Paginated", schema.id()),
-                            "meta": { "__typename": "DocumentMeta" },
-                            "fields": { "__typename": format!("{}Fields", schema.id()), }
-                        }
                     }]
-                });
-                assert_eq!(response.data, expected_data, "{:#?}", response.errors);
+                }
             });
-        } */
+
+            assert_eq!(response.data, expected_data, "{:#?}", response.errors);
+        });
+    }
 }
