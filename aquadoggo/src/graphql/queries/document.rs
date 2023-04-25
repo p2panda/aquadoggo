@@ -325,14 +325,14 @@ mod test {
                     "meta": { "__typename": "DocumentMeta" },
                     "fields": { "__typename": format!("{}Fields", schema.id()), }
                 },
-                "collection": [{
-                    "__typename": format!("{}DocumentCollection", schema.id()),
-                    "documents": {
-                        "__typename" : format!("{}Paginated", schema.id()),
+                "collection": {
+                    "__typename": format!("{}Collection", schema.id()),
+                    "documents": [{
+                        "__typename" : format!("{}Item", schema.id()),
                         "meta": { "__typename": "DocumentMeta" },
                         "fields": { "__typename": format!("{}Fields", schema.id()), }
-                    }
-                }]
+                    }]
+                }
             });
 
             assert_eq!(response.data, expected_data, "{:#?}", response.errors);
