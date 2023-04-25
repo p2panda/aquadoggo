@@ -1658,6 +1658,29 @@ mod tests {
                 .expect("Query failed");
 
             assert!(documents.is_empty());
+
+            // Query selecting application field.
+            let args = Query::new(
+                &Pagination::new(
+                    &NonZeroU64::new(10).unwrap(),
+                    None,
+                    &vec![
+                        PaginationField::TotalCount,
+                        PaginationField::EndCursor,
+                        PaginationField::HasNextPage,
+                    ],
+                ),
+                &Select::new(&["venues".into()]),
+                &Filter::default(),
+                &Order::default(),
+            );
+
+            let (pagination_data, documents) = node
+                .context
+                .store
+                .query(&visited_schema, &args, None)
+                .await
+                .expect("Query failed");
         });
     }
 

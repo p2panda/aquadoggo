@@ -299,7 +299,30 @@ mod tests {
     }
 
     #[rstest]
-    fn empty_pinned_relation_list(key_pair: KeyPair) {
+    #[case(
+        r#"fields {
+            venues {
+                documents {
+                    fields {
+                        name
+                    }
+                }
+            }
+        }"#
+    )]
+    #[case(
+        r#"fields {
+            venues {
+                documents {
+                    meta {
+                        documentId
+                    }
+                }
+            }
+        }"#
+    )]
+    fn empty_pinned_relation_list(#[case] query_fields: &str, key_pair: KeyPair) {
+        let query_fields = query_fields.to_string();
         test_runner(|mut node: TestNode| async move {
             let venues_schema = add_schema(
                 &mut node,
@@ -331,7 +354,7 @@ mod tests {
             )
             .await;
 
-            // Configure and send test query selecting only meta fields.
+            // Configure and send test query.
             let client = graphql_test_client(&node).await;
             let query = format!(
                 r#"{{
@@ -341,13 +364,12 @@ mod tests {
                         endCursor
                         documents {{
                             cursor
-                            meta {{
-                                documentId
-                            }}
+                            {query_fields}
                         }}
                     }},
                 }}"#,
                 type_name = visited_schema.id(),
+                query_fields = query_fields
             );
 
             let response = client
@@ -360,45 +382,7 @@ mod tests {
 
             let response: Response = response.json().await;
 
-            assert!(response.is_ok(), response.errors);
-
-
-            // Configure and send test query selecting application fields.
-            let client = graphql_test_client(&node).await;
-            let query = format!(
-                r#"{{
-                    collection: all_{type_name} {{
-                        hasNextPage
-                        totalCount
-                        endCursor
-                        documents {{
-                            cursor
-                            fields {{
-                                venues {{
-                                    documents {{
-                                        fields {{
-                                            name
-                                        }}
-                                    }}
-                                }}
-                            }}
-                        }}
-                    }},
-                }}"#,
-                type_name = visited_schema.id(),
-            );
-
-            let response = client
-                .post("/graphql")
-                .json(&json!({
-                    "query": query,
-                }))
-                .send()
-                .await;
-
-            let response: Response = response.json().await;
-
-            assert!(response.is_ok(), response.errors);
+            assert!(response.is_ok());
         });
     }
 }
