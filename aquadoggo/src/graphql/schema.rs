@@ -18,7 +18,10 @@ use crate::graphql::input_values::{
     RelationFilter, RelationListFilter, StringFilter,
 };
 use crate::graphql::mutations::{MutationRoot, Publish};
-use crate::graphql::objects::{build_document_object, build_paginated_document_object};
+use crate::graphql::objects::{
+    build_document_collection_object, build_document_fields_object, build_document_object,
+    build_paginated_document_object, DocumentMeta,
+};
 use crate::graphql::queries::{
     build_all_documents_query, build_document_query, build_next_args_query,
 };
@@ -27,15 +30,7 @@ use crate::graphql::scalars::{
     CursorScalar, DocumentIdScalar, DocumentViewIdScalar, EncodedEntryScalar,
     EncodedOperationScalar, EntryHashScalar, LogIdScalar, PublicKeyScalar, SeqNumScalar,
 };
-/* use crate::graphql::types::{
-    DocumentCollection, DocumentFields, DocumentMeta, DocumentSchema, OrderBy,
-    OrderDirection, PaginatedDocumentSchema,
-}; */
 use crate::schema::SchemaProvider;
-
-use super::objects::{
-    build_document_collection_object, build_document_fields_object, DocumentMeta,
-};
 
 /// Returns GraphQL API schema for p2panda node.
 ///

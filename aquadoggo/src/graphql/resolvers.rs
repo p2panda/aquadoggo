@@ -12,11 +12,9 @@ use crate::db::stores::{PaginationCursor, PaginationData, RelationList};
 use crate::db::types::StorageDocument;
 use crate::db::SqlStore;
 use crate::graphql::objects::DocumentMeta;
-use crate::graphql::utils::{gql_scalar, parse_collection_arguments};
+use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
+use crate::graphql::utils::{get_document_from_params, gql_scalar, parse_collection_arguments};
 use crate::schema::SchemaProvider;
-
-use super::scalars::{DocumentIdScalar, DocumentViewIdScalar};
-use super::utils::get_document_from_params;
 
 /// Document data passed between resolvers.
 #[derive(Clone, Debug)]
