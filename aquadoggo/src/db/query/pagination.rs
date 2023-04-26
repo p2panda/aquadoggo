@@ -80,6 +80,7 @@ where
     C: Cursor,
 {
     /// Returns a new instance of pagination settings.
+    #[allow(dead_code)]
     pub fn new(first: &NonZeroU64, after: Option<&C>, fields: &Vec<PaginationField>) -> Self {
         Self {
             first: *first,

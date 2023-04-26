@@ -11,7 +11,6 @@ use sqlx::migrate::MigrateDatabase;
 
 pub mod errors;
 pub mod models;
-#[allow(unused)]
 pub mod query;
 pub mod stores;
 pub mod types;
