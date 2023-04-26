@@ -23,7 +23,7 @@ use crate::graphql::objects::{
     build_paginated_document_object, DocumentMeta,
 };
 use crate::graphql::queries::{
-    build_all_documents_query, build_document_query, build_next_args_query,
+    build_collection_query, build_document_query, build_next_args_query,
 };
 use crate::graphql::responses::NextArguments;
 use crate::graphql::scalars::{
@@ -116,7 +116,7 @@ pub async fn build_root_schema(
         root_query = build_document_query(root_query, &schema);
 
         // Add a query for retrieving all documents of a certain schema
-        root_query = build_all_documents_query(root_query, &schema);
+        root_query = build_collection_query(root_query, &schema);
     }
 
     // Add next args to the query object

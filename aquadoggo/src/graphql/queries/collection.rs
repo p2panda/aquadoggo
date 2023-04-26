@@ -12,9 +12,10 @@ use crate::graphql::utils::{collection_name, with_collection_arguments};
 /// by schema to the passed root query object.
 ///
 /// The query follows the format `all_<SCHEMA_ID>(<...ARGS>)`.
-pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
+pub fn build_collection_query(query: Object, schema: &Schema) -> Object {
     let schema_id = schema.id().clone();
     let schema = schema.clone();
+
     query
         .field(with_collection_arguments(
             Field::new(
