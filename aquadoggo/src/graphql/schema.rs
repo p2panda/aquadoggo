@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! Build and manage a GraphQL schema including dynamic parts of the schema.
+//! Dynamically create and manage GraphQL schemas.
 use std::sync::Arc;
 
 use async_graphql::dynamic::{Object, Schema};
@@ -32,10 +32,8 @@ use crate::graphql::scalars::{
 };
 use crate::schema::SchemaProvider;
 
-/// Returns GraphQL API schema for p2panda node.
-///
-/// Builds the root schema that can handle all GraphQL requests from clients (Client API) or other
-/// nodes (Node API).
+/// Dynamically generates and returns a new GraphQL API root schema based on the currently
+/// registered p2panda schemas.
 pub async fn build_root_schema(
     store: SqlStore,
     tx: ServiceSender,
@@ -160,7 +158,6 @@ pub struct GraphQLSharedData {
 ///
 /// With this we can easily add "new" schemas to the list in the background while current queries
 /// still get processed using the "old" schema.
-//
 // @TODO: This manager does not "clean up" outdated schemas yet, they will just be appended to
 // an ever-growing list. See: https://github.com/p2panda/aquadoggo/issues/222
 #[derive(Clone)]
