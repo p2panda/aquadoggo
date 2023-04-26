@@ -8,8 +8,8 @@ use p2panda_rs::api;
 
 use crate::db::SqlStore;
 use crate::graphql::constants;
+use crate::graphql::responses::NextArguments;
 use crate::graphql::scalars::{DocumentViewIdScalar, PublicKeyScalar};
-use crate::graphql::types::NextArguments;
 
 /// Add "nextArgs" query to the root query object.
 pub fn build_next_args_query(query: Object) -> Object {
