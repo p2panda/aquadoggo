@@ -6,6 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
 use anyhow::bail;
+use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::{DocumentId, DocumentViewFields, DocumentViewId};
 use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::OperationValue;
@@ -1076,6 +1077,9 @@ fn convert_rows(
 ) -> Vec<(PaginationCursor, StorageDocument)> {
     let mut converted: Vec<(PaginationCursor, StorageDocument)> = Vec::new();
 
+    println!("=== ALL QUERY ROWS RETURNED FROM THE DATABASE ===");
+    println!("{rows:#?}");
+
     if rows.is_empty() {
         return converted;
     }
@@ -1107,11 +1111,14 @@ fn convert_rows(
 
     let rows_per_document = std::cmp::max(fields.len(), 1);
 
+    println!("=== REDUCE ROWS INTO DOCUMENTS ===");
     for (index, row) in rows.into_iter().enumerate() {
         // We observed a new document coming up in the next row, time to change
         if index % rows_per_document == 0 && index > 0 {
             // Finalize the current document, convert it and push it into the final array
             let (cursor, document) = finalize_document(&current, current_fields);
+            println!("Document at row index {index}: {}", document.id());
+            println!("Fields: {:?}", document.fields().unwrap().keys());
             converted.push((cursor, document));
 
             // Change the pointer to the next document
@@ -1133,6 +1140,9 @@ fn convert_rows(
 
     // Do it one last time at the end for the last document
     let (cursor, document) = finalize_document(&last_row, current_fields);
+    println!("Final document: {}", document.id());
+    println!("Fields: {:?}", document.fields().unwrap().keys());
+
     converted.push((cursor, document));
 
     converted
