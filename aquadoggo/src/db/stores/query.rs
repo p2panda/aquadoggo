@@ -2,6 +2,7 @@
 
 //! This module offers a query API to find many p2panda documents, filtered or sorted by custom
 //! parameters. The results are batched via cursor-based pagination.
+use std::fmt::Display;
 use std::str::FromStr;
 
 use anyhow::bail;
@@ -87,6 +88,12 @@ impl PaginationCursor {
             root_operation_cursor,
             root_view_id,
         }
+    }
+}
+
+impl Display for PaginationCursor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.encode())
     }
 }
 
