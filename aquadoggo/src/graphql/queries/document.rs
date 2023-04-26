@@ -2,15 +2,13 @@
 
 use async_graphql::dynamic::{Field, FieldFuture, InputValue, Object, ResolverContext, TypeRef};
 use async_graphql::Error;
-use dynamic_graphql::{FieldValue, ScalarValue};
+use dynamic_graphql::ScalarValue;
 use log::debug;
 use p2panda_rs::schema::Schema;
 
-use crate::db::SqlStore;
 use crate::graphql::constants;
+use crate::graphql::resolvers::resolve_document;
 use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
-use crate::graphql::types::DocumentValue;
-use crate::graphql::utils::get_document_from_params;
 
 /// Adds a GraphQL query for retrieving a single document selected by its id or
 /// view id to the root query object.
@@ -24,25 +22,8 @@ pub fn build_document_query(query: Object, schema: &Schema) -> Object {
             TypeRef::named(schema_id.to_string()),
             move |ctx| {
                 FieldFuture::new(async move {
-                    // Parse the received arguments.
                     let (document_id, document_view_id) = parse_arguments(&ctx)?;
-                    let store = ctx.data_unchecked::<SqlStore>();
-
-                    // Get the whole document from the store.
-                    let document =
-                        match get_document_from_params(store, &document_id, &document_view_id)
-                            .await?
-                        {
-                            Some(document) => document,
-                            None => return Ok(FieldValue::NONE),
-                        };
-
-                    // This is a query for a single document so we wrap the document in it's
-                    // relevent enum variant.
-                    let document = DocumentValue::Single(document);
-
-                    // Pass it up to the children query fields.
-                    Ok(Some(FieldValue::owned_any(document)))
+                    resolve_document(ctx, document_id, document_view_id).await
                 })
             },
         )

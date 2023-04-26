@@ -20,7 +20,6 @@ use crate::db::query::{
 use crate::db::stores::OperationCursor;
 use crate::db::types::StorageDocument;
 use crate::db::SqlStore;
-use crate::graphql::types::PaginationData;
 
 /// Configure query to select documents based on a relation list field.
 pub struct RelationList {
@@ -137,6 +136,27 @@ impl Cursor for PaginationCursor {
         )
         .into_string()
     }
+}
+
+#[derive(Default, Clone, Debug)]
+pub struct PaginationData<C>
+where
+    C: Cursor,
+{
+    /// Number of all documents in queried collection.
+    pub total_count: Option<u64>,
+
+    /// Flag indicating if `endCursor` will return another page.
+    pub has_next_page: bool,
+
+    /// Flag indicating if `startCursor` will return another page.
+    pub has_previous_page: bool,
+
+    /// Cursor which can be used to paginate backwards.
+    pub start_cursor: Option<C>,
+
+    /// Cursor which can be used to paginate forwards.
+    pub end_cursor: Option<C>,
 }
 
 pub type QueryResponse = (

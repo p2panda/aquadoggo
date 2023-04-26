@@ -19,7 +19,6 @@ use crate::db::types::StorageDocument;
 use crate::db::SqlStore;
 use crate::graphql::constants;
 use crate::graphql::scalars::{CursorScalar, DocumentIdScalar, DocumentViewIdScalar};
-use crate::graphql::types::DocumentValue;
 
 // Type name suffixes.
 const DOCUMENT_FIELDS_SUFFIX: &str = "Fields";
@@ -28,27 +27,27 @@ const ORDER_BY_SUFFIX: &str = "OrderBy";
 const COLLECTION_ITEM_SUFFIX: &str = "Item";
 const COLLECTION_SUFFIX: &str = "Collection";
 
-// Correctly formats the name of a document collection type.
+/// Formats the name of a document collection type.
 pub fn collection_name(schema_id: &SchemaId) -> String {
     format!("{}{COLLECTION_SUFFIX}", schema_id)
 }
 
-// Correctly formats the name of a collection item type.
+/// Formats the name of a collection item type.
 pub fn collection_item_name(schema_id: &SchemaId) -> String {
     format!("{}{COLLECTION_ITEM_SUFFIX}", schema_id)
 }
 
-// Correctly formats the name of a document fields type.
+/// Formats the name of a document fields type.
 pub fn fields_name(schema_id: &SchemaId) -> String {
     format!("{}{DOCUMENT_FIELDS_SUFFIX}", schema_id)
 }
 
-// Correctly formats the name of a collection filter type.
+/// Formats the name of a collection filter type.
 pub fn filter_name(schema_id: &SchemaId) -> String {
     format!("{}{FILTER_INPUT_SUFFIX}", schema_id)
 }
 
-// Correctly formats the name of an order by type.
+/// Formats the name of an order by type.
 pub fn order_by_name(schema_id: &SchemaId) -> String {
     format!("{}{ORDER_BY_SUFFIX}", schema_id)
 }
@@ -289,17 +288,6 @@ fn parse_meta_filter(filter: &mut Filter, filter_object: &ObjectAccessor) -> Res
     Ok(())
 }
 
-/// Downcast document value which will have been passed up by the parent query node,
-/// retrieved via the `ResolverContext`.
-///
-/// We unwrap internally here as we expect validation to have occured in the query resolver.
-pub fn downcast_document(ctx: &ResolverContext) -> DocumentValue {
-    ctx.parent_value
-        .downcast_ref::<DocumentValue>()
-        .expect("Values passed from query parent should match expected")
-        .to_owned()
-}
-
 /// Helper for getting a document from the store by either the document id or document view id.
 pub async fn get_document_from_params(
     store: &SqlStore,
@@ -333,7 +321,7 @@ pub fn with_collection_arguments(
         .argument(
             InputValue::new(
                 constants::META_FILTER_ARG,
-                TypeRef::named("MetaFilterInput"),
+                TypeRef::named("MetaFilterInputObject"),
             )
             .description("Filter the query based on meta field values"),
         )

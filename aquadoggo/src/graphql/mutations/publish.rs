@@ -12,8 +12,8 @@ use p2panda_rs::operation::{EncodedOperation, OperationId};
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::SqlStore;
+use crate::graphql::responses::NextArguments;
 use crate::graphql::scalars::{EncodedEntryScalar, EncodedOperationScalar};
-use crate::graphql::types::NextArguments;
 use crate::schema::SchemaProvider;
 
 /// GraphQL mutation root.
