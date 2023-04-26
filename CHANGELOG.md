@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update breaking API calls for new `p2panda-rs` 0.7.0 version [#293](https://github.com/p2panda/aquadoggo/pull/293)
 - Handle decoding and parsing empty pinned relation lists [#336](https://github.com/p2panda/aquadoggo/pull/336)
 - Make `value` on `QueryRow` an option [#339](https://github.com/p2panda/aquadoggo/pull/339)
+- Fix race conditions in SQLite database test runner [#345](https://github.com/p2panda/aquadoggo/pull/345)
 
 ## [0.4.0]
 
