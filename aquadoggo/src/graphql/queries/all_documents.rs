@@ -5,7 +5,7 @@ use log::debug;
 use p2panda_rs::schema::Schema;
 
 use crate::graphql::constants;
-use crate::graphql::types::DocumentCollection;
+use crate::graphql::resolvers::resolve_document_collection;
 use crate::graphql::utils::{collection_name, with_collection_arguments};
 
 /// Adds a GraphQL query for retrieving a paginated, ordered and filtered collection of documents
@@ -29,7 +29,7 @@ pub fn build_all_documents_query(query: Object, schema: &Schema) -> Object {
                     );
 
                     FieldFuture::new(
-                        async move { DocumentCollection::resolve(ctx, schema, None).await },
+                        async move { resolve_document_collection(ctx, schema, None).await },
                     )
                 },
             ),
@@ -184,7 +184,7 @@ mod tests {
     #[case(
         r#"(meta: { bool: { in: ["hello"] }})"#.to_string(),
         Value::Null,
-        vec!["Invalid value for argument \"meta\", unknown field \"bool\" of type \"MetaFilterInput\"".to_string()]
+        vec!["Invalid value for argument \"meta\", unknown field \"bool\" of type \"MetaFilterInputObject\"".to_string()]
     )]
     #[case(
         r#"(meta: { owner: { contains: "hello" }})"#.to_string(),

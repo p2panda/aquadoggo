@@ -12,21 +12,30 @@ use tokio::sync::Mutex;
 
 use crate::bus::ServiceSender;
 use crate::db::SqlStore;
+use crate::graphql::input_values::{
+    build_filter_input_object, build_order_enum_value, BooleanFilter, FloatFilter, IntegerFilter,
+    MetaFilterInputObject, OrderDirection, PinnedRelationFilter, PinnedRelationListFilter,
+    RelationFilter, RelationListFilter, StringFilter,
+};
 use crate::graphql::mutations::{MutationRoot, Publish};
+use crate::graphql::objects::{build_document_object, build_paginated_document_object};
 use crate::graphql::queries::{
     build_all_documents_query, build_document_query, build_next_args_query,
 };
+use crate::graphql::responses::NextArguments;
 use crate::graphql::scalars::{
     CursorScalar, DocumentIdScalar, DocumentViewIdScalar, EncodedEntryScalar,
     EncodedOperationScalar, EntryHashScalar, LogIdScalar, PublicKeyScalar, SeqNumScalar,
 };
-use crate::graphql::types::{
-    BooleanFilter, DocumentCollection, DocumentFields, DocumentMeta, DocumentSchema, FilterInput,
-    FloatFilter, IntegerFilter, MetaFilterInput, NextArguments, OrderBy, OrderDirection,
-    PaginatedDocumentSchema, PinnedRelationFilter, PinnedRelationListFilter, RelationFilter,
-    RelationListFilter, StringFilter,
-};
+/* use crate::graphql::types::{
+    DocumentCollection, DocumentFields, DocumentMeta, DocumentSchema, OrderBy,
+    OrderDirection, PaginatedDocumentSchema,
+}; */
 use crate::schema::SchemaProvider;
+
+use super::objects::{
+    build_document_collection_object, build_document_fields_object, DocumentMeta,
+};
 
 /// Returns GraphQL API schema for p2panda node.
 ///
@@ -37,31 +46,31 @@ pub async fn build_root_schema(
     tx: ServiceSender,
     schema_provider: SchemaProvider,
 ) -> Schema {
-    // Get all schema from the schema provider.
     let all_schema = schema_provider.all().await;
 
-    // Using dynamic-graphql we create a registry and add types.
+    // Using dynamic-graphql we create a registry and add types
     let registry = Registry::new()
-        // Register mutations
+        // Register mutation operations
         .register::<MutationRoot>()
         .register::<Publish>()
-        // Register return types
+        // Register responses
         .register::<NextArguments>()
-        // Register input types
-        .register::<StringFilter>()
-        .register::<IntegerFilter>()
+        // Register objects
+        .register::<DocumentMeta>()
+        // Register input values
         .register::<BooleanFilter>()
         .register::<FloatFilter>()
-        .register::<RelationFilter>()
-        .register::<RelationListFilter>()
+        .register::<IntegerFilter>()
+        .register::<MetaFilterInputObject>()
+        .register::<OrderDirection>()
         .register::<PinnedRelationFilter>()
         .register::<PinnedRelationListFilter>()
-        .register::<OrderDirection>()
-        .register::<MetaFilterInput>()
-        // Register scalar types
+        .register::<RelationFilter>()
+        .register::<RelationListFilter>()
+        .register::<StringFilter>()
+        // Register scalars
         .register::<CursorScalar>()
         .register::<DocumentIdScalar>()
-        .register::<DocumentMeta>()
         .register::<DocumentViewIdScalar>()
         .register::<EncodedEntryScalar>()
         .register::<EncodedOperationScalar>()
@@ -70,55 +79,54 @@ pub async fn build_root_schema(
         .register::<PublicKeyScalar>()
         .register::<SeqNumScalar>();
 
-    // Construct the schema builder.
     let mut schema_builder = Schema::build("Query", Some("MutationRoot"), None);
 
     // Populate it with the registered types. We can now use these in any following dynamically
     // created query object fields.
     schema_builder = registry.apply_into_schema_builder(schema_builder);
 
-    // Construct the root query object.
+    // Construct the root query object
     let mut root_query = Object::new("Query");
 
-    // Loop through all schema retrieved from the schema store, create types and a root query for the
-    // documents they describe.
+    // Loop through all schema retrieved from the schema store, dynamically create GraphQL objects,
+    // input values and a query for the documents they describe
     for schema in all_schema {
-        // Construct the fields type object which will be named `<schema_id>Field`.
-        let document_schema_fields = DocumentFields::build(&schema);
+        // Construct the fields type object which will be named `<schema_id>Field`
+        let document_fields_object = build_document_fields_object(&schema);
 
-        // Construct the schema type object which contains "fields" and "meta" fields.
-        let document_schema = DocumentSchema::build(&schema);
+        // Construct the document object which contains "fields" and "meta" fields
+        let document_object = build_document_object(&schema);
 
-        // Construct the paginated response wrapper for this document schema type.
-        let paginated_response_schema = DocumentCollection::build(&schema);
+        // Construct the paginated response wrapper for this document schema type
+        let document_collection_object = build_document_collection_object(&schema);
 
-        // Construct the schema type object which contains "fields" and "meta" fields
-        // as well as cursor pagination fields.
-        let paginated_document_schema = PaginatedDocumentSchema::build(&schema);
+        // Construct the document object which contains "fields" and "meta" fields as well as
+        // "cursor" pagination field
+        let paginated_document_object = build_paginated_document_object(&schema);
 
-        // Construct the filter and ordering input type object.
-        let filter_input = FilterInput::build(&schema);
-        let order_input = OrderBy::build(&schema);
+        // Construct the filter and ordering input values for this schema
+        let filter_input = build_filter_input_object(&schema);
+        let order_input = build_order_enum_value(&schema);
 
-        // Register a schema, schema fields and filter type for every schema.
+        // Register a schema, schema fields and filter type for every schema
         schema_builder = schema_builder
-            .register(document_schema_fields)
-            .register(document_schema)
-            .register(paginated_response_schema)
-            .register(paginated_document_schema)
+            .register(document_fields_object)
+            .register(document_object)
+            .register(document_collection_object)
+            .register(paginated_document_object)
             .register(order_input)
             .register(filter_input);
 
-        // Add a query object for each schema. It offers an interface to retrieve a single
-        // document of this schema by it's document id or view id. Its resolver parses and
-        // validates the passed parameters, then forwards them up to the children query fields.
+        // Add a query for each schema. It offers an interface to retrieve a single document of
+        // this schema by it's document id or view id. Its resolver parses and validates the passed
+        // parameters, then forwards them up to the children query fields
         root_query = build_document_query(root_query, &schema);
 
-        // Add a query for retrieving all documents of a certain schema.
+        // Add a query for retrieving all documents of a certain schema
         root_query = build_all_documents_query(root_query, &schema);
     }
 
-    // Add next args to the query object.
+    // Add next args to the query object
     let root_query = build_next_args_query(root_query);
 
     // Build the GraphQL schema. We can unwrap here since it will only fail if we forgot to

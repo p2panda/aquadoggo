@@ -1,13 +1,72 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! Filter inputs used to specify filter parameters in collection queries. Different document
-//! field types have different filter capabilities, this module contains filter objects for all
-//! p2panda core types: `String`, `Integer`, `Float`, `Boolean`, `Relation`, `PinnedRelation`,
-//! `RelationList` and `PinnedRelationList` as well as for `OWNER`, `DOCUMENT_ID` and
-//! `DOCUMENT_VIEW_ID` meta fields.
+//! GraphQL input objects used to specify filter parameters in collection queries.
+//!
+//! Different document field types have different filter capabilities. This module contains filter
+//! objects for all p2panda core types: `String`, `Integer`, `Float`, `Boolean`, `Relation`,
+//! `PinnedRelation`, `RelationList` and `PinnedRelationList` as well as for `owner`, `documentId`
+//! and `viewId` meta fields.
+use async_graphql::dynamic::{InputObject, InputValue, TypeRef};
 use dynamic_graphql::InputObject;
+use p2panda_rs::schema::{FieldType, Schema};
 
 use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar, PublicKeyScalar};
+use crate::graphql::utils::filter_name;
+
+/// Build a filter input object for a p2panda schema. It can be used to filter collection queries
+/// based on the values each document contains.
+///
+/// The resulting input objects are used passed to the `filter` argument on a document collection
+/// query or list relation fields.
+pub fn build_filter_input_object(schema: &Schema) -> InputObject {
+    // Construct the document fields object which will be named `<schema_id>Filter`
+    let schema_field_name = filter_name(schema.id());
+    let mut filter_input = InputObject::new(&schema_field_name);
+
+    // For every field in the schema we create a type with a resolver
+    for (name, field_type) in schema.fields().iter() {
+        match field_type {
+            FieldType::Boolean => {
+                filter_input =
+                    filter_input.field(InputValue::new(name, TypeRef::named("BooleanFilter")));
+            }
+            FieldType::Integer => {
+                filter_input =
+                    filter_input.field(InputValue::new(name, TypeRef::named("IntegerFilter")));
+            }
+            FieldType::Float => {
+                filter_input =
+                    filter_input.field(InputValue::new(name, TypeRef::named("FloatFilter")));
+            }
+            FieldType::String => {
+                filter_input =
+                    filter_input.field(InputValue::new(name, TypeRef::named("StringFilter")));
+            }
+            FieldType::Relation(_) => {
+                filter_input =
+                    filter_input.field(InputValue::new(name, TypeRef::named("RelationFilter")));
+            }
+            FieldType::RelationList(_) => {
+                filter_input =
+                    filter_input.field(InputValue::new(name, TypeRef::named("RelationListFilter")));
+            }
+            FieldType::PinnedRelation(_) => {
+                filter_input = filter_input.field(InputValue::new(
+                    name,
+                    TypeRef::named("PinnedRelationFilter"),
+                ));
+            }
+            FieldType::PinnedRelationList(_) => {
+                filter_input = filter_input.field(InputValue::new(
+                    name,
+                    TypeRef::named("PinnedRelationListFilter"),
+                ));
+            }
+        };
+    }
+
+    filter_input
+}
 
 /// A filter input type for owner field on meta object.
 #[derive(InputObject)]
