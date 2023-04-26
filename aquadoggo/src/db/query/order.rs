@@ -34,7 +34,7 @@ impl Order {
 impl Default for Order {
     fn default() -> Self {
         Self {
-            field: None,
+            field: Some(Field::Meta(MetaField::DocumentId)),
             direction: Direction::Ascending,
         }
     }
@@ -54,7 +54,7 @@ mod tests {
         assert_eq!(
             order,
             Order {
-                field: None,
+                field: Some(Field::Meta(MetaField::DocumentId)),
                 direction: Direction::Ascending
             }
         )
