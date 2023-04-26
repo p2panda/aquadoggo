@@ -43,7 +43,7 @@ pub fn test_runner<F: AsyncTestFn + Send + Sync + 'static>(test: F) {
 
     runtime.block_on(async {
         // Initialise store
-        let pool = initialize_db().await;
+        let (_config, pool) = initialize_db().await;
         let store = SqlStore::new(pool);
 
         // Construct the actual test node
