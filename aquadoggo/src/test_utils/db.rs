@@ -4,34 +4,28 @@ use sqlx::migrate::MigrateDatabase;
 use sqlx::Any;
 
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
-use crate::test_utils::TEST_CONFIG;
+use crate::test_utils::TestConfiguration;
 
 /// Create test database.
-pub async fn initialize_db() -> Pool {
-    initialize_db_with_url(&TEST_CONFIG.database_url).await
-}
+pub async fn initialize_db() -> (TestConfiguration, Pool) {
+    let config = TestConfiguration::new();
 
-/// Create test database.
-pub async fn initialize_db_with_url(url: &str) -> Pool {
-    // Reset database first
-    drop_database().await;
-    create_database(url).await.unwrap();
+    drop_database(&config).await;
+    create_database(&config.database_url).await.unwrap();
 
-    // Create connection pool and run all migrations
-    let pool = connection_pool(url, 25).await.unwrap();
+    let pool = connection_pool(&config.database_url, 1).await.unwrap();
+
     if run_pending_migrations(&pool).await.is_err() {
         pool.close().await;
+        panic!("Database migration failed");
     }
 
-    pool
+    (config, pool)
 }
 
-// Delete test database
-pub async fn drop_database() {
-    if Any::database_exists(&TEST_CONFIG.database_url)
-        .await
-        .unwrap()
-    {
-        Any::drop_database(&TEST_CONFIG.database_url).await.unwrap();
+/// Delete test database.
+pub async fn drop_database(config: &TestConfiguration) {
+    if Any::database_exists(&config.database_url).await.unwrap() {
+        Any::drop_database(&config.database_url).await.unwrap();
     }
 }

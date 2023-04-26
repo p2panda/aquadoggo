@@ -2,19 +2,17 @@
 
 use std::fmt::Debug;
 
-use once_cell::sync::Lazy;
 use serde::Deserialize;
 
 /// Configuration used in test helper methods.
 #[derive(Deserialize, Debug)]
 #[serde(default)]
 pub struct TestConfiguration {
-    /// Database url (sqlite or postgres)
+    /// Database url (SQLite or PostgreSQL).
     pub database_url: String,
 }
 
 impl TestConfiguration {
-    /// Create a new configuration object for test environments.
     pub fn new() -> Self {
         envy::from_env::<TestConfiguration>()
             .expect("Could not read environment variables for test configuration")
@@ -23,11 +21,12 @@ impl TestConfiguration {
 
 impl Default for TestConfiguration {
     fn default() -> Self {
+        // Give each database an unique name
+        let db_name = format!("dbmem{}", rand::random::<u32>());
+
         Self {
             /// SQLite database stored in memory.
-            database_url: "sqlite::memory:".into(),
+            database_url: format!("sqlite://{db_name}?mode=memory&cache=private"),
         }
     }
 }
-
-pub static TEST_CONFIG: Lazy<TestConfiguration> = Lazy::new(TestConfiguration::new);
