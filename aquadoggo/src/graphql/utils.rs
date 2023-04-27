@@ -91,25 +91,11 @@ pub fn filter_to_operation_value(
         FieldType::Integer => filter_value.i64()?.into(),
         FieldType::Float => filter_value.f64()?.into(),
         FieldType::String => filter_value.string()?.into(),
-        FieldType::Relation(_) => DocumentId::new(&filter_value.string()?.parse()?).into(),
-        FieldType::RelationList(_) => {
-            let mut list_items = vec![];
-            for value in filter_value.list()?.iter() {
-                list_items.push(DocumentId::new(&value.string()?.parse()?));
-            }
-            list_items.into()
-        }
-        FieldType::PinnedRelation(_) => {
+        // We are only ever dealing with list items here
+        FieldType::Relation(_) | FieldType::RelationList(_) => DocumentId::new(&filter_value.string()?.parse()?).into(),
+        FieldType::PinnedRelation(_) | FieldType::PinnedRelationList(_) => {
             let document_view_id: DocumentViewId = filter_value.string()?.parse()?;
             document_view_id.into()
-        }
-        FieldType::PinnedRelationList(_) => {
-            let mut list_items = vec![];
-            for value in filter_value.list()?.iter() {
-                let document_view_id: DocumentViewId = value.string()?.parse()?;
-                list_items.push(document_view_id);
-            }
-            list_items.into()
         }
     };
 
@@ -192,6 +178,7 @@ fn parse_filter(
             let field_type = schema.fields().get(field.as_str()).unwrap();
             match name.as_str() {
                 "in" => {
+                    println!("Parse filter `in`");
                     let mut list_items: Vec<OperationValue> = vec![];
                     for value in value.list()?.iter() {
                         let item = filter_to_operation_value(&value, field_type)?;
@@ -200,6 +187,7 @@ fn parse_filter(
                     filter.add_in(&filter_field, &list_items);
                 }
                 "notIn" => {
+                    println!("Parse filter `notIn`");
                     let mut list_items: Vec<OperationValue> = vec![];
                     for value in value.list()?.iter() {
                         let item = filter_to_operation_value(&value, field_type)?;
