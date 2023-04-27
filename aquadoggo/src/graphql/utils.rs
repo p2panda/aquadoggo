@@ -92,7 +92,9 @@ pub fn filter_to_operation_value(
         FieldType::Float => filter_value.f64()?.into(),
         FieldType::String => filter_value.string()?.into(),
         // We are only ever dealing with list items here
-        FieldType::Relation(_) | FieldType::RelationList(_) => DocumentId::new(&filter_value.string()?.parse()?).into(),
+        FieldType::Relation(_) | FieldType::RelationList(_) => {
+            DocumentId::new(&filter_value.string()?.parse()?).into()
+        }
         FieldType::PinnedRelation(_) | FieldType::PinnedRelationList(_) => {
             let document_view_id: DocumentViewId = filter_value.string()?.parse()?;
             document_view_id.into()
