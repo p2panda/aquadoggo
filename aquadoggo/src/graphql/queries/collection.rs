@@ -47,14 +47,172 @@ pub fn build_collection_query(query: Object, schema: &Schema) -> Object {
 #[cfg(test)]
 mod tests {
     use async_graphql::{value, Response, Value};
-    use p2panda_rs::operation::PinnedRelationList;
-    use p2panda_rs::schema::FieldType;
+    use p2panda_rs::document::DocumentViewId;
+    use p2panda_rs::operation::{PinnedRelationList, RelationList};
+    use p2panda_rs::schema::{FieldType, Schema};
     use p2panda_rs::test_utils::fixtures::key_pair;
     use p2panda_rs::{identity::KeyPair, operation::OperationValue};
     use rstest::rstest;
     use serde_json::json;
 
-    use crate::test_utils::{add_document, add_schema, graphql_test_client, test_runner, TestNode};
+    use crate::test_utils::{
+        add_document, add_schema, add_schema_and_documents, graphql_test_client, test_runner,
+        TestNode,
+    };
+
+    async fn gimme_some_lyrics(
+        node: &mut TestNode,
+        key_pair: &KeyPair,
+    ) -> (Schema, Vec<DocumentViewId>) {
+        add_schema_and_documents(
+            node,
+            "lyrics",
+            vec![
+                // X-ray Specs : Oh Bondage Up Yours!
+                vec![(
+                    "lyric",
+                    "Bind me, tie me, chain me to the wall".into(),
+                    None,
+                )],
+                vec![("lyric", "I wanna be a slave to you all".into(), None)],
+                vec![("lyric", "Oh bondage, up yours".into(), None)],
+                vec![("lyric", "Oh bondage, no more".into(), None)],
+                vec![(
+                    "lyric",
+                    "Chain-store chainsmoke, I consume you all".into(),
+                    None,
+                )],
+                vec![(
+                    "lyric",
+                    "Chain-gang chainmail, I don't think at all".into(),
+                    None,
+                )],
+                vec![(
+                    "lyric",
+                    "Thrash, me crush me, beat me till I fall".into(),
+                    None,
+                )],
+                vec![("lyric", "I wanna be a victim for you all".into(), None)],
+                vec![(
+                    "lyric",
+                    "Bind me, tie me, chain me to the wall".into(),
+                    None,
+                )],
+                vec![(
+                    "lyric",
+                    "I wanna be a slave to you all        ".into(),
+                    None,
+                )],
+                vec![("lyric", "Oh bondage, no more!".into(), None)],
+                // Gang of Four : Natural's Not In
+                vec![("lyric", "The problem of leisure".into(), None)],
+                vec![("lyric", "What to do for pleasure".into(), None)],
+                vec![("lyric", "Ideal love, a new purchase".into(), None)],
+                vec![("lyric", "A market of the senses".into(), None)],
+                vec![("lyric", "Dream of the perfect life".into(), None)],
+                vec![("lyric", "Economic circumstances".into(), None)],
+                vec![("lyric", "The body is good business".into(), None)],
+                vec![("lyric", "Sell out, maintain the interest".into(), None)],
+                vec![("lyric", "Remember Lot's wife".into(), None)],
+                vec![("lyric", "Renounce all sin and vice".into(), None)],
+                vec![("lyric", "Dream of the perfect life".into(), None)],
+                vec![("lyric", "This heaven gives me migraine".into(), None)],
+                vec![("lyric", "The problem of leisure".into(), None)],
+                vec![("lyric", "What to do for pleasure".into(), None)],
+                vec![("lyric", "Coercion of the senses".into(), None)],
+                vec![("lyric", "We're not so gullible".into(), None)],
+                vec![("lyric", "Our great expectations".into(), None)],
+                vec![("lyric", "A future for the good".into(), None)],
+                vec![("lyric", "Fornication makes you happy".into(), None)],
+                vec![("lyric", "No escape from society".into(), None)],
+                vec![("lyric", "Natural is not in it".into(), None)],
+                vec![("lyric", "Your relations are of power".into(), None)],
+                vec![("lyric", "We all have good intentions".into(), None)],
+                vec![("lyric", "But all with strings attached".into(), None)],
+                vec![("lyric", "Repackaged sex (keeps) your interest".into(), None)],
+                vec![("lyric", "This heaven gives me migraine".into(), None)],
+            ],
+            key_pair,
+        )
+        .await
+    }
+
+    async fn my_karaoke_hits(
+        node: &mut TestNode,
+        lyrics_view_ids: Vec<DocumentViewId>,
+        lyrics_schema: Schema,
+        key_pair: &KeyPair,
+    ) -> (Schema, Vec<DocumentViewId>) {
+        add_schema_and_documents(
+            node,
+            "songs",
+            vec![
+                vec![
+                    ("artist", "X-ray Specs".into(), None),
+                    ("title", "Oh Bondage Up Yours!".into(), None),
+                    (
+                        "lyrics",
+                        vec![
+                            lyrics_view_ids[0].clone(),
+                            lyrics_view_ids[1].clone(),
+                            lyrics_view_ids[2].clone(),
+                            lyrics_view_ids[3].clone(),
+                            lyrics_view_ids[2].clone(),
+                            lyrics_view_ids[3].clone(),
+                            lyrics_view_ids[4].clone(),
+                            lyrics_view_ids[5].clone(),
+                            lyrics_view_ids[2].clone(),
+                            lyrics_view_ids[3].clone(),
+                            lyrics_view_ids[2].clone(),
+                            lyrics_view_ids[3].clone(),
+                            lyrics_view_ids[6].clone(),
+                            lyrics_view_ids[7].clone(),
+                            lyrics_view_ids[2].clone(),
+                            lyrics_view_ids[3].clone(),
+                            lyrics_view_ids[2].clone(),
+                            lyrics_view_ids[3].clone(),
+                            lyrics_view_ids[8].clone(),
+                            lyrics_view_ids[9].clone(),
+                            lyrics_view_ids[2].clone(),
+                            lyrics_view_ids[3].clone(),
+                            lyrics_view_ids[2].clone(),
+                            lyrics_view_ids[3].clone(),
+                            lyrics_view_ids[8].clone(),
+                            lyrics_view_ids[9].clone(),
+                            lyrics_view_ids[2].clone(),
+                            lyrics_view_ids[3].clone(),
+                            lyrics_view_ids[2].clone(),
+                            lyrics_view_ids[3].clone(),
+                            lyrics_view_ids[2].clone(),
+                            lyrics_view_ids[10].clone(),
+                        ]
+                        .into(),
+                        Some(lyrics_schema.id().to_owned()),
+                    ),
+                ],
+                vec![
+                    ("artist", "Gang Of Four".into(), None),
+                    ("title", "Natural's Not In".into(), None),
+                    (
+                        "lyrics",
+                        OperationValue::RelationList(RelationList::new(vec![])),
+                        Some(lyrics_schema.id().to_owned()),
+                    ),
+                ],
+                vec![
+                    ("artist", "David Bowie".into(), None),
+                    ("title", "Speed Of Life".into(), None),
+                    (
+                        "lyrics",
+                        OperationValue::RelationList(RelationList::new(vec![])),
+                        Some(lyrics_schema.id().to_owned()),
+                    ),
+                ],
+            ],
+            &key_pair,
+        )
+        .await
+    }
 
     #[rstest]
     #[case(
@@ -432,5 +590,54 @@ mod tests {
 
             assert!(response.is_ok());
         });
+    }
+
+    #[rstest]
+    fn take_me_to_the_karaoke(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            let (lyrics_schema, view_ids) = gimme_some_lyrics(&mut node, &key_pair).await;
+            let (song_schema, view_ids) =
+                my_karaoke_hits(&mut node, view_ids, lyrics_schema, &key_pair).await;
+
+            let client = graphql_test_client(&node).await;
+            let query = format!(
+                r#"{{
+                    collection: all_{type_name}(first: 1) {{
+                        hasNextPage
+                        totalCount
+                        endCursor
+                        documents {{
+                            cursor
+                            fields {{
+                                title
+                                artist
+                                lyrics(first: 5) {{
+                                    endCursor
+                                    documents {{
+                                        fields {{
+                                            lyric
+                                        }}
+                                    }}
+                                }}
+                            }}
+                        }}
+                    }},
+                }}"#,
+                type_name = song_schema.id(),
+            );
+
+            let response = client
+                .post("/graphql")
+                .json(&json!({
+                    "query": query,
+                }))
+                .send()
+                .await;
+
+            let response: Response = response.json().await;
+
+            assert!(response.is_ok(), "{:#?}", response.errors);
+            println!("{:#?}", response.data.into_json().unwrap());
+        })
     }
 }
