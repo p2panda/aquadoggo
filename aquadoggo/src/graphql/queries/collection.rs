@@ -49,16 +49,64 @@ mod tests {
     use async_graphql::{value, Response, Value};
     use p2panda_rs::document::DocumentViewId;
     use p2panda_rs::operation::{PinnedRelationList, RelationList};
-    use p2panda_rs::schema::{FieldType, Schema};
+    use p2panda_rs::schema::{FieldType, Schema, SchemaId};
     use p2panda_rs::test_utils::fixtures::key_pair;
     use p2panda_rs::{identity::KeyPair, operation::OperationValue};
     use rstest::rstest;
-    use serde_json::json;
+    use serde_json::{json, Value as JsonValue};
 
     use crate::test_utils::{
         add_document, add_schema, add_schema_and_documents, graphql_test_client, test_runner,
-        TestNode,
+        TestClient, TestNode,
     };
+
+    /// Make a GraphQL query to the node.
+    async fn query(client: &TestClient, schema_id: &SchemaId, query_args: &str) -> JsonValue {
+        let response = client
+            .post("/graphql")
+            .json(&json!({
+                "query": &songs_collection_query(schema_id, query_args)
+            }))
+            .send()
+            .await;
+
+        let response: Response = response.json().await;
+        assert!(response.is_ok(), "{:#?}", response.errors);
+        response.data.into_json().unwrap()
+    }
+
+    // Helper for creating paginated queries over songs and lyrics.
+    fn songs_collection_query(type_name: &SchemaId, query_args: &str) -> String {
+        format!(
+            r#"{{
+            query: all_{type_name}{query_args} {{
+                hasNextPage
+                totalCount
+                endCursor
+                documents {{
+                    cursor
+                    meta {{
+                        owner
+                        documentId
+                        viewId
+                    }}
+                    fields {{
+                        title
+                        artist
+                        lyrics(first: 5) {{
+                            endCursor
+                            documents {{
+                                fields {{
+                                    lyric
+                                }}
+                            }}
+                        }}
+                    }}
+                }}
+            }},
+        }}"#
+        )
+    }
 
     async fn gimme_some_lyrics(
         node: &mut TestNode,
@@ -600,44 +648,10 @@ mod tests {
                 my_karaoke_hits(&mut node, view_ids, lyrics_schema, &key_pair).await;
 
             let client = graphql_test_client(&node).await;
-            let query = format!(
-                r#"{{
-                    collection: all_{type_name}(first: 1) {{
-                        hasNextPage
-                        totalCount
-                        endCursor
-                        documents {{
-                            cursor
-                            fields {{
-                                title
-                                artist
-                                lyrics(first: 5) {{
-                                    endCursor
-                                    documents {{
-                                        fields {{
-                                            lyric
-                                        }}
-                                    }}
-                                }}
-                            }}
-                        }}
-                    }},
-                }}"#,
-                type_name = song_schema.id(),
-            );
 
-            let response = client
-                .post("/graphql")
-                .json(&json!({
-                    "query": query,
-                }))
-                .send()
-                .await;
+            let data = query(&client, song_schema.id(), "(first: 1)").await;
 
-            let response: Response = response.json().await;
-
-            assert!(response.is_ok(), "{:#?}", response.errors);
-            println!("{:#?}", response.data.into_json().unwrap());
+            println!("{:#?}", data["query"]["documents"]);
         })
     }
 }
