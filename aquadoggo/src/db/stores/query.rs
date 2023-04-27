@@ -642,6 +642,13 @@ fn order_sql(order: &Order, schema: &Schema, list: Option<&RelationList>) -> Str
         _ => None,
     };
 
+    // Always order by document view id, except of if it was selected manually. We need this to
+    // assemble the rows to documents correctly at the end
+    let id_sql = match order.field {
+        Some(Field::Meta(MetaField::DocumentViewId)) => None,
+        _ => Some("documents.document_view_id ASC".to_string()),
+    };
+
     // On top we sort always by the unique operation cursor in case the previous order value is
     // equal between two rows
     let cursor_sql = match list {
@@ -649,7 +656,7 @@ fn order_sql(order: &Order, schema: &Schema, list: Option<&RelationList>) -> Str
         None => Some("operation_fields_v1.cursor ASC".to_string()),
     };
 
-    let order = concatenate_sql(&[custom, list_sql, cursor_sql]);
+    let order = concatenate_sql(&[custom, list_sql, id_sql, cursor_sql]);
 
     format!("ORDER BY {order}")
 }
