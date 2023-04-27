@@ -8,7 +8,6 @@ use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{FieldType, Schema};
 use p2panda_rs::storage_provider::traits::DocumentStore;
 
-use crate::db::query::{Field, MetaField};
 use crate::db::stores::{PaginationCursor, PaginationData, RelationList};
 use crate::db::types::StorageDocument;
 use crate::db::SqlStore;
@@ -74,13 +73,7 @@ pub async fn resolve_document_collection(
     let store = ctx.data_unchecked::<SqlStore>();
 
     // Populate query arguments with values from GraphQL query
-    let mut query = parse_collection_arguments(&ctx, &schema)?;
-
-    // Set default ordering to document id as per specification, if we're in a root query and
-    // haven't selected anything
-    if list.is_none() && query.order.field.is_none() {
-        query.order.field = Some(Field::Meta(MetaField::DocumentId));
-    }
+    let query = parse_collection_arguments(&ctx, &schema, &list)?;
 
     // Fetch all queried documents and compose the value to be passed up the query tree
     let (pagination_data, documents) = store.query(&schema, &query, list.as_ref()).await?;
