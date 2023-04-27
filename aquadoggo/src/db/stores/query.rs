@@ -6,7 +6,6 @@ use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
 use anyhow::bail;
-use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::{DocumentId, DocumentViewFields, DocumentViewId};
 use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::OperationValue;

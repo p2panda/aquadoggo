@@ -34,8 +34,6 @@ impl Order {
 impl Default for Order {
     fn default() -> Self {
         Self {
-            // @TODO: Needs to be document id as per specification:
-            // https://github.com/p2panda/aquadoggo/issues/351
             field: None,
             direction: Direction::Ascending,
         }
@@ -50,8 +48,7 @@ mod tests {
 
     #[test]
     fn default_specification() {
-        // @TODO: If no ordering is selected the documents will be ordered by document id,
-        // ascending, as per specification
+        // If no ordering is selected the documents will be ordered by document id, ascending
         let order = Order::default();
 
         assert_eq!(
