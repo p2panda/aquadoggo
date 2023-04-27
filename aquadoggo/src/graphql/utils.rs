@@ -178,7 +178,6 @@ fn parse_filter(
             let field_type = schema.fields().get(field.as_str()).unwrap();
             match name.as_str() {
                 "in" => {
-                    println!("Parse filter `in`");
                     let mut list_items: Vec<OperationValue> = vec![];
                     for value in value.list()?.iter() {
                         let item = filter_to_operation_value(&value, field_type)?;
@@ -187,7 +186,6 @@ fn parse_filter(
                     filter.add_in(&filter_field, &list_items);
                 }
                 "notIn" => {
-                    println!("Parse filter `notIn`");
                     let mut list_items: Vec<OperationValue> = vec![];
                     for value in value.list()?.iter() {
                         let item = filter_to_operation_value(&value, field_type)?;
