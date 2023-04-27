@@ -736,13 +736,98 @@ mod tests {
     }
 
     #[rstest]
+    #[case("", "")]
+    #[case("(orderDirection: ASC, orderBy: title)", "")]
+    #[case("(orderDirection: DESC, orderBy: DOCUMENT_ID)", "")]
+    #[case("(orderDirection: ASC, orderBy: DOCUMENT_VIEW_ID)", "")]
+    // @TODO: these fails, see: https://github.com/p2panda/aquadoggo/issues/353
+    // #[case("(meta: { owner: { eq: \"2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96\" } })", "")]
+    // #[case("(meta: { owner: { notEq: \"2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96\" } })", "")]
+    // #[case("(meta: { owner: { in: [ \"2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96\" ] } })", "")]
+    // #[case("(meta: { owner: { notIn: [ \"2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96\" ] } })", "")]
+    #[case("(meta: { documentId: { eq: \"0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543\" } })", "")]
+    #[case("(meta: { documentId: { notEq: \"0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543\" } })", "")]
+    #[case("(meta: { documentId: { in: [ \"0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543\" ] } })", "")]
+    #[case("(meta: { documentId: { notIn: [ \"0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543\" ] } })", "")]
+    #[case("(meta: { viewId: { eq: \"0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543\" } })", "")]
+    #[case("(meta: { viewId: { notEq: \"0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543\" } })", "")]
+    #[case("(meta: { viewId: { in: [ \"0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543\" ] } })", "")]
+    #[case("(meta: { viewId: { notIn: [ \"0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543\" ] } })", "")]
+    #[case("(filter: { release_year: { gte: 1978 } })", "")]
+    #[case("(filter: { release_year: { gt: 1978 } })", "")]
+    #[case("(filter: { release_year: { lt: 1978 } })", "")]
+    #[case("(filter: { release_year: { lte: 1978 } })", "")]
+    #[case("(filter: { release_year: { gte: 1971, lt: 1971 } })", "")]
+    #[case(
+        "(filter: { release_year: { gt: 1978, lte: 1978, lt: 1978, lte: 1978 } })",
+        ""
+    )]
+    #[case("(filter: { title: { gt: \"a\" } })", "")]
+    #[case("(filter: { title: { lte: \"a\" } })", "")]
+    #[case("(filter: { title: { contains: \"Up\" } })", "")]
+    #[case("(filter: { title: { notContains: \"!\" } })", "")]
+    #[case(
+        "(filter: { title: { in: [ \"Oh Bondage Up Yours!\", \"Speed Of Life\" ] } })",
+        ""
+    )]
+    #[case("(filter: { title: { notIn: [ \"Natural's Not In\" ] } })", "")]
+    #[case("(filter: { title: { eq: \"Natural's Not In\" } })", "")]
+    #[case("(filter: { title: { notEq: \"Natural's Not In\", in: [ \"Oh Bondage Up Yours!\", \"Speed Of Life\" ] } })", "")]
+    #[case("(filter: { title: { notEq: \"Natural's Not In\" }, release_year: { gt: 1978 }, artist: { in: [ \"X-ray Spex\"] } })", "")]
+    #[case(
+        "(orderDirection: DESC, orderBy: title)",
+        "(orderDirection: ASC, orderBy: line)"
+    )]
+    #[case(
+        "(orderDirection: ASC, orderBy: title)",
+        "(orderDirection: DESC, orderBy: DOCUMENT_ID)"
+    )]
+    #[case(
+        "(orderDirection: ASC, orderBy: title)",
+        "(orderDirection: ASC, orderBy: DOCUMENT_VIEW_ID)"
+    )]
+    #[case("", "(filter: { line: { gt: \"a\" } })")]
+    #[case("", "(filter: { line: { lte: \"a\" } })")]
+    #[case("", "(filter: { line: { contains: \"Up\" } })")]
+    #[case("", "(filter: { line: { notContains: \"!\" } })")]
+    #[case(
+        "",
+        "(filter: { line: { in: [ \"The body is good business\", \"Oh bondage, up yours\" ] } })"
+    )]
+    #[case("", "(filter: { line: { notIn: [ \"Oh bondage, up yours\" ] } })")]
+    #[case("", "(filter: { line: { eq: \"Oh bondage, up yours\" } })")]
+    #[case("", "(filter: { line: { notEq: \"The body is good business\", notIn: [ \"Oh bondage, up yours\" ] } })")]
+    fn valid_filter_and_order_queries_pass(
+        #[case] song_args: &str,
+        #[case] lyric_args: &str,
+        key_pair: KeyPair,
+    ) {
+        let song_args = song_args.to_string();
+        let lyric_args = lyric_args.to_string();
+        test_runner(move |mut node: TestNode| async move {
+            // Publish some lyrics to the node.
+            let (lyric_schema, view_ids) = here_be_some_lyrics(&mut node, &key_pair).await;
+
+            // Publish some songs, which contain "title", "artist" and "lyrics" fields.
+            let (song_schema, _) =
+                here_be_some_karaoke_hits(&mut node, &view_ids, &lyric_schema, &key_pair).await;
+
+            // Init a GraphQL client we'll use to query the node.
+            let client = graphql_test_client(&node).await;
+
+            // Perform a paginated collection query for the songs.
+            query_songs(&client, song_schema.id(), &song_args, &lyric_args).await;
+        })
+    }
+
+    #[rstest]
     fn take_me_to_the_karaoke(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
             // Publish some lyrics to the node.
             let (lyric_schema, view_ids) = here_be_some_lyrics(&mut node, &key_pair).await;
 
             // Publish some songs, which contain "title", "artist" and "lyrics" fields.
-            let (song_schema, view_ids) =
+            let (song_schema, _) =
                 here_be_some_karaoke_hits(&mut node, &view_ids, &lyric_schema, &key_pair).await;
 
             // Init a GraphQL client we'll use to query the node.
@@ -922,7 +1007,7 @@ mod tests {
 
             // let me = key_pair.public_key().to_string();
             //
-            // TODO: this fails, see: https://github.com/p2panda/aquadoggo/issues/353
+            // @TODO: this fails, see: https://github.com/p2panda/aquadoggo/issues/353
             // // What about only songs I've published to the network:
             // let data = query_songs(
             //     &client,
@@ -960,7 +1045,10 @@ mod tests {
 
             assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 1);
             assert_eq!(data["query"]["totalCount"], json!(1));
-            assert_eq!(data["query"]["documents"][0]["fields"]["title"], json!("Natural's Not In"));
+            assert_eq!(
+                data["query"]["documents"][0]["fields"]["title"],
+                json!("Natural's Not In")
+            );
         })
     }
 }
