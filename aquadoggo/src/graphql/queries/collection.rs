@@ -60,12 +60,36 @@ mod tests {
         TestClient, TestNode,
     };
 
-    /// Make a GraphQL query to the node.
-    async fn query(client: &TestClient, schema_id: &SchemaId, song_args: &str, lyric_args: &str) -> JsonValue {
+    /// Make a GraphQL collection query for songs stored on the node.
+    async fn query_songs(
+        client: &TestClient,
+        schema_id: &SchemaId,
+        song_args: &str,
+        lyric_args: &str,
+    ) -> JsonValue {
         let response = client
             .post("/graphql")
             .json(&json!({
                 "query": &songs_collection_query(schema_id, song_args, lyric_args)
+            }))
+            .send()
+            .await;
+
+        let response: Response = response.json().await;
+        assert!(response.is_ok(), "{:#?}", response.errors);
+        response.data.into_json().unwrap()
+    }
+
+    /// Make a GraphQL collection query for lyrics stored on the node.
+    async fn query_lyrics(
+        client: &TestClient,
+        schema_id: &SchemaId,
+        lyric_args: &str,
+    ) -> JsonValue {
+        let response = client
+            .post("/graphql")
+            .json(&json!({
+                "query": &lyrics_collection_query(schema_id, lyric_args)
             }))
             .send()
             .await;
@@ -93,9 +117,18 @@ mod tests {
                         fields {{
                             title
                             artist
+                            release_year
                             lyrics{lyric_args} {{
+                                hasNextPage
+                                totalCount
                                 endCursor
                                 documents {{
+                                    cursor
+                                    meta {{
+                                        owner
+                                        documentId
+                                        viewId
+                                    }}            
                                     fields {{
                                         line
                                     }}
@@ -108,7 +141,31 @@ mod tests {
         )
     }
 
-    async fn gimme_some_lyrics(
+    // Helper for creating paginated queries over songs and lyrics.
+    fn lyrics_collection_query(type_name: &SchemaId, lyric_args: &str) -> String {
+        format!(
+            r#"{{
+                query: all_{type_name}{lyric_args} {{
+                    hasNextPage
+                    totalCount
+                    endCursor
+                    documents {{
+                        cursor
+                        meta {{
+                            owner
+                            documentId
+                            viewId
+                        }}            
+                        fields {{
+                            line
+                        }}
+                    }}
+                }},
+            }}"#
+        )
+    }
+
+    async fn here_be_some_lyrics(
         node: &mut TestNode,
         key_pair: &KeyPair,
     ) -> (Schema, Vec<DocumentViewId>) {
@@ -116,12 +173,8 @@ mod tests {
             node,
             "lyrics",
             vec![
-                // X-ray Specs : Oh Bondage Up Yours!
-                vec![(
-                    "line",
-                    "Bind me, tie me, chain me to the wall".into(),
-                    None,
-                )],
+                // X-ray Spex : Oh Bondage Up Yours!
+                vec![("line", "Bind me, tie me, chain me to the wall".into(), None)],
                 vec![("line", "I wanna be a slave to you all".into(), None)],
                 vec![("line", "Oh bondage, up yours".into(), None)],
                 vec![("line", "Oh bondage, no more".into(), None)],
@@ -141,16 +194,8 @@ mod tests {
                     None,
                 )],
                 vec![("line", "I wanna be a victim for you all".into(), None)],
-                vec![(
-                    "line",
-                    "Bind me, tie me, chain me to the wall".into(),
-                    None,
-                )],
-                vec![(
-                    "line",
-                    "I wanna be a slave to you all        ".into(),
-                    None,
-                )],
+                vec![("line", "Bind me, tie me, chain me to the wall".into(), None)],
+                vec![("line", "I wanna be a slave to you all        ".into(), None)],
                 vec![("line", "Oh bondage, no more!".into(), None)],
                 // Gang of Four : Natural's Not In
                 vec![("line", "The problem of leisure".into(), None)],
@@ -185,10 +230,10 @@ mod tests {
         .await
     }
 
-    async fn my_karaoke_hits(
+    async fn here_be_some_karaoke_hits(
         node: &mut TestNode,
-        lyrics_view_ids: Vec<DocumentViewId>,
-        lyrics_schema: Schema,
+        lyrics_view_ids: &Vec<DocumentViewId>,
+        lyrics_schema: &Schema,
         key_pair: &KeyPair,
     ) -> (Schema, Vec<DocumentViewId>) {
         add_schema_and_documents(
@@ -196,8 +241,9 @@ mod tests {
             "songs",
             vec![
                 vec![
-                    ("artist", "X-ray Specs".into(), None),
+                    ("artist", "X-ray Spex".into(), None),
                     ("title", "Oh Bondage Up Yours!".into(), None),
+                    ("release_year", 1977.into(), None),
                     (
                         "lyrics",
                         vec![
@@ -241,15 +287,64 @@ mod tests {
                 vec![
                     ("artist", "Gang Of Four".into(), None),
                     ("title", "Natural's Not In".into(), None),
+                    ("release_year", 1979.into(), None),
                     (
                         "lyrics",
-                        OperationValue::RelationList(RelationList::new(vec![])),
+                        vec![
+                            lyrics_view_ids[11].clone(),
+                            lyrics_view_ids[12].clone(),
+                            lyrics_view_ids[13].clone(),
+                            lyrics_view_ids[14].clone(),
+                            lyrics_view_ids[15].clone(),
+                            lyrics_view_ids[16].clone(),
+                            lyrics_view_ids[17].clone(),
+                            lyrics_view_ids[18].clone(),
+                            lyrics_view_ids[19].clone(),
+                            lyrics_view_ids[20].clone(),
+                            lyrics_view_ids[21].clone(),
+                            lyrics_view_ids[22].clone(),
+                            lyrics_view_ids[23].clone(),
+                            lyrics_view_ids[24].clone(),
+                            lyrics_view_ids[25].clone(),
+                            lyrics_view_ids[26].clone(),
+                            lyrics_view_ids[27].clone(),
+                            lyrics_view_ids[28].clone(),
+                            lyrics_view_ids[29].clone(),
+                            lyrics_view_ids[30].clone(),
+                            lyrics_view_ids[31].clone(),
+                            lyrics_view_ids[32].clone(),
+                            lyrics_view_ids[33].clone(),
+                            lyrics_view_ids[34].clone(),
+                            lyrics_view_ids[35].clone(),
+                            lyrics_view_ids[35].clone(),
+                            lyrics_view_ids[35].clone(),
+                            lyrics_view_ids[35].clone(),
+                            lyrics_view_ids[35].clone(),
+                            lyrics_view_ids[35].clone(),
+                            lyrics_view_ids[11].clone(),
+                            lyrics_view_ids[12].clone(),
+                            lyrics_view_ids[13].clone(),
+                            lyrics_view_ids[14].clone(),
+                            lyrics_view_ids[15].clone(),
+                            lyrics_view_ids[16].clone(),
+                            lyrics_view_ids[17].clone(),
+                            lyrics_view_ids[18].clone(),
+                            lyrics_view_ids[19].clone(),
+                            lyrics_view_ids[20].clone(),
+                            lyrics_view_ids[21].clone(),
+                            lyrics_view_ids[22].clone(),
+                            lyrics_view_ids[36].clone(),
+                            lyrics_view_ids[36].clone(),
+                            lyrics_view_ids[36].clone(),
+                        ]
+                        .into(),
                         Some(lyrics_schema.id().to_owned()),
                     ),
                 ],
                 vec![
                     ("artist", "David Bowie".into(), None),
                     ("title", "Speed Of Life".into(), None),
+                    ("release_year", 1977.into(), None),
                     (
                         "lyrics",
                         OperationValue::RelationList(RelationList::new(vec![])),
@@ -643,15 +738,218 @@ mod tests {
     #[rstest]
     fn take_me_to_the_karaoke(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
-            let (lyrics_schema, view_ids) = gimme_some_lyrics(&mut node, &key_pair).await;
-            let (song_schema, view_ids) =
-                my_karaoke_hits(&mut node, view_ids, lyrics_schema, &key_pair).await;
+            // Publish some lyrics to the node.
+            let (lyric_schema, view_ids) = here_be_some_lyrics(&mut node, &key_pair).await;
 
+            // Publish some songs, which contain "title", "artist" and "lyrics" fields.
+            let (song_schema, view_ids) =
+                here_be_some_karaoke_hits(&mut node, &view_ids, &lyric_schema, &key_pair).await;
+
+            // Init a GraphQL client we'll use to query the node.
             let client = graphql_test_client(&node).await;
 
-            let data = query(&client, song_schema.id(), "(first: 1)", "").await;
+            // Perform a paginated collection query for the songs on the node identified by the
+            // schema id. We don't pass any arguments and so will get up to the default number of
+            // items per page, which is 25.
+            let data = query_songs(&client, song_schema.id(), "", "").await;
 
-            println!("{:#?}", data["query"]["documents"]);
+            // There are 3 songs on the node, so we get 3 back.
+            assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 3);
+            // There are no next pages and the total number of songs is 3.
+            assert_eq!(data["query"]["hasNextPage"], json!(false));
+            assert_eq!(data["query"]["totalCount"], json!(3));
+
+            // Let's just get the first two when the songs are sorted in alphanumeric order by their title.
+            let data = query_songs(
+                &client,
+                song_schema.id(),
+                "(first: 2, orderDirection: ASC, orderBy: title)",
+                "",
+            )
+            .await;
+
+            assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 2);
+            // Now there is a next page but the total count is still 3.
+            assert_eq!(data["query"]["hasNextPage"], json!(true));
+            assert_eq!(data["query"]["totalCount"], json!(3));
+
+            // Check the first song out.
+            let naturals_not_in = data["query"]["documents"][0].clone();
+            assert_eq!(
+                naturals_not_in["fields"]["title"],
+                json!("Natural's Not In")
+            );
+            assert_eq!(naturals_not_in["fields"]["artist"], json!("Gang Of Four"));
+            assert_eq!(naturals_not_in["fields"]["lyrics"]["totalCount"], json!(45));
+
+            // And the next.
+            let oh_bondage_up_yours = data["query"]["documents"][1].clone();
+            assert_eq!(
+                oh_bondage_up_yours["fields"]["title"],
+                json!("Oh Bondage Up Yours!")
+            );
+            assert_eq!(oh_bondage_up_yours["fields"]["artist"], json!("X-ray Spex"));
+            assert_eq!(
+                oh_bondage_up_yours["fields"]["lyrics"]["totalCount"],
+                json!(32)
+            );
+
+            // That's more my style, so let's get the lyrics for this song. But there are a lot,
+            // so I'll just get the first 2 lines.
+
+            // We can identify the song by it's id and then paginate the lyrics field which is a
+            // relation list of song lyric lines.
+            let oh_bondage_up_yours_id =
+                oh_bondage_up_yours["meta"]["documentId"].as_str().unwrap();
+            let data = query_songs(
+                &client,
+                song_schema.id(),
+                &format!("(meta: {{ documentId: {{ eq: \"{oh_bondage_up_yours_id}\" }} }})"),
+                "(first: 2)", // args for the lyrics collection
+            )
+            .await;
+
+            let lyrics = data["query"]["documents"][0]["fields"]["lyrics"].clone();
+            assert_eq!(lyrics["documents"].as_array().unwrap().len(), 2);
+            assert_eq!(lyrics["totalCount"], json!(32));
+            assert_eq!(lyrics["hasNextPage"], json!(true));
+            assert_eq!(
+                lyrics["documents"][0]["fields"]["line"],
+                json!("Bind me, tie me, chain me to the wall")
+            );
+            assert_eq!(
+                lyrics["documents"][1]["fields"]["line"],
+                json!("I wanna be a slave to you all")
+            );
+
+            // Nice, let's get the chorus too. We use the "endCursor" value to make a new request
+            // for the next page of results.
+            let end_cursor = lyrics["endCursor"].as_str().unwrap();
+            let data = query_songs(
+                &client,
+                song_schema.id(),
+                &format!("(meta: {{ documentId: {{ eq: \"{oh_bondage_up_yours_id}\" }} }})"),
+                &format!("(after: \"{end_cursor}\", first: 2)"), // args for the lyrics collection
+            )
+            .await;
+
+            let lyrics = data["query"]["documents"][0]["fields"]["lyrics"].clone();
+            assert_eq!(
+                lyrics["documents"][0]["fields"]["line"],
+                json!("Oh bondage, up yours")
+            );
+            assert_eq!(
+                lyrics["documents"][1]["fields"]["line"],
+                json!("Oh bondage, no more")
+            );
+
+            // And how about doing a text search over all lyric lines in this song which include
+            // the word "bondage".
+            let data = query_songs(
+                &client,
+                song_schema.id(),
+                &format!("(meta: {{ documentId: {{ eq: \"{oh_bondage_up_yours_id}\" }} }})"),
+                "(filter: { line: { contains: \"bondage\" } })",
+            )
+            .await;
+
+            let lyrics = data["query"]["documents"][0]["fields"]["lyrics"].clone();
+            assert_eq!(lyrics["totalCount"], json!(22));
+            assert_eq!(lyrics["documents"].as_array().unwrap().len(), 22);
+
+            // We can perform many filters....
+
+            // Songs released in 1977:
+            let data = query_songs(
+                &client,
+                song_schema.id(),
+                "(filter: { release_year: { eq: 1977 } })",
+                "",
+            )
+            .await;
+
+            assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 2);
+            assert_eq!(data["query"]["totalCount"], json!(2));
+
+            // Songs not by David Bowie released in 1977:
+            let data = query_songs(
+                &client,
+                song_schema.id(),
+                "(filter: { release_year: { eq: 1977 }, artist: { notEq: \"David Bowie\" } })",
+                "",
+            )
+            .await;
+
+            assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 1);
+            assert_eq!(data["query"]["totalCount"], json!(1));
+
+            // Songs released since 1977 which don't contain a "!" in the title:
+            let data = query_songs(
+                &client,
+                song_schema.id(),
+                "(filter: { release_year: { gte: 1977 }, title: { notContains: \"!\" } })",
+                "",
+            )
+            .await;
+
+            assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 2);
+            assert_eq!(data["query"]["totalCount"], json!(2));
+
+            // Songs released in 1977 or 1979 not by David Bowie or Gang Of Four:
+            let data = query_songs(
+                &client,
+                song_schema.id(),
+                "(filter: { release_year: { in: [ 1977, 1979 ] }, artist: { notIn: [\"David Bowie\", \"Gang Of Four\"] } })",
+                "",
+            )
+            .await;
+
+            assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 1);
+            assert_eq!(data["query"]["totalCount"], json!(1));
+
+            // Songs released between 1976 and 1978 but are by David Bowie but don't contain
+            // the word "Speed" in the title:
+            let data = query_songs(
+                &client,
+                song_schema.id(),
+                "(filter: { release_year: { gte: 1976, lt: 1978 }, artist: { eq: \"David Bowie\" }, title: { notContains: \"Speed Of Life\" } })",
+                "",
+            )
+            .await;
+
+            assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 0);
+            assert_eq!(data["query"]["totalCount"], json!(0));
+
+            // let me = key_pair.public_key().to_string();
+            //
+            // TODO: this fails, see: https://github.com/p2panda/aquadoggo/issues/353
+            // // What about only songs I've published to the network:
+            // let data = query_songs(
+            //     &client,
+            //     song_schema.id(),
+            //     &format!("(meta: {{ owner: {{ eq: \"{me}\" }} }})"),
+            //     "",
+            // )
+            // .await;
+
+            // Oh yeh, i like that song lyric "This heaven gives me migraine"! I wonder if I can
+            // find it....
+            let data = query_lyrics(
+                &client,
+                lyric_schema.id(),
+                "(filter: { line: { eq: \"This heaven gives me migraine\" } })",
+            )
+            .await;
+
+            let lyric_id = data["query"]["documents"][0]["meta"]["documentId"].clone();
+
+            let data = query_songs(
+                &client,
+                song_schema.id(),
+                &format!("(filter: {{ lyrics: {{ in: [ {lyric_id} ] }} }})"),
+                "",
+            )
+            .await;
         })
     }
 }
