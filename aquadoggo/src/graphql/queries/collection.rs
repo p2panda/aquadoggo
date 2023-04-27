@@ -61,11 +61,11 @@ mod tests {
     };
 
     /// Make a GraphQL query to the node.
-    async fn query(client: &TestClient, schema_id: &SchemaId, query_args: &str) -> JsonValue {
+    async fn query(client: &TestClient, schema_id: &SchemaId, song_args: &str, lyric_args: &str) -> JsonValue {
         let response = client
             .post("/graphql")
             .json(&json!({
-                "query": &songs_collection_query(schema_id, query_args)
+                "query": &songs_collection_query(schema_id, song_args, lyric_args)
             }))
             .send()
             .await;
@@ -76,35 +76,35 @@ mod tests {
     }
 
     // Helper for creating paginated queries over songs and lyrics.
-    fn songs_collection_query(type_name: &SchemaId, query_args: &str) -> String {
+    fn songs_collection_query(type_name: &SchemaId, song_args: &str, lyric_args: &str) -> String {
         format!(
             r#"{{
-            query: all_{type_name}{query_args} {{
-                hasNextPage
-                totalCount
-                endCursor
-                documents {{
-                    cursor
-                    meta {{
-                        owner
-                        documentId
-                        viewId
-                    }}
-                    fields {{
-                        title
-                        artist
-                        lyrics(first: 5) {{
-                            endCursor
-                            documents {{
-                                fields {{
-                                    lyric
+                query: all_{type_name}{song_args} {{
+                    hasNextPage
+                    totalCount
+                    endCursor
+                    documents {{
+                        cursor
+                        meta {{
+                            owner
+                            documentId
+                            viewId
+                        }}
+                        fields {{
+                            title
+                            artist
+                            lyrics{lyric_args} {{
+                                endCursor
+                                documents {{
+                                    fields {{
+                                        line
+                                    }}
                                 }}
                             }}
                         }}
                     }}
-                }}
-            }},
-        }}"#
+                }},
+            }}"#
         )
     }
 
@@ -118,67 +118,67 @@ mod tests {
             vec![
                 // X-ray Specs : Oh Bondage Up Yours!
                 vec![(
-                    "lyric",
+                    "line",
                     "Bind me, tie me, chain me to the wall".into(),
                     None,
                 )],
-                vec![("lyric", "I wanna be a slave to you all".into(), None)],
-                vec![("lyric", "Oh bondage, up yours".into(), None)],
-                vec![("lyric", "Oh bondage, no more".into(), None)],
+                vec![("line", "I wanna be a slave to you all".into(), None)],
+                vec![("line", "Oh bondage, up yours".into(), None)],
+                vec![("line", "Oh bondage, no more".into(), None)],
                 vec![(
-                    "lyric",
+                    "line",
                     "Chain-store chainsmoke, I consume you all".into(),
                     None,
                 )],
                 vec![(
-                    "lyric",
+                    "line",
                     "Chain-gang chainmail, I don't think at all".into(),
                     None,
                 )],
                 vec![(
-                    "lyric",
+                    "line",
                     "Thrash, me crush me, beat me till I fall".into(),
                     None,
                 )],
-                vec![("lyric", "I wanna be a victim for you all".into(), None)],
+                vec![("line", "I wanna be a victim for you all".into(), None)],
                 vec![(
-                    "lyric",
+                    "line",
                     "Bind me, tie me, chain me to the wall".into(),
                     None,
                 )],
                 vec![(
-                    "lyric",
+                    "line",
                     "I wanna be a slave to you all        ".into(),
                     None,
                 )],
-                vec![("lyric", "Oh bondage, no more!".into(), None)],
+                vec![("line", "Oh bondage, no more!".into(), None)],
                 // Gang of Four : Natural's Not In
-                vec![("lyric", "The problem of leisure".into(), None)],
-                vec![("lyric", "What to do for pleasure".into(), None)],
-                vec![("lyric", "Ideal love, a new purchase".into(), None)],
-                vec![("lyric", "A market of the senses".into(), None)],
-                vec![("lyric", "Dream of the perfect life".into(), None)],
-                vec![("lyric", "Economic circumstances".into(), None)],
-                vec![("lyric", "The body is good business".into(), None)],
-                vec![("lyric", "Sell out, maintain the interest".into(), None)],
-                vec![("lyric", "Remember Lot's wife".into(), None)],
-                vec![("lyric", "Renounce all sin and vice".into(), None)],
-                vec![("lyric", "Dream of the perfect life".into(), None)],
-                vec![("lyric", "This heaven gives me migraine".into(), None)],
-                vec![("lyric", "The problem of leisure".into(), None)],
-                vec![("lyric", "What to do for pleasure".into(), None)],
-                vec![("lyric", "Coercion of the senses".into(), None)],
-                vec![("lyric", "We're not so gullible".into(), None)],
-                vec![("lyric", "Our great expectations".into(), None)],
-                vec![("lyric", "A future for the good".into(), None)],
-                vec![("lyric", "Fornication makes you happy".into(), None)],
-                vec![("lyric", "No escape from society".into(), None)],
-                vec![("lyric", "Natural is not in it".into(), None)],
-                vec![("lyric", "Your relations are of power".into(), None)],
-                vec![("lyric", "We all have good intentions".into(), None)],
-                vec![("lyric", "But all with strings attached".into(), None)],
-                vec![("lyric", "Repackaged sex (keeps) your interest".into(), None)],
-                vec![("lyric", "This heaven gives me migraine".into(), None)],
+                vec![("line", "The problem of leisure".into(), None)],
+                vec![("line", "What to do for pleasure".into(), None)],
+                vec![("line", "Ideal love, a new purchase".into(), None)],
+                vec![("line", "A market of the senses".into(), None)],
+                vec![("line", "Dream of the perfect life".into(), None)],
+                vec![("line", "Economic circumstances".into(), None)],
+                vec![("line", "The body is good business".into(), None)],
+                vec![("line", "Sell out, maintain the interest".into(), None)],
+                vec![("line", "Remember Lot's wife".into(), None)],
+                vec![("line", "Renounce all sin and vice".into(), None)],
+                vec![("line", "Dream of the perfect life".into(), None)],
+                vec![("line", "This heaven gives me migraine".into(), None)],
+                vec![("line", "The problem of leisure".into(), None)],
+                vec![("line", "What to do for pleasure".into(), None)],
+                vec![("line", "Coercion of the senses".into(), None)],
+                vec![("line", "We're not so gullible".into(), None)],
+                vec![("line", "Our great expectations".into(), None)],
+                vec![("line", "A future for the good".into(), None)],
+                vec![("line", "Fornication makes you happy".into(), None)],
+                vec![("line", "No escape from society".into(), None)],
+                vec![("line", "Natural is not in it".into(), None)],
+                vec![("line", "Your relations are of power".into(), None)],
+                vec![("line", "We all have good intentions".into(), None)],
+                vec![("line", "But all with strings attached".into(), None)],
+                vec![("line", "Repackaged sex (keeps) your interest".into(), None)],
+                vec![("line", "This heaven gives me migraine".into(), None)],
             ],
             key_pair,
         )
@@ -649,7 +649,7 @@ mod tests {
 
             let client = graphql_test_client(&node).await;
 
-            let data = query(&client, song_schema.id(), "(first: 1)").await;
+            let data = query(&client, song_schema.id(), "(first: 1)", "").await;
 
             println!("{:#?}", data["query"]["documents"]);
         })
