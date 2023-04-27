@@ -34,8 +34,32 @@ impl Order {
 impl Default for Order {
     fn default() -> Self {
         Self {
+            // @TODO: Needs to be document id as per specification:
+            // https://github.com/p2panda/aquadoggo/issues/351
             field: None,
             direction: Direction::Ascending,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::db::query::{Field, MetaField};
+
+    use super::{Direction, Order};
+
+    #[test]
+    fn default_specification() {
+        // @TODO: If no ordering is selected the documents will be ordered by document id,
+        // ascending, as per specification
+        let order = Order::default();
+
+        assert_eq!(
+            order,
+            Order {
+                field: None,
+                direction: Direction::Ascending
+            }
+        )
     }
 }
