@@ -941,8 +941,15 @@ mod tests {
             )
             .await;
 
+            assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 2); // The line is referenced twice in the songs lyrics
+            assert_eq!(data["query"]["totalCount"], json!(2));
+
+            // But what song is it from?
+            //
+            // I can find out using the id of this lyric.
             let lyric_id = data["query"]["documents"][0]["meta"]["documentId"].clone();
 
+            // And filtering songs for ones which reference it in their "lyrics" field.
             let data = query_songs(
                 &client,
                 song_schema.id(),
@@ -950,6 +957,10 @@ mod tests {
                 "",
             )
             .await;
+
+            assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 1);
+            assert_eq!(data["query"]["totalCount"], json!(1));
+            assert_eq!(data["query"]["documents"][0]["fields"]["title"], json!("Natural's Not In"));
         })
     }
 }
