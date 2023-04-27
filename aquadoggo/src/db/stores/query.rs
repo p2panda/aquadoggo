@@ -643,6 +643,13 @@ fn order_sql(order: &Order, schema: &Schema, list: Option<&RelationList>) -> Str
         _ => None,
     };
 
+    // Always order by document view id, except of if it was selected manually. We need this to
+    // assemble the rows to documents correctly at the end
+    let id_sql = match order.field {
+        Some(Field::Meta(MetaField::DocumentViewId)) => None,
+        _ => Some("documents.document_view_id ASC".to_string()),
+    };
+
     // On top we sort always by the unique operation cursor in case the previous order value is
     // equal between two rows
     let cursor_sql = match list {
@@ -650,7 +657,7 @@ fn order_sql(order: &Order, schema: &Schema, list: Option<&RelationList>) -> Str
         None => Some("operation_fields_v1.cursor ASC".to_string()),
     };
 
-    let order = concatenate_sql(&[custom, list_sql, cursor_sql]);
+    let order = concatenate_sql(&[custom, list_sql, id_sql, cursor_sql]);
 
     format!("ORDER BY {order}")
 }
@@ -1077,9 +1084,6 @@ fn convert_rows(
 ) -> Vec<(PaginationCursor, StorageDocument)> {
     let mut converted: Vec<(PaginationCursor, StorageDocument)> = Vec::new();
 
-    println!("=== ALL QUERY ROWS RETURNED FROM THE DATABASE ===");
-    println!("{rows:#?}");
-
     if rows.is_empty() {
         return converted;
     }
@@ -1111,14 +1115,11 @@ fn convert_rows(
 
     let rows_per_document = std::cmp::max(fields.len(), 1);
 
-    println!("=== REDUCE ROWS INTO DOCUMENTS ===");
     for (index, row) in rows.into_iter().enumerate() {
         // We observed a new document coming up in the next row, time to change
         if index % rows_per_document == 0 && index > 0 {
             // Finalize the current document, convert it and push it into the final array
             let (cursor, document) = finalize_document(&current, current_fields);
-            println!("Document at row index {index}: {}", document.id());
-            println!("Fields: {:?}", document.fields().unwrap().keys());
             converted.push((cursor, document));
 
             // Change the pointer to the next document
@@ -1140,9 +1141,6 @@ fn convert_rows(
 
     // Do it one last time at the end for the last document
     let (cursor, document) = finalize_document(&last_row, current_fields);
-    println!("Final document: {}", document.id());
-    println!("Fields: {:?}", document.fields().unwrap().keys());
-
     converted.push((cursor, document));
 
     converted

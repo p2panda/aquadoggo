@@ -390,7 +390,6 @@ mod tests {
     #[rstest]
     fn a_funny_bug_which_needs_squishing(key_pair: KeyPair) {
         let schema_fields = vec![("one", FieldType::Boolean), ("two", FieldType::Boolean)];
-
         let document_values = vec![("one", true.into()), ("two", false.into())];
 
         test_runner(|mut node: TestNode| async move {

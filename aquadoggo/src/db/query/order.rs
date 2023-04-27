@@ -34,29 +34,8 @@ impl Order {
 impl Default for Order {
     fn default() -> Self {
         Self {
-            field: Some(Field::Meta(MetaField::DocumentId)),
+            field: None,
             direction: Direction::Ascending,
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::db::query::{Field, MetaField};
-
-    use super::{Direction, Order};
-
-    #[test]
-    fn default_specification() {
-        // If no ordering is selected the documents will be ordered by document id, ascending
-        let order = Order::default();
-
-        assert_eq!(
-            order,
-            Order {
-                field: Some(Field::Meta(MetaField::DocumentId)),
-                direction: Direction::Ascending
-            }
-        )
     }
 }
