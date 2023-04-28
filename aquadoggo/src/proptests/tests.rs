@@ -167,7 +167,11 @@ async fn paginated_query(
 
             println!("Current documents len: {}", documents.len());
             println!("Expected documents len: {}", remaining_documents);
-            assert_eq!(documents.len(), remaining_documents, "Number of returned documents doesn't match expected remaining");
+            assert_eq!(
+                documents.len(),
+                remaining_documents,
+                "Number of returned documents doesn't match expected remaining"
+            );
         }
 
         // De-increment the remaining documents count.
