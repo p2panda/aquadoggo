@@ -49,40 +49,8 @@ async fn sanity_checks(
     }
 }
 
-/// Unwrap values from a GraphQL response.
-fn unwrap_response(response: &Response) -> (bool, i64, Option<String>, Vec<JsonValue>) {
-    let query_response = response
-        .data
-        .to_owned()
-        .into_json()
-        .expect("Can convert to json")
-        .as_object()
-        .expect("Query response is object")
-        .to_owned();
-
-    let pagination_root = query_response.get("query").unwrap();
-
-    let has_next_page = pagination_root.get("hasNextPage").unwrap();
-    let total_count = pagination_root.get("totalCount").unwrap();
-    let end_cursor = pagination_root.get("endCursor").unwrap();
-    let documents = pagination_root
-        .get("documents")
-        .unwrap()
-        .as_array()
-        .expect("Documents fields is array");
-    (
-        has_next_page.as_bool().expect("Is boolean value"),
-        total_count.as_i64().expect("Is integer"),
-        end_cursor.as_str().map(String::from),
-        documents.clone(),
-    )
-}
-
 /// Make a GraphQL query to the node.
-async fn make_query(
-    client: &TestClient,
-    query_str: &str,
-) -> (bool, i64, Option<String>, Vec<JsonValue>) {
+async fn make_query(client: &TestClient, query_str: &str) -> JsonValue {
     let response = client
         .post("/graphql")
         .json(&json!({ "query": query_str }))
@@ -91,7 +59,7 @@ async fn make_query(
 
     let response: Response = response.json().await;
     assert!(response.is_ok(), "{:?}", response.errors);
-    unwrap_response(&response)
+    response.data.into_json().expect("Can convert to json")
 }
 
 // Helper for creating paginated queries over meta fields.
@@ -155,58 +123,48 @@ async fn paginated_query(
     query_builder: impl Fn(&SchemaId, &str, Option<&Vec<String>>) -> String,
 ) {
     let mut query_args = "(first: 5)".to_string();
-    let total_documents = expected_documents.len() as i64;
     let mut expected_remaining_documents = expected_documents.len();
 
     loop {
         // Make a paginated query.
-        let (has_next_page, total_count, end_cursor, documents) = make_query(
+        let data = make_query(
             &client,
             &query_builder(&schema_id, &query_args, application_fields),
         )
         .await;
 
+        let documents = data["query"]["documents"].as_array().unwrap();
+        let total_count = data["query"]["totalCount"].clone();
+        let has_next_page = data["query"]["hasNextPage"].clone();
+        let end_cursor = data["query"]["endCursor"].clone();
+
         // Total count should match number of documents expected.
-        assert_eq!(total_count, total_documents);
-        let current_documents_len = documents.len();
+        assert_eq!(total_count, json!(expected_documents.len()));
 
         if expected_remaining_documents == 0 {
-            // There should be no next page.
-            assert!(!has_next_page);
-            // The end cursor should be None.
-            assert!(end_cursor.is_none());
-            // No documents should have been returned.
-            assert_eq!(current_documents_len, 0);
+            assert_eq!(has_next_page, json!(false));
+            assert_eq!(end_cursor, JsonValue::Null);
+            assert_eq!(documents.len(), 0);
             // Pagination is complete and the test is over.
             break;
-        } else if expected_remaining_documents > 5 {
-            // The number of returned documents to match the requested page size.
-            assert_eq!(current_documents_len, 5);
-            // There should be a next page available.
-            assert!(has_next_page);
-        } else {
-            // There should be no next page available.
-            assert!(!has_next_page);
-            // The number of documents returned should match the remaining documents.
         }
 
         // A next cursor given which matches the cursor of the last returned document.
-        let last_document_cursor = documents
-            .last()
-            .unwrap()
-            .as_object()
-            .unwrap()
-            .get("cursor")
-            .unwrap();
-        assert_eq!(
-            end_cursor.as_ref().unwrap(),
-            last_document_cursor.as_str().unwrap()
-        );
+        let last_document_cursor = documents.last().unwrap()["cursor"].clone();
+        assert_eq!(end_cursor, last_document_cursor);
+
+        if expected_remaining_documents > 5 {
+            assert_eq!(documents.len(), 5);
+            assert_eq!(has_next_page, json!(true));
+        } else {
+            assert_eq!(has_next_page, json!(false));
+            assert_eq!(documents.len(), expected_remaining_documents);
+        }
 
         // De-increment the remaining documents count.
-        expected_remaining_documents -= current_documents_len;
+        expected_remaining_documents -= documents.len();
         // Compose the next query arguments.
-        query_args = format!("(first: 5, after: \"{0}\")", end_cursor.unwrap());
+        query_args = format!("(first: 5, after: {})", end_cursor);
     }
 }
 
@@ -397,13 +355,13 @@ proptest! {
             let filter_args_str = &filter_args_str[0..=filter_args_str.len() - 2]; // strip of the final trailing comma and space
             let filter_args_str = format!("( first: 1000, filter: {{ {filter_args_str} }} )");
             let fields_vec = parse_selected_fields(&node, &schema).await;
-            let (has_next_page, total_count, end_cursor, documents) = make_query(
+            let data = make_query(
                 &client,
                 &paginated_query_application_fields(&schema.id(), &filter_args_str, Some(&fields_vec)),
             )
             .await;
 
-            println!("{}", documents.len());
+            println!("{}", data["query"]["documents"].as_array().unwrap().len());
         });
     }
 }
