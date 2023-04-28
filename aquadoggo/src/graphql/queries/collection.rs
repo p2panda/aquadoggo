@@ -386,4 +386,51 @@ mod tests {
             assert!(response.is_ok());
         });
     }
+
+    #[rstest]
+    fn a_funny_bug_which_needs_squishing(key_pair: KeyPair) {
+        let schema_fields = vec![("one", FieldType::Boolean), ("two", FieldType::Boolean)];
+        let document_values = vec![("one", true.into()), ("two", false.into())];
+
+        test_runner(|mut node: TestNode| async move {
+            let schema = add_schema(&mut node, "test_schema", schema_fields, &key_pair).await;
+
+            add_document(&mut node, schema.id(), document_values.clone(), &key_pair).await;
+            add_document(&mut node, schema.id(), document_values.clone(), &key_pair).await;
+            add_document(&mut node, schema.id(), document_values.clone(), &key_pair).await;
+            add_document(&mut node, schema.id(), document_values, &key_pair).await;
+
+            // Configure and send test query.
+            let client = graphql_test_client(&node).await;
+            let query = format!(
+                r#"{{
+                    collection: all_{type_name} {{
+                        hasNextPage
+                        totalCount
+                        endCursor
+                        documents {{
+                            cursor
+                            fields {{
+                                one
+                                two
+                            }}
+                        }}
+                    }},
+                }}"#,
+                type_name = schema.id(),
+            );
+
+            let response = client
+                .post("/graphql")
+                .json(&json!({
+                    "query": query,
+                }))
+                .send()
+                .await;
+
+            let response: Response = response.json().await;
+
+            assert!(response.is_ok());
+        });
+    }
 }
