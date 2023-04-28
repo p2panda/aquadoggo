@@ -37,11 +37,13 @@ impl Select {
     }
 
     /// Returns the number of selected fields.
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.fields.len()
     }
 
     /// Returns an iterator over the selected fields.
+    #[allow(dead_code)]
     pub fn iter(&self) -> Iter<Field> {
         self.fields.iter()
     }

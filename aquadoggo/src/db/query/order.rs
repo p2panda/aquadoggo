@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use crate::db::query::{Field, MetaField};
+use crate::db::query::Field;
 
 /// Options to determine the direction of the ordering.
 #[derive(Debug, Clone, PartialEq)]
@@ -23,6 +23,7 @@ pub struct Order {
 
 impl Order {
     /// Returns a new instance of ordering settings.
+    #[allow(dead_code)]
     pub fn new(field: &Field, direction: &Direction) -> Self {
         Self {
             field: Some(field.clone()),
@@ -42,8 +43,6 @@ impl Default for Order {
 
 #[cfg(test)]
 mod tests {
-    use crate::db::query::{Field, MetaField};
-
     use super::{Direction, Order};
 
     #[test]

@@ -2,17 +2,15 @@
 
 //! This module offers a query API to find many p2panda documents, filtered or sorted by custom
 //! parameters. The results are batched via cursor-based pagination.
-use std::collections::{HashMap, HashSet};
+use std::fmt::Display;
 use std::str::FromStr;
 
 use anyhow::bail;
-use p2panda_rs::document::{DocumentId, DocumentViewFields, DocumentViewId};
-use p2panda_rs::identity::PublicKey;
+use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{FieldName, Schema, SchemaId};
 use p2panda_rs::storage_provider::error::DocumentStorageError;
-use sqlx::any::AnyRow;
-use sqlx::{query, query_as, FromRow};
+use sqlx::query_as;
 
 use crate::db::models::utils::parse_document_view_field_rows;
 use crate::db::models::{DocumentViewFieldRow, QueryRow};
@@ -90,6 +88,12 @@ impl PaginationCursor {
             root_operation_cursor,
             root_view_id,
         }
+    }
+}
+
+impl Display for PaginationCursor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.encode())
     }
 }
 
@@ -586,15 +590,6 @@ fn where_pagination_sql(
     }
 }
 
-fn group_sql(fields: &ApplicationFields) -> String {
-    if fields.is_empty() {
-        // Only one row per document when no field was selected
-        "GROUP BY documents.document_id".to_string()
-    } else {
-        "".to_string()
-    }
-}
-
 fn order_sql(order: &Order, schema: &Schema, list: Option<&RelationList>) -> String {
     // Create custom ordering if query set one
     let custom = order
@@ -858,8 +853,6 @@ impl SqlStore {
         args: &Query<PaginationCursor>,
         list: Option<&RelationList>,
     ) -> Result<QueryResponse, DocumentStorageError> {
-        let schema_id = schema.id();
-
         // Get all selected application fields from query
         let application_fields = args.select.application_fields();
 
@@ -899,7 +892,6 @@ impl SqlStore {
             &args.order,
         );
 
-        let group = group_sql(&application_fields);
         let order = order_sql(&args.order, schema, list);
         let (page_size, limit) = limit_sql(&args.pagination, &application_fields);
 
@@ -1167,16 +1159,13 @@ mod tests {
     use std::num::NonZeroU64;
 
     use p2panda_rs::document::traits::AsDocument;
-    use p2panda_rs::document::{DocumentViewFields, DocumentViewId};
+    use p2panda_rs::document::DocumentViewId;
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::KeyPair;
-    use p2panda_rs::operation::{
-        OperationFields, OperationId, OperationValue, PinnedRelationList, Relation,
-    };
+    use p2panda_rs::operation::{OperationValue, PinnedRelationList};
     use p2panda_rs::schema::{FieldType, Schema, SchemaId};
-    use p2panda_rs::test_utils::fixtures::{key_pair, random_hash, schema_id};
+    use p2panda_rs::test_utils::fixtures::{key_pair, schema_id};
     use rstest::rstest;
-    use sqlx::query_as;
 
     use crate::db::models::{OptionalOwner, QueryRow};
     use crate::db::query::{
@@ -1184,7 +1173,6 @@ mod tests {
     };
     use crate::db::stores::{OperationCursor, RelationList};
     use crate::db::types::StorageDocument;
-    use crate::graphql::input_values::OrderDirection;
     use crate::test_utils::{
         add_document, add_schema, add_schema_and_documents, test_runner, TestNode,
     };
@@ -1381,9 +1369,9 @@ mod tests {
         #[case] expected_fields: Vec<OperationValue>,
     ) {
         test_runner(|mut node: TestNode| async move {
-            let (schema, view_ids) = create_events_test_data(&mut node, &key_pair).await;
+            let (schema, _) = create_events_test_data(&mut node, &key_pair).await;
 
-            let (_pagination_data, documents) = node
+            let (_, documents) = node
                 .context
                 .store
                 .query(&schema, &args, None)
@@ -1482,10 +1470,10 @@ mod tests {
     #[rstest]
     fn pinned_relation_list(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
-            let (venues_schema, mut venues_view_ids) =
+            let (venues_schema, venues_view_ids) =
                 create_venues_test_data(&mut node, &key_pair).await;
 
-            let (visited_schema, mut visited_view_ids) = create_visited_test_data(
+            let (_, visited_view_ids) = create_visited_test_data(
                 &mut node,
                 venues_view_ids,
                 venues_schema.to_owned(),
@@ -1559,8 +1547,7 @@ mod tests {
     #[rstest]
     fn empty_pinned_relation_list(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
-            let (venues_schema, mut venues_view_ids) =
-                create_venues_test_data(&mut node, &key_pair).await;
+            let (venues_schema, _) = create_venues_test_data(&mut node, &key_pair).await;
 
             let visited_schema = add_schema(
                 &mut node,
@@ -1603,7 +1590,7 @@ mod tests {
             // Select the pinned relation list "venues" for the visited document
             let list = RelationList::new_pinned(&visited_view_id, "venues".into());
 
-            let (pagination_data, documents) = node
+            let (_, documents) = node
                 .context
                 .store
                 .query(&venues_schema, &args, Some(&list))
@@ -1631,7 +1618,7 @@ mod tests {
             // Select the pinned relation list "venues" for the visited document
             let list = RelationList::new_pinned(&visited_view_id, "venues".into());
 
-            let (pagination_data, documents) = node
+            let (_, documents) = node
                 .context
                 .store
                 .query(&venues_schema, &args, Some(&list))
@@ -1640,7 +1627,7 @@ mod tests {
 
             assert!(documents.is_empty());
 
-            // Query selecting application field.
+            // Query selecting application field
             let args = Query::new(
                 &Pagination::new(
                     &NonZeroU64::new(10).unwrap(),
@@ -1656,8 +1643,7 @@ mod tests {
                 &Order::default(),
             );
 
-            let (pagination_data, documents) = node
-                .context
+            node.context
                 .store
                 .query(&visited_schema, &args, None)
                 .await
@@ -1671,7 +1657,7 @@ mod tests {
             let (venues_schema, venues_view_ids) =
                 create_venues_test_data(&mut node, &key_pair).await;
 
-            let (visited_schema, visited_view_ids) = create_visited_test_data(
+            let (_, visited_view_ids) = create_visited_test_data(
                 &mut node,
                 venues_view_ids.clone(),
                 venues_schema.to_owned(),
@@ -1819,10 +1805,10 @@ mod tests {
         #[case] expected_venues: Vec<String>,
     ) {
         test_runner(|mut node: TestNode| async move {
-            let (venues_schema, mut venues_view_ids) =
+            let (venues_schema, venues_view_ids) =
                 create_venues_test_data(&mut node, &key_pair).await;
 
-            let (visited_schema, mut visited_view_ids) = create_visited_test_data(
+            let (_, visited_view_ids) = create_visited_test_data(
                 &mut node,
                 venues_view_ids.clone(),
                 venues_schema.clone(),
@@ -1918,8 +1904,7 @@ mod tests {
     #[case::no_results(Filter::new().fields(&[("name", &["doesnotexist".into()])]), 0)]
     fn count(#[case] filter: Filter, #[case] expected_result: u64, key_pair: KeyPair) {
         test_runner(move |mut node: TestNode| async move {
-            let (venues_schema, mut venues_view_ids) =
-                create_venues_test_data(&mut node, &key_pair).await;
+            let (venues_schema, _) = create_venues_test_data(&mut node, &key_pair).await;
 
             let args = Query::new(
                 &Pagination::default(),
@@ -1950,10 +1935,10 @@ mod tests {
         key_pair: KeyPair,
     ) {
         test_runner(move |mut node: TestNode| async move {
-            let (venues_schema, mut venues_view_ids) =
+            let (venues_schema, venues_view_ids) =
                 create_venues_test_data(&mut node, &key_pair).await;
 
-            let (visited_schema, mut visited_view_ids) = create_visited_test_data(
+            let (_, visited_view_ids) = create_visited_test_data(
                 &mut node,
                 venues_view_ids.clone(),
                 venues_schema.clone(),
@@ -1985,10 +1970,10 @@ mod tests {
     #[rstest]
     fn total_count_of_document_with_relation_list_field(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
-            let (venues_schema, mut venues_view_ids) =
+            let (venues_schema, venues_view_ids) =
                 create_venues_test_data(&mut node, &key_pair).await;
 
-            let (visited_schema, mut visited_view_ids) = create_visited_test_data(
+            let (visited_schema, _) = create_visited_test_data(
                 &mut node,
                 venues_view_ids,
                 venues_schema.to_owned(),
