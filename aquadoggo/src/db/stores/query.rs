@@ -456,7 +456,21 @@ fn where_pagination_sql(
         // in a relation list we need to paginate over the unique list index.
         None => match list {
             None => {
-                format!("AND operation_fields_v1.cursor > '{operation_cursor}'")
+                let cmp_value = format!(
+                    r#"
+                    SELECT
+                        document_view_fields.document_view_id
+                    FROM
+                        operation_fields_v1
+                        JOIN document_view_fields
+                            ON operation_fields_v1.operation_id = document_view_fields.operation_id
+                    WHERE
+                        operation_fields_v1.cursor = '{operation_cursor}'
+                    LIMIT 1
+                    "#
+                );
+
+                format!("AND documents.document_view_id > ({cmp_value})")
             }
             Some(_) => {
                 let root_cursor = cursor
@@ -493,7 +507,7 @@ fn where_pagination_sql(
                         FROM
                             operation_fields_v1
                             JOIN operations_v1
-                                On operation_fields_v1.operation_id = operations_v1.operation_id
+                                ON operation_fields_v1.operation_id = operations_v1.operation_id
                         WHERE
                             operation_fields_v1.cursor = '{operation_cursor}'
                         LIMIT 1
@@ -510,7 +524,7 @@ fn where_pagination_sql(
                         FROM
                             operation_fields_v1
                             JOIN document_view_fields
-                                On operation_fields_v1.operation_id = document_view_fields.operation_id
+                                ON operation_fields_v1.operation_id = document_view_fields.operation_id
                         WHERE
                             operation_fields_v1.cursor = '{operation_cursor}'
                         LIMIT 1

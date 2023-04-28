@@ -1106,21 +1106,13 @@ mod tests {
             // Init a GraphQL client we'll use to query the node.
             let client = graphql_test_client(&node).await;
 
-            println!("==FIRST QUERY==");
             let data = query_songs(&client, song_schema.id(), "(first: 4)", "").await;
             assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 3);
-
-            println!("==SECOND QUERY==");
 
             let data = query_songs(&client, song_schema.id(), "(first: 2)", "").await;
             assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 2);
             let end_cursor = data["query"]["endCursor"].clone();
 
-            println!("==THIRD QUERY==");
-            // @TODO: resolve issue https://github.com/p2panda/aquadoggo/issues/348
-            // This is where the test fails, the document returned from the store only contains
-            // the "lyrics" field and so when the resolver tries to get and unwrap that field
-            // there is a panic.
             let data = query_songs(
                 &client,
                 song_schema.id(),
@@ -1130,9 +1122,6 @@ mod tests {
             .await;
             assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 1);
             let end_cursor = data["query"]["endCursor"].clone();
-            println!("{end_cursor}");
-
-            println!("==FORTH QUERY==");
 
             let data = query_songs(
                 &client,
@@ -1158,18 +1147,12 @@ mod tests {
             // Init a GraphQL client we'll use to query the node.
             let client = graphql_test_client(&node).await;
 
-            println!("==FIRST QUERY==");
-
             let data = query_songs_meta_fields_only(&client, song_schema.id(), "(first: 4)").await;
             assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 3);
-
-            println!("==SECOND QUERY==");
 
             let data = query_songs_meta_fields_only(&client, song_schema.id(), "(first: 2)").await;
             assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 2);
             let end_cursor = data["query"]["endCursor"].clone();
-
-            println!("==THIRD QUERY==");
 
             let data = query_songs_meta_fields_only(
                 &client,
@@ -1177,14 +1160,10 @@ mod tests {
                 &format!("(first: 2, after: {end_cursor})"),
             )
             .await;
-            // @TODO: resolve issue https://github.com/p2panda/aquadoggo/issues/348
-            // This test fails at a different location from the above. There is no internal panic
-            // however an incorrect number of documents are returned. We are missing one.
+
             assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 1);
             let end_cursor = data["query"]["endCursor"].clone();
             println!("{end_cursor}");
-
-            println!("==FORTH QUERY==");
 
             let data = query_songs_meta_fields_only(
                 &client,
