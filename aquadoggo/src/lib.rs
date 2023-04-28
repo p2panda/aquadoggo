@@ -54,6 +54,8 @@ mod network;
 mod node;
 mod schema;
 #[cfg(test)]
+mod proptests;
+#[cfg(test)]
 mod test_utils;
 #[cfg(test)]
 mod tests;
