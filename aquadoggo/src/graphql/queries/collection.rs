@@ -80,6 +80,25 @@ mod tests {
         response.data.into_json().unwrap()
     }
 
+    /// Make a GraphQL collection query for songs stored on the node.
+    async fn query_songs_meta_fields_only(
+        client: &TestClient,
+        schema_id: &SchemaId,
+        song_args: &str,
+    ) -> JsonValue {
+        let response = client
+            .post("/graphql")
+            .json(&json!({
+                "query": &songs_collection_query_meta_fields_only(schema_id, song_args)
+            }))
+            .send()
+            .await;
+
+        let response: Response = response.json().await;
+        assert!(response.is_ok(), "{:#?}", response.errors);
+        response.data.into_json().unwrap()
+    }
+
     /// Make a GraphQL collection query for lyrics stored on the node.
     async fn query_lyrics(
         client: &TestClient,
@@ -158,6 +177,27 @@ mod tests {
                         }}            
                         fields {{
                             line
+                        }}
+                    }}
+                }},
+            }}"#
+        )
+    }
+
+    // Helper for creating paginated queries over songs and lyrics.
+    fn songs_collection_query_meta_fields_only(type_name: &SchemaId, song_args: &str) -> String {
+        format!(
+            r#"{{
+                query: all_{type_name}{song_args} {{
+                    hasNextPage
+                    totalCount
+                    endCursor
+                    documents {{
+                        cursor
+                        meta {{
+                            owner
+                            documentId
+                            viewId
                         }}
                     }}
                 }},
@@ -1050,6 +1090,109 @@ mod tests {
                 data["query"]["documents"][0]["fields"]["title"],
                 json!("Natural's Not In")
             );
+        })
+    }
+
+    #[rstest]
+    fn paginated_query_over_collection_with_application_fields_selected(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            // Publish some lyrics to the node.
+            let (lyric_schema, view_ids) = here_be_some_lyrics(&mut node, &key_pair).await;
+
+            // Publish some songs, which contain "title", "artist" and "lyrics" fields.
+            let (song_schema, _) =
+                here_be_some_karaoke_hits(&mut node, &view_ids, &lyric_schema, &key_pair).await;
+
+            // Init a GraphQL client we'll use to query the node.
+            let client = graphql_test_client(&node).await;
+
+            println!("==FIRST QUERY==");
+            let data = query_songs(&client, song_schema.id(), "(first: 4)", "").await;
+            assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 3);
+
+            println!("==SECOND QUERY==");
+
+            let data = query_songs(&client, song_schema.id(), "(first: 2)", "").await;
+            assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 2);
+            let end_cursor = data["query"]["endCursor"].clone();
+
+            println!("==THIRD QUERY==");
+            // @TODO: resolve issue https://github.com/p2panda/aquadoggo/issues/348
+            // This is where the test fails, the document returned from the store only contains
+            // the "lyrics" field and so when the resolver tries to get and unwrap that field
+            // there is a panic.
+            let data = query_songs(
+                &client,
+                song_schema.id(),
+                &format!("(first: 2, after: {end_cursor})"),
+                "",
+            )
+            .await;
+            assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 1);
+            let end_cursor = data["query"]["endCursor"].clone();
+            println!("{end_cursor}");
+
+            println!("==FORTH QUERY==");
+
+            let data = query_songs(
+                &client,
+                song_schema.id(),
+                &format!("(first: 2, after: {end_cursor})"),
+                "",
+            )
+            .await;
+            assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 0);
+        })
+    }
+
+    #[rstest]
+    fn paginated_query_over_collection_with_only_meta_fields_selected(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            // Publish some lyrics to the node.
+            let (lyric_schema, view_ids) = here_be_some_lyrics(&mut node, &key_pair).await;
+
+            // Publish some songs, which contain "title", "artist" and "lyrics" fields.
+            let (song_schema, _) =
+                here_be_some_karaoke_hits(&mut node, &view_ids, &lyric_schema, &key_pair).await;
+
+            // Init a GraphQL client we'll use to query the node.
+            let client = graphql_test_client(&node).await;
+
+            println!("==FIRST QUERY==");
+
+            let data = query_songs_meta_fields_only(&client, song_schema.id(), "(first: 4)").await;
+            assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 3);
+
+            println!("==SECOND QUERY==");
+
+            let data = query_songs_meta_fields_only(&client, song_schema.id(), "(first: 2)").await;
+            assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 2);
+            let end_cursor = data["query"]["endCursor"].clone();
+
+            println!("==THIRD QUERY==");
+
+            let data = query_songs_meta_fields_only(
+                &client,
+                song_schema.id(),
+                &format!("(first: 2, after: {end_cursor})"),
+            )
+            .await;
+            // @TODO: resolve issue https://github.com/p2panda/aquadoggo/issues/348
+            // This test fails at a different location from the above. There is no internal panic
+            // however an incorrect number of documents are returned. We are missing one.
+            assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 1);
+            let end_cursor = data["query"]["endCursor"].clone();
+            println!("{end_cursor}");
+
+            println!("==FORTH QUERY==");
+
+            let data = query_songs_meta_fields_only(
+                &client,
+                song_schema.id(),
+                &format!("(first: 2, after: {end_cursor})"),
+            )
+            .await;
+            assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 0);
         })
     }
 }

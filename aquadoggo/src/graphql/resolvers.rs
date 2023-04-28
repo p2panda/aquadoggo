@@ -131,6 +131,11 @@ pub async fn resolve_document_field(
     // Determine name of the field to be resolved
     let name = ctx.field().name();
 
+    // @TODO: resolve issue https://github.com/p2panda/aquadoggo/issues/348
+    println!("Schema fields: {:#?}", schema.fields().keys());
+    println!("Document fields: {:#?}", document.fields().unwrap().keys());
+    println!("Queried field: {name:#?}");
+
     match document.get(name).unwrap() {
         // Relation fields are expected to resolve to the related document
         OperationValue::Relation(relation) => {
