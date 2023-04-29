@@ -936,6 +936,7 @@ mod tests {
             .await;
 
             let lyrics = data["query"]["documents"][0]["fields"]["lyrics"].clone();
+            println!("{data:#?}");
             assert_eq!(lyrics["documents"].as_array().unwrap().len(), 2);
             assert_eq!(lyrics["totalCount"], json!(32));
             assert_eq!(lyrics["hasNextPage"], json!(true));

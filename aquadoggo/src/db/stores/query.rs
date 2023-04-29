@@ -275,26 +275,30 @@ fn value_sql(value: &OperationValue) -> String {
 }
 
 /// Helper method to convert filter settings into SQL comparison operations.
-fn cmp_sql(sql_field: &str, filter_setting: &FilterSetting) -> String {
+fn cmp_sql(
+    sql_field: &str,
+    filter_setting: &FilterSetting,
+    bind_parameters: &mut Vec<OperationValue>,
+) -> String {
     match &filter_setting.by {
         FilterBy::Element(value) => {
+            bind_parameters.push(value.to_owned());
             if !filter_setting.exclusive {
-                format!("{sql_field} = {}", value_sql(value))
+                format!("{sql_field} = ${}", bind_parameters.len())
             } else {
-                format!("{sql_field} != {}", value_sql(value))
+                format!("{sql_field} != ${}", bind_parameters.len())
             }
         }
         FilterBy::Set(values_vec) => {
-            let value_sql = values_vec
-                .iter()
-                .map(value_sql)
-                .collect::<Vec<String>>()
-                .join(",");
+            let values = values_vec.iter().map(|value|{
+                bind_parameters.push(value.to_owned());
+                format!("${}", bind_parameters.len())
+            }).collect::<Vec<String>>().join(", ");
 
             if !filter_setting.exclusive {
-                format!("{sql_field} IN ({})", value_sql)
+                format!("{sql_field} IN ({values})")
             } else {
-                format!("{sql_field} NOT IN ({})", value_sql)
+                format!("{sql_field} NOT IN ({values})")
             }
         }
         FilterBy::Interval(lower_value, upper_value) => {
@@ -303,32 +307,40 @@ fn cmp_sql(sql_field: &str, filter_setting: &FilterSetting) -> String {
             match lower_value {
                 LowerBound::Unbounded => (),
                 LowerBound::Greater(value) => {
-                    values.push(format!("{sql_field} > {}", value_sql(value)));
+                    bind_parameters.push(value.to_owned());
+                    values.push(format!("{sql_field} > ${}", bind_parameters.len()));
                 }
                 LowerBound::GreaterEqual(value) => {
-                    values.push(format!("{sql_field} >= {}", value_sql(value)));
+                    bind_parameters.push(value.to_owned());
+                    values.push(format!("{sql_field} >= ${}", bind_parameters.len()));
                 }
             }
 
             match upper_value {
                 UpperBound::Unbounded => (),
                 UpperBound::Lower(value) => {
-                    values.push(format!("{sql_field} < {}", value_sql(value)));
+                    bind_parameters.push(value.to_owned());
+                    values.push(format!("{sql_field} < ${}", bind_parameters.len()));
                 }
                 UpperBound::LowerEqual(value) => {
-                    values.push(format!("{sql_field} <= {}", value_sql(value)));
+                    bind_parameters.push(value.to_owned());
+                    values.push(format!("{sql_field} <= ${}", bind_parameters.len()));
                 }
             }
 
             values.join(" AND ")
         }
-        FilterBy::Contains(OperationValue::String(value)) => {
-            if !filter_setting.exclusive {
-                format!("{sql_field} LIKE '%{value}%'")
-            } else {
-                format!("{sql_field} NOT LIKE '%{value}%'")
+        FilterBy::Contains(operation_value) => match &operation_value {
+            OperationValue::String(_) => {
+                bind_parameters.push(operation_value.to_owned());
+                if !filter_setting.exclusive {
+                    format!("{sql_field} LIKE '%${}%'", bind_parameters.len())
+                } else {
+                    format!("{sql_field} NOT LIKE '%${}%'", bind_parameters.len())
+                }
             }
-        }
+            _ => panic!("Unsuported filter"),
+        },
         _ => panic!("Unsupported filter"),
     }
 }
@@ -342,13 +354,17 @@ fn concatenate_sql(items: &[Option<String>]) -> String {
         .join(", ")
 }
 
-fn where_filter_sql(filter: &Filter, schema: &Schema) -> String {
+fn where_filter_sql(
+    filter: &Filter,
+    bind_parameters: &mut Vec<OperationValue>,
+    schema: &Schema,
+) -> String {
     filter
         .iter()
         .filter_map(|filter_setting| {
             match &filter_setting.field {
                 Field::Meta(MetaField::Owner) => {
-                    Some(format!("AND {}", cmp_sql("owner", filter_setting)))
+                    Some(format!("AND {}", cmp_sql("owner", filter_setting, bind_parameters)))
                 }
                 Field::Meta(MetaField::Edited) => {
                     if let FilterBy::Element(OperationValue::Boolean(filter_value)) =
@@ -376,15 +392,15 @@ fn where_filter_sql(filter: &Filter, schema: &Schema) -> String {
                 }
                 Field::Meta(MetaField::DocumentId) => Some(format!(
                     "AND {}",
-                    cmp_sql("documents.document_id", filter_setting)
+                    cmp_sql("documents.document_id", filter_setting, bind_parameters)
                 )),
                 Field::Meta(MetaField::DocumentViewId) => Some(format!(
                     "AND {}",
-                    cmp_sql("documents.document_view_id", filter_setting)
+                    cmp_sql("documents.document_view_id", filter_setting, bind_parameters)
                 )),
                 Field::Field(field_name) => {
                     let field_sql = typecast_field_sql("operation_fields_v1.value", field_name, schema, true);
-                    let filter_cmp = cmp_sql(&field_sql, filter_setting);
+                    let filter_cmp = cmp_sql(&field_sql, filter_setting, bind_parameters);
 
                     Some(format!(
                         r#"
@@ -895,9 +911,11 @@ impl SqlStore {
 
         let from = from_sql(list);
 
+        let mut bind_parameters = Vec::new();
+
         let where_ = where_sql(schema, &application_fields, list);
         let and_fields = where_fields_sql(&application_fields);
-        let and_filters = where_filter_sql(&args.filter, schema);
+        let and_filters = where_filter_sql(&args.filter, &mut bind_parameters, schema);
         let and_pagination = where_pagination_sql(
             &args.pagination,
             &application_fields,
@@ -968,7 +986,17 @@ impl SqlStore {
         "#
         );
 
-        let mut rows: Vec<QueryRow> = query_as::<_, QueryRow>(&sea_quel)
+        println!("{sea_quel}");
+
+        let mut query = query_as::<_, QueryRow>(&sea_quel);
+
+        for value in bind_parameters {
+            let value = value_sql(&value);
+            println!("Bind: {}", value);
+            query = query.bind(value);
+        }
+
+        let mut rows: Vec<QueryRow> = query
             .fetch_all(&self.pool)
             .await
             .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
@@ -1035,10 +1063,11 @@ impl SqlStore {
         list: Option<&RelationList>,
     ) -> Result<u64, DocumentStorageError> {
         let application_fields = args.select.application_fields();
+        let mut bind_parameters = Vec::new();
 
         let from = from_sql(list);
         let where_ = where_sql(schema, &application_fields, list);
-        let and_filters = where_filter_sql(&args.filter, schema);
+        let and_filters = where_filter_sql(&args.filter, &mut bind_parameters, schema);
 
         let count_sql = format!(
             r#"
@@ -1063,7 +1092,17 @@ impl SqlStore {
             "#
         );
 
-        let result: Option<(i64,)> = query_as(&count_sql)
+        println!("{count_sql}");
+
+        let mut query = query_as(&count_sql);
+
+        for value in bind_parameters {
+            let value = value_sql(&value);
+            println!("Bind: {}", value);
+            query = query.bind(value);
+        }
+
+        let result: Option<(i64,)> = query
             .fetch_optional(&self.pool)
             .await
             .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
