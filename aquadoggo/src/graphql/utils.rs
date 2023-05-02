@@ -14,7 +14,7 @@ use p2panda_rs::storage_provider::traits::DocumentStore;
 use crate::db::query::{
     Direction, Field, Filter, MetaField, Order, Pagination, PaginationField, Select,
 };
-use crate::db::stores::{PaginationCursor, Query};
+use crate::db::stores::{PaginationCursor, Query, RelationList};
 use crate::db::types::StorageDocument;
 use crate::db::SqlStore;
 use crate::graphql::constants;
@@ -108,6 +108,7 @@ pub fn filter_to_operation_value(
 pub fn parse_collection_arguments(
     ctx: &ResolverContext,
     schema: &Schema,
+    list: &Option<RelationList>,
 ) -> Result<Query<PaginationCursor>, Error> {
     let mut pagination = Pagination::<PaginationCursor>::default();
     let mut order = Order::default();
@@ -159,6 +160,11 @@ pub fn parse_collection_arguments(
     let (pagination_fields, fields) = look_ahead_selected_fields(ctx);
     let select = Select::new(fields.as_slice());
     pagination.fields = pagination_fields;
+
+    // Set default ordering to document id as per specification, if we're in a root query
+    if list.is_none() && order.field.is_none() {
+        order.field = Some(Field::Meta(MetaField::DocumentId));
+    }
 
     // Finally put it all together
     let query = Query::new(&pagination, &select, &filter, &order);

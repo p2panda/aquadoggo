@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed replication service for now, preparing for new replication protocol [#296](https://github.com/p2panda/aquadoggo/pull/296)
 - Bring back e2e GraphQL API tests [#342](https://github.com/p2panda/aquadoggo/pull/342)
 - Move GraphQL `types` into separate modules [#343](https://github.com/p2panda/aquadoggo/pull/343)
+- Set default order for root queries to document id [#352](https://github.com/p2panda/aquadoggo/pull/352)
 - Remove property tests again because of concurrency bug [#347](https://github.com/p2panda/aquadoggo/pull/347)
 
 ### Fixed

@@ -40,22 +40,3 @@ impl Default for Order {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::{Direction, Order};
-
-    #[test]
-    fn default_specification() {
-        // If no ordering is selected the documents will be ordered by document id, ascending
-        let order = Order::default();
-
-        assert_eq!(
-            order,
-            Order {
-                field: None,
-                direction: Direction::Ascending
-            }
-        )
-    }
-}

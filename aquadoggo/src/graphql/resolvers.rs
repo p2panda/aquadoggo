@@ -73,7 +73,7 @@ pub async fn resolve_document_collection(
     let store = ctx.data_unchecked::<SqlStore>();
 
     // Populate query arguments with values from GraphQL query
-    let query = parse_collection_arguments(&ctx, &schema)?;
+    let query = parse_collection_arguments(&ctx, &schema, &list)?;
 
     // Fetch all queried documents and compose the value to be passed up the query tree
     let (pagination_data, documents) = store.query(&schema, &query, list.as_ref()).await?;
