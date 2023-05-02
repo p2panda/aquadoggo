@@ -244,7 +244,9 @@ fn typecast_field_sql(
     }
 }
 
-/// Helper method to convert an operation value into the right representation in SQL.
+/// Helper method to convert operation value(s) into the right representation in SQL.
+///
+/// Since all values are stored as strings in the database we need to convert them as such.
 fn value_sql(value: &OperationValue) -> Vec<String> {
     match &value {
         // Note that we wrap boolean values into a string here, as our operation field values are
@@ -271,6 +273,9 @@ fn value_sql(value: &OperationValue) -> Vec<String> {
 }
 
 /// Helper method to convert filter settings into SQL comparison operations.
+///
+/// Returns the SQL comparison string and adds binding arguments to the mutable array we pass into
+/// this function.
 fn cmp_sql(
     sql_field: &str,
     filter_setting: &FilterSetting,
@@ -355,6 +360,11 @@ fn concatenate_sql(items: &[Option<String>]) -> String {
 
 type BindArgument = String;
 
+/// Returns SQL to filter documents.
+///
+/// Since filters are the only place which can contain untrusted user values we are building the
+/// SQL query with positional arguments and bind the values to them. This helps sanitization of all
+/// values and prevents potential SQL injection attacks.
 fn where_filter_sql(filter: &Filter, schema: &Schema) -> (String, Vec<BindArgument>) {
     let mut args: Vec<BindArgument> = Vec::new();
 
@@ -985,9 +995,9 @@ impl SqlStore {
         "#
         );
 
-        println!("{sea_quel}");
-
         let mut query = query_as::<_, QueryRow>(&sea_quel);
+
+        // Bind untrusted user arguments from filter to SQL query
         for arg in bind_args {
             query = query.bind(arg);
         }
@@ -1089,6 +1099,7 @@ impl SqlStore {
 
         let mut query = query_as::<_, (i64,)>(&count_sql);
 
+        // Bind untrusted user arguments from filter to SQL query
         for arg in bind_args {
             query = query.bind(arg);
         }
