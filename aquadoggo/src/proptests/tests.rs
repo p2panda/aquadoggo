@@ -196,12 +196,6 @@ proptest! {
     })]
     #[test]
     fn pagination_queries((schema_ast, document_ast_collection) in schema_with_documents_strategy()) {
-        // The proptest strategies for generating schema and deriving collections of documents for
-        // each injects the raw AST types into the test. Here we convert these into p2panda
-        // `Entries`, `Operations` and `Schema` which we can then use to populate a store and run
-        // queries against.
-
-        // Now we start up a test runner and inject a test node we can populate.
         test_runner(|mut node: TestNode| async move {
             // Add all schema to the node.
             let mut schemas = Vec::new();
@@ -235,13 +229,8 @@ proptest! {
     }
 
     #[test]
-    fn filtering_queries((schema_ast, document_ast_collection, application_field_filters, meta_field_filters) in schema_with_documents_and_filters_strategy()) {
-        // The proptest strategies for generating schema and deriving collections of documents for
-        // each injects the raw AST types into the test. Here we convert these into p2panda
-        // `Entries`, `Operations` and `Schema` which we can then use to populate a store and run
-        // queries against.
+    fn filtering_queries((schema_ast, document_ast_collection, application_field_filters, _meta_field_filters) in schema_with_documents_and_filters_strategy()) {
 
-        // Now we start up a test runner and inject a test node we can populate.
         test_runner(|mut node: TestNode| async move {
             // Add all schema to the node.
             let mut schemas = Vec::new();
@@ -355,13 +344,11 @@ proptest! {
             let filter_args_str = filter_args.join(", ");
             let filter_args_str = format!("( first: 1000, filter: {{ {filter_args_str} }} )");
             let fields_vec = parse_selected_fields(&node, &schema).await;
-            let data = make_query(
+            let _data = make_query(
                 &client,
                 &paginated_query_application_fields(&schema.id(), &filter_args_str, Some(&fields_vec)),
             )
             .await;
-
-            println!("{}", data["query"]["documents"].as_array().unwrap().len());
         });
     }
 }
