@@ -47,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix SQL ordering to correctly assemble resulting rows to documents [#347](https://github.com/p2panda/aquadoggo/pull/347)
 - Fix parsing lists arguments twice in GraphQL [#354](https://github.com/p2panda/aquadoggo/pull/354)
 - Sort paginated query field rows by document view id [#354](https://github.com/p2panda/aquadoggo/pull/354)
+- Fix missing field when filtering owner [#359](https://github.com/p2panda/aquadoggo/pull/359)
 
 ## [0.4.0]
 
