@@ -10,6 +10,7 @@ use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{FieldName, Schema, SchemaId};
 use p2panda_rs::storage_provider::error::DocumentStorageError;
+use sqlx::query::QueryAs;
 use sqlx::query_as;
 
 use crate::db::models::utils::parse_document_view_field_rows;
@@ -244,8 +245,31 @@ fn typecast_field_sql(
     }
 }
 
-/// Helper method to convert an operation value into the right representation in SQL.
-fn value_sql(value: &OperationValue) -> String {
+/// Values to bind to SQL query.
+enum BindArgument {
+    String(String),
+    Integer(i64),
+    Float(f64),
+}
+
+/// Helper method to bind untrusted arguments to a sqlx `QueryAs` instance.
+fn bind_to_query<'q, O>(
+    mut query: QueryAs<'q, sqlx::Any, O, sqlx::any::AnyArguments<'q>>,
+    args: &'q Vec<BindArgument>,
+) -> QueryAs<'q, sqlx::Any, O, sqlx::any::AnyArguments<'q>> {
+    for arg in args {
+        query = match arg {
+            BindArgument::String(value) => query.bind(value),
+            BindArgument::Integer(value) => query.bind(value),
+            BindArgument::Float(value) => query.bind(value),
+        };
+    }
+
+    query
+}
+
+/// Helper method to convert operation values into a bindable argument representation for SQL.
+fn bind_arg(value: &OperationValue) -> Vec<BindArgument> {
     match &value {
         // Note that we wrap boolean values into a string here, as our operation field values are
         // stored as strings in themselves and we can't typecast them to booleans due to a
@@ -253,48 +277,62 @@ fn value_sql(value: &OperationValue) -> String {
         //
         // When comparing meta fields like `is_edited` etc. do _not_ use this method since we're
         // dealing there with native boolean values instead of strings.
-        OperationValue::Boolean(value) => (if *value { "'true'" } else { "'false'" }).to_string(),
-        OperationValue::Integer(value) => value.to_string(),
-        OperationValue::Float(value) => value.to_string(),
-        OperationValue::String(value) => format!("'{value}'"),
+        OperationValue::Boolean(value) => vec![BindArgument::String(
+            (if *value { "true" } else { "false" }).to_string(),
+        )],
+        OperationValue::Integer(value) => vec![BindArgument::Integer(value.to_owned())],
+        OperationValue::Float(value) => vec![BindArgument::Float(value.to_owned())],
+        OperationValue::String(value) => vec![BindArgument::String(value.to_owned())],
         OperationValue::Relation(value) => {
-            format!("'{}'", value.document_id())
+            vec![BindArgument::String(value.document_id().to_string())]
         }
         OperationValue::RelationList(value) => value
             .iter()
-            .map(|document_id| format!("'{document_id}'"))
-            .collect::<Vec<String>>()
-            .join(","),
-        OperationValue::PinnedRelation(value) => format!("'{}'", value.view_id()),
+            .map(|document_id| BindArgument::String(document_id.to_string()))
+            .collect(),
+        OperationValue::PinnedRelation(value) => {
+            vec![BindArgument::String(value.view_id().to_string())]
+        }
         OperationValue::PinnedRelationList(value) => value
             .iter()
-            .map(|view_id| format!("'{view_id}'"))
-            .collect::<Vec<String>>()
-            .join(","),
+            .map(|view_id| BindArgument::String(view_id.to_string()))
+            .collect(),
     }
 }
 
 /// Helper method to convert filter settings into SQL comparison operations.
-fn cmp_sql(sql_field: &str, filter_setting: &FilterSetting) -> String {
+///
+/// Returns the SQL comparison string and adds binding arguments to the mutable array we pass into
+/// this function.
+fn cmp_sql(
+    sql_field: &str,
+    filter_setting: &FilterSetting,
+    args: &mut Vec<BindArgument>,
+) -> String {
     match &filter_setting.by {
         FilterBy::Element(value) => {
+            args.append(&mut bind_arg(value));
+
             if !filter_setting.exclusive {
-                format!("{sql_field} = {}", value_sql(value))
+                format!("{sql_field} = ${}", args.len())
             } else {
-                format!("{sql_field} != {}", value_sql(value))
+                format!("{sql_field} != ${}", args.len())
             }
         }
         FilterBy::Set(values_vec) => {
-            let value_sql = values_vec
+            let args_sql = values_vec
                 .iter()
-                .map(value_sql)
+                .map(|value| {
+                    args.append(&mut bind_arg(value));
+                    format!("${}", args.len())
+                })
                 .collect::<Vec<String>>()
                 .join(",");
 
             if !filter_setting.exclusive {
-                format!("{sql_field} IN ({})", value_sql)
+                format!("{sql_field} IN ({})", args_sql)
             } else {
-                format!("{sql_field} NOT IN ({})", value_sql)
+                format!("{sql_field} NOT IN ({})", args_sql)
             }
         }
         FilterBy::Interval(lower_value, upper_value) => {
@@ -303,30 +341,36 @@ fn cmp_sql(sql_field: &str, filter_setting: &FilterSetting) -> String {
             match lower_value {
                 LowerBound::Unbounded => (),
                 LowerBound::Greater(value) => {
-                    values.push(format!("{sql_field} > {}", value_sql(value)));
+                    args.append(&mut bind_arg(value));
+                    values.push(format!("{sql_field} > ${}", args.len()));
                 }
                 LowerBound::GreaterEqual(value) => {
-                    values.push(format!("{sql_field} >= {}", value_sql(value)));
+                    args.append(&mut bind_arg(value));
+                    values.push(format!("{sql_field} >= ${}", args.len()));
                 }
             }
 
             match upper_value {
                 UpperBound::Unbounded => (),
                 UpperBound::Lower(value) => {
-                    values.push(format!("{sql_field} < {}", value_sql(value)));
+                    args.append(&mut bind_arg(value));
+                    values.push(format!("{sql_field} < ${}", args.len()));
                 }
                 UpperBound::LowerEqual(value) => {
-                    values.push(format!("{sql_field} <= {}", value_sql(value)));
+                    args.append(&mut bind_arg(value));
+                    values.push(format!("{sql_field} <= ${}", args.len()));
                 }
             }
 
             values.join(" AND ")
         }
         FilterBy::Contains(OperationValue::String(value)) => {
+            args.push(BindArgument::String(format!("%{value}%")));
+
             if !filter_setting.exclusive {
-                format!("{sql_field} LIKE '%{value}%'")
+                format!("{sql_field} LIKE ${}", args.len())
             } else {
-                format!("{sql_field} NOT LIKE '%{value}%'")
+                format!("{sql_field} NOT LIKE ${}", args.len())
             }
         }
         _ => panic!("Unsupported filter"),
@@ -342,8 +386,15 @@ fn concatenate_sql(items: &[Option<String>]) -> String {
         .join(", ")
 }
 
-fn where_filter_sql(filter: &Filter, schema: &Schema) -> String {
-    filter
+/// Returns SQL to filter documents.
+///
+/// Since filters are the only place which can contain untrusted user values we are building the
+/// SQL query with positional arguments and bind the values to them. This helps sanitization of all
+/// values and prevents potential SQL injection attacks.
+fn where_filter_sql(filter: &Filter, schema: &Schema) -> (String, Vec<BindArgument>) {
+    let mut args: Vec<BindArgument> = Vec::new();
+
+    let sql = filter
         .iter()
         .filter_map(|filter_setting| {
             match &filter_setting.field {
@@ -391,15 +442,15 @@ fn where_filter_sql(filter: &Filter, schema: &Schema) -> String {
                 }
                 Field::Meta(MetaField::DocumentId) => Some(format!(
                     "AND {}",
-                    cmp_sql("documents.document_id", filter_setting)
+                    cmp_sql("documents.document_id", filter_setting, &mut args)
                 )),
                 Field::Meta(MetaField::DocumentViewId) => Some(format!(
                     "AND {}",
-                    cmp_sql("documents.document_view_id", filter_setting)
+                    cmp_sql("documents.document_view_id", filter_setting, &mut args)
                 )),
                 Field::Field(field_name) => {
                     let field_sql = typecast_field_sql("operation_fields_v1.value", field_name, schema, true);
-                    let filter_cmp = cmp_sql(&field_sql, filter_setting);
+                    let filter_cmp = cmp_sql(&field_sql, filter_setting, &mut args);
 
                     Some(format!(
                         r#"
@@ -421,7 +472,9 @@ fn where_filter_sql(filter: &Filter, schema: &Schema) -> String {
             }
         })
         .collect::<Vec<String>>()
-        .join("\n")
+        .join("\n");
+
+    (sql, args)
 }
 
 fn where_pagination_sql(
@@ -912,7 +965,7 @@ impl SqlStore {
 
         let where_ = where_sql(schema, &application_fields, list);
         let and_fields = where_fields_sql(&application_fields);
-        let and_filters = where_filter_sql(&args.filter, schema);
+        let (and_filters, bind_args) = where_filter_sql(&args.filter, schema);
         let and_pagination = where_pagination_sql(
             &args.pagination,
             &application_fields,
@@ -983,7 +1036,12 @@ impl SqlStore {
         "#
         );
 
-        let mut rows: Vec<QueryRow> = query_as::<_, QueryRow>(&sea_quel)
+        let mut query = query_as::<_, QueryRow>(&sea_quel);
+
+        // Bind untrusted user arguments to query
+        query = bind_to_query(query, &bind_args);
+
+        let mut rows: Vec<QueryRow> = query
             .fetch_all(&self.pool)
             .await
             .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
@@ -1053,7 +1111,7 @@ impl SqlStore {
 
         let from = from_sql(list);
         let where_ = where_sql(schema, &application_fields, list);
-        let and_filters = where_filter_sql(&args.filter, schema);
+        let (and_filters, bind_args) = where_filter_sql(&args.filter, schema);
 
         let count_sql = format!(
             r#"
@@ -1078,7 +1136,12 @@ impl SqlStore {
             "#
         );
 
-        let result: Option<(i64,)> = query_as(&count_sql)
+        let mut query = query_as::<_, (i64,)>(&count_sql);
+
+        // Bind untrusted user arguments to query
+        query = bind_to_query(query, &bind_args);
+
+        let result: Option<(i64,)> = query
             .fetch_optional(&self.pool)
             .await
             .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
