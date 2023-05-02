@@ -147,7 +147,7 @@ mod tests {
                                         owner
                                         documentId
                                         viewId
-                                    }}            
+                                    }}
                                     fields {{
                                         line
                                     }}
@@ -174,7 +174,7 @@ mod tests {
                             owner
                             documentId
                             viewId
-                        }}            
+                        }}
                         fields {{
                             line
                         }}
@@ -810,11 +810,10 @@ mod tests {
         "(filter: { title: { in: [ \"Oh Bondage Up Yours!\", \"Speed Of Life\" ] } })",
         ""
     )]
-    // @TODO: fails due to syntax errors or unrecognized tokens in db, see: https://github.com/p2panda/aquadoggo/issues/349
-    // #[case("(filter: { title: { notIn: [ \"Natural's Not In\" ] } })", "")]
-    // #[case("(filter: { title: { eq: \"Natural's Not In\" } })", "")]
-    // #[case("(filter: { title: { notEq: \"Natural's Not In\", in: [ \"Oh Bondage Up Yours!\", \"Speed Of Life\" ] } })", "")]
-    // #[case("(filter: { title: { notEq: \"Natural's Not In\" }, release_year: { gt: 1978 }, artist: { in: [ \"X-ray Spex\"] } })", "")]
+    #[case("(filter: { title: { notIn: [ \"Natural's Not In\" ] } })", "")]
+    #[case("(filter: { title: { eq: \"Natural's Not In\" } })", "")]
+    #[case("(filter: { title: { notEq: \"Natural's Not In\", in: [ \"Oh Bondage Up Yours!\", \"Speed Of Life\" ] } })", "")]
+    #[case("(filter: { title: { notEq: \"Natural's Not In\" }, release_year: { gt: 1978 }, artist: { in: [ \"X-ray Spex\"] } })", "")]
     #[case(
         "(orderDirection: DESC, orderBy: title)",
         "(orderDirection: ASC, orderBy: line)"
