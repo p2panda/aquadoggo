@@ -10,7 +10,7 @@ use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{FieldName, Schema, SchemaId};
 use p2panda_rs::storage_provider::error::DocumentStorageError;
-use sqlx::query_as;
+use sqlx::{query_as, Any, QueryBuilder};
 
 use crate::db::models::utils::parse_document_view_field_rows;
 use crate::db::models::{DocumentViewFieldRow, QueryRow};
@@ -275,68 +275,97 @@ fn value_sql(value: &OperationValue) -> String {
 }
 
 /// Helper method to convert filter settings into SQL comparison operations.
-fn cmp_sql(
-    sql_field: &str,
-    filter_setting: &FilterSetting,
-    bind_parameters: &mut Vec<OperationValue>,
-) -> String {
+fn cmp_sql(sql_field: &str, filter_setting: &FilterSetting, query_builder: &mut QueryBuilder<Any>) {
     match &filter_setting.by {
         FilterBy::Element(value) => {
-            bind_parameters.push(value.to_owned());
             if !filter_setting.exclusive {
-                format!("{sql_field} = ${}", bind_parameters.len())
+                query_builder
+                    .push(format!("{sql_field} = "))
+                    .push_bind(value_sql(value));
             } else {
-                format!("{sql_field} != ${}", bind_parameters.len())
+                query_builder
+                    .push(format!("{sql_field} != "))
+                    .push_bind(value_sql(value));
             }
         }
         FilterBy::Set(values_vec) => {
-            let values = values_vec.iter().map(|value|{
-                bind_parameters.push(value.to_owned());
-                format!("${}", bind_parameters.len())
-            }).collect::<Vec<String>>().join(", ");
+            // let values = values_vec
+            //     .iter()
+            //     .map(|value| {
+            //         bind_parameters.push(value.to_owned());
+            //         format!("${}", bind_parameters.len())
+            //     })
+            //     .collect::<Vec<String>>()
+            //     .join(", ");
 
             if !filter_setting.exclusive {
-                format!("{sql_field} IN ({values})")
+                query_builder.push(format!("{sql_field} IN ")).push_tuples(
+                    values_vec.into_iter(),
+                    |mut builder, value| {
+                        builder.push_bind(value_sql(value));
+                    },
+                );
             } else {
-                format!("{sql_field} NOT IN ({values})")
+                query_builder
+                    .push(format!("{sql_field} NOT IN "))
+                    .push_tuples(values_vec.into_iter(), |mut builder, value| {
+                        builder.push_bind(value_sql(value));
+                    });
             }
         }
         FilterBy::Interval(lower_value, upper_value) => {
-            let mut values: Vec<String> = Vec::new();
+            let maybe_and = |is_first: bool, query_builder: &mut QueryBuilder<Any>| {
+                if !is_first {
+                    query_builder.push(" AND ");
+                };
+            };
+
+            let mut is_first = true;
 
             match lower_value {
                 LowerBound::Unbounded => (),
                 LowerBound::Greater(value) => {
-                    bind_parameters.push(value.to_owned());
-                    values.push(format!("{sql_field} > ${}", bind_parameters.len()));
+                    maybe_and(is_first, query_builder);
+                    query_builder
+                        .push(format!("{sql_field} > "))
+                        .push_bind(value_sql(value));
+                    is_first = false;
                 }
                 LowerBound::GreaterEqual(value) => {
-                    bind_parameters.push(value.to_owned());
-                    values.push(format!("{sql_field} >= ${}", bind_parameters.len()));
+                    maybe_and(is_first, query_builder);
+                    query_builder
+                        .push(format!("{sql_field} >= "))
+                        .push_bind(value_sql(value));
+                    is_first = false;
                 }
             }
 
             match upper_value {
                 UpperBound::Unbounded => (),
                 UpperBound::Lower(value) => {
-                    bind_parameters.push(value.to_owned());
-                    values.push(format!("{sql_field} < ${}", bind_parameters.len()));
+                    maybe_and(is_first, query_builder);
+                    query_builder
+                        .push(format!("{sql_field} < "))
+                        .push_bind(value_sql(value));
                 }
                 UpperBound::LowerEqual(value) => {
-                    bind_parameters.push(value.to_owned());
-                    values.push(format!("{sql_field} <= ${}", bind_parameters.len()));
+                    maybe_and(is_first, query_builder);
+                    query_builder
+                        .push(format!("{sql_field} <= "))
+                        .push_bind(value_sql(value));
                 }
             }
-
-            values.join(" AND ")
         }
         FilterBy::Contains(operation_value) => match &operation_value {
             OperationValue::String(_) => {
-                bind_parameters.push(operation_value.to_owned());
                 if !filter_setting.exclusive {
-                    format!("{sql_field} LIKE '%${}%'", bind_parameters.len())
+                    query_builder
+                        .push(format!("{sql_field} LIKE "))
+                        .push_bind(value_sql(operation_value));
                 } else {
-                    format!("{sql_field} NOT LIKE '%${}%'", bind_parameters.len())
+                    query_builder
+                        .push(format!("{sql_field} NOT LIKE "))
+                        .push_bind(value_sql(operation_value));
                 }
             }
             _ => panic!("Unsuported filter"),
@@ -354,56 +383,52 @@ fn concatenate_sql(items: &[Option<String>]) -> String {
         .join(", ")
 }
 
-fn where_filter_sql(
-    filter: &Filter,
-    bind_parameters: &mut Vec<OperationValue>,
-    schema: &Schema,
-) -> String {
-    filter
-        .iter()
-        .filter_map(|filter_setting| {
-            match &filter_setting.field {
-                Field::Meta(MetaField::Owner) => {
-                    Some(format!("AND {}", cmp_sql("owner", filter_setting, bind_parameters)))
-                }
-                Field::Meta(MetaField::Edited) => {
-                    if let FilterBy::Element(OperationValue::Boolean(filter_value)) =
-                        filter_setting.by
-                    {
-                        // Convert the boolean value manually here since we're dealing with native
-                        // boolean values instead of operation field value strings
-                        let edited_flag = if filter_value { "true" } else { "false" };
-                        Some(format!("AND is_edited = {edited_flag}"))
-                    } else {
-                        None
-                    }
-                }
-                Field::Meta(MetaField::Deleted) => {
-                    if let FilterBy::Element(OperationValue::Boolean(filter_value)) =
-                        filter_setting.by
-                    {
-                        // Convert the boolean value manually here since we're dealing with native
-                        // boolean values instead of operation field value strings
-                        let deleted_flag = if filter_value { "true" } else { "false" };
-                        Some(format!("AND documents.is_deleted = {deleted_flag}"))
-                    } else {
-                        None
-                    }
-                }
-                Field::Meta(MetaField::DocumentId) => Some(format!(
-                    "AND {}",
-                    cmp_sql("documents.document_id", filter_setting, bind_parameters)
-                )),
-                Field::Meta(MetaField::DocumentViewId) => Some(format!(
-                    "AND {}",
-                    cmp_sql("documents.document_view_id", filter_setting, bind_parameters)
-                )),
-                Field::Field(field_name) => {
-                    let field_sql = typecast_field_sql("operation_fields_v1.value", field_name, schema, true);
-                    let filter_cmp = cmp_sql(&field_sql, filter_setting, bind_parameters);
-
-                    Some(format!(
+fn where_filter_sql(filter: &Filter, query_builder: &mut QueryBuilder<Any>, schema: &Schema) {
+    filter.iter().for_each(|filter_setting| {
+        match &filter_setting.field {
+            Field::Meta(MetaField::Owner) => {
+                query_builder.push(r#"
+                    AND "#);
+                cmp_sql("owner", filter_setting, query_builder);
+                query_builder.push("\n");
+            }
+            Field::Meta(MetaField::Edited) => {
+                if let FilterBy::Element(OperationValue::Boolean(filter_value)) = filter_setting.by
+                {
+                    // Convert the boolean value manually here since we're dealing with native
+                    // boolean values instead of operation field value strings
+                    let edited_flag = if filter_value { "true" } else { "false" };
+                    query_builder.push(format!(r#"
+                        AND is_edited = {edited_flag} 
+                    "#));
+                };
+            }
+            Field::Meta(MetaField::Deleted) => {
+                if let FilterBy::Element(OperationValue::Boolean(filter_value)) = filter_setting.by
+                {
+                    // Convert the boolean value manually here since we're dealing with native
+                    // boolean values instead of operation field value strings
+                    let deleted_flag = if filter_value { "true" } else { "false" };
+                    query_builder.push(format!(
                         r#"
+                        AND documents.is_deleted = {deleted_flag} 
+                    "#
+                    ));
+                };
+            }
+            Field::Meta(MetaField::DocumentId) => {
+                query_builder.push("AND ");
+                cmp_sql("documents.document_id", filter_setting, query_builder);
+                query_builder.push("\n");
+            }
+            Field::Meta(MetaField::DocumentViewId) => {
+                query_builder.push("AND ");
+                cmp_sql("documents.document_view_id", filter_setting, query_builder);
+                query_builder.push("\n");
+            }
+            Field::Field(field_name) => {
+                query_builder.push(format!(
+                    r#"
                         AND EXISTS (
                             SELECT
                                 operation_fields_v1.value
@@ -412,17 +437,20 @@ fn where_filter_sql(
                             WHERE
                                 operation_fields_v1.name = '{field_name}'
                                 AND
-                                    {filter_cmp}
-                                AND
-                                    operation_fields_v1.operation_id = document_view_fields.operation_id
-                        )
-                        "#
-                    ))
-                }
+                    "#
+                ));
+                let field_sql =
+                    typecast_field_sql("operation_fields_v1.value", field_name, schema, true);
+                let filter_cmp = cmp_sql(&field_sql, filter_setting, query_builder);
+                query_builder.push(
+                    r#"
+                    AND
+                        operation_fields_v1.operation_id = document_view_fields.operation_id)
+                    "#,
+                );
             }
-        })
-        .collect::<Vec<String>>()
-        .join("\n")
+        }
+    });
 }
 
 fn where_pagination_sql(
@@ -845,6 +873,7 @@ fn from_sql(list: Option<&RelationList>) -> String {
             format!(
                 r#"
                 -- Select relation list of parent document first ..
+
                 document_view_fields document_view_fields_list
                 JOIN operation_fields_v1 operation_fields_v1_list
                     ON
@@ -853,6 +882,7 @@ fn from_sql(list: Option<&RelationList>) -> String {
                         document_view_fields_list.name = operation_fields_v1_list.name
 
                 -- .. and join the related documents afterwards
+
                 JOIN documents
                     ON
                         operation_fields_v1_list.value = {filter_sql}
@@ -908,14 +938,9 @@ impl SqlStore {
         select_vec.append(&mut select_fields_sql(&application_fields));
 
         let select = concatenate_sql(&select_vec);
-
         let from = from_sql(list);
-
-        let mut bind_parameters = Vec::new();
-
         let where_ = where_sql(schema, &application_fields, list);
         let and_fields = where_fields_sql(&application_fields);
-        let and_filters = where_filter_sql(&args.filter, &mut bind_parameters, schema);
         let and_pagination = where_pagination_sql(
             &args.pagination,
             &application_fields,
@@ -927,76 +952,84 @@ impl SqlStore {
         let order = order_sql(&args.order, schema, list);
         let (page_size, limit) = limit_sql(&args.pagination, &application_fields);
 
-        let sea_quel = format!(
+        let mut query_builder = QueryBuilder::<Any>::new(format!(
             r#"
-            -- ░░░░░▄▀▀▀▄░░░░░░░░░░░░░░░░░
-            -- ▄███▀░◐░░░▌░░░░░░░░░░░░░░░░
-            -- ░░░░▌░░░░░▐░░░░░░░░░░░░░░░░
-            -- ░░░░▐░░░░░▐░░░░░░░░░░░░░░░░
-            -- ░░░░▌░░░░░▐▄▄░░░░░░░░░░░░░░
-            -- ░░░░▌░░░░▄▀▒▒▀▀▀▀▄░░░░░░░░░
-            -- ░░░▐░░░░▐▒▒▒▒▒▒▒▒▀▀▄░░░░░░░
-            -- ░░░▐░░░░▐▄▒▒▒▒▒▒▒▒▒▒▀▄░░░░░
-            -- ░░░░▀▄░░░░▀▄▒▒▒▒▒▒▒▒▒▒▀▄░░░
-            -- ░░░░░░▀▄▄▄▄▄█▄▄▄▄▄▄▄▄▄▄▄▀▄░
-            -- ░░░░░░░░░░░▌▌░▌▌░░░░░░░░░░░
-            -- ░░░░░░░░░░░▌▌░▌▌░░░░░░░░░░░
-            -- ░░░░░░░░░▄▄▌▌▄▌▌░░░░░░░░░░░
-            --
-            -- Hello, my name is sea gull.
-            -- I designed a SQL query which
-            -- is as smart, as big and as
-            -- annoying as myself.
+                -- ░░░░░▄▀▀▀▄░░░░░░░░░░░░░░░░░
+                -- ▄███▀░◐░░░▌░░░░░░░░░░░░░░░░
+                -- ░░░░▌░░░░░▐░░░░░░░░░░░░░░░░
+                -- ░░░░▐░░░░░▐░░░░░░░░░░░░░░░░
+                -- ░░░░▌░░░░░▐▄▄░░░░░░░░░░░░░░
+                -- ░░░░▌░░░░▄▀▒▒▀▀▀▀▄░░░░░░░░░
+                -- ░░░▐░░░░▐▒▒▒▒▒▒▒▒▀▀▄░░░░░░░
+                -- ░░░▐░░░░▐▄▒▒▒▒▒▒▒▒▒▒▀▄░░░░░
+                -- ░░░░▀▄░░░░▀▄▒▒▒▒▒▒▒▒▒▒▀▄░░░
+                -- ░░░░░░▀▄▄▄▄▄█▄▄▄▄▄▄▄▄▄▄▄▀▄░
+                -- ░░░░░░░░░░░▌▌░▌▌░░░░░░░░░░░
+                -- ░░░░░░░░░░░▌▌░▌▌░░░░░░░░░░░
+                -- ░░░░░░░░░▄▄▌▌▄▌▌░░░░░░░░░░░
+                --
+                -- Hello, my name is sea gull.
+                -- I designed a SQL query which
+                -- is as smart, as big and as
+                -- annoying as myself.
+    
+                SELECT
+                    {select}
+    
+                FROM
+                    -- Usually we query the "documents" table first. In case we're looking at a relation
+                    -- list this is slighly more complicated and we need to do some additional JOINs
 
-            SELECT
-                {select}
+                    {from}
+    
+                    -- We need to add some more JOINs to get the values from the operations
 
-            FROM
-                -- Usually we query the "documents" table first. In case we're looking at a relation
-                -- list this is slighly more complicated and we need to do some additional JOINs
-                {from}
+                    JOIN operation_fields_v1
+                        ON
+                            document_view_fields.operation_id = operation_fields_v1.operation_id
+                            AND
+                                document_view_fields.name = operation_fields_v1.name
+    
+                WHERE
+                    -- We filter by the queried schema of that collection, if it is a relation
+                    -- list we filter by the view id of the parent document
 
-                -- We need to add some more JOINs to get the values from the operations
-                JOIN operation_fields_v1
-                    ON
-                        document_view_fields.operation_id = operation_fields_v1.operation_id
-                        AND
-                            document_view_fields.name = operation_fields_v1.name
+                    {where_}
+                    -- .. and select only the operation fields we're interested in
 
-            WHERE
-                -- We filter by the queried schema of that collection, if it is a relation
-                -- list we filter by the view id of the parent document
-                {where_}
+                    {and_fields} 
+    
+                    -- .. and further filter the data by custom parameters
+                "#
+        ));
 
-                -- .. and select only the operation fields we're interested in
-                {and_fields}
-
-                -- .. and further filter the data by custom parameters
-                {and_filters}
-
+        let and_filters = where_filter_sql(&args.filter, &mut query_builder, schema);
+        query_builder.push(format!(
+            r#"
                 -- Lastly we batch all results into smaller chunks via cursor pagination
+
                 {and_pagination}
 
-            -- We always order the rows by document id and list index, but there might also be
-            -- user-defined ordering on top of that
-            {order}
+                -- We always order the rows by document id and list index, but there might also be
+                -- user-defined ordering on top of that
 
-            -- Connected to cursor pagination we limit the number of rows
-            {limit}
-        "#
-        );
+                {order}
 
-        println!("{sea_quel}");
+                -- Connected to cursor pagination we limit the number of rows
 
-        let mut query = query_as::<_, QueryRow>(&sea_quel);
+                {limit}
+            "#
+        ));
 
-        for value in bind_parameters {
-            let value = value_sql(&value);
-            println!("Bind: {}", value);
-            query = query.bind(value);
-        }
+        // println!("{sea_quel}");
 
-        let mut rows: Vec<QueryRow> = query
+        // let mut rows: Vec<QueryRow> = query_builder.build_query_as()
+        //     .fetch_all(&self.pool)
+        //     .await
+        //     .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
+
+        let sea_quel = query_builder.sql().to_owned();
+        let mut rows: Vec<QueryRow> = query_as(&sea_quel)
             .fetch_all(&self.pool)
             .await
             .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
@@ -1063,46 +1096,39 @@ impl SqlStore {
         list: Option<&RelationList>,
     ) -> Result<u64, DocumentStorageError> {
         let application_fields = args.select.application_fields();
-        let mut bind_parameters = Vec::new();
-
         let from = from_sql(list);
         let where_ = where_sql(schema, &application_fields, list);
-        let and_filters = where_filter_sql(&args.filter, &mut bind_parameters, schema);
 
-        let count_sql = format!(
+        let mut query_builder = QueryBuilder::<Any>::new(format!(
             r#"
             SELECT
                 COUNT(documents.document_id)
-
             FROM
                 {from}
 
-                JOIN operation_fields_v1
-                    ON
-                        document_view_fields.operation_id = operation_fields_v1.operation_id
-                        AND
-                            document_view_fields.name = operation_fields_v1.name
+            JOIN operation_fields_v1
+                ON
+                    document_view_fields.operation_id = operation_fields_v1.operation_id
+                    AND
+                        document_view_fields.name = operation_fields_v1.name
 
             WHERE
                 {where_}
-                {and_filters}
+            "#
+        ));
 
+        where_filter_sql(&args.filter, &mut query_builder, schema);
+        query_builder.push(format!(
+            r#"
             -- Group application fields by name to make sure we get actual number of documents
             GROUP BY operation_fields_v1.name
             "#
-        );
+        ));
 
-        println!("{count_sql}");
+        // println!("{count_sql}");
 
-        let mut query = query_as(&count_sql);
-
-        for value in bind_parameters {
-            let value = value_sql(&value);
-            println!("Bind: {}", value);
-            query = query.bind(value);
-        }
-
-        let result: Option<(i64,)> = query
+        let count_sql = query_builder.sql().to_owned();
+        let result: Option<(i64,)> = query_as(&count_sql)
             .fetch_optional(&self.pool)
             .await
             .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
