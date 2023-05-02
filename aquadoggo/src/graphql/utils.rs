@@ -12,7 +12,7 @@ use p2panda_rs::storage_provider::error::DocumentStorageError;
 use p2panda_rs::storage_provider::traits::DocumentStore;
 
 use crate::db::query::{
-    Cursor, Direction, Field, Filter, MetaField, Order, Pagination, PaginationField, Select,
+    Direction, Field, Filter, MetaField, Order, Pagination, PaginationField, Select,
 };
 use crate::db::stores::{PaginationCursor, Query, RelationList};
 use crate::db::types::StorageDocument;
@@ -129,8 +129,8 @@ pub fn parse_collection_arguments(
     for (name, value) in ctx.args.iter() {
         match name.as_str() {
             constants::PAGINATION_AFTER_ARG => {
-                let cursor = CursorScalar::decode(value.string()?)?;
-                pagination.after = Some(PaginationCursor::from(&cursor));
+                let cursor: CursorScalar = value.string()?.parse()?;
+                pagination.after = Some(cursor.into());
             }
             constants::PAGINATION_FIRST_ARG => {
                 pagination.first = NonZeroU64::try_from(value.u64()?)?;

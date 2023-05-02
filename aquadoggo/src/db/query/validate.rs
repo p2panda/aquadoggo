@@ -6,10 +6,11 @@ use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{FieldName, FieldType, Schema};
 
 use crate::db::query::errors::QueryError;
-use crate::db::query::{Field, Filter, FilterBy, FilterSetting, MetaField, Order, Select};
+use crate::db::query::{Field, Filter, FilterBy, MetaField, Order, Select};
 
 /// Helper method to make sure that the chosen type in the query value matches the schema's field
 /// type.
+#[allow(dead_code)]
 fn validate_type(
     field_name: &str,
     query_field: &OperationValue,
@@ -30,6 +31,7 @@ fn validate_type(
 ///
 /// Not all fields in a schema can be equally filtered depending on their type. This method makes
 /// sure that these constraints are met and returns an error message.
+#[allow(dead_code)]
 pub fn validate_query(
     select: &Select,
     filter: &Filter,
@@ -172,8 +174,6 @@ pub fn validate_query(
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::operation::OperationValue;
-    use p2panda_rs::schema::Schema;
     use rstest::rstest;
 
     use crate::db::query::{Direction, Filter, Order, Select};

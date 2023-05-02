@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::fmt::Display;
+use std::str::FromStr;
 
-use anyhow::{anyhow, Error as AnyhowError};
 use async_graphql::{Error, Result};
 use dynamic_graphql::{Scalar, ScalarValue, Value};
 
@@ -20,7 +20,7 @@ impl ScalarValue for CursorScalar {
         Self: Sized,
     {
         match &value {
-            Value::String(str_value) => Ok(Self(PaginationCursor::decode(str_value)?)),
+            Value::String(str_value) => str_value.parse(),
             _ => Err(Error::new(format!("Expected a valid cursor, got: {value}"))),
         }
     }
@@ -30,35 +30,24 @@ impl ScalarValue for CursorScalar {
     }
 }
 
+impl FromStr for CursorScalar {
+    type Err = Error;
+
+    fn from_str(str_value: &str) -> std::result::Result<Self, Self::Err> {
+        let cursor = PaginationCursor::decode(str_value)?;
+        Ok(CursorScalar(cursor))
+    }
+}
+
 impl Display for CursorScalar {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0.encode())
+        write!(f, "{}", self.0)
     }
 }
 
-impl Cursor for CursorScalar {
-    type Error = AnyhowError;
-
-    fn decode(value: &str) -> Result<Self, Self::Error> {
-        let value = Value::String(value.to_string());
-
-        Self::from_value(value).map_err(|err| anyhow!(err.message.as_str().to_owned()))
-    }
-
-    fn encode(&self) -> String {
-        self.0.encode()
-    }
-}
-
-impl From<&PaginationCursor> for CursorScalar {
-    fn from(cursor: &PaginationCursor) -> Self {
-        Self(cursor.clone())
-    }
-}
-
-impl From<&CursorScalar> for PaginationCursor {
-    fn from(cursor: &CursorScalar) -> PaginationCursor {
-        cursor.0.clone()
+impl From<CursorScalar> for PaginationCursor {
+    fn from(cursor: CursorScalar) -> Self {
+        cursor.0
     }
 }
 

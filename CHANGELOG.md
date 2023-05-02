@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bring back e2e GraphQL API tests [#342](https://github.com/p2panda/aquadoggo/pull/342)
 - Move GraphQL `types` into separate modules [#343](https://github.com/p2panda/aquadoggo/pull/343)
 - Set default order for root queries to document id [#352](https://github.com/p2panda/aquadoggo/pull/352)
+- Remove property tests again because of concurrency bug [#347](https://github.com/p2panda/aquadoggo/pull/347)
 
 ### Fixed
 
@@ -42,6 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Handle decoding and parsing empty pinned relation lists [#336](https://github.com/p2panda/aquadoggo/pull/336)
 - Make `value` on `QueryRow` an option [#339](https://github.com/p2panda/aquadoggo/pull/339)
 - Fix race conditions in SQLite database test runner [#345](https://github.com/p2panda/aquadoggo/pull/345)
+- Remove duplicate `Cursor` implementation, query code clean up [#346](https://github.com/p2panda/aquadoggo/pull/346)
+- Fix SQL ordering to correctly assemble resulting rows to documents [#347](https://github.com/p2panda/aquadoggo/pull/347)
 
 ## [0.4.0]
 

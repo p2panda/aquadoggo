@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+#[cfg(test)]
 use std::convert::TryInto;
 use std::slice::Iter;
-use std::str::FromStr;
 
-use anyhow::{anyhow, bail, Context, Error, Result};
 use p2panda_rs::operation::OperationValue;
 
 #[cfg(test)]
@@ -107,11 +106,13 @@ impl Filter {
     }
 
     /// Returns the total number of filter settings.
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.0.len()
     }
 
     /// Returns a filter setting from a given index.
+    #[allow(dead_code)]
     pub fn get(&self, index: usize) -> Option<&FilterSetting> {
         self.0.get(index)
     }
@@ -144,7 +145,7 @@ impl Filter {
         let current_item = self.0.get_mut(index.unwrap()).unwrap();
 
         // Boolean values for the same field we can always easily overwrite
-        if let FilterBy::Element(OperationValue::Boolean(value)) = current_item.by {
+        if let FilterBy::Element(OperationValue::Boolean(_)) = current_item.by {
             *current_item = new_item;
             return;
         }
@@ -366,7 +367,6 @@ impl Filter {
 #[cfg(test)]
 mod tests {
     use p2panda_rs::operation::OperationValue;
-    use p2panda_rs::schema::FieldName;
 
     use crate::db::query::{Field, MetaField};
 
