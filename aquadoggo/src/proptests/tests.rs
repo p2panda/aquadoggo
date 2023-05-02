@@ -262,97 +262,97 @@ proptest! {
             // Run the test for each schema and related documents that have been generated.
             let schema_documents = documents.get(&schema_ast.id).cloned().unwrap_or_default();
             let schema = node.context.schema_provider.get(&schema_ast.id).await.expect("Schema should exist on node");
-            println!("{:#?}", schema.fields());
-            let mut filter_args_str = "".to_string();
+
+            let mut filter_args = Vec::new();
             for (filter, name) in &application_field_filters {
                 let name = name.clone().0;
                 let document_id_or_view_id = schema_documents.clone().into_iter().next().unwrap_or(random_document_view_id()).to_string();
                 match filter {
                     Filter::Contains(value) => {
                         match value {
-                            FilterValue::String(value) => filter_args_str += &format!("{name}: {{ contains: \"\"\"{value}\"\"\" }}, "),
+                            FilterValue::String(value) => filter_args.push(format!("{name}: {{ contains: \"\"\"{value}\"\"\" }}")),
                             _ => panic!(),
                         }
                     },
                     Filter::NotContains(value) => {
                         match value {
-                            FilterValue::String(value) => filter_args_str += &format!("{name}: {{ notContains: \"\"\"{value}\"\"\" }}, "),
+                            FilterValue::String(value) => filter_args.push(format!("{name}: {{ notContains: \"\"\"{value}\"\"\" }}")),
                             _ => panic!(),
                         }
                     },
                     Filter::Equal(value) => {
                         match value {
-                            FilterValue::UniqueIdentifier => filter_args_str += &format!("{name}: {{ eq: \"{document_id_or_view_id}\" }}, "),
-                            FilterValue::Boolean(value) => filter_args_str += &format!("{name}: {{ eq: {value} }}, "),
-                            FilterValue::String(value) => filter_args_str += &format!("{name}: {{ eq: \"\"\"{value}\"\"\" }}, "),
-                            FilterValue::Integer(value) => filter_args_str += &format!("{name}: {{ eq: {value} }}, "),
-                            FilterValue::Float(value) => filter_args_str += &format!("{name}: {{ eq: {value} }}, "),
+                            FilterValue::UniqueIdentifier => filter_args.push(format!("{name}: {{ eq: \"{document_id_or_view_id}\" }}")),
+                            FilterValue::Boolean(value) => filter_args.push(format!("{name}: {{ eq: {value} }}")),
+                            FilterValue::String(value) => filter_args.push(format!("{name}: {{ eq: \"\"\"{value}\"\"\" }}")),
+                            FilterValue::Integer(value) => filter_args.push(format!("{name}: {{ eq: {value} }}")),
+                            FilterValue::Float(value) => filter_args.push(format!("{name}: {{ eq: {value} }}")),
                         }
                     },
                     Filter::NotEqual(value) => {
                         match value {
-                            FilterValue::UniqueIdentifier => filter_args_str += &format!("{name}: {{ notEq: \"{document_id_or_view_id}\" }}, "),
-                            FilterValue::Boolean(value) => filter_args_str += &format!("{name}: {{ notEq: {value} }}, "),
-                            FilterValue::String(value) => filter_args_str += &format!("{name}: {{ notEq: \"\"\"{value}\"\"\" }}, "),
-                            FilterValue::Integer(value) => filter_args_str += &format!("{name}: {{ notEq: {value} }}, "),
-                            FilterValue::Float(value) => filter_args_str += &format!("{name}: {{ notEq: {value} }}, "),
+                            FilterValue::UniqueIdentifier => filter_args.push(format!("{name}: {{ notEq: \"{document_id_or_view_id}\" }}")),
+                            FilterValue::Boolean(value) => filter_args.push(format!("{name}: {{ notEq: {value} }}")),
+                            FilterValue::String(value) => filter_args.push(format!("{name}: {{ notEq: \"\"\"{value}\"\"\" }}")),
+                            FilterValue::Integer(value) => filter_args.push(format!("{name}: {{ notEq: {value} }}")),
+                            FilterValue::Float(value) => filter_args.push(format!("{name}: {{ notEq: {value} }}")),
                         }
                     },
                     Filter::IsIn(value) => {
                         match value {
-                            FilterValue::UniqueIdentifier => filter_args_str += &format!("{name}: {{ in: [\"{document_id_or_view_id}\"] }}, "),
-                            FilterValue::Boolean(value) => filter_args_str += &format!("{name}: {{ in: [{value}] }}, "),
-                            FilterValue::String(value) => filter_args_str += &format!("{name}: {{ in: [\"\"\"{value}\"\"\"] }}, "),
-                            FilterValue::Integer(value) => filter_args_str += &format!("{name}: {{ in: [{value}] }}, "),
-                            FilterValue::Float(value) => filter_args_str += &format!("{name}: {{ in: [{value}] }}, "),
+                            FilterValue::UniqueIdentifier => filter_args.push(format!("{name}: {{ in: [\"{document_id_or_view_id}\"] }}")),
+                            FilterValue::Boolean(value) => filter_args.push(format!("{name}: {{ in: [{value}] }}")),
+                            FilterValue::String(value) => filter_args.push(format!("{name}: {{ in: [\"\"\"{value}\"\"\"] }}")),
+                            FilterValue::Integer(value) => filter_args.push(format!("{name}: {{ in: [{value}] }}")),
+                            FilterValue::Float(value) => filter_args.push(format!("{name}: {{ in: [{value}] }}")),
                         }
                     },
                     Filter::NotIn(value) => {
                         match value {
-                            FilterValue::UniqueIdentifier => filter_args_str += &format!("{name}: {{ notIn: [\"{document_id_or_view_id}\"] }}, "),
-                            FilterValue::Boolean(value) => filter_args_str += &format!("{name}: {{ notIn: [{value}] }}, "),
-                            FilterValue::String(value) => filter_args_str += &format!("{name}: {{ notIn: [\"\"\"{value}\"\"\"] }}, "),
-                            FilterValue::Integer(value) => filter_args_str += &format!("{name}: {{ notIn: [{value}] }}, "),
-                            FilterValue::Float(value) => filter_args_str += &format!("{name}: {{ notIn: [{value}] }}, "),
+                            FilterValue::UniqueIdentifier => filter_args.push(format!("{name}: {{ notIn: [\"{document_id_or_view_id}\"] }}")),
+                            FilterValue::Boolean(value) => filter_args.push(format!("{name}: {{ notIn: [{value}] }}")),
+                            FilterValue::String(value) => filter_args.push(format!("{name}: {{ notIn: [\"\"\"{value}\"\"\"] }}")),
+                            FilterValue::Integer(value) => filter_args.push(format!("{name}: {{ notIn: [{value}] }}")),
+                            FilterValue::Float(value) => filter_args.push(format!("{name}: {{ notIn: [{value}] }}")),
                         }
                     },
                     Filter::GreaterThan(value) => {
                         match value {
-                            FilterValue::String(value) => filter_args_str += &format!("{name}: {{ gt: \"\"\"{value}\"\"\" }}, "),
-                            FilterValue::Integer(value) => filter_args_str += &format!("{name}: {{ gt: {value} }}, "),
-                            FilterValue::Float(value) => filter_args_str += &format!("{name}: {{ gt: {value} }}, "),
+                            FilterValue::String(value) => filter_args.push(format!("{name}: {{ gt: \"\"\"{value}\"\"\" }}")),
+                            FilterValue::Integer(value) => filter_args.push(format!("{name}: {{ gt: {value} }}")),
+                            FilterValue::Float(value) => filter_args.push(format!("{name}: {{ gt: {value} }}")),
                             _ => panic!(),
 
                         }
                     },
                     Filter::LessThan(value) => {
                         match value {
-                            FilterValue::String(value) => filter_args_str += &format!("{name}: {{ lt: \"\"\"{value}\"\"\" }}, "),
-                            FilterValue::Integer(value) => filter_args_str += &format!("{name}: {{ lt: {value} }}, "),
-                            FilterValue::Float(value) => filter_args_str += &format!("{name}: {{ lt: {value} }}, "),
+                            FilterValue::String(value) => filter_args.push(format!("{name}: {{ lt: \"\"\"{value}\"\"\" }}")),
+                            FilterValue::Integer(value) => filter_args.push(format!("{name}: {{ lt: {value} }}")),
+                            FilterValue::Float(value) => filter_args.push(format!("{name}: {{ lt: {value} }}")),
                             _ => panic!(),
                         }
                     },
                     Filter::GreaterThanOrEqual(value) => {
                         match value {
-                            FilterValue::String(value) => filter_args_str += &format!("{name}: {{ gte: \"\"\"{value}\"\"\" }}, "),
-                            FilterValue::Integer(value) => filter_args_str += &format!("{name}: {{ gte: {value} }}, "),
-                            FilterValue::Float(value) => filter_args_str += &format!("{name}: {{ gte: {value} }}, "),
+                            FilterValue::String(value) => filter_args.push(format!("{name}: {{ gte: \"\"\"{value}\"\"\" }}")),
+                            FilterValue::Integer(value) => filter_args.push(format!("{name}: {{ gte: {value} }}")),
+                            FilterValue::Float(value) => filter_args.push(format!("{name}: {{ gte: {value} }}")),
                             _ => panic!(),
 
                         }
                     },
                     Filter::LessThanOrEqual(value) => {
                         match value {
-                            FilterValue::String(value) => filter_args_str += &format!("{name}: {{ lte: \"\"\"{value}\"\"\" }}, "),
-                            FilterValue::Integer(value) => filter_args_str += &format!("{name}: {{ lte: {value} }}, "),
-                            FilterValue::Float(value) => filter_args_str += &format!("{name}: {{ lte: {value} }}, "),
+                            FilterValue::String(value) => filter_args.push(format!("{name}: {{ lte: \"\"\"{value}\"\"\" }}")),
+                            FilterValue::Integer(value) => filter_args.push(format!("{name}: {{ lte: {value} }}")),
+                            FilterValue::Float(value) => filter_args.push(format!("{name}: {{ lte: {value} }}")),
                             _ => panic!(),
                         }
                     },
                 }
             }
-            let filter_args_str = &filter_args_str[0..=filter_args_str.len() - 2]; // strip of the final trailing comma and space
+            let filter_args_str = filter_args.join(", ");
             let filter_args_str = format!("( first: 1000, filter: {{ {filter_args_str} }} )");
             let fields_vec = parse_selected_fields(&node, &schema).await;
             let data = make_query(
