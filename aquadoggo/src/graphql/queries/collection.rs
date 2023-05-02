@@ -780,11 +780,10 @@ mod tests {
     #[case("(orderDirection: ASC, orderBy: title)", "")]
     #[case("(orderDirection: DESC, orderBy: DOCUMENT_ID)", "")]
     #[case("(orderDirection: ASC, orderBy: DOCUMENT_VIEW_ID)", "")]
-    // @TODO: these fails, see: https://github.com/p2panda/aquadoggo/issues/353
-    // #[case("(meta: { owner: { eq: \"2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96\" } })", "")]
-    // #[case("(meta: { owner: { notEq: \"2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96\" } })", "")]
-    // #[case("(meta: { owner: { in: [ \"2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96\" ] } })", "")]
-    // #[case("(meta: { owner: { notIn: [ \"2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96\" ] } })", "")]
+    #[case("(meta: { owner: { eq: \"2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96\" } })", "")]
+    #[case("(meta: { owner: { notEq: \"2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96\" } })", "")]
+    #[case("(meta: { owner: { in: [ \"2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96\" ] } })", "")]
+    #[case("(meta: { owner: { notIn: [ \"2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96\" ] } })", "")]
     #[case("(meta: { documentId: { eq: \"0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543\" } })", "")]
     #[case("(meta: { documentId: { notEq: \"0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543\" } })", "")]
     #[case("(meta: { documentId: { in: [ \"0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543\" ] } })", "")]
@@ -1045,17 +1044,18 @@ mod tests {
             assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 0);
             assert_eq!(data["query"]["totalCount"], json!(0));
 
-            // let me = key_pair.public_key().to_string();
-            //
-            // @TODO: this fails, see: https://github.com/p2panda/aquadoggo/issues/353
-            // // What about only songs I've published to the network:
-            // let data = query_songs(
-            //     &client,
-            //     song_schema.id(),
-            //     &format!("(meta: {{ owner: {{ eq: \"{me}\" }} }})"),
-            //     "",
-            // )
-            // .await;
+            let me = key_pair.public_key().to_string();
+
+            // What about songs I've published to the network:
+            let data = query_songs(
+                &client,
+                song_schema.id(),
+                &format!("(meta: {{ owner: {{ eq: \"{me}\" }} }})"),
+                "",
+            )
+            .await;
+
+            assert_eq!(data["query"]["totalCount"], json!(3));
 
             // Oh yeh, i like that song lyric "This heaven gives me migraine"! I wonder if I can
             // find it....

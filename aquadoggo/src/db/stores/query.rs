@@ -399,7 +399,22 @@ fn where_filter_sql(filter: &Filter, schema: &Schema) -> (String, Vec<BindArgume
         .filter_map(|filter_setting| {
             match &filter_setting.field {
                 Field::Meta(MetaField::Owner) => {
-                    Some(format!("AND {}", cmp_sql("owner", filter_setting, &mut args)))
+                    let filter_cmp = cmp_sql("operations_v1.public_key", filter_setting, &mut args);
+
+                    Some(format!(
+                        r#"
+                        AND EXISTS (
+                            SELECT
+                                operations_v1.public_key
+                            FROM
+                                operations_v1
+                            WHERE
+                                operations_v1.operation_id = documents.document_id
+                                AND
+                                    {filter_cmp}
+                        )
+                        "#
+                    ))
                 }
                 Field::Meta(MetaField::Edited) => {
                     if let FilterBy::Element(OperationValue::Boolean(filter_value)) =
