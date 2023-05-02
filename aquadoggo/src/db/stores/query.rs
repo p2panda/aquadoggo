@@ -399,7 +399,7 @@ fn where_filter_sql(filter: &Filter, schema: &Schema) -> (String, Vec<BindArgume
         .filter_map(|filter_setting| {
             match &filter_setting.field {
                 Field::Meta(MetaField::Owner) => {
-                    let filter_cmp = cmp_sql("operations_v1.public_key", filter_setting);
+                    let filter_cmp = cmp_sql("operations_v1.public_key", filter_setting, &mut args);
 
                     Some(format!(
                         r#"
