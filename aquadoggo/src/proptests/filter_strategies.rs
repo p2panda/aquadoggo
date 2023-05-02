@@ -131,7 +131,7 @@ pub fn application_field_filter_strategy(
         }
         SchemaFieldType::String => {
             let value_and_name_strategy = any::<String>()
-                .prop_map(|value|FilterValue::String("a".to_string()))
+                .prop_map(FilterValue::String)
                 .prop_map(move |value| (value, field.name.clone()));
 
             prop_oneof![
