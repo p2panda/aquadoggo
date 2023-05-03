@@ -162,24 +162,25 @@ pub async fn add_documents_from_ast(
     document_view_id
 }
 
-pub async fn parse_selected_fields(node: &TestNode, schema: &Schema) -> Vec<String> {
-    let mut fields_vec = Vec::new();
+pub async fn parse_selected_fields(node: &TestNode, schema: &Schema) -> (Vec<String>, Vec<String>) {
+    let mut simple_fields = Vec::new();
+    let mut list_fields = Vec::new();
     for (name, field_type) in schema.fields().iter() {
         match field_type {
             FieldType::Relation(schema_id) | FieldType::PinnedRelation(schema_id) => {
                 let schema = node.context.schema_provider.get(&schema_id).await.expect("Schema should exist on node");
                 let fields = schema.fields().keys().join(" ");
-                fields_vec.push(format!("{name} {{ fields {{ {fields} }} }}"))
+                list_fields.push(format!("{name} {{ fields {{ {fields} }} }}"))
 
             },
             FieldType::RelationList(schema_id) | FieldType::PinnedRelationList(schema_id) => {
                 let schema = node.context.schema_provider.get(&schema_id).await.expect("Schema should exist on node");
                 let fields = schema.fields().keys().join(" ");
-                fields_vec.push(format!("{name} {{ documents {{ fields {{ {fields} }} }} }}"))
+                list_fields.push(format!("{name} {{ documents {{ fields {{ {fields} }} }} }}"))
 
             },
-            _ => fields_vec.push(name.to_owned()),
+            _ => simple_fields.push(name.to_owned()),
         }
     };
-    fields_vec
+    (simple_fields, list_fields)
 }

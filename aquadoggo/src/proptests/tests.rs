@@ -221,9 +221,10 @@ proptest! {
                 paginated_query(&client, &schema_id, &schema_documents, None, paginated_query_meta_fields_only).await;
 
                 let schema = node.context.schema_provider.get(&schema_id).await.expect("Schema should exist on node");
-                let fields_vec = parse_selected_fields(&node, &schema).await;
+                let (simple_fields, list_fields) = parse_selected_fields(&node, &schema).await;
+                let all_fields = [simple_fields, list_fields].concat();
                 println!("{schema_documents:#?}");
-                paginated_query(&client, &schema_id, &schema_documents, Some(&fields_vec), paginated_query_application_fields).await;
+                paginated_query(&client, &schema_id, &schema_documents, Some(&all_fields), paginated_query_application_fields).await;
             };
         });
     }
@@ -343,10 +344,11 @@ proptest! {
             }
             let filter_args_str = filter_args.join(", ");
             let filter_args_str = format!("( first: 1000, filter: {{ {filter_args_str} }} )");
-            let fields_vec = parse_selected_fields(&node, &schema).await;
+            let (simple_fields, list_fields) = parse_selected_fields(&node, &schema).await;
+            let all_fields = [simple_fields, list_fields].concat();
             let _data = make_query(
                 &client,
-                &paginated_query_application_fields(&schema.id(), &filter_args_str, Some(&fields_vec)),
+                &paginated_query_application_fields(&schema.id(), &filter_args_str, Some(&all_fields)),
             )
             .await;
         });
