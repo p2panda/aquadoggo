@@ -183,7 +183,7 @@ prop_compose! {
     fn schema_with_documents_and_filters_strategy()
             (schema in schema_strategy())
             (documents in documents_strategy(schema.clone()), schema in Just(schema.clone()), application_filters in application_filters_strategy(schema.clone().fields), meta_filters in meta_field_filter_strategy())
-            -> (SchemaAST, Vec<DocumentAST>, Vec<(Filter, FieldName)>, Vec<(MetaField, Filter)>) {
+            -> (SchemaAST, Vec<DocumentAST>, Vec<((FieldName, Filter), Vec<(FieldName, Filter)>)>, Vec<(MetaField, Filter)>) {
         (schema, documents, application_filters, meta_filters)
     }
 }
@@ -254,7 +254,7 @@ proptest! {
             let schema = node.context.schema_provider.get(&schema_ast.id).await.expect("Schema should exist on node");
 
             let mut filter_args = Vec::new();
-            for (filter, name) in &application_field_filters {
+            for ((name, filter), list_filter) in &application_field_filters {
                 let name = name.clone().0;
                 let document_id_or_view_id = schema_documents.clone().into_iter().next().unwrap_or(random_document_view_id()).to_string();
                 match filter {

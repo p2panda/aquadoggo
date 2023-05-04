@@ -4,7 +4,7 @@ use proptest::collection::vec;
 use proptest::prelude::any;
 use proptest::prop_oneof;
 use proptest::sample::select;
-use proptest::strategy::{Just, Strategy};
+use proptest::strategy::{BoxedStrategy, Just, Strategy};
 use proptest_derive::Arbitrary;
 
 use crate::proptests::schema_strategies::SchemaFieldType;
@@ -44,7 +44,7 @@ pub enum MetaField {
 
 pub fn application_filters_strategy(
     schema_fields: Vec<SchemaField>,
-) -> impl Strategy<Value = Vec<(Filter, FieldName)>> {
+) -> impl Strategy<Value = Vec<((FieldName, Filter), Vec<(FieldName, Filter)>)>> {
     let schema_fields = vec(select(schema_fields), 1..=3);
     let filters = schema_fields.prop_flat_map(|fields| {
         let mut filters = Vec::new();
@@ -58,148 +58,169 @@ pub fn application_filters_strategy(
 
 pub fn application_field_filter_strategy(
     field: SchemaField,
-) -> impl Strategy<Value = (Filter, FieldName)> {
+) -> impl Strategy<Value = ((FieldName, Filter), Vec<(FieldName, Filter)>)> {
+    match &field.field_type {
+        SchemaFieldType::Boolean
+        | SchemaFieldType::Integer
+        | SchemaFieldType::Float
+        | SchemaFieldType::String
+        | SchemaFieldType::Relation
+        | SchemaFieldType::PinnedRelation => generate_simple_field_filter(field.clone())
+            .prop_map(|(name, filter)| ((name, filter), Vec::new()))
+            .boxed(),
+        SchemaFieldType::RelationList | SchemaFieldType::PinnedRelationList => {
+            let name_and_filter = prop_oneof![
+                (
+                    Just(FilterValue::UniqueIdentifier),
+                    Just(field.name.clone())
+                )
+                    .prop_map(|(value, name)| { (name, Filter::IsIn(value)) }),
+                (
+                    Just(FilterValue::UniqueIdentifier),
+                    Just(field.name.clone())
+                )
+                    .prop_map(|(value, name)| { (name, Filter::NotIn(value)) }),
+            ];
+            let list_fields = field.relation_schema.clone().unwrap().fields;
+            let list_filters: Vec<BoxedStrategy<(FieldName, Filter)>> = list_fields
+                .iter()
+                .map(|field| generate_simple_field_filter(field.clone()))
+                .collect();
+            (name_and_filter, list_filters).boxed()
+        }
+    }
+}
+
+pub fn generate_simple_field_filter(field: SchemaField) -> BoxedStrategy<(FieldName, Filter)> {
     match &field.field_type {
         SchemaFieldType::Boolean => {
             let value_and_name_strategy = any::<bool>()
                 .prop_map(FilterValue::Boolean)
-                .prop_map(move |value| (value, field.name.clone()));
+                .prop_map(move |value| (field.name.clone(), value));
 
             prop_oneof![
                 value_and_name_strategy
                     .clone()
-                    .prop_map(|(value, name)| (Filter::Equal(value), name)),
-                value_and_name_strategy.prop_map(|(value, name)| (Filter::NotEqual(value), name))
+                    .prop_map(|(name, value)| (name, Filter::Equal(value))),
+                value_and_name_strategy.prop_map(|(name, value)| (name, Filter::NotEqual(value),))
             ]
             .boxed()
         }
         SchemaFieldType::Integer => {
             let value_and_name_strategy = any::<i64>()
                 .prop_map(FilterValue::Integer)
-                .prop_map(move |value| (value, field.name.clone()));
+                .prop_map(move |value| (field.name.clone(), value));
             prop_oneof![
                 value_and_name_strategy
                     .clone()
-                    .prop_map(|(value, name)| (Filter::Equal(value), name)),
+                    .prop_map(|(name, value)| (name, Filter::Equal(value))),
                 value_and_name_strategy
                     .clone()
-                    .prop_map(|(value, name)| (Filter::NotEqual(value), name)),
+                    .prop_map(|(name, value)| (name, Filter::NotEqual(value))),
                 value_and_name_strategy
                     .clone()
-                    .prop_map(|(value, name)| (Filter::IsIn(value), name)),
+                    .prop_map(|(name, value)| (name, Filter::IsIn(value))),
                 value_and_name_strategy
                     .clone()
-                    .prop_map(|(value, name)| (Filter::NotIn(value), name)),
+                    .prop_map(|(name, value)| (name, Filter::NotIn(value))),
                 value_and_name_strategy
                     .clone()
-                    .prop_map(|(value, name)| (Filter::GreaterThanOrEqual(value), name)),
+                    .prop_map(|(name, value)| (name, Filter::GreaterThanOrEqual(value))),
                 value_and_name_strategy
                     .clone()
-                    .prop_map(|(value, name)| (Filter::LessThan(value), name)),
+                    .prop_map(|(name, value)| (name, Filter::LessThan(value))),
                 value_and_name_strategy
-                    .prop_map(|(value, name)| (Filter::LessThanOrEqual(value), name)),
+                    .prop_map(|(name, value)| (name, Filter::LessThanOrEqual(value))),
             ]
             .boxed()
         }
         SchemaFieldType::Float => {
             let value_and_name_strategy = any::<f64>()
                 .prop_map(FilterValue::Float)
-                .prop_map(move |value| (value, field.name.clone()));
+                .prop_map(move |value| (field.name.clone(), value));
             prop_oneof![
                 value_and_name_strategy
                     .clone()
-                    .prop_map(|(value, name)| (Filter::Equal(value), name)),
+                    .prop_map(|(name, value)| (name, Filter::Equal(value))),
                 value_and_name_strategy
                     .clone()
-                    .prop_map(|(value, name)| (Filter::NotEqual(value), name)),
+                    .prop_map(|(name, value)| (name, Filter::NotEqual(value))),
                 value_and_name_strategy
                     .clone()
-                    .prop_map(|(value, name)| (Filter::IsIn(value), name)),
+                    .prop_map(|(name, value)| (name, Filter::IsIn(value))),
                 value_and_name_strategy
                     .clone()
-                    .prop_map(|(value, name)| (Filter::NotIn(value), name)),
+                    .prop_map(|(name, value)| (name, Filter::NotIn(value))),
                 value_and_name_strategy
                     .clone()
-                    .prop_map(|(value, name)| (Filter::GreaterThanOrEqual(value), name)),
+                    .prop_map(|(name, value)| (name, Filter::GreaterThanOrEqual(value))),
                 value_and_name_strategy
                     .clone()
-                    .prop_map(|(value, name)| (Filter::LessThan(value), name)),
+                    .prop_map(|(name, value)| (name, Filter::LessThan(value))),
                 value_and_name_strategy
-                    .prop_map(|(value, name)| (Filter::LessThanOrEqual(value), name)),
+                    .prop_map(|(name, value)| (name, Filter::LessThanOrEqual(value))),
             ]
             .boxed()
         }
         SchemaFieldType::String => {
             let value_and_name_strategy = any::<String>()
                 .prop_map(FilterValue::String)
-                .prop_map(move |value| (value, field.name.clone()));
+                .prop_map(move |value| (field.name.clone(), value));
 
             prop_oneof![
                 value_and_name_strategy
                     .clone()
-                    .prop_map(|(value, name)| (Filter::Contains(value), name)),
+                    .prop_map(|(name, value)| (name, Filter::Contains(value))),
                 value_and_name_strategy
                     .clone()
-                    .prop_map(|(value, name)| (Filter::NotContains(value), name)),
+                    .prop_map(|(name, value)| (name, Filter::NotContains(value))),
                 value_and_name_strategy
                     .clone()
-                    .prop_map(|(value, name)| (Filter::Equal(value), name)),
+                    .prop_map(|(name, value)| (name, Filter::Equal(value))),
                 value_and_name_strategy
                     .clone()
-                    .prop_map(|(value, name)| (Filter::NotEqual(value), name)),
+                    .prop_map(|(name, value)| (name, Filter::NotEqual(value))),
                 value_and_name_strategy
                     .clone()
-                    .prop_map(|(value, name)| (Filter::IsIn(value), name)),
+                    .prop_map(|(name, value)| (name, Filter::IsIn(value))),
                 value_and_name_strategy
                     .clone()
-                    .prop_map(|(value, name)| (Filter::NotIn(value), name)),
+                    .prop_map(|(name, value)| (name, Filter::NotIn(value))),
                 value_and_name_strategy
                     .clone()
-                    .prop_map(|(value, name)| (Filter::GreaterThanOrEqual(value), name)),
+                    .prop_map(|(name, value)| (name, Filter::GreaterThanOrEqual(value))),
                 value_and_name_strategy
                     .clone()
-                    .prop_map(|(value, name)| (Filter::LessThan(value), name)),
+                    .prop_map(|(name, value)| (name, Filter::LessThan(value))),
                 value_and_name_strategy
-                    .prop_map(|(value, name)| (Filter::LessThanOrEqual(value), name)),
+                    .prop_map(|(name, value)| (name, Filter::LessThanOrEqual(value))),
             ]
             .boxed()
         }
         SchemaFieldType::Relation | SchemaFieldType::PinnedRelation => prop_oneof![
             (
+                Just(field.name.clone()),
                 Just(FilterValue::UniqueIdentifier),
-                Just(field.name.clone())
             )
-                .prop_map(|(value, name)| (Filter::Equal(value), name)),
+                .prop_map(|(name, value)| (name, Filter::Equal(value))),
             (
+                Just(field.name.clone()),
                 Just(FilterValue::UniqueIdentifier),
-                Just(field.name.clone())
             )
-                .prop_map(|(value, name)| (Filter::NotEqual(value), name)),
+                .prop_map(|(name, value)| (name, Filter::NotEqual(value))),
             (
+                Just(field.name.clone()),
                 Just(FilterValue::UniqueIdentifier),
-                Just(field.name.clone())
             )
-                .prop_map(|(value, name)| (Filter::IsIn(value), name)),
+                .prop_map(|(name, value)| (name, Filter::IsIn(value))),
             (
+                Just(field.name.clone()),
                 Just(FilterValue::UniqueIdentifier),
-                Just(field.name.clone())
             )
-                .prop_map(|(value, name)| (Filter::NotIn(value), name)),
+                .prop_map(|(name, value)| (name, Filter::NotIn(value))),
         ]
         .boxed(),
-        SchemaFieldType::RelationList | SchemaFieldType::PinnedRelationList => prop_oneof![
-            (
-                Just(FilterValue::UniqueIdentifier),
-                Just(field.name.clone())
-            )
-                .prop_map(|(value, name)| (Filter::IsIn(value), name)),
-            (
-                Just(FilterValue::UniqueIdentifier),
-                Just(field.name.clone())
-            )
-                .prop_map(|(value, name)| (Filter::NotIn(value), name)),
-        ]
-        .boxed(),
+        _ => panic!("Unexpected field type"),
     }
 }
 
