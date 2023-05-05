@@ -15,6 +15,9 @@ repository = "https://github.com/p2panda/aquadoggo"
 readme = "README.md"
 edition = "2018"
 
+[features]
+proptests = []
+
 [dependencies]
 anyhow = "^1.0.62"
 async-graphql = { version = "^5.0.6", features = ["dynamic-schema"] }

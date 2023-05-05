@@ -1,4 +1,4 @@
-name: aquadoggo
+name: aquadoggo property tests
 
 on: push
 
@@ -44,7 +44,7 @@ jobs:
       - name: Run tests
         uses: actions-rs/cargo@v1
         with:
-          command: test
+          command: test --features=proptests
           args: --manifest-path ${{ env.cargo_manifest }}
         env:
           # Ensure debug output is also tested

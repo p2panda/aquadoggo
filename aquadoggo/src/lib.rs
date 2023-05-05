@@ -53,7 +53,7 @@ mod materializer;
 mod network;
 mod node;
 mod schema;
-#[cfg(test)]
+#[cfg(all(test, feature = "proptests"))]
 mod proptests;
 #[cfg(test)]
 mod test_utils;
