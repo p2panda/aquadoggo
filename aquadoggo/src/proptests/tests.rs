@@ -159,7 +159,7 @@ async fn paginated_query(
             assert_eq!(documents.len(), expected_remaining_documents);
         }
 
-        // De-increment the remaining documents count.
+        // Reduce the remaining documents count by the number of documents returned from the query.
         expected_remaining_documents -= documents.len();
         // Compose the next query arguments.
         query_args = format!("(first: 5, after: {})", end_cursor);

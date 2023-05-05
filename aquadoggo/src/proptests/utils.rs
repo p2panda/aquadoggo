@@ -164,6 +164,9 @@ pub async fn add_documents_from_ast(
     document_view_id
 }
 
+/// Helper for parsing the fields of a schema into valid GraphQL field selections. Any fields
+/// which are a relation list type and have filter arguments passed will have the arguments added
+/// to their sub-collection query.
 pub async fn parse_selected_fields(
     node: &TestNode,
     schema: &Schema,
@@ -212,6 +215,7 @@ pub async fn parse_selected_fields(
     all_fields
 }
 
+/// Parse a single filter into a GraphQL argument string.
 pub fn parse_filter(
     filter_args: &mut Vec<String>,
     name: &FieldName,
@@ -326,6 +330,7 @@ pub fn parse_filter(
     }
 }
 
+/// Escape unsafe chars in a string literal.
 fn escape_string_value(value: &str) -> String {
     format!("\"{}\"", value.replace("\"", "").replace("\\", ""))
 }

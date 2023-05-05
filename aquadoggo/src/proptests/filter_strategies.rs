@@ -7,11 +7,12 @@ use proptest::sample::select;
 use proptest::strategy::{BoxedStrategy, Just, Strategy};
 use proptest_derive::Arbitrary;
 
-use crate::proptests::schema_strategies::SchemaFieldType;
+use crate::proptests::schema_strategies::{SchemaFieldType, SchemaField};
+use crate::proptests::utils::FieldName;
 
-use super::schema_strategies::SchemaField;
-use super::utils::FieldName;
-
+/// Possible values used in filter arguments. `UniqueIdentifier` is a placeholder for values which
+/// can be derived at runtime in order to use identifiers which exist in on the node, these include
+/// document and view ids and public keys. 
 #[derive(Arbitrary, Debug, Clone)]
 pub enum FilterValue {
     Boolean(bool),
@@ -21,6 +22,7 @@ pub enum FilterValue {
     UniqueIdentifier, // This is a placeholder for a document id, document view id or public key which is selected at testing time
 }
 
+/// Valid filter types, each containing a FilterValue.
 #[derive(Arbitrary, Debug, Clone)]
 pub enum Filter {
     Contains(FilterValue),
@@ -35,6 +37,7 @@ pub enum Filter {
     LessThanOrEqual(FilterValue),
 }
 
+/// Valid meta field types.
 #[derive(Arbitrary, Debug, Clone)]
 pub enum MetaField {
     Owner,
@@ -42,6 +45,24 @@ pub enum MetaField {
     DocumentViewId,
 }
 
+/// Top level strategy for generating meta field filters.
+pub fn meta_field_filter_strategy() -> impl Strategy<Value = Vec<(MetaField, Filter)>> {
+    let meta_field_filters = vec![
+        Filter::Equal(FilterValue::UniqueIdentifier),
+        Filter::Equal(FilterValue::UniqueIdentifier),
+        Filter::Equal(FilterValue::UniqueIdentifier),
+        Filter::Equal(FilterValue::UniqueIdentifier),
+    ];
+    let field_and_value = prop_oneof![
+        select(meta_field_filters.clone()).prop_map(|filter| (MetaField::Owner, filter)),
+        select(meta_field_filters.clone()).prop_map(|filter| (MetaField::DocumentId, filter)),
+        select(meta_field_filters.clone()).prop_map(|filter| (MetaField::DocumentViewId, filter))
+    ];
+    vec(field_and_value, 1..3)
+}
+
+/// Top level strategy used for generating and injecting filter arguments derived from the fields
+/// of a schema.
 pub fn application_filters_strategy(
     schema_fields: Vec<SchemaField>,
 ) -> impl Strategy<Value = Vec<((FieldName, Filter), Vec<(FieldName, Filter)>)>> {
@@ -56,7 +77,10 @@ pub fn application_filters_strategy(
     filters
 }
 
-pub fn application_field_filter_strategy(
+
+/// Method for generating filter arguments for a single schema field. If the field is a relation
+/// list type then sub-filters are also generated for the list collection.
+fn application_field_filter_strategy(
     field: SchemaField,
 ) -> impl Strategy<Value = ((FieldName, Filter), Vec<(FieldName, Filter)>)> {
     match &field.field_type {
@@ -91,7 +115,8 @@ pub fn application_field_filter_strategy(
     }
 }
 
-pub fn generate_simple_field_filter(field: SchemaField) -> BoxedStrategy<(FieldName, Filter)> {
+/// Helper for generating a non-list type filter.
+fn generate_simple_field_filter(field: SchemaField) -> BoxedStrategy<(FieldName, Filter)> {
     match &field.field_type {
         SchemaFieldType::Boolean => {
             let value_and_name_strategy = any::<bool>()
@@ -222,19 +247,4 @@ pub fn generate_simple_field_filter(field: SchemaField) -> BoxedStrategy<(FieldN
         .boxed(),
         _ => panic!("Unexpected field type"),
     }
-}
-
-pub fn meta_field_filter_strategy() -> impl Strategy<Value = Vec<(MetaField, Filter)>> {
-    let meta_field_filters = vec![
-        Filter::Equal(FilterValue::UniqueIdentifier),
-        Filter::Equal(FilterValue::UniqueIdentifier),
-        Filter::Equal(FilterValue::UniqueIdentifier),
-        Filter::Equal(FilterValue::UniqueIdentifier),
-    ];
-    let field_and_value = prop_oneof![
-        select(meta_field_filters.clone()).prop_map(|filter| (MetaField::Owner, filter)),
-        select(meta_field_filters.clone()).prop_map(|filter| (MetaField::DocumentId, filter)),
-        select(meta_field_filters.clone()).prop_map(|filter| (MetaField::DocumentViewId, filter))
-    ];
-    vec(field_and_value, 1..3)
 }

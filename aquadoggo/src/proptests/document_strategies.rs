@@ -71,7 +71,8 @@ pub fn documents_strategy(schema: SchemaAST) -> impl Strategy<Value = Vec<Docume
     })
 }
 
-/// Strategy for generating a collection of document field values from a schema AST.
+/// Strategy for generating a collection of document field values corresponding to fields keys and
+/// types defined on a schema AST.
 fn values_from_schema(schema: SchemaAST) -> impl Strategy<Value = Vec<DocumentFieldValue>> {
     let mut field_values = vec![];
 
