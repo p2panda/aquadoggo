@@ -6,15 +6,17 @@ use async_recursion::async_recursion;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{FieldType, Schema, SchemaId};
-use p2panda_rs::test_utils::fixtures::random_key_pair;
+use p2panda_rs::test_utils::fixtures::{random_key_pair, random_document_id};
 use proptest_derive::Arbitrary;
 
 use crate::proptests::document_strategies::{DocumentAST, FieldValue};
 use crate::proptests::schema_strategies::{SchemaAST, SchemaFieldType};
 use crate::test_utils::{add_document, TestNode};
 
+use super::filter_strategies::{Filter, FilterValue};
+
 /// A fieldname which will follow the expected regex rules.
-#[derive(Arbitrary, Debug, Clone)]
+#[derive(Arbitrary, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FieldName(#[proptest(regex = "[A-Za-z]{1}[A-Za-z0-9_]{0,63}")] pub String);
 
 /// Add schemas from a schema AST to a test node.
@@ -162,25 +164,168 @@ pub async fn add_documents_from_ast(
     document_view_id
 }
 
-pub async fn parse_selected_fields(node: &TestNode, schema: &Schema) -> (Vec<String>, Vec<String>) {
-    let mut simple_fields = Vec::new();
-    let mut list_fields = Vec::new();
+pub async fn parse_selected_fields(
+    node: &TestNode,
+    schema: &Schema,
+    list_filters: Option<&HashMap<&FieldName, Vec<String>>>,
+) -> Vec<String> {
+    let mut all_fields = Vec::new();
     for (name, field_type) in schema.fields().iter() {
         match field_type {
             FieldType::Relation(schema_id) | FieldType::PinnedRelation(schema_id) => {
-                let schema = node.context.schema_provider.get(&schema_id).await.expect("Schema should exist on node");
+                let schema = node
+                    .context
+                    .schema_provider
+                    .get(&schema_id)
+                    .await
+                    .expect("Schema should exist on node");
                 let fields = schema.fields().keys().join(" ");
-                list_fields.push(format!("{name} {{ fields {{ {fields} }} }}"))
-
-            },
+                all_fields.push(format!("{name} {{ fields {{ {fields} }} }}"))
+            }
             FieldType::RelationList(schema_id) | FieldType::PinnedRelationList(schema_id) => {
-                let schema = node.context.schema_provider.get(&schema_id).await.expect("Schema should exist on node");
+                let schema = node
+                    .context
+                    .schema_provider
+                    .get(&schema_id)
+                    .await
+                    .expect("Schema should exist on node");
+                let filter_args_str = match list_filters {
+                    Some(list_filters) => {
+                        if let Some(filters) = list_filters.get(&FieldName(name.to_owned())) {
+                            let filter_args_str = filters.join(", ");
+                            format!("( filter: {{ {filter_args_str} }} )")
+                        } else {
+                            "".to_string()
+                        }
+                    }
+                    None => "".to_string(),
+                };
                 let fields = schema.fields().keys().join(" ");
-                list_fields.push(format!("{name} {{ documents {{ fields {{ {fields} }} }} }}"))
 
-            },
-            _ => simple_fields.push(name.to_owned()),
+                all_fields.push(format!(
+                    "{name}{filter_args_str} {{ documents {{ fields {{ {fields} }} }} }}"
+                ))
+            }
+            _ => all_fields.push(name.to_owned()),
         }
-    };
-    (simple_fields, list_fields)
+    }
+    all_fields
+}
+
+pub fn parse_filter(
+    filter_args: &mut Vec<String>,
+    name: &FieldName,
+    filter: &Filter,
+) {
+    let name = name.clone().0;
+    let document_id = random_document_id().to_string();
+    match filter {
+        Filter::Contains(value) => match value {
+            FilterValue::String(value) => filter_args.push(format!(
+                "{name}: {{ contains: {} }}",
+                escape_string_value(value)
+            )),
+            _ => panic!(),
+        },
+        Filter::NotContains(value) => match value {
+            FilterValue::String(value) => filter_args.push(format!(
+                "{name}: {{ notContains: {} }}",
+                escape_string_value(value)
+            )),
+            _ => panic!(),
+        },
+        Filter::Equal(value) => match value {
+            FilterValue::UniqueIdentifier => {
+                filter_args.push(format!("{name}: {{ eq: \"{document_id}\" }}"))
+            }
+            FilterValue::Boolean(value) => filter_args.push(format!("{name}: {{ eq: {value} }}")),
+            FilterValue::String(value) => {
+                filter_args.push(format!("{name}: {{ eq: {} }}", escape_string_value(value)))
+            }
+            FilterValue::Integer(value) => filter_args.push(format!("{name}: {{ eq: {value} }}")),
+            FilterValue::Float(value) => filter_args.push(format!("{name}: {{ eq: {value} }}")),
+        },
+        Filter::NotEqual(value) => match value {
+            FilterValue::UniqueIdentifier => {
+                filter_args.push(format!("{name}: {{ notEq: \"{document_id}\" }}"))
+            }
+            FilterValue::Boolean(value) => {
+                filter_args.push(format!("{name}: {{ notEq: {value} }}"))
+            }
+            FilterValue::String(value) => filter_args.push(format!(
+                "{name}: {{ notEq: {} }}",
+                escape_string_value(value)
+            )),
+            FilterValue::Integer(value) => {
+                filter_args.push(format!("{name}: {{ notEq: {value} }}"))
+            }
+            FilterValue::Float(value) => filter_args.push(format!("{name}: {{ notEq: {value} }}")),
+        },
+        Filter::IsIn(value) => match value {
+            FilterValue::UniqueIdentifier => {
+                filter_args.push(format!("{name}: {{ in: [\"{document_id}\"] }}"))
+            }
+            FilterValue::Boolean(value) => filter_args.push(format!("{name}: {{ in: [{value}] }}")),
+            FilterValue::String(value) => filter_args.push(format!(
+                "{name}: {{ in: [{}] }}",
+                escape_string_value(value)
+            )),
+            FilterValue::Integer(value) => filter_args.push(format!("{name}: {{ in: [{value}] }}")),
+            FilterValue::Float(value) => filter_args.push(format!("{name}: {{ in: [{value}] }}")),
+        },
+        Filter::NotIn(value) => match value {
+            FilterValue::UniqueIdentifier => {
+                filter_args.push(format!("{name}: {{ notIn: [\"{document_id}\"] }}"))
+            }
+            FilterValue::Boolean(value) => {
+                filter_args.push(format!("{name}: {{ notIn: [{value}] }}"))
+            }
+            FilterValue::String(value) => filter_args.push(format!(
+                "{name}: {{ notIn: [{}] }}",
+                escape_string_value(value)
+            )),
+            FilterValue::Integer(value) => {
+                filter_args.push(format!("{name}: {{ notIn: [{value}] }}"))
+            }
+            FilterValue::Float(value) => {
+                filter_args.push(format!("{name}: {{ notIn: [{value}] }}"))
+            }
+        },
+        Filter::GreaterThan(value) => match value {
+            FilterValue::String(value) => {
+                filter_args.push(format!("{name}: {{ gt: {} }}", escape_string_value(value)))
+            }
+            FilterValue::Integer(value) => filter_args.push(format!("{name}: {{ gt: {value} }}")),
+            FilterValue::Float(value) => filter_args.push(format!("{name}: {{ gt: {value} }}")),
+            _ => panic!(),
+        },
+        Filter::LessThan(value) => match value {
+            FilterValue::String(value) => {
+                filter_args.push(format!("{name}: {{ lt: {} }}", escape_string_value(value)))
+            }
+            FilterValue::Integer(value) => filter_args.push(format!("{name}: {{ lt: {value} }}")),
+            FilterValue::Float(value) => filter_args.push(format!("{name}: {{ lt: {value} }}")),
+            _ => panic!(),
+        },
+        Filter::GreaterThanOrEqual(value) => match value {
+            FilterValue::String(value) => {
+                filter_args.push(format!("{name}: {{ gte: {} }}", escape_string_value(value)))
+            }
+            FilterValue::Integer(value) => filter_args.push(format!("{name}: {{ gte: {value} }}")),
+            FilterValue::Float(value) => filter_args.push(format!("{name}: {{ gte: {value} }}")),
+            _ => panic!(),
+        },
+        Filter::LessThanOrEqual(value) => match value {
+            FilterValue::String(value) => {
+                filter_args.push(format!("{name}: {{ lte: {} }}", escape_string_value(value)))
+            }
+            FilterValue::Integer(value) => filter_args.push(format!("{name}: {{ lte: {value} }}")),
+            FilterValue::Float(value) => filter_args.push(format!("{name}: {{ lte: {value} }}")),
+            _ => panic!(),
+        },
+    }
+}
+
+fn escape_string_value(value: &str) -> String {
+    format!("\"{}\"", value.replace("\"", "").replace("\\", ""))
 }

@@ -6,16 +6,14 @@ use async_graphql::Response;
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::DocumentStore;
-use p2panda_rs::test_utils::fixtures::random_document_view_id;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use proptest::{prop_compose, proptest, strategy::Just};
 use serde_json::{json, Value as JsonValue};
 
 use crate::proptests::document_strategies::{documents_strategy, DocumentAST};
-use crate::proptests::filter_strategies::FilterValue;
 use crate::proptests::schema_strategies::{schema_strategy, SchemaAST};
 use crate::proptests::utils::{
-    add_documents_from_ast, add_schemas_from_ast, parse_selected_fields, FieldName,
+    add_documents_from_ast, add_schemas_from_ast, parse_filter, parse_selected_fields, FieldName,
 };
 use crate::test_utils::{graphql_test_client, test_runner, TestClient, TestNode};
 
@@ -195,6 +193,10 @@ proptest! {
         .. Config::default()
     })]
     #[test]
+    /// Test pagination for collection queries. Schemas and documents are generated via proptest
+    /// strategies. Tests expected behavior and return values based on the number of documents
+    /// which were generated for each schema. Performs a query where only meta fields are selected
+    /// and one where only document fields are selected.
     fn pagination_queries((schema_ast, document_ast_collection) in schema_with_documents_strategy()) {
         test_runner(|mut node: TestNode| async move {
             // Add all schema to the node.
@@ -221,15 +223,16 @@ proptest! {
                 paginated_query(&client, &schema_id, &schema_documents, None, paginated_query_meta_fields_only).await;
 
                 let schema = node.context.schema_provider.get(&schema_id).await.expect("Schema should exist on node");
-                let (simple_fields, list_fields) = parse_selected_fields(&node, &schema).await;
-                let all_fields = [simple_fields, list_fields].concat();
-                println!("{schema_documents:#?}");
-                paginated_query(&client, &schema_id, &schema_documents, Some(&all_fields), paginated_query_application_fields).await;
+                let fields = parse_selected_fields(&node, &schema, None).await;
+                paginated_query(&client, &schema_id, &schema_documents, Some(&fields), paginated_query_application_fields).await;
             };
         });
     }
 
     #[test]
+    /// Test passing different combinations of filter arguments to the root collection query and
+    /// also to fields which contain relation lists. Filter arguments are generated randomly via
+    /// proptest strategies and parsed into valid graphql query strings.
     fn filtering_queries((schema_ast, document_ast_collection, application_field_filters, _meta_field_filters) in schema_with_documents_and_filters_strategy()) {
 
         test_runner(|mut node: TestNode| async move {
@@ -249,106 +252,43 @@ proptest! {
             // Create a GraphQL client.
             let client = graphql_test_client(&node).await;
 
-            // Run the test for each schema and related documents that have been generated.
-            let schema_documents = documents.get(&schema_ast.id).cloned().unwrap_or_default();
+            // Get the root schema from the provider.
             let schema = node.context.schema_provider.get(&schema_ast.id).await.expect("Schema should exist on node");
 
-            let mut filter_args = Vec::new();
-            for ((name, filter), list_filter) in &application_field_filters {
-                let name = name.clone().0;
-                let document_id_or_view_id = schema_documents.clone().into_iter().next().unwrap_or(random_document_view_id()).to_string();
-                match filter {
-                    Filter::Contains(value) => {
-                        match value {
-                            FilterValue::String(value) => filter_args.push(format!("{name}: {{ contains: \"\"\"{value}\"\"\" }}")),
-                            _ => panic!(),
-                        }
-                    },
-                    Filter::NotContains(value) => {
-                        match value {
-                            FilterValue::String(value) => filter_args.push(format!("{name}: {{ notContains: \"\"\"{value}\"\"\" }}")),
-                            _ => panic!(),
-                        }
-                    },
-                    Filter::Equal(value) => {
-                        match value {
-                            FilterValue::UniqueIdentifier => filter_args.push(format!("{name}: {{ eq: \"{document_id_or_view_id}\" }}")),
-                            FilterValue::Boolean(value) => filter_args.push(format!("{name}: {{ eq: {value} }}")),
-                            FilterValue::String(value) => filter_args.push(format!("{name}: {{ eq: \"\"\"{value}\"\"\" }}")),
-                            FilterValue::Integer(value) => filter_args.push(format!("{name}: {{ eq: {value} }}")),
-                            FilterValue::Float(value) => filter_args.push(format!("{name}: {{ eq: {value} }}")),
-                        }
-                    },
-                    Filter::NotEqual(value) => {
-                        match value {
-                            FilterValue::UniqueIdentifier => filter_args.push(format!("{name}: {{ notEq: \"{document_id_or_view_id}\" }}")),
-                            FilterValue::Boolean(value) => filter_args.push(format!("{name}: {{ notEq: {value} }}")),
-                            FilterValue::String(value) => filter_args.push(format!("{name}: {{ notEq: \"\"\"{value}\"\"\" }}")),
-                            FilterValue::Integer(value) => filter_args.push(format!("{name}: {{ notEq: {value} }}")),
-                            FilterValue::Float(value) => filter_args.push(format!("{name}: {{ notEq: {value} }}")),
-                        }
-                    },
-                    Filter::IsIn(value) => {
-                        match value {
-                            FilterValue::UniqueIdentifier => filter_args.push(format!("{name}: {{ in: [\"{document_id_or_view_id}\"] }}")),
-                            FilterValue::Boolean(value) => filter_args.push(format!("{name}: {{ in: [{value}] }}")),
-                            FilterValue::String(value) => filter_args.push(format!("{name}: {{ in: [\"\"\"{value}\"\"\"] }}")),
-                            FilterValue::Integer(value) => filter_args.push(format!("{name}: {{ in: [{value}] }}")),
-                            FilterValue::Float(value) => filter_args.push(format!("{name}: {{ in: [{value}] }}")),
-                        }
-                    },
-                    Filter::NotIn(value) => {
-                        match value {
-                            FilterValue::UniqueIdentifier => filter_args.push(format!("{name}: {{ notIn: [\"{document_id_or_view_id}\"] }}")),
-                            FilterValue::Boolean(value) => filter_args.push(format!("{name}: {{ notIn: [{value}] }}")),
-                            FilterValue::String(value) => filter_args.push(format!("{name}: {{ notIn: [\"\"\"{value}\"\"\"] }}")),
-                            FilterValue::Integer(value) => filter_args.push(format!("{name}: {{ notIn: [{value}] }}")),
-                            FilterValue::Float(value) => filter_args.push(format!("{name}: {{ notIn: [{value}] }}")),
-                        }
-                    },
-                    Filter::GreaterThan(value) => {
-                        match value {
-                            FilterValue::String(value) => filter_args.push(format!("{name}: {{ gt: \"\"\"{value}\"\"\" }}")),
-                            FilterValue::Integer(value) => filter_args.push(format!("{name}: {{ gt: {value} }}")),
-                            FilterValue::Float(value) => filter_args.push(format!("{name}: {{ gt: {value} }}")),
-                            _ => panic!(),
+            // Filter args for the root collection query
+            let mut root_filter_args = Vec::new();
 
-                        }
-                    },
-                    Filter::LessThan(value) => {
-                        match value {
-                            FilterValue::String(value) => filter_args.push(format!("{name}: {{ lt: \"\"\"{value}\"\"\" }}")),
-                            FilterValue::Integer(value) => filter_args.push(format!("{name}: {{ lt: {value} }}")),
-                            FilterValue::Float(value) => filter_args.push(format!("{name}: {{ lt: {value} }}")),
-                            _ => panic!(),
-                        }
-                    },
-                    Filter::GreaterThanOrEqual(value) => {
-                        match value {
-                            FilterValue::String(value) => filter_args.push(format!("{name}: {{ gte: \"\"\"{value}\"\"\" }}")),
-                            FilterValue::Integer(value) => filter_args.push(format!("{name}: {{ gte: {value} }}")),
-                            FilterValue::Float(value) => filter_args.push(format!("{name}: {{ gte: {value} }}")),
-                            _ => panic!(),
+            // Filter args for list fields
+            let mut list_filter_args = HashMap::new();
 
-                        }
-                    },
-                    Filter::LessThanOrEqual(value) => {
-                        match value {
-                            FilterValue::String(value) => filter_args.push(format!("{name}: {{ lte: \"\"\"{value}\"\"\" }}")),
-                            FilterValue::Integer(value) => filter_args.push(format!("{name}: {{ lte: {value} }}")),
-                            FilterValue::Float(value) => filter_args.push(format!("{name}: {{ lte: {value} }}")),
-                            _ => panic!(),
-                        }
-                    },
+            // Parse filter arg strings for the root collection query and list fields
+            // sub-collection queries.
+            for ((name, root_filter), list_filters) in &application_field_filters {
+                // Parse the root filter args.
+                parse_filter(&mut root_filter_args, name, root_filter);
+
+                // If list field filters were generated parse them here.
+                if !list_filters.is_empty() {
+                    let mut args = Vec::new();
+                    for (list_field_name, list_filter) in list_filters {
+                        parse_filter(&mut args, list_field_name, list_filter);
+                    }
+                    list_filter_args.insert(name, args);
                 }
             }
-            let filter_args_str = filter_args.join(", ");
-            let filter_args_str = format!("( first: 1000, filter: {{ {filter_args_str} }} )");
-            let (simple_fields, list_fields) = parse_selected_fields(&node, &schema).await;
-            let all_fields = [simple_fields, list_fields].concat();
+
+            // Join the root query args into one string.
+            let filter_args_str = root_filter_args.join(", ");
+            let filter_args_str = format!("( filter: {{ {filter_args_str} }} )");
+
+            // Construct valid GraphQL query for all fields for the schema and relations. Any
+            // relation list filter arguments are added already here.
+            let fields = parse_selected_fields(&node, &schema, Some(&list_filter_args)).await;
+
+            // Make the query.
             let _data = make_query(
                 &client,
-                &paginated_query_application_fields(&schema.id(), &filter_args_str, Some(&all_fields)),
+                &paginated_query_application_fields(&schema.id(), &filter_args_str, Some(&fields)),
             )
             .await;
         });
