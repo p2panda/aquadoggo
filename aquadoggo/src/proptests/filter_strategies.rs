@@ -7,12 +7,12 @@ use proptest::sample::select;
 use proptest::strategy::{BoxedStrategy, Just, Strategy};
 use proptest_derive::Arbitrary;
 
-use crate::proptests::schema_strategies::{SchemaFieldType, SchemaField};
+use crate::proptests::schema_strategies::{SchemaField, SchemaFieldType};
 use crate::proptests::utils::FieldName;
 
 /// Possible values used in filter arguments. `UniqueIdentifier` is a placeholder for values which
 /// can be derived at runtime in order to use identifiers which exist in on the node, these include
-/// document and view ids and public keys. 
+/// document and view ids and public keys.
 #[derive(Arbitrary, Debug, Clone)]
 pub enum FilterValue {
     Boolean(bool),
@@ -76,7 +76,6 @@ pub fn application_filters_strategy(
     });
     filters
 }
-
 
 /// Method for generating filter arguments for a single schema field. If the field is a relation
 /// list type then sub-filters are also generated for the list collection.

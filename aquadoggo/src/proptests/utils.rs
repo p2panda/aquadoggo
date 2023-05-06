@@ -6,7 +6,7 @@ use async_recursion::async_recursion;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{FieldType, Schema, SchemaId};
-use p2panda_rs::test_utils::fixtures::{random_key_pair, random_document_id};
+use p2panda_rs::test_utils::fixtures::{random_document_id, random_key_pair};
 use proptest_derive::Arbitrary;
 
 use crate::proptests::document_strategies::{DocumentAST, FieldValue};
@@ -216,11 +216,7 @@ pub async fn parse_selected_fields(
 }
 
 /// Parse a single filter into a GraphQL argument string.
-pub fn parse_filter(
-    filter_args: &mut Vec<String>,
-    name: &FieldName,
-    filter: &Filter,
-) {
+pub fn parse_filter(filter_args: &mut Vec<String>, name: &FieldName, filter: &Filter) {
     let name = name.clone().0;
     let document_id = random_document_id().to_string();
     match filter {
