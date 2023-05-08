@@ -108,7 +108,6 @@ fn paginated_query_application_fields(
             }},
         }}"#
     );
-    println!("{query}");
     query
 }
 
