@@ -52,6 +52,7 @@ mod manager;
 mod materializer;
 mod network;
 mod node;
+mod replication;
 mod schema;
 #[cfg(test)]
 mod test_utils;
