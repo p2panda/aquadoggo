@@ -7,3 +7,9 @@ pub enum SyncMessage {
     SyncRequest(Mode, SessionId, TargetSet),
     Other,
 }
+
+#[derive(Debug)]
+enum ScopedMessage {
+    Have,
+    Entry,
+}
