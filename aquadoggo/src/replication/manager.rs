@@ -194,10 +194,16 @@ mod tests {
     const PEER_ID_LOCAL: &'static str = "local";
     const PEER_ID_REMOTE: &'static str = "remote";
 
-    #[rstest]
-    fn checks_supported_mode(schema_id: SchemaId) {
-        let target_set = TargetSet::new(&[schema_id]);
+    #[rstest::fixture]
+    fn random_target_set() -> TargetSet {
+        let document_view_id = random_document_view_id();
+        let schema_id =
+            SchemaId::new_application(&SchemaName::new("messages").unwrap(), &document_view_id);
+        TargetSet::new(&[schema_id])
+    }
 
+    #[rstest]
+    fn checks_supported_mode(#[from(random_target_set)] target_set: TargetSet) {
         // Should not fail when requesting supported replication mode
         let mut manager = SyncManager::new(PEER_ID_LOCAL);
         let message = SyncMessage::SyncRequest(Mode::Naive, INITIAL_SESSION_ID, target_set.clone());
@@ -214,17 +220,9 @@ mod tests {
 
     #[rstest]
     fn initiate_outbound_session(
-        #[from(random_document_view_id)] document_view_id_1: DocumentViewId,
-        #[from(random_document_view_id)] document_view_id_2: DocumentViewId,
+        #[from(random_target_set)] target_set_1: TargetSet,
+        #[from(random_target_set)] target_set_2: TargetSet,
     ) {
-        let schema_id_1 =
-            SchemaId::new_application(&SchemaName::new("messages").unwrap(), &document_view_id_1);
-        let schema_id_2 =
-            SchemaId::new_application(&SchemaName::new("profiles").unwrap(), &document_view_id_2);
-
-        let target_set_1 = TargetSet::new(&[schema_id_1]);
-        let target_set_2 = TargetSet::new(&[schema_id_2]);
-
         let mut manager = SyncManager::new(PEER_ID_LOCAL);
         let result = manager.initiate_session(&PEER_ID_REMOTE, &target_set_1);
         assert!(result.is_ok());
@@ -242,5 +240,9 @@ mod tests {
     }
 
     #[rstest]
-    fn initiate_inbound_session() {}
+    fn initiate_inbound_session(
+        #[from(random_target_set)] target_set_1: TargetSet,
+        #[from(random_target_set)] target_set_2: TargetSet,
+    ) {
+    }
 }
