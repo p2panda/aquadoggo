@@ -7,6 +7,9 @@ pub enum ReplicationError {
     #[error("Remote peer requested unsupported replication mode")]
     UnsupportedMode,
 
-    #[error("Tried to initialise duplicate session with id {0}")]
-    DuplicateSession(u64),
+    #[error("Tried to initialise duplicate inbound replication session with id {0}")]
+    DuplicateInboundRequest(u64),
+
+    #[error("Tried to initialise duplicate outbound replication session with id {0}")]
+    DuplicateOutboundRequest(u64),
 }

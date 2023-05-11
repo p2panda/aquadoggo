@@ -61,7 +61,7 @@ where
             .find(|session| &session.target_set == target_set);
 
         if let Some(session) = session {
-            return Err(ReplicationError::DuplicateSession(session.id));
+            return Err(ReplicationError::DuplicateOutboundRequest(session.id));
         }
 
         // Determine next id for upcoming session
@@ -108,7 +108,7 @@ where
                     false
                 }
             }
-            _ => return Err(ReplicationError::DuplicateSession(session.id)),
+            _ => return Err(ReplicationError::DuplicateInboundRequest(session.id)),
         };
 
         if accept_inbound_request {
@@ -141,7 +141,8 @@ where
 
         let sessions = self.get_sessions(remote_peer);
 
-        // Check if a session with this id already exists for this peer
+        // Check if a session with this id already exists for this peer, this can happen if both
+        // peers started to initiate a session at the same time, we can try to resolve this
         if let Some((index, session)) = sessions
             .iter()
             .enumerate()
@@ -150,12 +151,13 @@ where
             return self.handle_duplicate_session(remote_peer, target_set, index, session);
         }
 
-        // Check if a session with this target set already exists for this peer
+        // Check if a session with this target set already exists for this peer, this always gets
+        // rejected because it is clearly redundant
         if let Some(session) = sessions
             .iter()
             .find(|session| &session.target_set == target_set)
         {
-            return Err(ReplicationError::DuplicateSession(session.id));
+            return Err(ReplicationError::DuplicateInboundRequest(session.id));
         }
 
         self.insert_session(remote_peer, session_id, target_set);
@@ -207,4 +209,10 @@ mod tests {
         let result = manager.handle_message(&PEER_ID_REMOTE, &message);
         assert!(result.is_err());
     }
+
+    #[rstest]
+    fn initiate_outbound_session() {}
+
+    #[rstest]
+    fn initiate_inbound_session() {}
 }
