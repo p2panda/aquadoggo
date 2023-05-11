@@ -4,7 +4,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use p2panda_rs::schema::SchemaId;
 
-use crate::replication::{ReplicationMode, StrategyMessage, TargetSet};
+use crate::replication::{Mode, StrategyMessage, TargetSet};
 
 #[derive(Clone, Debug)]
 pub struct StrategyResult {
@@ -15,7 +15,7 @@ pub struct StrategyResult {
 #[async_trait]
 pub trait Strategy: std::fmt::Debug {
     /// Replication mode of this strategy.
-    fn mode(&self) -> ReplicationMode;
+    fn mode(&self) -> Mode;
 
     /// Target set replication is occurring over.
     fn target_set(&self) -> TargetSet;
@@ -55,12 +55,12 @@ pub trait Strategy: std::fmt::Debug {
 #[derive(Clone, Debug)]
 pub struct NaiveStrategy {
     target_set: TargetSet,
-    mode: ReplicationMode,
+    mode: Mode,
 }
 
 #[async_trait]
 impl Strategy for NaiveStrategy {
-    fn mode(&self) -> ReplicationMode {
+    fn mode(&self) -> Mode {
         self.mode.clone()
     }
 
@@ -102,7 +102,7 @@ pub struct SetReconciliationStrategy();
 
 #[async_trait]
 impl Strategy for SetReconciliationStrategy {
-    fn mode(&self) -> ReplicationMode {
+    fn mode(&self) -> Mode {
         todo!()
     }
 

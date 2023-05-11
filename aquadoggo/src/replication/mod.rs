@@ -80,9 +80,3 @@ mod tests {
         );
     }
 }
-
-#[derive(Clone, Debug)]
-pub enum ReplicationMode {
-    Naive,
-    SetReconciliation,
-}

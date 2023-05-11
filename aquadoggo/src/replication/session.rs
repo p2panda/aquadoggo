@@ -4,7 +4,7 @@ use anyhow::Result;
 use p2panda_rs::schema::SchemaId;
 
 use crate::replication::{
-    NaiveStrategy, ReplicationMode, SetReconciliationStrategy, Strategy, StrategyMessage, TargetSet,
+    NaiveStrategy, Mode, SetReconciliationStrategy, Strategy, StrategyMessage, TargetSet,
 };
 
 pub type SessionId = u64;
@@ -26,9 +26,9 @@ pub struct Session {
 }
 
 impl Session {
-    pub fn new(id: &SessionId, target_set: &TargetSet, mode: ReplicationMode) -> Self {
+    pub fn new(id: &SessionId, target_set: &TargetSet, mode: Mode) -> Self {
         match mode {
-            ReplicationMode::Naive => {
+            Mode::Naive => {
                 let strategy = Box::new(NaiveStrategy {
                     mode,
                     target_set: target_set.clone(),
@@ -39,7 +39,7 @@ impl Session {
                     strategy,
                 };
             }
-            ReplicationMode::SetReconciliation => {
+            Mode::SetReconciliation => {
                 let strategy = Box::new(SetReconciliationStrategy());
                 return Session {
                     id: id.clone(),
@@ -47,10 +47,11 @@ impl Session {
                     strategy,
                 };
             }
+            Unknown => panic!("Unknown replication mode found"),
         }
     }
 
-    pub fn mode(&self) -> &ReplicationMode {
+    pub fn mode(&self) -> &Mode {
         &self.strategy.mode()
     }
 
