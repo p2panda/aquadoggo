@@ -3,8 +3,9 @@
 use anyhow::Result;
 use p2panda_rs::schema::SchemaId;
 
+use crate::replication::traits::Strategy;
 use crate::replication::{
-    NaiveStrategy, Mode, SetReconciliationStrategy, Strategy, StrategyMessage, TargetSet,
+    Mode, NaiveStrategy, SetReconciliationStrategy, StrategyMessage, TargetSet,
 };
 
 pub type SessionId = u64;
@@ -16,7 +17,7 @@ pub enum SessionState {
     Done,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Session {
     // @TODO: Access to the store
     // store: Store
@@ -26,36 +27,33 @@ pub struct Session {
 }
 
 impl Session {
-    pub fn new(id: &SessionId, target_set: &TargetSet, mode: Mode) -> Self {
+    pub fn new(id: &SessionId, target_set: &TargetSet, mode: &Mode) -> Self {
         match mode {
             Mode::Naive => {
-                let strategy = Box::new(NaiveStrategy {
-                    mode,
-                    target_set: target_set.clone(),
-                });
-                return Session {
+                let strategy = Box::new(NaiveStrategy::new(target_set, mode));
+                return Self {
                     id: id.clone(),
                     state: SessionState::Pending,
                     strategy,
                 };
             }
             Mode::SetReconciliation => {
-                let strategy = Box::new(SetReconciliationStrategy());
-                return Session {
+                let strategy = Box::new(SetReconciliationStrategy::new());
+                return Self {
                     id: id.clone(),
                     state: SessionState::Pending,
                     strategy,
                 };
             }
-            Unknown => panic!("Unknown replication mode found"),
+            Mode::Unknown => panic!("Unknown replication mode found"),
         }
     }
 
-    pub fn mode(&self) -> &Mode {
-        &self.strategy.mode()
+    pub fn mode(&self) -> Mode {
+        self.strategy.mode()
     }
 
-    pub fn target_set(&self) -> &TargetSet {
-        &self.strategy.target_set()
+    pub fn target_set(&self) -> TargetSet {
+        self.strategy.target_set()
     }
 }
