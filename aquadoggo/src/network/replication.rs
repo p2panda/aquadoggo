@@ -9,17 +9,27 @@ use libp2p::core::Endpoint;
 use libp2p::swarm::handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound};
 use libp2p::swarm::{
     keep_alive, ConnectionDenied, ConnectionHandler, ConnectionHandlerEvent, ConnectionId,
-    KeepAlive, NetworkBehaviour, SubstreamProtocol, Swarm, SwarmEvent, THandler, THandlerOutEvent,
+    KeepAlive, NegotiatedSubstream, NetworkBehaviour, SubstreamProtocol, Swarm, SwarmEvent,
+    THandler, THandlerOutEvent,
 };
 use libp2p::{identity, Multiaddr, PeerId};
 
 pub const PROTOCOL_NAME: &[u8] = b"/p2p/naive-comprehensive/1.0.0";
 
-pub struct Handler();
+pub struct Handler {
+    /// The single long-lived outbound substream.
+    outbound_substream: Option<OutboundSubstreamState>,
+
+    /// The single long-lived inbound substream.
+    inbound_substream: Option<InboundSubstreamState>,
+}
 
 impl Handler {
     pub fn new() -> Self {
-        Self()
+        Self {
+            outbound_substream: None,
+            inbound_substream: None,
+        }
     }
 }
 
@@ -33,7 +43,29 @@ pub struct OutEvent();
 
 pub enum HandlerError {
     #[error("Error!!")]
-    Custom
+    Custom,
+}
+
+/// State of the inbound substream, opened either by us or by the remote.
+enum InboundSubstreamState {
+    /// Waiting for a message from the remote. The idle state for an inbound substream.
+    WaitingInput(NegotiatedSubstream),
+    /// The substream is being closed.
+    Closing(NegotiatedSubstream),
+    /// An error occurred during processing.
+    Poisoned,
+}
+
+/// State of the outbound substream, opened either by us or by the remote.
+enum OutboundSubstreamState {
+    /// Waiting for the user to send a message. The idle state for an outbound substream.
+    WaitingOutput(NegotiatedSubstream),
+    /// Waiting to send a message to the remote.
+    PendingSend(NegotiatedSubstream),
+    /// Waiting to flush the substream so that the data arrives to the remote.
+    PendingFlush(NegotiatedSubstream),
+    /// An error occurred during processing.
+    Poisoned,
 }
 
 impl ConnectionHandler for Handler {
