@@ -9,7 +9,7 @@ pub enum SyncMessage {
 }
 
 #[derive(Debug)]
-enum StrategyMessage {
+pub enum StrategyMessage {
     Have,
     Entry,
 }
