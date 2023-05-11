@@ -6,6 +6,7 @@ pub mod errors;
 mod manager;
 mod message;
 mod session;
+mod strategies;
 
 pub use manager::SyncManager;
 pub use message::{SyncMessage, StrategyMessage};
@@ -77,4 +78,9 @@ mod tests {
             TargetSet::new(&[schema_id_2.clone()]),
         );
     }
+}
+
+pub enum ReplicationMode {
+    Naive,
+    SetReconciliation
 }
