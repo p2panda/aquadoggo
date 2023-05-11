@@ -31,7 +31,7 @@ where
     /// Get all sessions related to a remote peer.
     fn get_sessions(&self, remote_peer: &P) -> Vec<Session> {
         self.sessions
-            .get(&remote_peer)
+            .get(remote_peer)
             // Always return an array, even when it is empty
             .unwrap_or(&vec![])
             .to_owned()
@@ -112,7 +112,7 @@ where
         };
 
         if accept_inbound_request {
-            self.insert_session(remote_peer, &session.id, &target_set);
+            self.insert_session(remote_peer, &session.id, target_set);
 
             // @TODO: Session needs to generate some messages on creation and
             // it will pass them back up to us to then forward onto
@@ -121,7 +121,7 @@ where
             // If we dropped our own outbound session request regarding a different target set, we
             // need to re-establish it with another session id, otherwise it would get lost
             if &session.target_set != target_set {
-                self.initiate_session(remote_peer, &target_set)?;
+                self.initiate_session(remote_peer, target_set)?;
                 // @TODO: Again, the new session will generate a message
                 // which we send onto the swarm
             }
@@ -137,7 +137,7 @@ where
         session_id: &SessionId,
         target_set: &TargetSet,
     ) -> Result<(), ReplicationError> {
-        SyncManager::<P>::is_mode_supported(&mode)?;
+        SyncManager::<P>::is_mode_supported(mode)?;
 
         let sessions = self.get_sessions(remote_peer);
 
@@ -158,7 +158,7 @@ where
             return Err(ReplicationError::DuplicateSession(session.id));
         }
 
-        self.insert_session(remote_peer, &session_id, &target_set);
+        self.insert_session(remote_peer, session_id, target_set);
 
         Ok(())
     }
@@ -170,7 +170,7 @@ where
     ) -> Result<(), ReplicationError> {
         match message {
             SyncMessage::SyncRequest(mode, session_id, target_set) => {
-                return self.handle_sync_request(remote_peer, mode, session_id, target_set);
+                self.handle_sync_request(remote_peer, mode, session_id, target_set)
             }
             SyncMessage::Other => todo!(),
         }
