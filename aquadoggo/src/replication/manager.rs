@@ -181,10 +181,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::schema::SchemaId;
-    use p2panda_rs::test_utils::fixtures::schema_id;
+    use p2panda_rs::document::DocumentViewId;
+    use p2panda_rs::schema::{SchemaId, SchemaName};
+    use p2panda_rs::test_utils::fixtures::{random_document_view_id, schema_id};
     use rstest::rstest;
 
+    use crate::replication::errors::ReplicationError;
     use crate::replication::{Mode, SyncMessage, TargetSet};
 
     use super::{SyncManager, INITIAL_SESSION_ID};
@@ -211,7 +213,33 @@ mod tests {
     }
 
     #[rstest]
-    fn initiate_outbound_session() {}
+    fn initiate_outbound_session(
+        #[from(random_document_view_id)] document_view_id_1: DocumentViewId,
+        #[from(random_document_view_id)] document_view_id_2: DocumentViewId,
+    ) {
+        let schema_id_1 =
+            SchemaId::new_application(&SchemaName::new("messages").unwrap(), &document_view_id_1);
+        let schema_id_2 =
+            SchemaId::new_application(&SchemaName::new("profiles").unwrap(), &document_view_id_2);
+
+        let target_set_1 = TargetSet::new(&[schema_id_1]);
+        let target_set_2 = TargetSet::new(&[schema_id_2]);
+
+        let mut manager = SyncManager::new(PEER_ID_LOCAL);
+        let result = manager.initiate_session(&PEER_ID_REMOTE, &target_set_1);
+        assert!(result.is_ok());
+
+        let mut manager = SyncManager::new(PEER_ID_LOCAL);
+        let result = manager.initiate_session(&PEER_ID_REMOTE, &target_set_2);
+        assert!(result.is_ok());
+
+        // Expect error when initiating a session for the same target set
+        let result = manager.initiate_session(&PEER_ID_REMOTE, &target_set_1);
+        assert!(matches!(
+            result,
+            Err(ReplicationError::DuplicateOutboundRequest(0))
+        ));
+    }
 
     #[rstest]
     fn initiate_inbound_session() {}
