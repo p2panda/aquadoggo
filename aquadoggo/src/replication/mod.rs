@@ -2,6 +2,7 @@
 
 use p2panda_rs::schema::SchemaId;
 
+pub mod errors;
 mod manager;
 mod message;
 mod session;
@@ -21,4 +22,11 @@ impl TargetSet {
 
         Self(schema_ids)
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Mode {
+    Naive,
+    SetReconciliation,
+    Unknown,
 }

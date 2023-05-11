@@ -52,6 +52,8 @@ mod manager;
 mod materializer;
 mod network;
 mod node;
+// @TODO: Remove this as soon as we use the replication code
+#[allow(dead_code)]
 mod replication;
 mod schema;
 #[cfg(test)]

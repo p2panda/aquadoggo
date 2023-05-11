@@ -2,14 +2,14 @@
 
 use std::collections::HashMap;
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 
-use crate::replication::{Session, SessionId, SessionState, SyncMessage, TargetSet};
+use crate::replication::errors::ReplicationError;
+use crate::replication::{Mode, Session, SessionId, SessionState, SyncMessage, TargetSet};
 
 pub const INITIAL_SESSION_ID: SessionId = 0;
 
-// @TODO: Can the modes be an enum?
-pub const SUPPORTED_MODES: [u64; 1] = [0];
+pub const SUPPORTED_MODES: [Mode; 1] = [Mode::Naive];
 
 #[derive(Debug)]
 pub struct SyncManager<P> {
@@ -28,39 +28,49 @@ where
         }
     }
 
+    /// Get all sessions related to a remote peer.
+    fn get_sessions(&self, remote_peer: &P) -> Vec<Session> {
+        self.sessions
+            .get(&remote_peer)
+            // Always return an array, even when it is empty
+            .unwrap_or(&vec![])
+            .to_owned()
+    }
+
+    /// Register a new session in manager.
     fn insert_session(&mut self, remote_peer: &P, session_id: &SessionId, target_set: &TargetSet) {
         let session = Session::new(session_id, target_set);
 
         if let Some(sessions) = self.sessions.get_mut(remote_peer) {
             sessions.push(session);
         } else {
-            let sessions = vec![session];
-            self.sessions.insert(remote_peer.clone(), sessions);
+            self.sessions.insert(remote_peer.clone(), vec![session]);
         }
     }
 
-    fn get_sessions(&self, remote_peer: &P) -> Option<&Vec<Session>> {
-        self.sessions.get(remote_peer)
-    }
+    pub fn initiate_session(
+        &mut self,
+        remote_peer: &P,
+        target_set: &TargetSet,
+    ) -> Result<(), ReplicationError> {
+        let sessions = self.get_sessions(remote_peer);
 
-    pub fn initiate_session(&mut self, remote_peer: &P, target_set: &TargetSet) -> Result<()> {
-        let session_id = if let Some(sessions) = self.sessions.get(&remote_peer) {
-            // Make sure to not have duplicate sessions over the same schema ids
-            let session = sessions
-                .iter()
-                .find(|session| &session.target_set == target_set);
+        // Make sure to not have duplicate sessions over the same schema ids
+        let session = sessions
+            .iter()
+            .find(|session| &session.target_set == target_set);
 
-            if session.is_some() {
-                bail!("Session concerning same schema ids already exists");
-            }
+        if let Some(session) = session {
+            return Err(ReplicationError::DuplicateSession(session.id));
+        }
 
+        // Determine next id for upcoming session
+        let session_id = {
             if let Some(session) = sessions.last() {
                 session.id + 1
             } else {
                 INITIAL_SESSION_ID
             }
-        } else {
-            INITIAL_SESSION_ID
         };
 
         self.insert_session(remote_peer, &session_id, target_set);
@@ -68,108 +78,133 @@ where
         Ok(())
     }
 
-    pub fn handle_message(&mut self, remote_peer: &P, message: &SyncMessage) -> Result<()> {
-        // Handle `SyncRequest`
-        // If message = SyncRequest, then check if a) session id doesn't exist yet b) we're
-        // not already handling the same schema id's in a running session
-        //
-        // If session id exists, then check if we just initialised it, in that case use peer id as
-        // tie-breaker to decide who continues
-
-        match message {
-            SyncMessage::SyncRequest(mode, session_id, target_set) => {
-                // Check we support this replication mode
-                if !SUPPORTED_MODES.contains(&mode) {
-                    // @TODO: We want custom error types for all of these
-                    bail!("Unsupported replication mode requested")
-                }
-
-                // Check if any sessions for this peer already exist
-                if let Some(sessions) = self.sessions.get_mut(remote_peer) {
-                    // lolz...
-                    let sessions_clone = sessions.clone();
-
-                    // Check if a session with this session id already exists for this peer
-                    let session = sessions_clone
-                        .iter()
-                        .enumerate()
-                        .find(|(_, session)| session.id == *session_id);
-
-                    match session {
-                        Some((index, session)) => {
-                            // Check session state, if it is already established then this is an error
-                            // if it is in initial state, then we need to compare peer ids and drop
-                            // the connection depending on which is "lower".
-                            let accept_sync_request = match session.state {
-                                SessionState::Pending => {
-                                    // Use peer ids as tie breaker as this SyncRequest contains a
-                                    // existing sessin id.
-                                    if &self.local_peer < remote_peer {
-                                        // Drop our pending session
-                                        sessions.remove(index);
-
-                                        // We want to accept the incoming session
-                                        true
-                                    } else {
-                                        // Keep our pending session
-                                        // Ignore incoming sync request
-                                        false
-                                    }
-                                }
-                                _ => {
-                                    bail!("Invalid SyncRequest received: duplicate session id used")
-                                }
-                            };
-
-                            if accept_sync_request {
-                                // Accept incoming sync request
-                                self.insert_session(remote_peer, &session_id, &target_set);
-                                // @TODO: Session needs to generate some messages on creation and
-                                // it will pass them back up to us to then forward onto
-                                // the swarm
-
-                                // Check if the target sets match
-                                if &session.target_set != target_set {
-                                    // Send a new sync request for the dropped session
-                                    // with new session id
-
-                                    self.initiate_session(remote_peer, &target_set)?;
-                                    // @TODO: Again, the new session will generate a message
-                                    // which we send onto the swarm
-                                }
-                            }
-
-                            // We handled the request we return here.
-                            return Ok(());
-                        }
-                        // No duplicate session ids exist, move on.
-                        None => (),
-                    }
-
-                    // Check we don't already have a session handling this target set
-                    if sessions
-                        .iter()
-                        .find(|session| &session.target_set == target_set)
-                        .is_some()
-                    {
-                        bail!("SyncRequest containing duplicate target set found")
-                    }
-                };
-
-                self.insert_session(remote_peer, &session_id, &target_set);
-                // @TODO: Handle messages that the new session will generate
-            }
-            SyncMessage::Other => todo!(),
+    fn is_mode_supported(mode: &Mode) -> Result<(), ReplicationError> {
+        if !SUPPORTED_MODES.contains(mode) {
+            return Err(ReplicationError::UnsupportedMode);
         }
 
         Ok(())
+    }
+
+    fn handle_duplicate_session(
+        &mut self,
+        remote_peer: &P,
+        target_set: &TargetSet,
+        index: usize,
+        session: &Session,
+    ) -> Result<(), ReplicationError> {
+        let accept_inbound_request = match session.state {
+            // Handle only duplicate sessions when they haven't started yet
+            SessionState::Pending => {
+                if &self.local_peer < remote_peer {
+                    // Drop our pending session
+                    let mut sessions = self.get_sessions(remote_peer);
+                    sessions.remove(index);
+
+                    // Accept the inbound request
+                    true
+                } else {
+                    // Keep our pending session, ignore inbound request
+                    false
+                }
+            }
+            _ => return Err(ReplicationError::DuplicateSession(session.id)),
+        };
+
+        if accept_inbound_request {
+            self.insert_session(remote_peer, &session.id, &target_set);
+
+            // @TODO: Session needs to generate some messages on creation and
+            // it will pass them back up to us to then forward onto
+            // the swarm
+
+            // If we dropped our own outbound session request regarding a different target set, we
+            // need to re-establish it with another session id, otherwise it would get lost
+            if &session.target_set != target_set {
+                self.initiate_session(remote_peer, &target_set)?;
+                // @TODO: Again, the new session will generate a message
+                // which we send onto the swarm
+            }
+        }
+
+        Ok(())
+    }
+
+    fn handle_sync_request(
+        &mut self,
+        remote_peer: &P,
+        mode: &Mode,
+        session_id: &SessionId,
+        target_set: &TargetSet,
+    ) -> Result<(), ReplicationError> {
+        SyncManager::<P>::is_mode_supported(&mode)?;
+
+        let sessions = self.get_sessions(remote_peer);
+
+        // Check if a session with this id already exists for this peer
+        if let Some((index, session)) = sessions
+            .iter()
+            .enumerate()
+            .find(|(_, session)| session.id == *session_id)
+        {
+            return self.handle_duplicate_session(remote_peer, target_set, index, session);
+        }
+
+        // Check if a session with this target set already exists for this peer
+        if let Some(session) = sessions
+            .iter()
+            .find(|session| &session.target_set == target_set)
+        {
+            return Err(ReplicationError::DuplicateSession(session.id));
+        }
+
+        self.insert_session(remote_peer, &session_id, &target_set);
+
+        Ok(())
+    }
+
+    pub fn handle_message(
+        &mut self,
+        remote_peer: &P,
+        message: &SyncMessage,
+    ) -> Result<(), ReplicationError> {
+        match message {
+            SyncMessage::SyncRequest(mode, session_id, target_set) => {
+                return self.handle_sync_request(remote_peer, mode, session_id, target_set);
+            }
+            SyncMessage::Other => todo!(),
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn session_manager() {
-        // @TODO
+    use p2panda_rs::schema::SchemaId;
+    use p2panda_rs::test_utils::fixtures::schema_id;
+    use rstest::rstest;
+
+    use crate::replication::{Mode, SyncMessage, TargetSet};
+
+    use super::{SyncManager, INITIAL_SESSION_ID};
+
+    const PEER_ID_LOCAL: &'static str = "local";
+    const PEER_ID_REMOTE: &'static str = "remote";
+
+    #[rstest]
+    fn checks_supported_mode(schema_id: SchemaId) {
+        let target_set = TargetSet::new(&[schema_id]);
+
+        // Should not fail when requesting supported replication mode
+        let mut manager = SyncManager::new(PEER_ID_LOCAL);
+        let message = SyncMessage::SyncRequest(Mode::Naive, INITIAL_SESSION_ID, target_set.clone());
+        let result = manager.handle_message(&PEER_ID_REMOTE, &message);
+        assert!(result.is_ok());
+
+        // Should fail when requesting unsupported replication mode
+        let mut manager = SyncManager::new(PEER_ID_LOCAL);
+        let message =
+            SyncMessage::SyncRequest(Mode::SetReconciliation, INITIAL_SESSION_ID, target_set);
+        let result = manager.handle_message(&PEER_ID_REMOTE, &message);
+        assert!(result.is_err());
     }
 }
