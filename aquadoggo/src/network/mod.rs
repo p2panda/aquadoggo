@@ -6,6 +6,7 @@ mod identity;
 mod service;
 mod swarm;
 mod transport;
+mod replication;
 
 pub use config::NetworkConfiguration;
 pub use service::network_service;

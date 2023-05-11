@@ -80,6 +80,7 @@ ctor = "0.1.23"
 env_logger = "0.9.0"
 http = "0.2.9"
 hyper = "0.14.19"
+libp2p-swarm-test = "0.1.0"
 once_cell = "1.17.0"
 p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "50f9f0b02570c8ed895baf499cb0d98bbadd1687", features = [
     "test-utils",
