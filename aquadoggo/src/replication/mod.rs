@@ -8,7 +8,7 @@ mod message;
 mod session;
 
 pub use manager::SyncManager;
-pub use message::SyncMessage;
+pub use message::{SyncMessage, StrategyMessage};
 pub use session::{Session, SessionId, SessionState};
 
 /// De-duplicated and sorted set of schema ids which define the target data for the replication
