@@ -38,8 +38,14 @@ where
     }
 
     /// Register a new session in manager.
-    fn insert_session(&mut self, remote_peer: &P, session_id: &SessionId, target_set: &TargetSet) {
-        let session = Session::new(session_id, target_set);
+    fn insert_session(
+        &mut self,
+        remote_peer: &P,
+        session_id: &SessionId,
+        target_set: &TargetSet,
+        mode: &Mode,
+    ) {
+        let session = Session::new(session_id, target_set, mode);
 
         if let Some(sessions) = self.sessions.get_mut(remote_peer) {
             sessions.push(session);
@@ -52,13 +58,16 @@ where
         &mut self,
         remote_peer: &P,
         target_set: &TargetSet,
+        mode: &Mode,
     ) -> Result<(), ReplicationError> {
+        SyncManager::<P>::is_mode_supported(mode)?;
+
         let sessions = self.get_sessions(remote_peer);
 
         // Make sure to not have duplicate sessions over the same schema ids
         let session = sessions
             .iter()
-            .find(|session| &session.target_set == target_set);
+            .find(|session| session.target_set() == *target_set);
 
         if let Some(session) = session {
             return Err(ReplicationError::DuplicateOutboundRequest(session.id));
@@ -73,7 +82,7 @@ where
             }
         };
 
-        self.insert_session(remote_peer, &session_id, target_set);
+        self.insert_session(remote_peer, &session_id, target_set, mode);
 
         Ok(())
     }
@@ -112,7 +121,7 @@ where
         };
 
         if accept_inbound_request {
-            self.insert_session(remote_peer, &session.id, target_set);
+            self.insert_session(remote_peer, &session.id, target_set, &session.mode());
 
             // @TODO: Session needs to generate some messages on creation and
             // it will pass them back up to us to then forward onto
@@ -120,8 +129,8 @@ where
 
             // If we dropped our own outbound session request regarding a different target set, we
             // need to re-establish it with another session id, otherwise it would get lost
-            if &session.target_set != target_set {
-                self.initiate_session(remote_peer, target_set)?;
+            if session.target_set() != *target_set {
+                self.initiate_session(remote_peer, target_set, &session.mode())?;
                 // @TODO: Again, the new session will generate a message
                 // which we send onto the swarm
             }
@@ -155,12 +164,12 @@ where
         // rejected because it is clearly redundant
         if let Some(session) = sessions
             .iter()
-            .find(|session| &session.target_set == target_set)
+            .find(|session| session.target_set() == *target_set)
         {
             return Err(ReplicationError::DuplicateInboundRequest(session.id));
         }
 
-        self.insert_session(remote_peer, session_id, target_set);
+        self.insert_session(remote_peer, session_id, target_set, mode);
 
         Ok(())
     }
@@ -223,16 +232,18 @@ mod tests {
         #[from(random_target_set)] target_set_1: TargetSet,
         #[from(random_target_set)] target_set_2: TargetSet,
     ) {
+        let mode = Mode::Naive;
+
         let mut manager = SyncManager::new(PEER_ID_LOCAL);
-        let result = manager.initiate_session(&PEER_ID_REMOTE, &target_set_1);
+        let result = manager.initiate_session(&PEER_ID_REMOTE, &target_set_1, &mode);
         assert!(result.is_ok());
 
         let mut manager = SyncManager::new(PEER_ID_LOCAL);
-        let result = manager.initiate_session(&PEER_ID_REMOTE, &target_set_2);
+        let result = manager.initiate_session(&PEER_ID_REMOTE, &target_set_2, &mode);
         assert!(result.is_ok());
 
         // Expect error when initiating a session for the same target set
-        let result = manager.initiate_session(&PEER_ID_REMOTE, &target_set_1);
+        let result = manager.initiate_session(&PEER_ID_REMOTE, &target_set_1, &mode);
         assert!(matches!(
             result,
             Err(ReplicationError::DuplicateOutboundRequest(0))
