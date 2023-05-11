@@ -16,13 +16,21 @@ pub enum SessionState {
 pub struct Session {
     // @TODO: Access to the store
     // store: Store
+    /// Unique identifier of this session for that peer.
     pub id: SessionId,
+
+    /// Current state of this session.
     pub state: SessionState,
+
+    /// True if session was established by us.
+    pub local: bool,
+
+    /// Replication strategy handler.
     pub strategy: Box<dyn Strategy>,
 }
 
 impl Session {
-    pub fn new(id: &SessionId, target_set: &TargetSet, mode: &Mode) -> Self {
+    pub fn new(id: &SessionId, target_set: &TargetSet, mode: &Mode, local: bool) -> Self {
         let strategy: Box<dyn Strategy> = match mode {
             Mode::Naive => Box::new(NaiveStrategy::new(target_set, mode)),
             Mode::SetReconciliation => Box::new(SetReconciliationStrategy::new()),
@@ -33,6 +41,7 @@ impl Session {
             id: *id,
             state: SessionState::Pending,
             strategy,
+            local,
         }
     }
 

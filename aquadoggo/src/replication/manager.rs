@@ -44,8 +44,9 @@ where
         session_id: &SessionId,
         target_set: &TargetSet,
         mode: &Mode,
+        local: bool,
     ) {
-        let session = Session::new(session_id, target_set, mode);
+        let session = Session::new(session_id, target_set, mode, local);
 
         if let Some(sessions) = self.sessions.get_mut(remote_peer) {
             sessions.push(session);
@@ -82,7 +83,7 @@ where
             }
         };
 
-        self.insert_session(remote_peer, &session_id, target_set, mode);
+        self.insert_session(remote_peer, &session_id, target_set, mode, true);
 
         Ok(())
     }
@@ -107,7 +108,10 @@ where
             SessionState::Pending => {
                 if &self.local_peer < remote_peer {
                     // Drop our pending session
-                    let mut sessions = self.get_sessions(remote_peer);
+                    let sessions = self
+                        .sessions
+                        .get_mut(remote_peer)
+                        .expect("Expected at least one pending session");
                     sessions.remove(index);
 
                     // Accept the inbound request
@@ -121,7 +125,7 @@ where
         };
 
         if accept_inbound_request {
-            self.insert_session(remote_peer, &session.id, target_set, &session.mode());
+            self.insert_session(remote_peer, &session.id, target_set, &session.mode(), false);
 
             // @TODO: Session needs to generate some messages on creation and
             // it will pass them back up to us to then forward onto
@@ -155,7 +159,7 @@ where
         if let Some((index, session)) = sessions
             .iter()
             .enumerate()
-            .find(|(_, session)| session.id == *session_id)
+            .find(|(_, session)| session.id == *session_id && session.local)
         {
             return self.handle_duplicate_session(remote_peer, target_set, index, session);
         }
@@ -169,7 +173,7 @@ where
             return Err(ReplicationError::DuplicateInboundRequest(session.id));
         }
 
-        self.insert_session(remote_peer, session_id, target_set, mode);
+        self.insert_session(remote_peer, session_id, target_set, mode, false);
 
         Ok(())
     }
@@ -247,7 +251,7 @@ mod tests {
         let result = manager.handle_message(&PEER_ID_REMOTE, &message);
         assert!(result.is_ok());
 
-        // Reject session with duplicate session id
+        // Reject attempt to create session again
         let message = SyncMessage::SyncRequest(Mode::Naive, 0, target_set_1.clone());
         let result = manager.handle_message(&PEER_ID_REMOTE, &message);
         assert!(matches!(
