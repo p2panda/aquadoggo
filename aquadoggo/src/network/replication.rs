@@ -3,18 +3,16 @@
 use std::task::{Context, Poll};
 use thiserror::Error;
 
-use libp2p::core::transport::MemoryTransport;
-use libp2p::core::upgrade::{DeniedUpgrade, ReadyUpgrade};
+use libp2p::core::upgrade::ReadyUpgrade;
 use libp2p::core::Endpoint;
 use libp2p::swarm::handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound};
 use libp2p::swarm::{
-    keep_alive, ConnectionDenied, ConnectionHandler, ConnectionHandlerEvent, ConnectionId,
-    KeepAlive, NegotiatedSubstream, NetworkBehaviour, SubstreamProtocol, Swarm, SwarmEvent,
-    THandler, THandlerOutEvent,
+    ConnectionDenied, ConnectionHandler, ConnectionHandlerEvent, ConnectionId, KeepAlive,
+    NegotiatedSubstream, NetworkBehaviour, SubstreamProtocol, THandler, THandlerOutEvent,
 };
-use libp2p::{identity, Multiaddr, PeerId};
+use libp2p::{Multiaddr, PeerId};
 
-pub const PROTOCOL_NAME: &[u8] = b"/p2p/naive-comprehensive/1.0.0";
+pub const PROTOCOL_NAME: &[u8] = b"/p2p/p2panda/1.0.0";
 
 pub struct Handler {
     /// The single long-lived outbound substream.
@@ -50,8 +48,10 @@ pub enum HandlerError {
 enum InboundSubstreamState {
     /// Waiting for a message from the remote. The idle state for an inbound substream.
     WaitingInput(NegotiatedSubstream),
+
     /// The substream is being closed.
     Closing(NegotiatedSubstream),
+
     /// An error occurred during processing.
     Poisoned,
 }
@@ -60,10 +60,13 @@ enum InboundSubstreamState {
 enum OutboundSubstreamState {
     /// Waiting for the user to send a message. The idle state for an outbound substream.
     WaitingOutput(NegotiatedSubstream),
+
     /// Waiting to send a message to the remote.
     PendingSend(NegotiatedSubstream),
+
     /// Waiting to flush the substream so that the data arrives to the remote.
     PendingFlush(NegotiatedSubstream),
+
     /// An error occurred during processing.
     Poisoned,
 }
@@ -150,7 +153,7 @@ impl NetworkBehaviour for Behaviour {
         _: PeerId,
         _: &Multiaddr,
         _: &Multiaddr,
-    ) -> std::result::Result<THandler<Self>, ConnectionDenied> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(Handler::new())
     }
 
@@ -160,7 +163,7 @@ impl NetworkBehaviour for Behaviour {
         _: PeerId,
         _: &Multiaddr,
         _: Endpoint,
-    ) -> std::result::Result<THandler<Self>, ConnectionDenied> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(Handler::new())
     }
     fn on_swarm_event(&mut self, event: libp2p::swarm::FromSwarm<Self::ConnectionHandler>) {
@@ -178,10 +181,9 @@ impl NetworkBehaviour for Behaviour {
 
     fn poll(
         &mut self,
-        cx: &mut std::task::Context<'_>,
+        cx: &mut Context<'_>,
         params: &mut impl libp2p::swarm::PollParameters,
-    ) -> std::task::Poll<libp2p::swarm::ToSwarm<Self::OutEvent, libp2p::swarm::THandlerInEvent<Self>>>
-    {
+    ) -> Poll<libp2p::swarm::ToSwarm<Self::OutEvent, libp2p::swarm::THandlerInEvent<Self>>> {
         todo!()
     }
 }
