@@ -4,6 +4,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use p2panda_rs::schema::SchemaId;
 
+use crate::replication::traits::Strategy;
 use crate::replication::{Mode, StrategyMessage, TargetSet};
 
 #[derive(Clone, Debug)]
@@ -12,50 +13,19 @@ pub struct StrategyResult {
     messages: Vec<StrategyMessage>,
 }
 
-#[async_trait]
-pub trait Strategy: std::fmt::Debug {
-    /// Replication mode of this strategy.
-    fn mode(&self) -> Mode;
-
-    /// Target set replication is occurring over.
-    fn target_set(&self) -> TargetSet;
-
-    // Generate initial messages.
-    //
-    // @TODO: we want to pass the store in here too eventually.
-    async fn initial_messages(&self) -> Vec<StrategyMessage>;
-
-    // Handle incoming message and return response.
-    //
-    // @TODO: we want to pass the store in here too eventually.
-    async fn handle_message(&self, message: StrategyMessage) -> Result<StrategyResult>;
-
-    // Validate and store entry and operation.
-    //
-    // @TODO: we want to pass the store in here too eventually.
-    async fn handle_entry(
-        &self,
-        schema_id: &SchemaId,
-        entry_bytes: Vec<u8>,
-        operation_bytes: Vec<u8>,
-    ) -> Result<()> {
-        // Validation:
-        // Check against schema_id and target_set if entry is what we've asked for
-        let _target_set = self.target_set();
-
-        // Further validation through our publish api stuff (?!)
-
-        // Have an entry waiting lobby service here, to batch stuff?!
-        // Nice to check certificate pool in one go.
-        // Nice to not put too much pressure on the database.
-        Ok(())
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct NaiveStrategy {
     target_set: TargetSet,
     mode: Mode,
+}
+
+impl NaiveStrategy {
+    pub fn new(target_set: &TargetSet, mode: &Mode) -> Self {
+        Self {
+            target_set: target_set.clone(),
+            mode: mode.clone(),
+        }
+    }
 }
 
 #[async_trait]
@@ -99,6 +69,12 @@ impl Strategy for NaiveStrategy {
 
 #[derive(Clone, Debug)]
 pub struct SetReconciliationStrategy();
+
+impl SetReconciliationStrategy {
+    pub fn new() -> Self {
+        Self()
+    }
+}
 
 #[async_trait]
 impl Strategy for SetReconciliationStrategy {
