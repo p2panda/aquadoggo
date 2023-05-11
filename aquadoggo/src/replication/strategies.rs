@@ -2,7 +2,6 @@
 
 use anyhow::Result;
 use async_trait::async_trait;
-use p2panda_rs::schema::SchemaId;
 
 use crate::replication::traits::Strategy;
 use crate::replication::{Mode, StrategyMessage, TargetSet};
@@ -50,7 +49,7 @@ impl Strategy for NaiveStrategy {
         // TODO: Verify that the TargetSet contained in the message is a sub-set of the passed
         // local TargetSet.
         let _target_set = self.target_set();
-        let mut messages = Vec::new();
+        let messages = Vec::new();
         let mut is_done = false;
 
         match message {

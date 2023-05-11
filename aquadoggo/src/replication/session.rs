@@ -1,12 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use anyhow::Result;
-use p2panda_rs::schema::SchemaId;
-
 use crate::replication::traits::Strategy;
-use crate::replication::{
-    Mode, NaiveStrategy, SetReconciliationStrategy, StrategyMessage, TargetSet,
-};
+use crate::replication::{Mode, NaiveStrategy, SetReconciliationStrategy, TargetSet};
 
 pub type SessionId = u64;
 
@@ -28,24 +23,16 @@ pub struct Session {
 
 impl Session {
     pub fn new(id: &SessionId, target_set: &TargetSet, mode: &Mode) -> Self {
-        match mode {
-            Mode::Naive => {
-                let strategy = Box::new(NaiveStrategy::new(target_set, mode));
-                return Self {
-                    id: id.clone(),
-                    state: SessionState::Pending,
-                    strategy,
-                };
-            }
-            Mode::SetReconciliation => {
-                let strategy = Box::new(SetReconciliationStrategy::new());
-                return Self {
-                    id: id.clone(),
-                    state: SessionState::Pending,
-                    strategy,
-                };
-            }
+        let strategy: Box<dyn Strategy> = match mode {
+            Mode::Naive => Box::new(NaiveStrategy::new(target_set, mode)),
+            Mode::SetReconciliation => Box::new(SetReconciliationStrategy::new()),
             Mode::Unknown => panic!("Unknown replication mode found"),
+        };
+
+        Self {
+            id: *id,
+            state: SessionState::Pending,
+            strategy,
         }
     }
 
