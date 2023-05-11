@@ -8,7 +8,7 @@ pub enum SyncMessage {
     Other,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum StrategyMessage {
     Have,
     Entry,

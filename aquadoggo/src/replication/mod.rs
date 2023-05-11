@@ -9,8 +9,9 @@ mod session;
 mod strategies;
 
 pub use manager::SyncManager;
-pub use message::{SyncMessage, StrategyMessage};
+pub use message::{StrategyMessage, SyncMessage};
 pub use session::{Session, SessionId, SessionState};
+pub use strategies::{NaiveStrategy, SetReconciliationStrategy, Strategy};
 
 /// De-duplicated and sorted set of schema ids which define the target data for the replication
 /// session.
@@ -80,7 +81,8 @@ mod tests {
     }
 }
 
+#[derive(Clone, Debug)]
 pub enum ReplicationMode {
     Naive,
-    SetReconciliation
+    SetReconciliation,
 }

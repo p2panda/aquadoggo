@@ -6,15 +6,16 @@ use p2panda_rs::schema::SchemaId;
 
 use crate::replication::{ReplicationMode, StrategyMessage, TargetSet};
 
+#[derive(Clone, Debug)]
 pub struct StrategyResult {
     is_done: bool,
     messages: Vec<StrategyMessage>,
 }
 
 #[async_trait]
-pub trait Strategy {
+pub trait Strategy: std::fmt::Debug {
     /// Replication mode of this strategy.
-    fn mode() -> ReplicationMode;
+    fn mode(&self) -> ReplicationMode;
 
     /// Target set replication is occurring over.
     fn target_set(&self) -> TargetSet;
@@ -51,14 +52,16 @@ pub trait Strategy {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct NaiveStrategy {
     target_set: TargetSet,
+    mode: ReplicationMode,
 }
 
 #[async_trait]
 impl Strategy for NaiveStrategy {
-    fn mode() -> ReplicationMode {
-        ReplicationMode::Naive
+    fn mode(&self) -> ReplicationMode {
+        self.mode.clone()
     }
 
     fn target_set(&self) -> TargetSet {
@@ -91,5 +94,27 @@ impl Strategy for NaiveStrategy {
         }
 
         Ok(StrategyResult { is_done, messages })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct SetReconciliationStrategy();
+
+#[async_trait]
+impl Strategy for SetReconciliationStrategy {
+    fn mode(&self) -> ReplicationMode {
+        todo!()
+    }
+
+    fn target_set(&self) -> TargetSet {
+        todo!()
+    }
+
+    async fn initial_messages(&self) -> Vec<StrategyMessage> {
+        todo!()
+    }
+
+    async fn handle_message(&self, message: StrategyMessage) -> Result<StrategyResult> {
+        todo!()
     }
 }
