@@ -181,9 +181,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::document::DocumentViewId;
     use p2panda_rs::schema::{SchemaId, SchemaName};
-    use p2panda_rs::test_utils::fixtures::{random_document_view_id, schema_id};
+    use p2panda_rs::test_utils::fixtures::random_document_view_id;
     use rstest::rstest;
 
     use crate::replication::errors::ReplicationError;
@@ -200,22 +199,6 @@ mod tests {
         let schema_id =
             SchemaId::new_application(&SchemaName::new("messages").unwrap(), &document_view_id);
         TargetSet::new(&[schema_id])
-    }
-
-    #[rstest]
-    fn checks_supported_mode(#[from(random_target_set)] target_set: TargetSet) {
-        // Should not fail when requesting supported replication mode
-        let mut manager = SyncManager::new(PEER_ID_LOCAL);
-        let message = SyncMessage::SyncRequest(Mode::Naive, INITIAL_SESSION_ID, target_set.clone());
-        let result = manager.handle_message(&PEER_ID_REMOTE, &message);
-        assert!(result.is_ok());
-
-        // Should fail when requesting unsupported replication mode
-        let mut manager = SyncManager::new(PEER_ID_LOCAL);
-        let message =
-            SyncMessage::SyncRequest(Mode::SetReconciliation, INITIAL_SESSION_ID, target_set);
-        let result = manager.handle_message(&PEER_ID_REMOTE, &message);
-        assert!(result.is_err());
     }
 
     #[rstest]
@@ -243,5 +226,46 @@ mod tests {
         #[from(random_target_set)] target_set_1: TargetSet,
         #[from(random_target_set)] target_set_2: TargetSet,
     ) {
+        let mut manager = SyncManager::new(PEER_ID_LOCAL);
+
+        let message = SyncMessage::SyncRequest(Mode::Naive, 0, target_set_1.clone());
+        let result = manager.handle_message(&PEER_ID_REMOTE, &message);
+        assert!(result.is_ok());
+
+        let message = SyncMessage::SyncRequest(Mode::Naive, 1, target_set_2.clone());
+        let result = manager.handle_message(&PEER_ID_REMOTE, &message);
+        assert!(result.is_ok());
+
+        // Reject session with duplicate session id
+        let message = SyncMessage::SyncRequest(Mode::Naive, 0, target_set_1.clone());
+        let result = manager.handle_message(&PEER_ID_REMOTE, &message);
+        assert!(matches!(
+            result,
+            Err(ReplicationError::DuplicateInboundRequest(0))
+        ));
+
+        // Reject different session concerning same target set
+        let message = SyncMessage::SyncRequest(Mode::Naive, 2, target_set_2.clone());
+        let result = manager.handle_message(&PEER_ID_REMOTE, &message);
+        assert!(matches!(
+            result,
+            Err(ReplicationError::DuplicateInboundRequest(1))
+        ));
+    }
+
+    #[rstest]
+    fn inbound_checks_supported_mode(#[from(random_target_set)] target_set: TargetSet) {
+        // Should not fail when requesting supported replication mode
+        let mut manager = SyncManager::new(PEER_ID_LOCAL);
+        let message = SyncMessage::SyncRequest(Mode::Naive, INITIAL_SESSION_ID, target_set.clone());
+        let result = manager.handle_message(&PEER_ID_REMOTE, &message);
+        assert!(result.is_ok());
+
+        // Should fail when requesting unsupported replication mode
+        let mut manager = SyncManager::new(PEER_ID_LOCAL);
+        let message =
+            SyncMessage::SyncRequest(Mode::SetReconciliation, INITIAL_SESSION_ID, target_set);
+        let result = manager.handle_message(&PEER_ID_REMOTE, &message);
+        assert!(result.is_err());
     }
 }
