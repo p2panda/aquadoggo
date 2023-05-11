@@ -227,7 +227,6 @@ mod tests {
         let result = manager.initiate_session(&PEER_ID_REMOTE, &target_set_1);
         assert!(result.is_ok());
 
-        let mut manager = SyncManager::new(PEER_ID_LOCAL);
         let result = manager.initiate_session(&PEER_ID_REMOTE, &target_set_2);
         assert!(result.is_ok());
 
