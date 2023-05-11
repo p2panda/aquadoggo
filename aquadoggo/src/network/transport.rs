@@ -5,12 +5,15 @@ use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::transport::upgrade::Version;
 use libp2p::core::transport::{Boxed, OrTransport};
 use libp2p::identity::Keypair;
+#[allow(deprecated)]
 use libp2p::noise::NoiseAuthenticated;
+#[allow(deprecated)]
 use libp2p::yamux::YamuxConfig;
 use libp2p::{relay, PeerId, Transport};
 use libp2p_quic as quic;
 
 // Build the transport stack to be used by the network swarm
+#[allow(deprecated)]
 pub async fn build_transport(
     key_pair: &Keypair,
     relay_client_enabled: bool,
