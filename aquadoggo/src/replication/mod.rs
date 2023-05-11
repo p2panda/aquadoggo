@@ -6,10 +6,13 @@ pub mod errors;
 mod manager;
 mod message;
 mod session;
+mod strategies;
+pub mod traits;
 
 pub use manager::SyncManager;
-pub use message::SyncMessage;
+pub use message::{StrategyMessage, SyncMessage};
 pub use session::{Session, SessionId, SessionState};
+pub use strategies::{NaiveStrategy, SetReconciliationStrategy, StrategyResult};
 
 /// De-duplicated and sorted set of schema ids which define the target data for the replication
 /// session.
