@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::collections::VecDeque;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use asynchronous_codec::Framed;
-use deadqueue::limited::Queue;
 use futures::{Sink, StreamExt};
 use libp2p::swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
@@ -31,7 +31,7 @@ pub struct Handler {
     outbound_substream_establishing: bool,
 
     /// Queue of messages that we want to send to the remote.
-    send_queue: Queue<Message>,
+    send_queue: VecDeque<Message>,
 }
 
 impl Handler {
@@ -41,7 +41,7 @@ impl Handler {
             outbound_substream: None,
             inbound_substream: None,
             outbound_substream_establishing: false,
-            send_queue: Queue::new(16),
+            send_queue: VecDeque::new(),
         }
     }
 
@@ -96,7 +96,6 @@ pub enum HandlerOutEvent {
     Message(Message),
 }
 
-// @TODO: Do we need our own error type? Use `Void` instead?
 #[derive(Debug, Error)]
 pub enum HandlerError {
     #[error("Failed to encode or decode CBOR")]
@@ -168,8 +167,12 @@ impl ConnectionHandler for Handler {
         }
     }
 
-    fn on_behaviour_event(&mut self, _event: Self::InEvent) {
-        todo!()
+    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+        match event {
+            HandlerInEvent::Message(message) => {
+                self.send_queue.push_back(message);
+            }
+        }
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
@@ -211,9 +214,9 @@ impl ConnectionHandler for Handler {
                             // Received message from remote peer
                             self.inbound_substream =
                                 Some(InboundSubstreamState::WaitingInput(substream));
-                            return Poll::Ready(ConnectionHandlerEvent::Custom(HandlerOutEvent::Message(
-                                message,
-                            )));
+                            return Poll::Ready(ConnectionHandlerEvent::Custom(
+                                HandlerOutEvent::Message(message),
+                            ));
                         }
                         Poll::Ready(Some(Err(_))) => {
                             // More serious errors, close this side of the stream. If the peer is
@@ -276,7 +279,7 @@ impl ConnectionHandler for Handler {
                 Some(OutboundSubstreamState::Poisoned),
             ) {
                 Some(OutboundSubstreamState::WaitingOutput(substream)) => {
-                    match self.send_queue.try_pop() {
+                    match self.send_queue.pop_front() {
                         Some(message) => {
                             self.outbound_substream =
                                 Some(OutboundSubstreamState::PendingSend(substream, message));

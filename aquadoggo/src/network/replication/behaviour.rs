@@ -5,8 +5,8 @@ use std::task::{Context, Poll};
 
 use libp2p::core::Endpoint;
 use libp2p::swarm::{
-    ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, PollParameters, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, NotifyHandler, PollParameters,
+    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use libp2p::{Multiaddr, PeerId};
 
@@ -14,8 +14,11 @@ use crate::network::replication::handler::{Handler, HandlerInEvent, HandlerOutEv
 use crate::network::replication::protocol::Message;
 
 #[derive(Debug)]
+pub enum BehaviourOutEvent {}
+
+#[derive(Debug)]
 pub struct Behaviour {
-    events: VecDeque<ToSwarm<BehaviourEvent, HandlerInEvent>>,
+    events: VecDeque<ToSwarm<BehaviourOutEvent, HandlerInEvent>>,
 }
 
 impl Behaviour {
@@ -27,18 +30,23 @@ impl Behaviour {
 }
 
 impl Behaviour {
-    fn handle_received_message(&self, _peer: &PeerId, _message: Message) {
-        todo!()
+    fn send_message(&mut self, peer_id: PeerId, message: Message) {
+        self.events.push_back(ToSwarm::NotifyHandler {
+            peer_id,
+            event: HandlerInEvent::Message(message),
+            handler: NotifyHandler::Any,
+        });
+    }
+
+    fn handle_received_message(&self, _peer_id: &PeerId, _message: Message) {
+        // @TODO: Handle incoming messages
     }
 }
-
-#[derive(Debug)]
-pub struct BehaviourEvent;
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Handler;
 
-    type OutEvent = BehaviourEvent;
+    type OutEvent = BehaviourOutEvent;
 
     fn handle_established_inbound_connection(
         &mut self,
