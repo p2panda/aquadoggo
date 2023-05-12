@@ -67,7 +67,7 @@ impl Handler {
     fn on_dial_upgrade_error(
         &mut self,
         DialUpgradeError {
-            info: (), error, ..
+            info: (), error: _error, ..
         }: DialUpgradeError<
             <Self as ConnectionHandler>::OutboundOpenInfo,
             <Self as ConnectionHandler>::OutboundProtocol,
@@ -153,7 +153,7 @@ impl ConnectionHandler for Handler {
         }
     }
 
-    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+    fn on_behaviour_event(&mut self, _event: Self::InEvent) {
         todo!()
     }
 
@@ -254,23 +254,23 @@ impl NetworkBehaviour for Behaviour {
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(Handler::new())
     }
-    fn on_swarm_event(&mut self, event: libp2p::swarm::FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, _event: libp2p::swarm::FromSwarm<Self::ConnectionHandler>) {
         todo!()
     }
 
     fn on_connection_handler_event(
         &mut self,
-        peer: PeerId,
+        _peer: PeerId,
         _: ConnectionId,
-        result: THandlerOutEvent<Self>,
+        _result: THandlerOutEvent<Self>,
     ) {
-        // self.events.push_front(Event { peer, result })
+        todo!()
     }
 
     fn poll(
         &mut self,
-        cx: &mut Context<'_>,
-        params: &mut impl libp2p::swarm::PollParameters,
+        _cx: &mut Context<'_>,
+        _params: &mut impl libp2p::swarm::PollParameters,
     ) -> Poll<libp2p::swarm::ToSwarm<Self::OutEvent, libp2p::swarm::THandlerInEvent<Self>>> {
         todo!()
     }
