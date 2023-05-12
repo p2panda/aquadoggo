@@ -6,9 +6,7 @@ use std::task::{Context, Poll};
 
 use asynchronous_codec::Framed;
 use futures::{Sink, StreamExt};
-use libp2p::swarm::handler::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-};
+use libp2p::swarm::handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound};
 use libp2p::swarm::{
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, NegotiatedSubstream, SubstreamProtocol,
 };
@@ -67,20 +65,6 @@ impl Handler {
         >,
     ) {
         self.inbound_substream = Some(InboundSubstreamState::WaitingInput(protocol));
-    }
-
-    fn on_dial_upgrade_error(
-        &mut self,
-        DialUpgradeError {
-            info: (),
-            error: _error,
-            ..
-        }: DialUpgradeError<
-            <Self as ConnectionHandler>::OutboundOpenInfo,
-            <Self as ConnectionHandler>::OutboundProtocol,
-        >,
-    ) {
-        todo!()
     }
 }
 
@@ -164,10 +148,9 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
                 self.on_fully_negotiated_inbound(fully_negotiated_inbound);
             }
-            ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
-                self.on_dial_upgrade_error(dial_upgrade_error)
-            }
-            ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
+            ConnectionEvent::DialUpgradeError(_)
+            | ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::ListenUpgradeError(_) => {}
         }
     }
 
