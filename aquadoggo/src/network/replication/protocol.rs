@@ -2,12 +2,14 @@
 
 use std::pin::Pin;
 
-use asynchronous_codec::{CborCodec, Framed};
+use asynchronous_codec::{CborCodec, CborCodecError, Framed};
 use futures::{future, AsyncRead, AsyncWrite, Future};
 use libp2p::{core::UpgradeInfo, InboundUpgrade, OutboundUpgrade};
 use serde::{Deserialize, Serialize};
 
 pub const PROTOCOL_NAME: &[u8] = b"/p2p/p2panda/1.0.0";
+
+pub type CodecError = CborCodecError;
 
 pub type Codec = CborCodec<Message, Message>;
 
@@ -40,7 +42,7 @@ where
     TSocket: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     type Output = Framed<TSocket, Codec>;
-    type Error = anyhow::Error;
+    type Error = CodecError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_inbound(self, socket: TSocket, _protocol_id: Self::Info) -> Self::Future {
@@ -53,7 +55,7 @@ where
     TSocket: AsyncWrite + AsyncRead + Unpin + Send + 'static,
 {
     type Output = Framed<TSocket, Codec>;
-    type Error = anyhow::Error;
+    type Error = CodecError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_outbound(self, socket: TSocket, _protocol_id: Self::Info) -> Self::Future {

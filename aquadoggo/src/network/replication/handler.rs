@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use asynchronous_codec::Framed;
 use deadqueue::limited::Queue;
+use futures::{Sink, StreamExt};
 use libp2p::swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
@@ -12,7 +14,7 @@ use libp2p::swarm::{
 };
 use thiserror::Error;
 
-use crate::network::replication::{Codec, Message, Protocol};
+use crate::network::replication::{Codec, CodecError, Message, Protocol};
 
 pub struct Handler {
     /// Upgrade configuration for the replication protocol.
@@ -97,8 +99,8 @@ pub enum OutEvent {
 // @TODO: Do we need our own error type? Use `Void` instead?
 #[derive(Debug, Error)]
 pub enum HandlerError {
-    #[error("Error!!")]
-    Custom,
+    #[error("Failed to encode or decode CBOR")]
+    Codec(#[from] CodecError),
 }
 
 type Stream = Framed<NegotiatedSubstream, Codec>;
@@ -177,7 +179,7 @@ impl ConnectionHandler for Handler {
 
     fn poll(
         &mut self,
-        _: &mut Context<'_>,
+        cx: &mut Context<'_>,
     ) -> Poll<
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
@@ -203,8 +205,60 @@ impl ConnectionHandler for Handler {
                 &mut self.inbound_substream,
                 Some(InboundSubstreamState::Poisoned),
             ) {
-                Some(InboundSubstreamState::WaitingInput(mut substream)) => {}
-                Some(InboundSubstreamState::Closing(mut substream)) => {}
+                Some(InboundSubstreamState::WaitingInput(mut substream)) => {
+                    match substream.poll_next_unpin(cx) {
+                        Poll::Ready(Some(Ok(message))) => {
+                            // Received message from remote peer
+                            self.inbound_substream =
+                                Some(InboundSubstreamState::WaitingInput(substream));
+                            return Poll::Ready(ConnectionHandlerEvent::Custom(OutEvent::Message(
+                                message,
+                            )));
+                        }
+                        Poll::Ready(Some(Err(_))) => {
+                            // More serious errors, close this side of the stream. If the peer is
+                            // still around, they will re-establish their connection
+                            self.inbound_substream =
+                                Some(InboundSubstreamState::Closing(substream));
+                        }
+                        Poll::Ready(None) => {
+                            // Remote peer closed the stream
+                            self.inbound_substream =
+                                Some(InboundSubstreamState::Closing(substream));
+                        }
+                        Poll::Pending => {
+                            self.inbound_substream =
+                                Some(InboundSubstreamState::WaitingInput(substream));
+                            break;
+                        }
+                    }
+                }
+                Some(InboundSubstreamState::Closing(mut substream)) => {
+                    match Sink::poll_close(Pin::new(&mut substream), cx) {
+                        Poll::Ready(res) => {
+                            if res.is_err() {
+                                // Don't close the connection but just drop the inbound substream.
+                                // In case the remote has more to send, they will open up a new
+                                // substream.
+                                // @TODO: Log error here
+                            }
+
+                            self.inbound_substream = None;
+
+                            // @TODO: Handle keep alive
+                            // if self.outbound_substream.is_none() {
+                            //     self.keep_alive = KeepAlive::No;
+                            // }
+
+                            break;
+                        }
+                        Poll::Pending => {
+                            self.inbound_substream =
+                                Some(InboundSubstreamState::Closing(substream));
+                            break;
+                        }
+                    }
+                }
                 None => {
                     self.inbound_substream = None;
                     break;
@@ -221,9 +275,70 @@ impl ConnectionHandler for Handler {
                 &mut self.outbound_substream,
                 Some(OutboundSubstreamState::Poisoned),
             ) {
-                Some(OutboundSubstreamState::WaitingOutput(substream)) => {}
-                Some(OutboundSubstreamState::PendingSend(mut substream, message)) => {}
-                Some(OutboundSubstreamState::PendingFlush(mut substream)) => {}
+                Some(OutboundSubstreamState::WaitingOutput(substream)) => {
+                    match self.send_queue.try_pop() {
+                        Some(message) => {
+                            self.outbound_substream =
+                                Some(OutboundSubstreamState::PendingSend(substream, message));
+                        }
+                        None => {
+                            self.outbound_substream =
+                                Some(OutboundSubstreamState::WaitingOutput(substream));
+                            break;
+                        }
+                    }
+                }
+                Some(OutboundSubstreamState::PendingSend(mut substream, message)) => {
+                    match Sink::poll_ready(Pin::new(&mut substream), cx) {
+                        Poll::Ready(Ok(())) => {
+                            match Sink::start_send(Pin::new(&mut substream), message) {
+                                Ok(()) => {
+                                    self.outbound_substream =
+                                        Some(OutboundSubstreamState::PendingFlush(substream))
+                                }
+                                Err(err) => {
+                                    return Poll::Ready(ConnectionHandlerEvent::Close(
+                                        HandlerError::Codec(err),
+                                    ));
+                                }
+                            }
+                        }
+                        Poll::Ready(Err(err)) => {
+                            return Poll::Ready(ConnectionHandlerEvent::Close(
+                                HandlerError::Codec(err),
+                            ));
+                        }
+                        Poll::Pending => {
+                            // @TODO: Handle keep alive
+                            // self.keep_alive = KeepAlive::Yes;
+
+                            self.outbound_substream =
+                                Some(OutboundSubstreamState::PendingSend(substream, message));
+                            break;
+                        }
+                    }
+                }
+                Some(OutboundSubstreamState::PendingFlush(mut substream)) => {
+                    match Sink::poll_flush(Pin::new(&mut substream), cx) {
+                        Poll::Ready(Ok(())) => {
+                            self.outbound_substream =
+                                Some(OutboundSubstreamState::WaitingOutput(substream))
+                        }
+                        Poll::Ready(Err(err)) => {
+                            return Poll::Ready(ConnectionHandlerEvent::Close(HandlerError::Codec(
+                                err,
+                            )))
+                        }
+                        Poll::Pending => {
+                            // @TODO: Handle keep alive
+                            // self.keep_alive = KeepAlive::Yes;
+
+                            self.outbound_substream =
+                                Some(OutboundSubstreamState::PendingFlush(substream));
+                            break;
+                        }
+                    }
+                }
                 None => {
                     self.outbound_substream = None;
                     break;
