@@ -32,6 +32,9 @@ pub struct Handler {
 
     /// Queue of messages that we want to send to the remote.
     send_queue: VecDeque<Message>,
+
+    /// Flag determining whether to maintain the connection to the peer.
+    keep_alive: KeepAlive,
 }
 
 impl Handler {
@@ -42,6 +45,7 @@ impl Handler {
             inbound_substream: None,
             outbound_substream_establishing: false,
             send_queue: VecDeque::new(),
+            keep_alive: KeepAlive::Yes,
         }
     }
 
@@ -168,6 +172,8 @@ impl ConnectionHandler for Handler {
     }
 
     fn on_behaviour_event(&mut self, event: Self::InEvent) {
+        self.keep_alive = KeepAlive::Yes;
+
         match event {
             HandlerInEvent::Message(message) => {
                 self.send_queue.push_back(message);
@@ -176,8 +182,7 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        // @TODO
-        KeepAlive::No
+        self.keep_alive
     }
 
     fn poll(
@@ -214,6 +219,8 @@ impl ConnectionHandler for Handler {
                             // Received message from remote peer
                             self.inbound_substream =
                                 Some(InboundSubstreamState::WaitingInput(substream));
+                            self.keep_alive = KeepAlive::Yes;
+
                             return Poll::Ready(ConnectionHandlerEvent::Custom(
                                 HandlerOutEvent::Message(message),
                             ));
@@ -248,10 +255,9 @@ impl ConnectionHandler for Handler {
 
                             self.inbound_substream = None;
 
-                            // @TODO: Handle keep alive
-                            // if self.outbound_substream.is_none() {
-                            //     self.keep_alive = KeepAlive::No;
-                            // }
+                            if self.outbound_substream.is_none() {
+                                self.keep_alive = KeepAlive::No;
+                            }
 
                             break;
                         }
@@ -312,9 +318,6 @@ impl ConnectionHandler for Handler {
                             ));
                         }
                         Poll::Pending => {
-                            // @TODO: Handle keep alive
-                            // self.keep_alive = KeepAlive::Yes;
-
                             self.outbound_substream =
                                 Some(OutboundSubstreamState::PendingSend(substream, message));
                             break;
@@ -333,9 +336,6 @@ impl ConnectionHandler for Handler {
                             )))
                         }
                         Poll::Pending => {
-                            // @TODO: Handle keep alive
-                            // self.keep_alive = KeepAlive::Yes;
-
                             self.outbound_substream =
                                 Some(OutboundSubstreamState::PendingFlush(substream));
                             break;
