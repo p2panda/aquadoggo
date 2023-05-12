@@ -4,7 +4,6 @@ use std::task::{Context, Poll};
 
 use asynchronous_codec::Framed;
 use deadqueue::limited::Queue;
-use libp2p::core::upgrade::ReadyUpgrade;
 use libp2p::swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
@@ -13,9 +12,12 @@ use libp2p::swarm::{
 };
 use thiserror::Error;
 
-use crate::network::replication::{Codec, Message, PROTOCOL_NAME};
+use crate::network::replication::{Codec, Message, Protocol};
 
 pub struct Handler {
+    /// Upgrade configuration for the replication protocol.
+    listen_protocol: SubstreamProtocol<Protocol, ()>,
+
     /// The single long-lived outbound substream.
     outbound_substream: Option<OutboundSubstreamState>,
 
@@ -33,6 +35,7 @@ pub struct Handler {
 impl Handler {
     pub fn new() -> Self {
         Self {
+            listen_protocol: SubstreamProtocol::new(Protocol::new(), ()),
             outbound_substream: None,
             inbound_substream: None,
             outbound_substream_establishing: false,
@@ -103,10 +106,10 @@ type Stream = Framed<NegotiatedSubstream, Codec>;
 /// State of the inbound substream, opened either by us or by the remote.
 enum InboundSubstreamState {
     /// Waiting for a message from the remote. The idle state for an inbound substream.
-    WaitingInput(NegotiatedSubstream),
+    WaitingInput(Stream),
 
     /// The substream is being closed.
-    Closing(NegotiatedSubstream),
+    Closing(Stream),
 
     /// An error occurred during processing.
     Poisoned,
@@ -115,13 +118,13 @@ enum InboundSubstreamState {
 /// State of the outbound substream, opened either by us or by the remote.
 enum OutboundSubstreamState {
     /// Waiting for the user to send a message. The idle state for an outbound substream.
-    WaitingOutput(NegotiatedSubstream),
+    WaitingOutput(Stream),
 
     /// Waiting to send a message to the remote.
-    PendingSend(NegotiatedSubstream, Message),
+    PendingSend(Stream, Message),
 
     /// Waiting to flush the substream so that the data arrives to the remote.
-    PendingFlush(NegotiatedSubstream),
+    PendingFlush(Stream),
 
     /// An error occurred during processing.
     Poisoned,
@@ -131,13 +134,13 @@ impl ConnectionHandler for Handler {
     type InEvent = InEvent;
     type OutEvent = OutEvent;
     type Error = HandlerError;
-    type InboundProtocol = ReadyUpgrade<&'static [u8]>;
-    type OutboundProtocol = ReadyUpgrade<&'static [u8]>;
+    type InboundProtocol = Protocol;
+    type OutboundProtocol = Protocol;
     type InboundOpenInfo = ();
     type OutboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<ReadyUpgrade<&'static [u8]>, ()> {
-        SubstreamProtocol::new(ReadyUpgrade::new(PROTOCOL_NAME), ())
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+        self.listen_protocol.clone()
     }
 
     fn on_connection_event(
@@ -190,7 +193,7 @@ impl ConnectionHandler for Handler {
         {
             self.outbound_substream_establishing = true;
             return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                protocol: SubstreamProtocol::new(ReadyUpgrade::new(PROTOCOL_NAME), ()),
+                protocol: self.listen_protocol(),
             });
         }
 
