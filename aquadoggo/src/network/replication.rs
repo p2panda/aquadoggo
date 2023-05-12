@@ -108,7 +108,7 @@ enum OutboundSubstreamState {
     WaitingOutput(NegotiatedSubstream),
 
     /// Waiting to send a message to the remote.
-    PendingSend(NegotiatedSubstream),
+    PendingSend(NegotiatedSubstream, Message),
 
     /// Waiting to flush the substream so that the data arrives to the remote.
     PendingFlush(NegotiatedSubstream),
@@ -153,7 +153,7 @@ impl ConnectionHandler for Handler {
         }
     }
 
-    fn on_behaviour_event(&mut self, v: Self::InEvent) {
+    fn on_behaviour_event(&mut self, event: Self::InEvent) {
         todo!()
     }
 
@@ -190,10 +190,14 @@ impl ConnectionHandler for Handler {
                 &mut self.inbound_substream,
                 Some(InboundSubstreamState::Poisoned),
             ) {
-                Some(_) => todo!(),
+                Some(InboundSubstreamState::WaitingInput(mut substream)) => {}
+                Some(InboundSubstreamState::Closing(mut substream)) => {}
                 None => {
                     self.inbound_substream = None;
                     break;
+                }
+                Some(InboundSubstreamState::Poisoned) => {
+                    unreachable!("Error occurred during inbound stream processing")
                 }
             }
         }
@@ -204,10 +208,15 @@ impl ConnectionHandler for Handler {
                 &mut self.outbound_substream,
                 Some(OutboundSubstreamState::Poisoned),
             ) {
-                Some(_) => todo!(),
+                Some(OutboundSubstreamState::WaitingOutput(substream)) => {}
+                Some(OutboundSubstreamState::PendingSend(mut substream, message)) => {}
+                Some(OutboundSubstreamState::PendingFlush(mut substream)) => {}
                 None => {
                     self.outbound_substream = None;
                     break;
+                }
+                Some(OutboundSubstreamState::Poisoned) => {
+                    unreachable!("Error occurred during outbound stream processing")
                 }
             }
         }
