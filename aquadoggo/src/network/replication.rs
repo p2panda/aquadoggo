@@ -5,7 +5,9 @@ use thiserror::Error;
 
 use libp2p::core::upgrade::ReadyUpgrade;
 use libp2p::core::Endpoint;
-use libp2p::swarm::handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound};
+use libp2p::swarm::handler::{
+    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+};
 use libp2p::swarm::{
     ConnectionDenied, ConnectionHandler, ConnectionHandlerEvent, ConnectionId, KeepAlive,
     NegotiatedSubstream, NetworkBehaviour, SubstreamProtocol, THandler, THandlerOutEvent,
@@ -28,6 +30,38 @@ impl Handler {
             outbound_substream: None,
             inbound_substream: None,
         }
+    }
+
+    fn on_fully_negotiated_outbound(
+        &mut self,
+        FullyNegotiatedOutbound { protocol, info: () }: FullyNegotiatedOutbound<
+            <Self as ConnectionHandler>::OutboundProtocol,
+            <Self as ConnectionHandler>::OutboundOpenInfo,
+        >,
+    ) {
+        self.outbound_substream = Some(OutboundSubstreamState::WaitingOutput(protocol));
+    }
+
+    fn on_fully_negotiated_inbound(
+        &mut self,
+        FullyNegotiatedInbound { protocol, .. }: FullyNegotiatedInbound<
+            <Self as ConnectionHandler>::InboundProtocol,
+            <Self as ConnectionHandler>::InboundOpenInfo,
+        >,
+    ) {
+        self.inbound_substream = Some(InboundSubstreamState::WaitingInput(protocol));
+    }
+
+    fn on_dial_upgrade_error(
+        &mut self,
+        DialUpgradeError {
+            info: (), error, ..
+        }: DialUpgradeError<
+            <Self as ConnectionHandler>::OutboundOpenInfo,
+            <Self as ConnectionHandler>::OutboundProtocol,
+        >,
+    ) {
+        todo!();
     }
 }
 
@@ -84,11 +118,35 @@ impl ConnectionHandler for Handler {
         SubstreamProtocol::new(ReadyUpgrade::new(PROTOCOL_NAME), ())
     }
 
+    fn on_connection_event(
+        &mut self,
+        event: ConnectionEvent<
+            Self::InboundProtocol,
+            Self::OutboundProtocol,
+            Self::InboundOpenInfo,
+            Self::OutboundOpenInfo,
+        >,
+    ) {
+        match event {
+            ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
+                self.on_fully_negotiated_outbound(fully_negotiated_outbound);
+            }
+            ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
+                self.on_fully_negotiated_inbound(fully_negotiated_inbound);
+            }
+            ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
+                self.on_dial_upgrade_error(dial_upgrade_error)
+            }
+            ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
+        }
+    }
+
     fn on_behaviour_event(&mut self, v: Self::InEvent) {
         todo!()
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
+        // @TODO
         KeepAlive::No
     }
 
@@ -104,36 +162,6 @@ impl ConnectionHandler for Handler {
         >,
     > {
         Poll::Pending
-    }
-
-    fn on_connection_event(
-        &mut self,
-        event: ConnectionEvent<
-            Self::InboundProtocol,
-            Self::OutboundProtocol,
-            Self::InboundOpenInfo,
-            Self::OutboundOpenInfo,
-        >,
-    ) {
-        match event {
-            ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
-                protocol: stream,
-                ..
-            }) => {
-                // self.inbound = Some(protocol::recv_ping(stream).boxed());
-            }
-            ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
-                protocol: stream,
-                ..
-            }) => {
-                // self.timer.reset(self.config.timeout);
-                // self.outbound = Some(OutboundState::Ping(protocol::send_ping(stream).boxed()));
-            }
-            ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
-                // self.on_dial_upgrade_error(dial_upgrade_error)
-            }
-            ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
-        }
     }
 }
 
