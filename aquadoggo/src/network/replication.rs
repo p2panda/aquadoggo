@@ -3,6 +3,7 @@
 use std::task::{Context, Poll};
 use thiserror::Error;
 
+use deadqueue::limited::Queue;
 use libp2p::core::upgrade::ReadyUpgrade;
 use libp2p::core::Endpoint;
 use libp2p::swarm::handler::{
@@ -16,12 +17,21 @@ use libp2p::{Multiaddr, PeerId};
 
 pub const PROTOCOL_NAME: &[u8] = b"/p2p/p2panda/1.0.0";
 
+enum Message {}
+
 pub struct Handler {
     /// The single long-lived outbound substream.
     outbound_substream: Option<OutboundSubstreamState>,
 
     /// The single long-lived inbound substream.
     inbound_substream: Option<InboundSubstreamState>,
+
+    /// Flag indicating that an outbound substream is being established to prevent duplicate
+    /// requests.
+    outbound_substream_establishing: bool,
+
+    /// Queue of messages that we want to send to the remote.
+    send_queue: Queue<Message>,
 }
 
 impl Handler {
@@ -29,6 +39,8 @@ impl Handler {
         Self {
             outbound_substream: None,
             inbound_substream: None,
+            outbound_substream_establishing: false,
+            send_queue: Queue::new(16),
         }
     }
 
@@ -161,6 +173,17 @@ impl ConnectionHandler for Handler {
             Self::Error,
         >,
     > {
+        // Determine if we need to create the outbound stream
+        if !self.send_queue.is_empty()
+            && self.outbound_substream.is_none()
+            && !self.outbound_substream_establishing
+        {
+            self.outbound_substream_establishing = true;
+            return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                protocol: SubstreamProtocol::new(ReadyUpgrade::new(PROTOCOL_NAME), ()),
+            });
+        }
+
         Poll::Pending
     }
 }
