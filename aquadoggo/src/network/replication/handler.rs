@@ -82,7 +82,7 @@ impl Handler {
 
 /// An event sent from the network behaviour to the connection handler.
 #[derive(Debug)]
-pub enum InEvent {
+pub enum HandlerInEvent {
     /// Replication message to send on outbound stream.
     Message(Message),
 }
@@ -91,7 +91,7 @@ pub enum InEvent {
 ///
 /// This informs the network behaviour of various events created by the handler.
 #[derive(Debug)]
-pub enum OutEvent {
+pub enum HandlerOutEvent {
     /// Replication message received on the inbound stream.
     Message(Message),
 }
@@ -133,8 +133,8 @@ enum OutboundSubstreamState {
 }
 
 impl ConnectionHandler for Handler {
-    type InEvent = InEvent;
-    type OutEvent = OutEvent;
+    type InEvent = HandlerInEvent;
+    type OutEvent = HandlerOutEvent;
     type Error = HandlerError;
     type InboundProtocol = Protocol;
     type OutboundProtocol = Protocol;
@@ -211,7 +211,7 @@ impl ConnectionHandler for Handler {
                             // Received message from remote peer
                             self.inbound_substream =
                                 Some(InboundSubstreamState::WaitingInput(substream));
-                            return Poll::Ready(ConnectionHandlerEvent::Custom(OutEvent::Message(
+                            return Poll::Ready(ConnectionHandlerEvent::Custom(HandlerOutEvent::Message(
                                 message,
                             )));
                         }

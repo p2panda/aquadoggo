@@ -4,7 +4,8 @@ use std::pin::Pin;
 
 use asynchronous_codec::{CborCodec, CborCodecError, Framed};
 use futures::{future, AsyncRead, AsyncWrite, Future};
-use libp2p::{core::UpgradeInfo, InboundUpgrade, OutboundUpgrade};
+use libp2p::core::UpgradeInfo;
+use libp2p::{InboundUpgrade, OutboundUpgrade};
 use serde::{Deserialize, Serialize};
 
 pub const PROTOCOL_NAME: &[u8] = b"/p2p/p2panda/1.0.0";
