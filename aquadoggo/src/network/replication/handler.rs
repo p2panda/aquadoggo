@@ -5,19 +5,14 @@ use thiserror::Error;
 
 use deadqueue::limited::Queue;
 use libp2p::core::upgrade::ReadyUpgrade;
-use libp2p::core::Endpoint;
 use libp2p::swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p::swarm::{
-    ConnectionDenied, ConnectionHandler, ConnectionHandlerEvent, ConnectionId, KeepAlive,
-    NegotiatedSubstream, NetworkBehaviour, SubstreamProtocol, THandler, THandlerOutEvent,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, NegotiatedSubstream, SubstreamProtocol,
 };
-use libp2p::{Multiaddr, PeerId};
 
-pub const PROTOCOL_NAME: &[u8] = b"/p2p/p2panda/1.0.0";
-
-enum Message {}
+use crate::network::replication::{Message, PROTOCOL_NAME};
 
 pub struct Handler {
     /// The single long-lived outbound substream.
@@ -67,13 +62,15 @@ impl Handler {
     fn on_dial_upgrade_error(
         &mut self,
         DialUpgradeError {
-            info: (), error: _error, ..
+            info: (),
+            error: _error,
+            ..
         }: DialUpgradeError<
             <Self as ConnectionHandler>::OutboundOpenInfo,
             <Self as ConnectionHandler>::OutboundProtocol,
         >,
     ) {
-        todo!();
+        todo!()
     }
 }
 
@@ -222,56 +219,5 @@ impl ConnectionHandler for Handler {
         }
 
         Poll::Pending
-    }
-}
-
-pub struct Behaviour();
-
-#[derive(Debug)]
-pub struct Event();
-
-impl NetworkBehaviour for Behaviour {
-    type ConnectionHandler = Handler;
-
-    type OutEvent = Event;
-
-    fn handle_established_inbound_connection(
-        &mut self,
-        _: ConnectionId,
-        _: PeerId,
-        _: &Multiaddr,
-        _: &Multiaddr,
-    ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Handler::new())
-    }
-
-    fn handle_established_outbound_connection(
-        &mut self,
-        _: ConnectionId,
-        _: PeerId,
-        _: &Multiaddr,
-        _: Endpoint,
-    ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Handler::new())
-    }
-    fn on_swarm_event(&mut self, _event: libp2p::swarm::FromSwarm<Self::ConnectionHandler>) {
-        todo!()
-    }
-
-    fn on_connection_handler_event(
-        &mut self,
-        _peer: PeerId,
-        _: ConnectionId,
-        _result: THandlerOutEvent<Self>,
-    ) {
-        todo!()
-    }
-
-    fn poll(
-        &mut self,
-        _cx: &mut Context<'_>,
-        _params: &mut impl libp2p::swarm::PollParameters,
-    ) -> Poll<libp2p::swarm::ToSwarm<Self::OutEvent, libp2p::swarm::THandlerInEvent<Self>>> {
-        todo!()
     }
 }
