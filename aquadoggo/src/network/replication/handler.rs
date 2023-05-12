@@ -2,6 +2,7 @@
 
 use std::task::{Context, Poll};
 
+use asynchronous_codec::Framed;
 use deadqueue::limited::Queue;
 use libp2p::core::upgrade::ReadyUpgrade;
 use libp2p::swarm::handler::{
@@ -12,7 +13,7 @@ use libp2p::swarm::{
 };
 use thiserror::Error;
 
-use crate::network::replication::{Message, PROTOCOL_NAME};
+use crate::network::replication::{Codec, Message, PROTOCOL_NAME};
 
 pub struct Handler {
     /// The single long-lived outbound substream.
@@ -96,6 +97,8 @@ pub enum HandlerError {
     #[error("Error!!")]
     Custom,
 }
+
+type Stream = Framed<NegotiatedSubstream, Codec>;
 
 /// State of the inbound substream, opened either by us or by the remote.
 enum InboundSubstreamState {

@@ -4,4 +4,4 @@ mod protocol;
 
 pub use behaviour::Behaviour;
 pub use handler::Handler;
-pub use protocol::{Message, PROTOCOL_NAME};
+pub use protocol::{Codec, Message, PROTOCOL_NAME};

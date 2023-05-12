@@ -20,6 +20,7 @@ anyhow = "1.0.62"
 async-graphql = { version = "5.0.6", features = ["dynamic-schema"] }
 async-graphql-axum = "5.0.6"
 async-trait = "0.1.64"
+asynchronous-codec = { version = "0.6.1", features = ["cbor"] }
 axum = "0.6.10"
 bamboo-rs-core-ed25519-yasmf = "0.1.1"
 bs58 = "0.4.0"
