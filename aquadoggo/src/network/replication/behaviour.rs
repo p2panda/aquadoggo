@@ -3,7 +3,6 @@
 use std::task::{Context, Poll};
 
 use libp2p::core::Endpoint;
-
 use libp2p::swarm::{ConnectionDenied, ConnectionId, NetworkBehaviour, THandler, THandlerOutEvent};
 use libp2p::{Multiaddr, PeerId};
 

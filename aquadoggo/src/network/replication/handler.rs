@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::task::{Context, Poll};
-use thiserror::Error;
 
 use deadqueue::limited::Queue;
 use libp2p::core::upgrade::ReadyUpgrade;
@@ -11,6 +10,7 @@ use libp2p::swarm::handler::{
 use libp2p::swarm::{
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, NegotiatedSubstream, SubstreamProtocol,
 };
+use thiserror::Error;
 
 use crate::network::replication::{Message, PROTOCOL_NAME};
 
@@ -74,14 +74,24 @@ impl Handler {
     }
 }
 
+/// An event sent from the network behaviour to the connection handler.
 #[derive(Debug)]
-pub struct InEvent();
+pub enum InEvent {
+    /// Replication message to send on outbound stream.
+    Message(Message),
+}
 
+/// The event emitted by the connection handler.
+///
+/// This informs the network behaviour of various events created by the handler.
 #[derive(Debug)]
-pub struct OutEvent();
+pub enum OutEvent {
+    /// Replication message received on the inbound stream.
+    Message(Message),
+}
 
+// @TODO: Do we need our own error type? Use `Void` instead?
 #[derive(Debug, Error)]
-
 pub enum HandlerError {
     #[error("Error!!")]
     Custom,
