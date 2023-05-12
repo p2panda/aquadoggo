@@ -184,6 +184,34 @@ impl ConnectionHandler for Handler {
             });
         }
 
+        // Process inbound stream
+        loop {
+            match std::mem::replace(
+                &mut self.inbound_substream,
+                Some(InboundSubstreamState::Poisoned),
+            ) {
+                Some(_) => todo!(),
+                None => {
+                    self.inbound_substream = None;
+                    break;
+                }
+            }
+        }
+
+        // Process outbound stream
+        loop {
+            match std::mem::replace(
+                &mut self.outbound_substream,
+                Some(OutboundSubstreamState::Poisoned),
+            ) {
+                Some(_) => todo!(),
+                None => {
+                    self.outbound_substream = None;
+                    break;
+                }
+            }
+        }
+
         Poll::Pending
     }
 }
