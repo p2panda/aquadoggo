@@ -89,7 +89,7 @@ impl Strategy for SetReconciliationStrategy {
         todo!()
     }
 
-    async fn handle_message(&self, message: StrategyMessage) -> Result<StrategyResult> {
+    async fn handle_message(&self, _message: StrategyMessage) -> Result<StrategyResult> {
         todo!()
     }
 }

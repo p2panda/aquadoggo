@@ -29,9 +29,9 @@ pub trait Strategy: std::fmt::Debug + StrategyClone {
     // @TODO: we want to pass the store in here too eventually.
     async fn handle_entry(
         &self,
-        schema_id: &SchemaId,
-        entry_bytes: Vec<u8>,
-        operation_bytes: Vec<u8>,
+        _schema_id: &SchemaId,
+        _entry_bytes: Vec<u8>,
+        _operation_bytes: Vec<u8>,
     ) -> Result<()> {
         // Validation:
         // Check against schema_id and target_set if entry is what we've asked for
