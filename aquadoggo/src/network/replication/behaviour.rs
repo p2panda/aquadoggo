@@ -14,7 +14,10 @@ use crate::network::replication::handler::{Handler, HandlerInEvent, HandlerOutEv
 use crate::network::replication::protocol::Message;
 
 #[derive(Debug)]
-pub enum BehaviourOutEvent {}
+pub enum BehaviourOutEvent {
+    MessageReceived(PeerId, Message),
+    Error,
+}
 
 #[derive(Debug)]
 pub struct Behaviour {
@@ -38,8 +41,13 @@ impl Behaviour {
         });
     }
 
-    fn handle_received_message(&self, _peer_id: &PeerId, _message: Message) {
+    fn handle_received_message(&mut self, peer_id: &PeerId, message: Message) {
         // @TODO: Handle incoming messages
+        self.events
+            .push_back(ToSwarm::GenerateEvent(BehaviourOutEvent::MessageReceived(
+                peer_id.clone(),
+                message,
+            )));
     }
 }
 
