@@ -25,7 +25,7 @@ pub enum StrategyMessage {
 pub enum Message {
     SyncRequest(Mode, TargetSet),
     Entry(Vec<u8>, Vec<u8>),
-    SyncDone,
+    SyncDone(bool),
 }
 
 impl Message {
@@ -33,7 +33,7 @@ impl Message {
         match self {
             Message::SyncRequest { .. } => SYNC_REQUEST_TYPE,
             Message::Entry(_, _) => ENTRY_TYPE,
-            Message::SyncDone => SYNC_DONE_TYPE,
+            Message::SyncDone(_) => SYNC_DONE_TYPE,
         }
     }
 }
@@ -84,8 +84,9 @@ impl Serialize for SyncMessage {
                 seq.serialize_element(operation_bytes)?;
                 seq.end()
             }
-            Message::SyncDone => {
-                let seq = serialize_header(serializer.serialize_seq(Some(2))?)?;
+            Message::SyncDone(live_mode) => {
+                let mut seq = serialize_header(serializer.serialize_seq(Some(3))?)?;
+                seq.serialize_element(live_mode)?;
                 seq.end()
             }
         }
@@ -139,7 +140,11 @@ impl<'de> Deserialize<'de> for SyncMessage {
 
                     Ok(Message::Entry(entry_bytes, operation_bytes))
                 } else if message_type == SYNC_DONE_TYPE {
-                    Ok(Message::SyncDone)
+                    let live_mode: bool = seq.next_element()?.ok_or_else(|| {
+                        serde::de::Error::custom("missing live mode flag in sync done message")
+                    })?;
+
+                    Ok(Message::SyncDone(live_mode))
                 } else {
                     Err(serde::de::Error::custom(format!(
                         "unknown message type {} in replication message",
