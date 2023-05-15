@@ -118,3 +118,145 @@ impl NetworkBehaviour for Behaviour {
         Poll::Pending
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use futures::StreamExt;
+    use libp2p::swarm::{keep_alive, Swarm};
+    use libp2p_swarm_test::SwarmExt;
+
+    use crate::network::replication::Message;
+
+    use super::{BehaviourOutEvent, Behaviour as ReplicationBehaviour};
+
+    #[tokio::test]
+    async fn peers_connect() {
+        // Create two swarms
+        let mut swarm1 = Swarm::new_ephemeral(|_| ReplicationBehaviour::new());
+        let mut swarm2 = Swarm::new_ephemeral(|_| ReplicationBehaviour::new());
+
+        // Listen on swarm1 and connect from swarm2, this should establish a bi-directional connection.
+        swarm1.listen().await;
+        swarm2.connect(&mut swarm1).await;
+
+        let swarm1_peer_id = *swarm1.local_peer_id();
+        let swarm2_peer_id = *swarm2.local_peer_id();
+
+        let info1 = swarm1.network_info();
+        let info2 = swarm2.network_info();
+
+        // Peers should be connected.
+        assert!(swarm2.is_connected(&swarm1_peer_id));
+        assert!(swarm1.is_connected(&swarm2_peer_id));
+
+        // Each swarm should have exactly one connected peer.
+        assert_eq!(info1.num_peers(), 1);
+        assert_eq!(info2.num_peers(), 1);
+
+        // Each swarm should have one established connection.
+        assert_eq!(info1.connection_counters().num_established(), 1);
+        assert_eq!(info2.connection_counters().num_established(), 1);
+    }
+
+    #[tokio::test]
+    async fn incompatible_network_behaviour() {
+        // Create two swarms
+        let mut swarm1 = Swarm::new_ephemeral(|_| ReplicationBehaviour::new());
+        let mut swarm2 = Swarm::new_ephemeral(|_| keep_alive::Behaviour);
+
+        // Listen on swarm1 and connect from swarm2, this should establish a bi-directional connection.
+        swarm1.listen().await;
+        swarm2.connect(&mut swarm1).await;
+
+        let swarm1_peer_id = *swarm1.local_peer_id();
+        let swarm2_peer_id = *swarm2.local_peer_id();
+
+        let info1 = swarm1.network_info();
+        let info2 = swarm2.network_info();
+
+        // Even though the network behaviours of our two peers are incompatible they still
+        // establish a connection.
+
+        // Peers should be connected.
+        assert!(swarm2.is_connected(&swarm1_peer_id));
+        assert!(swarm1.is_connected(&swarm2_peer_id));
+
+        // Each swarm should have exactly one connected peer.
+        assert_eq!(info1.num_peers(), 1);
+        assert_eq!(info2.num_peers(), 1);
+
+        // Each swarm should have one established connection.
+        assert_eq!(info1.connection_counters().num_established(), 1);
+        assert_eq!(info2.connection_counters().num_established(), 1);
+
+        // Send a message from to swarm1 local peer from swarm2 local peer.
+        swarm1
+            .behaviour_mut()
+            .send_message(swarm2_peer_id, Message::Dummy(0));
+
+        let mut res1 = Vec::new();
+        let mut res2 = Vec::new();
+
+        // Collect the next 2 behaviour events (if any) which occur in either swarms.
+        for _ in 0..2 {
+            tokio::select! {
+                Some(event) = swarm1.next() => res1.push(event),
+                Some(event) = swarm2.next() => res2.push(event),
+                else => break
+            }
+        }
+
+        // We expect neither peers to have issued any swarm events as they ignore incompatible messages.
+        assert!(res1.is_empty());
+        assert!(res2.is_empty());
+    }
+
+    #[tokio::test]
+    async fn swarm_behaviour_events() {
+        // Create two swarms
+        let mut swarm1 = Swarm::new_ephemeral(|_| ReplicationBehaviour::new());
+        let mut swarm2 = Swarm::new_ephemeral(|_| ReplicationBehaviour::new());
+
+        // Listen on swarm1 and connect from swarm2, this should establish a bi-directional connection.
+        swarm1.listen().await;
+        swarm2.connect(&mut swarm1).await;
+
+        let mut res1 = Vec::new();
+        let mut res2 = Vec::new();
+
+        let swarm1_peer_id = *swarm1.local_peer_id();
+        let swarm2_peer_id = *swarm2.local_peer_id();
+
+        // Send a message from to swarm1 local peer from swarm2 local peer.
+        swarm1
+            .behaviour_mut()
+            .send_message(swarm2_peer_id, Message::Dummy(0));
+
+        // Send a message from to swarm2 local peer from swarm1 local peer.
+        swarm2
+            .behaviour_mut()
+            .send_message(swarm1_peer_id, Message::Dummy(1));
+
+        // Collect the next 2 behaviour events which occur in either swarms.
+        for _ in 0..2 {
+            tokio::select! {
+                BehaviourOutEvent::MessageReceived(peer_id, message) = swarm1.next_behaviour_event() => res1.push((peer_id, message)),
+                BehaviourOutEvent::MessageReceived(peer_id, message) = swarm2.next_behaviour_event() => res2.push((peer_id, message)),
+            }
+        }
+
+        // Each swarm should have emitted exactly one event.
+        assert_eq!(res1.len(), 1);
+        assert_eq!(res2.len(), 1);
+
+        // swarm1 should have received the message from swarm2 peer.
+        let (peer_id, message) = &res1[0];
+        assert_eq!(peer_id, &swarm2_peer_id);
+        assert_eq!(message, &Message::Dummy(1));
+
+        // swarm2 should have received the message from swarm1 peer.
+        let (peer_id, message) = &res2[0];
+        assert_eq!(peer_id, &swarm1_peer_id);
+        assert_eq!(message, &Message::Dummy(0));
+    }
+}
