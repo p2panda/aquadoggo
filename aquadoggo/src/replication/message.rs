@@ -3,6 +3,7 @@
 use std::fmt;
 
 use serde::de::Visitor;
+use serde::ser::SerializeSeq;
 use serde::{Deserialize, Serialize};
 
 use crate::replication::{Mode, SessionId, TargetSet};
@@ -11,7 +12,7 @@ pub const SYNC_MESSAGE_TYPE: MessageType = 0;
 
 pub type MessageType = u64;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub enum Message {
     SyncRequest(Mode, TargetSet),
 }
@@ -24,24 +25,47 @@ impl Message {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct SyncMessage(MessageType, SessionId, Message);
+#[derive(Debug, Clone)]
+pub struct SyncMessage(SessionId, Message);
 
 impl SyncMessage {
     pub fn new(session_id: SessionId, message: Message) -> Self {
-        Self(message.message_type(), session_id, message)
-    }
-
-    pub fn session_id(&self) -> SessionId {
-        self.1
-    }
-
-    pub fn message(&self) -> &Message {
-        &self.2
+        Self(session_id, message)
     }
 
     pub fn message_type(&self) -> MessageType {
-        self.2.message_type()
+        self.1.message_type()
+    }
+
+    pub fn session_id(&self) -> SessionId {
+        self.0
+    }
+
+    pub fn message(&self) -> &Message {
+        &self.1
+    }
+}
+
+impl Serialize for SyncMessage {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        // Always encode message type and session id first
+        let serialize_header = |mut seq: <S as serde::Serializer>::SerializeSeq| -> Result<<S as serde::Serializer>::SerializeSeq, S::Error> {
+            seq.serialize_element(&self.message_type())?;
+            seq.serialize_element(&self.session_id())?;
+            Ok(seq)
+        };
+
+        match self.message() {
+            Message::SyncRequest(mode, target_set) => {
+                let mut seq = serialize_header(serializer.serialize_seq(Some(4))?)?;
+                seq.serialize_element(mode)?;
+                seq.serialize_element(target_set)?;
+                seq.end()
+            }
+        }
     }
 }
 
@@ -109,4 +133,27 @@ impl<'de> Deserialize<'de> for SyncMessage {
 pub enum StrategyMessage {
     Have,
     Entry,
+}
+
+#[cfg(test)]
+mod tests {
+    use ciborium::cbor;
+    use p2panda_rs::serde::{serialize_from, serialize_value};
+    use rstest::rstest;
+
+    use crate::replication::{Mode, TargetSet};
+    use crate::test_utils::helpers::random_target_set;
+
+    use super::{Message, SyncMessage};
+
+    #[rstest]
+    fn serialize(#[from(random_target_set)] target_set: TargetSet) {
+        assert_eq!(
+            hex::encode(serialize_from(SyncMessage::new(
+                51,
+                Message::SyncRequest(Mode::SetReconciliation, target_set.clone())
+            ))),
+            hex::encode(serialize_value(cbor!([0, 51, 1, target_set])))
+        );
+    }
 }

@@ -193,26 +193,17 @@ where
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::schema::{SchemaId, SchemaName};
-    use p2panda_rs::test_utils::fixtures::random_document_view_id;
     use rstest::rstest;
 
     use crate::replication::errors::ReplicationError;
     use crate::replication::message::Message;
     use crate::replication::{Mode, SyncMessage, TargetSet};
+    use crate::test_utils::helpers::random_target_set;
 
     use super::{SyncManager, INITIAL_SESSION_ID};
 
     const PEER_ID_LOCAL: &'static str = "local";
     const PEER_ID_REMOTE: &'static str = "remote";
-
-    #[rstest::fixture]
-    fn random_target_set() -> TargetSet {
-        let document_view_id = random_document_view_id();
-        let schema_id =
-            SchemaId::new_application(&SchemaName::new("messages").unwrap(), &document_view_id);
-        TargetSet::new(&[schema_id])
-    }
 
     #[rstest]
     fn initiate_outbound_session(
