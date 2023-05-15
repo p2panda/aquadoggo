@@ -59,10 +59,6 @@ impl Validate for TargetSet {
         let mut prev_schema_id: Option<&SchemaId> = None;
 
         for schema_id in &self.0 {
-            // Check if the given schema ids are correctly formatted
-            // @TODO: This needs to be implemented in `p2panda_rs`
-            // schema_id.validate()?;
-
             // Check if it is sorted, this indirectly also checks against duplicates
             if let Some(prev) = prev_schema_id {
                 if prev >= schema_id {
@@ -82,6 +78,7 @@ impl<'de> Deserialize<'de> for TargetSet {
     where
         D: Deserializer<'de>,
     {
+        // Deserializer of `SchemaId` checks internally for the correct format of each id
         let schema_ids: Vec<SchemaId> = Deserialize::deserialize(deserializer)?;
         Self::from_untrusted(schema_ids).map_err(serde::de::Error::custom)
     }
