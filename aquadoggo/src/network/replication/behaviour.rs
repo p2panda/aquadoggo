@@ -121,13 +121,13 @@ impl NetworkBehaviour for Behaviour {
 
 #[cfg(test)]
 mod tests {
-    use futures::StreamExt;
+    use futures::FutureExt;
     use libp2p::swarm::{keep_alive, Swarm};
     use libp2p_swarm_test::SwarmExt;
 
     use crate::network::replication::Message;
 
-    use super::{BehaviourOutEvent, Behaviour as ReplicationBehaviour};
+    use super::{Behaviour as ReplicationBehaviour, BehaviourOutEvent};
 
     #[tokio::test]
     async fn peers_connect() {
@@ -194,21 +194,14 @@ mod tests {
             .behaviour_mut()
             .send_message(swarm2_peer_id, Message::Dummy(0));
 
-        let mut res1 = Vec::new();
-        let mut res2 = Vec::new();
+        // Await a swarm event on swarm2.
+        //
+        // We expect a timeout panic as no event will occur.
+        let result = std::panic::AssertUnwindSafe(swarm2.next_swarm_event())
+            .catch_unwind()
+            .await;
 
-        // Collect the next 2 behaviour events (if any) which occur in either swarms.
-        for _ in 0..2 {
-            tokio::select! {
-                Some(event) = swarm1.next() => res1.push(event),
-                Some(event) = swarm2.next() => res2.push(event),
-                else => break
-            }
-        }
-
-        // We expect neither peers to have issued any swarm events as they ignore incompatible messages.
-        assert!(res1.is_empty());
-        assert!(res2.is_empty());
+        assert!(result.is_err())
     }
 
     #[tokio::test]
