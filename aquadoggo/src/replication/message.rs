@@ -12,7 +12,7 @@ pub const SYNC_MESSAGE_TYPE: MessageType = 0;
 
 pub type MessageType = u64;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Message {
     SyncRequest(Mode, TargetSet),
 }
@@ -25,7 +25,7 @@ impl Message {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct SyncMessage(SessionId, Message);
 
 impl SyncMessage {
@@ -138,7 +138,7 @@ pub enum StrategyMessage {
 #[cfg(test)]
 mod tests {
     use ciborium::cbor;
-    use p2panda_rs::serde::{serialize_from, serialize_value};
+    use p2panda_rs::serde::{deserialize_into, serialize_from, serialize_value};
     use rstest::rstest;
 
     use crate::replication::{Mode, TargetSet};
@@ -149,11 +149,20 @@ mod tests {
     #[rstest]
     fn serialize(#[from(random_target_set)] target_set: TargetSet) {
         assert_eq!(
-            hex::encode(serialize_from(SyncMessage::new(
+            serialize_from(SyncMessage::new(
                 51,
                 Message::SyncRequest(Mode::SetReconciliation, target_set.clone())
-            ))),
-            hex::encode(serialize_value(cbor!([0, 51, 1, target_set])))
+            )),
+            serialize_value(cbor!([0, 51, 1, target_set]))
+        );
+    }
+
+    #[rstest]
+    fn deserialize(#[from(random_target_set)] target_set: TargetSet) {
+        assert_eq!(
+            deserialize_into::<SyncMessage>(&serialize_value(cbor!([0, 12, 0, target_set])))
+                .unwrap(),
+            SyncMessage::new(12, Message::SyncRequest(Mode::Naive, target_set.clone()))
         );
     }
 }
