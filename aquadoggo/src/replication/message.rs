@@ -3,7 +3,7 @@
 use std::fmt;
 
 use serde::de::Visitor;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::replication::{Mode, SessionId, TargetSet};
 
@@ -11,37 +11,37 @@ pub const SYNC_MESSAGE_TYPE: MessageType = 0;
 
 pub type MessageType = u64;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum Message {
     SyncRequest(Mode, TargetSet),
 }
 
-#[derive(Debug, Clone)]
-pub struct SyncMessage {
-    session_id: SessionId,
-    message: Message,
+impl Message {
+    pub fn message_type(&self) -> MessageType {
+        match self {
+            Message::SyncRequest { .. } => SYNC_MESSAGE_TYPE,
+        }
+    }
 }
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SyncMessage(MessageType, SessionId, Message);
 
 impl SyncMessage {
     pub fn new(session_id: SessionId, message: Message) -> Self {
-        Self {
-            session_id,
-            message,
-        }
+        Self(message.message_type(), session_id, message)
     }
 
-    pub fn session_id(&self) -> &SessionId {
-        &self.session_id
+    pub fn session_id(&self) -> SessionId {
+        self.1
     }
 
     pub fn message(&self) -> &Message {
-        &self.message
+        &self.2
     }
 
     pub fn message_type(&self) -> MessageType {
-        match self.message {
-            Message::SyncRequest { .. } => SYNC_MESSAGE_TYPE,
-        }
+        self.2.message_type()
     }
 }
 
@@ -97,10 +97,7 @@ impl<'de> Deserialize<'de> for SyncMessage {
                     }
                 };
 
-                Ok(SyncMessage {
-                    session_id,
-                    message,
-                })
+                Ok(SyncMessage::new(session_id, message))
             }
         }
 
