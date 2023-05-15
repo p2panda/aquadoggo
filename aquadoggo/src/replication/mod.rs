@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use p2panda_rs::{schema::SchemaId, Validate};
-use serde::{Deserialize, Deserializer};
+use std::fmt::{self, Display};
+
+use p2panda_rs::{schema::SchemaId, Human, Validate};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 pub mod errors;
 mod manager;
@@ -17,7 +19,7 @@ pub use strategies::{NaiveStrategy, SetReconciliationStrategy, StrategyResult};
 
 /// De-duplicated and sorted set of schema ids which define the target data for the replication
 /// session.
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize)]
 pub struct TargetSet(Vec<SchemaId>);
 
 impl TargetSet {
@@ -36,7 +38,7 @@ impl TargetSet {
         Self(deduplicated_set)
     }
 
-    pub fn from_untrusted(schema_ids: Vec<SchemaId>) -> Result<Self, errors::TargetSetError> {
+    fn from_untrusted(schema_ids: Vec<SchemaId>) -> Result<Self, errors::TargetSetError> {
         // Create target set with potentially invalid data
         let target_set = Self(schema_ids);
 
@@ -91,6 +93,24 @@ pub enum Mode {
     Unknown,
 }
 
+impl Mode {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Mode::Naive => "naive",
+            Mode::SetReconciliation => "set-reconciliation",
+            Mode::Unknown => "unknown",
+        }
+    }
+
+    pub fn as_u64(&self) -> u64 {
+        match self {
+            Mode::Naive => 0,
+            Mode::SetReconciliation => 1,
+            Mode::Unknown => unreachable!("Can't create an unknown replication mode"),
+        }
+    }
+}
+
 impl From<u64> for Mode {
     fn from(value: u64) -> Self {
         match value {
@@ -101,6 +121,15 @@ impl From<u64> for Mode {
     }
 }
 
+impl Serialize for Mode {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_u64(self.as_u64())
+    }
+}
+
 impl<'de> Deserialize<'de> for Mode {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -108,6 +137,18 @@ impl<'de> Deserialize<'de> for Mode {
     {
         let mode = u64::deserialize(deserializer)?;
         Ok(mode.into())
+    }
+}
+
+impl Display for Mode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_u64())
+    }
+}
+
+impl Human for Mode {
+    fn display(&self) -> String {
+        self.as_str().to_owned()
     }
 }
 
