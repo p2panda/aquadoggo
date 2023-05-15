@@ -187,6 +187,7 @@ where
             Message::SyncRequest(mode, target_set) => {
                 self.handle_sync_request(remote_peer, mode, &sync_message.session_id(), target_set)
             }
+            _ => todo!(),
         }
     }
 }

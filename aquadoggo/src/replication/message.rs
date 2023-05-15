@@ -8,19 +8,32 @@ use serde::{Deserialize, Serialize};
 
 use crate::replication::{Mode, SessionId, TargetSet};
 
-pub const SYNC_MESSAGE_TYPE: MessageType = 0;
+pub const SYNC_REQUEST_TYPE: MessageType = 0;
+pub const ENTRY_TYPE: MessageType = 8;
+pub const SYNC_DONE_TYPE: MessageType = 9;
 
 pub type MessageType = u64;
+
+// @TODO
+#[derive(Clone, Debug)]
+pub enum StrategyMessage {
+    Have,
+    Entry,
+}
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Message {
     SyncRequest(Mode, TargetSet),
+    Entry(Vec<u8>, Vec<u8>),
+    SyncDone,
 }
 
 impl Message {
     pub fn message_type(&self) -> MessageType {
         match self {
-            Message::SyncRequest { .. } => SYNC_MESSAGE_TYPE,
+            Message::SyncRequest { .. } => SYNC_REQUEST_TYPE,
+            Message::Entry(_, _) => ENTRY_TYPE,
+            Message::SyncDone => SYNC_DONE_TYPE,
         }
     }
 }
@@ -65,6 +78,16 @@ impl Serialize for SyncMessage {
                 seq.serialize_element(target_set)?;
                 seq.end()
             }
+            Message::Entry(entry_bytes, operation_bytes) => {
+                let mut seq = serialize_header(serializer.serialize_seq(Some(4))?)?;
+                seq.serialize_element(entry_bytes)?;
+                seq.serialize_element(operation_bytes)?;
+                seq.end()
+            }
+            Message::SyncDone => {
+                let seq = serialize_header(serializer.serialize_seq(Some(2))?)?;
+                seq.end()
+            }
         }
     }
 }
@@ -95,22 +118,33 @@ impl<'de> Deserialize<'de> for SyncMessage {
                     serde::de::Error::custom("missing session id in replication message")
                 })?;
 
-                let message = match message_type {
-                    SYNC_MESSAGE_TYPE => {
-                        let mode: Mode = seq.next_element()?.ok_or_else(|| {
-                            serde::de::Error::custom("missing mode in sync request message")
-                        })?;
+                let message = if message_type == SYNC_REQUEST_TYPE {
+                    let mode: Mode = seq.next_element()?.ok_or_else(|| {
+                        serde::de::Error::custom("missing mode in sync request message")
+                    })?;
 
-                        let target_set: TargetSet = seq.next_element()?.ok_or_else(|| {
-                            serde::de::Error::custom("missing target set in sync request message")
-                        })?;
+                    let target_set: TargetSet = seq.next_element()?.ok_or_else(|| {
+                        serde::de::Error::custom("missing target set in sync request message")
+                    })?;
 
-                        Ok(Message::SyncRequest(mode, target_set))
-                    }
-                    unknown_type => Err(serde::de::Error::custom(format!(
+                    Ok(Message::SyncRequest(mode, target_set))
+                } else if message_type == ENTRY_TYPE {
+                    let entry_bytes: Vec<u8> = seq.next_element()?.ok_or_else(|| {
+                        serde::de::Error::custom("missing entry bytes in entry message")
+                    })?;
+
+                    let operation_bytes: Vec<u8> = seq.next_element()?.ok_or_else(|| {
+                        serde::de::Error::custom("missing operation bytes in entry message")
+                    })?;
+
+                    Ok(Message::Entry(entry_bytes, operation_bytes))
+                } else if message_type == SYNC_DONE_TYPE {
+                    Ok(Message::SyncDone)
+                } else {
+                    Err(serde::de::Error::custom(format!(
                         "unknown message type {} in replication message",
-                        unknown_type
-                    ))),
+                        message_type
+                    )))
                 }?;
 
                 if let Some(items_left) = seq.size_hint() {
@@ -127,12 +161,6 @@ impl<'de> Deserialize<'de> for SyncMessage {
 
         deserializer.deserialize_seq(SyncMessageVisitor)
     }
-}
-
-#[derive(Clone, Debug)]
-pub enum StrategyMessage {
-    Have,
-    Entry,
 }
 
 #[cfg(test)]
