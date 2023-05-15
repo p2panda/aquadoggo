@@ -70,3 +70,34 @@ impl Human for Mode {
         self.as_str().to_owned()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use ciborium::cbor;
+
+    use p2panda_rs::serde::{deserialize_into, serialize_from, serialize_value};
+
+    use super::Mode;
+
+    #[test]
+    fn u64_representation() {
+        assert_eq!(Mode::Naive.as_u64(), 0);
+        assert_eq!(Mode::SetReconciliation.as_u64(), 1);
+    }
+
+    #[test]
+    fn serialize() {
+        let bytes = serialize_from(Mode::Naive);
+        assert_eq!(bytes, vec![0]);
+    }
+
+    #[test]
+    fn deserialize() {
+        let version: Mode = deserialize_into(&serialize_value(cbor!(1))).unwrap();
+        assert_eq!(version, Mode::SetReconciliation);
+
+        // Can not be a string
+        let invalid_type = deserialize_into::<Mode>(&serialize_value(cbor!("0")));
+        assert!(invalid_type.is_err());
+    }
+}

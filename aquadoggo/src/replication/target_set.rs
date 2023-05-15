@@ -77,8 +77,10 @@ impl<'de> Deserialize<'de> for TargetSet {
 
 #[cfg(test)]
 mod tests {
+    use ciborium::cbor;
     use p2panda_rs::document::DocumentViewId;
     use p2panda_rs::schema::{SchemaId, SchemaName};
+    use p2panda_rs::serde::{deserialize_into, serialize_value};
     use p2panda_rs::test_utils::fixtures::random_document_view_id;
     use rstest::rstest;
 
@@ -111,5 +113,21 @@ mod tests {
             TargetSet::new(&[schema_id_1.clone()]),
             TargetSet::new(&[schema_id_2.clone()]),
         );
+    }
+
+    #[rstest]
+    fn deserialize_unsorted_target_set() {
+        let unsorted_schema_ids = [
+            "venues_0020c13cdc58dfc6f4ebd32992ff089db79980363144bdb2743693a019636fa72ec8",
+            "alpacas_00202dce4b32cd35d61cf54634b93a526df333c5ed3d93230c2f026f8d1ecabc0cd7",
+        ];
+        let result = deserialize_into::<TargetSet>(&serialize_value(cbor!(unsorted_schema_ids)));
+
+        let expected_result = ciborium::de::Error::<std::io::Error>::Semantic(
+            None,
+            "Target set contains unsorted or duplicate schema ids".to_string(),
+        );
+
+        assert_eq!(result.unwrap_err().to_string(), expected_result.to_string());
     }
 }
