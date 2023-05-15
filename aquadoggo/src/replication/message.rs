@@ -116,7 +116,7 @@ impl<'de> Deserialize<'de> for SyncMessage {
                 if let Some(items_left) = seq.size_hint() {
                     if items_left > 0 {
                         return Err(serde::de::Error::custom(
-                            "too many fields for this replication message",
+                            "too many fields for replication message",
                         ));
                     }
                 };
@@ -138,6 +138,7 @@ pub enum StrategyMessage {
 #[cfg(test)]
 mod tests {
     use ciborium::cbor;
+    use ciborium::value::{Error, Value};
     use p2panda_rs::serde::{deserialize_into, serialize_from, serialize_value};
     use rstest::rstest;
 
@@ -164,5 +165,23 @@ mod tests {
                 .unwrap(),
             SyncMessage::new(12, Message::SyncRequest(Mode::Naive, target_set.clone()))
         );
+    }
+
+    #[rstest]
+    #[should_panic(expected = "missing message type in replication message")]
+    #[case::no_fields(cbor!([]))]
+    #[should_panic(expected = "unknown message type 122 in replication message")]
+    #[case::unknown_message_type(cbor!([122, 0]))]
+    #[should_panic(expected = "missing session id in replication message")]
+    #[case::only_message_type(cbor!([0]))]
+    #[should_panic(expected = "too many fields for replication message")]
+    #[case::too_many_fields(cbor!([0, 0, 0, ["schema_field_definition_v1"], "too much"]))]
+    fn deserialize_invalid_messages(#[case] cbor: Result<Value, Error>) {
+        // Check the cbor is valid
+        assert!(cbor.is_ok());
+
+        // Deserialize into sync message, we unwrap here to cause a panic and then test for
+        // expected error stings
+        deserialize_into::<SyncMessage>(&serialize_value(cbor)).unwrap();
     }
 }
