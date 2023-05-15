@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use p2panda_rs::schema::SchemaId;
+use p2panda_rs::{schema::SchemaId, Validate};
+use serde::{Deserialize, Deserializer};
 
 pub mod errors;
 mod manager;
@@ -10,7 +11,7 @@ mod strategies;
 pub mod traits;
 
 pub use manager::SyncManager;
-pub use message::{StrategyMessage, SyncMessage};
+pub use message::{Message, StrategyMessage, SyncMessage};
 pub use session::{Session, SessionId, SessionState};
 pub use strategies::{NaiveStrategy, SetReconciliationStrategy, StrategyResult};
 
@@ -34,6 +35,56 @@ impl TargetSet {
 
         Self(deduplicated_set)
     }
+
+    pub fn from_untrusted(schema_ids: Vec<SchemaId>) -> Result<Self, errors::TargetSetError> {
+        // Create target set with potentially invalid data
+        let target_set = Self(schema_ids);
+
+        // Make sure its sorted and does not contain any duplicates
+        target_set.validate()?;
+
+        Ok(target_set)
+    }
+}
+
+impl Validate for TargetSet {
+    type Error = errors::TargetSetError;
+
+    fn validate(&self) -> Result<(), Self::Error> {
+        // Check if at least one schema id is given
+        if self.0.is_empty() {
+            return Err(errors::TargetSetError::ZeroSchemaIds);
+        };
+
+        let mut prev_schema_id: Option<&SchemaId> = None;
+
+        for schema_id in &self.0 {
+            // Check if the given schema ids are correctly formatted
+            // @TODO: This needs to be implemented in `p2panda_rs`
+            // schema_id.validate()?;
+
+            // Check if it is sorted, this indirectly also checks against duplicates
+            if let Some(prev) = prev_schema_id {
+                if prev >= schema_id {
+                    return Err(errors::TargetSetError::UnsortedSchemaIds);
+                }
+            }
+
+            prev_schema_id = Some(schema_id);
+        }
+
+        Ok(())
+    }
+}
+
+impl<'de> Deserialize<'de> for TargetSet {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let schema_ids: Vec<SchemaId> = Deserialize::deserialize(deserializer)?;
+        Self::from_untrusted(schema_ids).map_err(serde::de::Error::custom)
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -41,6 +92,26 @@ pub enum Mode {
     Naive,
     SetReconciliation,
     Unknown,
+}
+
+impl From<u64> for Mode {
+    fn from(value: u64) -> Self {
+        match value {
+            0 => Mode::Naive,
+            1 => Mode::SetReconciliation,
+            _ => Mode::Unknown,
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Mode {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let mode = u64::deserialize(deserializer)?;
+        Ok(mode.into())
+    }
 }
 
 #[cfg(test)]
