@@ -20,6 +20,7 @@ anyhow = "1.0.62"
 async-graphql = { version = "5.0.6", features = ["dynamic-schema"] }
 async-graphql-axum = "5.0.6"
 async-trait = "0.1.64"
+asynchronous-codec = { version = "0.6.1", features = ["cbor"] }
 axum = "0.6.10"
 bamboo-rs-core-ed25519-yasmf = "0.1.1"
 bs58 = "0.4.0"
@@ -80,6 +81,7 @@ ctor = "0.1.23"
 env_logger = "0.9.0"
 http = "0.2.9"
 hyper = "0.14.19"
+libp2p-swarm-test = "0.1.0"
 once_cell = "1.17.0"
 p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "679107b636eea39e7713d9b21ac69df28aaad97d", features = [
     "test-utils",
