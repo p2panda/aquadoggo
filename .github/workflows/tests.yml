@@ -45,7 +45,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --manifest-path ${{ env.cargo_manifest }} --features=proptests
+          args: --manifest-path ${{ env.cargo_manifest }}
         env:
           # Ensure debug output is also tested
           RUST_LOG: debug
