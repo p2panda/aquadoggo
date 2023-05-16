@@ -127,9 +127,7 @@ pub async fn network_service(
                             if let Some(rendezvous_client) =
                                 swarm.behaviour_mut().rendezvous_client.as_mut()
                             {
-                                trace!(
-                            "Connected to rendezvous point, discovering nodes in '{NODE_NAMESPACE}' namespace ..."
-                        );
+                                trace!("Connected to rendezvous point, discovering nodes in '{NODE_NAMESPACE}' namespace ...");
 
                                 rendezvous_client.discover(
                                     Some(rendezvous::Namespace::from_static(NODE_NAMESPACE)),

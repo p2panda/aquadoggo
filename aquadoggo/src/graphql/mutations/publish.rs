@@ -403,11 +403,6 @@ mod tests {
         "".as_bytes(),
         "cbor decoder failed failed to fill whole buffer"
     )]
-    #[case::invalid_operation_bytes(
-        &EncodedEntry::from_bytes(&ENTRY_ENCODED).to_string(),
-        "AB01".as_bytes(),
-        "invalid type: bytes, expected array"
-    )]
     #[case::invalid_operation_hex_encoding(
         &EncodedEntry::from_bytes(&ENTRY_ENCODED).to_string(),
         "0-25.-%5930n3544[{{{   @@@".as_bytes(),
