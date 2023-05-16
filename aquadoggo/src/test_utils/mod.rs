@@ -3,7 +3,7 @@
 mod client;
 mod config;
 mod db;
-mod helpers;
+pub mod helpers;
 mod node;
 mod runner;
 

@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add custom validation to GraphQL scalar types [#318](https://github.com/p2panda/aquadoggo/pull/318)
 - Introduce property tests for GraphQL query API with `proptest` [#338](https://github.com/p2panda/aquadoggo/pull/338)
 - Introduce initial libp2p network behaviour for replication protocol [#365](https://github.com/p2panda/aquadoggo/pull/365) 
+- Replication protocol session manager [#363](https://github.com/p2panda/aquadoggo/pull/363)
+- Replication message de- / serialization [#375](https://github.com/p2panda/aquadoggo/pull/375)
 
 ### Changed
 

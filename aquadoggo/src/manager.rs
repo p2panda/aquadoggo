@@ -13,8 +13,6 @@ use triggered::{Listener, Trigger};
 /// Sends messages through the communication bus between services.
 pub type Sender<T> = broadcast::Sender<T>;
 
-// pub type ServiceReady = oneshot::channel<()>;
-
 // Receives ready signal from services once they are ready to handle messages on the communication bus.
 pub type ServiceReadyReceiver = oneshot::Receiver<()>;
 
