@@ -13,3 +13,12 @@ pub enum ReplicationError {
     #[error("Tried to initialise duplicate outbound replication session with id {0}")]
     DuplicateOutboundRequest(u64),
 }
+
+#[derive(Error, Debug)]
+pub enum TargetSetError {
+    #[error("Target set does not contain any schema ids")]
+    ZeroSchemaIds,
+
+    #[error("Target set contains unsorted or duplicate schema ids")]
+    UnsortedSchemaIds,
+}

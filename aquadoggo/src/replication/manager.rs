@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 
 use crate::replication::errors::ReplicationError;
-use crate::replication::{Mode, Session, SessionId, SessionState, SyncMessage, TargetSet};
+use crate::replication::{Message, Mode, Session, SessionId, SessionState, SyncMessage, TargetSet};
 
 pub const INITIAL_SESSION_ID: SessionId = 0;
 
@@ -181,38 +181,30 @@ where
     pub fn handle_message(
         &mut self,
         remote_peer: &P,
-        message: &SyncMessage,
+        sync_message: &SyncMessage,
     ) -> Result<(), ReplicationError> {
-        match message {
-            SyncMessage::SyncRequest(mode, session_id, target_set) => {
-                self.handle_sync_request(remote_peer, mode, session_id, target_set)
+        match sync_message.message() {
+            Message::SyncRequest(mode, target_set) => {
+                self.handle_sync_request(remote_peer, mode, &sync_message.session_id(), target_set)
             }
-            SyncMessage::Other => todo!(),
+            _ => todo!(),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::schema::{SchemaId, SchemaName};
-    use p2panda_rs::test_utils::fixtures::random_document_view_id;
     use rstest::rstest;
 
     use crate::replication::errors::ReplicationError;
+    use crate::replication::message::Message;
     use crate::replication::{Mode, SyncMessage, TargetSet};
+    use crate::test_utils::helpers::random_target_set;
 
     use super::{SyncManager, INITIAL_SESSION_ID};
 
     const PEER_ID_LOCAL: &'static str = "local";
     const PEER_ID_REMOTE: &'static str = "remote";
-
-    #[rstest::fixture]
-    fn random_target_set() -> TargetSet {
-        let document_view_id = random_document_view_id();
-        let schema_id =
-            SchemaId::new_application(&SchemaName::new("messages").unwrap(), &document_view_id);
-        TargetSet::new(&[schema_id])
-    }
 
     #[rstest]
     fn initiate_outbound_session(
@@ -243,16 +235,16 @@ mod tests {
     ) {
         let mut manager = SyncManager::new(PEER_ID_LOCAL);
 
-        let message = SyncMessage::SyncRequest(Mode::Naive, 0, target_set_1.clone());
+        let message = SyncMessage::new(0, Message::SyncRequest(Mode::Naive, target_set_1.clone()));
         let result = manager.handle_message(&PEER_ID_REMOTE, &message);
         assert!(result.is_ok());
 
-        let message = SyncMessage::SyncRequest(Mode::Naive, 1, target_set_2.clone());
+        let message = SyncMessage::new(1, Message::SyncRequest(Mode::Naive, target_set_2.clone()));
         let result = manager.handle_message(&PEER_ID_REMOTE, &message);
         assert!(result.is_ok());
 
         // Reject attempt to create session again
-        let message = SyncMessage::SyncRequest(Mode::Naive, 0, target_set_1.clone());
+        let message = SyncMessage::new(0, Message::SyncRequest(Mode::Naive, target_set_1.clone()));
         let result = manager.handle_message(&PEER_ID_REMOTE, &message);
         assert!(matches!(
             result,
@@ -260,7 +252,7 @@ mod tests {
         ));
 
         // Reject different session concerning same target set
-        let message = SyncMessage::SyncRequest(Mode::Naive, 2, target_set_2.clone());
+        let message = SyncMessage::new(2, Message::SyncRequest(Mode::Naive, target_set_2.clone()));
         let result = manager.handle_message(&PEER_ID_REMOTE, &message);
         assert!(matches!(
             result,
@@ -272,14 +264,19 @@ mod tests {
     fn inbound_checks_supported_mode(#[from(random_target_set)] target_set: TargetSet) {
         // Should not fail when requesting supported replication mode
         let mut manager = SyncManager::new(PEER_ID_LOCAL);
-        let message = SyncMessage::SyncRequest(Mode::Naive, INITIAL_SESSION_ID, target_set.clone());
+        let message = SyncMessage::new(
+            INITIAL_SESSION_ID,
+            Message::SyncRequest(Mode::Naive, target_set.clone()),
+        );
         let result = manager.handle_message(&PEER_ID_REMOTE, &message);
         assert!(result.is_ok());
 
         // Should fail when requesting unsupported replication mode
         let mut manager = SyncManager::new(PEER_ID_LOCAL);
-        let message =
-            SyncMessage::SyncRequest(Mode::SetReconciliation, INITIAL_SESSION_ID, target_set);
+        let message = SyncMessage::new(
+            INITIAL_SESSION_ID,
+            Message::SyncRequest(Mode::SetReconciliation, target_set.clone()),
+        );
         let result = manager.handle_message(&PEER_ID_REMOTE, &message);
         assert!(result.is_err());
     }
