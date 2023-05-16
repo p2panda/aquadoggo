@@ -1,0 +1,51 @@
+name: aquadoggo property tests
+
+on: push
+
+env:
+  CARGO_TERM_COLOR: always
+  cache_path: |
+    target
+    ~/.cargo
+  cargo_manifest: aquadoggo/Cargo.toml
+
+jobs:
+  rust-test-sqlite:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install Protocol Buffers compiler
+        run: sudo apt-get install protobuf-compiler
+
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Restore from cargo cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.cache_path }}
+          key: ${{ runner.os }}-test-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build binary
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: >-
+            --verbose
+            --manifest-path ${{ env.cargo_manifest }}
+
+      - name: Run tests
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: proptests::tests --manifest-path ${{ env.cargo_manifest }} --features=proptests
+        env:
+          # Ensure debug output is also tested
+          RUST_LOG: debug
