@@ -45,8 +45,7 @@ impl Behaviour {
         // @TODO: Handle incoming messages
         self.events
             .push_back(ToSwarm::GenerateEvent(BehaviourOutEvent::MessageReceived(
-                *peer_id,
-                message,
+                *peer_id, message,
             )));
     }
 }
