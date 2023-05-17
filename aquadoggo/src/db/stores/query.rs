@@ -1257,6 +1257,7 @@ mod tests {
     use p2panda_rs::operation::{OperationValue, PinnedRelationList};
     use p2panda_rs::schema::{FieldType, Schema, SchemaId};
     use p2panda_rs::test_utils::fixtures::{key_pair, schema_id};
+    use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
     use rstest::rstest;
 
     use crate::db::models::{OptionalOwner, QueryRow};
@@ -1266,7 +1267,8 @@ mod tests {
     use crate::db::stores::{OperationCursor, RelationList};
     use crate::db::types::StorageDocument;
     use crate::test_utils::{
-        add_document, add_schema, add_schema_and_documents, test_runner, TestNode,
+        add_document, add_schema, add_schema_and_documents, doggo_fields, doggo_schema,
+        populate_and_materialize, populate_store_config, test_runner, TestNode,
     };
 
     use super::{convert_rows, PaginationCursor, Query};
@@ -2214,5 +2216,52 @@ mod tests {
             result[1].0,
             PaginationCursor::new(OperationCursor::from(cursor_2.as_str()), None, None)
         );
+    }
+
+    #[rstest]
+    fn query_updated_documents(
+        #[from(populate_store_config)]
+        // This config will populate the store with 10 documents which each have their username
+        // field updated
+        #[with(2, 10, 1, false, doggo_schema(), doggo_fields(), vec!(("username", OperationValue::String("me".to_string()))))]
+        config: PopulateStoreConfig,
+    ) {
+        test_runner(|mut node: TestNode| async move {
+            // Populate the store and materialize all documents.
+            populate_and_materialize(&mut node, &config).await;
+
+            let schema = doggo_schema();
+
+            let args = Query::new(
+                &Pagination::new(
+                    &NonZeroU64::new(5).unwrap(),
+                    None,
+                    &vec![PaginationField::TotalCount],
+                ),
+                &Select::new(&[
+                    Field::Meta(MetaField::DocumentId),
+                    Field::Field("username".into()),
+                    Field::Field("height".into()),
+                    Field::Field("age".into()),
+                    Field::Field("is_admin".into()),
+                ]),
+                &Filter::default(),
+                &Order::default(),
+            );
+
+            let (_pagination_data, documents) = node
+                .context
+                .store
+                .query(&schema, &args, None)
+                .await
+                .expect("Query failed");
+
+            // We expect 5 documents and each should contain 4 fields.
+            assert_eq!(documents.len(), 5);
+            for (_cursor, document) in documents {
+                assert_eq!(document.fields().unwrap().len(), 4);
+                assert!(document.is_edited());
+            }
+        });
     }
 }
