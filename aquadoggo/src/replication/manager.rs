@@ -181,6 +181,26 @@ where
         Ok(())
     }
 
+    pub async fn handle_session_message(
+        &self,
+        remote_peer: &P,
+        session_id: &SessionId,
+        message: &Message,
+    ) -> Result<(), ReplicationError> {
+
+        let sessions = self.get_sessions(remote_peer);
+        
+        // Check if a session exists with the given id for this peer.
+        if let Some(session) = sessions.iter().find(|session| session.id == *session_id) {
+            // Pass the message onto the session when found.
+            let _result = session.handle_message(&self.store, message).await?;
+
+            Ok(())
+        } else {
+            Err(ReplicationError::NoSessionFound(*session_id))
+        }
+    }
+
     pub async fn handle_message(
         &mut self,
         remote_peer: &P,
@@ -191,16 +211,8 @@ where
                 self.handle_sync_request(remote_peer, mode, &sync_message.session_id(), target_set)
             }
             message => {
-                let sessions = self.get_sessions(remote_peer);
-                if let Some(session) = sessions
-                    .iter()
-                    .find(|session| session.id == sync_message.session_id())
-                {
-                    let _result = session.handle_message(&self.store, message).await?;
-                    Ok(())
-                } else {
-                    Err(ReplicationError::NoSessionFound(sync_message.session_id()))
-                }
+                self.handle_session_message(remote_peer, &sync_message.session_id(), message)
+                    .await
             }
         }
     }
