@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use crate::db::SqlStore;
+use crate::replication::errors::ReplicationError;
 use crate::replication::traits::Strategy;
 use crate::replication::{
     Message, Mode, NaiveStrategy, SetReconciliationStrategy, StrategyResult, TargetSet,
 };
-use crate::replication::errors::ReplicationError;
 
 pub type SessionId = u64;
 

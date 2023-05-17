@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use async_trait::async_trait;
 use anyhow::Result;
+use async_trait::async_trait;
 
 use crate::db::SqlStore;
+use crate::replication::errors::ReplicationError;
 use crate::replication::traits::Strategy;
 use crate::replication::{Message, Mode, TargetSet};
-use crate::replication::errors::ReplicationError;
 
 #[derive(Clone, Debug)]
 pub struct StrategyResult {
@@ -47,7 +47,11 @@ impl Strategy for NaiveStrategy {
         vec![Message::Have(vec![])]
     }
 
-    async fn handle_message(&self, _store: &SqlStore, message: &Message) -> Result<StrategyResult, ReplicationError> {
+    async fn handle_message(
+        &self,
+        _store: &SqlStore,
+        message: &Message,
+    ) -> Result<StrategyResult, ReplicationError> {
         // TODO: Verify that the TargetSet contained in the message is a sub-set of the passed
         // local TargetSet.
         let _target_set = self.target_set();

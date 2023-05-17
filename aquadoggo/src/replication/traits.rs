@@ -3,11 +3,11 @@
 use async_trait::async_trait;
 use p2panda_rs::schema::SchemaId;
 
+use crate::replication::errors::ReplicationError;
 use crate::{
     db::SqlStore,
     replication::{Message, Mode, StrategyResult, TargetSet},
 };
-use crate::replication::errors::ReplicationError;
 
 #[async_trait]
 pub trait Strategy: std::fmt::Debug + StrategyClone + Sync + Send {
@@ -25,7 +25,11 @@ pub trait Strategy: std::fmt::Debug + StrategyClone + Sync + Send {
     // Handle incoming message and return response.
     //
     // @TODO: we want to pass the store in here too eventually.
-    async fn handle_message(&self, store: &SqlStore, message: &Message) -> Result<StrategyResult, ReplicationError>;
+    async fn handle_message(
+        &self,
+        store: &SqlStore,
+        message: &Message,
+    ) -> Result<StrategyResult, ReplicationError>;
 
     // Validate and store entry and operation.
     //

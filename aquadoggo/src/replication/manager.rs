@@ -91,7 +91,9 @@ where
             }
         };
 
-        let messages = self.insert_session(remote_peer, &session_id, target_set, mode, true).await;
+        let messages = self
+            .insert_session(remote_peer, &session_id, target_set, mode, true)
+            .await;
 
         Ok(messages)
     }
@@ -135,13 +137,17 @@ where
         let mut all_messages = vec![];
 
         if accept_inbound_request {
-            let messages = self.insert_session(remote_peer, &session.id, target_set, &session.mode(), false).await;
+            let messages = self
+                .insert_session(remote_peer, &session.id, target_set, &session.mode(), false)
+                .await;
             all_messages.extend(messages);
 
             // If we dropped our own outbound session request regarding a different target set, we
             // need to re-establish it with another session id, otherwise it would get lost
             if session.target_set() != *target_set {
-                let messages = self.initiate_session(remote_peer, target_set, &session.mode()).await?;
+                let messages = self
+                    .initiate_session(remote_peer, target_set, &session.mode())
+                    .await?;
                 all_messages.extend(messages)
             }
         }
@@ -167,7 +173,9 @@ where
             .enumerate()
             .find(|(_, session)| session.id == *session_id && session.local)
         {
-            return self.handle_duplicate_session(remote_peer, target_set, index, session).await;
+            return self
+                .handle_duplicate_session(remote_peer, target_set, index, session)
+                .await;
         }
 
         // Check if a session with this target set already exists for this peer, this always gets
@@ -179,7 +187,9 @@ where
             return Err(ReplicationError::DuplicateInboundRequest(session.id));
         }
 
-        let messages = self.insert_session(remote_peer, session_id, target_set, mode, false).await;
+        let messages = self
+            .insert_session(remote_peer, session_id, target_set, mode, false)
+            .await;
 
         Ok(messages)
     }
@@ -190,13 +200,13 @@ where
         session_id: &SessionId,
         message: &Message,
     ) -> Result<Vec<Message>, ReplicationError> {
-
         let sessions = self.get_sessions(remote_peer);
-        
+
         // Check if a session exists with the given id for this peer.
         if let Some(session) = sessions.iter().find(|session| session.id == *session_id) {
             // Pass the message onto the session when found.
-            let StrategyResult { is_done, messages } = session.handle_message(&self.store, message).await?;
+            let StrategyResult { is_done, messages } =
+                session.handle_message(&self.store, message).await?;
 
             if is_done {
                 // @TODO: We want to close this connection when both sides are finished....
@@ -215,7 +225,8 @@ where
     ) -> Result<Vec<Message>, ReplicationError> {
         match sync_message.message() {
             Message::SyncRequest(mode, target_set) => {
-                self.handle_sync_request(remote_peer, mode, &sync_message.session_id(), target_set).await
+                self.handle_sync_request(remote_peer, mode, &sync_message.session_id(), target_set)
+                    .await
             }
             message => {
                 self.handle_session_message(remote_peer, &sync_message.session_id(), message)
@@ -249,14 +260,20 @@ mod tests {
             let mode = Mode::Naive;
 
             let mut manager = SyncManager::new(node.context.store.clone(), PEER_ID_LOCAL);
-            let result = manager.initiate_session(&PEER_ID_REMOTE, &target_set_1, &mode).await;
+            let result = manager
+                .initiate_session(&PEER_ID_REMOTE, &target_set_1, &mode)
+                .await;
             assert!(result.is_ok());
 
-            let result = manager.initiate_session(&PEER_ID_REMOTE, &target_set_2, &mode).await;
+            let result = manager
+                .initiate_session(&PEER_ID_REMOTE, &target_set_2, &mode)
+                .await;
             assert!(result.is_ok());
 
             // Expect error when initiating a session for the same target set
-            let result = manager.initiate_session(&PEER_ID_REMOTE, &target_set_1, &mode).await;
+            let result = manager
+                .initiate_session(&PEER_ID_REMOTE, &target_set_1, &mode)
+                .await;
             assert!(matches!(
                 result,
                 Err(ReplicationError::DuplicateOutboundRequest(0))
