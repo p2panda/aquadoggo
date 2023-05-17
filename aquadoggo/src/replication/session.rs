@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use anyhow::Result;
-use p2panda_rs::schema::SchemaId;
 
 use crate::db::SqlStore;
 use crate::replication::traits::Strategy;
@@ -64,20 +63,8 @@ impl Session {
     pub async fn handle_message(
         &self,
         store: &SqlStore,
-        message: Message,
+        message: &Message,
     ) -> Result<StrategyResult> {
         self.strategy.handle_message(&store, message).await
-    }
-
-    pub async fn handle_entry(
-        &self,
-        store: &SqlStore,
-        schema_id: &SchemaId,
-        entry_bytes: Vec<u8>,
-        operation_bytes: Vec<u8>,
-    ) -> Result<()> {
-        self.strategy
-            .handle_entry(&store, schema_id, entry_bytes, operation_bytes)
-            .await
     }
 }

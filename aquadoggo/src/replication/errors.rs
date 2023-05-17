@@ -12,6 +12,9 @@ pub enum ReplicationError {
 
     #[error("Tried to initialise duplicate outbound replication session with id {0}")]
     DuplicateOutboundRequest(u64),
+
+    #[error("No session found with id {0}")]
+    NoSessionFound(u64),
 }
 
 #[derive(Error, Debug)]

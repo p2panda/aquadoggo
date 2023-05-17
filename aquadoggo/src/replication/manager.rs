@@ -181,7 +181,7 @@ where
         Ok(())
     }
 
-    pub fn handle_message(
+    pub async fn handle_message(
         &mut self,
         remote_peer: &P,
         sync_message: &SyncMessage,
@@ -190,7 +190,20 @@ where
             Message::SyncRequest(mode, target_set) => {
                 self.handle_sync_request(remote_peer, mode, &sync_message.session_id(), target_set)
             }
-            _ => todo!(),
+            message => {
+                let sessions = self.get_sessions(remote_peer);
+                if let Some(session) = sessions
+                    .iter()
+                    .find(|session| session.id == sync_message.session_id())
+                {
+                    // @TODO: handle errors here.
+                    let _result = session.handle_message(&self.store, message).await;
+
+                    Ok(())
+                } else {
+                    return Err(ReplicationError::NoSessionFound(sync_message.session_id()));
+                }
+            }
         }
     }
 }
@@ -244,18 +257,18 @@ mod tests {
 
             let message =
                 SyncMessage::new(0, Message::SyncRequest(Mode::Naive, target_set_1.clone()));
-            let result = manager.handle_message(&PEER_ID_REMOTE, &message);
+            let result = manager.handle_message(&PEER_ID_REMOTE, &message).await;
             assert!(result.is_ok());
 
             let message =
                 SyncMessage::new(1, Message::SyncRequest(Mode::Naive, target_set_2.clone()));
-            let result = manager.handle_message(&PEER_ID_REMOTE, &message);
+            let result = manager.handle_message(&PEER_ID_REMOTE, &message).await;
             assert!(result.is_ok());
 
             // Reject attempt to create session again
             let message =
                 SyncMessage::new(0, Message::SyncRequest(Mode::Naive, target_set_1.clone()));
-            let result = manager.handle_message(&PEER_ID_REMOTE, &message);
+            let result = manager.handle_message(&PEER_ID_REMOTE, &message).await;
             assert!(matches!(
                 result,
                 Err(ReplicationError::DuplicateInboundRequest(0))
@@ -264,7 +277,7 @@ mod tests {
             // Reject different session concerning same target set
             let message =
                 SyncMessage::new(2, Message::SyncRequest(Mode::Naive, target_set_2.clone()));
-            let result = manager.handle_message(&PEER_ID_REMOTE, &message);
+            let result = manager.handle_message(&PEER_ID_REMOTE, &message).await;
             assert!(matches!(
                 result,
                 Err(ReplicationError::DuplicateInboundRequest(1))
@@ -281,7 +294,7 @@ mod tests {
                 INITIAL_SESSION_ID,
                 Message::SyncRequest(Mode::Naive, target_set.clone()),
             );
-            let result = manager.handle_message(&PEER_ID_REMOTE, &message);
+            let result = manager.handle_message(&PEER_ID_REMOTE, &message).await;
             assert!(result.is_ok());
 
             // Should fail when requesting unsupported replication mode
@@ -290,7 +303,7 @@ mod tests {
                 INITIAL_SESSION_ID,
                 Message::SyncRequest(Mode::SetReconciliation, target_set.clone()),
             );
-            let result = manager.handle_message(&PEER_ID_REMOTE, &message);
+            let result = manager.handle_message(&PEER_ID_REMOTE, &message).await;
             assert!(result.is_err());
         })
     }

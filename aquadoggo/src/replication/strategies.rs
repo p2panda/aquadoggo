@@ -46,7 +46,7 @@ impl Strategy for NaiveStrategy {
         vec![Message::Have(vec![])]
     }
 
-    async fn handle_message(&self, _store: &SqlStore, message: Message) -> Result<StrategyResult> {
+    async fn handle_message(&self, _store: &SqlStore, message: &Message) -> Result<StrategyResult> {
         // TODO: Verify that the TargetSet contained in the message is a sub-set of the passed
         // local TargetSet.
         let _target_set = self.target_set();
@@ -91,7 +91,7 @@ impl Strategy for SetReconciliationStrategy {
         todo!()
     }
 
-    async fn handle_message(&self, _store: &SqlStore, message: Message) -> Result<StrategyResult> {
+    async fn handle_message(&self, _store: &SqlStore, _message: &Message) -> Result<StrategyResult> {
         todo!()
     }
 }
