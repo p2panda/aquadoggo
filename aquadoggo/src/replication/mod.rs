@@ -10,7 +10,7 @@ mod target_set;
 pub mod traits;
 
 pub use manager::SyncManager;
-pub use message::{Message, StrategyMessage, SyncMessage};
+pub use message::{Message, SyncMessage};
 pub use mode::Mode;
 pub use session::{Session, SessionId, SessionState};
 pub use strategies::{NaiveStrategy, SetReconciliationStrategy, StrategyResult};

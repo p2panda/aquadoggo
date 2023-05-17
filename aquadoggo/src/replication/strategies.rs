@@ -4,12 +4,12 @@ use anyhow::Result;
 use async_trait::async_trait;
 
 use crate::replication::traits::Strategy;
-use crate::replication::{Mode, StrategyMessage, TargetSet};
+use crate::replication::{Message, Mode, TargetSet};
 
 #[derive(Clone, Debug)]
 pub struct StrategyResult {
     is_done: bool,
-    messages: Vec<StrategyMessage>,
+    messages: Vec<Message>,
 }
 
 #[derive(Clone, Debug)]
@@ -37,15 +37,15 @@ impl Strategy for NaiveStrategy {
         self.target_set.clone()
     }
 
-    async fn initial_messages(&self) -> Vec<StrategyMessage> {
+    async fn initial_messages(&self) -> Vec<Message> {
         // TODO: Access the store and compose a have message which contains our local log heights over
         // the TargetSet.
         let _target_set = self.target_set();
 
-        vec![StrategyMessage::Have]
+        vec![Message::Have(vec![])]
     }
 
-    async fn handle_message(&self, message: StrategyMessage) -> Result<StrategyResult> {
+    async fn handle_message(&self, message: Message) -> Result<StrategyResult> {
         // TODO: Verify that the TargetSet contained in the message is a sub-set of the passed
         // local TargetSet.
         let _target_set = self.target_set();
@@ -53,13 +53,14 @@ impl Strategy for NaiveStrategy {
         let mut is_done = false;
 
         match message {
-            StrategyMessage::Have => {
+            Message::Have(_log_heights) => {
                 // Compose Have message and push to messages
                 is_done = true;
             }
-            StrategyMessage::Entry => {
+            Message::Entry(_, _) => {
                 // self.handle_entry(..)
             }
+            _ => panic!("Naive replication strategy received unsupported message type"),
         }
 
         Ok(StrategyResult { is_done, messages })
@@ -85,11 +86,11 @@ impl Strategy for SetReconciliationStrategy {
         todo!()
     }
 
-    async fn initial_messages(&self) -> Vec<StrategyMessage> {
+    async fn initial_messages(&self) -> Vec<Message> {
         todo!()
     }
 
-    async fn handle_message(&self, _message: StrategyMessage) -> Result<StrategyResult> {
+    async fn handle_message(&self, _message: Message) -> Result<StrategyResult> {
         todo!()
     }
 }
