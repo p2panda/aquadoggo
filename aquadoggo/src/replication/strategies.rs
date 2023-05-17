@@ -10,8 +10,8 @@ use crate::replication::errors::ReplicationError;
 
 #[derive(Clone, Debug)]
 pub struct StrategyResult {
-    is_done: bool,
-    messages: Vec<Message>,
+    pub is_done: bool,
+    pub messages: Vec<Message>,
 }
 
 #[derive(Clone, Debug)]

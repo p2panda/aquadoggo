@@ -8,6 +8,8 @@ use crate::db::SqlStore;
 use crate::replication::errors::ReplicationError;
 use crate::replication::{Message, Mode, Session, SessionId, SessionState, SyncMessage, TargetSet};
 
+use super::StrategyResult;
+
 pub const INITIAL_SESSION_ID: SessionId = 0;
 
 pub const SUPPORTED_MODES: [Mode; 1] = [Mode::Naive];
@@ -41,29 +43,32 @@ where
     }
 
     /// Register a new session in manager.
-    fn insert_session(
+    async fn insert_session(
         &mut self,
         remote_peer: &P,
         session_id: &SessionId,
         target_set: &TargetSet,
         mode: &Mode,
         local: bool,
-    ) {
+    ) -> Vec<Message> {
         let session = Session::new(session_id, target_set, mode, local);
+        let initial_messages = session.initial_messages(&self.store).await;
 
         if let Some(sessions) = self.sessions.get_mut(remote_peer) {
             sessions.push(session);
         } else {
             self.sessions.insert(remote_peer.clone(), vec![session]);
         }
+
+        initial_messages
     }
 
-    pub fn initiate_session(
+    pub async fn initiate_session(
         &mut self,
         remote_peer: &P,
         target_set: &TargetSet,
         mode: &Mode,
-    ) -> Result<(), ReplicationError> {
+    ) -> Result<Vec<Message>, ReplicationError> {
         SyncManager::<P>::is_mode_supported(mode)?;
 
         let sessions = self.get_sessions(remote_peer);
@@ -86,9 +91,9 @@ where
             }
         };
 
-        self.insert_session(remote_peer, &session_id, target_set, mode, true);
+        let messages = self.insert_session(remote_peer, &session_id, target_set, mode, true).await;
 
-        Ok(())
+        Ok(messages)
     }
 
     fn is_mode_supported(mode: &Mode) -> Result<(), ReplicationError> {
@@ -99,13 +104,13 @@ where
         Ok(())
     }
 
-    fn handle_duplicate_session(
+    async fn handle_duplicate_session(
         &mut self,
         remote_peer: &P,
         target_set: &TargetSet,
         index: usize,
         session: &Session,
-    ) -> Result<(), ReplicationError> {
+    ) -> Result<Vec<Message>, ReplicationError> {
         let accept_inbound_request = match session.state {
             // Handle only duplicate sessions when they haven't started yet
             SessionState::Pending => {
@@ -127,32 +132,30 @@ where
             _ => return Err(ReplicationError::DuplicateInboundRequest(session.id)),
         };
 
-        if accept_inbound_request {
-            self.insert_session(remote_peer, &session.id, target_set, &session.mode(), false);
+        let mut all_messages = vec![];
 
-            // @TODO: Session needs to generate some messages on creation and
-            // it will pass them back up to us to then forward onto
-            // the swarm
+        if accept_inbound_request {
+            let messages = self.insert_session(remote_peer, &session.id, target_set, &session.mode(), false).await;
+            all_messages.extend(messages);
 
             // If we dropped our own outbound session request regarding a different target set, we
             // need to re-establish it with another session id, otherwise it would get lost
             if session.target_set() != *target_set {
-                self.initiate_session(remote_peer, target_set, &session.mode())?;
-                // @TODO: Again, the new session will generate a message
-                // which we send onto the swarm
+                let messages = self.initiate_session(remote_peer, target_set, &session.mode()).await?;
+                all_messages.extend(messages)
             }
         }
 
-        Ok(())
+        Ok(all_messages)
     }
 
-    fn handle_sync_request(
+    async fn handle_sync_request(
         &mut self,
         remote_peer: &P,
         mode: &Mode,
         session_id: &SessionId,
         target_set: &TargetSet,
-    ) -> Result<(), ReplicationError> {
+    ) -> Result<Vec<Message>, ReplicationError> {
         SyncManager::<P>::is_mode_supported(mode)?;
 
         let sessions = self.get_sessions(remote_peer);
@@ -164,7 +167,7 @@ where
             .enumerate()
             .find(|(_, session)| session.id == *session_id && session.local)
         {
-            return self.handle_duplicate_session(remote_peer, target_set, index, session);
+            return self.handle_duplicate_session(remote_peer, target_set, index, session).await;
         }
 
         // Check if a session with this target set already exists for this peer, this always gets
@@ -176,9 +179,9 @@ where
             return Err(ReplicationError::DuplicateInboundRequest(session.id));
         }
 
-        self.insert_session(remote_peer, session_id, target_set, mode, false);
+        let messages = self.insert_session(remote_peer, session_id, target_set, mode, false).await;
 
-        Ok(())
+        Ok(messages)
     }
 
     pub async fn handle_session_message(
@@ -186,16 +189,20 @@ where
         remote_peer: &P,
         session_id: &SessionId,
         message: &Message,
-    ) -> Result<(), ReplicationError> {
+    ) -> Result<Vec<Message>, ReplicationError> {
 
         let sessions = self.get_sessions(remote_peer);
         
         // Check if a session exists with the given id for this peer.
         if let Some(session) = sessions.iter().find(|session| session.id == *session_id) {
             // Pass the message onto the session when found.
-            let _result = session.handle_message(&self.store, message).await?;
+            let StrategyResult { is_done, messages } = session.handle_message(&self.store, message).await?;
 
-            Ok(())
+            if is_done {
+                // @TODO: We want to close this connection when both sides are finished....
+            }
+
+            Ok(messages)
         } else {
             Err(ReplicationError::NoSessionFound(*session_id))
         }
@@ -205,10 +212,10 @@ where
         &mut self,
         remote_peer: &P,
         sync_message: &SyncMessage,
-    ) -> Result<(), ReplicationError> {
+    ) -> Result<Vec<Message>, ReplicationError> {
         match sync_message.message() {
             Message::SyncRequest(mode, target_set) => {
-                self.handle_sync_request(remote_peer, mode, &sync_message.session_id(), target_set)
+                self.handle_sync_request(remote_peer, mode, &sync_message.session_id(), target_set).await
             }
             message => {
                 self.handle_session_message(remote_peer, &sync_message.session_id(), message)
@@ -242,14 +249,14 @@ mod tests {
             let mode = Mode::Naive;
 
             let mut manager = SyncManager::new(node.context.store.clone(), PEER_ID_LOCAL);
-            let result = manager.initiate_session(&PEER_ID_REMOTE, &target_set_1, &mode);
+            let result = manager.initiate_session(&PEER_ID_REMOTE, &target_set_1, &mode).await;
             assert!(result.is_ok());
 
-            let result = manager.initiate_session(&PEER_ID_REMOTE, &target_set_2, &mode);
+            let result = manager.initiate_session(&PEER_ID_REMOTE, &target_set_2, &mode).await;
             assert!(result.is_ok());
 
             // Expect error when initiating a session for the same target set
-            let result = manager.initiate_session(&PEER_ID_REMOTE, &target_set_1, &mode);
+            let result = manager.initiate_session(&PEER_ID_REMOTE, &target_set_1, &mode).await;
             assert!(matches!(
                 result,
                 Err(ReplicationError::DuplicateOutboundRequest(0))
