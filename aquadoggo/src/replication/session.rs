@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use anyhow::Result;
-
 use crate::db::SqlStore;
 use crate::replication::traits::Strategy;
 use crate::replication::{
     Message, Mode, NaiveStrategy, SetReconciliationStrategy, StrategyResult, TargetSet,
 };
+use crate::replication::errors::ReplicationError;
 
 pub type SessionId = u64;
 
@@ -64,7 +63,7 @@ impl Session {
         &self,
         store: &SqlStore,
         message: &Message,
-    ) -> Result<StrategyResult> {
+    ) -> Result<StrategyResult, ReplicationError> {
         self.strategy.handle_message(store, message).await
     }
 }

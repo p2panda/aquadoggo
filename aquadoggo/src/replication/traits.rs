@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use anyhow::Result;
 use async_trait::async_trait;
 use p2panda_rs::schema::SchemaId;
 
@@ -8,6 +7,7 @@ use crate::{
     db::SqlStore,
     replication::{Message, Mode, StrategyResult, TargetSet},
 };
+use crate::replication::errors::ReplicationError;
 
 #[async_trait]
 pub trait Strategy: std::fmt::Debug + StrategyClone + Sync + Send {
@@ -25,7 +25,7 @@ pub trait Strategy: std::fmt::Debug + StrategyClone + Sync + Send {
     // Handle incoming message and return response.
     //
     // @TODO: we want to pass the store in here too eventually.
-    async fn handle_message(&self, store: &SqlStore, message: &Message) -> Result<StrategyResult>;
+    async fn handle_message(&self, store: &SqlStore, message: &Message) -> Result<StrategyResult, ReplicationError>;
 
     // Validate and store entry and operation.
     //
@@ -36,7 +36,7 @@ pub trait Strategy: std::fmt::Debug + StrategyClone + Sync + Send {
         _schema_id: &SchemaId,
         _entry_bytes: Vec<u8>,
         _operation_bytes: Vec<u8>,
-    ) -> Result<()> {
+    ) -> Result<(), ReplicationError> {
         // Validation:
         // Check against schema_id and target_set if entry is what we've asked for
         let _target_set = self.target_set();

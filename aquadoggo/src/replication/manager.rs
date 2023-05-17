@@ -196,9 +196,7 @@ where
                     .iter()
                     .find(|session| session.id == sync_message.session_id())
                 {
-                    // @TODO: handle errors here.
-                    let _result = session.handle_message(&self.store, message).await;
-
+                    let _result = session.handle_message(&self.store, message).await?;
                     Ok(())
                 } else {
                     Err(ReplicationError::NoSessionFound(sync_message.session_id()))
