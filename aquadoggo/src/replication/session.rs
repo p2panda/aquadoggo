@@ -57,7 +57,7 @@ impl Session {
     }
 
     pub async fn initial_messages(&self, store: &SqlStore) -> Vec<Message> {
-        self.strategy.initial_messages(&store).await
+        self.strategy.initial_messages(store).await
     }
 
     pub async fn handle_message(
@@ -65,6 +65,6 @@ impl Session {
         store: &SqlStore,
         message: &Message,
     ) -> Result<StrategyResult> {
-        self.strategy.handle_message(&store, message).await
+        self.strategy.handle_message(store, message).await
     }
 }

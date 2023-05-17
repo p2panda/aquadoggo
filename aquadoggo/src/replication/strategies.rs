@@ -91,7 +91,11 @@ impl Strategy for SetReconciliationStrategy {
         todo!()
     }
 
-    async fn handle_message(&self, _store: &SqlStore, _message: &Message) -> Result<StrategyResult> {
+    async fn handle_message(
+        &self,
+        _store: &SqlStore,
+        _message: &Message,
+    ) -> Result<StrategyResult> {
         todo!()
     }
 }

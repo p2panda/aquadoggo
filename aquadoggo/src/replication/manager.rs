@@ -201,7 +201,7 @@ where
 
                     Ok(())
                 } else {
-                    return Err(ReplicationError::NoSessionFound(sync_message.session_id()));
+                    Err(ReplicationError::NoSessionFound(sync_message.session_id()))
                 }
             }
         }

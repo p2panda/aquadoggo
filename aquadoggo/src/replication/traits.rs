@@ -4,7 +4,10 @@ use anyhow::Result;
 use async_trait::async_trait;
 use p2panda_rs::schema::SchemaId;
 
-use crate::{replication::{Mode, Message, StrategyResult, TargetSet}, db::SqlStore};
+use crate::{
+    db::SqlStore,
+    replication::{Message, Mode, StrategyResult, TargetSet},
+};
 
 #[async_trait]
 pub trait Strategy: std::fmt::Debug + StrategyClone + Sync + Send {
