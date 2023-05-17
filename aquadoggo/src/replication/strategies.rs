@@ -3,6 +3,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 
+use crate::db::SqlStore;
 use crate::replication::traits::Strategy;
 use crate::replication::{Message, Mode, TargetSet};
 
@@ -37,7 +38,7 @@ impl Strategy for NaiveStrategy {
         self.target_set.clone()
     }
 
-    async fn initial_messages(&self) -> Vec<Message> {
+    async fn initial_messages(&self, _store: &SqlStore) -> Vec<Message> {
         // TODO: Access the store and compose a have message which contains our local log heights over
         // the TargetSet.
         let _target_set = self.target_set();
@@ -45,7 +46,7 @@ impl Strategy for NaiveStrategy {
         vec![Message::Have(vec![])]
     }
 
-    async fn handle_message(&self, message: Message) -> Result<StrategyResult> {
+    async fn handle_message(&self, _store: &SqlStore, message: Message) -> Result<StrategyResult> {
         // TODO: Verify that the TargetSet contained in the message is a sub-set of the passed
         // local TargetSet.
         let _target_set = self.target_set();
@@ -86,11 +87,11 @@ impl Strategy for SetReconciliationStrategy {
         todo!()
     }
 
-    async fn initial_messages(&self) -> Vec<Message> {
+    async fn initial_messages(&self, _store: &SqlStore) -> Vec<Message> {
         todo!()
     }
 
-    async fn handle_message(&self, _message: Message) -> Result<StrategyResult> {
+    async fn handle_message(&self, _store: &SqlStore, message: Message) -> Result<StrategyResult> {
         todo!()
     }
 }

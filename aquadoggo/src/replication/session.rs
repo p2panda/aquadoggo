@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use anyhow::Result;
+use p2panda_rs::schema::SchemaId;
+
+use crate::db::SqlStore;
 use crate::replication::traits::Strategy;
-use crate::replication::{Mode, NaiveStrategy, SetReconciliationStrategy, TargetSet};
+use crate::replication::{
+    Message, Mode, NaiveStrategy, SetReconciliationStrategy, StrategyResult, TargetSet,
+};
 
 pub type SessionId = u64;
 
@@ -14,8 +20,6 @@ pub enum SessionState {
 
 #[derive(Clone, Debug)]
 pub struct Session {
-    // @TODO: Access to the store
-    // store: Store
     /// Unique identifier of this session for that peer.
     pub id: SessionId,
 
@@ -51,5 +55,29 @@ impl Session {
 
     pub fn target_set(&self) -> TargetSet {
         self.strategy.target_set()
+    }
+
+    pub async fn initial_messages(&self, store: &SqlStore) -> Vec<Message> {
+        self.strategy.initial_messages(&store).await
+    }
+
+    pub async fn handle_message(
+        &self,
+        store: &SqlStore,
+        message: Message,
+    ) -> Result<StrategyResult> {
+        self.strategy.handle_message(&store, message).await
+    }
+
+    pub async fn handle_entry(
+        &self,
+        store: &SqlStore,
+        schema_id: &SchemaId,
+        entry_bytes: Vec<u8>,
+        operation_bytes: Vec<u8>,
+    ) -> Result<()> {
+        self.strategy
+            .handle_entry(&store, schema_id, entry_bytes, operation_bytes)
+            .await
     }
 }

@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 
+use crate::db::SqlStore;
 use crate::replication::errors::ReplicationError;
 use crate::replication::{Message, Mode, Session, SessionId, SessionState, SyncMessage, TargetSet};
 
@@ -13,6 +14,7 @@ pub const SUPPORTED_MODES: [Mode; 1] = [Mode::Naive];
 
 #[derive(Debug)]
 pub struct SyncManager<P> {
+    store: SqlStore,
     local_peer: P,
     sessions: HashMap<P, Vec<Session>>,
 }
@@ -21,8 +23,9 @@ impl<P> SyncManager<P>
 where
     P: Clone + std::hash::Hash + Eq + PartialOrd,
 {
-    pub fn new(local_peer: P) -> Self {
+    pub fn new(store: SqlStore, local_peer: P) -> Self {
         Self {
+            store,
             local_peer,
             sessions: HashMap::new(),
         }
@@ -200,6 +203,7 @@ mod tests {
     use crate::replication::message::Message;
     use crate::replication::{Mode, SyncMessage, TargetSet};
     use crate::test_utils::helpers::random_target_set;
+    use crate::test_utils::{test_runner, TestNode};
 
     use super::{SyncManager, INITIAL_SESSION_ID};
 
@@ -211,21 +215,23 @@ mod tests {
         #[from(random_target_set)] target_set_1: TargetSet,
         #[from(random_target_set)] target_set_2: TargetSet,
     ) {
-        let mode = Mode::Naive;
+        test_runner(move |node: TestNode| async move {
+            let mode = Mode::Naive;
 
-        let mut manager = SyncManager::new(PEER_ID_LOCAL);
-        let result = manager.initiate_session(&PEER_ID_REMOTE, &target_set_1, &mode);
-        assert!(result.is_ok());
+            let mut manager = SyncManager::new(node.context.store.clone(), PEER_ID_LOCAL);
+            let result = manager.initiate_session(&PEER_ID_REMOTE, &target_set_1, &mode);
+            assert!(result.is_ok());
 
-        let result = manager.initiate_session(&PEER_ID_REMOTE, &target_set_2, &mode);
-        assert!(result.is_ok());
+            let result = manager.initiate_session(&PEER_ID_REMOTE, &target_set_2, &mode);
+            assert!(result.is_ok());
 
-        // Expect error when initiating a session for the same target set
-        let result = manager.initiate_session(&PEER_ID_REMOTE, &target_set_1, &mode);
-        assert!(matches!(
-            result,
-            Err(ReplicationError::DuplicateOutboundRequest(0))
-        ));
+            // Expect error when initiating a session for the same target set
+            let result = manager.initiate_session(&PEER_ID_REMOTE, &target_set_1, &mode);
+            assert!(matches!(
+                result,
+                Err(ReplicationError::DuplicateOutboundRequest(0))
+            ));
+        })
     }
 
     #[rstest]
@@ -233,51 +239,59 @@ mod tests {
         #[from(random_target_set)] target_set_1: TargetSet,
         #[from(random_target_set)] target_set_2: TargetSet,
     ) {
-        let mut manager = SyncManager::new(PEER_ID_LOCAL);
+        test_runner(move |node: TestNode| async move {
+            let mut manager = SyncManager::new(node.context.store.clone(), PEER_ID_LOCAL);
 
-        let message = SyncMessage::new(0, Message::SyncRequest(Mode::Naive, target_set_1.clone()));
-        let result = manager.handle_message(&PEER_ID_REMOTE, &message);
-        assert!(result.is_ok());
+            let message =
+                SyncMessage::new(0, Message::SyncRequest(Mode::Naive, target_set_1.clone()));
+            let result = manager.handle_message(&PEER_ID_REMOTE, &message);
+            assert!(result.is_ok());
 
-        let message = SyncMessage::new(1, Message::SyncRequest(Mode::Naive, target_set_2.clone()));
-        let result = manager.handle_message(&PEER_ID_REMOTE, &message);
-        assert!(result.is_ok());
+            let message =
+                SyncMessage::new(1, Message::SyncRequest(Mode::Naive, target_set_2.clone()));
+            let result = manager.handle_message(&PEER_ID_REMOTE, &message);
+            assert!(result.is_ok());
 
-        // Reject attempt to create session again
-        let message = SyncMessage::new(0, Message::SyncRequest(Mode::Naive, target_set_1.clone()));
-        let result = manager.handle_message(&PEER_ID_REMOTE, &message);
-        assert!(matches!(
-            result,
-            Err(ReplicationError::DuplicateInboundRequest(0))
-        ));
+            // Reject attempt to create session again
+            let message =
+                SyncMessage::new(0, Message::SyncRequest(Mode::Naive, target_set_1.clone()));
+            let result = manager.handle_message(&PEER_ID_REMOTE, &message);
+            assert!(matches!(
+                result,
+                Err(ReplicationError::DuplicateInboundRequest(0))
+            ));
 
-        // Reject different session concerning same target set
-        let message = SyncMessage::new(2, Message::SyncRequest(Mode::Naive, target_set_2.clone()));
-        let result = manager.handle_message(&PEER_ID_REMOTE, &message);
-        assert!(matches!(
-            result,
-            Err(ReplicationError::DuplicateInboundRequest(1))
-        ));
+            // Reject different session concerning same target set
+            let message =
+                SyncMessage::new(2, Message::SyncRequest(Mode::Naive, target_set_2.clone()));
+            let result = manager.handle_message(&PEER_ID_REMOTE, &message);
+            assert!(matches!(
+                result,
+                Err(ReplicationError::DuplicateInboundRequest(1))
+            ));
+        })
     }
 
     #[rstest]
     fn inbound_checks_supported_mode(#[from(random_target_set)] target_set: TargetSet) {
-        // Should not fail when requesting supported replication mode
-        let mut manager = SyncManager::new(PEER_ID_LOCAL);
-        let message = SyncMessage::new(
-            INITIAL_SESSION_ID,
-            Message::SyncRequest(Mode::Naive, target_set.clone()),
-        );
-        let result = manager.handle_message(&PEER_ID_REMOTE, &message);
-        assert!(result.is_ok());
+        test_runner(move |node: TestNode| async move {
+            // Should not fail when requesting supported replication mode
+            let mut manager = SyncManager::new(node.context.store.clone(), PEER_ID_LOCAL);
+            let message = SyncMessage::new(
+                INITIAL_SESSION_ID,
+                Message::SyncRequest(Mode::Naive, target_set.clone()),
+            );
+            let result = manager.handle_message(&PEER_ID_REMOTE, &message);
+            assert!(result.is_ok());
 
-        // Should fail when requesting unsupported replication mode
-        let mut manager = SyncManager::new(PEER_ID_LOCAL);
-        let message = SyncMessage::new(
-            INITIAL_SESSION_ID,
-            Message::SyncRequest(Mode::SetReconciliation, target_set.clone()),
-        );
-        let result = manager.handle_message(&PEER_ID_REMOTE, &message);
-        assert!(result.is_err());
+            // Should fail when requesting unsupported replication mode
+            let mut manager = SyncManager::new(node.context.store.clone(), PEER_ID_LOCAL);
+            let message = SyncMessage::new(
+                INITIAL_SESSION_ID,
+                Message::SyncRequest(Mode::SetReconciliation, target_set.clone()),
+            );
+            let result = manager.handle_message(&PEER_ID_REMOTE, &message);
+            assert!(result.is_err());
+        })
     }
 }

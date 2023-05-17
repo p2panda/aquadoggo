@@ -4,10 +4,10 @@ use anyhow::Result;
 use async_trait::async_trait;
 use p2panda_rs::schema::SchemaId;
 
-use crate::replication::{Mode, Message, StrategyResult, TargetSet};
+use crate::{replication::{Mode, Message, StrategyResult, TargetSet}, db::SqlStore};
 
 #[async_trait]
-pub trait Strategy: std::fmt::Debug + StrategyClone {
+pub trait Strategy: std::fmt::Debug + StrategyClone + Sync {
     /// Replication mode of this strategy.
     fn mode(&self) -> Mode;
 
@@ -17,18 +17,19 @@ pub trait Strategy: std::fmt::Debug + StrategyClone {
     // Generate initial messages.
     //
     // @TODO: we want to pass the store in here too eventually.
-    async fn initial_messages(&self) -> Vec<Message>;
+    async fn initial_messages(&self, store: &SqlStore) -> Vec<Message>;
 
     // Handle incoming message and return response.
     //
     // @TODO: we want to pass the store in here too eventually.
-    async fn handle_message(&self, message: Message) -> Result<StrategyResult>;
+    async fn handle_message(&self, store: &SqlStore, message: Message) -> Result<StrategyResult>;
 
     // Validate and store entry and operation.
     //
     // @TODO: we want to pass the store in here too eventually.
     async fn handle_entry(
         &self,
+        _store: &SqlStore,
         _schema_id: &SchemaId,
         _entry_bytes: Vec<u8>,
         _operation_bytes: Vec<u8>,
