@@ -52,16 +52,19 @@ impl SchemaProvider {
     }
 
     /// Returns receiver for broadcast channel.
+    #[allow(dead_code)]
     pub fn on_schema_added(&self) -> Receiver<SchemaId> {
         self.tx.subscribe()
     }
 
     /// Retrieve a schema that may be a system or application schema by its schema id.
+    #[allow(dead_code)]
     pub async fn get(&self, schema_id: &SchemaId) -> Option<Schema> {
         self.schemas.lock().await.get(schema_id).cloned()
     }
 
     /// Returns all system and application schemas.
+    #[allow(dead_code)]
     pub async fn all(&self) -> Vec<Schema> {
         self.schemas.lock().await.values().cloned().collect()
     }

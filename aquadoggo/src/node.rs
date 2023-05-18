@@ -7,6 +7,7 @@ use crate::config::Configuration;
 use crate::context::Context;
 use crate::db::SqlStore;
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
+#[cfg(feature = "graphql")]
 use crate::http::http_service;
 use crate::manager::ServiceManager;
 use crate::materializer::materializer_service;
@@ -72,6 +73,7 @@ impl Node {
         }
 
         // Start HTTP server with GraphQL API
+        #[cfg(feature = "graphql")]
         if manager.add("http", http_service).await.is_err() {
             panic!("Failed starting HTTP service");
         }

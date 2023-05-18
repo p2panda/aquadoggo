@@ -11,6 +11,7 @@ use sqlx::migrate::MigrateDatabase;
 
 pub mod errors;
 pub mod models;
+#[cfg(feature = "graphql")]
 pub mod query;
 pub mod stores;
 pub mod types;

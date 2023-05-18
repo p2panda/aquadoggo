@@ -222,6 +222,7 @@ pub async fn add_schema(
 }
 
 /// Create a schema in the test database and multiple documents using it.
+#[cfg(feature = "graphql")]
 pub async fn add_schema_and_documents(
     node: &mut TestNode,
     schema_name: &str,

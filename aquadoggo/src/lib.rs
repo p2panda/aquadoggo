@@ -46,7 +46,9 @@ mod bus;
 mod config;
 mod context;
 mod db;
+#[cfg(feature = "graphql")]
 mod graphql;
+#[cfg(feature = "graphql")]
 mod http;
 mod manager;
 mod materializer;
@@ -57,7 +59,7 @@ mod proptests;
 mod schema;
 #[cfg(test)]
 mod test_utils;
-#[cfg(test)]
+#[cfg(all(test, feature = "graphql"))]
 mod tests;
 
 pub use crate::config::Configuration;
