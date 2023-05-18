@@ -29,3 +29,4 @@ libp2p = "=0.51.3"
 [dependencies.aquadoggo]
 version = "~0.4.0"
 path = "../aquadoggo"
+features = ["graphql", "network"]

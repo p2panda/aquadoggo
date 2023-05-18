@@ -52,6 +52,7 @@ mod graphql;
 mod http;
 mod manager;
 mod materializer;
+#[cfg(feature = "network")]
 mod network;
 mod node;
 #[cfg(all(test, feature = "proptests"))]
@@ -63,6 +64,7 @@ mod test_utils;
 mod tests;
 
 pub use crate::config::Configuration;
+#[cfg(feature = "network")]
 pub use crate::network::NetworkConfiguration;
 pub use node::Node;
 

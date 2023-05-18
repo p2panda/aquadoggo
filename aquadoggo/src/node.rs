@@ -11,6 +11,7 @@ use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
 use crate::http::http_service;
 use crate::manager::ServiceManager;
 use crate::materializer::materializer_service;
+#[cfg(feature = "network")]
 use crate::network::network_service;
 use crate::schema::SchemaProvider;
 
@@ -79,6 +80,7 @@ impl Node {
         }
 
         // Start network service
+        #[cfg(feature = "network")]
         if manager.add("network", network_service).await.is_err() {
             panic!("Failed starting network service");
         }

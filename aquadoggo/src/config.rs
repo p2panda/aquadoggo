@@ -7,6 +7,7 @@ use anyhow::Result;
 use directories::ProjectDirs;
 use serde::Deserialize;
 
+#[cfg(feature = "network")]
 use crate::network::NetworkConfiguration;
 
 /// Data directory name.
@@ -39,6 +40,7 @@ pub struct Configuration {
     pub http_port: u16,
 
     /// Network configuration.
+    #[cfg(feature = "network")]
     pub network: NetworkConfiguration,
 
     /// Materializer worker pool size.
@@ -52,6 +54,7 @@ impl Default for Configuration {
             database_url: None,
             database_max_connections: 32,
             http_port: 2020,
+            #[cfg(feature = "network")]
             network: NetworkConfiguration::default(),
             worker_pool_size: 16,
         }
