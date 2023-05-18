@@ -149,13 +149,10 @@ impl<'de> Deserialize<'de> for SyncMessage {
 
                     Ok(Message::SyncDone(live_mode))
                 } else if message_type == HAVE_TYPE {
-                    println!("Deserialize log heights");
                     let log_heights: Vec<(PublicKey, LogId, SeqNum)> =
                         seq.next_element()?.ok_or_else(|| {
                             serde::de::Error::custom("missing log heights in have message")
                         })?;
-                    println!("COMPLETE");
-                    println!("{log_heights:#?}");
 
                     Ok(Message::Have(log_heights))
                 } else {
