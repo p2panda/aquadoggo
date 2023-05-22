@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use p2panda_rs::entry::EncodedEntry;
+use p2panda_rs::operation::decode::decode_operation;
+use p2panda_rs::operation::traits::Schematic;
+use p2panda_rs::operation::EncodedOperation;
+
 use crate::db::SqlStore;
 use crate::replication::errors::ReplicationError;
 use crate::replication::traits::Strategy;
@@ -83,6 +88,27 @@ impl Session {
         self.strategy.initial_messages(store).await
     }
 
+    /// Validate entry and operation.
+    ///
+    /// This checks if the received data is actually what we've asked for.
+    pub fn validate_entry(
+        &self,
+        _entry_bytes: &EncodedEntry,
+        operation_bytes: Option<&EncodedOperation>,
+    ) -> Result<(), ReplicationError> {
+        if let Some(operation_bytes) = operation_bytes {
+            let operation = decode_operation(operation_bytes).map_err(|_| {
+                ReplicationError::StrategyFailed("Could not decode operation".into())
+            })?;
+
+            if !self.target_set().contains(operation.schema_id()) {
+                return Err(ReplicationError::UnmatchedTargetSet);
+            }
+        }
+
+        Ok(())
+    }
+
     pub async fn handle_message(
         &mut self,
         store: &SqlStore,
@@ -92,14 +118,6 @@ impl Session {
             Message::SyncDone(live_mode) => {
                 self.is_remote_done = true;
                 self.is_remote_live_mode = *live_mode;
-                vec![]
-            }
-            Message::Entry(entry_bytes, operation_bytes) => {
-                self.strategy
-                    .validate_entry(entry_bytes, operation_bytes.as_ref())
-                    .await?;
-
-                // @TODO: Store entry and inform other services about it
                 vec![]
             }
             message => {

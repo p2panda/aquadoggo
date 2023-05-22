@@ -3,6 +3,8 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
+use p2panda_rs::entry::EncodedEntry;
+use p2panda_rs::operation::EncodedOperation;
 
 use crate::bus::ServiceSender;
 use crate::db::SqlStore;
@@ -37,9 +39,9 @@ where
 {
     pub fn new(store: SqlStore, local_peer: P, tx: ServiceSender) -> Self {
         Self {
-            store: store.clone(),
+            store,
             local_peer,
-            ingest: SyncIngest::new(store, tx),
+            ingest: SyncIngest::new(tx),
             sessions: HashMap::new(),
         }
     }
@@ -248,6 +250,32 @@ where
         }
     }
 
+    pub async fn handle_entry(
+        &mut self,
+        remote_peer: &P,
+        session_id: &SessionId,
+        entry_bytes: &EncodedEntry,
+        operation_bytes: &Option<EncodedOperation>,
+    ) -> Result<SyncResult, ReplicationError> {
+        let mut sessions = self.get_sessions(remote_peer);
+
+        if let Some(session) = sessions
+            .iter_mut()
+            .find(|session| session.id == *session_id)
+        {
+            self.ingest
+                .handle_entry(&self.store, entry_bytes, operation_bytes.as_ref())
+                .await?;
+
+            Ok(SyncResult {
+                messages: vec![],
+                is_done: session.state == SessionState::Done,
+            })
+        } else {
+            Err(ReplicationError::NoSessionFound(*session_id))
+        }
+    }
+
     pub async fn handle_message(
         &mut self,
         remote_peer: &P,
@@ -257,6 +285,15 @@ where
             Message::SyncRequest(mode, target_set) => {
                 self.handle_sync_request(remote_peer, mode, &sync_message.session_id(), target_set)
                     .await
+            }
+            Message::Entry(entry_bytes, operation_bytes) => {
+                self.handle_entry(
+                    remote_peer,
+                    &sync_message.session_id(),
+                    entry_bytes,
+                    operation_bytes,
+                )
+                .await
             }
             message => {
                 self.handle_session_message(remote_peer, &sync_message.session_id(), message)

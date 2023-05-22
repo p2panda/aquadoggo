@@ -1,10 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_trait::async_trait;
-use p2panda_rs::entry::EncodedEntry;
-use p2panda_rs::operation::decode::decode_operation;
-use p2panda_rs::operation::traits::Schematic;
-use p2panda_rs::operation::EncodedOperation;
 
 use crate::db::SqlStore;
 use crate::replication::errors::ReplicationError;
@@ -27,27 +23,6 @@ pub trait Strategy: std::fmt::Debug + StrategyClone + Sync + Send {
         store: &SqlStore,
         message: &Message,
     ) -> Result<StrategyResult, ReplicationError>;
-
-    /// Validate and store entry and operation.
-    ///
-    /// This checks if the received data is actually what we've asked for.
-    async fn validate_entry(
-        &mut self,
-        _entry_bytes: &EncodedEntry,
-        operation_bytes: Option<&EncodedOperation>,
-    ) -> Result<(), ReplicationError> {
-        if let Some(operation_bytes) = operation_bytes {
-            let operation = decode_operation(operation_bytes).map_err(|_| {
-                ReplicationError::StrategyFailed("Could not decode operation".into())
-            })?;
-
-            if !self.target_set().contains(operation.schema_id()) {
-                return Err(ReplicationError::UnmatchedTargetSet);
-            }
-        }
-
-        Ok(())
-    }
 }
 
 // This is a little trick so we can clone trait objects.

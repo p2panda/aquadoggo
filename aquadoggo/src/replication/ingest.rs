@@ -10,18 +10,19 @@ use crate::replication::errors::ReplicationError;
 
 #[derive(Debug)]
 pub struct SyncIngest {
-    store: SqlStore,
     tx: ServiceSender,
 }
 
 impl SyncIngest {
-    pub fn new(store: SqlStore, tx: ServiceSender) -> Self {
-        Self { store, tx }
+    pub fn new(tx: ServiceSender) -> Self {
+        Self { tx }
     }
 
-    pub fn handle_entry(
-        entry_bytes: EncodedEntry,
-        operation_bytes: Option<EncodedOperation>,
+    pub async fn handle_entry(
+        &self,
+        store: &SqlStore,
+        entry_bytes: &EncodedEntry,
+        operation_bytes: Option<&EncodedOperation>,
     ) -> Result<(), ReplicationError> {
         Ok(())
     }

@@ -856,7 +856,6 @@ mod tests {
         });
     }
 
-
     #[rstest]
     fn get_entries_from(
         #[from(populate_store_config)]
