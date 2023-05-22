@@ -21,6 +21,15 @@ pub enum ReplicationError {
 
     #[error("Replication strategy failed with error: {0}")]
     StrategyFailed(String),
+
+    #[error("Validation failed")]
+    Validation(#[from] p2panda_rs::api::DomainError),
+
+    #[error("Decoding entry failed")]
+    DecodeEntry(#[from] p2panda_rs::entry::error::DecodeEntryError),
+
+    #[error("Decoding operation failed")]
+    DecodeOperation(#[from] p2panda_rs::operation::error::DecodeOperationError),
 }
 
 #[derive(Error, Debug)]

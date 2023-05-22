@@ -51,7 +51,7 @@ fn diff_log_heights(
             .iter()
             .find(|(local_author, _)| local_author == remote_author)
         {
-            // Diff our local log heights against the remote. 
+            // Diff our local log heights against the remote.
             let remote_needs_logs: Vec<(LogId, SeqNum)> = local_author_logs
                 .to_owned()
                 .into_iter()
