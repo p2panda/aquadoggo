@@ -113,26 +113,27 @@ impl Strategy for NaiveStrategy {
 
                 let local_log_heights = self.local_log_heights(&store).await;
                 let remote_needs = diff_log_heights(&local_log_heights, remote_log_heights);
-                let mut messages: Vec<Message> = vec![];
+
                 for (public_key, log_heights) in remote_needs {
                     for (log_id, seq_num) in log_heights {
                         let entry_messages: Vec<Message> = store
                             .get_entries_from(&public_key, &log_id, &seq_num)
                             .await
-                            .expect("Fatal database error").iter().map(|entry| {
-                            Message::Entry(entry.clone().encoded_entry, entry.payload().cloned())
-                        }).collect();
+                            .expect("Fatal database error")
+                            .iter()
+                            .map(|entry| {
+                                Message::Entry(
+                                    entry.clone().encoded_entry,
+                                    entry.payload().cloned(),
+                                )
+                            })
+                            .collect();
                         messages.extend(entry_messages);
                     }
                 }
 
                 is_local_done = true;
                 self.received_remote_have = true;
-
-                return Ok(StrategyResult {
-                    is_local_done,
-                    messages
-                });
             }
             _ => {
                 return Err(ReplicationError::StrategyFailed(
@@ -160,13 +161,28 @@ mod tests {
     #[rstest]
     fn correctly_diffs_log_heights(#[from(random_key_pair)] author_a: KeyPair) {
         let author_a = author_a.public_key();
-        let peer_a_log_heights = vec![(author_a, vec![(LogId::new(0), SeqNum::new(5).unwrap())])];
-        let peer_b_log_heights = vec![(author_a, vec![(LogId::new(0), SeqNum::new(8).unwrap())])];
+        let peer_a_log_heights = vec![(
+            author_a,
+            vec![
+                (LogId::new(0), SeqNum::new(5).unwrap()),
+                (LogId::new(1), SeqNum::new(2).unwrap()),
+            ],
+        )];
+        let peer_b_log_heights = vec![(
+            author_a,
+            vec![
+                (LogId::new(0), SeqNum::new(8).unwrap()),
+                (LogId::new(1), SeqNum::new(2).unwrap()),
+            ],
+        )];
 
         let peer_b_needs = diff_log_heights(&peer_a_log_heights, &peer_b_log_heights);
         let peer_a_needs = diff_log_heights(&peer_b_log_heights, &peer_a_log_heights);
 
-        assert_eq!(peer_a_needs, peer_b_log_heights);
+        assert_eq!(
+            peer_a_needs,
+            vec![(author_a, vec![(LogId::new(0), SeqNum::new(6).unwrap())])]
+        );
         assert_eq!(peer_b_needs, vec![]);
     }
 }
