@@ -10,7 +10,7 @@ mod query;
 mod task;
 pub mod utils;
 
-pub use self::log::LogRow;
+pub use self::log::{LogRow, LogHeightRow};
 pub use document::{DocumentRow, DocumentViewFieldRow};
 pub use entry::EntryRow;
 pub use operation::{OperationFieldsJoinedRow, OperationRow};

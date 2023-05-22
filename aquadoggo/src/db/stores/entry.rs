@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::collections::HashMap;
+use std::vec;
+
 use async_trait::async_trait;
 use lipmaa_link::get_lipmaa_links_back_to;
 use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
@@ -12,7 +15,7 @@ use p2panda_rs::storage_provider::error::EntryStorageError;
 use p2panda_rs::storage_provider::traits::EntryStore;
 use sqlx::{query, query_as};
 
-use crate::db::models::EntryRow;
+use crate::db::models::{EntryRow, LogHeightRow};
 use crate::db::types::StorageEntry;
 use crate::db::SqlStore;
 
@@ -311,6 +314,64 @@ impl EntryStore for SqlStore {
             .map_err(|e| EntryStorageError::Custom(e.to_string()))?;
 
         Ok(entries.into_iter().map(|row| row.into()).collect())
+    }
+}
+
+impl SqlStore {
+    async fn get_log_heights(
+        &self,
+        schema_id: &SchemaId,
+    ) -> Result<Vec<(PublicKey, Vec<(LogId, SeqNum)>)>, EntryStorageError> {
+        let log_height_rows = query_as::<_, LogHeightRow>(
+            "
+            SELECT
+                entries.public_key,
+                entries.log_id,
+                CAST(MAX(CAST(entries.seq_num AS NUMERIC)) AS TEXT) as seq_num
+            FROM
+                entries
+            INNER JOIN logs
+                ON (entries.log_id = logs.log_id
+                    AND entries.public_key = logs.public_key)
+            WHERE
+                logs.schema = $1
+            group by entries.public_key, entries.log_id
+            ",
+        )
+        .bind(schema_id.to_string())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| EntryStorageError::Custom(e.to_string()))?;
+
+        let mut log_heights = HashMap::<PublicKey, Vec<(LogId, SeqNum)>>::new();
+
+        // Aggregate log height rows into a map.
+        for LogHeightRow {
+            public_key,
+            log_id,
+            seq_num,
+        } in log_height_rows
+        {
+            let public_key: PublicKey = public_key
+                .parse()
+                .expect("Values stored in the database are valid");
+            let log_id: LogId = log_id
+                .parse()
+                .expect("Values stored in the database are valid");
+            let seq_num: SeqNum = seq_num
+                .parse()
+                .expect("Values stored in the database are valid");
+
+            if let Some(author_logs) = log_heights.get_mut(&public_key) {
+                author_logs.push((log_id, seq_num));
+            } else {
+                let author_logs = vec![(log_id, seq_num)];
+                log_heights.insert(public_key, author_logs);
+            }
+        }
+
+        // Convert log heights map back into vec.
+        Ok(log_heights.into_iter().collect())
     }
 }
 
@@ -723,6 +784,39 @@ mod tests {
 
             // The cert pool should match our expected values.
             assert_eq!(cert_pool_seq_nums, vec![19, 18, 17, 13, 4, 1]);
+        });
+    }
+
+    #[rstest]
+    fn get_log_heights(
+        #[from(populate_store_config)]
+        #[with(5, 5, 5)]
+        config: PopulateStoreConfig,
+    ) {
+        test_runner(|node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (key_pairs, _) = populate_store(&node.context.store, &config).await;
+
+            let log_heights = node
+                .context
+                .store
+                .get_log_heights(config.schema.id())
+                .await
+                .unwrap();
+
+            assert_eq!(log_heights.len(), 5);
+
+            for (public_key, author_logs) in log_heights {
+                assert!(key_pairs
+                    .iter()
+                    .find(|key_pair| key_pair.public_key() == public_key)
+                    .is_some());
+                assert_eq!(author_logs.len(), 5);
+
+                for (_, seq_num) in author_logs {
+                    assert_eq!(seq_num.as_u64(), 5)
+                }
+            }
         });
     }
 }
