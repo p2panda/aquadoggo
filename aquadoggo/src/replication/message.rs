@@ -2,6 +2,10 @@
 
 use std::fmt;
 
+use p2panda_rs::entry::EncodedEntry;
+use p2panda_rs::entry::{LogId, SeqNum};
+use p2panda_rs::identity::PublicKey;
+use p2panda_rs::operation::EncodedOperation;
 use serde::de::Visitor;
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Serialize};
@@ -11,29 +15,29 @@ use crate::replication::{Mode, SessionId, TargetSet};
 pub const SYNC_REQUEST_TYPE: MessageType = 0;
 pub const ENTRY_TYPE: MessageType = 8;
 pub const SYNC_DONE_TYPE: MessageType = 9;
+pub const HAVE_TYPE: MessageType = 10;
 
 pub type MessageType = u64;
 
-// @TODO
-#[derive(Clone, Debug)]
-pub enum StrategyMessage {
-    Have,
-    Entry,
-}
+pub type LiveMode = bool;
+
+pub type LogHeight = (PublicKey, Vec<(LogId, SeqNum)>);
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Message {
     SyncRequest(Mode, TargetSet),
-    Entry(Vec<u8>, Vec<u8>),
-    SyncDone(bool),
+    Entry(EncodedEntry, Option<EncodedOperation>),
+    SyncDone(LiveMode),
+    Have(Vec<LogHeight>),
 }
 
 impl Message {
     pub fn message_type(&self) -> MessageType {
         match self {
-            Message::SyncRequest { .. } => SYNC_REQUEST_TYPE,
+            Message::SyncRequest(_, _) => SYNC_REQUEST_TYPE,
             Message::Entry(_, _) => ENTRY_TYPE,
             Message::SyncDone(_) => SYNC_DONE_TYPE,
+            Message::Have(_) => HAVE_TYPE,
         }
     }
 }
@@ -89,6 +93,11 @@ impl Serialize for SyncMessage {
                 seq.serialize_element(live_mode)?;
                 seq.end()
             }
+            Message::Have(log_heights) => {
+                let mut seq = serialize_header(serializer.serialize_seq(Some(3))?)?;
+                seq.serialize_element(log_heights)?;
+                seq.end()
+            }
         }
     }
 }
@@ -130,13 +139,11 @@ impl<'de> Deserialize<'de> for SyncMessage {
 
                     Ok(Message::SyncRequest(mode, target_set))
                 } else if message_type == ENTRY_TYPE {
-                    let entry_bytes: Vec<u8> = seq.next_element()?.ok_or_else(|| {
+                    let entry_bytes: EncodedEntry = seq.next_element()?.ok_or_else(|| {
                         serde::de::Error::custom("missing entry bytes in entry message")
                     })?;
 
-                    let operation_bytes: Vec<u8> = seq.next_element()?.ok_or_else(|| {
-                        serde::de::Error::custom("missing operation bytes in entry message")
-                    })?;
+                    let operation_bytes: Option<EncodedOperation> = seq.next_element()?;
 
                     Ok(Message::Entry(entry_bytes, operation_bytes))
                 } else if message_type == SYNC_DONE_TYPE {
@@ -145,6 +152,13 @@ impl<'de> Deserialize<'de> for SyncMessage {
                     })?;
 
                     Ok(Message::SyncDone(live_mode))
+                } else if message_type == HAVE_TYPE {
+                    let log_heights: Vec<(PublicKey, Vec<(LogId, SeqNum)>)> =
+                        seq.next_element()?.ok_or_else(|| {
+                            serde::de::Error::custom("missing log heights in have message")
+                        })?;
+
+                    Ok(Message::Have(log_heights))
                 } else {
                     Err(serde::de::Error::custom(format!(
                         "unknown message type {} in replication message",
@@ -172,7 +186,10 @@ impl<'de> Deserialize<'de> for SyncMessage {
 mod tests {
     use ciborium::cbor;
     use ciborium::value::{Error, Value};
+    use p2panda_rs::entry::{LogId, SeqNum};
+    use p2panda_rs::identity::PublicKey;
     use p2panda_rs::serde::{deserialize_into, serialize_from, serialize_value};
+    use p2panda_rs::test_utils::fixtures::public_key;
     use rstest::rstest;
 
     use crate::replication::{Mode, TargetSet};
@@ -181,7 +198,7 @@ mod tests {
     use super::{Message, SyncMessage};
 
     #[rstest]
-    fn serialize(#[from(random_target_set)] target_set: TargetSet) {
+    fn serialize(#[from(random_target_set)] target_set: TargetSet, public_key: PublicKey) {
         assert_eq!(
             serialize_from(SyncMessage::new(
                 51,
@@ -189,14 +206,34 @@ mod tests {
             )),
             serialize_value(cbor!([0, 51, 1, target_set]))
         );
+
+        let log_heights = vec![(public_key, vec![(LogId::default(), SeqNum::default())])];
+        assert_eq!(
+            serialize_from(SyncMessage::new(51, Message::Have(log_heights.clone()))),
+            serialize_value(cbor!([10, 51, log_heights]))
+        );
     }
 
     #[rstest]
-    fn deserialize(#[from(random_target_set)] target_set: TargetSet) {
+    fn deserialize(#[from(random_target_set)] target_set: TargetSet, public_key: PublicKey) {
         assert_eq!(
             deserialize_into::<SyncMessage>(&serialize_value(cbor!([0, 12, 0, target_set])))
                 .unwrap(),
             SyncMessage::new(12, Message::SyncRequest(Mode::Naive, target_set.clone()))
+        );
+
+        let log_heights: Vec<(PublicKey, Vec<(LogId, SeqNum)>)> = vec![];
+        assert_eq!(
+            deserialize_into::<SyncMessage>(&serialize_value(cbor!([10, 12, log_heights])))
+                .unwrap(),
+            SyncMessage::new(12, Message::Have(vec![]))
+        );
+
+        let log_heights = vec![(public_key, vec![(LogId::default(), SeqNum::default())])];
+        assert_eq!(
+            deserialize_into::<SyncMessage>(&serialize_value(cbor!([10, 12, log_heights.clone()])))
+                .unwrap(),
+            SyncMessage::new(12, Message::Have(log_heights))
         );
     }
 

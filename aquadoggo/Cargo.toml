@@ -51,7 +51,7 @@ lipmaa-link = "0.2.2"
 log = "0.4.17"
 once_cell = "1.17.0"
 openssl-probe = "0.1.5"
-p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "679107b636eea39e7713d9b21ac69df28aaad97d", features = [
+p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "ae60bf754a60a1daf9c6862e9ae51ee7501b007f", features = [
     "storage-provider",
 ] }
 serde = { version = "1.0.152", features = ["derive"] }
@@ -83,7 +83,7 @@ http = "0.2.9"
 hyper = "0.14.19"
 libp2p-swarm-test = "0.1.0"
 once_cell = "1.17.0"
-p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "679107b636eea39e7713d9b21ac69df28aaad97d", features = [
+p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "ae60bf754a60a1daf9c6862e9ae51ee7501b007f", features = [
     "test-utils",
     "storage-provider",
 ] }

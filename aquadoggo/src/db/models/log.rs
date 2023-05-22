@@ -21,3 +21,15 @@ pub struct LogRow {
     /// SchemaId which identifies the schema for operations in this log.
     pub schema: String,
 }
+
+#[derive(FromRow, Debug, Clone)]
+pub struct LogHeightRow {
+    /// PublicKey of this entry.
+    pub public_key: String,
+
+    /// Used log for this entry.
+    pub log_id: String,
+
+    /// Sequence number of this entry.
+    pub seq_num: String,
+}

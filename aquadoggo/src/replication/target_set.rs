@@ -9,7 +9,7 @@ use crate::replication::errors::TargetSetError;
 /// De-duplicated and sorted set of schema ids which define the target data for the replication
 /// session.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize)]
-pub struct TargetSet(Vec<SchemaId>);
+pub struct TargetSet(pub Vec<SchemaId>);
 
 impl TargetSet {
     pub fn new(schema_ids: &[SchemaId]) -> Self {
@@ -25,6 +25,10 @@ impl TargetSet {
         deduplicated_set.sort();
 
         Self(deduplicated_set)
+    }
+
+    pub fn contains(&self, schema_id: &SchemaId) -> bool {
+        self.0.contains(schema_id)
     }
 
     fn from_untrusted(schema_ids: Vec<SchemaId>) -> Result<Self, TargetSetError> {
