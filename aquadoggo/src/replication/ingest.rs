@@ -19,7 +19,7 @@ use p2panda_rs::storage_provider::traits::{EntryStore, LogStore, OperationStore}
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::SqlStore;
-use crate::replication::errors::ReplicationError;
+use crate::replication::errors::IngestError;
 use crate::schema::SchemaProvider;
 
 // @TODO: This method exists in `p2panda-rs`, we need to make it public there
@@ -127,18 +127,15 @@ impl SyncIngest {
         store: &SqlStore,
         encoded_entry: &EncodedEntry,
         encoded_operation: &EncodedOperation,
-    ) -> Result<(), ReplicationError> {
+    ) -> Result<(), IngestError> {
         let entry = decode_entry(encoded_entry)?;
-
-        let plain_operation = decode_operation(&encoded_operation)?;
+        let plain_operation = decode_operation(encoded_operation)?;
 
         let schema = self
             .schema_provider
             .get(plain_operation.schema_id())
             .await
-            .ok_or_else(|| {
-                ReplicationError::StrategyFailed("Schema is not supported anymore".into())
-            })?;
+            .ok_or_else(|| IngestError::UnsupportedSchema)?;
 
         let (operation, operation_id) = validate_entry_and_operation(
             store,
@@ -158,7 +155,7 @@ impl SyncIngest {
                 .insert_log(
                     entry.log_id(),
                     entry.public_key(),
-                    &Schematic::schema_id(&operation),
+                    Schematic::schema_id(&operation),
                     &document_id,
                 )
                 .await
@@ -178,7 +175,11 @@ impl SyncIngest {
         // Inform other services about received data
         let operation_id: OperationId = encoded_entry.hash().into();
 
-        if self.tx.send(ServiceMessage::NewOperation(operation_id)).is_err() {
+        if self
+            .tx
+            .send(ServiceMessage::NewOperation(operation_id))
+            .is_err()
+        {
             // Silently fail here as we don't mind if there are no subscribers. We have
             // tests in other places to check if messages arrive.
         }

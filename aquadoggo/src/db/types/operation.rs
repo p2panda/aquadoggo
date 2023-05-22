@@ -7,6 +7,7 @@ use p2panda_rs::operation::{OperationAction, OperationFields, OperationId, Opera
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::WithId;
 
+#[derive(Debug)]
 pub struct StorageOperation {
     /// The id of the document this operation is part of.
     pub(crate) document_id: DocumentId,

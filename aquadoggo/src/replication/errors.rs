@@ -22,8 +22,17 @@ pub enum ReplicationError {
     #[error("Replication strategy failed with error: {0}")]
     StrategyFailed(String),
 
-    #[error("Validation failed")]
-    Validation(#[from] p2panda_rs::api::DomainError),
+    #[error("Incoming data could not be ingested")]
+    Validation(#[from] IngestError),
+}
+
+#[derive(Error, Debug)]
+pub enum IngestError {
+    #[error("Schema is not supported")]
+    UnsupportedSchema,
+
+    #[error("Received entry and operation is invalid")]
+    Domain(#[from] p2panda_rs::api::DomainError),
 
     #[error("Decoding entry failed")]
     DecodeEntry(#[from] p2panda_rs::entry::error::DecodeEntryError),

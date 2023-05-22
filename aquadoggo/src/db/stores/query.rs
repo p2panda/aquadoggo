@@ -24,6 +24,7 @@ use crate::db::types::StorageDocument;
 use crate::db::SqlStore;
 
 /// Configure query to select documents based on a relation list field.
+#[derive(Debug)]
 pub struct RelationList {
     /// View id of document which holds relation list field.
     pub root: DocumentViewId,
@@ -35,6 +36,7 @@ pub struct RelationList {
     pub list_type: RelationListType,
 }
 
+#[derive(Debug)]
 pub enum RelationListType {
     Pinned,
     Unpinned,
