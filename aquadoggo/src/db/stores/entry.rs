@@ -374,7 +374,7 @@ impl SqlStore {
         Ok(log_heights.into_iter().collect())
     }
 
-    pub async fn get_entries_greater_than(
+    pub async fn get_entries_from(
         &self,
         public_key: &PublicKey,
         log_id: &LogId,
@@ -395,7 +395,7 @@ impl SqlStore {
             WHERE
                 public_key = $1
                 AND log_id = $2
-                AND CAST(seq_num AS NUMERIC) > CAST($3 AS NUMERIC)
+                AND CAST(seq_num AS NUMERIC) >= CAST($3 AS NUMERIC)
             ORDER BY
                 CAST(seq_num AS NUMERIC)
             ",
@@ -858,7 +858,7 @@ mod tests {
 
 
     #[rstest]
-    fn get_entries_greater_than(
+    fn get_entries_from(
         #[from(populate_store_config)]
         #[with(20, 2, 1)]
         config: PopulateStoreConfig,
@@ -870,11 +870,11 @@ mod tests {
             let entries = node
                 .context
                 .store
-                .get_entries_greater_than(&public_key, &LogId::default(), &SeqNum::new(10).unwrap())
+                .get_entries_from(&public_key, &LogId::default(), &SeqNum::new(10).unwrap())
                 .await
                 .unwrap();
 
-            assert_eq!(entries.len(), 10);
+            assert_eq!(entries.len(), 11);
         });
     }
 }
