@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::collections::HashMap;
+
 use anyhow::Result;
 use async_trait::async_trait;
 use p2panda_rs::entry::{LogId, SeqNum};
@@ -33,7 +35,6 @@ fn diff_log_heights(
                     }
                 })
                 .collect();
-
             if !remote_needs_logs.is_empty() {
                 remote_needs.push((remote_author.to_owned(), remote_needs_logs));
             };
@@ -103,7 +104,7 @@ impl Strategy for NaiveStrategy {
         }
 
         match message {
-            Message::Have(_log_heights) => {
+            Message::Have(remote_log_heights) => {
                 if self.received_remote_have {
                     return Err(ReplicationError::StrategyFailed(
                         "Received Have from remote message twice".into(),
@@ -111,6 +112,8 @@ impl Strategy for NaiveStrategy {
                 }
 
                 // @TODO Compose Entry messages + SyncDone
+                let local_log_heights = self.local_log_heights(&store).await;
+                let remote_needs = diff_log_heights(&local_log_heights, remote_log_heights);
                 is_local_done = true;
 
                 self.received_remote_have = true;
@@ -142,7 +145,9 @@ mod tests {
     use super::diff_log_heights;
 
     #[rstest]
-    fn correctly_diffs_log_heights(#[from(random_key_pair)] author_a: KeyPair) {
+    fn correctly_diffs_log_heights(
+        #[from(random_key_pair)] author_a: KeyPair,
+    ) {
         let author_a = author_a.public_key();
         let peer_a_log_heights = vec![(author_a, vec![(LogId::new(0), SeqNum::new(5).unwrap())])];
         let peer_b_log_heights = vec![(author_a, vec![(LogId::new(0), SeqNum::new(8).unwrap())])];
