@@ -145,9 +145,7 @@ mod tests {
     use super::diff_log_heights;
 
     #[rstest]
-    fn correctly_diffs_log_heights(
-        #[from(random_key_pair)] author_a: KeyPair,
-    ) {
+    fn correctly_diffs_log_heights(#[from(random_key_pair)] author_a: KeyPair) {
         let author_a = author_a.public_key();
         let peer_a_log_heights = vec![(author_a, vec![(LogId::new(0), SeqNum::new(5).unwrap())])];
         let peer_b_log_heights = vec![(author_a, vec![(LogId::new(0), SeqNum::new(8).unwrap())])];
