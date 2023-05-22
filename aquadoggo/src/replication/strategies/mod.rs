@@ -15,3 +15,10 @@ pub struct StrategyResult {
     pub messages: Vec<Message>,
     pub is_local_done: bool,
 }
+
+impl StrategyResult {
+    pub fn merge(&mut self, result: StrategyResult) {
+        self.messages.extend(result.messages);
+        self.is_local_done = self.is_local_done || result.is_local_done;
+    }
+}

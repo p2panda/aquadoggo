@@ -40,7 +40,7 @@ impl NaiveStrategy {
         result
     }
 
-    async fn handle_have_message(
+    async fn entry_responses(
         &self,
         store: &SqlStore,
         remote_log_heights: &[LogHeight],
@@ -79,8 +79,14 @@ impl Strategy for NaiveStrategy {
         self.target_set.clone()
     }
 
-    async fn initial_messages(&self, store: &SqlStore) -> Vec<Message> {
-        vec![Message::Have(self.local_log_heights(store).await)]
+    async fn initial_messages(&mut self, store: &SqlStore) -> StrategyResult {
+        let log_heights = self.local_log_heights(store).await;
+        self.sent_have = true;
+
+        StrategyResult {
+            is_local_done: log_heights.is_empty(),
+            messages: vec![Message::Have(log_heights)],
+        }
     }
 
     async fn handle_message(
@@ -88,13 +94,14 @@ impl Strategy for NaiveStrategy {
         store: &SqlStore,
         message: &Message,
     ) -> Result<StrategyResult, ReplicationError> {
-        let mut messages = Vec::new();
-        let is_local_done: bool;
+        let mut result = StrategyResult {
+            is_local_done: false,
+            messages: vec![],
+        };
 
         // Send our Have message to remote if we haven't done it yet
         if !self.sent_have {
-            messages.extend(self.initial_messages(store).await);
-            self.sent_have = true;
+            result.merge(self.initial_messages(store).await);
         }
 
         match message {
@@ -105,10 +112,10 @@ impl Strategy for NaiveStrategy {
                     ));
                 }
 
-                let response = self.handle_have_message(store, remote_log_heights).await;
-                messages.extend(response);
+                let response = self.entry_responses(store, remote_log_heights).await;
+                result.messages.extend(response);
+                result.is_local_done = true;
 
-                is_local_done = true;
                 self.received_remote_have = true;
             }
             _ => {
@@ -118,9 +125,6 @@ impl Strategy for NaiveStrategy {
             }
         }
 
-        Ok(StrategyResult {
-            is_local_done,
-            messages,
-        })
+        Ok(result)
     }
 }

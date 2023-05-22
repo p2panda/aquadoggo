@@ -10,20 +10,20 @@ pub fn diff_log_heights(
 ) -> Vec<LogHeight> {
     let mut remote_needs = Vec::new();
 
-    for (remote_author, remote_author_logs) in remote_log_heights {
+    for (local_author, local_author_logs) in local_log_heights {
         // Helper for diffing local log heights against remote log heights.
-        let diff_logs = |(local_log_id, local_seq_num): (LogId, SeqNum)| {
+        let diff_logs = |(remote_log_id, remote_seq_num): (LogId, SeqNum)| {
             // Get the remote log by it's id.
-            let remote_log = remote_author_logs
+            let local_log = local_author_logs
                 .iter()
-                .find(|(remote_log_id, _)| local_log_id == *remote_log_id);
+                .find(|(local_log_id, _)| remote_log_id == *local_log_id);
 
-            match remote_log {
+            match local_log {
                 // If a log exists then compare heights of local and remote logs.
-                Some((log_id, remote_seq_num)) => {
+                Some((log_id, local_seq_num)) => {
                     // If the local log is higher we increment their log id (we want all entries
                     // greater than or equal to this). Otherwise we return none.
-                    if local_seq_num > *remote_seq_num {
+                    if local_seq_num > &remote_seq_num {
                         // We can unwrap as we are incrementing the remote peers seq num here and
                         // this means it's will not reach max seq number.
                         Some((log_id.to_owned(), remote_seq_num.clone().next().unwrap()))
@@ -33,7 +33,7 @@ pub fn diff_log_heights(
                 }
                 // If no log exists then the remote has never had this log and they need all
                 // entries from seq num 1.
-                None => Some((local_log_id.to_owned(), SeqNum::default())),
+                None => Some((remote_log_id.to_owned(), SeqNum::default())),
             }
         };
 
@@ -41,12 +41,12 @@ pub fn diff_log_heights(
         //
         // If none is found we don't do anything as this means we are missing entries they should
         // send us.
-        if let Some((_, local_author_logs)) = local_log_heights
+        if let Some((_, remote_author_logs)) = remote_log_heights
             .iter()
-            .find(|(local_author, _)| local_author == remote_author)
+            .find(|(remote_author, _)| remote_author == local_author)
         {
             // Diff our local log heights against the remote.
-            let remote_needs_logs: Vec<(LogId, SeqNum)> = local_author_logs
+            let remote_needs_logs: Vec<(LogId, SeqNum)> = remote_author_logs
                 .iter()
                 .copied()
                 .filter_map(diff_logs)
@@ -54,8 +54,16 @@ pub fn diff_log_heights(
 
             // If the remote needs at least one log we push it to the remote needs.
             if !remote_needs_logs.is_empty() {
-                remote_needs.push((remote_author.to_owned(), remote_needs_logs));
+                remote_needs.push((local_author.to_owned(), remote_needs_logs));
             };
+        } else {
+            remote_needs.push((
+                local_author.to_owned(),
+                local_author_logs
+                    .iter()
+                    .map(|(log_id, _)| (*log_id, SeqNum::default()))
+                    .collect(),
+            ));
         }
     }
 
@@ -97,5 +105,33 @@ mod tests {
             vec![(author_a, vec![(LogId::new(0), SeqNum::new(6).unwrap())])]
         );
         assert_eq!(peer_b_needs, vec![]);
+    }
+
+    #[rstest]
+    fn diff_when_remote_is_empty(#[from(random_key_pair)] author_a: KeyPair) {
+        let author_a = author_a.public_key();
+        let peer_a_log_heights = vec![(
+            author_a,
+            vec![
+                (LogId::new(0), SeqNum::new(5).unwrap()),
+                (LogId::new(1), SeqNum::new(5).unwrap()),
+            ],
+        )];
+        let peer_b_log_heights = vec![];
+
+        let peer_b_needs = diff_log_heights(&peer_a_log_heights, &peer_b_log_heights);
+        let peer_a_needs = diff_log_heights(&peer_b_log_heights, &peer_a_log_heights);
+
+        assert_eq!(peer_a_needs, vec![]);
+        assert_eq!(
+            peer_b_needs,
+            vec![(
+                author_a,
+                vec![
+                    (LogId::new(0), SeqNum::new(1).unwrap()),
+                    (LogId::new(1), SeqNum::new(1).unwrap())
+                ]
+            ),]
+        );
     }
 }

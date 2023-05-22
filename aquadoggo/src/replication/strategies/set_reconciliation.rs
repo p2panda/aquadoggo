@@ -27,7 +27,7 @@ impl Strategy for SetReconciliationStrategy {
         todo!()
     }
 
-    async fn initial_messages(&self, _store: &SqlStore) -> Vec<Message> {
+    async fn initial_messages(&mut self, _store: &SqlStore) -> StrategyResult {
         todo!()
     }
 

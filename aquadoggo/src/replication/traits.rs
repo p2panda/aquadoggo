@@ -15,7 +15,7 @@ pub trait Strategy: std::fmt::Debug + StrategyClone + Sync + Send {
     fn target_set(&self) -> TargetSet;
 
     /// Generate initial messages.
-    async fn initial_messages(&self, store: &SqlStore) -> Vec<Message>;
+    async fn initial_messages(&mut self, store: &SqlStore) -> StrategyResult;
 
     /// Handle incoming message and return response.
     async fn handle_message(

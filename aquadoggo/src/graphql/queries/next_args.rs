@@ -183,7 +183,6 @@ mod tests {
                 .json::<Response>()
                 .await;
 
-            print!("{:?}", received_entry_args.errors);
             assert!(received_entry_args.is_ok());
             assert_eq!(
                 received_entry_args.data,

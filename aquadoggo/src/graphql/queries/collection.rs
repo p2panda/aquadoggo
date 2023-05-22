@@ -1162,7 +1162,6 @@ mod tests {
 
             assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 1);
             let end_cursor = data["query"]["endCursor"].clone();
-            println!("{end_cursor}");
 
             let data = query_songs_meta_fields_only(
                 &client,

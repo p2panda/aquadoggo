@@ -8,7 +8,9 @@ use p2panda_rs::operation::EncodedOperation;
 use crate::db::SqlStore;
 use crate::replication::errors::ReplicationError;
 use crate::replication::traits::Strategy;
-use crate::replication::{Message, Mode, NaiveStrategy, SetReconciliationStrategy, TargetSet};
+use crate::replication::{
+    Message, Mode, NaiveStrategy, SetReconciliationStrategy, StrategyResult, TargetSet,
+};
 
 pub type SessionId = u64;
 
@@ -84,8 +86,21 @@ impl Session {
         self.strategy.target_set()
     }
 
+    /// Send `SyncDone` message last as soon as the done flag flipped.
+    fn flippy_flaggy(&mut self, result: &mut StrategyResult) {
+        if result.is_local_done && !self.is_local_done {
+            result
+                .messages
+                .push(Message::SyncDone(self.is_local_live_mode));
+
+            self.is_local_done = result.is_local_done;
+        }
+    }
+
     pub async fn initial_messages(&mut self, store: &SqlStore) -> Vec<Message> {
-        self.strategy.initial_messages(store).await
+        let mut result = self.strategy.initial_messages(store).await;
+        self.flippy_flaggy(&mut result);
+        result.messages
     }
 
     /// Validate entry and operation.
@@ -124,16 +139,7 @@ impl Session {
             }
             message => {
                 let mut result = self.strategy.handle_message(store, message).await?;
-
-                // Send `SyncDone` message last as soon as the done flag flipped
-                if result.is_local_done != self.is_local_done {
-                    result
-                        .messages
-                        .push(Message::SyncDone(self.is_local_live_mode));
-
-                    self.is_local_done = result.is_local_done;
-                }
-
+                self.flippy_flaggy(&mut result);
                 result.messages
             }
         };
@@ -160,11 +166,9 @@ mod tests {
     use rstest::rstest;
 
     use crate::replication::manager::INITIAL_SESSION_ID;
-    use crate::replication::{Message, Mode, SessionState, SyncMessage, TargetSet};
+    use crate::replication::{Message, Mode, SessionState, TargetSet};
     use crate::test_utils::helpers::random_target_set;
-    use crate::test_utils::{
-        populate_store_config, test_runner, test_runner_with_manager, TestNode, TestNodeManager,
-    };
+    use crate::test_utils::{populate_store_config, test_runner, TestNode};
 
     use super::Session;
 
@@ -197,8 +201,7 @@ mod tests {
         #[with(5, 2, 1)]
         config: PopulateStoreConfig,
     ) {
-        test_runner_with_manager(|manager: TestNodeManager| async move {
-            let node = manager.create().await;
+        test_runner(move |node: TestNode| async move {
             populate_store(&node.context.store, &config).await;
 
             let target_set = TargetSet::new(&vec![config.schema.id().to_owned()]);
@@ -210,7 +213,8 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(response_messages.len(), 11);
+            // 1x Have + 10x Entry + 1x SyncDone = 12 messages
+            assert_eq!(response_messages.len(), 12);
         });
     }
 }
