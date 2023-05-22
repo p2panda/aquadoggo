@@ -78,7 +78,6 @@ impl TestNodeManager {
     }
 }
 
-
 /// Provides a safe way to write tests using a database which closes the pool connection
 /// automatically when the test succeeds or fails.
 ///

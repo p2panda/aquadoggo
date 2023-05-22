@@ -108,7 +108,7 @@ async fn determine_document_id<S: OperationStore>(
     Ok(document_id)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SyncIngest {
     tx: ServiceSender,
     schema_provider: SchemaProvider,

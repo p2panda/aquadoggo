@@ -6,13 +6,11 @@ use anyhow::Result;
 use p2panda_rs::entry::EncodedEntry;
 use p2panda_rs::operation::EncodedOperation;
 
-use crate::bus::ServiceSender;
 use crate::db::SqlStore;
 use crate::replication::errors::ReplicationError;
 use crate::replication::{
     Message, Mode, Session, SessionId, SessionState, SyncIngest, SyncMessage, TargetSet,
 };
-use crate::schema::SchemaProvider;
 
 pub const INITIAL_SESSION_ID: SessionId = 0;
 
@@ -38,16 +36,11 @@ impl<P> SyncManager<P>
 where
     P: Clone + std::hash::Hash + Eq + PartialOrd,
 {
-    pub fn new(
-        store: SqlStore,
-        tx: ServiceSender,
-        schema_provider: SchemaProvider,
-        local_peer: P,
-    ) -> Self {
+    pub fn new(store: SqlStore, ingest: SyncIngest, local_peer: P) -> Self {
         Self {
             store,
             local_peer,
-            ingest: SyncIngest::new(schema_provider, tx),
+            ingest,
             sessions: HashMap::new(),
         }
     }
@@ -271,6 +264,8 @@ where
             .iter_mut()
             .find(|session| session.id == *session_id)
         {
+            session.validate_entry(entry_bytes, operation_bytes.as_ref())?;
+
             self.ingest
                 .handle_entry(
                     &self.store,
@@ -325,7 +320,7 @@ mod tests {
 
     use crate::replication::errors::ReplicationError;
     use crate::replication::message::Message;
-    use crate::replication::{Mode, SyncMessage, TargetSet};
+    use crate::replication::{Mode, SyncIngest, SyncMessage, TargetSet};
     use crate::schema::SchemaProvider;
     use crate::test_utils::helpers::random_target_set;
     use crate::test_utils::{test_runner, TestNode};
@@ -343,13 +338,9 @@ mod tests {
         test_runner(move |node: TestNode| async move {
             let mode = Mode::Naive;
             let (tx, _rx) = broadcast::channel(8);
+            let ingest = SyncIngest::new(SchemaProvider::default(), tx);
 
-            let mut manager = SyncManager::new(
-                node.context.store.clone(),
-                tx,
-                SchemaProvider::default(),
-                PEER_ID_LOCAL,
-            );
+            let mut manager = SyncManager::new(node.context.store.clone(), ingest, PEER_ID_LOCAL);
             let result = manager
                 .initiate_session(&PEER_ID_REMOTE, &target_set_1, &mode)
                 .await;
@@ -378,12 +369,9 @@ mod tests {
     ) {
         test_runner(move |node: TestNode| async move {
             let (tx, _rx) = broadcast::channel(8);
-            let mut manager = SyncManager::new(
-                node.context.store.clone(),
-                tx,
-                SchemaProvider::default(),
-                PEER_ID_LOCAL,
-            );
+            let ingest = SyncIngest::new(SchemaProvider::default(), tx);
+
+            let mut manager = SyncManager::new(node.context.store.clone(), ingest, PEER_ID_LOCAL);
 
             let message =
                 SyncMessage::new(0, Message::SyncRequest(Mode::Naive, target_set_1.clone()));
@@ -419,15 +407,11 @@ mod tests {
     fn inbound_checks_supported_mode(#[from(random_target_set)] target_set: TargetSet) {
         test_runner(move |node: TestNode| async move {
             let (tx, _rx) = broadcast::channel(8);
-            let schema_provider = SchemaProvider::default();
+            let ingest = SyncIngest::new(SchemaProvider::default(), tx);
 
             // Should not fail when requesting supported replication mode
-            let mut manager = SyncManager::new(
-                node.context.store.clone(),
-                tx.clone(),
-                schema_provider.clone(),
-                PEER_ID_LOCAL,
-            );
+            let mut manager =
+                SyncManager::new(node.context.store.clone(), ingest.clone(), PEER_ID_LOCAL);
             let message = SyncMessage::new(
                 INITIAL_SESSION_ID,
                 Message::SyncRequest(Mode::Naive, target_set.clone()),
@@ -436,12 +420,7 @@ mod tests {
             assert!(result.is_ok());
 
             // Should fail when requesting unsupported replication mode
-            let mut manager = SyncManager::new(
-                node.context.store.clone(),
-                tx,
-                schema_provider,
-                PEER_ID_LOCAL,
-            );
+            let mut manager = SyncManager::new(node.context.store.clone(), ingest, PEER_ID_LOCAL);
             let message = SyncMessage::new(
                 INITIAL_SESSION_ID,
                 Message::SyncRequest(Mode::SetReconciliation, target_set.clone()),
