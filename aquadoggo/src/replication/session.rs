@@ -96,7 +96,7 @@ impl Session {
             }
             Message::Entry(entry_bytes, operation_bytes) => {
                 self.strategy
-                    .validate_entry(entry_bytes, operation_bytes)
+                    .validate_entry(entry_bytes, operation_bytes.as_ref())
                     .await?;
 
                 // @TODO: Store entry and inform other services about it
