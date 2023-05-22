@@ -38,11 +38,18 @@ impl Strategy for NaiveStrategy {
         self.target_set.clone()
     }
 
-    async fn initial_messages(&self, _store: &SqlStore) -> Vec<Message> {
-        // TODO: Access the store and compose a have message which contains our local log heights over
-        // the TargetSet.
-        let _target_set = self.target_set();
-        vec![Message::Have(vec![])]
+    async fn initial_messages(&self, store: &SqlStore) -> Vec<Message> {
+        let mut target_set_log_heights = vec![];
+
+        // For every schema id in the target set retrieve log heights for all contributing authors
+        for schema_id in self.target_set().0.iter() {
+            let log_heights = store
+                .get_log_heights(schema_id)
+                .await
+                .expect("Fatal database error");
+            target_set_log_heights.extend(log_heights);
+        }
+        vec![Message::Have(target_set_log_heights)]
     }
 
     async fn handle_message(

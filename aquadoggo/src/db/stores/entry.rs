@@ -318,7 +318,7 @@ impl EntryStore for SqlStore {
 }
 
 impl SqlStore {
-    async fn get_log_heights(
+    pub async fn get_log_heights(
         &self,
         schema_id: &SchemaId,
     ) -> Result<Vec<(PublicKey, Vec<(LogId, SeqNum)>)>, EntryStorageError> {

@@ -9,7 +9,7 @@ use crate::replication::errors::TargetSetError;
 /// De-duplicated and sorted set of schema ids which define the target data for the replication
 /// session.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize)]
-pub struct TargetSet(Vec<SchemaId>);
+pub struct TargetSet(pub Vec<SchemaId>);
 
 impl TargetSet {
     pub fn new(schema_ids: &[SchemaId]) -> Self {
