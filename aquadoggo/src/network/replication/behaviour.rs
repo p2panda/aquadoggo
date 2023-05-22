@@ -4,6 +4,7 @@ use std::collections::VecDeque;
 use std::task::{Context, Poll};
 
 use libp2p::core::Endpoint;
+use libp2p::swarm::derive_prelude::ConnectionEstablished;
 use libp2p::swarm::{
     ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, NotifyHandler, PollParameters,
     THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
@@ -11,11 +12,11 @@ use libp2p::swarm::{
 use libp2p::{Multiaddr, PeerId};
 
 use crate::network::replication::handler::{Handler, HandlerInEvent, HandlerOutEvent};
-use crate::network::replication::protocol::Message;
+use crate::replication::{Message, SyncMessage};
 
 #[derive(Debug)]
 pub enum BehaviourOutEvent {
-    MessageReceived(PeerId, Message),
+    MessageReceived(PeerId, SyncMessage),
     Error,
 }
 
@@ -33,7 +34,7 @@ impl Behaviour {
 }
 
 impl Behaviour {
-    fn send_message(&mut self, peer_id: PeerId, message: Message) {
+    fn send_message(&mut self, peer_id: PeerId, message: SyncMessage) {
         self.events.push_back(ToSwarm::NotifyHandler {
             peer_id,
             event: HandlerInEvent::Message(message),
@@ -41,7 +42,7 @@ impl Behaviour {
         });
     }
 
-    fn handle_received_message(&mut self, peer_id: &PeerId, message: Message) {
+    fn handle_received_message(&mut self, peer_id: &PeerId, message: SyncMessage) {
         // @TODO: Handle incoming messages
         self.events
             .push_back(ToSwarm::GenerateEvent(BehaviourOutEvent::MessageReceived(
@@ -90,8 +91,17 @@ impl NetworkBehaviour for Behaviour {
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
         match event {
-            FromSwarm::ConnectionEstablished(_)
-            | FromSwarm::ConnectionClosed(_)
+            FromSwarm::ConnectionEstablished(ConnectionEstablished {
+                peer_id,
+                connection_id,
+                endpoint,
+                failed_addresses,
+                other_established,
+            }) => self.send_message(
+                peer_id,
+                SyncMessage::new(0, Message::SyncRequest(0, vec![])),
+            ),
+            FromSwarm::ConnectionClosed(_)
             | FromSwarm::AddressChange(_)
             | FromSwarm::DialFailure(_)
             | FromSwarm::ListenFailure(_)
@@ -124,7 +134,7 @@ mod tests {
     use libp2p::swarm::{keep_alive, Swarm};
     use libp2p_swarm_test::SwarmExt;
 
-    use crate::network::replication::Message;
+    use crate::replication::{Message, SyncMessage};
 
     use super::{Behaviour as ReplicationBehaviour, BehaviourOutEvent};
 
@@ -189,9 +199,10 @@ mod tests {
         assert_eq!(info2.connection_counters().num_established(), 1);
 
         // Send a message from to swarm1 local peer from swarm2 local peer.
-        swarm1
-            .behaviour_mut()
-            .send_message(swarm2_peer_id, Message::Dummy(0));
+        swarm1.behaviour_mut().send_message(
+            swarm2_peer_id,
+            SyncMessage::new(0, Message::SyncRequest(0, vec![])),
+        );
 
         // Await a swarm event on swarm2.
         //
@@ -220,14 +231,16 @@ mod tests {
         let swarm2_peer_id = *swarm2.local_peer_id();
 
         // Send a message from to swarm1 local peer from swarm2 local peer.
-        swarm1
-            .behaviour_mut()
-            .send_message(swarm2_peer_id, Message::Dummy(0));
+        swarm1.behaviour_mut().send_message(
+            swarm2_peer_id,
+            SyncMessage::new(0, Message::SyncRequest(0, vec![])),
+        );
 
         // Send a message from to swarm2 local peer from swarm1 local peer.
-        swarm2
-            .behaviour_mut()
-            .send_message(swarm1_peer_id, Message::Dummy(1));
+        swarm2.behaviour_mut().send_message(
+            swarm1_peer_id,
+            SyncMessage::new(0, Message::SyncRequest(0, vec![])),
+        );
 
         // Collect the next 2 behaviour events which occur in either swarms.
         for _ in 0..2 {
@@ -244,11 +257,17 @@ mod tests {
         // swarm1 should have received the message from swarm2 peer.
         let (peer_id, message) = &res1[0];
         assert_eq!(peer_id, &swarm2_peer_id);
-        assert_eq!(message, &Message::Dummy(1));
+        assert_eq!(
+            message,
+            &SyncMessage::new(0, Message::SyncRequest(0, vec![]))
+        );
 
         // swarm2 should have received the message from swarm1 peer.
         let (peer_id, message) = &res2[0];
         assert_eq!(peer_id, &swarm1_peer_id);
-        assert_eq!(message, &Message::Dummy(0));
+        assert_eq!(
+            message,
+            &SyncMessage::new(0, Message::SyncRequest(0, vec![]))
+        );
     }
 }

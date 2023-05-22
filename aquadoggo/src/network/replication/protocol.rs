@@ -6,19 +6,14 @@ use asynchronous_codec::{CborCodec, CborCodecError, Framed};
 use futures::{future, AsyncRead, AsyncWrite, Future};
 use libp2p::core::UpgradeInfo;
 use libp2p::{InboundUpgrade, OutboundUpgrade};
-use serde::{Deserialize, Serialize};
+
+use crate::replication::SyncMessage;
 
 pub const PROTOCOL_NAME: &[u8] = b"/p2p/p2panda/1.0.0";
 
 pub type CodecError = CborCodecError;
 
-pub type Codec = CborCodec<Message, Message>;
-
-// @TODO: Get this from our other replication module
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub enum Message {
-    Dummy(u64),
-}
+pub type Codec = CborCodec<SyncMessage, SyncMessage>;
 
 #[derive(Clone, Debug)]
 pub struct Protocol;

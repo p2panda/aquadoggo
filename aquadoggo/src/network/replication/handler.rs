@@ -12,7 +12,8 @@ use libp2p::swarm::{
 };
 use thiserror::Error;
 
-use crate::network::replication::{Codec, CodecError, Message, Protocol};
+use crate::network::replication::{Codec, CodecError, Protocol};
+use crate::replication::SyncMessage;
 
 pub struct Handler {
     /// Upgrade configuration for the replication protocol.
@@ -29,7 +30,7 @@ pub struct Handler {
     outbound_substream_establishing: bool,
 
     /// Queue of messages that we want to send to the remote.
-    send_queue: VecDeque<Message>,
+    send_queue: VecDeque<SyncMessage>,
 
     /// Flag determining whether to maintain the connection to the peer.
     keep_alive: KeepAlive,
@@ -72,7 +73,7 @@ impl Handler {
 #[derive(Debug)]
 pub enum HandlerInEvent {
     /// Replication message to send on outbound stream.
-    Message(Message),
+    Message(SyncMessage),
 }
 
 /// The event emitted by the connection handler.
@@ -81,7 +82,7 @@ pub enum HandlerInEvent {
 #[derive(Debug)]
 pub enum HandlerOutEvent {
     /// Replication message received on the inbound stream.
-    Message(Message),
+    Message(SyncMessage),
 }
 
 #[derive(Debug, Error)]
@@ -110,7 +111,7 @@ enum OutboundSubstreamState {
     WaitingOutput(Stream),
 
     /// Waiting to send a message to the remote.
-    PendingSend(Stream, Message),
+    PendingSend(Stream, SyncMessage),
 
     /// Waiting to flush the substream so that the data arrives to the remote.
     PendingFlush(Stream),
