@@ -373,6 +373,42 @@ impl SqlStore {
         // Convert log heights map back into vec.
         Ok(log_heights.into_iter().collect())
     }
+
+    pub async fn get_entries_greater_than(
+        &self,
+        public_key: &PublicKey,
+        log_id: &LogId,
+        seq_num: &SeqNum,
+    ) -> Result<Vec<StorageEntry>, EntryStorageError> {
+        let entries = query_as::<_, EntryRow>(
+            "
+            SELECT
+                public_key,
+                entry_bytes,
+                entry_hash,
+                log_id,
+                payload_bytes,
+                payload_hash,
+                seq_num
+            FROM
+                entries
+            WHERE
+                public_key = $1
+                AND log_id = $2
+                AND CAST(seq_num AS NUMERIC) > CAST($3 AS NUMERIC)
+            ORDER BY
+                CAST(seq_num AS NUMERIC)
+            ",
+        )
+        .bind(public_key.to_string())
+        .bind(log_id.as_u64().to_string())
+        .bind(seq_num.as_u64().to_string())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| EntryStorageError::Custom(e.to_string()))?;
+
+        Ok(entries.into_iter().map(|row| row.into()).collect())
+    }
 }
 
 #[cfg(test)]
@@ -817,6 +853,28 @@ mod tests {
                     assert_eq!(seq_num.as_u64(), 5)
                 }
             }
+        });
+    }
+
+
+    #[rstest]
+    fn get_entries_greater_than(
+        #[from(populate_store_config)]
+        #[with(20, 2, 1)]
+        config: PopulateStoreConfig,
+    ) {
+        test_runner(|node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (key_pairs, _) = populate_store(&node.context.store, &config).await;
+            let public_key = key_pairs[0].public_key();
+            let entries = node
+                .context
+                .store
+                .get_entries_greater_than(&public_key, &LogId::default(), &SeqNum::new(10).unwrap())
+                .await
+                .unwrap();
+
+            assert_eq!(entries.len(), 10);
         });
     }
 }
