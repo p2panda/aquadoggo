@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::collections::HashMap;
-
 use anyhow::Result;
 use async_trait::async_trait;
 use p2panda_rs::entry::{LogId, SeqNum};
@@ -10,7 +8,7 @@ use p2panda_rs::identity::PublicKey;
 use crate::db::SqlStore;
 use crate::replication::errors::ReplicationError;
 use crate::replication::traits::Strategy;
-use crate::replication::{Message, Mode, TargetSet};
+use crate::replication::{Message, Mode, StrategyResult, TargetSet};
 
 fn diff_log_heights(
     local_log_heights: &Vec<(PublicKey, Vec<(LogId, SeqNum)>)>,
@@ -36,19 +34,13 @@ fn diff_log_heights(
                     }
                 })
                 .collect();
+
             if !remote_needs_logs.is_empty() {
                 remote_needs.push((remote_author.to_owned(), remote_needs_logs));
             };
         }
     }
     remote_needs
-}
-
-// @TODO: Better name?!!
-#[derive(Clone, Debug)]
-pub struct StrategyResult {
-    pub messages: Vec<Message>,
-    pub is_local_done: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -117,38 +109,6 @@ impl Strategy for NaiveStrategy {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct SetReconciliationStrategy();
-
-impl SetReconciliationStrategy {
-    pub fn new() -> Self {
-        Self()
-    }
-}
-
-#[async_trait]
-impl Strategy for SetReconciliationStrategy {
-    fn mode(&self) -> Mode {
-        Mode::SetReconciliation
-    }
-
-    fn target_set(&self) -> TargetSet {
-        todo!()
-    }
-
-    async fn initial_messages(&self, _store: &SqlStore) -> Vec<Message> {
-        todo!()
-    }
-
-    async fn handle_message(
-        &self,
-        _store: &SqlStore,
-        _message: &Message,
-    ) -> Result<StrategyResult, ReplicationError> {
-        todo!()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use p2panda_rs::entry::{LogId, SeqNum};
@@ -159,9 +119,7 @@ mod tests {
     use super::diff_log_heights;
 
     #[rstest]
-    fn correctly_diffs_log_heights(
-        #[from(random_key_pair)] author_a: KeyPair,
-    ) {
+    fn correctly_diffs_log_heights(#[from(random_key_pair)] author_a: KeyPair) {
         let author_a = author_a.public_key();
         let peer_a_log_heights = vec![(author_a, vec![(LogId::new(0), SeqNum::new(5).unwrap())])];
         let peer_b_log_heights = vec![(author_a, vec![(LogId::new(0), SeqNum::new(8).unwrap())])];
