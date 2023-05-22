@@ -20,14 +20,14 @@ pub trait Strategy: std::fmt::Debug + StrategyClone + Sync + Send {
 
     /// Handle incoming message and return response.
     async fn handle_message(
-        &self,
+        &mut self,
         store: &SqlStore,
         message: &Message,
     ) -> Result<StrategyResult, ReplicationError>;
 
     /// Validate and store entry and operation.
     async fn handle_entry(
-        &self,
+        &mut self,
         _store: &SqlStore,
         _schema_id: &SchemaId,
         _entry_bytes: Vec<u8>,
