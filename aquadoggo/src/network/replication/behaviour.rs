@@ -99,7 +99,7 @@ impl NetworkBehaviour for Behaviour {
                 other_established,
             }) => self.send_message(
                 peer_id,
-                SyncMessage::new(0, Message::SyncRequest(0, TargetSet::new(&vec![]))),
+                SyncMessage::new(0, Message::SyncRequest(0.into(), TargetSet::new(&vec![]))),
             ),
             FromSwarm::ConnectionClosed(_)
             | FromSwarm::AddressChange(_)
@@ -201,7 +201,7 @@ mod tests {
         // Send a message from to swarm1 local peer from swarm2 local peer.
         swarm1.behaviour_mut().send_message(
             swarm2_peer_id,
-            SyncMessage::new(0, Message::SyncRequest(0, TargetSet::new(&vec![]))),
+            SyncMessage::new(0, Message::SyncRequest(0.into(), TargetSet::new(&vec![]))),
         );
 
         // Await a swarm event on swarm2.
@@ -233,13 +233,13 @@ mod tests {
         // Send a message from to swarm1 local peer from swarm2 local peer.
         swarm1.behaviour_mut().send_message(
             swarm2_peer_id,
-            SyncMessage::new(0, Message::SyncRequest(0, TargetSet::new(&vec![]))),
+            SyncMessage::new(0, Message::SyncRequest(0.into(), TargetSet::new(&vec![]))),
         );
 
         // Send a message from to swarm2 local peer from swarm1 local peer.
         swarm2.behaviour_mut().send_message(
             swarm1_peer_id,
-            SyncMessage::new(0, Message::SyncRequest(0, TargetSet::new(&vec![]))),
+            SyncMessage::new(0, Message::SyncRequest(0.into(), TargetSet::new(&vec![]))),
         );
 
         // Collect the next 2 behaviour events which occur in either swarms.
@@ -259,7 +259,7 @@ mod tests {
         assert_eq!(peer_id, &swarm2_peer_id);
         assert_eq!(
             message,
-            &SyncMessage::new(0, Message::SyncRequest(0, TargetSet::new(&vec![])))
+            &SyncMessage::new(0, Message::SyncRequest(0.into(), TargetSet::new(&vec![])))
         );
 
         // swarm2 should have received the message from swarm1 peer.
@@ -267,7 +267,7 @@ mod tests {
         assert_eq!(peer_id, &swarm1_peer_id);
         assert_eq!(
             message,
-            &SyncMessage::new(0, Message::SyncRequest(0, TargetSet::new(&vec![])))
+            &SyncMessage::new(0, Message::SyncRequest(0.into(), TargetSet::new(&vec![])))
         );
     }
 }
