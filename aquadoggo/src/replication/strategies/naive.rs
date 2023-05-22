@@ -111,12 +111,28 @@ impl Strategy for NaiveStrategy {
                     ));
                 }
 
-                // @TODO Compose Entry messages + SyncDone
                 let local_log_heights = self.local_log_heights(&store).await;
                 let remote_needs = diff_log_heights(&local_log_heights, remote_log_heights);
-                is_local_done = true;
+                let mut messages: Vec<Message> = vec![];
+                for (public_key, log_heights) in remote_needs {
+                    for (log_id, seq_num) in log_heights {
+                        let entry_messages: Vec<Message> = store
+                            .get_entries_from(&public_key, &log_id, &seq_num)
+                            .await
+                            .expect("Fatal database error").iter().map(|entry| {
+                            Message::Entry(entry.clone().encoded_entry, entry.payload().cloned())
+                        }).collect();
+                        messages.extend(entry_messages);
+                    }
+                }
 
+                is_local_done = true;
                 self.received_remote_have = true;
+
+                return Ok(StrategyResult {
+                    is_local_done,
+                    messages
+                });
             }
             _ => {
                 return Err(ReplicationError::StrategyFailed(
