@@ -32,7 +32,7 @@ impl Strategy for SetReconciliationStrategy {
     }
 
     async fn handle_message(
-        &self,
+        &mut self,
         _store: &SqlStore,
         _message: &Message,
     ) -> Result<StrategyResult, ReplicationError> {

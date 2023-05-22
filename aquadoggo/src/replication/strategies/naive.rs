@@ -10,10 +10,12 @@ use crate::replication::errors::ReplicationError;
 use crate::replication::traits::Strategy;
 use crate::replication::{Message, Mode, StrategyResult, TargetSet};
 
+type LogHeight = (PublicKey, Vec<(LogId, SeqNum)>);
+
 fn diff_log_heights(
-    local_log_heights: &Vec<(PublicKey, Vec<(LogId, SeqNum)>)>,
-    remote_log_heights: &Vec<(PublicKey, Vec<(LogId, SeqNum)>)>,
-) -> Vec<(PublicKey, Vec<(LogId, SeqNum)>)> {
+    local_log_heights: &Vec<LogHeight>,
+    remote_log_heights: &Vec<LogHeight>,
+) -> Vec<LogHeight> {
     let mut remote_needs = Vec::new();
     for (remote_author, remote_author_logs) in remote_log_heights {
         if let Some((_, local_author_logs)) = local_log_heights
@@ -46,13 +48,32 @@ fn diff_log_heights(
 #[derive(Clone, Debug)]
 pub struct NaiveStrategy {
     target_set: TargetSet,
+    received_remote_have: bool,
+    sent_have: bool,
 }
 
 impl NaiveStrategy {
     pub fn new(target_set: &TargetSet) -> Self {
         Self {
             target_set: target_set.clone(),
+            received_remote_have: false,
+            sent_have: false,
         }
+    }
+
+    async fn local_log_heights(&self, store: &SqlStore) -> Vec<LogHeight> {
+        let mut result = vec![];
+
+        // For every schema id in the target set retrieve log heights for all contributing authors
+        for schema_id in self.target_set().0.iter() {
+            let log_heights = store
+                .get_log_heights(schema_id)
+                .await
+                .expect("Fatal database error");
+            result.extend(log_heights);
+        }
+
+        result
     }
 }
 
@@ -67,37 +88,38 @@ impl Strategy for NaiveStrategy {
     }
 
     async fn initial_messages(&self, store: &SqlStore) -> Vec<Message> {
-        let mut target_set_log_heights = vec![];
-
-        // For every schema id in the target set retrieve log heights for all contributing authors
-        for schema_id in self.target_set().0.iter() {
-            let log_heights = store
-                .get_log_heights(schema_id)
-                .await
-                .expect("Fatal database error");
-            target_set_log_heights.extend(log_heights);
-        }
-        vec![Message::Have(target_set_log_heights)]
+        vec![Message::Have(self.local_log_heights(store).await)]
     }
 
     async fn handle_message(
-        &self,
-        _store: &SqlStore,
+        &mut self,
+        store: &SqlStore,
         message: &Message,
     ) -> Result<StrategyResult, ReplicationError> {
-        // TODO: Verify that the TargetSet contained in the message is a sub-set of the passed
-        // local TargetSet.
-        let _target_set = self.target_set();
-        let messages = Vec::new();
+        let mut messages = Vec::new();
         let mut is_local_done = false;
+
+        // Send our Have message to remote if we haven't done it yet
+        if !self.sent_have {
+            messages.extend(self.initial_messages(store).await);
+            self.sent_have = true;
+        }
 
         match message {
             Message::Have(_log_heights) => {
-                // Compose Have message and push to messages
+                if self.received_remote_have {
+                    // @TODO: Throw error
+                }
+
+                // @TODO Compose Entry messages
                 is_local_done = true;
+
+                self.received_remote_have = true;
             }
             Message::Entry(_, _) => {
                 // self.handle_entry(..)
+                // TODO: Verify that the TargetSet contained in the message is a sub-set of the passed
+                // local TargetSet.
             }
             _ => panic!("Naive replication strategy received unsupported message type"),
         }
