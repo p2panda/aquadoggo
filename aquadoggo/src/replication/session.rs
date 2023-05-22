@@ -94,9 +94,26 @@ impl Session {
                 self.is_remote_live_mode = *live_mode;
                 vec![]
             }
+            Message::Entry(entry_bytes, operation_bytes) => {
+                self.strategy
+                    .validate_entry(entry_bytes, operation_bytes)
+                    .await?;
+
+                // @TODO: Store entry and inform other services about it
+                vec![]
+            }
             message => {
-                let result = self.strategy.handle_message(store, message).await?;
-                self.is_local_done = result.is_local_done;
+                let mut result = self.strategy.handle_message(store, message).await?;
+
+                // Send `SyncDone` message last as soon as the done flag flipped
+                if result.is_local_done != self.is_local_done {
+                    result
+                        .messages
+                        .push(Message::SyncDone(self.is_local_live_mode));
+
+                    self.is_local_done = result.is_local_done;
+                }
+
                 result.messages
             }
         };
