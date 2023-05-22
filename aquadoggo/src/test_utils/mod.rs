@@ -15,4 +15,4 @@ pub use node::{
     add_document, add_schema, add_schema_and_documents, populate_and_materialize,
     populate_store_config, TestNode,
 };
-pub use runner::test_runner;
+pub use runner::{test_runner, test_runner_with_manager, TestNodeManager};
