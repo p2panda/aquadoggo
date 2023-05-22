@@ -82,6 +82,22 @@ where
         initial_messages
     }
 
+    fn remove_session(&mut self, remote_peer: &P, index: usize) {
+        let sessions = self
+            .sessions
+            .get_mut(remote_peer)
+            .expect("Expected at least one pending session");
+        sessions.remove(index);
+    }
+
+    fn is_mode_supported(mode: &Mode) -> Result<(), ReplicationError> {
+        if !SUPPORTED_MODES.contains(mode) {
+            return Err(ReplicationError::UnsupportedMode);
+        }
+
+        Ok(())
+    }
+
     pub async fn initiate_session(
         &mut self,
         remote_peer: &P,
@@ -117,22 +133,6 @@ where
             .await;
 
         Ok(vec![Message::SyncRequest(mode.clone(), target_set.clone())])
-    }
-
-    fn is_mode_supported(mode: &Mode) -> Result<(), ReplicationError> {
-        if !SUPPORTED_MODES.contains(mode) {
-            return Err(ReplicationError::UnsupportedMode);
-        }
-
-        Ok(())
-    }
-
-    fn remove_session(&mut self, remote_peer: &P, index: usize) {
-        let sessions = self
-            .sessions
-            .get_mut(remote_peer)
-            .expect("Expected at least one pending session");
-        sessions.remove(index);
     }
 
     async fn handle_duplicate_session(
@@ -256,7 +256,7 @@ where
         }
     }
 
-    pub async fn handle_entry(
+    async fn handle_entry(
         &mut self,
         remote_peer: &P,
         session_id: &SessionId,
