@@ -113,7 +113,7 @@ impl Strategy for NaiveStrategy {
                     ));
                 }
 
-                // @TODO Compose Entry messages
+                // @TODO Compose Entry messages + SyncDone
                 is_local_done = true;
 
                 self.received_remote_have = true;
