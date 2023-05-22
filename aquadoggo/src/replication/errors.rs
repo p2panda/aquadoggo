@@ -15,6 +15,9 @@ pub enum ReplicationError {
 
     #[error("No session found with id {0}")]
     NoSessionFound(u64),
+
+    #[error("Replication strategy failed with error: {0}")]
+    StrategyFailed(String),
 }
 
 #[derive(Error, Debug)]

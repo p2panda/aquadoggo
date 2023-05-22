@@ -108,7 +108,9 @@ impl Strategy for NaiveStrategy {
         match message {
             Message::Have(_log_heights) => {
                 if self.received_remote_have {
-                    // @TODO: Throw error
+                    return Err(ReplicationError::StrategyFailed(
+                        "Received Have from remote message twice".into(),
+                    ));
                 }
 
                 // @TODO Compose Entry messages
@@ -121,7 +123,11 @@ impl Strategy for NaiveStrategy {
                 // TODO: Verify that the TargetSet contained in the message is a sub-set of the passed
                 // local TargetSet.
             }
-            _ => panic!("Naive replication strategy received unsupported message type"),
+            _ => {
+                return Err(ReplicationError::StrategyFailed(
+                    "Received unknown message type".into(),
+                ));
+            }
         }
 
         Ok(StrategyResult {
