@@ -25,11 +25,11 @@ pub struct LogRow {
 #[derive(FromRow, Debug, Clone)]
 pub struct LogHeightRow {
     /// PublicKey of this entry.
-    pub(crate) public_key: String,
+    pub public_key: String,
 
     /// Used log for this entry.
-    pub(crate) log_id: String,
+    pub log_id: String,
 
     /// Sequence number of this entry.
-    pub(crate) seq_num: String,
+    pub seq_num: String,
 }
