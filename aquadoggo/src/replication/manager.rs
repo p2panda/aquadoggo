@@ -97,14 +97,13 @@ where
             }
         };
 
-        let initial_messages = self
+        // Ignore initial messages when we initiated the session, they will come from the other
+        // peer
+        let _initial_messages = self
             .insert_session(remote_peer, &session_id, target_set, mode, true)
             .await;
 
-        let mut all_messages = vec![Message::SyncRequest(mode.clone(), target_set.clone())];
-        all_messages.extend(initial_messages);
-
-        Ok(all_messages)
+        Ok(vec![Message::SyncRequest(mode.clone(), target_set.clone())])
     }
 
     fn is_mode_supported(mode: &Mode) -> Result<(), ReplicationError> {

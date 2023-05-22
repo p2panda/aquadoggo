@@ -88,31 +88,66 @@ impl Session {
         store: &SqlStore,
         message: &Message,
     ) -> Result<Vec<Message>, ReplicationError> {
-        match message {
+        let result = match message {
             Message::SyncDone(live_mode) => {
                 self.is_remote_done = true;
                 self.is_remote_live_mode = *live_mode;
-
-                if self.is_local_done && self.is_remote_done {
-                    self.state = SessionState::Done;
-                }
-
-                Ok(vec![])
+                vec![]
             }
             message => {
                 let result = self.strategy.handle_message(store, message).await?;
                 self.is_local_done = result.is_local_done;
-
-                if self.state == SessionState::Pending {
-                    self.state = SessionState::Established;
-                }
-
-                if self.is_local_done && self.is_remote_done {
-                    self.state = SessionState::Done;
-                }
-
-                Ok(result.messages)
+                result.messages
             }
+        };
+
+        // As soon as we've received any message from the remote peer we can consider the session
+        // to be "established"
+        if self.state == SessionState::Pending {
+            self.state = SessionState::Established;
         }
+
+        // If local and remote peer decided they're done, we can consider this whole session to be
+        // "done"
+        if self.is_local_done && self.is_remote_done {
+            self.state = SessionState::Done;
+        }
+
+        Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+
+    use crate::replication::manager::INITIAL_SESSION_ID;
+    use crate::replication::{Message, Mode, SessionState, TargetSet};
+    use crate::test_utils::helpers::random_target_set;
+    use crate::test_utils::{test_runner, TestNode};
+
+    use super::Session;
+
+    #[rstest]
+    fn state_machine(#[from(random_target_set)] target_set: TargetSet) {
+        test_runner(move |node: TestNode| async move {
+            let mut session =
+                Session::new(&INITIAL_SESSION_ID, &target_set, &Mode::Naive, true, false);
+            assert!(!session.is_local_done);
+            assert!(!session.is_local_live_mode);
+            assert!(!session.is_remote_live_mode);
+            assert!(!session.is_remote_done);
+            assert!(session.state == SessionState::Pending);
+
+            session
+                .handle_message(&node.context.store, &Message::SyncDone(true))
+                .await
+                .expect("No errors expected");
+            assert!(!session.is_local_done);
+            assert!(!session.is_local_live_mode);
+            assert!(session.is_remote_live_mode);
+            assert!(session.is_remote_done);
+            assert!(session.state == SessionState::Established);
+        })
     }
 }
