@@ -154,12 +154,15 @@ impl Session {
 
 #[cfg(test)]
 mod tests {
+    use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
     use rstest::rstest;
 
     use crate::replication::manager::INITIAL_SESSION_ID;
-    use crate::replication::{Message, Mode, SessionState, TargetSet};
+    use crate::replication::{Message, Mode, SessionState, SyncMessage, TargetSet};
     use crate::test_utils::helpers::random_target_set;
-    use crate::test_utils::{test_runner, TestNode};
+    use crate::test_utils::{
+        populate_store_config, test_runner, test_runner_with_manager, TestNode, TestNodeManager,
+    };
 
     use super::Session;
 
@@ -184,5 +187,28 @@ mod tests {
             assert!(session.is_remote_done);
             assert!(session.state == SessionState::Established);
         })
+    }
+
+    #[rstest]
+    fn correct_strategy_messages(
+        #[from(populate_store_config)]
+        #[with(5, 2, 1)]
+        config: PopulateStoreConfig,
+    ) {
+        test_runner_with_manager(|manager: TestNodeManager| async move {
+            let node = manager.create().await;
+            populate_store(&node.context.store, &config).await;
+
+            let target_set = TargetSet::new(&vec![config.schema.id().to_owned()]);
+            let mut session =
+                Session::new(&INITIAL_SESSION_ID, &target_set, &Mode::Naive, true, false);
+
+            let response_messages = session
+                .handle_message(&node.context.store, &Message::Have(vec![]))
+                .await
+                .unwrap();
+
+            assert_eq!(response_messages.len(), 11);
+        });
     }
 }
