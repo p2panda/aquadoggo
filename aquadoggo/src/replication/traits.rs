@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use async_trait::async_trait;
-use p2panda_rs::schema::SchemaId;
+use p2panda_rs::entry::EncodedEntry;
+use p2panda_rs::operation::decode::decode_operation;
+use p2panda_rs::operation::EncodedOperation;
 
 use crate::db::SqlStore;
 use crate::replication::errors::ReplicationError;
@@ -26,28 +28,24 @@ pub trait Strategy: std::fmt::Debug + StrategyClone + Sync + Send {
     ) -> Result<StrategyResult, ReplicationError>;
 
     /// Validate and store entry and operation.
+    ///
+    /// This checks if the received data is actually what we've asked for.
     async fn handle_entry(
         &mut self,
-        _store: &SqlStore,
-        _schema_id: &SchemaId,
-        _entry_bytes: Vec<u8>,
-        _operation_bytes: Vec<u8>,
+        store: &SqlStore,
+        entry_bytes: EncodedEntry,
+        operation_bytes: EncodedOperation,
     ) -> Result<(), ReplicationError> {
-        // @TODO
-        // Validation:
-        // Check against schema_id and target_set if entry is what we've asked for
-        let _target_set = self.target_set();
+        let target_set = self.target_set();
 
-        // Further validation through our publish api stuff (?!)
+        let operation = decode_operation(&operation_bytes)
+            .map_err(|err| ReplicationError::StrategyFailed("Could not decode operation".into()))?;
 
-        // Have an entry waiting lobby service here, to batch stuff?!
-        // Nice to check certificate pool in one go.
-        // Nice to not put too much pressure on the database.
         Ok(())
     }
 }
 
-/// This is a little trick so we can clone trait objects.
+// This is a little trick so we can clone trait objects.
 pub trait StrategyClone {
     fn clone_box(&self) -> Box<dyn Strategy>;
 }

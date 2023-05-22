@@ -2,8 +2,10 @@
 
 use std::fmt;
 
+use p2panda_rs::entry::EncodedEntry;
 use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::identity::PublicKey;
+use p2panda_rs::operation::EncodedOperation;
 use serde::de::Visitor;
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Serialize};
@@ -17,18 +19,22 @@ pub const HAVE_TYPE: MessageType = 10;
 
 pub type MessageType = u64;
 
+pub type LiveMode = bool;
+
+pub type LogHeight = (PublicKey, Vec<(LogId, SeqNum)>);
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Message {
     SyncRequest(Mode, TargetSet),
-    Entry(Vec<u8>, Vec<u8>),
-    SyncDone(bool),
-    Have(Vec<(PublicKey, Vec<(LogId, SeqNum)>)>),
+    Entry(EncodedEntry, EncodedOperation),
+    SyncDone(LiveMode),
+    Have(Vec<LogHeight>),
 }
 
 impl Message {
     pub fn message_type(&self) -> MessageType {
         match self {
-            Message::SyncRequest { .. } => SYNC_REQUEST_TYPE,
+            Message::SyncRequest(_, _) => SYNC_REQUEST_TYPE,
             Message::Entry(_, _) => ENTRY_TYPE,
             Message::SyncDone(_) => SYNC_DONE_TYPE,
             Message::Have(_) => HAVE_TYPE,
@@ -133,13 +139,14 @@ impl<'de> Deserialize<'de> for SyncMessage {
 
                     Ok(Message::SyncRequest(mode, target_set))
                 } else if message_type == ENTRY_TYPE {
-                    let entry_bytes: Vec<u8> = seq.next_element()?.ok_or_else(|| {
+                    let entry_bytes: EncodedEntry = seq.next_element()?.ok_or_else(|| {
                         serde::de::Error::custom("missing entry bytes in entry message")
                     })?;
 
-                    let operation_bytes: Vec<u8> = seq.next_element()?.ok_or_else(|| {
-                        serde::de::Error::custom("missing operation bytes in entry message")
-                    })?;
+                    let operation_bytes: EncodedOperation =
+                        seq.next_element()?.ok_or_else(|| {
+                            serde::de::Error::custom("missing operation bytes in entry message")
+                        })?;
 
                     Ok(Message::Entry(entry_bytes, operation_bytes))
                 } else if message_type == SYNC_DONE_TYPE {

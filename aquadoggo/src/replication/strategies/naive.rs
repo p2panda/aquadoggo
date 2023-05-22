@@ -3,14 +3,11 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use p2panda_rs::entry::{LogId, SeqNum};
-use p2panda_rs::identity::PublicKey;
 
 use crate::db::SqlStore;
 use crate::replication::errors::ReplicationError;
 use crate::replication::traits::Strategy;
-use crate::replication::{Message, Mode, StrategyResult, TargetSet};
-
-type LogHeight = (PublicKey, Vec<(LogId, SeqNum)>);
+use crate::replication::{LogHeight, Message, Mode, StrategyResult, TargetSet};
 
 fn diff_log_heights(
     local_log_heights: &Vec<LogHeight>,
@@ -118,10 +115,9 @@ impl Strategy for NaiveStrategy {
 
                 self.received_remote_have = true;
             }
-            Message::Entry(_, _) => {
-                // self.handle_entry(..)
-                // TODO: Verify that the TargetSet contained in the message is a sub-set of the passed
-                // local TargetSet.
+            Message::Entry(entry_bytes, operation_bytes) => {
+                self.handle_entry(store, entry_bytes.clone(), operation_bytes.clone())
+                    .await?;
             }
             _ => {
                 return Err(ReplicationError::StrategyFailed(
