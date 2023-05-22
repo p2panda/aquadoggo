@@ -116,8 +116,7 @@ impl Strategy for NaiveStrategy {
                 self.received_remote_have = true;
             }
             Message::Entry(entry_bytes, operation_bytes) => {
-                self.handle_entry(store, entry_bytes.clone(), operation_bytes.clone())
-                    .await?;
+                self.validate_entry(entry_bytes, operation_bytes).await?;
             }
             _ => {
                 return Err(ReplicationError::StrategyFailed(

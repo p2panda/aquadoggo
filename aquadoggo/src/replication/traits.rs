@@ -31,18 +31,15 @@ pub trait Strategy: std::fmt::Debug + StrategyClone + Sync + Send {
     /// Validate and store entry and operation.
     ///
     /// This checks if the received data is actually what we've asked for.
-    async fn handle_entry(
+    async fn validate_entry(
         &mut self,
-        store: &SqlStore,
-        entry_bytes: EncodedEntry,
-        operation_bytes: EncodedOperation,
+        _entry_bytes: &EncodedEntry,
+        operation_bytes: &EncodedOperation,
     ) -> Result<(), ReplicationError> {
-        let operation = decode_operation(&operation_bytes)
+        let operation = decode_operation(operation_bytes)
             .map_err(|_| ReplicationError::StrategyFailed("Could not decode operation".into()))?;
 
-        let schema_id = operation.schema_id();
-
-        if !self.target_set().contains(schema_id) {
+        if !self.target_set().contains(operation.schema_id()) {
             return Err(ReplicationError::UnmatchedTargetSet);
         }
 
