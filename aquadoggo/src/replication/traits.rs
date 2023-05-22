@@ -3,6 +3,7 @@
 use async_trait::async_trait;
 use p2panda_rs::entry::EncodedEntry;
 use p2panda_rs::operation::decode::decode_operation;
+use p2panda_rs::operation::traits::Schematic;
 use p2panda_rs::operation::EncodedOperation;
 
 use crate::db::SqlStore;
@@ -36,10 +37,14 @@ pub trait Strategy: std::fmt::Debug + StrategyClone + Sync + Send {
         entry_bytes: EncodedEntry,
         operation_bytes: EncodedOperation,
     ) -> Result<(), ReplicationError> {
-        let target_set = self.target_set();
-
         let operation = decode_operation(&operation_bytes)
-            .map_err(|err| ReplicationError::StrategyFailed("Could not decode operation".into()))?;
+            .map_err(|_| ReplicationError::StrategyFailed("Could not decode operation".into()))?;
+
+        let schema_id = operation.schema_id();
+
+        if !self.target_set().contains(schema_id) {
+            return Err(ReplicationError::UnmatchedTargetSet);
+        }
 
         Ok(())
     }

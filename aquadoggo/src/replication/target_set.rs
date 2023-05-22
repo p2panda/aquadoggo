@@ -27,6 +27,10 @@ impl TargetSet {
         Self(deduplicated_set)
     }
 
+    pub fn contains(&self, schema_id: &SchemaId) -> bool {
+        self.0.contains(schema_id)
+    }
+
     fn from_untrusted(schema_ids: Vec<SchemaId>) -> Result<Self, TargetSetError> {
         // Create target set with potentially invalid data
         let target_set = Self(schema_ids);
