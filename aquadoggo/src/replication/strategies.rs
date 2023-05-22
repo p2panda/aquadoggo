@@ -8,23 +8,22 @@ use crate::replication::errors::ReplicationError;
 use crate::replication::traits::Strategy;
 use crate::replication::{Message, Mode, TargetSet};
 
+// @TODO: Better name?!!
 #[derive(Clone, Debug)]
 pub struct StrategyResult {
-    pub is_done: bool,
     pub messages: Vec<Message>,
+    pub is_local_done: bool,
 }
 
 #[derive(Clone, Debug)]
 pub struct NaiveStrategy {
     target_set: TargetSet,
-    mode: Mode,
 }
 
 impl NaiveStrategy {
-    pub fn new(target_set: &TargetSet, mode: &Mode) -> Self {
+    pub fn new(target_set: &TargetSet) -> Self {
         Self {
             target_set: target_set.clone(),
-            mode: mode.clone(),
         }
     }
 }
@@ -32,7 +31,7 @@ impl NaiveStrategy {
 #[async_trait]
 impl Strategy for NaiveStrategy {
     fn mode(&self) -> Mode {
-        self.mode.clone()
+        Mode::Naive
     }
 
     fn target_set(&self) -> TargetSet {
@@ -43,7 +42,6 @@ impl Strategy for NaiveStrategy {
         // TODO: Access the store and compose a have message which contains our local log heights over
         // the TargetSet.
         let _target_set = self.target_set();
-
         vec![Message::Have(vec![])]
     }
 
@@ -56,12 +54,12 @@ impl Strategy for NaiveStrategy {
         // local TargetSet.
         let _target_set = self.target_set();
         let messages = Vec::new();
-        let mut is_done = false;
+        let mut is_local_done = false;
 
         match message {
             Message::Have(_log_heights) => {
                 // Compose Have message and push to messages
-                is_done = true;
+                is_local_done = true;
             }
             Message::Entry(_, _) => {
                 // self.handle_entry(..)
@@ -69,7 +67,10 @@ impl Strategy for NaiveStrategy {
             _ => panic!("Naive replication strategy received unsupported message type"),
         }
 
-        Ok(StrategyResult { is_done, messages })
+        Ok(StrategyResult {
+            is_local_done,
+            messages,
+        })
     }
 }
 
@@ -85,7 +86,7 @@ impl SetReconciliationStrategy {
 #[async_trait]
 impl Strategy for SetReconciliationStrategy {
     fn mode(&self) -> Mode {
-        todo!()
+        Mode::SetReconciliation
     }
 
     fn target_set(&self) -> TargetSet {

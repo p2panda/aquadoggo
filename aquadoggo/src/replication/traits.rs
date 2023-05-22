@@ -3,11 +3,9 @@
 use async_trait::async_trait;
 use p2panda_rs::schema::SchemaId;
 
+use crate::db::SqlStore;
 use crate::replication::errors::ReplicationError;
-use crate::{
-    db::SqlStore,
-    replication::{Message, Mode, StrategyResult, TargetSet},
-};
+use crate::replication::{Message, Mode, StrategyResult, TargetSet};
 
 #[async_trait]
 pub trait Strategy: std::fmt::Debug + StrategyClone + Sync + Send {
@@ -17,23 +15,17 @@ pub trait Strategy: std::fmt::Debug + StrategyClone + Sync + Send {
     /// Target set replication is occurring over.
     fn target_set(&self) -> TargetSet;
 
-    // Generate initial messages.
-    //
-    // @TODO: we want to pass the store in here too eventually.
+    /// Generate initial messages.
     async fn initial_messages(&self, store: &SqlStore) -> Vec<Message>;
 
-    // Handle incoming message and return response.
-    //
-    // @TODO: we want to pass the store in here too eventually.
+    /// Handle incoming message and return response.
     async fn handle_message(
         &self,
         store: &SqlStore,
         message: &Message,
     ) -> Result<StrategyResult, ReplicationError>;
 
-    // Validate and store entry and operation.
-    //
-    // @TODO: we want to pass the store in here too eventually.
+    /// Validate and store entry and operation.
     async fn handle_entry(
         &self,
         _store: &SqlStore,
@@ -41,6 +33,7 @@ pub trait Strategy: std::fmt::Debug + StrategyClone + Sync + Send {
         _entry_bytes: Vec<u8>,
         _operation_bytes: Vec<u8>,
     ) -> Result<(), ReplicationError> {
+        // @TODO
         // Validation:
         // Check against schema_id and target_set if entry is what we've asked for
         let _target_set = self.target_set();

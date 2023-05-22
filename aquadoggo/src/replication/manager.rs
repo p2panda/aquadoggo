@@ -8,11 +8,17 @@ use crate::db::SqlStore;
 use crate::replication::errors::ReplicationError;
 use crate::replication::{Message, Mode, Session, SessionId, SessionState, SyncMessage, TargetSet};
 
-use super::StrategyResult;
-
 pub const INITIAL_SESSION_ID: SessionId = 0;
 
 pub const SUPPORTED_MODES: [Mode; 1] = [Mode::Naive];
+
+pub const SUPPORT_LIVE_MODE: bool = false;
+
+#[derive(Clone, Debug)]
+pub struct SyncResult {
+    pub messages: Vec<Message>,
+    pub is_done: bool,
+}
 
 #[derive(Debug)]
 pub struct SyncManager<P> {
@@ -51,7 +57,7 @@ where
         mode: &Mode,
         local: bool,
     ) -> Vec<Message> {
-        let session = Session::new(session_id, target_set, mode, local);
+        let mut session = Session::new(session_id, target_set, mode, local, SUPPORT_LIVE_MODE);
         let initial_messages = session.initial_messages(&self.store).await;
 
         if let Some(sessions) = self.sessions.get_mut(remote_peer) {
@@ -91,11 +97,14 @@ where
             }
         };
 
-        let messages = self
+        let initial_messages = self
             .insert_session(remote_peer, &session_id, target_set, mode, true)
             .await;
 
-        Ok(messages)
+        let mut all_messages = vec![Message::SyncRequest(mode.clone(), target_set.clone())];
+        all_messages.extend(initial_messages);
+
+        Ok(all_messages)
     }
 
     fn is_mode_supported(mode: &Mode) -> Result<(), ReplicationError> {
@@ -106,23 +115,27 @@ where
         Ok(())
     }
 
+    fn remove_session(&mut self, remote_peer: &P, index: usize) {
+        let sessions = self
+            .sessions
+            .get_mut(remote_peer)
+            .expect("Expected at least one pending session");
+        sessions.remove(index);
+    }
+
     async fn handle_duplicate_session(
         &mut self,
         remote_peer: &P,
         target_set: &TargetSet,
         index: usize,
         session: &Session,
-    ) -> Result<Vec<Message>, ReplicationError> {
+    ) -> Result<SyncResult, ReplicationError> {
         let accept_inbound_request = match session.state {
             // Handle only duplicate sessions when they haven't started yet
             SessionState::Pending => {
                 if &self.local_peer < remote_peer {
                     // Drop our pending session
-                    let sessions = self
-                        .sessions
-                        .get_mut(remote_peer)
-                        .expect("Expected at least one pending session");
-                    sessions.remove(index);
+                    self.remove_session(remote_peer, index);
 
                     // Accept the inbound request
                     true
@@ -152,7 +165,10 @@ where
             }
         }
 
-        Ok(all_messages)
+        Ok(SyncResult {
+            is_done: false,
+            messages: all_messages,
+        })
     }
 
     async fn handle_sync_request(
@@ -161,7 +177,7 @@ where
         mode: &Mode,
         session_id: &SessionId,
         target_set: &TargetSet,
-    ) -> Result<Vec<Message>, ReplicationError> {
+    ) -> Result<SyncResult, ReplicationError> {
         SyncManager::<P>::is_mode_supported(mode)?;
 
         let sessions = self.get_sessions(remote_peer);
@@ -191,28 +207,38 @@ where
             .insert_session(remote_peer, session_id, target_set, mode, false)
             .await;
 
-        Ok(messages)
+        Ok(SyncResult {
+            is_done: false,
+            messages,
+        })
     }
 
-    pub async fn handle_session_message(
-        &self,
+    async fn handle_session_message(
+        &mut self,
         remote_peer: &P,
         session_id: &SessionId,
         message: &Message,
-    ) -> Result<Vec<Message>, ReplicationError> {
-        let sessions = self.get_sessions(remote_peer);
+    ) -> Result<SyncResult, ReplicationError> {
+        let mut sessions = self.get_sessions(remote_peer);
 
         // Check if a session exists with the given id for this peer.
-        if let Some(session) = sessions.iter().find(|session| session.id == *session_id) {
+        if let Some((index, session)) = sessions
+            .iter_mut()
+            .enumerate()
+            .find(|(_, session)| session.id == *session_id)
+        {
             // Pass the message onto the session when found.
-            let StrategyResult { is_done, messages } =
-                session.handle_message(&self.store, message).await?;
+            let messages = session.handle_message(&self.store, message).await?;
 
-            if is_done {
-                // @TODO: We want to close this connection when both sides are finished....
+            // We're done, clean up after ourselves
+            if session.state == SessionState::Done {
+                self.remove_session(remote_peer, index);
             }
 
-            Ok(messages)
+            Ok(SyncResult {
+                messages,
+                is_done: session.state == SessionState::Done,
+            })
         } else {
             Err(ReplicationError::NoSessionFound(*session_id))
         }
@@ -222,7 +248,7 @@ where
         &mut self,
         remote_peer: &P,
         sync_message: &SyncMessage,
-    ) -> Result<Vec<Message>, ReplicationError> {
+    ) -> Result<SyncResult, ReplicationError> {
         match sync_message.message() {
             Message::SyncRequest(mode, target_set) => {
                 self.handle_sync_request(remote_peer, mode, &sync_message.session_id(), target_set)
