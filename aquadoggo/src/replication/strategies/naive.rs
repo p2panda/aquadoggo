@@ -17,24 +17,48 @@ fn diff_log_heights(
 ) -> Vec<LogHeight> {
     let mut remote_needs = Vec::new();
     for (remote_author, remote_author_logs) in remote_log_heights {
+
+        // Helper for diffing local log heights against remote log heights.
+        let diff_logs = |(local_log_id, local_seq_num): (LogId, SeqNum)| {
+            // Get the remote log by it's id.
+            let remote_log = remote_author_logs
+                .iter()
+                .find(|(remote_log_id, _)| local_log_id == *remote_log_id);
+
+            match remote_log {
+                // If a log exists then compare heights of local and remote logs.
+                Some((log_id, remote_seq_num)) => {
+                    // If the local log is higher we increment their log id (we want all entries
+                    // greater than or equal to this). Otherwise we return none.
+                    if local_seq_num > *remote_seq_num {
+                        // We can unwrap as we are incrementing the remote peers seq num here
+                        // and this means it's will not reach max seq number.
+                        Some((log_id.to_owned(), remote_seq_num.clone().next().unwrap()))
+                    } else {
+                        None
+                    }
+                }
+                // If no log exists then the remote has never had this log and they need
+                // all entries from seq num 1.
+                None => Some((local_log_id.to_owned(), SeqNum::default())),
+            }
+        };
+
+        // Find local log for a public key sent by the remote peer.
+        //
+        // If none is found we don't do anything as this means we are missing entries they should send us.
         if let Some((_, local_author_logs)) = local_log_heights
             .iter()
             .find(|(local_author, _)| local_author == remote_author)
         {
+            // Diff our local log heights against the remote. 
             let remote_needs_logs: Vec<(LogId, SeqNum)> = local_author_logs
                 .to_owned()
                 .into_iter()
-                .filter(|(local_log_id, local_seq_num)| {
-                    let remote_log = remote_author_logs
-                        .iter()
-                        .find(|(remote_log_id, _)| local_log_id == remote_log_id);
-
-                    match remote_log {
-                        Some((_, remote_seq_num)) => local_seq_num > remote_seq_num,
-                        None => true,
-                    }
-                })
+                .filter_map(diff_logs)
                 .collect();
+
+            // If the remote needs at least one log we push it to the remote needs.
             if !remote_needs_logs.is_empty() {
                 remote_needs.push((remote_author.to_owned(), remote_needs_logs));
             };
