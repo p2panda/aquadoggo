@@ -4,9 +4,12 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 
+use crate::bus::ServiceSender;
 use crate::db::SqlStore;
 use crate::replication::errors::ReplicationError;
-use crate::replication::{Message, Mode, Session, SessionId, SessionState, SyncMessage, TargetSet};
+use crate::replication::{
+    Message, Mode, Session, SessionId, SessionState, SyncIngest, SyncMessage, TargetSet,
+};
 
 pub const INITIAL_SESSION_ID: SessionId = 0;
 
@@ -23,6 +26,7 @@ pub struct SyncResult {
 #[derive(Debug)]
 pub struct SyncManager<P> {
     store: SqlStore,
+    ingest: SyncIngest,
     local_peer: P,
     sessions: HashMap<P, Vec<Session>>,
 }
@@ -31,10 +35,11 @@ impl<P> SyncManager<P>
 where
     P: Clone + std::hash::Hash + Eq + PartialOrd,
 {
-    pub fn new(store: SqlStore, local_peer: P) -> Self {
+    pub fn new(store: SqlStore, local_peer: P, tx: ServiceSender) -> Self {
         Self {
-            store,
+            store: store.clone(),
             local_peer,
+            ingest: SyncIngest::new(store, tx),
             sessions: HashMap::new(),
         }
     }
@@ -264,6 +269,7 @@ where
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
+    use tokio::sync::broadcast;
 
     use crate::replication::errors::ReplicationError;
     use crate::replication::message::Message;
@@ -283,8 +289,9 @@ mod tests {
     ) {
         test_runner(move |node: TestNode| async move {
             let mode = Mode::Naive;
+            let (tx, _rx) = broadcast::channel(8);
 
-            let mut manager = SyncManager::new(node.context.store.clone(), PEER_ID_LOCAL);
+            let mut manager = SyncManager::new(node.context.store.clone(), PEER_ID_LOCAL, tx);
             let result = manager
                 .initiate_session(&PEER_ID_REMOTE, &target_set_1, &mode)
                 .await;
@@ -312,7 +319,8 @@ mod tests {
         #[from(random_target_set)] target_set_2: TargetSet,
     ) {
         test_runner(move |node: TestNode| async move {
-            let mut manager = SyncManager::new(node.context.store.clone(), PEER_ID_LOCAL);
+            let (tx, _rx) = broadcast::channel(8);
+            let mut manager = SyncManager::new(node.context.store.clone(), PEER_ID_LOCAL, tx);
 
             let message =
                 SyncMessage::new(0, Message::SyncRequest(Mode::Naive, target_set_1.clone()));
@@ -347,8 +355,11 @@ mod tests {
     #[rstest]
     fn inbound_checks_supported_mode(#[from(random_target_set)] target_set: TargetSet) {
         test_runner(move |node: TestNode| async move {
+            let (tx, _rx) = broadcast::channel(8);
+
             // Should not fail when requesting supported replication mode
-            let mut manager = SyncManager::new(node.context.store.clone(), PEER_ID_LOCAL);
+            let mut manager =
+                SyncManager::new(node.context.store.clone(), PEER_ID_LOCAL, tx.clone());
             let message = SyncMessage::new(
                 INITIAL_SESSION_ID,
                 Message::SyncRequest(Mode::Naive, target_set.clone()),
@@ -357,7 +368,7 @@ mod tests {
             assert!(result.is_ok());
 
             // Should fail when requesting unsupported replication mode
-            let mut manager = SyncManager::new(node.context.store.clone(), PEER_ID_LOCAL);
+            let mut manager = SyncManager::new(node.context.store.clone(), PEER_ID_LOCAL, tx);
             let message = SyncMessage::new(
                 INITIAL_SESSION_ID,
                 Message::SyncRequest(Mode::SetReconciliation, target_set.clone()),
