@@ -91,6 +91,8 @@ impl Session {
     /// Validate entry and operation.
     ///
     /// This checks if the received data is actually what we've asked for.
+    // @TODO: Make error type smaller in size
+    #[allow(clippy::result_large_err)]
     pub fn validate_entry(
         &self,
         _entry_bytes: &EncodedEntry,

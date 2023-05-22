@@ -90,6 +90,8 @@ where
         sessions.remove(index);
     }
 
+    // @TODO: Make error type smaller in size
+    #[allow(clippy::result_large_err)]
     fn is_mode_supported(mode: &Mode) -> Result<(), ReplicationError> {
         if !SUPPORTED_MODES.contains(mode) {
             return Err(ReplicationError::UnsupportedMode);
