@@ -42,9 +42,11 @@ pub struct Behaviour {
     /// Register with a rendezvous server and query remote peer addresses.
     pub rendezvous_client: Toggle<rendezvous::client::Behaviour>,
 
-    /// Serve as a rendezvous point for remote peers to register their external addresses
-    /// and query the addresses of other peers.
+    /// Serve as a rendezvous point for remote peers to register their external addresses and query
+    /// the addresses of other peers.
     pub rendezvous_server: Toggle<rendezvous::server::Behaviour>,
+
+    pub replication: crate::network::replication::Behaviour,
 }
 
 impl Behaviour {
@@ -132,6 +134,8 @@ impl Behaviour {
             None
         };
 
+        let replication = crate::network::replication::Behaviour::new();
+
         Ok(Self {
             autonat: autonat.into(),
             identify: identify.into(),
@@ -142,6 +146,7 @@ impl Behaviour {
             rendezvous_server: rendezvous_server.into(),
             relay_client: relay_client.into(),
             relay_server: relay_server.into(),
+            replication,
         })
     }
 }
