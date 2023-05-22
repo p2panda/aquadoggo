@@ -22,7 +22,7 @@ pub enum Message {
     SyncRequest(Mode, TargetSet),
     Entry(Vec<u8>, Vec<u8>),
     SyncDone(bool),
-    Have(Vec<(PublicKey, LogId, SeqNum)>),
+    Have(Vec<(PublicKey, Vec<(LogId, SeqNum)>)>),
 }
 
 impl Message {
@@ -149,7 +149,7 @@ impl<'de> Deserialize<'de> for SyncMessage {
 
                     Ok(Message::SyncDone(live_mode))
                 } else if message_type == HAVE_TYPE {
-                    let log_heights: Vec<(PublicKey, LogId, SeqNum)> =
+                    let log_heights: Vec<(PublicKey, Vec<(LogId, SeqNum)>)> =
                         seq.next_element()?.ok_or_else(|| {
                             serde::de::Error::custom("missing log heights in have message")
                         })?;
@@ -203,7 +203,7 @@ mod tests {
             serialize_value(cbor!([0, 51, 1, target_set]))
         );
 
-        let log_heights = vec![(public_key, LogId::default(), SeqNum::default())];
+        let log_heights = vec![(public_key, vec![(LogId::default(), SeqNum::default())])];
         assert_eq!(
             serialize_from(SyncMessage::new(51, Message::Have(log_heights.clone()))),
             serialize_value(cbor!([10, 51, log_heights]))
@@ -218,14 +218,14 @@ mod tests {
             SyncMessage::new(12, Message::SyncRequest(Mode::Naive, target_set.clone()))
         );
 
-        let log_heights: Vec<(PublicKey, LogId, SeqNum)> = vec![];
+        let log_heights: Vec<(PublicKey, Vec<(LogId, SeqNum)>)> = vec![];
         assert_eq!(
             deserialize_into::<SyncMessage>(&serialize_value(cbor!([10, 12, log_heights])))
                 .unwrap(),
             SyncMessage::new(12, Message::Have(vec![]))
         );
 
-        let log_heights = vec![(public_key, LogId::default(), SeqNum::default())];
+        let log_heights = vec![(public_key, vec![(LogId::default(), SeqNum::default())])];
         assert_eq!(
             deserialize_into::<SyncMessage>(&serialize_value(cbor!([10, 12, log_heights.clone()])))
                 .unwrap(),
