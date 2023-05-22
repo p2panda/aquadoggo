@@ -6,10 +6,7 @@ use sqlx::Any;
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
 use crate::test_utils::TestConfiguration;
 
-/// Create test database.
-pub async fn initialize_db() -> (TestConfiguration, Pool) {
-    let config = TestConfiguration::new();
-
+async fn db_from_config(config: TestConfiguration) -> (TestConfiguration, Pool) {
     drop_database(&config).await;
     create_database(&config.database_url).await.unwrap();
 
@@ -21,6 +18,17 @@ pub async fn initialize_db() -> (TestConfiguration, Pool) {
     }
 
     (config, pool)
+}
+
+/// Create test database.
+pub async fn initialize_db() -> (TestConfiguration, Pool) {
+    let config = TestConfiguration::new();
+    db_from_config(config).await
+}
+
+pub async fn initialize_sqlite_db() -> (TestConfiguration, Pool) {
+    let config = TestConfiguration::default();
+    db_from_config(config).await
 }
 
 /// Delete test database.

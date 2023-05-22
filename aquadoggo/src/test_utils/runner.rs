@@ -12,7 +12,7 @@ use crate::db::Pool;
 use crate::db::SqlStore;
 use crate::schema::SchemaProvider;
 use crate::test_utils::TestNode;
-use crate::test_utils::{initialize_db, initialize_db_with_url};
+use crate::test_utils::{initialize_db, initialize_sqlite_db};
 use crate::Configuration;
 
 #[async_trait::async_trait]
@@ -58,18 +58,26 @@ impl TestNodeManager {
         Self::default()
     }
 
-    pub async fn create(&self, url: &str) -> TestNode {
-        let pool = initialize_db_with_url(url).await;
+    pub async fn create(&self) -> TestNode {
+        let (_config, pool) = initialize_sqlite_db().await;
 
         // Initialise test store using pool.
         let store = SqlStore::new(pool.clone());
 
-        let test_node = TestNode::new(store.clone());
+        // Construct the actual test node
+        let test_node = TestNode {
+            context: Context::new(
+                store.clone(),
+                Configuration::default(),
+                SchemaProvider::default(),
+            ),
+        };
 
         self.pools.lock().await.push(pool);
         test_node
     }
 }
+
 
 /// Provides a safe way to write tests using a database which closes the pool connection
 /// automatically when the test succeeds or fails.
@@ -86,7 +94,7 @@ pub fn test_runner<F: AsyncTestFn + Send + Sync + 'static>(test: F) {
 
     runtime.block_on(async {
         // Initialise store
-        let pool = initialize_db().await;
+        let (_config, pool) = initialize_db().await;
         let store = SqlStore::new(pool);
 
         // Construct the actual test node
