@@ -26,7 +26,7 @@ pub type LogHeight = (PublicKey, Vec<(LogId, SeqNum)>);
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Message {
     SyncRequest(Mode, TargetSet),
-    Entry(EncodedEntry, EncodedOperation),
+    Entry(EncodedEntry, Option<EncodedOperation>),
     SyncDone(LiveMode),
     Have(Vec<LogHeight>),
 }
@@ -143,10 +143,7 @@ impl<'de> Deserialize<'de> for SyncMessage {
                         serde::de::Error::custom("missing entry bytes in entry message")
                     })?;
 
-                    let operation_bytes: EncodedOperation =
-                        seq.next_element()?.ok_or_else(|| {
-                            serde::de::Error::custom("missing operation bytes in entry message")
-                        })?;
+                    let operation_bytes: Option<EncodedOperation> = seq.next_element()?;
 
                     Ok(Message::Entry(entry_bytes, operation_bytes))
                 } else if message_type == SYNC_DONE_TYPE {

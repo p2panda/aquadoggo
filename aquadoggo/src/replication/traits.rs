@@ -34,13 +34,16 @@ pub trait Strategy: std::fmt::Debug + StrategyClone + Sync + Send {
     async fn validate_entry(
         &mut self,
         _entry_bytes: &EncodedEntry,
-        operation_bytes: &EncodedOperation,
+        operation_bytes: Option<&EncodedOperation>,
     ) -> Result<(), ReplicationError> {
-        let operation = decode_operation(operation_bytes)
-            .map_err(|_| ReplicationError::StrategyFailed("Could not decode operation".into()))?;
+        if let Some(operation_bytes) = operation_bytes {
+            let operation = decode_operation(operation_bytes).map_err(|_| {
+                ReplicationError::StrategyFailed("Could not decode operation".into())
+            })?;
 
-        if !self.target_set().contains(operation.schema_id()) {
-            return Err(ReplicationError::UnmatchedTargetSet);
+            if !self.target_set().contains(operation.schema_id()) {
+                return Err(ReplicationError::UnmatchedTargetSet);
+            }
         }
 
         Ok(())
