@@ -24,22 +24,23 @@ pub fn diff_log_heights(
                     // If the local log is higher we increment their log id (we want all entries
                     // greater than or equal to this). Otherwise we return none.
                     if local_seq_num > *remote_seq_num {
-                        // We can unwrap as we are incrementing the remote peers seq num here
-                        // and this means it's will not reach max seq number.
+                        // We can unwrap as we are incrementing the remote peers seq num here and
+                        // this means it's will not reach max seq number.
                         Some((log_id.to_owned(), remote_seq_num.clone().next().unwrap()))
                     } else {
                         None
                     }
                 }
-                // If no log exists then the remote has never had this log and they need
-                // all entries from seq num 1.
+                // If no log exists then the remote has never had this log and they need all
+                // entries from seq num 1.
                 None => Some((local_log_id.to_owned(), SeqNum::default())),
             }
         };
 
         // Find local log for a public key sent by the remote peer.
         //
-        // If none is found we don't do anything as this means we are missing entries they should send us.
+        // If none is found we don't do anything as this means we are missing entries they should
+        // send us.
         if let Some((_, local_author_logs)) = local_log_heights
             .iter()
             .find(|(local_author, _)| local_author == remote_author)
