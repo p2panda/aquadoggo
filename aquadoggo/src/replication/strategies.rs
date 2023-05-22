@@ -1,12 +1,46 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::collections::HashMap;
+
 use anyhow::Result;
 use async_trait::async_trait;
+use p2panda_rs::entry::{LogId, SeqNum};
+use p2panda_rs::identity::PublicKey;
 
 use crate::db::SqlStore;
 use crate::replication::errors::ReplicationError;
 use crate::replication::traits::Strategy;
 use crate::replication::{Message, Mode, TargetSet};
+
+fn diff_log_heights(
+    local_log_heights: &Vec<(PublicKey, Vec<(LogId, SeqNum)>)>,
+    remote_log_heights: &Vec<(PublicKey, Vec<(LogId, SeqNum)>)>,
+) -> Vec<(PublicKey, Vec<(LogId, SeqNum)>)> {
+    let mut remote_needs = Vec::new();
+    for (remote_author, remote_author_logs) in remote_log_heights {
+        if let Some((_, local_author_logs)) = local_log_heights
+            .iter()
+            .find(|(local_author, _)| local_author == remote_author)
+        {
+            let remote_needs_logs = local_author_logs
+                .to_owned()
+                .into_iter()
+                .filter(|(local_log_id, local_seq_num)| {
+                    let remote_log = remote_author_logs
+                        .iter()
+                        .find(|(remote_log_id, _)| local_log_id == remote_log_id);
+
+                    match remote_log {
+                        Some((_, remote_seq_num)) => local_seq_num > remote_seq_num,
+                        None => true,
+                    }
+                })
+                .collect();
+            remote_needs.push((remote_author.to_owned(), remote_needs_logs));
+        }
+    }
+    remote_needs
+}
 
 // @TODO: Better name?!!
 #[derive(Clone, Debug)]
@@ -110,5 +144,34 @@ impl Strategy for SetReconciliationStrategy {
         _message: &Message,
     ) -> Result<StrategyResult, ReplicationError> {
         todo!()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use p2panda_rs::entry::{LogId, SeqNum};
+    use p2panda_rs::identity::KeyPair;
+    use p2panda_rs::test_utils::fixtures::random_key_pair;
+    use rstest::rstest;
+
+    use super::diff_log_heights;
+
+    #[rstest]
+    fn correctly_diffs_log_heights(
+        #[from(random_key_pair)] author_a: KeyPair,
+        #[from(random_key_pair)] author_b: KeyPair,
+        #[from(random_key_pair)] author_c: KeyPair,
+    ) {
+        let author_a = author_a.public_key();
+        let author_b = author_b.public_key();
+        let author_c = author_c.public_key();
+        let peer_a_log_heights = vec![(author_a, vec![(LogId::new(0), SeqNum::new(5).unwrap())])];
+        let peer_b_log_heights = vec![(author_a, vec![(LogId::new(0), SeqNum::new(8).unwrap())])];
+
+        let peer_b_needs = diff_log_heights(&peer_a_log_heights, &peer_b_log_heights);
+        let peer_a_needs = diff_log_heights(&peer_a_log_heights, &peer_b_log_heights);
+
+        assert_eq!(peer_a_needs, peer_b_log_heights);
+        assert_eq!(peer_b_needs, vec![]);
     }
 }
