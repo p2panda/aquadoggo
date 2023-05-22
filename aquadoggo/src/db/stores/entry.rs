@@ -331,11 +331,12 @@ impl SqlStore {
             FROM
                 entries
             INNER JOIN logs
-                ON (entries.log_id = logs.log_id
-                    AND entries.public_key = logs.public_key)
+                ON entries.log_id = logs.log_id
+                    AND entries.public_key = logs.public_key
             WHERE
                 logs.schema = $1
-            group by entries.public_key, entries.log_id
+            GROUP BY
+                entries.public_key, entries.log_id
             ",
         )
         .bind(schema_id.to_string())
