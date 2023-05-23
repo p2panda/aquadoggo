@@ -3,6 +3,7 @@
 use std::convert::TryFrom;
 
 use log::{debug, info, trace};
+use p2panda_rs::document::materialization::build_graph;
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::{Document, DocumentBuilder, DocumentId, DocumentViewId};
 use p2panda_rs::operation::traits::{AsOperation, WithPublicKey};
@@ -206,6 +207,13 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
 
             if document_view_exists {
                 return Ok(None);
+            };
+
+            let operations = DocumentBuilder::from(operations).operations();
+            let sorted_operations = build_graph(&operations).unwrap().sort().unwrap().sorted();
+
+            for (index, (id, _, _)) in sorted_operations.iter().enumerate() {
+                // @TODO: Update operations in document with correct sorted index
             }
 
             // Insert this document into storage. If it already existed, this will update it's
