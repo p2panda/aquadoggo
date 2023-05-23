@@ -236,7 +236,9 @@ impl OperationStore for SqlStore {
             WHERE
                 operations_v1.document_id = $1
             ORDER BY
-                operation_fields_v1.list_index ASC
+                -- order the operations by their index when topologically sorted, in the case where this may not be set yet
+                -- we fall back to ordering by operation id. In both cases we additionally order by list index.
+                operations_v1.sorted_index ASC, operations_v1.operation_id ASC, operation_fields_v1.list_index ASC
             ",
         )
         .bind(id.as_str())
@@ -244,26 +246,11 @@ impl OperationStore for SqlStore {
         .await
         .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
 
-        let mut grouped_operation_rows: BTreeMap<String, Vec<OperationFieldsJoinedRow>> =
-            BTreeMap::new();
-
-        for operation_row in operation_rows {
-            if let Some(current_operations) =
-                grouped_operation_rows.get_mut(&operation_row.operation_id)
-            {
-                current_operations.push(operation_row)
-            } else {
-                grouped_operation_rows
-                    .insert(operation_row.clone().operation_id, vec![operation_row]);
-            };
+        if operation_rows.is_empty() {
+            return Ok(vec![]);
         }
 
-        let operations: Vec<StorageOperation> = grouped_operation_rows
-            .iter()
-            .filter_map(|(_id, operation_rows)| parse_operation_rows(operation_rows.to_owned()))
-            .collect();
-
-        Ok(operations)
+        Ok(group_and_parse_operation_rows(operation_rows))
     }
 
     /// Get all operations that are part of a given document.
@@ -293,7 +280,7 @@ impl OperationStore for SqlStore {
                 WHERE
                     operations_v1.schema_id = $1
                 ORDER BY
-                    operation_fields_v1.list_index ASC
+                    operations_v1.operation_id ASC, operation_fields_v1.list_index ASC
                 ",
         )
         .bind(id.to_string())
@@ -301,27 +288,53 @@ impl OperationStore for SqlStore {
         .await
         .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
 
-        let mut grouped_operation_rows: BTreeMap<String, Vec<OperationFieldsJoinedRow>> =
-            BTreeMap::new();
-
-        for operation_row in operation_rows {
-            if let Some(current_operations) =
-                grouped_operation_rows.get_mut(&operation_row.operation_id)
-            {
-                current_operations.push(operation_row)
-            } else {
-                grouped_operation_rows
-                    .insert(operation_row.clone().operation_id, vec![operation_row]);
-            };
+        if operation_rows.is_empty() {
+            return Ok(vec![]);
         }
 
-        let operations: Vec<StorageOperation> = grouped_operation_rows
-            .iter()
-            .filter_map(|(_id, operation_rows)| parse_operation_rows(operation_rows.to_owned()))
-            .collect();
-
-        Ok(operations)
+        Ok(group_and_parse_operation_rows(operation_rows))
     }
+}
+
+/// Parse a collection of operation rows from multiple operations, into a list of `StorageOperation`.
+///
+/// Expects the rows to be grouped by operation id.
+fn group_and_parse_operation_rows(
+    operation_rows: Vec<OperationFieldsJoinedRow>,
+) -> Vec<StorageOperation> {
+    // We need to group all the operation rows so they can be parsed into operations.
+    // They come from the database ordered by their index once topologically sorted when
+    // present, otherwise by operation id. List items are additionally ordered by their
+    // list index.
+
+    let mut grouped_operation_rows = vec![];
+
+    let mut current_operation_id = operation_rows.first().unwrap().operation_id.clone();
+    let mut current_operation_rows = vec![];
+
+    let mut operation_rows_iter = operation_rows.into_iter();
+    while let Some(row) = operation_rows_iter.next() {
+        if row.operation_id == current_operation_id {
+            // If this row is part of the current operation push it to the current rows vec.
+            current_operation_rows.push(row);
+        } else {
+            // If we've moved on to the next operation, then push the complete vec of
+            // operation rows to the grouped rows collection and then setup for the next
+            // iteration.
+            grouped_operation_rows.push(current_operation_rows.clone());
+            current_operation_id = row.operation_id.clone();
+            current_operation_rows = vec![row];
+        }
+    }
+
+    // Push the final operation to the grouped rows.
+    grouped_operation_rows.push(current_operation_rows);
+
+    // Parse all the operation rows into operations.
+    grouped_operation_rows
+        .into_iter()
+        .filter_map(|operation_rows| parse_operation_rows(operation_rows.to_owned()))
+        .collect()
 }
 
 impl SqlStore {
@@ -389,7 +402,8 @@ impl From<&DocumentViewFieldRow> for OperationCursor {
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::document::DocumentId;
+    use p2panda_rs::document::materialization::build_graph;
+    use p2panda_rs::document::{DocumentBuilder, DocumentId};
     use p2panda_rs::identity::PublicKey;
     use p2panda_rs::operation::traits::{AsOperation, WithPublicKey};
     use p2panda_rs::operation::{Operation, OperationAction, OperationBuilder, OperationId};
@@ -400,11 +414,13 @@ mod tests {
         document_id, operation, operation_id, operation_with_schema, public_key,
         random_document_view_id, random_operation_id, random_previous_operations, schema_id,
     };
-    use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
+    use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
     use p2panda_rs::WithId;
     use rstest::rstest;
 
-    use crate::test_utils::{doggo_fields, populate_store_config, test_runner, TestNode};
+    use crate::test_utils::{
+        doggo_fields, populate_and_materialize, populate_store_config, test_runner, TestNode,
+    };
 
     use super::OperationCursor;
 
@@ -561,9 +577,9 @@ mod tests {
         #[with(10, 1, 1)]
         config: PopulateStoreConfig,
     ) {
-        test_runner(|node: TestNode| async move {
-            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let (_, document_ids) = populate_store(&node.context.store, &config).await;
+        test_runner(|mut node: TestNode| async move {
+            // Populate the store with some entries and operations and materialize documents.
+            let (_, document_ids) = populate_and_materialize(&mut node, &config).await;
             let document_id = document_ids.get(0).expect("At least one document id");
 
             let operations_by_document_id = node
@@ -574,7 +590,13 @@ mod tests {
                 .expect("Get operations by their document id");
 
             // We expect the number of operations returned to match the expected number.
-            assert_eq!(operations_by_document_id.len(), 10)
+            assert_eq!(operations_by_document_id.len(), 10);
+
+            // The operations should be in their topologically sorted order.
+            let operations = DocumentBuilder::from(&operations_by_document_id).operations();
+            let expected_operation_order = build_graph(&operations).unwrap().sort().unwrap().sorted();
+
+            assert_eq!(operations, expected_operation_order);
         });
     }
 
