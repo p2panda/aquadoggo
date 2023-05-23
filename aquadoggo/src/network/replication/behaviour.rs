@@ -14,6 +14,7 @@ use libp2p::{Multiaddr, PeerId};
 use crate::db::SqlStore;
 use crate::network::replication::handler::{Handler, HandlerInEvent, HandlerOutEvent};
 use crate::replication::{Message, SyncIngest, SyncManager, SyncMessage, TargetSet};
+use crate::schema::SchemaProvider;
 
 #[derive(Debug)]
 pub enum BehaviourOutEvent {
@@ -25,13 +26,20 @@ pub enum BehaviourOutEvent {
 pub struct Behaviour {
     events: VecDeque<ToSwarm<BehaviourOutEvent, HandlerInEvent>>,
     manager: SyncManager<PeerId>,
+    schema_provider: SchemaProvider,
 }
 
 impl Behaviour {
-    pub fn new(store: &SqlStore, ingest: SyncIngest, peer_id: &PeerId) -> Self {
+    pub fn new(
+        store: &SqlStore,
+        ingest: SyncIngest,
+        schema_provider: SchemaProvider,
+        peer_id: &PeerId,
+    ) -> Self {
         Self {
             events: VecDeque::new(),
             manager: SyncManager::new(store.clone(), ingest, peer_id.clone()),
+            schema_provider,
         }
     }
 }
@@ -51,6 +59,14 @@ impl Behaviour {
             .push_back(ToSwarm::GenerateEvent(BehaviourOutEvent::MessageReceived(
                 *peer_id, message,
             )));
+    }
+
+    fn handle_established_connection(&mut self, remote_peer_id: &PeerId) {
+        // @TODO: Have an async backend
+        self.send_message(
+            *remote_peer_id,
+            SyncMessage::new(0, Message::SyncRequest(0.into(), TargetSet::new(&vec![]))),
+        )
     }
 }
 
@@ -94,16 +110,9 @@ impl NetworkBehaviour for Behaviour {
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
         match event {
-            FromSwarm::ConnectionEstablished(ConnectionEstablished {
-                peer_id,
-                connection_id,
-                endpoint,
-                failed_addresses,
-                other_established,
-            }) => self.send_message(
-                peer_id,
-                SyncMessage::new(0, Message::SyncRequest(0.into(), TargetSet::new(&vec![]))),
-            ),
+            FromSwarm::ConnectionEstablished(ConnectionEstablished { peer_id, .. }) => {
+                self.handle_established_connection(&peer_id)
+            }
             FromSwarm::ConnectionClosed(_)
             | FromSwarm::AddressChange(_)
             | FromSwarm::DialFailure(_)
@@ -149,8 +158,8 @@ mod tests {
         let (tx, _rx) = broadcast::channel(8);
 
         test_runner_with_manager(|manager: TestNodeManager| async move {
-            let mut node_a = manager.create().await;
-            let mut node_b = manager.create().await;
+            let node_a = manager.create().await;
+            let node_b = manager.create().await;
 
             let peer_id_a = PeerId::random();
             let peer_id_b = PeerId::random();
@@ -160,6 +169,7 @@ mod tests {
                 ReplicationBehaviour::new(
                     &node_a.context.store,
                     SyncIngest::new(node_a.context.schema_provider.clone(), tx.clone()),
+                    node_a.context.schema_provider.clone(),
                     &peer_id_a,
                 )
             });
@@ -167,6 +177,7 @@ mod tests {
                 ReplicationBehaviour::new(
                     &node_a.context.store,
                     SyncIngest::new(node_b.context.schema_provider.clone(), tx.clone()),
+                    node_b.context.schema_provider.clone(),
                     &peer_id_b,
                 )
             });
@@ -198,15 +209,16 @@ mod tests {
 
     #[tokio::test]
     async fn incompatible_network_behaviour() {
-        let (tx, _rx) = broadcast::channel(8);
-        let peer_id = PeerId::random();
-
         test_runner(|node: TestNode| async move {
+            let (tx, _rx) = broadcast::channel(8);
+            let peer_id = PeerId::random();
+
             // Create two swarms
             let mut swarm1 = Swarm::new_ephemeral(|_| {
                 ReplicationBehaviour::new(
                     &node.context.store,
                     SyncIngest::new(node.context.schema_provider.clone(), tx.clone()),
+                    node.context.schema_provider.clone(),
                     &peer_id,
                 )
             });
@@ -260,8 +272,8 @@ mod tests {
         let (tx, _rx) = broadcast::channel(8);
 
         test_runner_with_manager(|manager: TestNodeManager| async move {
-            let mut node_a = manager.create().await;
-            let mut node_b = manager.create().await;
+            let node_a = manager.create().await;
+            let node_b = manager.create().await;
 
             let peer_id_a = PeerId::random();
             let peer_id_b = PeerId::random();
@@ -271,6 +283,7 @@ mod tests {
                 ReplicationBehaviour::new(
                     &node_a.context.store,
                     SyncIngest::new(node_a.context.schema_provider.clone(), tx.clone()),
+                    node_a.context.schema_provider.clone(),
                     &peer_id_a,
                 )
             });
@@ -278,6 +291,7 @@ mod tests {
                 ReplicationBehaviour::new(
                     &node_a.context.store,
                     SyncIngest::new(node_b.context.schema_provider.clone(), tx.clone()),
+                    node_b.context.schema_provider.clone(),
                     &peer_id_b,
                 )
             });

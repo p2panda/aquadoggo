@@ -144,7 +144,8 @@ impl Behaviour {
         };
 
         let ingest = SyncIngest::new(schema_provider.clone(), tx);
-        let replication = replication::Behaviour::new(store, ingest, &peer_id);
+        let replication =
+            replication::Behaviour::new(store, ingest, schema_provider.clone(), &peer_id);
 
         Ok(Self {
             autonat: autonat.into(),
