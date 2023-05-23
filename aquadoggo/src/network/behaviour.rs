@@ -7,13 +7,9 @@ use libp2p::swarm::NetworkBehaviour;
 use libp2p::{autonat, connection_limits, identify, mdns, ping, relay, rendezvous, PeerId};
 use log::debug;
 
-use crate::bus::ServiceSender;
-use crate::db::SqlStore;
 use crate::network::config::NODE_NAMESPACE;
 use crate::network::replication;
 use crate::network::NetworkConfiguration;
-use crate::replication::SyncIngest;
-use crate::schema::SchemaProvider;
 
 /// Network behaviour for the aquadoggo node.
 #[derive(NetworkBehaviour)]
@@ -60,9 +56,6 @@ impl Behaviour {
     pub fn new(
         network_config: &NetworkConfiguration,
         peer_id: PeerId,
-        store: &SqlStore,
-        schema_provider: &SchemaProvider,
-        tx: ServiceSender,
         key_pair: Keypair,
         relay_client: Option<relay::client::Behaviour>,
     ) -> Result<Self> {
@@ -143,9 +136,7 @@ impl Behaviour {
             None
         };
 
-        let ingest = SyncIngest::new(schema_provider.clone(), tx);
-        let replication =
-            replication::Behaviour::new(store, ingest, schema_provider.clone(), &peer_id);
+        let replication = replication::Behaviour::new();
 
         Ok(Self {
             autonat: autonat.into(),

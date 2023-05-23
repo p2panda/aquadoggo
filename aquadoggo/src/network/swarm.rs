@@ -9,18 +9,12 @@ use libp2p::PeerId;
 use libp2p::Swarm;
 use log::info;
 
-use crate::bus::ServiceSender;
-use crate::db::SqlStore;
 use crate::network::behaviour::Behaviour;
 use crate::network::transport;
 use crate::network::NetworkConfiguration;
-use crate::schema::SchemaProvider;
 
 pub async fn build_swarm(
     network_config: &NetworkConfiguration,
-    store: &SqlStore,
-    schema_provider: &SchemaProvider,
-    tx: ServiceSender,
     key_pair: Keypair,
 ) -> Result<(Swarm<Behaviour>, PeerId)> {
     // Read the peer ID (public key) from the key pair
@@ -34,15 +28,7 @@ pub async fn build_swarm(
 
     // Instantiate the custom network behaviour with default configuration
     // and the libp2p peer ID
-    let behaviour = Behaviour::new(
-        network_config,
-        peer_id,
-        store,
-        schema_provider,
-        tx,
-        key_pair,
-        relay_client,
-    )?;
+    let behaviour = Behaviour::new(network_config, peer_id, key_pair, relay_client)?;
 
     // Initialise a swarm with QUIC transports, our composed network behaviour
     // and the default configuration parameters
