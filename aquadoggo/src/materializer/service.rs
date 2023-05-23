@@ -93,7 +93,7 @@ pub async fn materializer_service(
     let handle = task::spawn(async move {
         while let Ok(ServiceMessage::NewOperation(operation_id)) = rx.recv().await {
             // Resolve document id of regarding operation
-            match context
+            let document_id = context
                 .store
                 .get_document_id_by_operation_id(&operation_id)
                 .await
@@ -102,7 +102,9 @@ pub async fn materializer_service(
                         "Failed database query when retrieving document id by operation_id {}",
                         operation_id
                     )
-                }) {
+                });
+
+            match document_id {
                 Some(document_id) => {
                     // Get the document by it's document id.
                     let document = context
@@ -116,26 +118,30 @@ pub async fn materializer_service(
                             )
                         });
 
-                    // Attempt a quick commit of the document.
-                    //
-                    // This succeeds if the operation passed on the bus refers to the documents'
-                    // current view in it's previous field.
                     let mut quick_commit_success = false;
-                    if let Some(mut document) = document {
-                        quick_commit_success =
-                            quick_commit(&context, &mut document, &operation_id).await;
 
-                        // If the commit succeeded and the document isn't now deleted dispatch "dependency" task for the documents new view.
-                        if quick_commit_success && !document.is_deleted() {
-                            factory.queue(Task::new(
-                                "dependency",
-                                TaskInput::new(None, Some(document.view_id().to_owned())),
-                            ))
+                    // If a document was found we can try to incrementally update the document.
+                    if document.is_some() {
+                        // Attempt a quick commit of the document.
+                        //
+                        // This succeeds if the operation passed on the bus refers to the documents'
+                        // current view in it's previous field.
+                        if let Some(mut document) = document {
+                            quick_commit_success =
+                                quick_commit(&context, &mut document, &operation_id).await;
+
+                            // If the commit succeeded and the document isn't now deleted dispatch "dependency" task for the documents new view.
+                            if quick_commit_success && !document.is_deleted() {
+                                factory.queue(Task::new(
+                                    "dependency",
+                                    TaskInput::new(None, Some(document.view_id().to_owned())),
+                                ))
+                            };
                         };
-                    };
+                    }
 
                     if !quick_commit_success {
-                        // The quick commit failed.
+                        // We couldn't perform a quick commit for this document.
                         // Dispatch "reduce" task which will materialize the regarding document.
                         factory.queue(Task::new("reduce", TaskInput::new(Some(document_id), None)))
                     }
@@ -190,13 +196,14 @@ async fn quick_commit(
 
     match document.commit(&operation) {
         Ok(_) => {
+            // The quick commit was successful so we now insert the updated document.
             context
                 .store
                 .insert_document(document)
                 .await
                 .unwrap_or_else(|_| {
                     panic!(
-                        "Failed inserting document view {} into database",
+                        "Failed inserting document with view {} into database",
                         document.view_id()
                     )
                 });
@@ -488,18 +495,12 @@ mod tests {
 
     #[rstest]
     fn materialize_complex_documents(
-        #[from(populate_store_config)]
-        #[with(0, 0, 0)]
-        config: PopulateStoreConfig,
         #[from(operation)]
         #[with(Some(operation_fields(doggo_fields())), None, doggo_schema().id().to_owned())]
         operation: Operation,
         key_pair: KeyPair,
     ) {
         test_runner(move |node: TestNode| async move {
-            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            populate_store(&node.context.store, &config).await;
-
             // Prepare arguments for service
             let context = Context::new(
                 node.context.store.clone(),
@@ -557,4 +558,5 @@ mod tests {
             assert_eq!(document.id(), &entry_encoded.hash().into());
         });
     }
+
 }
