@@ -4,6 +4,6 @@ mod behaviour;
 mod handler;
 mod protocol;
 
-pub use behaviour::Behaviour;
+pub use behaviour::{Behaviour, Event};
 pub use handler::Handler;
 pub use protocol::{Codec, CodecError, Protocol, PROTOCOL_NAME};
