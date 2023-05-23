@@ -234,10 +234,12 @@ mod tests {
     use tokio::task;
 
     use crate::context::Context;
+    use crate::materializer::service::quick_commit;
     use crate::materializer::{Task, TaskInput};
     use crate::schema::SchemaProvider;
     use crate::test_utils::{
-        doggo_fields, doggo_schema, populate_store_config, test_runner, TestNode,
+        doggo_fields, doggo_schema, populate_and_materialize, populate_store_config, test_runner,
+        TestNode,
     };
     use crate::Configuration;
 
@@ -559,4 +561,102 @@ mod tests {
         });
     }
 
+    #[rstest]
+    fn performs_quick_commit(
+        #[from(populate_store_config)]
+        #[with(1, 1, 1)]
+        config: PopulateStoreConfig,
+    ) {
+        test_runner(move |mut node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (key_pairs, document_ids) = populate_and_materialize(&mut node, &config).await;
+            let document_id = document_ids[0].clone();
+            let key_pair = &key_pairs[0];
+            let schema = config.schema;
+            let store = node.context.store.clone();
+
+            // Now we create and insert an UPDATE operation for this document which is pointing at
+            // the root CREATE operation.
+            let (encoded_entry, _) = send_to_store(
+                &node.context.store,
+                &operation(
+                    Some(operation_fields(vec![(
+                        "username",
+                        OperationValue::String("melon".to_string()),
+                    )])),
+                    Some(document_id.as_str().parse().unwrap()),
+                    schema.id().to_owned(),
+                ),
+                &schema,
+                key_pair,
+            )
+            .await
+            .unwrap();
+
+            // Get the document.
+            let mut document = store.get_document(&document_id).await.unwrap().unwrap();
+
+            // We expect the quick commit to succeed as the new operation is pointing at the
+            // current document view id.
+            assert!(quick_commit(&node.context, &mut document, &encoded_entry.hash().into()).await);
+
+            // Get the document again.
+            let document = store.get_document(&document_id).await.unwrap().unwrap();
+            // It should have an updated value.
+            assert_eq!(
+                *document.get("username").unwrap(),
+                "melon".to_string().into()
+            )
+        })
+    }
+
+    #[rstest]
+    fn does_not_performs_quick_commit(
+        #[from(populate_store_config)]
+        #[with(2, 1, 1)]
+        config: PopulateStoreConfig,
+    ) {
+        test_runner(move |mut node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (key_pairs, document_ids) = populate_and_materialize(&mut node, &config).await;
+            let document_id = document_ids[0].clone();
+            let key_pair = &key_pairs[0];
+            let schema = config.schema;
+            let store = node.context.store.clone();
+
+            // Now we create and insert an UPDATE operation for this document which is pointing at
+            // the root CREATE operation.
+            let (encoded_entry, _) = send_to_store(
+                &node.context.store,
+                &operation(
+                    Some(operation_fields(vec![(
+                        "username",
+                        OperationValue::String("melon".to_string()),
+                    )])),
+                    Some(document_id.as_str().parse().unwrap()),
+                    schema.id().to_owned(),
+                ),
+                &schema,
+                key_pair,
+            )
+            .await
+            .unwrap();
+
+            // Get the document.
+            let mut document = store.get_document(&document_id).await.unwrap().unwrap();
+            // We expect the quick commit to fail as the operation isn't pointing at the current
+            // document view id.
+            assert!(
+                !quick_commit(&node.context, &mut document, &encoded_entry.hash().into()).await
+            );
+
+            // Get the document again.
+            let document = store.get_document(&document_id).await.unwrap().unwrap();
+            // It should be the original value still.
+            assert_eq!(
+                *document.get("username").unwrap(),
+                "bubu".to_string().into()
+            )
+        })
+    }
 }
