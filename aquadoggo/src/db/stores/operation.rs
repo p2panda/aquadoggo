@@ -311,8 +311,7 @@ fn group_and_parse_operation_rows(
     let mut current_operation_id = operation_rows.first().unwrap().operation_id.clone();
     let mut current_operation_rows = vec![];
 
-    let mut operation_rows_iter = operation_rows.into_iter();
-    while let Some(row) = operation_rows_iter.next() {
+    for row in operation_rows {
         if row.operation_id == current_operation_id {
             // If this row is part of the current operation push it to the current rows vec.
             current_operation_rows.push(row);
@@ -332,7 +331,7 @@ fn group_and_parse_operation_rows(
     // Parse all the operation rows into operations.
     grouped_operation_rows
         .into_iter()
-        .filter_map(|operation_rows| parse_operation_rows(operation_rows.to_owned()))
+        .filter_map(parse_operation_rows)
         .collect()
 }
 
@@ -593,7 +592,8 @@ mod tests {
 
             // The operations should be in their topologically sorted order.
             let operations = DocumentBuilder::from(&operations_by_document_id).operations();
-            let expected_operation_order = build_graph(&operations).unwrap().sort().unwrap().sorted();
+            let expected_operation_order =
+                build_graph(&operations).unwrap().sort().unwrap().sorted();
 
             assert_eq!(operations, expected_operation_order);
         });
