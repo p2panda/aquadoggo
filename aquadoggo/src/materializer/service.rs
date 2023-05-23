@@ -568,7 +568,6 @@ mod tests {
         config: PopulateStoreConfig,
     ) {
         test_runner(move |mut node: TestNode| async move {
-            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
             let (key_pairs, document_ids) = populate_and_materialize(&mut node, &config).await;
             let document_id = document_ids[0].clone();
             let key_pair = &key_pairs[0];
@@ -617,7 +616,6 @@ mod tests {
         config: PopulateStoreConfig,
     ) {
         test_runner(move |mut node: TestNode| async move {
-            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
             let (key_pairs, document_ids) = populate_and_materialize(&mut node, &config).await;
             let document_id = document_ids[0].clone();
             let key_pair = &key_pairs[0];
