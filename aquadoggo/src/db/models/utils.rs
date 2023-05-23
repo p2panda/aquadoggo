@@ -431,6 +431,7 @@ mod tests {
                 field_type: Some("int".to_string()),
                 value: Some("28".to_string()),
                 list_index: Some(0),
+                sorted_index: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -449,6 +450,7 @@ mod tests {
                 field_type: Some("float".to_string()),
                 value: Some("3.5".to_string()),
                 list_index: Some(0),
+                sorted_index: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -467,6 +469,7 @@ mod tests {
                 field_type: Some("bool".to_string()),
                 value: Some("false".to_string()),
                 list_index: Some(0),
+                sorted_index: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -488,6 +491,7 @@ mod tests {
                         .to_string(),
                 ),
                 list_index: Some(0),
+                sorted_index: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -509,6 +513,7 @@ mod tests {
                         .to_string(),
                 ),
                 list_index: Some(1),
+                sorted_index: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -530,6 +535,7 @@ mod tests {
                         .to_string(),
                 ),
                 list_index: Some(0),
+                sorted_index: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -551,6 +557,7 @@ mod tests {
                         .to_string(),
                 ),
                 list_index: Some(1),
+                sorted_index: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -572,6 +579,7 @@ mod tests {
                         .to_string(),
                 ),
                 list_index: Some(0),
+                sorted_index: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -593,6 +601,7 @@ mod tests {
                         .to_string(),
                 ),
                 list_index: Some(1),
+                sorted_index: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -614,6 +623,7 @@ mod tests {
                         .to_string(),
                 ),
                 list_index: Some(0),
+                sorted_index: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -635,6 +645,7 @@ mod tests {
                         .to_string(),
                 ),
                 list_index: Some(0),
+                sorted_index: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -653,6 +664,7 @@ mod tests {
                 field_type: Some("str".to_string()),
                 value: Some("bubu".to_string()),
                 list_index: Some(0),
+                sorted_index: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -671,6 +683,7 @@ mod tests {
                 field_type: Some("pinned_relation_list".to_string()),
                 value: None,
                 list_index: Some(0),
+                sorted_index: None,
             },
         ];
 

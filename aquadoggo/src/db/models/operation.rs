@@ -25,6 +25,8 @@ pub struct OperationRow {
     /// The previous operations of this operation concatenated into string format with `_`
     /// separator.
     pub previous: Option<String>,
+
+    pub sorted_index: Option<i32>,
 }
 
 /// A struct representing a single operation field row as it is inserted in the database.
@@ -99,4 +101,6 @@ pub struct OperationFieldsJoinedRow {
     /// This numeric value is a simple list index to represent multiple values within one operation
     /// field.
     pub list_index: Option<i32>,
+
+    pub sorted_index: Option<i32>,
 }

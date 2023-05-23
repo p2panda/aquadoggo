@@ -96,10 +96,11 @@ impl OperationStore for SqlStore {
                     operation_id,
                     action,
                     schema_id,
-                    previous
+                    previous,
+                    sorted_index
                 )
             VALUES
-                ($1, $2, $3, $4, $5, $6)
+                ($1, $2, $3, $4, $5, $6, null)
             ",
         )
         .bind(public_key.to_string())
@@ -183,6 +184,7 @@ impl OperationStore for SqlStore {
                 operations_v1.action,
                 operations_v1.schema_id,
                 operations_v1.previous,
+                operations_v1.sorted_index,
                 operation_fields_v1.name,
                 operation_fields_v1.field_type,
                 operation_fields_v1.value,
@@ -221,6 +223,7 @@ impl OperationStore for SqlStore {
                 operations_v1.action,
                 operations_v1.schema_id,
                 operations_v1.previous,
+                operations_v1.sorted_index,
                 operation_fields_v1.name,
                 operation_fields_v1.field_type,
                 operation_fields_v1.value,
@@ -277,6 +280,7 @@ impl OperationStore for SqlStore {
                     operations_v1.action,
                     operations_v1.schema_id,
                     operations_v1.previous,
+                    operations_v1.sorted_index,
                     operation_fields_v1.name,
                     operation_fields_v1.field_type,
                     operation_fields_v1.value,
