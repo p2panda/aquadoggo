@@ -12,7 +12,7 @@ use p2panda_rs::operation::{Operation, OperationId};
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::error::OperationStorageError;
 use p2panda_rs::storage_provider::traits::OperationStore;
-use sqlx::{query, query_as, query_scalar};
+use sqlx::{query, query_as, query_scalar, Any};
 
 use crate::db::models::utils::{parse_operation_rows, parse_value_to_string_vec};
 use crate::db::models::{DocumentViewFieldRow, OperationFieldsJoinedRow};
@@ -321,6 +321,32 @@ impl OperationStore for SqlStore {
             .collect();
 
         Ok(operations)
+    }
+}
+
+impl SqlStore {
+    pub async fn update_operation_index(
+        &self,
+        operation_id: &OperationId,
+        sorted_index: i32,
+    ) -> Result<(), OperationStorageError> {
+        query::<Any>(
+            "
+            UPDATE 
+                operations_v1
+            SET
+                sorted_index = $2
+            WHERE
+                operation_id = $1
+            ",
+        )
+        .bind(operation_id.as_str())
+        .bind(sorted_index)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
+
+        Ok(())
     }
 }
 

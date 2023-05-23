@@ -209,11 +209,19 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
                 return Ok(None);
             };
 
+            // @TODO: Make sorted operations available after building the document above so we can skip this step.
             let operations = DocumentBuilder::from(operations).operations();
             let sorted_operations = build_graph(&operations).unwrap().sort().unwrap().sorted();
 
-            for (index, (id, _, _)) in sorted_operations.iter().enumerate() {
-                // @TODO: Update operations in document with correct sorted index
+            // Iterate over the sorted document operations and update their sorted index on the
+            // operations_v1 table.
+            for (index, (operation_id, _, _)) in sorted_operations.iter().enumerate() {
+                let sorted_index = { index + 1 } as i32;
+                context
+                    .store
+                    .update_operation_index(operation_id, sorted_index)
+                    .await
+                    .map_err(|err| TaskError::Critical(err.to_string()))?;
             }
 
             // Insert this document into storage. If it already existed, this will update it's
