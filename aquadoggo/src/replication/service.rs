@@ -67,14 +67,18 @@ pub async fn replication_service(
 
 struct PeerStatus {
     peer_id: PeerId,
-    sessions: usize,
+    active_sessions: usize,
+    successful_count: usize,
+    failed_count: usize,
 }
 
 impl PeerStatus {
     pub fn new(peer_id: &PeerId) -> Self {
         Self {
             peer_id: peer_id.clone(),
-            sessions: 0,
+            active_sessions: 0,
+            successful_count: 0,
+            failed_count: 0,
         }
     }
 }
@@ -146,9 +150,31 @@ impl ConnectionManager {
         }
     }
 
-    async fn on_replication_finished(&mut self, peer_id: PeerId) {}
+    fn on_replication_finished(&mut self, peer_id: PeerId) {
+        match self.peers.get_mut(&peer_id) {
+            Some(status) => {
+                status.successful_count += 1;
+                status.active_sessions -= 1;
+            }
+            None => {
+                panic!("Tried to access unknown peer");
+            }
+        }
+    }
 
-    async fn on_replication_error(&mut self, peer_id: PeerId, error: ReplicationError) {}
+    fn on_replication_error(&mut self, peer_id: PeerId, _error: ReplicationError) {
+        match self.peers.get_mut(&peer_id) {
+            Some(status) => {
+                status.failed_count += 1;
+                status.active_sessions -= 1;
+            }
+            None => {
+                panic!("Tried to access unknown peer");
+            }
+        }
+
+        // @TODO: SyncManager should remove session internally on critical errors
+    }
 
     async fn handle_service_message(&mut self, message: ServiceMessage) {
         match message {
