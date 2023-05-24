@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 use libp2p::PeerId;
-use log::warn;
+use log::{info, warn};
 use p2panda_rs::schema::SchemaId;
 use tokio::sync::broadcast::Receiver;
 use tokio::task;
@@ -155,6 +155,8 @@ impl ConnectionManager {
     }
 
     async fn on_replication_finished(&mut self, peer_id: PeerId) {
+        info!("Finished replication with peer {}", peer_id);
+
         match self.peers.get_mut(&peer_id) {
             Some(status) => {
                 status.successful_count += 1;
@@ -167,7 +169,9 @@ impl ConnectionManager {
         self.update_sessions().await;
     }
 
-    async fn on_replication_error(&mut self, peer_id: PeerId, _error: ReplicationError) {
+    async fn on_replication_error(&mut self, peer_id: PeerId, error: ReplicationError) {
+        info!("Replication with peer {} failed: {}", peer_id, error);
+
         match self.peers.get_mut(&peer_id) {
             Some(status) => {
                 status.failed_count += 1;
@@ -238,6 +242,8 @@ impl ConnectionManager {
             .await
         {
             Ok(messages) => {
+                info!("Initiate replication with peer {}", peer_id);
+
                 for message in messages {
                     self.send_service_message(ServiceMessage::SentReplicationMessage(
                         peer_id.clone(),
