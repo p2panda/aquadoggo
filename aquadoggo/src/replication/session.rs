@@ -79,15 +79,15 @@ impl Session {
     }
 
     pub fn is_pending(&self) -> bool {
-        return self.state == SessionState::Pending;
+        self.state == SessionState::Pending
     }
 
     pub fn is_established(&self) -> bool {
-        return self.state == SessionState::Established;
+        self.state == SessionState::Established
     }
 
     pub fn is_done(&self) -> bool {
-        return self.state == SessionState::Done;
+        self.state == SessionState::Done
     }
 
     pub fn mode(&self) -> Mode {

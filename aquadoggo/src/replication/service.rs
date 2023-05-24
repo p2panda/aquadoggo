@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 use libp2p::PeerId;
-use log::{info, warn};
+use log::{info, trace, warn};
 use p2panda_rs::schema::SchemaId;
 use tokio::sync::broadcast::Receiver;
 use tokio::task;
@@ -25,6 +25,9 @@ pub async fn replication_service(
     tx: ServiceSender,
     tx_ready: ServiceReadySender,
 ) -> Result<()> {
+    // Subscribe to communication bus
+    let _rx = tx.subscribe();
+
     let local_peer_id = context
         .config
         .network
@@ -76,7 +79,7 @@ struct PeerStatus {
 impl PeerStatus {
     pub fn new(peer_id: &PeerId) -> Self {
         Self {
-            peer_id: peer_id.clone(),
+            peer_id: *peer_id,
             successful_count: 0,
             failed_count: 0,
         }
@@ -202,6 +205,8 @@ impl ConnectionManager {
     }
 
     fn send_service_message(&mut self, message: ServiceMessage) {
+        trace!("Sending replication message: {:?}", message);
+
         if self.tx.send(message).is_err() {
             // Silently fail here as we don't care if the message was received at this
             // point
@@ -215,7 +220,7 @@ impl ConnectionManager {
             .iter()
             .filter_map(|(peer_id, _peer_status)| {
                 // Find out how many sessions we know about for each peer
-                let sessions = self.sync_manager.get_sessions(&peer_id);
+                let sessions = self.sync_manager.get_sessions(peer_id);
                 let active_sessions: Vec<&Session> = sessions
                     .iter()
                     .filter(|session| session.is_done())
@@ -226,7 +231,7 @@ impl ConnectionManager {
                     return Some(peer_id.to_owned());
                 }
 
-                return None;
+                None
             })
             .collect();
 
@@ -246,8 +251,7 @@ impl ConnectionManager {
 
                 for message in messages {
                     self.send_service_message(ServiceMessage::SentReplicationMessage(
-                        peer_id.clone(),
-                        message,
+                        *peer_id, message,
                     ));
                 }
             }

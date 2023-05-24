@@ -6,6 +6,7 @@ use libp2p::ping::Event;
 use libp2p::swarm::{AddressScore, SwarmEvent};
 use libp2p::{autonat, identify, mdns, rendezvous, Multiaddr, Swarm};
 use log::{debug, info, trace, warn};
+use tokio::task;
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt;
 
@@ -20,14 +21,17 @@ use crate::network::NetworkConfiguration;
 
 /// Network service that configures and deploys a network swarm over QUIC transports.
 ///
-/// The swarm listens for incoming connections, dials remote nodes, manages
-/// connections and executes predefined network behaviours.
+/// The swarm listens for incoming connections, dials remote nodes, manages connections and
+/// executes predefined network behaviours.
 pub async fn network_service(
     context: Context,
     shutdown: Shutdown,
     tx: ServiceSender,
     tx_ready: ServiceReadySender,
 ) -> Result<()> {
+    // Subscribe to communication bus
+    let _rx = tx.subscribe();
+
     // Load the network key pair and peer ID
     let key_pair =
         NetworkConfiguration::load_or_generate_key_pair(context.config.base_path.clone())?;
@@ -81,7 +85,7 @@ pub async fn network_service(
 
     // Spawn a task to run swarm in event loop
     let event_loop = EventLoop::new(swarm, tx, external_circuit_addr, network_config);
-    let handle = tokio::spawn(event_loop.run());
+    let handle = task::spawn(event_loop.run());
 
     info!("Network service is ready");
 
@@ -136,7 +140,10 @@ impl EventLoop {
                         panic!("Service bus subscriber for event loop failed: {}", err);
                     }
                     // Command channel closed, thus shutting down the network event loop
-                    None => return,
+                    None => {
+                        warn!("CLOSED");
+                        return
+                    },
                 },
             }
         }
