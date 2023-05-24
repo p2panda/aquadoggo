@@ -61,12 +61,16 @@ where
         }
     }
 
+    /// Removes all sessions related to a remote peer.
+    ///
+    /// Warning: This might also remove actively running sessions. Do only clear sessions when you
+    /// are sure they are a) done or b) the peer closed its connection.
     pub fn remove_sessions(&mut self, remote_peer: &P) {
         self.sessions.remove(remote_peer);
     }
 
     /// Get all sessions related to a remote peer.
-    fn get_sessions(&self, remote_peer: &P) -> Vec<Session> {
+    pub fn get_sessions(&self, remote_peer: &P) -> Vec<Session> {
         self.sessions
             .get(remote_peer)
             // Always return an array, even when it is empty
