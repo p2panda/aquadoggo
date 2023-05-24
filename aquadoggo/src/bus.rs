@@ -18,6 +18,9 @@ pub enum ServiceMessage {
     /// Node established a bi-directional connection to another node.
     ConnectionEstablished(PeerId),
 
+    /// Node closed a connection to another node.
+    ConnectionClosed(PeerId),
+
     /// Node sent a message to remote node for replication.
     SentReplicationMessage(PeerId, SyncMessage),
 

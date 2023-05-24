@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use anyhow::Result;
-// use futures::StreamExt;
 use libp2p::multiaddr::Protocol;
 use libp2p::ping::Event;
 use libp2p::swarm::{AddressScore, SwarmEvent};
@@ -122,6 +121,8 @@ impl EventLoop {
         }
     }
 
+    /// Main event loop handling libp2p swarm events and incoming messages from the service bus as
+    /// an ongoing async stream.
     pub async fn run(mut self) {
         loop {
             tokio::select! {
@@ -131,19 +132,39 @@ impl EventLoop {
                 event = self.rx.next() => match event {
                     Some(Ok(message)) => self.handle_service_message(message).await,
                     Some(Err(err)) => {
-                        // @TODO
+                        panic!("Service bus subscriber for event loop failed: {}", err);
                     }
-                    // Command channel closed, thus shutting down the network event loop.
+                    // Command channel closed, thus shutting down the network event loop
                     None => return,
                 },
             }
         }
     }
 
-    async fn handle_service_message(&mut self, message: ServiceMessage) {
-        // @TODO
+    /// Send a message on the communication bus to inform other services.
+    fn send_service_message(&mut self, message: ServiceMessage) {
+        if self.tx.send(message).is_err() {
+            // Silently fail here as we don't care if the message was received at this
+            // point
+        }
     }
 
+    /// Handle an incoming message via the communication bus from other services.
+    async fn handle_service_message(&mut self, message: ServiceMessage) {
+        match message {
+            ServiceMessage::SentReplicationMessage(peer_id, sync_message) => {
+                self.swarm
+                    .behaviour_mut()
+                    .replication
+                    .send_message(peer_id, sync_message);
+            }
+            _ => {
+                // Ignore all other messages
+            }
+        }
+    }
+
+    /// Handle an event coming from the libp2p swarm.
     async fn handle_swarm_event<E: std::fmt::Debug>(
         &mut self,
         event: SwarmEvent<BehaviourEvent, E>,
@@ -178,6 +199,9 @@ impl EventLoop {
                         }
                     }
                 }
+
+                // Inform other services about new connection
+                self.send_service_message(ServiceMessage::ConnectionEstablished(peer_id));
             }
             SwarmEvent::ConnectionClosed {
                 peer_id,
@@ -185,13 +209,15 @@ impl EventLoop {
                 num_established,
                 cause,
             } => {
-                info!("ConnectionClosed: {peer_id} {endpoint:?} {num_established} {cause:?}")
+                info!("ConnectionClosed: {peer_id} {endpoint:?} {num_established} {cause:?}");
+
+                // Inform other services about closed connection
+                self.send_service_message(ServiceMessage::ConnectionClosed(peer_id));
             }
             SwarmEvent::ExpiredListenAddr {
                 listener_id,
                 address,
             } => trace!("ExpiredListenAddr: {listener_id:?} {address}"),
-
             SwarmEvent::IncomingConnection {
                 local_addr,
                 send_back_addr,
@@ -400,9 +426,9 @@ impl EventLoop {
             // Replication
             // ~~~~~~~~~~~
             SwarmEvent::Behaviour(BehaviourEvent::Replication(event)) => match event {
-                replication::Event::MessageReceived(peer_id, message) => {
-                    debug!("Swarm received replication message: {message:?}");
-                }
+                replication::Event::MessageReceived(peer_id, message) => self.send_service_message(
+                    ServiceMessage::ReceivedReplicationMessage(peer_id, message),
+                ),
             },
 
             // ~~~~~~~
