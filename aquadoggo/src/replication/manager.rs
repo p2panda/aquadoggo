@@ -61,6 +61,10 @@ where
         }
     }
 
+    pub fn remove_sessions(&mut self, remote_peer: &P) {
+        self.sessions.remove(remote_peer);
+    }
+
     /// Get all sessions related to a remote peer.
     fn get_sessions(&self, remote_peer: &P) -> Vec<Session> {
         self.sessions

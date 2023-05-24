@@ -70,6 +70,15 @@ struct PeerStatus {
     sessions: usize,
 }
 
+impl PeerStatus {
+    pub fn new(peer_id: &PeerId) -> Self {
+        Self {
+            peer_id: peer_id.clone(),
+            sessions: 0,
+        }
+    }
+}
+
 struct ConnectionManager {
     peers: HashMap<PeerId, PeerStatus>,
     sync_manager: SyncManager<PeerId>,
@@ -98,9 +107,25 @@ impl ConnectionManager {
         }
     }
 
-    async fn on_connection_established(&mut self, peer_id: PeerId) {}
+    fn on_connection_established(&mut self, peer_id: PeerId) {
+        if self
+            .peers
+            .insert(peer_id, PeerStatus::new(&peer_id))
+            .is_some()
+        {
+            warn!("Duplicate established connection encountered");
+        }
+    }
 
-    async fn on_connection_closed(&mut self, peer_id: PeerId) {}
+    fn on_connection_closed(&mut self, peer_id: PeerId) {
+        // Clear running replication sessions from sync manager
+        self.sync_manager.remove_sessions(&peer_id);
+
+        // Remove peer from our connections table
+        if self.peers.remove(&peer_id).is_none() {
+            warn!("Tried to remove unknown connection");
+        }
+    }
 
     async fn on_replication_message(&mut self, peer_id: PeerId, message: SyncMessage) {
         match self.sync_manager.handle_message(&peer_id, &message).await {
@@ -128,10 +153,10 @@ impl ConnectionManager {
     async fn handle_service_message(&mut self, message: ServiceMessage) {
         match message {
             ServiceMessage::ConnectionEstablished(peer_id) => {
-                self.on_connection_established(peer_id).await;
+                self.on_connection_established(peer_id);
             }
             ServiceMessage::ConnectionClosed(peer_id) => {
-                self.on_connection_closed(peer_id).await;
+                self.on_connection_closed(peer_id);
             }
             ServiceMessage::ReceivedReplicationMessage(peer_id, message) => {
                 self.on_replication_message(peer_id, message).await;
