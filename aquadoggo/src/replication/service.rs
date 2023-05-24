@@ -13,7 +13,8 @@ use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
 use crate::db::SqlStore;
 use crate::manager::{ServiceReadySender, Shutdown};
-use crate::replication::{SyncIngest, SyncManager, TargetSet};
+use crate::replication::errors::ReplicationError;
+use crate::replication::{SyncIngest, SyncManager, SyncMessage, TargetSet};
 use crate::schema::SchemaProvider;
 
 pub async fn replication_service(
@@ -66,6 +67,7 @@ pub async fn replication_service(
 
 struct PeerStatus {
     peer_id: PeerId,
+    sessions: usize,
 }
 
 struct ConnectionManager {
@@ -96,40 +98,52 @@ impl ConnectionManager {
         }
     }
 
-    fn send_service_message(&mut self, message: ServiceMessage) {
-        if self.tx.send(message).is_err() {
-            // Silently fail here as we don't care if the message was received at this
-            // point
+    async fn on_connection_established(&mut self, peer_id: PeerId) {}
+
+    async fn on_connection_closed(&mut self, peer_id: PeerId) {}
+
+    async fn on_replication_message(&mut self, peer_id: PeerId, message: SyncMessage) {
+        match self.sync_manager.handle_message(&peer_id, &message).await {
+            Ok(result) => {
+                for message in result.messages {
+                    self.send_service_message(ServiceMessage::SentReplicationMessage(
+                        peer_id, message,
+                    ));
+                }
+
+                if result.is_done {
+                    self.on_replication_finished(peer_id);
+                }
+            }
+            Err(err) => {
+                self.on_replication_error(peer_id, err);
+            }
         }
     }
+
+    async fn on_replication_finished(&mut self, peer_id: PeerId) {}
+
+    async fn on_replication_error(&mut self, peer_id: PeerId, error: ReplicationError) {}
 
     async fn handle_service_message(&mut self, message: ServiceMessage) {
         match message {
             ServiceMessage::ConnectionEstablished(peer_id) => {
-                // @TODO
+                self.on_connection_established(peer_id).await;
             }
             ServiceMessage::ConnectionClosed(peer_id) => {
-                // @TODO
+                self.on_connection_closed(peer_id).await;
             }
             ServiceMessage::ReceivedReplicationMessage(peer_id, message) => {
-                match self.sync_manager.handle_message(&peer_id, &message).await {
-                    Ok(result) => {
-                        for message in result.messages {
-                            self.send_service_message(ServiceMessage::SentReplicationMessage(
-                                peer_id, message,
-                            ));
-                        }
-
-                        if result.is_done {
-                            // @TODO
-                        }
-                    }
-                    Err(err) => {
-                        // @TODO
-                    }
-                }
+                self.on_replication_message(peer_id, message).await;
             }
             _ => (), // Ignore all other messages
+        }
+    }
+
+    fn send_service_message(&mut self, message: ServiceMessage) {
+        if self.tx.send(message).is_err() {
+            // Silently fail here as we don't care if the message was received at this
+            // point
         }
     }
 
