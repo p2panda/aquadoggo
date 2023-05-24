@@ -129,7 +129,7 @@ impl TryFrom<Cli> for Configuration {
             rendezvous_address: cli.rendezvous_address,
             rendezvous_peer_id,
             rendezvous_server_enabled: cli.enable_rendezvous_server,
-            ..NetworkConfiguration::default()
+            ..config.network
         };
 
         Ok(config)
