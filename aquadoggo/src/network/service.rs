@@ -79,7 +79,7 @@ pub async fn network_service(
         swarm.dial(addr)?;
     }
 
-    // Spawn a task to run swarm
+    // Spawn a task to run swarm in event loop
     let event_loop = EventLoop::new(swarm, tx, external_circuit_addr, network_config);
     let handle = tokio::spawn(event_loop.run());
 
@@ -126,10 +126,10 @@ impl EventLoop {
         loop {
             tokio::select! {
                 event = self.swarm.next() => {
-                    self.handle_swarm_event(event.expect("Swarm stream to be infinite.")).await
+                    self.handle_swarm_event(event.expect("Swarm stream to be infinite")).await
                 }
                 event = self.rx.next() => match event {
-                    Some(Ok(message)) => self.handle_incoming_message(message).await,
+                    Some(Ok(message)) => self.handle_service_message(message).await,
                     Some(Err(err)) => {
                         // @TODO
                     }
@@ -140,40 +140,19 @@ impl EventLoop {
         }
     }
 
-    async fn handle_incoming_message(&mut self, message: ServiceMessage) {}
+    async fn handle_service_message(&mut self, message: ServiceMessage) {
+        // @TODO
+    }
 
     async fn handle_swarm_event<E: std::fmt::Debug>(
         &mut self,
         event: SwarmEvent<BehaviourEvent, E>,
     ) {
         match event {
-            SwarmEvent::Behaviour(BehaviourEvent::Mdns(event)) => match event {
-                mdns::Event::Discovered(list) => {
-                    for (peer, multiaddr) in list {
-                        debug!("mDNS discovered a new peer: {peer}");
-
-                        if let Err(err) = self.swarm.dial(multiaddr) {
-                            warn!("Failed to dial: {}", err);
-                        }
-                    }
-                }
-                mdns::Event::Expired(list) => {
-                    for (peer, _multiaddr) in list {
-                        trace!("mDNS peer has expired: {peer}");
-                    }
-                }
-            },
-            SwarmEvent::Behaviour(BehaviourEvent::Ping(Event { peer, result: _ })) => {
-                debug!("Ping from: {peer}")
-            }
-            SwarmEvent::ConnectionClosed {
-                peer_id,
-                endpoint,
-                num_established,
-                cause,
-            } => {
-                info!("ConnectionClosed: {peer_id} {endpoint:?} {num_established} {cause:?}")
-            }
+            // ~~~~~
+            // Swarm
+            // ~~~~~
+            SwarmEvent::Dialing(peer_id) => info!("Dialing: {peer_id}"),
             SwarmEvent::ConnectionEstablished {
                 peer_id,
                 endpoint,
@@ -200,7 +179,14 @@ impl EventLoop {
                     }
                 }
             }
-            SwarmEvent::Dialing(peer_id) => info!("Dialing: {peer_id}"),
+            SwarmEvent::ConnectionClosed {
+                peer_id,
+                endpoint,
+                num_established,
+                cause,
+            } => {
+                info!("ConnectionClosed: {peer_id} {endpoint:?} {num_established} {cause:?}")
+            }
             SwarmEvent::ExpiredListenAddr {
                 listener_id,
                 address,
@@ -232,6 +218,37 @@ impl EventLoop {
             SwarmEvent::OutgoingConnectionError { peer_id, error } => {
                 warn!("OutgoingConnectionError: {peer_id:?} {error:?}")
             }
+
+            // ~~~~
+            // mDNS
+            // ~~~~
+            SwarmEvent::Behaviour(BehaviourEvent::Mdns(event)) => match event {
+                mdns::Event::Discovered(list) => {
+                    for (peer, multiaddr) in list {
+                        debug!("mDNS discovered a new peer: {peer}");
+
+                        if let Err(err) = self.swarm.dial(multiaddr) {
+                            warn!("Failed to dial: {}", err);
+                        }
+                    }
+                }
+                mdns::Event::Expired(list) => {
+                    for (peer, _multiaddr) in list {
+                        trace!("mDNS peer has expired: {peer}");
+                    }
+                }
+            },
+
+            // ~~~~
+            // Ping
+            // ~~~~
+            SwarmEvent::Behaviour(BehaviourEvent::Ping(Event { peer, result: _ })) => {
+                debug!("Ping from: {peer}")
+            }
+
+            // ~~~~~~~~~~
+            // Rendezvous
+            // ~~~~~~~~~~
             SwarmEvent::Behaviour(BehaviourEvent::RendezvousClient(event)) => match event {
                 rendezvous::client::Event::Registered {
                     namespace,
@@ -293,6 +310,10 @@ impl EventLoop {
                 }
                 other => trace!("Unhandled rendezvous server event: {other:?}"),
             },
+
+            // ~~~~~~~~
+            // Identify
+            // ~~~~~~~~
             SwarmEvent::Behaviour(BehaviourEvent::Identify(event)) => {
                 match event {
                     identify::Event::Received { peer_id, .. } => {
@@ -325,12 +346,20 @@ impl EventLoop {
                     }
                 }
             }
+
+            // ~~~~~
+            // Relay
+            // ~~~~~
             SwarmEvent::Behaviour(BehaviourEvent::RelayServer(event)) => {
                 debug!("Unhandled relay server event: {event:?}")
             }
             SwarmEvent::Behaviour(BehaviourEvent::RelayClient(event)) => {
                 debug!("Unhandled relay client event: {event:?}")
             }
+
+            // ~~~~~~~
+            // AutoNAT
+            // ~~~~~~~
             SwarmEvent::Behaviour(BehaviourEvent::Autonat(event)) => {
                 match event {
                     autonat::Event::StatusChanged { old, new } => {
@@ -359,6 +388,10 @@ impl EventLoop {
                     autonat::Event::InboundProbe(_) | autonat::Event::OutboundProbe(_) => (),
                 }
             }
+
+            // ~~~~~~
+            // Limits
+            // ~~~~~~
             SwarmEvent::Behaviour(BehaviourEvent::Limits(event)) => {
                 debug!("Unhandled connection limit event: {event:?}")
             }
