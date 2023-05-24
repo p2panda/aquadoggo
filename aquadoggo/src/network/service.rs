@@ -34,9 +34,10 @@ pub async fn network_service(
 
     // Read the network configuration parameters from the application context
     let network_config = context.config.network.clone();
+    let local_peer_id = network_config.peer_id.expect("Peer id needs to be given");
 
     // Build the network swarm and retrieve the local peer ID
-    let (mut swarm, local_peer_id) = swarm::build_swarm(&network_config, key_pair).await?;
+    let mut swarm = swarm::build_swarm(&network_config, key_pair).await?;
 
     // Define the QUIC multiaddress on which the swarm will listen for connections
     let quic_multiaddr =
