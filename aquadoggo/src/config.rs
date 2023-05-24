@@ -99,7 +99,7 @@ impl Configuration {
         };
 
         // Derive peer id from key pair
-        let key_pair = NetworkConfiguration::load_or_generate_key_pair(config.base_path)?;
+        let key_pair = NetworkConfiguration::load_or_generate_key_pair(config.base_path.clone())?;
         config.network.set_peer_id(&key_pair.public());
 
         Ok(config)

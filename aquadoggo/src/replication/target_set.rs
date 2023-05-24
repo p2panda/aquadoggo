@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::slice::Iter;
+
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::Validate;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -9,7 +11,7 @@ use crate::replication::errors::TargetSetError;
 /// De-duplicated and sorted set of schema ids which define the target data for the replication
 /// session.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize)]
-pub struct TargetSet(pub Vec<SchemaId>);
+pub struct TargetSet(Vec<SchemaId>);
 
 impl TargetSet {
     pub fn new(schema_ids: &[SchemaId]) -> Self {
@@ -39,6 +41,10 @@ impl TargetSet {
         target_set.validate()?;
 
         Ok(target_set)
+    }
+
+    pub fn iter(&self) -> Iter<SchemaId> {
+        self.0.iter()
     }
 }
 

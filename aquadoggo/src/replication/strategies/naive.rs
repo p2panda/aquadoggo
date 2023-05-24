@@ -29,7 +29,7 @@ impl NaiveStrategy {
         let mut result = vec![];
 
         // For every schema id in the target set retrieve log heights for all contributing authors
-        for schema_id in self.target_set().0.iter() {
+        for schema_id in self.target_set().iter() {
             let log_heights = store
                 .get_log_heights(schema_id)
                 .await
