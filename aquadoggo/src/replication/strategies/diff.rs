@@ -62,6 +62,9 @@ pub fn diff_log_heights(
     let mut remote_needs = Vec::new();
 
     for (local_author, local_author_logs) in local_log_heights {
+        let local_author_logs: HashMap<LogId, SeqNum> =
+            local_author_logs.to_owned().into_iter().collect();
+
         debug!(
             "Local log heights: {} {:?}",
             local_author.display(),
@@ -86,7 +89,7 @@ pub fn diff_log_heights(
 
             for (log_id, seq_num) in local_author_logs {
                 if let Some(from_log_height) =
-                    remote_requires_entries(log_id, seq_num, &remote_author_logs)
+                    remote_requires_entries(&log_id, &seq_num, &remote_author_logs)
                 {
                     remote_needs_logs.push(from_log_height)
                 };

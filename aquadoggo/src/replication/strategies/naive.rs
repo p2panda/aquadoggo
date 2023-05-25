@@ -34,18 +34,20 @@ impl NaiveStrategy {
         }
     }
 
-    async fn local_log_heights(
-        &self,
-        store: &SqlStore,
-        schema_id: &SchemaId,
-    ) -> HashMap<PublicKey, Vec<(LogId, SeqNum)>> {
-        // For every schema id in the target set retrieve log heights for all contributing authors
-        store
-            .get_log_heights(schema_id)
-            .await
-            .expect("Schema in target set not found in database")
-            .into_iter()
-            .collect()
+    async fn local_log_heights(&self, store: &SqlStore) -> Vec<(PublicKey, Vec<(LogId, SeqNum)>)> {
+        let mut log_heights: Vec<(PublicKey, Vec<(LogId, SeqNum)>)> = vec![];
+
+        for schema_id in self.target_set().iter() {
+            // For every schema id in the target set retrieve log heights for all contributing authors
+            let logs = store
+                .get_log_heights(schema_id)
+                .await
+                .expect("Schema in target set not found in database")
+                .into_iter();
+
+            log_heights.extend(logs);
+        }
+        log_heights
     }
 
     async fn entry_responses(
@@ -55,38 +57,31 @@ impl NaiveStrategy {
     ) -> Vec<Message> {
         let mut messages = Vec::new();
 
-        for schema_id in self.target_set().iter() {
-            info!(
-                "Comparing local and remote state for {}",
-                schema_id.display()
-            );
+        let local_log_heights = self.local_log_heights(store).await;
+        let remote_needs = diff_log_heights(
+            &local_log_heights.to_owned().into_iter().collect(),
+            &remote_log_heights.to_owned().into_iter().collect(),
+        );
 
-            let local_log_heights = self.local_log_heights(store, schema_id).await;
-            let remote_needs = diff_log_heights(
-                &local_log_heights,
-                &remote_log_heights.to_owned().into_iter().collect(),
-            );
+        for (public_key, log_heights) in remote_needs {
+            for (log_id, seq_num) in log_heights {
+                let entry_messages: Vec<Message> = store
+                    .get_entries_from(&public_key, &log_id, &seq_num)
+                    .await
+                    .expect("Fatal database error")
+                    .iter()
+                    .map(|entry| {
+                        debug!(
+                            "Prepare message containing entry at {:?} on {:?} for {}",
+                            entry.seq_num(),
+                            entry.log_id(),
+                            entry.public_key().display()
+                        );
 
-            for (public_key, log_heights) in remote_needs {
-                for (log_id, seq_num) in log_heights {
-                    let entry_messages: Vec<Message> = store
-                        .get_entries_from(&public_key, &log_id, &seq_num)
-                        .await
-                        .expect("Fatal database error")
-                        .iter()
-                        .map(|entry| {
-                            debug!(
-                                "Prepare message containing entry at {:?} on {:?} for {}",
-                                entry.seq_num(),
-                                entry.log_id(),
-                                entry.public_key().display()
-                            );
-
-                            Message::Entry(entry.clone().encoded_entry, entry.payload().cloned())
-                        })
-                        .collect();
-                    messages.extend(entry_messages);
-                }
+                        Message::Entry(entry.clone().encoded_entry, entry.payload().cloned())
+                    })
+                    .collect();
+                messages.extend(entry_messages);
             }
         }
 
@@ -105,10 +100,7 @@ impl Strategy for NaiveStrategy {
     }
 
     async fn initial_messages(&mut self, store: &SqlStore) -> StrategyResult {
-        let mut log_heights = vec![];
-        for schema_id in self.target_set().iter() {
-            log_heights.extend(self.local_log_heights(store, schema_id).await)
-        }
+        let log_heights = self.local_log_heights(store).await;
         self.sent_have = true;
 
         StrategyResult {
