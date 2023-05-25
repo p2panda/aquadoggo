@@ -31,7 +31,7 @@ pub enum IngestError {
     #[error("Schema is not supported")]
     UnsupportedSchema,
 
-    #[error("Received entry and operation is invalid")]
+    #[error(transparent)]
     Domain(#[from] p2panda_rs::api::DomainError),
 
     #[error("Decoding entry failed")]
