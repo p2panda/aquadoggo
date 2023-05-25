@@ -1,16 +1,63 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::collections::HashMap;
+
 use log::debug;
 use p2panda_rs::{
     entry::{LogId, SeqNum},
+    identity::PublicKey,
     Human,
 };
 
 use crate::replication::LogHeight;
 
+fn remote_requires_entries(
+    log_id: &LogId,
+    local_seq_num: &SeqNum,
+    remote_log_heights: &HashMap<LogId, SeqNum>,
+) -> Option<(LogId, SeqNum)> {
+    debug!("Local log height: {:?} {:?}", log_id, local_seq_num);
+    // Get height of the remote log by it's id.
+    let remote_log_height = remote_log_heights.get(&log_id);
+
+    match remote_log_height {
+        // If a log exists then compare heights of local and remote logs.
+        Some(remote_seq_num) => {
+            debug!("Remote log height: {:?} {:?}", log_id, remote_seq_num);
+
+            // If the local seq num is higher the remote needs all entries higher than
+            // their max seq num for this log.
+            if local_seq_num > &remote_seq_num {
+                // We increment the seq num as we want it to represent an inclusive lower
+                // bound.
+                //
+                // We can unwrap as we are incrementing the lower remote seq num which means it's
+                // will not reach max seq number.
+                let from_seq_num = remote_seq_num.clone().next().unwrap();
+
+                debug!(
+                    "Remote needs entries from {:?} for {:?}",
+                    from_seq_num, log_id
+                );
+
+                Some((log_id.to_owned(), from_seq_num))
+            } else {
+                debug!("Remote has all entries for {:?}", log_id);
+                None
+            }
+        }
+        // If no log exists then the remote has a log we don't know about yet and we
+        // return nothing.
+        None => {
+            debug!("{:?} not found on remote, all entries required", log_id);
+            Some((log_id.to_owned(), SeqNum::default()))
+        }
+    }
+}
+
 pub fn diff_log_heights(
-    local_log_heights: &[LogHeight],
-    remote_log_heights: &[LogHeight],
+    local_log_heights: &HashMap<PublicKey, Vec<(LogId, SeqNum)>>,
+    remote_log_heights: &HashMap<PublicKey, Vec<(LogId, SeqNum)>>,
 ) -> Vec<LogHeight> {
     let mut remote_needs = Vec::new();
 
@@ -21,75 +68,37 @@ pub fn diff_log_heights(
             local_author_logs
         );
 
-        // Helper for diffing local log heights against remote log heights.
-        let diff_logs = |(remote_log_id, remote_seq_num): (LogId, SeqNum)| {
-            debug!(
-                "Remote log height: {:?} {:?}",
-                remote_log_id, remote_seq_num
-            );
-            // Get the remote log by it's id.
-            let local_log = local_author_logs
-                .iter()
-                .find(|(local_log_id, _)| remote_log_id == *local_log_id);
-
-            match local_log {
-                // If a log exists then compare heights of local and remote logs.
-                Some((log_id, local_seq_num)) => {
-                    debug!("Local log height: {:?} {:?}", log_id, local_seq_num);
-
-                    // If the local log is higher we increment their log id (we want all entries
-                    // greater than or equal to this). Otherwise we return none.
-                    if local_seq_num > &remote_seq_num {
-                        // We can unwrap as we are incrementing the remote peers seq num here and
-                        // this means it's will not reach max seq number.
-                        let next_seq_num = remote_seq_num.clone().next().unwrap();
-
-                        debug!(
-                            "Remote needs entries from {:?} - {:?} for {:?}",
-                            local_seq_num, next_seq_num, log_id
-                        );
-
-                        Some((log_id.to_owned(), remote_seq_num.clone().next().unwrap()))
-                    } else {
-                        debug!("Remote contains all local entries");
-                        None
-                    }
-                }
-                // If no log exists then the remote has never had this log and they need all
-                // entries from seq num 1.
-                None => {
-                    debug!("Remote needs all entries from {:?}", remote_log_id);
-                    Some((remote_log_id.to_owned(), SeqNum::default()))
-                }
-            }
-        };
-
-        // Find local log for a public key sent by the remote peer.
+        // Find all logs for a public key sent by the remote peer.
         //
         // If none is found we don't do anything as this means we are missing entries they should
         // send us.
-        if let Some((remote_author, remote_author_logs)) = remote_log_heights
-            .iter()
-            .find(|(remote_author, _)| remote_author == local_author)
-        {
+        if let Some(remote_author_logs) = remote_log_heights.get(&local_author) {
+            let remote_author_logs: HashMap<LogId, SeqNum> =
+                remote_author_logs.to_owned().into_iter().collect();
+
             debug!(
                 "Remote log heights: {} {:?}",
-                remote_author.display(),
+                local_author.display(),
                 remote_author_logs
             );
 
-            // Diff our local log heights against the remote.
-            let remote_needs_logs: Vec<(LogId, SeqNum)> = remote_author_logs
-                .iter()
-                .copied()
-                .filter_map(diff_logs)
-                .collect();
+            let mut remote_needs_logs = vec![];
+
+            for (log_id, seq_num) in local_author_logs {
+                if let Some(from_log_height) =
+                    remote_requires_entries(log_id, seq_num, &remote_author_logs)
+                {
+                    remote_needs_logs.push(from_log_height)
+                };
+            }
 
             // If the remote needs at least one log we push it to the remote needs.
             if !remote_needs_logs.is_empty() {
                 remote_needs.push((local_author.to_owned(), remote_needs_logs));
             };
         } else {
+            // The author we know about locally wasn't found on the remote log heights so they
+            // need everything we have.
             remote_needs.push((
                 local_author.to_owned(),
                 local_author_logs
@@ -130,8 +139,14 @@ mod tests {
             ],
         )];
 
-        let peer_b_needs = diff_log_heights(&peer_a_log_heights, &peer_b_log_heights);
-        let peer_a_needs = diff_log_heights(&peer_b_log_heights, &peer_a_log_heights);
+        let peer_b_needs = diff_log_heights(
+            &peer_a_log_heights.clone().into_iter().collect(),
+            &peer_b_log_heights.clone().into_iter().collect(),
+        );
+        let peer_a_needs = diff_log_heights(
+            &peer_b_log_heights.into_iter().collect(),
+            &peer_a_log_heights.into_iter().collect(),
+        );
 
         assert_eq!(
             peer_a_needs,
@@ -152,8 +167,14 @@ mod tests {
         )];
         let peer_b_log_heights = vec![];
 
-        let peer_b_needs = diff_log_heights(&peer_a_log_heights, &peer_b_log_heights);
-        let peer_a_needs = diff_log_heights(&peer_b_log_heights, &peer_a_log_heights);
+        let peer_b_needs = diff_log_heights(
+            &peer_a_log_heights.clone().into_iter().collect(),
+            &peer_b_log_heights.clone().into_iter().collect(),
+        );
+        let peer_a_needs = diff_log_heights(
+            &peer_b_log_heights.into_iter().collect(),
+            &peer_a_log_heights.into_iter().collect(),
+        );
 
         assert_eq!(peer_a_needs, vec![]);
         assert_eq!(
