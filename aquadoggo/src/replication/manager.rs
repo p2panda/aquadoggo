@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
+use log::warn;
 use p2panda_rs::entry::EncodedEntry;
 use p2panda_rs::operation::EncodedOperation;
 
@@ -324,7 +325,8 @@ where
         {
             session.validate_entry(entry_bytes, operation_bytes.as_ref())?;
 
-            self.ingest
+            let result = self
+                .ingest
                 .handle_entry(
                     &self.store,
                     entry_bytes,
@@ -333,7 +335,12 @@ where
                         .as_ref()
                         .expect("For now we always expect an operation here"),
                 )
-                .await?;
+                .await;
+
+            result.map_err(|err| {
+                warn!("{:?}", err);
+                err
+            })?;
 
             Ok(SyncResult {
                 messages: vec![],

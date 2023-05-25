@@ -2,6 +2,9 @@
 
 use anyhow::Result;
 use async_trait::async_trait;
+use log::debug;
+use p2panda_rs::entry::traits::AsEntry;
+use p2panda_rs::Human;
 
 use crate::db::SqlStore;
 use crate::replication::errors::ReplicationError;
@@ -58,6 +61,14 @@ impl NaiveStrategy {
                     .expect("Fatal database error")
                     .iter()
                     .map(|entry| {
+
+                        debug!(
+                            "Prepare message containing entry at {:?} on {:?} for {}",
+                            entry.seq_num(),
+                            entry.log_id(),
+                            entry.public_key().display()
+                        );
+                        
                         Message::Entry(entry.clone().encoded_entry, entry.payload().cloned())
                     })
                     .collect();

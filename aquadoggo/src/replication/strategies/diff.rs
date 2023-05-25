@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use p2panda_rs::entry::{LogId, SeqNum};
+use log::debug;
+use p2panda_rs::{
+    entry::{LogId, SeqNum},
+    Human,
+};
 
 use crate::replication::LogHeight;
 
@@ -11,8 +15,18 @@ pub fn diff_log_heights(
     let mut remote_needs = Vec::new();
 
     for (local_author, local_author_logs) in local_log_heights {
+        debug!(
+            "Local log heights: {} {:?}",
+            local_author.display(),
+            local_author_logs
+        );
+
         // Helper for diffing local log heights against remote log heights.
         let diff_logs = |(remote_log_id, remote_seq_num): (LogId, SeqNum)| {
+            debug!(
+                "Remote log height: {:?} {:?}",
+                remote_log_id, remote_seq_num
+            );
             // Get the remote log by it's id.
             let local_log = local_author_logs
                 .iter()
@@ -21,19 +35,32 @@ pub fn diff_log_heights(
             match local_log {
                 // If a log exists then compare heights of local and remote logs.
                 Some((log_id, local_seq_num)) => {
+                    debug!("Local log height: {:?} {:?}", log_id, local_seq_num);
+
                     // If the local log is higher we increment their log id (we want all entries
                     // greater than or equal to this). Otherwise we return none.
                     if local_seq_num > &remote_seq_num {
                         // We can unwrap as we are incrementing the remote peers seq num here and
                         // this means it's will not reach max seq number.
+                        let next_seq_num = remote_seq_num.clone().next().unwrap();
+
+                        debug!(
+                            "Remote needs entries from {:?} - {:?} for {:?}",
+                            local_seq_num, next_seq_num, log_id
+                        );
+
                         Some((log_id.to_owned(), remote_seq_num.clone().next().unwrap()))
                     } else {
+                        debug!("Remote contains all local entries");
                         None
                     }
                 }
                 // If no log exists then the remote has never had this log and they need all
                 // entries from seq num 1.
-                None => Some((remote_log_id.to_owned(), SeqNum::default())),
+                None => {
+                    debug!("Remote needs all entries from {:?}", remote_log_id);
+                    Some((remote_log_id.to_owned(), SeqNum::default()))
+                }
             }
         };
 
@@ -41,10 +68,16 @@ pub fn diff_log_heights(
         //
         // If none is found we don't do anything as this means we are missing entries they should
         // send us.
-        if let Some((_, remote_author_logs)) = remote_log_heights
+        if let Some((remote_author, remote_author_logs)) = remote_log_heights
             .iter()
             .find(|(remote_author, _)| remote_author == local_author)
         {
+            debug!(
+                "Remote log heights: {} {:?}",
+                remote_author.display(),
+                remote_author_logs
+            );
+
             // Diff our local log heights against the remote.
             let remote_needs_logs: Vec<(LogId, SeqNum)> = remote_author_logs
                 .iter()

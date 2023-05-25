@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use log::debug;
+use p2panda_rs::Human;
 use p2panda_rs::api::validation::{
     ensure_document_not_deleted, get_checked_document_id_for_view_id, get_expected_skiplink,
     is_next_seq_num, validate_claimed_schema_id,
@@ -129,6 +131,14 @@ impl SyncIngest {
         encoded_operation: &EncodedOperation,
     ) -> Result<(), IngestError> {
         let entry = decode_entry(encoded_entry)?;
+
+        debug!(
+            "Received entry {:?} for log {:?} and {}",
+            entry.seq_num(),
+            entry.log_id(),
+            entry.public_key().display()
+        );
+
         let plain_operation = decode_operation(encoded_operation)?;
 
         let schema = self
