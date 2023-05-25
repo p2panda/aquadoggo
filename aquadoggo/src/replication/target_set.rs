@@ -26,6 +26,17 @@ impl TargetSet {
         // Sort schema ids to compare target sets easily
         deduplicated_set.sort();
 
+        // And now sort system schema to the front of the set.
+        deduplicated_set.sort_by(|schema_id_a, schema_id_b| {
+            let is_system_schema = |schema_id: &SchemaId| -> bool {
+                match schema_id {
+                    SchemaId::Application(_, _) => false,
+                    _ => true,
+                }
+            };
+            is_system_schema(schema_id_b).cmp(&is_system_schema(schema_id_a))
+        });
+
         Self(deduplicated_set)
     }
 
