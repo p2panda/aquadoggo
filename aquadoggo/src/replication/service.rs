@@ -239,6 +239,7 @@ impl ConnectionManager {
             .collect();
 
         for peer_id in attempt_peers {
+            debug!("Re-initiate replication with: {}", peer_id);
             self.initiate_replication(&peer_id).await;
         }
     }
