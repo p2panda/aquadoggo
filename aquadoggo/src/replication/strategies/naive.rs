@@ -34,18 +34,23 @@ impl NaiveStrategy {
         }
     }
 
-    async fn local_log_heights(&self, store: &SqlStore) -> Vec<(PublicKey, Vec<(LogId, SeqNum)>)> {
-        let mut log_heights: Vec<(PublicKey, Vec<(LogId, SeqNum)>)> = vec![];
+    async fn local_log_heights(&self, store: &SqlStore) -> HashMap<PublicKey, Vec<(LogId, SeqNum)>> {
+        let mut log_heights: HashMap<PublicKey, Vec<(LogId, SeqNum)>> = HashMap::new();
 
         for schema_id in self.target_set().iter() {
             // For every schema id in the target set retrieve log heights for all contributing authors
-            let logs = store
+            let schema_logs = store
                 .get_log_heights(schema_id)
                 .await
                 .expect("Schema in target set not found in database")
                 .into_iter();
 
-            log_heights.extend(logs);
+            // Then merge them into any existing records for the author
+            for (public_key, logs) in schema_logs {
+                let mut author_logs = log_heights.get(&public_key).cloned().unwrap_or(vec![]);
+                author_logs.extend(logs);
+                log_heights.insert(public_key, author_logs);
+            }
         }
         log_heights
     }
@@ -59,7 +64,7 @@ impl NaiveStrategy {
 
         let local_log_heights = self.local_log_heights(store).await;
         let remote_needs = diff_log_heights(
-            &local_log_heights.to_owned().into_iter().collect(),
+            &local_log_heights,
             &remote_log_heights.to_owned().into_iter().collect(),
         );
 
@@ -105,7 +110,7 @@ impl Strategy for NaiveStrategy {
 
         StrategyResult {
             is_local_done: log_heights.is_empty(),
-            messages: vec![Message::Have(log_heights)],
+            messages: vec![Message::Have(log_heights.into_iter().collect())],
         }
     }
 
