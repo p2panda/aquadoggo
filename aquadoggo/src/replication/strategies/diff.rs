@@ -185,8 +185,8 @@ mod tests {
             vec![(
                 author_a,
                 vec![
-                    (LogId::new(0), SeqNum::new(1).unwrap()),
-                    (LogId::new(1), SeqNum::new(1).unwrap())
+                    (LogId::new(1), SeqNum::new(1).unwrap()),
+                    (LogId::new(0), SeqNum::new(1).unwrap())
                 ]
             ),]
         );
