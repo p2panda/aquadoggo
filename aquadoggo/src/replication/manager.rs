@@ -195,6 +195,7 @@ where
             SessionState::Pending => {
                 if &self.local_peer < remote_peer {
                     // Drop our pending session
+                    debug!("Drop pending duplicate session with id {} for peer {:?}", session.id, remote_peer);
                     self.remove_session(remote_peer, &session.id);
 
                     // Accept the inbound request
@@ -213,6 +214,7 @@ where
         let mut all_messages: Vec<SyncMessage> = vec![];
 
         if accept_inbound_request {
+            debug!("Accept duplicate session request with id {} for peer {:?}", session.id, remote_peer);
             let messages = self
                 .insert_and_initialize_session(
                     remote_peer,
@@ -227,6 +229,7 @@ where
             // If we dropped our own outbound session request regarding a different target set, we
             // need to re-establish it with another session id, otherwise it would get lost
             if session.target_set() != *target_set {
+                debug!("Re-initiate dropped session with target set {:?} for peer {:?}", session.target_set(), remote_peer);
                 let messages = self
                     .initiate_session(remote_peer, target_set, &session.mode())
                     .await?;
