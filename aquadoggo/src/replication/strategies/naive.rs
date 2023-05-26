@@ -42,7 +42,7 @@ impl NaiveStrategy {
             let schema_logs = store
                 .get_log_heights(schema_id)
                 .await
-                .expect("Schema in target set not found in database")
+                .expect("Fatal database error")
                 .into_iter();
 
             // Then merge them into any existing records for the author
