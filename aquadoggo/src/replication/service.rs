@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 use libp2p::PeerId;
-use log::{info, trace, warn};
+use log::{info, trace, warn, debug};
 use p2panda_rs::schema::SchemaId;
 use tokio::sync::broadcast::Receiver;
 use tokio::task;
@@ -115,6 +115,7 @@ impl ConnectionManager {
     }
 
     async fn on_connection_established(&mut self, peer_id: PeerId) {
+        info!("Connection established with peer: {}", peer_id);
         if self
             .peers
             .insert(peer_id, PeerStatus::new(&peer_id))
@@ -128,6 +129,7 @@ impl ConnectionManager {
 
     async fn on_connection_closed(&mut self, peer_id: PeerId) {
         // Clear running replication sessions from sync manager
+        info!("Connection closed: remove sessions with peer: {}", peer_id);
         self.sync_manager.remove_sessions(&peer_id);
 
         // Remove peer from our connections table
@@ -139,6 +141,7 @@ impl ConnectionManager {
     }
 
     async fn on_replication_message(&mut self, peer_id: PeerId, message: SyncMessage) {
+        trace!("Received SyncMessage: {:?}", message);
         match self.sync_manager.handle_message(&peer_id, &message).await {
             Ok(result) => {
                 for message in result.messages {
@@ -205,7 +208,7 @@ impl ConnectionManager {
     }
 
     fn send_service_message(&mut self, message: ServiceMessage) {
-        trace!("Sending replication message: {:?}", message);
+        trace!("Sending message on service channel: {:?}", message);
 
         if self.tx.send(message).is_err() {
             // Silently fail here as we don't care if the message was received at this
@@ -230,7 +233,7 @@ impl ConnectionManager {
                 if active_sessions.len() < MAX_SESSIONS_PER_PEER {
                     return Some(peer_id.to_owned());
                 }
-
+                debug!("Max sessions reached for peer: {}", peer_id);
                 None
             })
             .collect();
@@ -247,16 +250,14 @@ impl ConnectionManager {
             .await
         {
             Ok(messages) => {
-                info!("Initiate replication with peer {}", peer_id);
-
                 for message in messages {
                     self.send_service_message(ServiceMessage::SentReplicationMessage(
                         *peer_id, message,
                     ));
                 }
             }
-            Err(_err) => {
-                // @TODO
+            Err(err) => {
+                warn!("Replication error: {}", err)
             }
         }
     }

@@ -3,12 +3,12 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use log::warn;
+use log::{debug, warn, info};
 use p2panda_rs::entry::EncodedEntry;
 use p2panda_rs::operation::EncodedOperation;
 
 use crate::db::SqlStore;
-use crate::replication::errors::ReplicationError;
+use crate::replication::errors::{DuplicateSessionRequestError, ReplicationError};
 use crate::replication::{
     Message, Mode, Session, SessionId, SessionState, SyncIngest, SyncMessage, TargetSet,
 };
@@ -51,7 +51,7 @@ pub struct SyncManager<P> {
 
 impl<P> SyncManager<P>
 where
-    P: Clone + std::hash::Hash + Eq + PartialOrd,
+    P: Clone + std::fmt::Debug + std::hash::Hash + Eq + PartialOrd,
 {
     pub fn new(store: SqlStore, ingest: SyncIngest, local_peer: P) -> Self {
         Self {
@@ -152,14 +152,17 @@ where
 
         let sessions = self.get_sessions(remote_peer);
 
+        info!("Initiate outbound replication session with peer {:?}", remote_peer);
+
         // Make sure to not have duplicate sessions over the same schema ids
         let session = sessions
             .iter()
             .find(|session| session.target_set() == *target_set);
 
-        if let Some(session) = session {
-            return Err(ReplicationError::DuplicateOutboundRequest(session.id));
-        }
+        match session {
+            Some(session) => Err(DuplicateSessionRequestError::OutboundExistingTargetSet(session.target_set())),
+            None => Ok(()),
+        }?;
 
         // Determine next id for upcoming session
         let session_id = {
@@ -195,14 +198,17 @@ where
                     self.remove_session(remote_peer, &session.id);
 
                     // Accept the inbound request
-                    true
+                    Ok(true)
                 } else {
                     // Keep our pending session, ignore inbound request
-                    false
+                    Ok(false)
                 }
             }
-            _ => return Err(ReplicationError::DuplicateInboundRequest(session.id)),
-        };
+            SessionState::Established => Err(
+                DuplicateSessionRequestError::InboundEstablishedSession(session.id),
+            ),
+            SessionState::Done => Err(DuplicateSessionRequestError::InboundDoneSession(session.id)),
+        }?;
 
         let mut all_messages: Vec<SyncMessage> = vec![];
 
@@ -245,6 +251,8 @@ where
 
         let sessions = self.get_sessions(remote_peer);
 
+        info!("Initiate inbound replication session with peer {:?}", remote_peer);
+
         // Check if a session with this id already exists for this peer, this can happen if both
         // peers started to initiate a session at the same time, we can try to resolve this
         if let Some(session) = sessions
@@ -258,12 +266,15 @@ where
 
         // Check if a session with this target set already exists for this peer, this always gets
         // rejected because it is clearly redundant
-        if let Some(session) = sessions
+        match sessions
             .iter()
             .find(|session| session.target_set() == *target_set)
         {
-            return Err(ReplicationError::DuplicateInboundRequest(session.id));
-        }
+            Some(session) => Err(DuplicateSessionRequestError::InboundExistingTargetSet(
+                session.target_set(),
+            )),
+            None => Ok(()),
+        }?;
 
         let messages = self
             .insert_and_initialize_session(remote_peer, session_id, target_set, mode, false)
@@ -384,7 +395,7 @@ mod tests {
     use rstest::rstest;
     use tokio::sync::broadcast;
 
-    use crate::replication::errors::ReplicationError;
+    use crate::replication::errors::{DuplicateSessionRequestError, ReplicationError};
     use crate::replication::message::{Message, HAVE_TYPE, SYNC_DONE_TYPE};
     use crate::replication::{Mode, SyncIngest, SyncMessage, TargetSet};
     use crate::schema::SchemaProvider;
@@ -426,7 +437,9 @@ mod tests {
                 .await;
             assert!(matches!(
                 result,
-                Err(ReplicationError::DuplicateOutboundRequest(0))
+                Err(ReplicationError::DuplicateSession(
+                    DuplicateSessionRequestError::Outbound(0)
+                ))
             ));
         })
     }
@@ -458,7 +471,9 @@ mod tests {
             let result = manager.handle_message(&PEER_ID_REMOTE, &message).await;
             assert!(matches!(
                 result,
-                Err(ReplicationError::DuplicateInboundRequest(0))
+                Err(ReplicationError::DuplicateSession(
+                    DuplicateSessionRequestError::InboundEstablishedSession(0)
+                ))
             ));
 
             // Reject different session concerning same target set
@@ -467,7 +482,9 @@ mod tests {
             let result = manager.handle_message(&PEER_ID_REMOTE, &message).await;
             assert!(matches!(
                 result,
-                Err(ReplicationError::DuplicateInboundRequest(1))
+                Err(ReplicationError::DuplicateSession(
+                    DuplicateSessionRequestError::InboundExistingTargetSet(target_set_2)
+                ))
             ));
         })
     }
