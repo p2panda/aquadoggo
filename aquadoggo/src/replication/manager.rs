@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use log::{debug, warn, info};
+use log::{debug, info, warn};
 use p2panda_rs::entry::EncodedEntry;
 use p2panda_rs::operation::EncodedOperation;
 
@@ -152,7 +152,10 @@ where
 
         let sessions = self.get_sessions(remote_peer);
 
-        info!("Initiate outbound replication session with peer {:?}", remote_peer);
+        info!(
+            "Initiate outbound replication session with peer {:?}",
+            remote_peer
+        );
 
         // Make sure to not have duplicate sessions over the same schema ids
         let session = sessions
@@ -160,7 +163,9 @@ where
             .find(|session| session.target_set() == *target_set);
 
         match session {
-            Some(session) => Err(DuplicateSessionRequestError::OutboundExistingTargetSet(session.target_set())),
+            Some(session) => Err(DuplicateSessionRequestError::OutboundExistingTargetSet(
+                session.target_set(),
+            )),
             None => Ok(()),
         }?;
 
@@ -195,13 +200,20 @@ where
             SessionState::Pending => {
                 if &self.local_peer < remote_peer {
                     // Drop our pending session
-                    debug!("Drop pending duplicate session with id {} for peer {:?}", session.id, remote_peer);
+                    debug!(
+                        "Drop pending outbound session and process inbound session request with duplicate id {}",
+                        session.id
+                    );
                     self.remove_session(remote_peer, &session.id);
 
                     // Accept the inbound request
                     Ok(true)
                 } else {
                     // Keep our pending session, ignore inbound request
+                    debug!(
+                        "Ignore inbound request and keep pending outbound session with duplicate id {}",
+                        session.id
+                    );
                     Ok(false)
                 }
             }
@@ -214,7 +226,10 @@ where
         let mut all_messages: Vec<SyncMessage> = vec![];
 
         if accept_inbound_request {
-            debug!("Accept duplicate session request with id {} for peer {:?}", session.id, remote_peer);
+            debug!(
+                "Accept duplicate session request with id {} for peer {:?}",
+                session.id, remote_peer
+            );
             let messages = self
                 .insert_and_initialize_session(
                     remote_peer,
@@ -229,7 +244,11 @@ where
             // If we dropped our own outbound session request regarding a different target set, we
             // need to re-establish it with another session id, otherwise it would get lost
             if session.target_set() != *target_set {
-                debug!("Re-initiate dropped session with target set {:?} for peer {:?}", session.target_set(), remote_peer);
+                debug!(
+                    "Re-initiate dropped session with target set {:?} for peer {:?}",
+                    session.target_set(),
+                    remote_peer
+                );
                 let messages = self
                     .initiate_session(remote_peer, target_set, &session.mode())
                     .await?;
@@ -254,16 +273,20 @@ where
 
         let sessions = self.get_sessions(remote_peer);
 
-        info!("Initiate inbound replication session with peer {:?}", remote_peer);
+        info!(
+            "Initiate inbound replication session with peer {:?}",
+            remote_peer
+        );
 
         // Check if a session with this id already exists for this peer, this can happen if both
         // peers started to initiate a session at the same time, we can try to resolve this
-        if let Some(session) = sessions
+        if let Some(existing_session) = sessions
             .iter()
-            .find(|session| session.id == *session_id && session.local)
+            .find(|existing_session| existing_session.id == *session_id && existing_session.local)
         {
+            debug!("Handle sync request containing duplicate session id");
             return self
-                .handle_duplicate_session(remote_peer, target_set, session)
+                .handle_duplicate_session(remote_peer, target_set, existing_session)
                 .await;
         }
 
@@ -292,6 +315,7 @@ where
         session_id: &SessionId,
         message: &Message,
     ) -> Result<SyncResult, ReplicationError> {
+        debug!("Message {message:?} received for session {session_id} with peer {remote_peer:?}");
         let sessions = self.sessions.get_mut(remote_peer);
 
         let (is_both_done, messages) = match sessions {
