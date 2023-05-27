@@ -50,8 +50,11 @@ pub enum TargetSetError {
     UnsortedSchemaIds,
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq)]
 pub enum DuplicateSessionRequestError {
+    #[error("Remote sent two sync requests for session with id {0}")]
+    InboundPendingSession(u64),
+
     #[error("Tried to initialise duplicate inbound replication for already established session with id {0}")]
     InboundEstablishedSession(u64),
 

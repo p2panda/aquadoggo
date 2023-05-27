@@ -193,18 +193,27 @@ where
         &mut self,
         remote_peer: &P,
         target_set: &TargetSet,
-        session: &Session,
+        existing_session: &Session,
     ) -> Result<SyncResult, ReplicationError> {
-        let accept_inbound_request = match session.state {
+        match existing_session.local {
+            // Remote peer sent a sync request for an already pending session, we should ignore
+            // this second request.
+            false => Err(DuplicateSessionRequestError::InboundPendingSession(
+                existing_session.id,
+            )),
+            _ => Ok(()),
+        }?;
+
+        let accept_inbound_request = match existing_session.state {
             // Handle only duplicate sessions when they haven't started yet
             SessionState::Pending => {
                 if &self.local_peer < remote_peer {
                     // Drop our pending session
                     debug!(
                         "Drop pending outbound session and process inbound session request with duplicate id {}",
-                        session.id
+                        existing_session.id
                     );
-                    self.remove_session(remote_peer, &session.id);
+                    self.remove_session(remote_peer, &existing_session.id);
 
                     // Accept the inbound request
                     Ok(true)
@@ -212,15 +221,17 @@ where
                     // Keep our pending session, ignore inbound request
                     debug!(
                         "Ignore inbound request and keep pending outbound session with duplicate id {}",
-                        session.id
+                        existing_session.id
                     );
                     Ok(false)
                 }
             }
             SessionState::Established => Err(
-                DuplicateSessionRequestError::InboundEstablishedSession(session.id),
+                DuplicateSessionRequestError::InboundEstablishedSession(existing_session.id),
             ),
-            SessionState::Done => Err(DuplicateSessionRequestError::InboundDoneSession(session.id)),
+            SessionState::Done => Err(DuplicateSessionRequestError::InboundDoneSession(
+                existing_session.id,
+            )),
         }?;
 
         let mut all_messages: Vec<SyncMessage> = vec![];
@@ -228,29 +239,29 @@ where
         if accept_inbound_request {
             debug!(
                 "Accept duplicate session request with id {} for peer {:?}",
-                session.id, remote_peer
+                existing_session.id, remote_peer
             );
             let messages = self
                 .insert_and_initialize_session(
                     remote_peer,
-                    &session.id,
+                    &existing_session.id,
                     target_set,
-                    &session.mode(),
+                    &existing_session.mode(),
                     false,
                 )
                 .await;
-            all_messages.extend(to_sync_messages(session.id, messages));
+            all_messages.extend(to_sync_messages(existing_session.id, messages));
 
             // If we dropped our own outbound session request regarding a different target set, we
             // need to re-establish it with another session id, otherwise it would get lost
-            if session.target_set() != *target_set {
+            if existing_session.target_set() != *target_set {
                 debug!(
                     "Re-initiate dropped session with target set {:?} for peer {:?}",
-                    session.target_set(),
+                    existing_session.target_set(),
                     remote_peer
                 );
                 let messages = self
-                    .initiate_session(remote_peer, target_set, &session.mode())
+                    .initiate_session(remote_peer, target_set, &existing_session.mode())
                     .await?;
                 all_messages.extend(messages)
             }
@@ -279,10 +290,11 @@ where
         );
 
         // Check if a session with this id already exists for this peer, this can happen if both
-        // peers started to initiate a session at the same time, we can try to resolve this
+        // peers started to initiate a session at the same time, or if the remote peer sent two
+        // sync request messages with the same session id.
         if let Some(existing_session) = sessions
             .iter()
-            .find(|existing_session| existing_session.id == *session_id && existing_session.local)
+            .find(|existing_session| existing_session.id == *session_id)
         {
             debug!("Handle sync request containing duplicate session id");
             return self
@@ -475,6 +487,7 @@ mod tests {
     fn initiate_inbound_session(
         #[from(random_target_set)] target_set_1: TargetSet,
         #[from(random_target_set)] target_set_2: TargetSet,
+        #[from(random_target_set)] target_set_3: TargetSet,
     ) {
         test_runner(move |node: TestNode| async move {
             let (tx, _rx) = broadcast::channel(8);
@@ -494,13 +507,11 @@ mod tests {
 
             // Reject attempt to create session again
             let message =
-                SyncMessage::new(0, Message::SyncRequest(Mode::Naive, target_set_1.clone()));
+                SyncMessage::new(0, Message::SyncRequest(Mode::Naive, target_set_3.clone()));
             let result = manager.handle_message(&PEER_ID_REMOTE, &message).await;
-            assert!(matches!(
-                result,
-                Err(ReplicationError::DuplicateSession(
-                    DuplicateSessionRequestError::InboundEstablishedSession(0)
-                ))
+            println!("{result:?}");
+            assert!(matches!(result,
+                Err(ReplicationError::DuplicateSession(err)) if err == DuplicateSessionRequestError::InboundPendingSession(0)
             ));
 
             // Reject different session concerning same target set
@@ -509,9 +520,7 @@ mod tests {
             let result = manager.handle_message(&PEER_ID_REMOTE, &message).await;
             assert!(matches!(
                 result,
-                Err(ReplicationError::DuplicateSession(
-                    DuplicateSessionRequestError::InboundExistingTargetSet(target_set_2)
-                ))
+                Err(ReplicationError::DuplicateSession(err)) if err == DuplicateSessionRequestError::InboundExistingTargetSet(target_set_2)
             ));
         })
     }
