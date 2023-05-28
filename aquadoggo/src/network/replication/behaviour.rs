@@ -9,6 +9,7 @@ use libp2p::swarm::{
     THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use libp2p::{Multiaddr, PeerId};
+use log::{debug, trace};
 
 use crate::network::replication::handler::{Handler, HandlerInEvent, HandlerOutEvent};
 use crate::replication::SyncMessage;
@@ -33,6 +34,7 @@ impl Behaviour {
 
 impl Behaviour {
     pub fn send_message(&mut self, peer_id: PeerId, message: SyncMessage) {
+        trace!("Notify handler of sent sync message: {peer_id} {message:?}");
         self.events.push_back(ToSwarm::NotifyHandler {
             peer_id,
             event: HandlerInEvent::Message(message),
@@ -41,6 +43,7 @@ impl Behaviour {
     }
 
     fn handle_received_message(&mut self, peer_id: &PeerId, message: SyncMessage) {
+        trace!("Notify swarm of received sync message: {peer_id} {message:?}");
         self.events
             .push_back(ToSwarm::GenerateEvent(Event::MessageReceived(
                 *peer_id, message,
@@ -60,6 +63,7 @@ impl NetworkBehaviour for Behaviour {
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
+        debug!("Replication Behaviour: established inbound connection");
         Ok(Handler::new())
     }
 
@@ -70,6 +74,7 @@ impl NetworkBehaviour for Behaviour {
         _: &Multiaddr,
         _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
+        debug!("Replication Behaviour: established outbound connection");
         Ok(Handler::new())
     }
 
@@ -79,6 +84,7 @@ impl NetworkBehaviour for Behaviour {
         _connection_id: ConnectionId,
         handler_event: THandlerOutEvent<Self>,
     ) {
+        debug!("Replication Behaviour: connection handler event");
         match handler_event {
             HandlerOutEvent::Message(message) => {
                 self.handle_received_message(&peer, message);
@@ -109,6 +115,7 @@ impl NetworkBehaviour for Behaviour {
         _params: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
+            trace!("Poll handler: {event:?}");
             return Poll::Ready(event);
         }
 
