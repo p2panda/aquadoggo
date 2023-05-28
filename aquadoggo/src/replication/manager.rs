@@ -581,6 +581,28 @@ mod tests {
                 PEER_ID_REMOTE,
             );
 
+            // SyncRequest(0, 0, [..])─────────────────────►
+            // 
+            // ◄───────────────────────────────── Have([..])
+            // 
+            // ◄──────────────────────────── SyncDone(false)
+            // 
+            // Have([..]) ─────────────────────────────────►
+            // 
+            // Entry(..)  ─────────────────────────────────►
+            // 
+            // Entry(..) ──────────────────────────────────►
+            // 
+            // Entry(..) ──────────────────────────────────►
+            // 
+            // Entry(..) ──────────────────────────────────►
+            // 
+            // Entry(..) ──────────────────────────────────►
+            // 
+            // Entry(..) ──────────────────────────────────►
+            // 
+            // SyncDone(false) ────────────────────────────►
+
             // Send `SyncRequest` to remote
             let messages = manager_a
                 .initiate_session(&PEER_ID_REMOTE, &target_set, &Mode::Naive)
@@ -595,7 +617,8 @@ mod tests {
                 )]
             );
 
-            // Receive `Have` and `SyncDone` from remote
+            // Remote receives `SyncRequest`
+            // Send `Have` and `SyncDone` messages back to local
             let result = manager_b
                 .handle_message(&PEER_ID_LOCAL, &messages[0])
                 .await
@@ -610,6 +633,7 @@ mod tests {
                 ]
             );
 
+            // Receive `Have` and `SyncDone` messages from remote
             // Send `Have`, `Entry` and `SyncDone` messages to remote
             let result_have = manager_a
                 .handle_message(&PEER_ID_REMOTE, &result.messages[0])
@@ -633,7 +657,7 @@ mod tests {
                 SYNC_DONE_TYPE
             );
 
-            // Receive `SyncDone` from remote
+            // Remote receives `Have`, `Entry` `SyncDone` messages from local
             for (index, message) in result_have.messages.iter().enumerate() {
                 let result = manager_b
                     .handle_message(&PEER_ID_LOCAL, &message)
