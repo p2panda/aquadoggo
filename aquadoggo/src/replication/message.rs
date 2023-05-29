@@ -58,7 +58,6 @@ impl Human for Message {
     }
 }
 
-
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct SyncMessage(SessionId, Message);
 

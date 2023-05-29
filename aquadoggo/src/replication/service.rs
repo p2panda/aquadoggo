@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 use libp2p::PeerId;
-use log::{info, trace, warn, debug};
+use log::{debug, info, trace, warn};
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::Human;
 use tokio::sync::broadcast::Receiver;

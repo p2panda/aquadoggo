@@ -35,7 +35,10 @@ impl Behaviour {
 
 impl Behaviour {
     pub fn send_message(&mut self, peer_id: PeerId, message: SyncMessage) {
-        trace!("Notify handler of sent sync message: {peer_id} {}", message.display());
+        trace!(
+            "Notify handler of sent sync message: {peer_id} {}",
+            message.display()
+        );
         self.events.push_back(ToSwarm::NotifyHandler {
             peer_id,
             event: HandlerInEvent::Message(message),
@@ -44,7 +47,10 @@ impl Behaviour {
     }
 
     fn handle_received_message(&mut self, peer_id: &PeerId, message: SyncMessage) {
-        trace!("Notify swarm of received sync message: {peer_id} {}", message.display());
+        trace!(
+            "Notify swarm of received sync message: {peer_id} {}",
+            message.display()
+        );
         self.events
             .push_back(ToSwarm::GenerateEvent(Event::MessageReceived(
                 *peer_id, message,

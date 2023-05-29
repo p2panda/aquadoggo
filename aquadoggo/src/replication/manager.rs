@@ -381,7 +381,10 @@ where
         session_id: &SessionId,
         message: &Message,
     ) -> Result<SyncResult, ReplicationError> {
-        debug!("Message received: {session_id} {remote_peer:?} {}", message.display());
+        debug!(
+            "Message received: {session_id} {remote_peer:?} {}",
+            message.display()
+        );
         let sessions = self.sessions.get_mut(remote_peer);
 
         let (is_both_done, messages) = match sessions {

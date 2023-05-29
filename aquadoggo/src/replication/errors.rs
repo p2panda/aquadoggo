@@ -61,10 +61,14 @@ pub enum DuplicateSessionRequestError {
     #[error("Tried to initialise duplicate inbound replication for completed session with id {0}")]
     InboundDoneSession(u64),
 
-    #[error("Tried to initialise duplicate inbound replication session for existing target set {0:?}")]
+    #[error(
+        "Tried to initialise duplicate inbound replication session for existing target set {0:?}"
+    )]
     InboundExistingTargetSet(TargetSet),
 
-    #[error("Tried to initialise duplicate outbound replication session for existing target set {0:?}")]
+    #[error(
+        "Tried to initialise duplicate outbound replication session for existing target set {0:?}"
+    )]
     OutboundExistingTargetSet(TargetSet),
 
     #[error("Tried to initialise duplicate outbound replication session with id {0}")]
