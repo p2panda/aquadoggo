@@ -69,13 +69,48 @@ impl Validate for TargetSet {
         };
 
         let mut prev_schema_id: Option<&SchemaId> = None;
+        let mut initial_system_schema = true;
 
-        for schema_id in &self.0 {
-            // Check if it is sorted, this indirectly also checks against duplicates
-            if let Some(prev) = prev_schema_id {
-                if prev >= schema_id {
-                    return Err(TargetSetError::UnsortedSchemaIds);
+        // We need to validate that:
+        // - if system schema are included they are first in the list and ordered alphabetically
+        // - any following application schema are also ordered alphabetically
+        for (index, schema_id) in self.0.iter().enumerate() {
+            // If the first schema id is an application schema then no system schema should be
+            // included and we flip the `initial_system_schema` flag.
+            if index == 0 {
+                initial_system_schema = match schema_id {
+                    SchemaId::Application(_, _) => false,
+                    _ => true,
                 }
+            }
+
+            // Now validate the order.
+            if let Some(prev) = prev_schema_id {
+                match schema_id {
+                    // If current and previous are application schema compare them.
+                    SchemaId::Application(_, _) if !initial_system_schema => {
+                        if prev >= schema_id {
+                            return Err(TargetSetError::UnsortedSchemaIds);
+                        }
+                    }
+                    // If the current is an application schema and the previous is a system schema
+                    // flip the `initial_system_schema` flag.
+                    SchemaId::Application(_, _) if initial_system_schema => {
+                        initial_system_schema = false
+                    }
+                    // If the current is a system schema and the `initial_system_schema` flag is
+                    // false then there is an out of order system schema.
+                    _ if !initial_system_schema => {
+                        return Err(TargetSetError::UnsortedSchemaIds);
+                    }
+                    // If current and previous are both system schema then compare them.
+                    _ if initial_system_schema => {
+                        if prev >= schema_id {
+                            return Err(TargetSetError::UnsortedSchemaIds);
+                        }
+                    }
+                    _ => panic!(),
+                };
             }
 
             prev_schema_id = Some(schema_id);
@@ -104,6 +139,8 @@ mod tests {
     use p2panda_rs::serde::{deserialize_into, serialize_value};
     use p2panda_rs::test_utils::fixtures::random_document_view_id;
     use rstest::rstest;
+
+    use crate::test_utils::helpers::random_target_set;
 
     use super::TargetSet;
 
@@ -150,5 +187,13 @@ mod tests {
         );
 
         assert_eq!(result.unwrap_err().to_string(), expected_result.to_string());
+    }
+
+    #[rstest]
+    fn serialize(#[from(random_target_set)] target_set: TargetSet) {
+        assert_eq!(
+            deserialize_into::<TargetSet>(&serialize_value(cbor!(target_set))).unwrap(),
+            target_set.clone()
+        );
     }
 }
