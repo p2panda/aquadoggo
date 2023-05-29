@@ -6,6 +6,7 @@ use anyhow::Result;
 use libp2p::PeerId;
 use log::{info, trace, warn, debug};
 use p2panda_rs::schema::SchemaId;
+use p2panda_rs::Human;
 use tokio::sync::broadcast::Receiver;
 use tokio::task;
 
@@ -141,7 +142,7 @@ impl ConnectionManager {
     }
 
     async fn on_replication_message(&mut self, peer_id: PeerId, message: SyncMessage) {
-        trace!("Received SyncMessage: {:?}", message);
+        trace!("Received SyncMessage: {}", message.display());
         match self.sync_manager.handle_message(&peer_id, &message).await {
             Ok(result) => {
                 for message in result.messages {
@@ -208,8 +209,6 @@ impl ConnectionManager {
     }
 
     fn send_service_message(&mut self, message: ServiceMessage) {
-        trace!("Sending message on service channel: {:?}", message);
-
         if self.tx.send(message).is_err() {
             // Silently fail here as we don't care if the message was received at this
             // point

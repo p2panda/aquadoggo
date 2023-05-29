@@ -82,7 +82,7 @@ pub fn diff_log_heights(
             debug!(
                 "Remote log heights: {} {:?}",
                 local_author.display(),
-                remote_author_logs
+                remote_author_logs.clone().into_iter().collect::<Vec<(LogId, SeqNum)>>().sort()
             );
 
             let mut remote_needs_logs = vec![];

@@ -10,6 +10,7 @@ use libp2p::swarm::handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegot
 use libp2p::swarm::{
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, NegotiatedSubstream, SubstreamProtocol,
 };
+use log::warn;
 use thiserror::Error;
 
 use crate::network::replication::{Codec, CodecError, Protocol};
@@ -231,6 +232,7 @@ impl ConnectionHandler for Handler {
                     match Sink::poll_close(Pin::new(&mut substream), cx) {
                         Poll::Ready(res) => {
                             if res.is_err() {
+                                warn!("{res:#?}")
                                 // Don't close the connection but just drop the inbound substream.
                                 // In case the remote has more to send, they will open up a new
                                 // substream.

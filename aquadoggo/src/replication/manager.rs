@@ -6,6 +6,7 @@ use anyhow::Result;
 use log::{debug, info, warn};
 use p2panda_rs::entry::EncodedEntry;
 use p2panda_rs::operation::EncodedOperation;
+use p2panda_rs::Human;
 
 use crate::db::SqlStore;
 use crate::replication::errors::{DuplicateSessionRequestError, ReplicationError};
@@ -380,7 +381,7 @@ where
         session_id: &SessionId,
         message: &Message,
     ) -> Result<SyncResult, ReplicationError> {
-        debug!("Message {message:?} received for session {session_id} with peer {remote_peer:?}");
+        debug!("Message received: {session_id} {remote_peer:?} {}", message.display());
         let sessions = self.sessions.get_mut(remote_peer);
 
         let (is_both_done, messages) = match sessions {
