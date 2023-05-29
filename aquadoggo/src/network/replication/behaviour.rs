@@ -128,8 +128,13 @@ mod tests {
     use futures::FutureExt;
     use libp2p::swarm::{keep_alive, Swarm};
     use libp2p_swarm_test::SwarmExt;
+    use p2panda_rs::schema::SchemaId;
+    use rstest::rstest;
 
-    use crate::replication::{Message, SyncMessage, TargetSet};
+    use crate::{
+        replication::{Message, SyncMessage, TargetSet},
+        test_utils::helpers::random_target_set,
+    };
 
     use super::{Behaviour as ReplicationBehaviour, Event};
 
@@ -210,8 +215,14 @@ mod tests {
         assert!(result.is_err())
     }
 
+    #[rstest]
+    #[case(TargetSet::new(&vec![SchemaId::SchemaFieldDefinition(0)]), TargetSet::new(&vec![SchemaId::SchemaDefinition(0)]))]
+    #[case(random_target_set(), random_target_set())]
     #[tokio::test]
-    async fn swarm_behaviour_events() {
+    async fn swarm_behaviour_events(
+        #[case] target_set_1: TargetSet,
+        #[case] target_set_2: TargetSet,
+    ) {
         // Create two swarms
         let mut swarm1 = Swarm::new_ephemeral(|_| ReplicationBehaviour::new());
         let mut swarm2 = Swarm::new_ephemeral(|_| ReplicationBehaviour::new());
@@ -226,16 +237,16 @@ mod tests {
         let swarm1_peer_id = *swarm1.local_peer_id();
         let swarm2_peer_id = *swarm2.local_peer_id();
 
-        // Send a message from to swarm1 local peer from swarm2 local peer.
+        // Send a message from swarm1 to peer2.
         swarm1.behaviour_mut().send_message(
             swarm2_peer_id,
-            SyncMessage::new(0, Message::SyncRequest(0.into(), TargetSet::new(&vec![]))),
+            SyncMessage::new(0, Message::SyncRequest(0.into(), target_set_1.clone())),
         );
 
-        // Send a message from to swarm2 local peer from swarm1 local peer.
+        // Send a message from swarm2 peer1.
         swarm2.behaviour_mut().send_message(
             swarm1_peer_id,
-            SyncMessage::new(1, Message::SyncRequest(0.into(), TargetSet::new(&vec![]))),
+            SyncMessage::new(1, Message::SyncRequest(0.into(), target_set_2.clone())),
         );
 
         // Collect the next 2 behaviour events which occur in either swarms.
@@ -255,7 +266,7 @@ mod tests {
         assert_eq!(peer_id, &swarm2_peer_id);
         assert_eq!(
             message,
-            &SyncMessage::new(1, Message::SyncRequest(0.into(), TargetSet::new(&vec![])))
+            &SyncMessage::new(1, Message::SyncRequest(0.into(), target_set_2.clone()))
         );
 
         // swarm2 should have received the message from swarm1 peer.
@@ -263,7 +274,7 @@ mod tests {
         assert_eq!(peer_id, &swarm1_peer_id);
         assert_eq!(
             message,
-            &SyncMessage::new(0, Message::SyncRequest(0.into(), TargetSet::new(&vec![])))
+            &SyncMessage::new(0, Message::SyncRequest(0.into(), target_set_1))
         );
     }
 }

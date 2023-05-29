@@ -62,14 +62,14 @@ pub fn diff_log_heights(
     let mut remote_needs = Vec::new();
 
     for (local_author, local_author_logs) in local_log_heights {
-        let local_author_logs: HashMap<LogId, SeqNum> =
-            local_author_logs.to_owned().into_iter().collect();
-
         debug!(
             "Local log heights: {} {:?}",
             local_author.display(),
             local_author_logs
         );
+
+        let local_author_logs: HashMap<LogId, SeqNum> =
+            local_author_logs.to_owned().into_iter().collect();
 
         // Find all logs for a public key sent by the remote peer.
         //
@@ -95,6 +95,9 @@ pub fn diff_log_heights(
                 };
             }
 
+            // Sort the log heights.
+            remote_needs_logs.sort();
+
             // If the remote needs at least one log we push it to the remote needs.
             if !remote_needs_logs.is_empty() {
                 remote_needs.push((local_author.to_owned(), remote_needs_logs));
@@ -102,13 +105,16 @@ pub fn diff_log_heights(
         } else {
             // The author we know about locally wasn't found on the remote log heights so they
             // need everything we have.
-            remote_needs.push((
-                local_author.to_owned(),
-                local_author_logs
-                    .iter()
-                    .map(|(log_id, _)| (*log_id, SeqNum::default()))
-                    .collect(),
-            ));
+
+            let mut remote_needs_logs: Vec<(LogId, SeqNum)> = local_author_logs
+                .iter()
+                .map(|(log_id, _)| (*log_id, SeqNum::default()))
+                .collect();
+
+            // Sort the log heights.
+            remote_needs_logs.sort();
+
+            remote_needs.push((local_author.to_owned(), remote_needs_logs));
         }
     }
 
@@ -185,8 +191,8 @@ mod tests {
             vec![(
                 author_a,
                 vec![
-                    (LogId::new(1), SeqNum::new(1).unwrap()),
-                    (LogId::new(0), SeqNum::new(1).unwrap())
+                    (LogId::new(0), SeqNum::new(1).unwrap()),
+                    (LogId::new(1), SeqNum::new(1).unwrap())
                 ]
             ),]
         );

@@ -530,9 +530,7 @@ mod tests {
                 .await;
             assert!(matches!(
                 result,
-                Err(ReplicationError::DuplicateSession(
-                    DuplicateSessionRequestError::Outbound(0)
-                ))
+                Err(ReplicationError::DuplicateSession(err)) if err == DuplicateSessionRequestError::OutboundExistingTargetSet(target_set_1)
             ));
         })
     }
