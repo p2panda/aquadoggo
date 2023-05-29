@@ -124,6 +124,6 @@ pub fn random_target_set() -> TargetSet {
         SchemaId::new_application(&SchemaName::new("messages").unwrap(), &document_view_id_1);
     let document_view_id_2 = random_document_view_id();
     let schema_id_2 =
-        SchemaId::new_application(&SchemaName::new("messages").unwrap(), &document_view_id_2);
+        SchemaId::new_application(&SchemaName::new("events").unwrap(), &document_view_id_2);
     TargetSet::new(&[system_schema_id, schema_id_1, schema_id_2])
 }
