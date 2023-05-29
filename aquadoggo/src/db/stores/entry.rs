@@ -336,7 +336,9 @@ impl SqlStore {
             WHERE
                 logs.schema = $1
             GROUP BY
-                entries.public_key, entries.log_id
+                entries.public_key, CAST(entries.log_id AS NUMERIC)
+            ORDER BY
+                entries.public_key, CAST(entries.log_id AS NUMERIC)
             ",
         )
         .bind(schema_id.to_string())

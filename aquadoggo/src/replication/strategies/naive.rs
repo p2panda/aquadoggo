@@ -34,7 +34,10 @@ impl NaiveStrategy {
         }
     }
 
-    async fn local_log_heights(&self, store: &SqlStore) -> HashMap<PublicKey, Vec<(LogId, SeqNum)>> {
+    async fn local_log_heights(
+        &self,
+        store: &SqlStore,
+    ) -> HashMap<PublicKey, Vec<(LogId, SeqNum)>> {
         let mut log_heights: HashMap<PublicKey, Vec<(LogId, SeqNum)>> = HashMap::new();
 
         for schema_id in self.target_set().iter() {
@@ -49,6 +52,7 @@ impl NaiveStrategy {
             for (public_key, logs) in schema_logs {
                 let mut author_logs = log_heights.get(&public_key).cloned().unwrap_or(vec![]);
                 author_logs.extend(logs);
+                author_logs.sort();
                 log_heights.insert(public_key, author_logs);
             }
         }
