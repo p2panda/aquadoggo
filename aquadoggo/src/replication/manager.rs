@@ -514,6 +514,130 @@ mod tests {
         })
     }
 
+    //  PEER A                                 PEER B
+    //
+    //  SyncRequest(0, 0, ["A"])────────────────────►
+    //
+    //  ◄─────────────────── SyncRequest(0, 0, ["B"])
+    //
+    //  ========== PEER A REQUEST DROPPED ===========
+    //
+    //  Have([..]) ─────────────────────────────────►
+    //
+    //  Done(false) ───────────┐
+    //                         │
+    //  ◄──────────────────────┼────────── Have([..])
+    //                         │
+    //  ◄──────────────────────┼───────── Done(false)
+    //                         │
+    //                         └────────────────────►
+    //
+    //  ============== SESSION CLOSED ===============
+    #[rstest]
+    fn concurrent_requests_different_target_set(
+        #[from(random_target_set)] target_set_1: TargetSet,
+        #[from(random_target_set)] target_set_2: TargetSet,
+    ) {
+        test_runner(move |node: TestNode| async move {
+            let mode = Mode::Naive;
+            let (tx, _rx) = broadcast::channel(8);
+            let ingest = SyncIngest::new(SchemaProvider::default(), tx);
+
+            // Local peer id is < than remote, this is important for testing the deterministic
+            // handling of concurrent session requests which contain the same session id.
+            assert!(PEER_ID_LOCAL < PEER_ID_REMOTE);
+
+            // Local peer A initiates a session with id 0.
+            let mut manager_a =
+                SyncManager::new(node.context.store.clone(), ingest.clone(), PEER_ID_LOCAL);
+            let result = manager_a
+                .initiate_session(&PEER_ID_REMOTE, &target_set_1, &mode)
+                .await;
+
+            let sync_messages = result.unwrap();
+            assert_eq!(sync_messages.len(), 1);
+            let sync_request_a = sync_messages[0].clone();
+
+            // Remote peer B initiates a session with id 0.
+            let mut manager_b =
+                SyncManager::new(node.context.store.clone(), ingest, PEER_ID_REMOTE);
+            let result = manager_b
+                .initiate_session(&PEER_ID_LOCAL, &target_set_2, &mode)
+                .await;
+
+            let sync_messages = result.unwrap();
+            assert_eq!(sync_messages.len(), 1);
+            let sync_request_b = sync_messages[0].clone();
+
+            // Both peers send and handle the requests concurrently.
+            let result = manager_a
+                .handle_message(&PEER_ID_REMOTE, &sync_request_b)
+                .await;
+            let response = result.unwrap();
+
+            // We expect Peer A to drop their pending outgoing session and respond to the request
+            // from Peer B.
+            assert_eq!(response.messages.len(), 2);
+            let (have_message_a, done_message_a) =
+                (response.messages[0].clone(), response.messages[1].clone());
+
+            let result = manager_b
+                .handle_message(&PEER_ID_LOCAL, &sync_request_a)
+                .await;
+            let response = result.unwrap();
+
+            // We expect Peer B to drop the incomming request from Peer A and simply wait
+            // for a response from it's original request.
+            assert_eq!(response.messages.len(), 0);
+
+            // Both peers have exactly one session running.
+            let manager_a_sessions = manager_a.get_sessions(&PEER_ID_REMOTE);
+            assert_eq!(manager_a_sessions.len(), 1);
+
+            let manager_b_sessions = manager_b.get_sessions(&PEER_ID_LOCAL);
+            assert_eq!(manager_b_sessions.len(), 1);
+
+            // Peer B processes the `Have` and `SyncDone` messages from Peer A.
+            let result = manager_b
+                .handle_message(&PEER_ID_LOCAL, &have_message_a)
+                .await;
+            let response = result.unwrap();
+            assert_eq!(response.messages.len(), 2);
+
+            // They send their own `Have` and `SyncDone` messages.
+            let (have_message_b, done_message_b) =
+                (response.messages[0].clone(), response.messages[1].clone());
+
+            // Sync done, they send no more messages.
+            let result = manager_b
+                .handle_message(&PEER_ID_LOCAL, &done_message_a)
+                .await;
+            let response = result.unwrap();
+            assert_eq!(response.messages.len(), 0);
+
+            // Peer A processes both the `Have` and `SyncDone` messages from Peer B and produces
+            // no new messages.
+            let result = manager_a
+                .handle_message(&PEER_ID_REMOTE, &have_message_b)
+                .await;
+            let response = result.unwrap();
+            assert_eq!(response.messages.len(), 0);
+
+            let result = manager_a
+                .handle_message(&PEER_ID_REMOTE, &done_message_b)
+                .await;
+            let response = result.unwrap();
+            assert_eq!(response.messages.len(), 0);
+
+            // After processing all messages both peers should have no sessions remaining.
+            let manager_a_sessions = manager_a.get_sessions(&PEER_ID_REMOTE);
+            assert_eq!(manager_a_sessions.len(), 0);
+
+            let manager_b_sessions = manager_b.get_sessions(&PEER_ID_LOCAL);
+            assert_eq!(manager_b_sessions.len(), 0);
+        })
+    }
+
     #[rstest]
     fn inbound_checks_supported_mode(#[from(random_target_set)] target_set: TargetSet) {
         test_runner(move |node: TestNode| async move {
