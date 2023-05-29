@@ -196,7 +196,7 @@ where
         existing_session: &Session,
     ) -> Result<SyncResult, ReplicationError> {
         match existing_session.local {
-            // Remote peer sent a sync request for an already pending session, we should ignore
+            // Remote peer sent a sync request for an already pending inbound session, we should ignore
             // this second request.
             false => Err(DuplicateSessionRequestError::InboundPendingSession(
                 existing_session.id,
@@ -339,6 +339,7 @@ where
 
         // We're done, clean up after ourselves
         if is_both_done {
+            debug!("Both peers done, removing session: {session_id:?} {remote_peer:?}");
             self.remove_session(remote_peer, session_id);
         }
 
@@ -498,7 +499,6 @@ mod tests {
             let message =
                 SyncMessage::new(0, Message::SyncRequest(Mode::Naive, target_set_3.clone()));
             let result = manager.handle_message(&PEER_ID_REMOTE, &message).await;
-            println!("{result:?}");
             assert!(matches!(result,
                 Err(ReplicationError::DuplicateSession(err)) if err == DuplicateSessionRequestError::InboundPendingSession(0)
             ));
