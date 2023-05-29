@@ -6,6 +6,7 @@ use p2panda_rs::entry::EncodedEntry;
 use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::EncodedOperation;
+use p2panda_rs::Human;
 use serde::de::Visitor;
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Serialize};
@@ -42,6 +43,22 @@ impl Message {
     }
 }
 
+impl Human for Message {
+    fn display(&self) -> String {
+        match &self {
+            Message::Have(log_heights) => {
+                let log_heights: Vec<(String, &Vec<(LogId, SeqNum)>)> = log_heights
+                    .iter()
+                    .map(|(public_key, log_heights)| (public_key.to_string(), log_heights))
+                    .collect();
+                format!("Have({log_heights:?})")
+            }
+            message => format!("{message:?}"),
+        }
+    }
+}
+
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct SyncMessage(SessionId, Message);
 
@@ -60,6 +77,12 @@ impl SyncMessage {
 
     pub fn message(&self) -> &Message {
         &self.1
+    }
+}
+
+impl Human for SyncMessage {
+    fn display(&self) -> String {
+        format!("SyncMessage({:?}, {})", self.0, self.1.display())
     }
 }
 
