@@ -79,11 +79,14 @@ pub fn diff_log_heights(
             let remote_author_logs: HashMap<LogId, SeqNum> =
                 remote_author_logs.to_owned().into_iter().collect();
 
-            debug!(
-                "Remote log heights: {} {:?}",
-                local_author.display(),
-                remote_author_logs.clone().into_iter().collect::<Vec<(LogId, SeqNum)>>().sort()
-            );
+            debug!("Remote log heights: {} {:?}", local_author.display(), {
+                let mut logs = remote_author_logs
+                    .clone()
+                    .into_iter()
+                    .collect::<Vec<(LogId, SeqNum)>>();
+                logs.sort();
+                logs
+            });
 
             let mut remote_needs_logs = vec![];
 
