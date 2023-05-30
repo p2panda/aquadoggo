@@ -210,7 +210,8 @@ impl ConnectionHandler for Handler {
                                 HandlerOutEvent::Message(message),
                             ));
                         }
-                        Poll::Ready(Some(Err(_))) => {
+                        Poll::Ready(Some(Err(err))) => {
+                            warn!("{err:#?}");
                             // More serious errors, close this side of the stream. If the peer is
                             // still around, they will re-establish their connection
                             self.inbound_substream =
