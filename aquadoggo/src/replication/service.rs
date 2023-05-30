@@ -23,6 +23,12 @@ use crate::schema::SchemaProvider;
 const MAX_SESSIONS_PER_CONNECTION: usize = 3;
 
 #[derive(PartialEq, Eq, PartialOrd, Clone, Debug, Hash)]
+
+/// Identifier for a connection to another peer. The `ConnectionId` is optional as we need to
+/// identify the local peer in the replication manager, but in this case there is no single
+/// connection to associate with.
+/// 
+/// @TODO: This could be modelled better maybe...
 pub struct PeerConnectionId(PeerId, Option<ConnectionId>);
 
 impl Display for PeerConnectionId {
