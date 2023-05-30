@@ -247,11 +247,13 @@ impl EventLoop {
             // ~~~~
             SwarmEvent::Behaviour(BehaviourEvent::Mdns(event)) => match event {
                 mdns::Event::Discovered(list) => {
-                    for (peer, multiaddr) in list {
-                        debug!("mDNS discovered a new peer: {peer}");
+                    for (peer_id, multiaddr) in list {
+                        debug!("mDNS discovered a new peer: {peer_id}");
 
-                        if let Err(err) = self.swarm.dial(multiaddr) {
-                            warn!("Failed to dial: {}", err);
+                        if !self.swarm.is_connected(&peer_id) {
+                            if let Err(err) = self.swarm.dial(multiaddr) {
+                                warn!("Failed to dial: {}", err);
+                            }
                         }
                     }
                 }
@@ -423,9 +425,12 @@ impl EventLoop {
             // Replication
             // ~~~~~~~~~~~
             SwarmEvent::Behaviour(BehaviourEvent::Replication(event)) => match event {
-                replication::Event::MessageReceived(peer_id, message, connection_id) => self.send_service_message(
-                    ServiceMessage::ReceivedReplicationMessage(peer_id, connection_id, message),
-                ),
+                replication::Event::MessageReceived(peer_id, message, connection_id) => self
+                    .send_service_message(ServiceMessage::ReceivedReplicationMessage(
+                        peer_id,
+                        connection_id,
+                        message,
+                    )),
                 replication::Event::ConnectionEstablished(peer_id, connection_id) => {
                     // Inform other services about new connection
                     self.send_service_message(ServiceMessage::ConnectionEstablished(

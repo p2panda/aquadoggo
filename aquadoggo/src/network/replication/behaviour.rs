@@ -6,8 +6,8 @@ use std::task::{Context, Poll};
 use libp2p::core::Endpoint;
 use libp2p::swarm::derive_prelude::ConnectionEstablished;
 use libp2p::swarm::{
-    ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, NotifyHandler, PollParameters,
-    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm, ConnectionClosed,
+    ConnectionClosed, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, NotifyHandler,
+    PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use libp2p::{Multiaddr, PeerId};
 use log::{debug, trace, warn};
@@ -125,7 +125,11 @@ impl NetworkBehaviour for Behaviour {
                         connection_id,
                     )));
             }
-            FromSwarm::ConnectionClosed(ConnectionClosed { peer_id, connection_id, ..}) => {
+            FromSwarm::ConnectionClosed(ConnectionClosed {
+                peer_id,
+                connection_id,
+                ..
+            }) => {
                 self.events
                     .push_back(ToSwarm::GenerateEvent(Event::ConnectionClosed(
                         peer_id,
@@ -287,29 +291,46 @@ mod tests {
         // Collect the next 2 behaviour events which occur in either swarms.
         for _ in 0..2 {
             tokio::select! {
-                Event::MessageReceived(peer_id, message, _) = swarm1.next_behaviour_event() => res1.push((peer_id, message)),
-                Event::MessageReceived(peer_id, message, _) = swarm2.next_behaviour_event() => res2.push((peer_id, message)),
+                Event::ConnectionEstablished(peer_id, _) = swarm1.next_behaviour_event() => res1.push((peer_id, None)),
+                Event::ConnectionEstablished(peer_id, _) = swarm2.next_behaviour_event() => res2.push((peer_id, None)),
+            }
+        }
+
+        // And again add the next 2 behaviour events which occur in either swarms.
+        for _ in 0..2 {
+            tokio::select! {
+                Event::MessageReceived(peer_id, message, _) = swarm1.next_behaviour_event() => res1.push((peer_id, Some(message))),
+                Event::MessageReceived(peer_id, message, _) = swarm2.next_behaviour_event() => res2.push((peer_id, Some(message))),
             }
         }
 
         // Each swarm should have emitted exactly one event.
-        assert_eq!(res1.len(), 1);
-        assert_eq!(res2.len(), 1);
+        assert_eq!(res1.len(), 2);
+        assert_eq!(res2.len(), 2);
+
+        // The first event should have been a ConnectionEstablished containing the expected peer id.
+        let (peer_id, message) = res1[0].clone();
+        assert_eq!(peer_id, swarm2_peer_id);
+        assert!(message.is_none());
+
+        let (peer_id, message) = res2[0].clone();
+        assert_eq!(peer_id, swarm1_peer_id);
+        assert!(message.is_none());
 
         // swarm1 should have received the message from swarm2 peer.
-        let (peer_id, message) = &res1[0];
-        assert_eq!(peer_id, &swarm2_peer_id);
+        let (peer_id, message) = res1[1].clone();
+        assert_eq!(peer_id, swarm2_peer_id);
         assert_eq!(
-            message,
-            &SyncMessage::new(1, Message::SyncRequest(0.into(), target_set_2.clone()))
+            message.unwrap(),
+            SyncMessage::new(1, Message::SyncRequest(0.into(), target_set_2.clone()))
         );
 
         // swarm2 should have received the message from swarm1 peer.
-        let (peer_id, message) = &res2[0];
-        assert_eq!(peer_id, &swarm1_peer_id);
+        let (peer_id, message) = res2[1].clone();
+        assert_eq!(peer_id, swarm1_peer_id);
         assert_eq!(
-            message,
-            &SyncMessage::new(0, Message::SyncRequest(0.into(), target_set_1))
+            message.unwrap(),
+            SyncMessage::new(0, Message::SyncRequest(0.into(), target_set_1))
         );
     }
 }

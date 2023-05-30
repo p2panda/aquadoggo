@@ -119,7 +119,7 @@ where
         }
     }
 
-    fn remove_session(&mut self, remote_peer: &P, session_id: &SessionId) {
+    pub fn remove_session(&mut self, remote_peer: &P, session_id: &SessionId) {
         let sessions = self.sessions.get_mut(remote_peer);
 
         if let Some(sessions) = sessions {

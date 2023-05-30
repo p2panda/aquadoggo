@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::time::Duration;
 
 use anyhow::Result;
 use libp2p::swarm::ConnectionId;
@@ -11,6 +12,7 @@ use p2panda_rs::schema::SchemaId;
 use p2panda_rs::Human;
 use tokio::sync::broadcast::Receiver;
 use tokio::task;
+use tokio::time::sleep;
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
@@ -20,6 +22,8 @@ use crate::replication::errors::ReplicationError;
 use crate::replication::{Mode, Session, SyncIngest, SyncManager, SyncMessage, TargetSet};
 use crate::schema::SchemaProvider;
 
+use super::SessionId;
+
 const MAX_SESSIONS_PER_CONNECTION: usize = 3;
 
 #[derive(PartialEq, Eq, PartialOrd, Clone, Debug, Hash)]
@@ -27,7 +31,7 @@ const MAX_SESSIONS_PER_CONNECTION: usize = 3;
 /// Identifier for a connection to another peer. The `ConnectionId` is optional as we need to
 /// identify the local peer in the replication manager, but in this case there is no single
 /// connection to associate with.
-/// 
+///
 /// @TODO: This could be modelled better maybe...
 pub struct PeerConnectionId(PeerId, Option<ConnectionId>);
 
@@ -77,6 +81,7 @@ pub async fn replication_service(
         target_set,
     );
 
+    let scheduler_handle = task::spawn(ConnectionManager::start_scheduler(tx.clone()));
     let handle = task::spawn(manager.run());
 
     if tx_ready.send(()).is_err() {
@@ -85,6 +90,7 @@ pub async fn replication_service(
 
     tokio::select! {
         _ = handle => (),
+        _ = scheduler_handle => (),
         _ = shutdown => {
             // @TODO: Wait until all pending replication processes are completed during graceful
             // shutdown
@@ -158,19 +164,15 @@ impl ConnectionManager {
     async fn on_connection_closed(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
         // Clear running replication sessions from sync manager
         info!("Connection closed: remove sessions with peer: {}", peer_id);
-        self.sync_manager
-            .remove_sessions(&PeerConnectionId(peer_id, Some(connection_id)));
+
+        let peer_connection_id = PeerConnectionId(peer_id, Some(connection_id));
+
+        self.sync_manager.remove_sessions(&peer_connection_id);
 
         // Remove peer from our connections table
-        if self
-            .connections
-            .remove(&PeerConnectionId(peer_id, Some(connection_id)))
-            .is_none()
-        {
+        if self.connections.remove(&peer_connection_id).is_none() {
             warn!("Tried to remove unknown connection");
         }
-
-        self.update_sessions().await;
     }
 
     async fn on_replication_message(
@@ -180,6 +182,9 @@ impl ConnectionManager {
         connection_id: ConnectionId,
     ) {
         trace!("Received SyncMessage: {}", message.display());
+
+        let session_id = message.session_id();
+
         match self
             .sync_manager
             .handle_message(&PeerConnectionId(peer_id, Some(connection_id)), &message)
@@ -195,22 +200,28 @@ impl ConnectionManager {
                 }
 
                 if result.is_done {
-                    self.on_replication_finished(peer_id, connection_id).await;
+                    self.on_replication_finished(peer_id, connection_id, session_id)
+                        .await;
                 }
             }
             Err(err) => {
-                self.on_replication_error(peer_id, connection_id, err).await;
+                self.on_replication_error(peer_id, connection_id, session_id, err)
+                    .await;
             }
         }
     }
 
-    async fn on_replication_finished(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
+    async fn on_replication_finished(
+        &mut self,
+        peer_id: PeerId,
+        connection_id: ConnectionId,
+        session_id: SessionId,
+    ) {
         info!("Finished replication with peer {}", peer_id);
 
-        match self
-            .connections
-            .get_mut(&PeerConnectionId(peer_id, Some(connection_id)))
-        {
+        let peer_connection_id = PeerConnectionId(peer_id, Some(connection_id));
+
+        match self.connections.get_mut(&peer_connection_id) {
             Some(status) => {
                 status.successful_count += 1;
             }
@@ -218,22 +229,20 @@ impl ConnectionManager {
                 panic!("Tried to access unknown peer");
             }
         }
-
-        self.update_sessions().await;
     }
 
     async fn on_replication_error(
         &mut self,
         peer_id: PeerId,
         connection_id: ConnectionId,
+        session_id: SessionId,
         error: ReplicationError,
     ) {
         info!("Replication with peer {} failed: {}", peer_id, error);
 
-        match self
-            .connections
-            .get_mut(&PeerConnectionId(peer_id, Some(connection_id)))
-        {
+        let peer_connection_id = PeerConnectionId(peer_id, Some(connection_id));
+
+        match self.connections.get_mut(&peer_connection_id) {
             Some(status) => {
                 status.failed_count += 1;
             }
@@ -242,11 +251,13 @@ impl ConnectionManager {
             }
         }
 
-        // @TODO: Ideally we would know which session the error came from and only close that one.
-        self.sync_manager
-            .remove_sessions(&PeerConnectionId(peer_id, Some(connection_id)));
-
-        self.update_sessions().await;
+        match error {
+            ReplicationError::StrategyFailed(_) | ReplicationError::Validation(_) => {
+                self.sync_manager
+                    .remove_session(&peer_connection_id, &session_id);
+            }
+            _ => (), // Don't try and close the session on other errors as it should not have been initiated
+        }
     }
 
     async fn handle_service_message(&mut self, message: ServiceMessage) {
@@ -261,11 +272,15 @@ impl ConnectionManager {
                 self.on_replication_message(peer_id, message, connection_id)
                     .await;
             }
+            ServiceMessage::InitiateReplication => {
+                info!("Initiate replication");
+                self.update_sessions().await;
+            }
             _ => (), // Ignore all other messages
         }
     }
 
-    fn send_service_message(&mut self, message: ServiceMessage) {
+    fn send_service_message(&self, message: ServiceMessage) {
         if self.tx.send(message).is_err() {
             // Silently fail here as we don't care if the message was received at this
             // point
@@ -313,7 +328,9 @@ impl ConnectionManager {
                 for message in messages {
                     self.send_service_message(ServiceMessage::SentReplicationMessage(
                         peer_connection_id.0,
-                        peer_connection_id.1.expect("Remote peer found without a connection id"),
+                        peer_connection_id
+                            .1
+                            .expect("Remote peer found without a connection id"),
                         message,
                     ));
                 }
@@ -331,6 +348,16 @@ impl ConnectionManager {
                 Err(err) => {
                     panic!("Service bus subscriber failed: {}", err);
                 }
+            }
+        }
+    }
+
+    pub async fn start_scheduler(tx: ServiceSender) {
+        loop {
+            sleep(Duration::from_secs(5)).await;
+            if tx.send(ServiceMessage::InitiateReplication).is_err() {
+                // Silently fail here as we don't care if the message was received at this
+                // point
             }
         }
     }
