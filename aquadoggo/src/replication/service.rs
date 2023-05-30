@@ -188,7 +188,8 @@ impl ConnectionManager {
             }
         }
 
-        // @TODO: SyncManager should remove session internally on critical errors
+        // @TODO: Ideally we would know which session the error came from and only close that one.
+        self.sync_manager.remove_sessions(&peer_id);
 
         self.update_sessions().await;
     }
