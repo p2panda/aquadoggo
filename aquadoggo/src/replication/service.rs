@@ -37,6 +37,7 @@ impl Display for PeerConnectionId {
             f,
             "{}{:?}",
             self.0,
+            // If we don't pass a connection id then we default to `0`
             self.1.unwrap_or(ConnectionId::new_unchecked(0))
         )
     }
