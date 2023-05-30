@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use libp2p::PeerId;
+use libp2p::swarm::ConnectionId;
 use p2panda_rs::operation::OperationId;
 
 use crate::manager::Sender;
@@ -16,14 +17,14 @@ pub enum ServiceMessage {
     NewOperation(OperationId),
 
     /// Node established a bi-directional connection to another node.
-    ConnectionEstablished(PeerId),
+    ConnectionEstablished(PeerId, ConnectionId),
 
     /// Node closed a connection to another node.
-    ConnectionClosed(PeerId),
+    ConnectionClosed(PeerId, ConnectionId),
 
     /// Node sent a message to remote node for replication.
-    SentReplicationMessage(PeerId, SyncMessage),
+    SentReplicationMessage(PeerId, ConnectionId, SyncMessage),
 
     /// Node received a message from remote node for replication.
-    ReceivedReplicationMessage(PeerId, SyncMessage),
+    ReceivedReplicationMessage(PeerId, ConnectionId, SyncMessage),
 }

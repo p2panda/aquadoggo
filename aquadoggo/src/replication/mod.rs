@@ -15,7 +15,7 @@ pub use ingest::SyncIngest;
 pub use manager::SyncManager;
 pub use message::{LiveMode, LogHeight, Message, SyncMessage};
 pub use mode::Mode;
-pub use service::replication_service;
+pub use service::{replication_service, PeerConnectionId};
 pub use session::{Session, SessionId, SessionState};
 pub use strategies::{NaiveStrategy, SetReconciliationStrategy, StrategyResult};
 pub use target_set::TargetSet;

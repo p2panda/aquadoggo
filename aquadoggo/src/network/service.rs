@@ -159,7 +159,7 @@ impl EventLoop {
 
     /// Handle an incoming message via the communication bus from other services.
     async fn handle_service_message(&mut self, message: ServiceMessage) {
-        if let ServiceMessage::SentReplicationMessage(peer_id, sync_message) = message {
+        if let ServiceMessage::SentReplicationMessage(peer_id, _connection_id, sync_message) = message {
             self.swarm
                 .behaviour_mut()
                 .replication
@@ -202,9 +202,6 @@ impl EventLoop {
                         }
                     }
                 }
-
-                // Inform other services about new connection
-                self.send_service_message(ServiceMessage::ConnectionEstablished(peer_id));
             }
             SwarmEvent::ConnectionClosed {
                 peer_id,
@@ -213,9 +210,6 @@ impl EventLoop {
                 cause,
             } => {
                 info!("ConnectionClosed: {peer_id} {endpoint:?} {num_established} {cause:?}");
-
-                // Inform other services about closed connection
-                self.send_service_message(ServiceMessage::ConnectionClosed(peer_id));
             }
             SwarmEvent::ExpiredListenAddr {
                 listener_id,
@@ -429,9 +423,23 @@ impl EventLoop {
             // Replication
             // ~~~~~~~~~~~
             SwarmEvent::Behaviour(BehaviourEvent::Replication(event)) => match event {
-                replication::Event::MessageReceived(peer_id, message) => self.send_service_message(
-                    ServiceMessage::ReceivedReplicationMessage(peer_id, message),
+                replication::Event::MessageReceived(peer_id, message, connection_id) => self.send_service_message(
+                    ServiceMessage::ReceivedReplicationMessage(peer_id, connection_id, message),
                 ),
+                replication::Event::ConnectionEstablished(peer_id, connection_id) => {
+                    // Inform other services about new connection
+                    self.send_service_message(ServiceMessage::ConnectionEstablished(
+                        peer_id,
+                        connection_id,
+                    ));
+                }
+                replication::Event::ConnectionClosed(peer_id, connection_id) => {
+                    // Inform other services about closed connection
+                    self.send_service_message(ServiceMessage::ConnectionClosed(
+                        peer_id,
+                        connection_id,
+                    ));
+                }
             },
 
             // ~~~~~~~
