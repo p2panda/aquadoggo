@@ -168,18 +168,30 @@ mod tests {
     }
 
     #[rstest]
-    fn deserialize_unsorted_target_set() {
-        let unsorted_schema_ids = [
-            "venues_0020c13cdc58dfc6f4ebd32992ff089db79980363144bdb2743693a019636fa72ec8",
-            "alpacas_00202dce4b32cd35d61cf54634b93a526df333c5ed3d93230c2f026f8d1ecabc0cd7",
-        ];
-        let result = deserialize_into::<TargetSet>(&serialize_value(cbor!(unsorted_schema_ids)));
+    #[case(vec![
+        "venues_0020c13cdc58dfc6f4ebd32992ff089db79980363144bdb2743693a019636fa72ec8".to_string(),
+        "alpacas_00202dce4b32cd35d61cf54634b93a526df333c5ed3d93230c2f026f8d1ecabc0cd7".to_string(),
+    ])]
+    #[case(vec![
+        "alpacas_00202dce4b32cd35d61cf54634b93a526df333c5ed3d93230c2f026f8d1ecabc0cd7".to_string(),
+        "schema_field_definition_v1".to_string(),
+    ])]
+    #[case(vec![
+        "schema_field_definition_v1".to_string(),
+        "schema_definition_v1".to_string(),
+    ])]
+    #[case(vec![
+        "schema_definition_v1".to_string(),
+        "alpacas_00202dce4b32cd35d61cf54634b93a526df333c5ed3d93230c2f026f8d1ecabc0cd7".to_string(),
+        "schema_field_definition_v1".to_string(),
+    ])]
+    fn deserialize_unsorted_target_set(#[case] schema_ids: Vec<String>) {
+        let result = deserialize_into::<TargetSet>(&serialize_value(cbor!(schema_ids)));
 
         let expected_result = ciborium::de::Error::<std::io::Error>::Semantic(
             None,
             "Target set contains unsorted or duplicate schema ids".to_string(),
         );
-
         assert_eq!(result.unwrap_err().to_string(), expected_result.to_string());
     }
 
