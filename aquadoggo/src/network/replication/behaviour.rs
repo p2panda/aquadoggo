@@ -134,7 +134,11 @@ impl NetworkBehaviour for Behaviour {
                 ..
             }) => {
                 if other_established > 0 {
-                    warn!("Multiple connections established to peer: {} {}", other_established + 1, peer_id);
+                    warn!(
+                        "Multiple connections established to peer: {} {}",
+                        other_established + 1,
+                        peer_id
+                    );
                 }
                 self.events
                     .push_back(ToSwarm::GenerateEvent(Event::ConnectionEstablished(
@@ -171,7 +175,7 @@ impl NetworkBehaviour for Behaviour {
 #[cfg(test)]
 mod tests {
     use futures::FutureExt;
-    use libp2p::swarm::{keep_alive, Swarm};
+    use libp2p::swarm::{keep_alive, ConnectionId, Swarm};
     use libp2p_swarm_test::SwarmExt;
     use p2panda_rs::schema::SchemaId;
     use rstest::rstest;
@@ -247,6 +251,7 @@ mod tests {
         // Send a message from to swarm1 local peer from swarm2 local peer.
         swarm1.behaviour_mut().send_message(
             swarm2_peer_id,
+            ConnectionId::new_unchecked(0),
             SyncMessage::new(0, Message::SyncRequest(0.into(), TargetSet::new(&vec![]))),
         );
 
@@ -285,12 +290,14 @@ mod tests {
         // Send a message from swarm1 to peer2.
         swarm1.behaviour_mut().send_message(
             swarm2_peer_id,
+            ConnectionId::new_unchecked(0),
             SyncMessage::new(0, Message::SyncRequest(0.into(), target_set_1.clone())),
         );
 
         // Send a message from swarm2 peer1.
         swarm2.behaviour_mut().send_message(
             swarm1_peer_id,
+            ConnectionId::new_unchecked(0),
             SyncMessage::new(1, Message::SyncRequest(0.into(), target_set_2.clone())),
         );
 
