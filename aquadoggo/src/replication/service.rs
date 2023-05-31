@@ -100,6 +100,7 @@ pub async fn replication_service(
     Ok(())
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct PeerStatus {
     peer_id: PeerId,
     successful_count: usize,
@@ -116,8 +117,14 @@ impl PeerStatus {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PeerConnections {
+    status: PeerStatus,
+    connections: Vec<ConnectionId>,
+}
+
 struct ConnectionManager {
-    connections: HashMap<PeerConnectionId, PeerStatus>,
+    connections: HashMap<PeerId, PeerConnections>,
     sync_manager: SyncManager<PeerConnectionId>,
     tx: ServiceSender,
     rx: Receiver<ServiceMessage>,
@@ -145,17 +152,57 @@ impl ConnectionManager {
         }
     }
 
+    fn remove_connection(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
+        let peer = self.connections.get_mut(&peer_id);
+
+        match peer {
+            Some(peer) => {
+                if peer
+                    .connections
+                    .iter()
+                    .find(|id| *id != &connection_id)
+                    .is_none()
+                {
+                    warn!("Tried to remove unknown connection");
+                };
+
+                peer.connections = peer
+                    .connections
+                    .iter()
+                    .filter(|id| *id != &connection_id)
+                    .map(ConnectionId::to_owned)
+                    .collect();
+            }
+            None => {
+                warn!("Tried to remove connection from unknown peer");
+            }
+        }
+    }
+
     async fn on_connection_established(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
         info!("Connection established with peer: {}", peer_id);
-        if self
-            .connections
-            .insert(
-                PeerConnectionId(peer_id, Some(connection_id)),
-                PeerStatus::new(&peer_id),
-            )
-            .is_some()
-        {
-            warn!("Duplicate established connection encountered");
+        let peer = self.connections.get_mut(&peer_id);
+
+        match peer {
+            Some(peer) => {
+                if peer
+                    .connections
+                    .iter()
+                    .find(|id| *id == &connection_id)
+                    .is_some()
+                {
+                    warn!("Duplicate established connection encountered");
+                } else {
+                    peer.connections.push(connection_id)
+                }
+            }
+            None => {
+                let peer_connections = PeerConnections {
+                    status: PeerStatus::new(&peer_id),
+                    connections: vec![connection_id],
+                };
+                self.connections.insert(peer_id, peer_connections);
+            }
         }
 
         self.update_sessions().await;
@@ -169,10 +216,7 @@ impl ConnectionManager {
 
         self.sync_manager.remove_sessions(&peer_connection_id);
 
-        // Remove peer from our connections table
-        if self.connections.remove(&peer_connection_id).is_none() {
-            warn!("Tried to remove unknown connection");
-        }
+        self.remove_connection(peer_id, connection_id)
     }
 
     async fn on_replication_message(
@@ -218,17 +262,18 @@ impl ConnectionManager {
         session_id: SessionId,
     ) {
         info!("Finished replication with peer {}", peer_id);
-
-        let peer_connection_id = PeerConnectionId(peer_id, Some(connection_id));
-
-        match self.connections.get_mut(&peer_connection_id) {
-            Some(status) => {
-                status.successful_count += 1;
+        match self.connections.get_mut(&peer_id) {
+            Some(peer) => {
+                peer.status.successful_count += 1;
             }
             None => {
                 panic!("Tried to access unknown peer");
             }
         }
+
+        let peer_connection_id = PeerConnectionId(peer_id, Some(connection_id));
+        self.sync_manager
+            .remove_session(&peer_connection_id, &session_id);
     }
 
     async fn on_replication_error(
@@ -240,11 +285,9 @@ impl ConnectionManager {
     ) {
         info!("Replication with peer {} failed: {}", peer_id, error);
 
-        let peer_connection_id = PeerConnectionId(peer_id, Some(connection_id));
-
-        match self.connections.get_mut(&peer_connection_id) {
-            Some(status) => {
-                status.failed_count += 1;
+        match self.connections.get_mut(&peer_id) {
+            Some(peer) => {
+                peer.status.failed_count += 1;
             }
             None => {
                 panic!("Tried to access unknown peer");
@@ -253,8 +296,11 @@ impl ConnectionManager {
 
         match error {
             ReplicationError::StrategyFailed(_) | ReplicationError::Validation(_) => {
+                let peer_connection_id = PeerConnectionId(peer_id, Some(connection_id));
                 self.sync_manager
                     .remove_session(&peer_connection_id, &session_id);
+
+                self.remove_connection(peer_id, connection_id);
             }
             _ => (), // Don't try and close the session on other errors as it should not have been initiated
         }
@@ -292,23 +338,28 @@ impl ConnectionManager {
         let attempt_peers: Vec<PeerConnectionId> = self
             .connections
             .iter()
-            .filter_map(|(peer_connection_id, peer_status)| {
+            .flat_map(|(peer_id, peer_connections)| {
                 // Find out how many sessions we know about for each peer
-                let sessions = self.sync_manager.get_sessions(&peer_connection_id);
-                let active_sessions: Vec<&Session> = sessions
-                    .iter()
-                    .filter(|session| session.is_done())
-                    .collect();
+                let mut connections = vec![];
+                for connection_id in &peer_connections.connections {
+                    let peer_connection_id = PeerConnectionId(*peer_id, Some(*connection_id));
+                    let sessions = self.sync_manager.get_sessions(&peer_connection_id);
+                    let active_sessions: Vec<&Session> = sessions
+                        .iter()
+                        .filter(|session| session.is_done())
+                        .collect();
 
-                // Check if we're running too many sessions with that peer on this connection already
-                if active_sessions.len() < MAX_SESSIONS_PER_CONNECTION {
-                    return Some(peer_connection_id.to_owned());
+                    // Check if we're running too many sessions with that peer on this connection already
+                    if active_sessions.len() < MAX_SESSIONS_PER_CONNECTION {
+                        connections.push(peer_connection_id.to_owned());
+                    } else {
+                        debug!(
+                            "Max sessions reached for connection: {:?}",
+                            peer_connection_id
+                        );    
+                    }
                 }
-                debug!(
-                    "Max sessions reached for connection: {:?}",
-                    peer_connection_id
-                );
-                None
+                connections
             })
             .collect();
 
