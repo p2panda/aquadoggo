@@ -156,10 +156,7 @@ impl ConnectionManager {
 
         match peer {
             Some(peer) => {
-                if !peer
-                    .connections
-                    .iter().any(|id| id == &connection_id)
-                {
+                if !peer.connections.iter().any(|id| id == &connection_id) {
                     debug!("Tried to remove unknown connection: {peer_id} {connection_id:?}");
                 } else {
                     debug!("Remove connection: {peer_id} {connection_id:?}");
@@ -184,11 +181,7 @@ impl ConnectionManager {
 
         match peer {
             Some(peer) => {
-                if peer
-                    .connections
-                    .iter()
-                    .any(|id| id == &connection_id)
-                {
+                if peer.connections.iter().any(|id| id == &connection_id) {
                     warn!("Duplicate established connection encountered");
                 } else {
                     peer.connections.push(connection_id)

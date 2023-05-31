@@ -323,9 +323,9 @@ impl ConnectionHandler for Handler {
                         }
                         Poll::Ready(Err(err)) => {
                             warn!("{err:#?}");
-                            return Poll::Ready(ConnectionHandlerEvent::Close(HandlerError::Codec(
-                                err,
-                            )));
+                            return Poll::Ready(ConnectionHandlerEvent::Close(
+                                HandlerError::Codec(err),
+                            ));
                         }
                         Poll::Pending => {
                             self.outbound_substream =

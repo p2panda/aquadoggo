@@ -37,7 +37,8 @@ fn remote_requires_entries(
 
                 trace!(
                     "Remote needs entries from {:?} for {:?}",
-                    from_seq_num, log_id
+                    from_seq_num,
+                    log_id
                 );
 
                 Some((log_id.to_owned(), from_seq_num))
@@ -68,8 +69,7 @@ pub fn diff_log_heights(
             local_author_logs
         );
 
-        let local_author_logs: HashMap<LogId, SeqNum> =
-            local_author_logs.iter().copied().collect();
+        let local_author_logs: HashMap<LogId, SeqNum> = local_author_logs.iter().copied().collect();
 
         // Find all logs sent by the remote for a public key we have locally.
         //
@@ -90,7 +90,7 @@ pub fn diff_log_heights(
             let mut remote_needs_logs = vec![];
 
             // For each log we diff the local and remote height and determine which entries, if
-            // any, we should send them. 
+            // any, we should send them.
             for (log_id, seq_num) in local_author_logs {
                 if let Some(from_log_height) =
                     remote_requires_entries(&log_id, &seq_num, &remote_author_logs)
@@ -111,7 +111,9 @@ pub fn diff_log_heights(
             // need everything we have.
 
             trace!("No logs found on remote for this author");
-            let mut remote_needs_logs: Vec<(LogId, SeqNum)> = local_author_logs.keys().map(|log_id| (*log_id, SeqNum::default()))
+            let mut remote_needs_logs: Vec<(LogId, SeqNum)> = local_author_logs
+                .keys()
+                .map(|log_id| (*log_id, SeqNum::default()))
                 .collect();
 
             // Sort the log heights.

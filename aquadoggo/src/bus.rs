@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use libp2p::PeerId;
 use libp2p::swarm::ConnectionId;
+use libp2p::PeerId;
 use p2panda_rs::operation::OperationId;
 
 use crate::manager::Sender;
