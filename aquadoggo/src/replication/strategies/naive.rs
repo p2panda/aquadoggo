@@ -4,12 +4,10 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use log::{debug, info};
+use log::debug;
 use p2panda_rs::entry::traits::AsEntry;
 use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::identity::PublicKey;
-use p2panda_rs::schema::SchemaId;
-use p2panda_rs::test_utils::fixtures::public_key;
 use p2panda_rs::Human;
 
 use crate::db::SqlStore;
@@ -69,7 +67,7 @@ impl NaiveStrategy {
         let local_log_heights = self.local_log_heights(store).await;
         let remote_needs = diff_log_heights(
             &local_log_heights,
-            &remote_log_heights.to_owned().into_iter().collect(),
+            &remote_log_heights.iter().cloned().collect(),
         );
 
         for (public_key, log_heights) in remote_needs {

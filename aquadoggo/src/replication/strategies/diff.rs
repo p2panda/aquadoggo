@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use log::{debug, trace};
+use log::trace;
 use p2panda_rs::{
     entry::{LogId, SeqNum},
     identity::PublicKey,
@@ -18,7 +18,7 @@ fn remote_requires_entries(
 ) -> Option<(LogId, SeqNum)> {
     trace!("Local log height: {:?} {:?}", log_id, local_seq_num);
     // Get height of the remote log by it's id.
-    let remote_log_height = remote_log_heights.get(&log_id);
+    let remote_log_height = remote_log_heights.get(log_id);
 
     match remote_log_height {
         // If a log exists then compare heights of local and remote logs.
@@ -27,7 +27,7 @@ fn remote_requires_entries(
 
             // If the local seq num is higher the remote needs all entries higher than
             // their max seq num for this log.
-            if local_seq_num > &remote_seq_num {
+            if local_seq_num > remote_seq_num {
                 // We increment the seq num as we want it to represent an inclusive lower
                 // bound.
                 //
@@ -69,14 +69,14 @@ pub fn diff_log_heights(
         );
 
         let local_author_logs: HashMap<LogId, SeqNum> =
-            local_author_logs.to_owned().into_iter().collect();
+            local_author_logs.iter().copied().collect();
 
         // Find all logs sent by the remote for a public key we have locally.
         //
         // If none is found we know they need everything we have by this author.
-        if let Some(remote_author_logs) = remote_log_heights.get(&local_author) {
+        if let Some(remote_author_logs) = remote_log_heights.get(local_author) {
             let remote_author_logs: HashMap<LogId, SeqNum> =
-                remote_author_logs.to_owned().into_iter().collect();
+                remote_author_logs.iter().copied().collect();
 
             trace!("Remote log heights: {} {:?}", local_author.display(), {
                 let mut logs = remote_author_logs
@@ -111,9 +111,7 @@ pub fn diff_log_heights(
             // need everything we have.
 
             trace!("No logs found on remote for this author");
-            let mut remote_needs_logs: Vec<(LogId, SeqNum)> = local_author_logs
-                .iter()
-                .map(|(log_id, _)| (*log_id, SeqNum::default()))
+            let mut remote_needs_logs: Vec<(LogId, SeqNum)> = local_author_logs.keys().map(|log_id| (*log_id, SeqNum::default()))
                 .collect();
 
             // Sort the log heights.

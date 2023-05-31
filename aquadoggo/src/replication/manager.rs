@@ -318,9 +318,9 @@ where
             let messages = self
                 .insert_and_initialize_session(
                     remote_peer,
-                    &session_id,
+                    session_id,
                     &existing_session.target_set(),
-                    &mode,
+                    mode,
                     false,
                 )
                 .await;
@@ -510,8 +510,8 @@ mod tests {
 
     use super::{SyncManager, INITIAL_SESSION_ID};
 
-    const PEER_ID_LOCAL: &'static str = "local";
-    const PEER_ID_REMOTE: &'static str = "remote";
+    const PEER_ID_LOCAL: &str = "local";
+    const PEER_ID_REMOTE: &str = "remote";
 
     #[rstest]
     fn initiate_outbound_session(
@@ -912,7 +912,7 @@ mod tests {
             populate_and_materialize(&mut node_b, &config_b).await;
 
             let (tx, _rx) = broadcast::channel(8);
-            let target_set = TargetSet::new(&vec![config_a.schema.id().to_owned()]);
+            let target_set = TargetSet::new(&[config_a.schema.id().to_owned()]);
 
             let mut manager_a = SyncManager::new(
                 node_a.context.store.clone(),
@@ -947,7 +947,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            assert_eq!(result.is_done, false);
+            assert!(!result.is_done);
             assert_eq!(
                 result.messages,
                 vec![
@@ -962,13 +962,13 @@ mod tests {
                 .handle_message(&PEER_ID_REMOTE, &result.messages[0])
                 .await
                 .unwrap();
-            assert_eq!(result_have.is_done, false);
+            assert!(!result_have.is_done);
 
             let result_done = manager_a
                 .handle_message(&PEER_ID_REMOTE, &result.messages[1])
                 .await
                 .unwrap();
-            assert_eq!(result_done.is_done, true);
+            assert!(result_done.is_done);
 
             assert_eq!(result_have.messages.len(), 8);
             assert_eq!(
@@ -983,7 +983,7 @@ mod tests {
             // Remote receives `Have`, `Entry` `SyncDone` messages from local
             for (index, message) in result_have.messages.iter().enumerate() {
                 let result = manager_b
-                    .handle_message(&PEER_ID_LOCAL, &message)
+                    .handle_message(&PEER_ID_LOCAL, message)
                     .await
                     .unwrap();
 

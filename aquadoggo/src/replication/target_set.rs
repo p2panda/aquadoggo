@@ -29,10 +29,7 @@ impl TargetSet {
         // And now sort system schema to the front of the set.
         deduplicated_set.sort_by(|schema_id_a, schema_id_b| {
             let is_system_schema = |schema_id: &SchemaId| -> bool {
-                match schema_id {
-                    SchemaId::Application(_, _) => false,
-                    _ => true,
-                }
+                !matches!(schema_id, SchemaId::Application(_, _))
             };
             is_system_schema(schema_id_b).cmp(&is_system_schema(schema_id_a))
         });
@@ -78,10 +75,7 @@ impl Validate for TargetSet {
             // If the first schema id is an application schema then no system schema should be
             // included and we flip the `initial_system_schema` flag.
             if index == 0 {
-                initial_system_schema = match schema_id {
-                    SchemaId::Application(_, _) => false,
-                    _ => true,
-                }
+                initial_system_schema = !matches!(schema_id, SchemaId::Application(_, _))
             }
 
             // Now validate the order.

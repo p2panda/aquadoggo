@@ -7,9 +7,8 @@ use std::time::Duration;
 use anyhow::Result;
 use libp2p::swarm::ConnectionId;
 use libp2p::PeerId;
-use log::{debug, info, trace, warn};
+use log::{debug, info, warn};
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::Human;
 use tokio::sync::broadcast::Receiver;
 use tokio::task;
 use tokio::time::sleep;
@@ -157,11 +156,9 @@ impl ConnectionManager {
 
         match peer {
             Some(peer) => {
-                if peer
+                if !peer
                     .connections
-                    .iter()
-                    .find(|id| *id == &connection_id)
-                    .is_none()
+                    .iter().any(|id| id == &connection_id)
                 {
                     debug!("Tried to remove unknown connection: {peer_id} {connection_id:?}");
                 } else {
@@ -190,8 +187,7 @@ impl ConnectionManager {
                 if peer
                     .connections
                     .iter()
-                    .find(|id| *id == &connection_id)
-                    .is_some()
+                    .any(|id| id == &connection_id)
                 {
                     warn!("Duplicate established connection encountered");
                 } else {
@@ -256,8 +252,8 @@ impl ConnectionManager {
     async fn on_replication_finished(
         &mut self,
         peer_id: PeerId,
-        connection_id: ConnectionId,
-        session_id: SessionId,
+        _connection_id: ConnectionId,
+        _session_id: SessionId,
     ) {
         info!("Finished replication with peer {}", peer_id);
         match self.connections.get_mut(&peer_id) {
