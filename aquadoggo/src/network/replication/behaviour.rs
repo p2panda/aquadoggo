@@ -6,9 +6,8 @@ use std::task::{Context, Poll};
 use libp2p::core::Endpoint;
 use libp2p::swarm::derive_prelude::ConnectionEstablished;
 use libp2p::swarm::{
-    ConnectionClosed, ConnectionDenied, ConnectionId, FromSwarm,
-    NetworkBehaviour, NotifyHandler, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
-    ToSwarm,
+    ConnectionClosed, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, NotifyHandler,
+    PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use libp2p::{Multiaddr, PeerId};
 use log::{debug, trace, warn};
@@ -90,11 +89,6 @@ impl NetworkBehaviour for Behaviour {
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         debug!("Replication Behaviour: established inbound connection");
-        self.events
-            .push_back(ToSwarm::GenerateEvent(Event::ConnectionEstablished(
-                peer_id,
-                connection_id,
-            )));
         Ok(Handler::new())
     }
 
@@ -106,11 +100,6 @@ impl NetworkBehaviour for Behaviour {
         _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         debug!("Replication Behaviour: established outbound connection");
-        self.events
-            .push_back(ToSwarm::GenerateEvent(Event::ConnectionEstablished(
-                peer_id,
-                connection_id,
-            )));
         Ok(Handler::new())
     }
 
@@ -141,8 +130,22 @@ impl NetworkBehaviour for Behaviour {
                         connection_id,
                     )));
             }
-            FromSwarm::ConnectionEstablished(_)
-            | FromSwarm::AddressChange(_)
+            FromSwarm::ConnectionEstablished(ConnectionEstablished {
+                peer_id,
+                connection_id,
+                other_established,
+                ..
+            }) => {
+                if other_established > 0 {
+                    warn!("Multiple connections established to peer: {} {}", other_established + 1, peer_id);
+                }
+                self.events
+                    .push_back(ToSwarm::GenerateEvent(Event::ConnectionEstablished(
+                        peer_id,
+                        connection_id,
+                    )));
+            }
+            FromSwarm::AddressChange(_)
             | FromSwarm::DialFailure(_)
             | FromSwarm::ListenFailure(_)
             | FromSwarm::NewListener(_)
