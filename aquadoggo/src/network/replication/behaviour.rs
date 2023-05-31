@@ -83,23 +83,21 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_inbound_connection(
         &mut self,
-        connection_id: ConnectionId,
-        peer_id: PeerId,
+        _: ConnectionId,
+        _: PeerId,
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        debug!("Replication Behaviour: established inbound connection");
         Ok(Handler::new())
     }
 
     fn handle_established_outbound_connection(
         &mut self,
-        connection_id: ConnectionId,
-        peer_id: PeerId,
+        _: ConnectionId,
+        _: PeerId,
         _: &Multiaddr,
         _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        debug!("Replication Behaviour: established outbound connection");
         Ok(Handler::new())
     }
 
@@ -109,7 +107,6 @@ impl NetworkBehaviour for Behaviour {
         connection_id: ConnectionId,
         handler_event: THandlerOutEvent<Self>,
     ) {
-        debug!("Replication Behaviour: connection handler event");
         match handler_event {
             HandlerOutEvent::Message(message) => {
                 self.handle_received_message(&peer, message, connection_id);

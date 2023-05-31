@@ -160,18 +160,20 @@ impl ConnectionManager {
                 if peer
                     .connections
                     .iter()
-                    .find(|id| *id != &connection_id)
+                    .find(|id| *id == &connection_id)
                     .is_none()
                 {
-                    warn!("Tried to remove unknown connection");
-                };
+                    debug!("Tried to remove unknown connection: {peer_id} {connection_id:?}");
+                } else {
+                    debug!("Remove connection: {peer_id} {connection_id:?}");
 
-                peer.connections = peer
-                    .connections
-                    .iter()
-                    .filter(|id| *id != &connection_id)
-                    .map(ConnectionId::to_owned)
-                    .collect();
+                    peer.connections = peer
+                        .connections
+                        .iter()
+                        .filter(|id| *id != &connection_id)
+                        .map(ConnectionId::to_owned)
+                        .collect();
+                };
             }
             None => {
                 warn!("Tried to remove connection from unknown peer");
@@ -213,9 +215,7 @@ impl ConnectionManager {
         info!("Connection closed: remove sessions with peer: {}", peer_id);
 
         let peer_connection_id = PeerConnectionId(peer_id, Some(connection_id));
-
         self.sync_manager.remove_sessions(&peer_connection_id);
-
         self.remove_connection(peer_id, connection_id)
     }
 
@@ -225,8 +225,6 @@ impl ConnectionManager {
         message: SyncMessage,
         connection_id: ConnectionId,
     ) {
-        trace!("Received SyncMessage: {}", message.display());
-
         let session_id = message.session_id();
 
         match self
@@ -270,10 +268,6 @@ impl ConnectionManager {
                 panic!("Tried to access unknown peer");
             }
         }
-
-        let peer_connection_id = PeerConnectionId(peer_id, Some(connection_id));
-        self.sync_manager
-            .remove_session(&peer_connection_id, &session_id);
     }
 
     async fn on_replication_error(
@@ -283,7 +277,7 @@ impl ConnectionManager {
         session_id: SessionId,
         error: ReplicationError,
     ) {
-        info!("Replication with peer {} failed: {}", peer_id, error);
+        warn!("Replication with peer {} failed: {}", peer_id, error);
 
         match self.connections.get_mut(&peer_id) {
             Some(peer) => {
@@ -299,8 +293,6 @@ impl ConnectionManager {
                 let peer_connection_id = PeerConnectionId(peer_id, Some(connection_id));
                 self.sync_manager
                     .remove_session(&peer_connection_id, &session_id);
-
-                self.remove_connection(peer_id, connection_id);
             }
             _ => (), // Don't try and close the session on other errors as it should not have been initiated
         }
@@ -319,7 +311,6 @@ impl ConnectionManager {
                     .await;
             }
             ServiceMessage::InitiateReplication => {
-                info!("Initiate replication");
                 self.update_sessions().await;
             }
             _ => (), // Ignore all other messages
@@ -356,15 +347,18 @@ impl ConnectionManager {
                         debug!(
                             "Max sessions reached for connection: {:?}",
                             peer_connection_id
-                        );    
+                        );
                     }
                 }
                 connections
             })
             .collect();
 
+        if attempt_peers.is_empty() {
+            info!("No peers available for replication")
+        }
+
         for peer_connection_id in attempt_peers {
-            debug!("Initiate replication with: {:?}", peer_connection_id);
             self.initiate_replication(&peer_connection_id).await;
         }
     }

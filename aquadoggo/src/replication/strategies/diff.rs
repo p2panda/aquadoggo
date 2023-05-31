@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use log::debug;
+use log::{debug, trace};
 use p2panda_rs::{
     entry::{LogId, SeqNum},
     identity::PublicKey,
@@ -16,14 +16,14 @@ fn remote_requires_entries(
     local_seq_num: &SeqNum,
     remote_log_heights: &HashMap<LogId, SeqNum>,
 ) -> Option<(LogId, SeqNum)> {
-    debug!("Local log height: {:?} {:?}", log_id, local_seq_num);
+    trace!("Local log height: {:?} {:?}", log_id, local_seq_num);
     // Get height of the remote log by it's id.
     let remote_log_height = remote_log_heights.get(&log_id);
 
     match remote_log_height {
         // If a log exists then compare heights of local and remote logs.
         Some(remote_seq_num) => {
-            debug!("Remote log height: {:?} {:?}", log_id, remote_seq_num);
+            trace!("Remote log height: {:?} {:?}", log_id, remote_seq_num);
 
             // If the local seq num is higher the remote needs all entries higher than
             // their max seq num for this log.
@@ -35,21 +35,21 @@ fn remote_requires_entries(
                 // will not reach max seq number.
                 let from_seq_num = remote_seq_num.clone().next().unwrap();
 
-                debug!(
+                trace!(
                     "Remote needs entries from {:?} for {:?}",
                     from_seq_num, log_id
                 );
 
                 Some((log_id.to_owned(), from_seq_num))
             } else {
-                debug!("Remote has all entries for {:?}", log_id);
+                trace!("Remote has all entries for {:?}", log_id);
                 None
             }
         }
         // If no log exists then the remote has a log we don't know about yet and we
         // return nothing.
         None => {
-            debug!("{:?} not found on remote, all entries required", log_id);
+            trace!("{:?} not found on remote, all entries required", log_id);
             Some((log_id.to_owned(), SeqNum::default()))
         }
     }
@@ -62,7 +62,7 @@ pub fn diff_log_heights(
     let mut remote_needs = Vec::new();
 
     for (local_author, local_author_logs) in local_log_heights {
-        debug!(
+        trace!(
             "Local log heights: {} {:?}",
             local_author.display(),
             local_author_logs
@@ -71,15 +71,14 @@ pub fn diff_log_heights(
         let local_author_logs: HashMap<LogId, SeqNum> =
             local_author_logs.to_owned().into_iter().collect();
 
-        // Find all logs for a public key sent by the remote peer.
+        // Find all logs sent by the remote for a public key we have locally.
         //
-        // If none is found we don't do anything as this means we are missing entries they should
-        // send us.
+        // If none is found we know they need everything we have by this author.
         if let Some(remote_author_logs) = remote_log_heights.get(&local_author) {
             let remote_author_logs: HashMap<LogId, SeqNum> =
                 remote_author_logs.to_owned().into_iter().collect();
 
-            debug!("Remote log heights: {} {:?}", local_author.display(), {
+            trace!("Remote log heights: {} {:?}", local_author.display(), {
                 let mut logs = remote_author_logs
                     .clone()
                     .into_iter()
@@ -90,6 +89,8 @@ pub fn diff_log_heights(
 
             let mut remote_needs_logs = vec![];
 
+            // For each log we diff the local and remote height and determine which entries, if
+            // any, we should send them. 
             for (log_id, seq_num) in local_author_logs {
                 if let Some(from_log_height) =
                     remote_requires_entries(&log_id, &seq_num, &remote_author_logs)
@@ -109,6 +110,7 @@ pub fn diff_log_heights(
             // The author we know about locally wasn't found on the remote log heights so they
             // need everything we have.
 
+            trace!("No logs found on remote for this author");
             let mut remote_needs_logs: Vec<(LogId, SeqNum)> = local_author_logs
                 .iter()
                 .map(|(log_id, _)| (*log_id, SeqNum::default()))

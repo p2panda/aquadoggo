@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use log::{debug, info, warn};
+use log::{debug, info, trace, warn};
 use p2panda_rs::entry::EncodedEntry;
 use p2panda_rs::operation::EncodedOperation;
 use p2panda_rs::Human;
@@ -68,6 +68,7 @@ where
     /// Warning: This might also remove actively running sessions. Do only clear sessions when you
     /// are sure they are a) done or b) the peer closed its connection.
     pub fn remove_sessions(&mut self, remote_peer: &P) {
+        debug!("Remove all sessions with peer: {remote_peer:?}");
         self.sessions.remove(remote_peer);
     }
 
@@ -128,8 +129,13 @@ where
                 .enumerate()
                 .find(|(_, session)| session.id == *session_id)
             {
+                debug!("Remove session {session_id} with peer: {remote_peer:?}");
                 sessions.remove(index);
+            } else {
+                warn!("Tried to remove nonexistent session {session_id} with peer: {remote_peer:?}")
             }
+        } else {
+            warn!("Tried to remove sessions from unknown peer: {remote_peer:?}")
         }
     }
 
@@ -338,11 +344,6 @@ where
 
         let sessions = self.get_sessions(remote_peer);
 
-        info!(
-            "Initiate inbound replication session with peer {:?}",
-            remote_peer
-        );
-
         // Check if a session with this id already exists for this peer, this can happen if both
         // peers started to initiate a session at the same time, or if the remote peer sent two
         // sync request messages with the same session id.
@@ -362,11 +363,16 @@ where
             .iter()
             .find(|session| session.target_set() == *target_set)
         {
-            debug!("Handle sync request containing duplicate session id");
+            debug!("Handle sync request containing duplicate target sets");
             return self
                 .handle_duplicate_target_set(remote_peer, session_id, mode, session)
                 .await;
         };
+
+        info!(
+            "Accept inbound replication session with peer {:?}",
+            remote_peer
+        );
 
         let messages = self
             .insert_and_initialize_session(remote_peer, session_id, target_set, mode, false)
@@ -381,10 +387,11 @@ where
         session_id: &SessionId,
         message: &Message,
     ) -> Result<SyncResult, ReplicationError> {
-        debug!(
+        trace!(
             "Message received: {session_id} {remote_peer:?} {}",
             message.display()
         );
+
         let sessions = self.sessions.get_mut(remote_peer);
 
         let (is_both_done, messages) = match sessions {
@@ -399,15 +406,17 @@ where
                     let is_both_done = session.state == SessionState::Done;
                     Ok((is_both_done, messages))
                 } else {
-                    Err(ReplicationError::NoSessionFound(*session_id))
+                    Err(ReplicationError::NoSessionFound(
+                        *session_id,
+                        format!("{remote_peer:?}"),
+                    ))
                 }
             }
-            None => Err(ReplicationError::NoSessionFound(*session_id)),
+            None => Err(ReplicationError::NoPeerFound(format!("{remote_peer:?}"))),
         }?;
 
         // We're done, clean up after ourselves
         if is_both_done {
-            debug!("Both peers done, removing session: {session_id:?} {remote_peer:?}");
             self.remove_session(remote_peer, session_id);
         }
 
@@ -433,8 +442,7 @@ where
         {
             session.validate_entry(entry_bytes, operation_bytes.as_ref())?;
 
-            let result = self
-                .ingest
+            self.ingest
                 .handle_entry(
                     &self.store,
                     entry_bytes,
@@ -443,19 +451,17 @@ where
                         .as_ref()
                         .expect("For now we always expect an operation here"),
                 )
-                .await;
-
-            result.map_err(|err| {
-                warn!("{:?}", err);
-                err
-            })?;
+                .await?;
 
             Ok(SyncResult {
                 messages: vec![],
                 is_done: session.state == SessionState::Done,
             })
         } else {
-            Err(ReplicationError::NoSessionFound(*session_id))
+            Err(ReplicationError::NoSessionFound(
+                *session_id,
+                format!("{remote_peer:?}"),
+            ))
         }
     }
 

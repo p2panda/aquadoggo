@@ -262,6 +262,8 @@ impl EventLoop {
                             if let Err(err) = self.swarm.dial(multiaddr) {
                                 warn!("Failed to dial: {}", err);
                             }
+                        } else {
+                            warn!("Not dialing discovered peer as connection already exists: {peer_id:?}")
                         }
                     }
                 }

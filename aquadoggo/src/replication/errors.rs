@@ -12,8 +12,11 @@ pub enum ReplicationError {
     #[error("Duplicate session error: {0}")]
     DuplicateSession(#[from] DuplicateSessionRequestError),
 
-    #[error("No session found with id {0}")]
-    NoSessionFound(u64),
+    #[error("No session found with id {0} for peer {1}")]
+    NoSessionFound(u64, String),
+
+    #[error("No sessions found for peer {0}")]
+    NoPeerFound(String),
 
     #[error("Received entry which is not in target set")]
     UnmatchedTargetSet,
