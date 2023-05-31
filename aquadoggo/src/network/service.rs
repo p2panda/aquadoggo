@@ -159,11 +159,11 @@ impl EventLoop {
 
     /// Handle an incoming message via the communication bus from other services.
     async fn handle_service_message(&mut self, message: ServiceMessage) {
-        if let ServiceMessage::SentReplicationMessage(peer_id, _connection_id, sync_message) = message {
+        if let ServiceMessage::SentReplicationMessage(peer_id, connection_id, sync_message) = message {
             self.swarm
                 .behaviour_mut()
                 .replication
-                .send_message(peer_id, sync_message);
+                .send_message(peer_id, connection_id, sync_message);
         }
     }
 

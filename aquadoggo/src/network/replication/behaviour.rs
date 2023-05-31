@@ -40,7 +40,12 @@ impl Behaviour {
 }
 
 impl Behaviour {
-    pub fn send_message(&mut self, peer_id: PeerId, message: SyncMessage) {
+    pub fn send_message(
+        &mut self,
+        peer_id: PeerId,
+        connection_id: ConnectionId,
+        message: SyncMessage,
+    ) {
         trace!(
             "Notify handler of sent sync message: {peer_id} {}",
             message.display()
@@ -48,7 +53,7 @@ impl Behaviour {
         self.events.push_back(ToSwarm::NotifyHandler {
             peer_id,
             event: HandlerInEvent::Message(message),
-            handler: NotifyHandler::Any,
+            handler: NotifyHandler::One(connection_id),
         });
     }
 
