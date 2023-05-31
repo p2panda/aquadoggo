@@ -152,7 +152,9 @@ impl ConnectionHandler for Handler {
             }
             ConnectionEvent::DialUpgradeError(_)
             | ConnectionEvent::AddressChange(_)
-            | ConnectionEvent::ListenUpgradeError(_) => {}
+            | ConnectionEvent::ListenUpgradeError(_) => {
+                warn!("Connection event error");
+            }
         }
     }
 
@@ -293,6 +295,7 @@ impl ConnectionHandler for Handler {
                                         Some(OutboundSubstreamState::PendingFlush(substream))
                                 }
                                 Err(err) => {
+                                    warn!("{err:#?}");
                                     return Poll::Ready(ConnectionHandlerEvent::Close(
                                         HandlerError::Codec(err),
                                     ));
@@ -300,6 +303,7 @@ impl ConnectionHandler for Handler {
                             }
                         }
                         Poll::Ready(Err(err)) => {
+                            warn!("{err:#?}");
                             return Poll::Ready(ConnectionHandlerEvent::Close(
                                 HandlerError::Codec(err),
                             ));
@@ -318,9 +322,10 @@ impl ConnectionHandler for Handler {
                                 Some(OutboundSubstreamState::WaitingOutput(substream))
                         }
                         Poll::Ready(Err(err)) => {
+                            warn!("{err:#?}");
                             return Poll::Ready(ConnectionHandlerEvent::Close(HandlerError::Codec(
                                 err,
-                            )))
+                            )));
                         }
                         Poll::Pending => {
                             self.outbound_substream =
