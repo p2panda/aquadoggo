@@ -250,6 +250,10 @@ impl EventLoop {
                     for (peer_id, multiaddr) in list {
                         debug!("mDNS discovered a new peer: {peer_id}");
 
+                        // Only dial the newly discovered peer if we're not already connected.
+                        // 
+                        // @TODO: Is this even a thing? Trying to catch the case where two peers
+                        // simultaneously discover and connect to each other. 
                         if !self.swarm.is_connected(&peer_id) {
                             if let Err(err) = self.swarm.dial(multiaddr) {
                                 warn!("Failed to dial: {}", err);

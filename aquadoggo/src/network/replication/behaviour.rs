@@ -78,23 +78,33 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_inbound_connection(
         &mut self,
-        _: ConnectionId,
-        _: PeerId,
+        connection_id: ConnectionId,
+        peer_id: PeerId,
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         debug!("Replication Behaviour: established inbound connection");
+        self.events
+            .push_back(ToSwarm::GenerateEvent(Event::ConnectionEstablished(
+                peer_id,
+                connection_id,
+            )));
         Ok(Handler::new())
     }
 
     fn handle_established_outbound_connection(
         &mut self,
-        _: ConnectionId,
-        _: PeerId,
+        connection_id: ConnectionId,
+        peer_id: PeerId,
         _: &Multiaddr,
         _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         debug!("Replication Behaviour: established outbound connection");
+        self.events
+            .push_back(ToSwarm::GenerateEvent(Event::ConnectionEstablished(
+                peer_id,
+                connection_id,
+            )));
         Ok(Handler::new())
     }
 
@@ -114,29 +124,9 @@ impl NetworkBehaviour for Behaviour {
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
         match event {
-            FromSwarm::ConnectionEstablished(ConnectionEstablished {
-                peer_id,
-                connection_id,
-                ..
-            }) => {
-                self.events
-                    .push_back(ToSwarm::GenerateEvent(Event::ConnectionEstablished(
-                        peer_id,
-                        connection_id,
-                    )));
-            }
-            FromSwarm::ConnectionClosed(ConnectionClosed {
-                peer_id,
-                connection_id,
-                ..
-            }) => {
-                self.events
-                    .push_back(ToSwarm::GenerateEvent(Event::ConnectionClosed(
-                        peer_id,
-                        connection_id,
-                    )));
-            }
-            FromSwarm::AddressChange(_)
+            FromSwarm::ConnectionEstablished(_)
+            | FromSwarm::ConnectionClosed(_)
+            | FromSwarm::AddressChange(_)
             | FromSwarm::DialFailure(_)
             | FromSwarm::ListenFailure(_)
             | FromSwarm::NewListener(_)
