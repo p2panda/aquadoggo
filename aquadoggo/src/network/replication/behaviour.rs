@@ -6,8 +6,9 @@ use std::task::{Context, Poll};
 use libp2p::core::Endpoint;
 use libp2p::swarm::derive_prelude::ConnectionEstablished;
 use libp2p::swarm::{
-    ConnectionClosed, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, NotifyHandler,
-    PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionClosed, ConnectionDenied, ConnectionId, FromSwarm,
+    NetworkBehaviour, NotifyHandler, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
+    ToSwarm,
 };
 use libp2p::{Multiaddr, PeerId};
 use log::{debug, trace, warn};
@@ -129,8 +130,18 @@ impl NetworkBehaviour for Behaviour {
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
         match event {
+            FromSwarm::ConnectionClosed(ConnectionClosed {
+                peer_id,
+                connection_id,
+                ..
+            }) => {
+                self.events
+                    .push_back(ToSwarm::GenerateEvent(Event::ConnectionClosed(
+                        peer_id,
+                        connection_id,
+                    )));
+            }
             FromSwarm::ConnectionEstablished(_)
-            | FromSwarm::ConnectionClosed(_)
             | FromSwarm::AddressChange(_)
             | FromSwarm::DialFailure(_)
             | FromSwarm::ListenFailure(_)
