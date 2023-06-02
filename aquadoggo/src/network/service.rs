@@ -443,15 +443,15 @@ impl EventLoop {
                         peer_id,
                         message,
                     )),
-                replication::Event::ConnectionEstablished(peer_id) => {
+                replication::Event::PeerConnected(peer_id) => {
                     // Inform other services about new connection
-                    self.send_service_message(ServiceMessage::ConnectionEstablished(
+                    self.send_service_message(ServiceMessage::PeerConnected(
                         peer_id,
                     ));
                 }
-                replication::Event::ConnectionClosed(peer_id) => {
+                replication::Event::PeerDisconnected(peer_id) => {
                     // Inform other services about closed connection
-                    self.send_service_message(ServiceMessage::ConnectionClosed(
+                    self.send_service_message(ServiceMessage::PeerDisconnected(
                         peer_id,
                     ));
                 }

@@ -21,9 +21,9 @@ pub enum Event {
     /// Replication message received on the inbound stream.
     MessageReceived(PeerId, SyncMessage),
 
-    ConnectionEstablished(PeerId),
+    PeerConnected(PeerId),
 
-    ConnectionClosed(PeerId),
+    PeerDisconnected(PeerId),
 }
 
 #[derive(Debug)]
@@ -120,7 +120,7 @@ impl NetworkBehaviour for Behaviour {
             }) => {
                 if remaining_established == 0 {
                     self.events
-                        .push_back(ToSwarm::GenerateEvent(Event::ConnectionClosed(
+                        .push_back(ToSwarm::GenerateEvent(Event::PeerDisconnected(
                             peer_id,
                         )));
                 }
@@ -138,7 +138,7 @@ impl NetworkBehaviour for Behaviour {
                     );
                 } else {
                     self.events
-                        .push_back(ToSwarm::GenerateEvent(Event::ConnectionEstablished(
+                        .push_back(ToSwarm::GenerateEvent(Event::PeerConnected(
                             peer_id,
                         )));
                 }
@@ -298,8 +298,8 @@ mod tests {
         // Collect the next 2 behaviour events which occur in either swarms.
         for _ in 0..2 {
             tokio::select! {
-                Event::ConnectionEstablished(peer_id) = swarm1.next_behaviour_event() => res1.push((peer_id, None)),
-                Event::ConnectionEstablished(peer_id) = swarm2.next_behaviour_event() => res2.push((peer_id, None)),
+                Event::PeerConnected(peer_id) = swarm1.next_behaviour_event() => res1.push((peer_id, None)),
+                Event::PeerConnected(peer_id) = swarm2.next_behaviour_event() => res2.push((peer_id, None)),
             }
         }
 

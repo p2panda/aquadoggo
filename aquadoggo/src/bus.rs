@@ -19,10 +19,10 @@ pub enum ServiceMessage {
     InitiateReplication,
 
     /// Node established a bi-directional connection to another node.
-    ConnectionEstablished(PeerId),
+    PeerConnected(PeerId),
 
     /// Node closed a connection to another node.
-    ConnectionClosed(PeerId),
+    PeerDisconnected(PeerId),
 
     /// Node sent a message to remote node for replication.
     SentReplicationMessage(PeerId, SyncMessage),

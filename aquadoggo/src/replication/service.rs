@@ -129,7 +129,8 @@ impl ConnectionManager {
     }
 
     async fn on_connection_established(&mut self, peer_id: PeerId) {
-        info!("Connection established with peer: {}", peer_id);
+        info!("Connected to peer: {peer_id}");
+        
         match self.peers.get(&peer_id) {
             Some(_) => {
                 warn!("Peer already known: {peer_id}");
@@ -142,9 +143,9 @@ impl ConnectionManager {
     }
 
     async fn on_connection_closed(&mut self, peer_id: PeerId) {
-        // Clear running replication sessions from sync manager
-        info!("Connection closed: remove sessions with peer: {}", peer_id);
+        info!("Disconnected from peer: {peer_id}");
 
+        // Clear running replication sessions from sync manager
         self.sync_manager.remove_sessions(&peer_id);
         self.remove_connection(peer_id)
     }
@@ -220,10 +221,10 @@ impl ConnectionManager {
 
     async fn handle_service_message(&mut self, message: ServiceMessage) {
         match message {
-            ServiceMessage::ConnectionEstablished(peer_id) => {
+            ServiceMessage::PeerConnected(peer_id) => {
                 self.on_connection_established(peer_id).await;
             }
-            ServiceMessage::ConnectionClosed(peer_id) => {
+            ServiceMessage::PeerDisconnected(peer_id) => {
                 self.on_connection_closed(peer_id).await;
             }
             ServiceMessage::ReceivedReplicationMessage(peer_id, message) => {
