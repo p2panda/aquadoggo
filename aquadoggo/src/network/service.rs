@@ -159,12 +159,11 @@ impl EventLoop {
 
     /// Handle an incoming message via the communication bus from other services.
     async fn handle_service_message(&mut self, message: ServiceMessage) {
-        if let ServiceMessage::SentReplicationMessage(peer_id, connection_id, sync_message) =
+        if let ServiceMessage::SentReplicationMessage(peer_id, sync_message) =
             message
         {
             self.swarm.behaviour_mut().replication.send_message(
                 peer_id,
-                connection_id,
                 sync_message,
             );
         }
@@ -254,17 +253,21 @@ impl EventLoop {
                     for (peer_id, multiaddr) in list {
                         debug!("mDNS discovered a new peer: {peer_id}");
 
-                        // Only dial the newly discovered peer if we're not already connected.
-                        //
-                        // @TODO: Is this even a thing? Trying to catch the case where two peers
-                        // simultaneously discover and connect to each other.
-                        if !self.swarm.is_connected(&peer_id) {
-                            if let Err(err) = self.swarm.dial(multiaddr) {
-                                warn!("Failed to dial: {}", err);
-                            }
-                        } else {
-                            warn!("Not dialing discovered peer as connection already exists: {peer_id:?}")
+                        if let Err(err) = self.swarm.dial(multiaddr) {
+                            warn!("Failed to dial: {}", err);
                         }
+
+                        // // Only dial the newly discovered peer if we're not already connected.
+                        // //
+                        // // @TODO: Is this even a thing? Trying to catch the case where two peers
+                        // // simultaneously discover and connect to each other.
+                        // if !self.swarm.is_connected(&peer_id) {
+                        //     if let Err(err) = self.swarm.dial(multiaddr) {
+                        //         warn!("Failed to dial: {}", err);
+                        //     }
+                        // } else {
+                        //     warn!("Not dialing discovered peer as connection already exists: {peer_id:?}")
+                        // }
                     }
                 }
                 mdns::Event::Expired(list) => {
@@ -435,24 +438,21 @@ impl EventLoop {
             // Replication
             // ~~~~~~~~~~~
             SwarmEvent::Behaviour(BehaviourEvent::Replication(event)) => match event {
-                replication::Event::MessageReceived(peer_id, message, connection_id) => self
+                replication::Event::MessageReceived(peer_id, message) => self
                     .send_service_message(ServiceMessage::ReceivedReplicationMessage(
                         peer_id,
-                        connection_id,
                         message,
                     )),
-                replication::Event::ConnectionEstablished(peer_id, connection_id) => {
+                replication::Event::ConnectionEstablished(peer_id) => {
                     // Inform other services about new connection
                     self.send_service_message(ServiceMessage::ConnectionEstablished(
                         peer_id,
-                        connection_id,
                     ));
                 }
-                replication::Event::ConnectionClosed(peer_id, connection_id) => {
+                replication::Event::ConnectionClosed(peer_id) => {
                     // Inform other services about closed connection
                     self.send_service_message(ServiceMessage::ConnectionClosed(
                         peer_id,
-                        connection_id,
                     ));
                 }
             },

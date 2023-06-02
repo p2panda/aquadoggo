@@ -19,11 +19,11 @@ use crate::replication::SyncMessage;
 #[derive(Debug)]
 pub enum Event {
     /// Replication message received on the inbound stream.
-    MessageReceived(PeerId, SyncMessage, ConnectionId),
+    MessageReceived(PeerId, SyncMessage),
 
-    ConnectionEstablished(PeerId, ConnectionId),
+    ConnectionEstablished(PeerId),
 
-    ConnectionClosed(PeerId, ConnectionId),
+    ConnectionClosed(PeerId),
 }
 
 #[derive(Debug)]
@@ -43,7 +43,6 @@ impl Behaviour {
     pub fn send_message(
         &mut self,
         peer_id: PeerId,
-        connection_id: ConnectionId,
         message: SyncMessage,
     ) {
         trace!(
@@ -53,7 +52,7 @@ impl Behaviour {
         self.events.push_back(ToSwarm::NotifyHandler {
             peer_id,
             event: HandlerInEvent::Message(message),
-            handler: NotifyHandler::One(connection_id),
+            handler: NotifyHandler::Any,
         });
     }
 
@@ -61,7 +60,6 @@ impl Behaviour {
         &mut self,
         peer_id: &PeerId,
         message: SyncMessage,
-        connection_id: ConnectionId,
     ) {
         trace!(
             "Notify swarm of received sync message: {peer_id} {}",
@@ -71,7 +69,6 @@ impl Behaviour {
             .push_back(ToSwarm::GenerateEvent(Event::MessageReceived(
                 *peer_id,
                 message,
-                connection_id,
             )));
     }
 }
@@ -104,12 +101,12 @@ impl NetworkBehaviour for Behaviour {
     fn on_connection_handler_event(
         &mut self,
         peer: PeerId,
-        connection_id: ConnectionId,
+        _connection_id: ConnectionId,
         handler_event: THandlerOutEvent<Self>,
     ) {
         match handler_event {
             HandlerOutEvent::Message(message) => {
-                self.handle_received_message(&peer, message, connection_id);
+                self.handle_received_message(&peer, message);
             }
         }
     }
@@ -118,18 +115,18 @@ impl NetworkBehaviour for Behaviour {
         match event {
             FromSwarm::ConnectionClosed(ConnectionClosed {
                 peer_id,
-                connection_id,
+                remaining_established,
                 ..
             }) => {
-                self.events
-                    .push_back(ToSwarm::GenerateEvent(Event::ConnectionClosed(
-                        peer_id,
-                        connection_id,
-                    )));
+                if remaining_established == 0 {
+                    self.events
+                        .push_back(ToSwarm::GenerateEvent(Event::ConnectionClosed(
+                            peer_id,
+                        )));
+                }
             }
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
                 peer_id,
-                connection_id,
                 other_established,
                 ..
             }) => {
@@ -139,12 +136,12 @@ impl NetworkBehaviour for Behaviour {
                         other_established + 1,
                         peer_id
                     );
+                } else {
+                    self.events
+                        .push_back(ToSwarm::GenerateEvent(Event::ConnectionEstablished(
+                            peer_id,
+                        )));
                 }
-                self.events
-                    .push_back(ToSwarm::GenerateEvent(Event::ConnectionEstablished(
-                        peer_id,
-                        connection_id,
-                    )));
             }
             FromSwarm::AddressChange(_)
             | FromSwarm::DialFailure(_)
@@ -175,7 +172,7 @@ impl NetworkBehaviour for Behaviour {
 #[cfg(test)]
 mod tests {
     use futures::FutureExt;
-    use libp2p::swarm::{keep_alive, ConnectionId, Swarm};
+    use libp2p::swarm::{keep_alive, Swarm};
     use libp2p_swarm_test::SwarmExt;
     use p2panda_rs::schema::SchemaId;
     use rstest::rstest;
@@ -251,7 +248,6 @@ mod tests {
         // Send a message from to swarm1 local peer from swarm2 local peer.
         swarm1.behaviour_mut().send_message(
             swarm2_peer_id,
-            ConnectionId::new_unchecked(0),
             SyncMessage::new(0, Message::SyncRequest(0.into(), TargetSet::new(&vec![]))),
         );
 
@@ -290,30 +286,28 @@ mod tests {
         // Send a message from swarm1 to peer2.
         swarm1.behaviour_mut().send_message(
             swarm2_peer_id,
-            ConnectionId::new_unchecked(0),
             SyncMessage::new(0, Message::SyncRequest(0.into(), target_set_1.clone())),
         );
 
         // Send a message from swarm2 peer1.
         swarm2.behaviour_mut().send_message(
             swarm1_peer_id,
-            ConnectionId::new_unchecked(0),
             SyncMessage::new(1, Message::SyncRequest(0.into(), target_set_2.clone())),
         );
 
         // Collect the next 2 behaviour events which occur in either swarms.
         for _ in 0..2 {
             tokio::select! {
-                Event::ConnectionEstablished(peer_id, _) = swarm1.next_behaviour_event() => res1.push((peer_id, None)),
-                Event::ConnectionEstablished(peer_id, _) = swarm2.next_behaviour_event() => res2.push((peer_id, None)),
+                Event::ConnectionEstablished(peer_id) = swarm1.next_behaviour_event() => res1.push((peer_id, None)),
+                Event::ConnectionEstablished(peer_id) = swarm2.next_behaviour_event() => res2.push((peer_id, None)),
             }
         }
 
         // And again add the next 2 behaviour events which occur in either swarms.
         for _ in 0..2 {
             tokio::select! {
-                Event::MessageReceived(peer_id, message, _) = swarm1.next_behaviour_event() => res1.push((peer_id, Some(message))),
-                Event::MessageReceived(peer_id, message, _) = swarm2.next_behaviour_event() => res2.push((peer_id, Some(message))),
+                Event::MessageReceived(peer_id, message) = swarm1.next_behaviour_event() => res1.push((peer_id, Some(message))),
+                Event::MessageReceived(peer_id, message) = swarm2.next_behaviour_event() => res2.push((peer_id, Some(message))),
             }
         }
 

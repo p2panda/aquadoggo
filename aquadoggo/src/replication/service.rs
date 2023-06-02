@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::collections::HashMap;
-use std::fmt::Display;
 use std::time::Duration;
 
 use anyhow::Result;
-use libp2p::swarm::ConnectionId;
 use libp2p::PeerId;
 use log::{debug, info, warn};
 use p2panda_rs::schema::SchemaId;
@@ -24,27 +22,6 @@ use crate::schema::SchemaProvider;
 use super::SessionId;
 
 const MAX_SESSIONS_PER_CONNECTION: usize = 3;
-
-#[derive(PartialEq, Eq, PartialOrd, Clone, Debug, Hash)]
-
-/// Identifier for a connection to another peer. The `ConnectionId` is optional as we need to
-/// identify the local peer in the replication manager, but in this case there is no single
-/// connection to associate with.
-///
-/// @TODO: This could be modelled better maybe...
-pub struct PeerConnectionId(PeerId, Option<ConnectionId>);
-
-impl Display for PeerConnectionId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}{:?}",
-            self.0,
-            // If we don't pass a connection id then we default to `0`
-            self.1.unwrap_or(ConnectionId::new_unchecked(0))
-        )
-    }
-}
 
 pub async fn replication_service(
     context: Context,
@@ -116,15 +93,9 @@ impl PeerStatus {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct PeerConnections {
-    status: PeerStatus,
-    connections: Vec<ConnectionId>,
-}
-
 struct ConnectionManager {
-    connections: HashMap<PeerId, PeerConnections>,
-    sync_manager: SyncManager<PeerConnectionId>,
+    peers: HashMap<PeerId, PeerStatus>,
+    sync_manager: SyncManager<PeerId>,
     tx: ServiceSender,
     rx: Receiver<ServiceMessage>,
     target_set: TargetSet,
@@ -139,11 +110,10 @@ impl ConnectionManager {
         target_set: TargetSet,
     ) -> Self {
         let ingest = SyncIngest::new(schema_provider.clone(), tx.clone());
-        let sync_manager =
-            SyncManager::new(store.clone(), ingest, PeerConnectionId(local_peer_id, None));
+        let sync_manager = SyncManager::new(store.clone(), ingest, local_peer_id);
 
         Self {
-            connections: HashMap::new(),
+            peers: HashMap::new(),
             sync_manager,
             tx: tx.clone(),
             rx: tx.subscribe(),
@@ -151,92 +121,57 @@ impl ConnectionManager {
         }
     }
 
-    fn remove_connection(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
-        let peer = self.connections.get_mut(&peer_id);
-
-        match peer {
-            Some(peer) => {
-                if !peer.connections.iter().any(|id| id == &connection_id) {
-                    debug!("Tried to remove unknown connection: {peer_id} {connection_id:?}");
-                } else {
-                    debug!("Remove connection: {peer_id} {connection_id:?}");
-
-                    peer.connections = peer
-                        .connections
-                        .iter()
-                        .filter(|id| *id != &connection_id)
-                        .map(ConnectionId::to_owned)
-                        .collect();
-                };
-            }
-            None => {
-                warn!("Tried to remove connection from unknown peer");
-            }
+    fn remove_connection(&mut self, peer_id: PeerId) {
+        match self.peers.remove(&peer_id) {
+            Some(_) => debug!("Remove peer: {peer_id}"),
+            None => warn!("Tried to remove connection from unknown peer"),
         }
     }
 
-    async fn on_connection_established(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
+    async fn on_connection_established(&mut self, peer_id: PeerId) {
         info!("Connection established with peer: {}", peer_id);
-        let peer = self.connections.get_mut(&peer_id);
-
-        match peer {
-            Some(peer) => {
-                if peer.connections.iter().any(|id| id == &connection_id) {
-                    warn!("Duplicate established connection encountered");
-                } else {
-                    peer.connections.push(connection_id)
-                }
+        match self.peers.get(&peer_id) {
+            Some(_) => {
+                warn!("Peer already known: {peer_id}");
             }
             None => {
-                let peer_connections = PeerConnections {
-                    status: PeerStatus::new(&peer_id),
-                    connections: vec![connection_id],
-                };
-                self.connections.insert(peer_id, peer_connections);
+                self.peers.insert(peer_id, PeerStatus::new(&peer_id));
+                self.update_sessions().await;
             }
         }
-
-        self.update_sessions().await;
     }
 
-    async fn on_connection_closed(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
+    async fn on_connection_closed(&mut self, peer_id: PeerId) {
         // Clear running replication sessions from sync manager
         info!("Connection closed: remove sessions with peer: {}", peer_id);
 
-        let peer_connection_id = PeerConnectionId(peer_id, Some(connection_id));
-        self.sync_manager.remove_sessions(&peer_connection_id);
-        self.remove_connection(peer_id, connection_id)
+        self.sync_manager.remove_sessions(&peer_id);
+        self.remove_connection(peer_id)
     }
 
     async fn on_replication_message(
         &mut self,
         peer_id: PeerId,
         message: SyncMessage,
-        connection_id: ConnectionId,
     ) {
         let session_id = message.session_id();
 
-        match self
-            .sync_manager
-            .handle_message(&PeerConnectionId(peer_id, Some(connection_id)), &message)
-            .await
-        {
+        match self.sync_manager.handle_message(&peer_id, &message).await {
             Ok(result) => {
                 for message in result.messages {
                     self.send_service_message(ServiceMessage::SentReplicationMessage(
                         peer_id,
-                        connection_id,
                         message,
                     ));
                 }
 
                 if result.is_done {
-                    self.on_replication_finished(peer_id, connection_id, session_id)
+                    self.on_replication_finished(peer_id, session_id)
                         .await;
                 }
             }
             Err(err) => {
-                self.on_replication_error(peer_id, connection_id, session_id, err)
+                self.on_replication_error(peer_id, session_id, err)
                     .await;
             }
         }
@@ -245,13 +180,12 @@ impl ConnectionManager {
     async fn on_replication_finished(
         &mut self,
         peer_id: PeerId,
-        _connection_id: ConnectionId,
         _session_id: SessionId,
     ) {
         info!("Finished replication with peer {}", peer_id);
-        match self.connections.get_mut(&peer_id) {
-            Some(peer) => {
-                peer.status.successful_count += 1;
+        match self.peers.get_mut(&peer_id) {
+            Some(status) => {
+                status.successful_count += 1;
             }
             None => {
                 panic!("Tried to access unknown peer");
@@ -262,15 +196,14 @@ impl ConnectionManager {
     async fn on_replication_error(
         &mut self,
         peer_id: PeerId,
-        connection_id: ConnectionId,
         session_id: SessionId,
         error: ReplicationError,
     ) {
         warn!("Replication with peer {} failed: {}", peer_id, error);
 
-        match self.connections.get_mut(&peer_id) {
-            Some(peer) => {
-                peer.status.failed_count += 1;
+        match self.peers.get_mut(&peer_id) {
+            Some(status) => {
+                status.failed_count += 1;
             }
             None => {
                 panic!("Tried to access unknown peer");
@@ -279,9 +212,7 @@ impl ConnectionManager {
 
         match error {
             ReplicationError::StrategyFailed(_) | ReplicationError::Validation(_) => {
-                let peer_connection_id = PeerConnectionId(peer_id, Some(connection_id));
-                self.sync_manager
-                    .remove_session(&peer_connection_id, &session_id);
+                self.sync_manager.remove_session(&peer_id, &session_id);
             }
             _ => (), // Don't try and close the session on other errors as it should not have been initiated
         }
@@ -289,14 +220,14 @@ impl ConnectionManager {
 
     async fn handle_service_message(&mut self, message: ServiceMessage) {
         match message {
-            ServiceMessage::ConnectionEstablished(peer_id, connection_id) => {
-                self.on_connection_established(peer_id, connection_id).await;
+            ServiceMessage::ConnectionEstablished(peer_id) => {
+                self.on_connection_established(peer_id).await;
             }
-            ServiceMessage::ConnectionClosed(peer_id, connection_id) => {
-                self.on_connection_closed(peer_id, connection_id).await;
+            ServiceMessage::ConnectionClosed(peer_id) => {
+                self.on_connection_closed(peer_id).await;
             }
-            ServiceMessage::ReceivedReplicationMessage(peer_id, connection_id, message) => {
-                self.on_replication_message(peer_id, message, connection_id)
+            ServiceMessage::ReceivedReplicationMessage(peer_id, message) => {
+                self.on_replication_message(peer_id, message)
                     .await;
             }
             ServiceMessage::InitiateReplication => {
@@ -315,31 +246,24 @@ impl ConnectionManager {
 
     async fn update_sessions(&mut self) {
         // Iterate through all currently connected peers
-        let attempt_peers: Vec<PeerConnectionId> = self
-            .connections
-            .iter()
-            .flat_map(|(peer_id, peer_connections)| {
-                // Find out how many sessions we know about for each peer
-                let mut connections = vec![];
-                for connection_id in &peer_connections.connections {
-                    let peer_connection_id = PeerConnectionId(*peer_id, Some(*connection_id));
-                    let sessions = self.sync_manager.get_sessions(&peer_connection_id);
-                    let active_sessions: Vec<&Session> = sessions
-                        .iter()
-                        .filter(|session| session.is_done())
-                        .collect();
+        let attempt_peers: Vec<PeerId> = self
+            .peers
+            .clone()
+            .into_iter()
+            .filter_map(|(peer_id, _)| {
+                let sessions = self.sync_manager.get_sessions(&peer_id);
+                let active_sessions: Vec<&Session> = sessions
+                    .iter()
+                    .filter(|session| session.is_done())
+                    .collect();
 
-                    // Check if we're running too many sessions with that peer on this connection already
-                    if active_sessions.len() < MAX_SESSIONS_PER_CONNECTION {
-                        connections.push(peer_connection_id.to_owned());
-                    } else {
-                        debug!(
-                            "Max sessions reached for connection: {:?}",
-                            peer_connection_id
-                        );
-                    }
+                // Check if we're running too many sessions with that peer on this connection already
+                if active_sessions.len() < MAX_SESSIONS_PER_CONNECTION {
+                    Some(peer_id)
+                } else {
+                    debug!("Max sessions reached for peer: {:?}", peer_id);
+                    None
                 }
-                connections
             })
             .collect();
 
@@ -347,24 +271,21 @@ impl ConnectionManager {
             info!("No peers available for replication")
         }
 
-        for peer_connection_id in attempt_peers {
-            self.initiate_replication(&peer_connection_id).await;
+        for peer_id in attempt_peers {
+            self.initiate_replication(&peer_id).await;
         }
     }
 
-    async fn initiate_replication(&mut self, peer_connection_id: &PeerConnectionId) {
+    async fn initiate_replication(&mut self, peer_id: &PeerId) {
         match self
             .sync_manager
-            .initiate_session(peer_connection_id, &self.target_set, &Mode::Naive)
+            .initiate_session(peer_id, &self.target_set, &Mode::Naive)
             .await
         {
             Ok(messages) => {
                 for message in messages {
                     self.send_service_message(ServiceMessage::SentReplicationMessage(
-                        peer_connection_id.0,
-                        peer_connection_id
-                            .1
-                            .expect("Remote peer found without a connection id"),
+                        peer_id.clone(),
                         message,
                     ));
                 }
