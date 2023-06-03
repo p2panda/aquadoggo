@@ -213,7 +213,8 @@ impl ConnectionHandler for Handler {
                             ));
                         }
                         Poll::Ready(Some(Err(err))) => {
-                            warn!("{err:#?}");
+                            warn!("Error decoding inbound message: {err:#?}");
+
                             // More serious errors, close this side of the stream. If the peer is
                             // still around, they will re-establish their connection
                             self.inbound_substream =
@@ -235,11 +236,10 @@ impl ConnectionHandler for Handler {
                     match Sink::poll_close(Pin::new(&mut substream), cx) {
                         Poll::Ready(res) => {
                             if res.is_err() {
-                                warn!("{res:#?}")
                                 // Don't close the connection but just drop the inbound substream.
                                 // In case the remote has more to send, they will open up a new
                                 // substream.
-                                // @TODO: Log error here
+                                warn!("Error during closing inbound connection: {res:#?}")
                             }
 
                             self.inbound_substream = None;
@@ -295,7 +295,8 @@ impl ConnectionHandler for Handler {
                                         Some(OutboundSubstreamState::PendingFlush(substream))
                                 }
                                 Err(err) => {
-                                    warn!("{err:#?}");
+                                    warn!("Error sending outbound message: {err:#?}");
+
                                     return Poll::Ready(ConnectionHandlerEvent::Close(
                                         HandlerError::Codec(err),
                                     ));
@@ -303,7 +304,8 @@ impl ConnectionHandler for Handler {
                             }
                         }
                         Poll::Ready(Err(err)) => {
-                            warn!("{err:#?}");
+                            warn!("Error encoding outbound message: {err:#?}");
+
                             return Poll::Ready(ConnectionHandlerEvent::Close(
                                 HandlerError::Codec(err),
                             ));
@@ -322,7 +324,8 @@ impl ConnectionHandler for Handler {
                                 Some(OutboundSubstreamState::WaitingOutput(substream))
                         }
                         Poll::Ready(Err(err)) => {
-                            warn!("{err:#?}");
+                            warn!("Error flushing outbound message: {err:#?}");
+
                             return Poll::Ready(ConnectionHandlerEvent::Close(
                                 HandlerError::Codec(err),
                             ));
