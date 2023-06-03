@@ -40,11 +40,7 @@ impl Behaviour {
 }
 
 impl Behaviour {
-    pub fn send_message(
-        &mut self,
-        peer_id: PeerId,
-        message: SyncMessage,
-    ) {
+    pub fn send_message(&mut self, peer_id: PeerId, message: SyncMessage) {
         trace!(
             "Notify handler of sent sync message: {peer_id} {}",
             message.display()
@@ -56,19 +52,14 @@ impl Behaviour {
         });
     }
 
-    fn handle_received_message(
-        &mut self,
-        peer_id: &PeerId,
-        message: SyncMessage,
-    ) {
+    fn handle_received_message(&mut self, peer_id: &PeerId, message: SyncMessage) {
         trace!(
             "Notify swarm of received sync message: {peer_id} {}",
             message.display()
         );
         self.events
             .push_back(ToSwarm::GenerateEvent(Event::MessageReceived(
-                *peer_id,
-                message,
+                *peer_id, message,
             )));
     }
 }
@@ -120,9 +111,7 @@ impl NetworkBehaviour for Behaviour {
             }) => {
                 if remaining_established == 0 {
                     self.events
-                        .push_back(ToSwarm::GenerateEvent(Event::PeerDisconnected(
-                            peer_id,
-                        )));
+                        .push_back(ToSwarm::GenerateEvent(Event::PeerDisconnected(peer_id)));
                 }
             }
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
@@ -138,9 +127,7 @@ impl NetworkBehaviour for Behaviour {
                     );
                 } else {
                     self.events
-                        .push_back(ToSwarm::GenerateEvent(Event::PeerConnected(
-                            peer_id,
-                        )));
+                        .push_back(ToSwarm::GenerateEvent(Event::PeerConnected(peer_id)));
                 }
             }
             FromSwarm::AddressChange(_)
