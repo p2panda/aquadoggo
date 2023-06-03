@@ -2,7 +2,7 @@
 
 mod behaviour;
 mod config;
-mod identity;
+pub mod identity;
 mod replication;
 mod service;
 mod swarm;
