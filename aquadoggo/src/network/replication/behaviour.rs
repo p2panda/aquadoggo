@@ -21,8 +21,10 @@ pub enum Event {
     /// Replication message received on the inbound stream.
     MessageReceived(PeerId, SyncMessage),
 
+    /// We established an inbound or outbound connection to a peer for the first time.
     PeerConnected(PeerId),
 
+    /// Peer does not have any inbound or outbound connections left with us.
     PeerDisconnected(PeerId),
 }
 
