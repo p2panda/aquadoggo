@@ -253,7 +253,7 @@ impl ConnectionManager {
                 let sessions = self.sync_manager.get_sessions(&peer_id);
                 let active_sessions: Vec<&Session> = sessions
                     .iter()
-                    .filter(|session| session.is_done())
+                    .filter(|session| !session.is_done())
                     .collect();
 
                 // Check if we're running too many sessions with that peer on this connection already
