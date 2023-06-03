@@ -22,7 +22,10 @@ use crate::replication::{
 };
 use crate::schema::SchemaProvider;
 
-const MAX_SESSIONS_PER_CONNECTION: usize = 3;
+/// Maximum of replication sessions per peer.
+const MAX_SESSIONS_PER_PEER: usize = 3;
+
+/// How often does the scheduler check for initiating replication sessions with peers.
 const UPDATE_INTERVAL: Duration = Duration::from_secs(5);
 
 pub async fn replication_service(
@@ -31,7 +34,6 @@ pub async fn replication_service(
     tx: ServiceSender,
     tx_ready: ServiceReadySender,
 ) -> Result<()> {
-    // Subscribe to communication bus
     let _rx = tx.subscribe();
 
     let local_peer_id = context
@@ -43,7 +45,6 @@ pub async fn replication_service(
     // Run a connection manager which deals with the replication logic
     let manager =
         ConnectionManager::new(&context.schema_provider, &context.store, &tx, local_peer_id);
-
     let handle = task::spawn(manager.run());
 
     if tx_ready.send(()).is_err() {
@@ -79,11 +80,23 @@ impl PeerStatus {
 }
 
 struct ConnectionManager {
+    /// List of peers the connection mananger knows about and are available for replication.
     peers: HashMap<PeerId, PeerStatus>,
+
+    /// Replication state manager, data ingest and message generator for handling all replication
+    /// logic.
     sync_manager: SyncManager<PeerId>,
+
+    /// Async stream giving us a regular interval to initiate new replication sessions.
     scheduler: Ticker,
+
+    /// Receiver for messages from other services, for example the networking layer.
     tx: ServiceSender,
+
+    /// Sender for messages to other services.
     rx: BroadcastStream<ServiceMessage>,
+
+    /// Provider to retreive our currently supported schema ids.
     schema_provider: SchemaProvider,
 }
 
@@ -108,7 +121,7 @@ impl ConnectionManager {
         }
     }
 
-    /// Define set of schema ids we are interested in.
+    /// Returns set of schema ids we are interested in and support on this node.
     async fn target_set(&self) -> TargetSet {
         let supported_schema_ids: Vec<SchemaId> = self
             .schema_provider
@@ -244,7 +257,7 @@ impl ConnectionManager {
                     .collect();
 
                 // Check if we're running too many sessions with that peer on this connection already
-                if active_sessions.len() < MAX_SESSIONS_PER_CONNECTION {
+                if active_sessions.len() < MAX_SESSIONS_PER_PEER {
                     Some(peer_id)
                 } else {
                     debug!("Max sessions reached for peer: {:?}", peer_id);
