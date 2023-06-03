@@ -299,7 +299,7 @@ impl EntryStore for SqlStore {
             WHERE
                 public_key = $1
                 AND log_id = $2
-                AND CAST(seq_num AS NUMERIC) IN ({})
+                AND seq_num IN ({})
             ORDER BY
                 CAST(seq_num AS NUMERIC) DESC
             ",
@@ -336,7 +336,7 @@ impl SqlStore {
             WHERE
                 logs.schema = $1
             GROUP BY
-                entries.public_key, CAST(entries.log_id AS NUMERIC)
+                entries.public_key, entries.log_id
             ORDER BY
                 entries.public_key, CAST(entries.log_id AS NUMERIC)
             ",
