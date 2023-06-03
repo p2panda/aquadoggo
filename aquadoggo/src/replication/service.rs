@@ -4,12 +4,12 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use anyhow::Result;
-use futures_ticker::Ticker;
 use libp2p::PeerId;
 use log::{debug, info, warn};
 use p2panda_rs::schema::SchemaId;
 use tokio::task;
-use tokio_stream::wrappers::BroadcastStream;
+use tokio::time::interval;
+use tokio_stream::wrappers::{BroadcastStream, IntervalStream};
 use tokio_stream::StreamExt;
 
 use crate::bus::{ServiceMessage, ServiceSender};
@@ -88,7 +88,7 @@ struct ConnectionManager {
     sync_manager: SyncManager<PeerId>,
 
     /// Async stream giving us a regular interval to initiate new replication sessions.
-    scheduler: Ticker,
+    scheduler: IntervalStream,
 
     /// Receiver for messages from other services, for example the networking layer.
     tx: ServiceSender,
@@ -109,7 +109,7 @@ impl ConnectionManager {
     ) -> Self {
         let ingest = SyncIngest::new(schema_provider.clone(), tx.clone());
         let sync_manager = SyncManager::new(store.clone(), ingest, local_peer_id);
-        let scheduler = Ticker::new(UPDATE_INTERVAL);
+        let scheduler = IntervalStream::new(interval(UPDATE_INTERVAL));
 
         Self {
             peers: HashMap::new(),

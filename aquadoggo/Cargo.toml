@@ -31,7 +31,6 @@ directories = "4.0.1"
 dynamic-graphql = "0.7.3"
 envy = "0.4.2"
 futures = "0.3.23"
-futures-ticker = "0.0.3"
 hex = "0.4.3"
 http = "0.2.9"
 libp2p = { version = "0.51.3", features = [
