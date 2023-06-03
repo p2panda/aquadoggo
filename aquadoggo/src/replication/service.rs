@@ -40,24 +40,9 @@ pub async fn replication_service(
         .peer_id
         .expect("Peer id needs to be given");
 
-    // Define set of schema ids we are interested in
-    let supported_schema_ids: Vec<SchemaId> = context
-        .schema_provider
-        .all()
-        .await
-        .iter()
-        .map(|schema| schema.id().to_owned())
-        .collect();
-    let target_set = TargetSet::new(&supported_schema_ids);
-
     // Run a connection manager which deals with the replication logic
-    let manager = ConnectionManager::new(
-        &context.schema_provider,
-        &context.store,
-        &tx,
-        local_peer_id,
-        target_set,
-    );
+    let manager =
+        ConnectionManager::new(&context.schema_provider, &context.store, &tx, local_peer_id);
 
     let handle = task::spawn(manager.run());
 
@@ -99,7 +84,7 @@ struct ConnectionManager {
     scheduler: Ticker,
     tx: ServiceSender,
     rx: BroadcastStream<ServiceMessage>,
-    target_set: TargetSet,
+    schema_provider: SchemaProvider,
 }
 
 impl ConnectionManager {
@@ -108,7 +93,6 @@ impl ConnectionManager {
         store: &SqlStore,
         tx: &ServiceSender,
         local_peer_id: PeerId,
-        target_set: TargetSet,
     ) -> Self {
         let ingest = SyncIngest::new(schema_provider.clone(), tx.clone());
         let sync_manager = SyncManager::new(store.clone(), ingest, local_peer_id);
@@ -120,8 +104,20 @@ impl ConnectionManager {
             scheduler,
             tx: tx.clone(),
             rx: BroadcastStream::new(tx.subscribe()),
-            target_set,
+            schema_provider: schema_provider.clone(),
         }
+    }
+
+    /// Define set of schema ids we are interested in.
+    async fn target_set(&self) -> TargetSet {
+        let supported_schema_ids: Vec<SchemaId> = self
+            .schema_provider
+            .all()
+            .await
+            .iter()
+            .map(|schema| schema.id().to_owned())
+            .collect();
+        TargetSet::new(&supported_schema_ids)
     }
 
     fn remove_connection(&mut self, peer_id: PeerId) {
@@ -176,6 +172,7 @@ impl ConnectionManager {
 
     async fn on_replication_finished(&mut self, peer_id: PeerId, _session_id: SessionId) {
         info!("Finished replication with peer {}", peer_id);
+
         match self.peers.get_mut(&peer_id) {
             Some(status) => {
                 status.successful_count += 1;
@@ -266,16 +263,17 @@ impl ConnectionManager {
     }
 
     async fn initiate_replication(&mut self, peer_id: &PeerId) {
+        let target_set = self.target_set().await;
+
         match self
             .sync_manager
-            .initiate_session(peer_id, &self.target_set, &Mode::Naive)
+            .initiate_session(peer_id, &target_set, &Mode::Naive)
             .await
         {
             Ok(messages) => {
                 for message in messages {
                     self.send_service_message(ServiceMessage::SentReplicationMessage(
-                        peer_id.clone(),
-                        message,
+                        *peer_id, message,
                     ));
                 }
             }
