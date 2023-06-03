@@ -277,14 +277,14 @@ impl EntryStore for SqlStore {
         log_id: &LogId,
         initial_seq_num: &SeqNum,
     ) -> Result<Vec<StorageEntry>, EntryStorageError> {
+        // Formatting query string in this way as `sqlx` currently doesn't support binding list
+        // arguments for IN queries.
         let cert_pool_seq_nums = get_lipmaa_links_back_to(initial_seq_num.as_u64(), 1)
             .iter()
-            .map(|seq_num| seq_num.to_string())
+            .map(|seq_num| format!("\"{}\"", seq_num))
             .collect::<Vec<String>>()
             .join(",");
 
-        // Formatting query string in this way as `sqlx` currently
-        // doesn't support binding list arguments for IN queries.
         let sql_str = format!(
             "SELECT
                 public_key,
