@@ -281,7 +281,7 @@ impl EntryStore for SqlStore {
         // arguments for IN queries.
         let cert_pool_seq_nums = get_lipmaa_links_back_to(initial_seq_num.as_u64(), 1)
             .iter()
-            .map(|seq_num| format!("\"{}\"", seq_num))
+            .map(|seq_num| format!("'{seq_num}'"))
             .collect::<Vec<String>>()
             .join(",");
 
