@@ -141,7 +141,6 @@ impl EventLoop {
                     }
                     // Command channel closed, thus shutting down the network event loop
                     None => {
-                        warn!("CLOSED");
                         return
                     },
                 },
@@ -159,13 +158,11 @@ impl EventLoop {
 
     /// Handle an incoming message via the communication bus from other services.
     async fn handle_service_message(&mut self, message: ServiceMessage) {
-        if let ServiceMessage::SentReplicationMessage(peer_id, sync_message) =
-            message
-        {
-            self.swarm.behaviour_mut().replication.send_message(
-                peer_id,
-                sync_message,
-            );
+        if let ServiceMessage::SentReplicationMessage(peer_id, sync_message) = message {
+            self.swarm
+                .behaviour_mut()
+                .replication
+                .send_message(peer_id, sync_message);
         }
     }
 
@@ -438,22 +435,16 @@ impl EventLoop {
             // Replication
             // ~~~~~~~~~~~
             SwarmEvent::Behaviour(BehaviourEvent::Replication(event)) => match event {
-                replication::Event::MessageReceived(peer_id, message) => self
-                    .send_service_message(ServiceMessage::ReceivedReplicationMessage(
-                        peer_id,
-                        message,
-                    )),
+                replication::Event::MessageReceived(peer_id, message) => self.send_service_message(
+                    ServiceMessage::ReceivedReplicationMessage(peer_id, message),
+                ),
                 replication::Event::PeerConnected(peer_id) => {
                     // Inform other services about new connection
-                    self.send_service_message(ServiceMessage::PeerConnected(
-                        peer_id,
-                    ));
+                    self.send_service_message(ServiceMessage::PeerConnected(peer_id));
                 }
                 replication::Event::PeerDisconnected(peer_id) => {
                     // Inform other services about closed connection
-                    self.send_service_message(ServiceMessage::PeerDisconnected(
-                        peer_id,
-                    ));
+                    self.send_service_message(ServiceMessage::PeerDisconnected(peer_id));
                 }
             },
 

@@ -4,24 +4,26 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use anyhow::Result;
+use futures_ticker::Ticker;
 use libp2p::PeerId;
 use log::{debug, info, warn};
 use p2panda_rs::schema::SchemaId;
-use tokio::sync::broadcast::Receiver;
 use tokio::task;
-use tokio::time::sleep;
+use tokio_stream::wrappers::BroadcastStream;
+use tokio_stream::StreamExt;
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
 use crate::db::SqlStore;
 use crate::manager::{ServiceReadySender, Shutdown};
 use crate::replication::errors::ReplicationError;
-use crate::replication::{Mode, Session, SyncIngest, SyncManager, SyncMessage, TargetSet};
+use crate::replication::{
+    Mode, Session, SessionId, SyncIngest, SyncManager, SyncMessage, TargetSet,
+};
 use crate::schema::SchemaProvider;
 
-use super::SessionId;
-
 const MAX_SESSIONS_PER_CONNECTION: usize = 3;
+const UPDATE_INTERVAL: Duration = Duration::from_secs(5);
 
 pub async fn replication_service(
     context: Context,
@@ -57,7 +59,6 @@ pub async fn replication_service(
         target_set,
     );
 
-    let scheduler_handle = task::spawn(ConnectionManager::start_scheduler(tx.clone()));
     let handle = task::spawn(manager.run());
 
     if tx_ready.send(()).is_err() {
@@ -66,7 +67,6 @@ pub async fn replication_service(
 
     tokio::select! {
         _ = handle => (),
-        _ = scheduler_handle => (),
         _ = shutdown => {
             // @TODO: Wait until all pending replication processes are completed during graceful
             // shutdown
@@ -96,8 +96,9 @@ impl PeerStatus {
 struct ConnectionManager {
     peers: HashMap<PeerId, PeerStatus>,
     sync_manager: SyncManager<PeerId>,
+    scheduler: Ticker,
     tx: ServiceSender,
-    rx: Receiver<ServiceMessage>,
+    rx: BroadcastStream<ServiceMessage>,
     target_set: TargetSet,
 }
 
@@ -111,12 +112,14 @@ impl ConnectionManager {
     ) -> Self {
         let ingest = SyncIngest::new(schema_provider.clone(), tx.clone());
         let sync_manager = SyncManager::new(store.clone(), ingest, local_peer_id);
+        let scheduler = Ticker::new(UPDATE_INTERVAL);
 
         Self {
             peers: HashMap::new(),
             sync_manager,
+            scheduler,
             tx: tx.clone(),
-            rx: tx.subscribe(),
+            rx: BroadcastStream::new(tx.subscribe()),
             target_set,
         }
     }
@@ -130,7 +133,7 @@ impl ConnectionManager {
 
     async fn on_connection_established(&mut self, peer_id: PeerId) {
         info!("Connected to peer: {peer_id}");
-        
+
         match self.peers.get(&peer_id) {
             Some(_) => {
                 warn!("Peer already known: {peer_id}");
@@ -150,39 +153,28 @@ impl ConnectionManager {
         self.remove_connection(peer_id)
     }
 
-    async fn on_replication_message(
-        &mut self,
-        peer_id: PeerId,
-        message: SyncMessage,
-    ) {
+    async fn on_replication_message(&mut self, peer_id: PeerId, message: SyncMessage) {
         let session_id = message.session_id();
 
         match self.sync_manager.handle_message(&peer_id, &message).await {
             Ok(result) => {
                 for message in result.messages {
                     self.send_service_message(ServiceMessage::SentReplicationMessage(
-                        peer_id,
-                        message,
+                        peer_id, message,
                     ));
                 }
 
                 if result.is_done {
-                    self.on_replication_finished(peer_id, session_id)
-                        .await;
+                    self.on_replication_finished(peer_id, session_id).await;
                 }
             }
             Err(err) => {
-                self.on_replication_error(peer_id, session_id, err)
-                    .await;
+                self.on_replication_error(peer_id, session_id, err).await;
             }
         }
     }
 
-    async fn on_replication_finished(
-        &mut self,
-        peer_id: PeerId,
-        _session_id: SessionId,
-    ) {
+    async fn on_replication_finished(&mut self, peer_id: PeerId, _session_id: SessionId) {
         info!("Finished replication with peer {}", peer_id);
         match self.peers.get_mut(&peer_id) {
             Some(status) => {
@@ -228,11 +220,7 @@ impl ConnectionManager {
                 self.on_connection_closed(peer_id).await;
             }
             ServiceMessage::ReceivedReplicationMessage(peer_id, message) => {
-                self.on_replication_message(peer_id, message)
-                    .await;
-            }
-            ServiceMessage::InitiateReplication => {
-                self.update_sessions().await;
+                self.on_replication_message(peer_id, message).await;
             }
             _ => (), // Ignore all other messages
         }
@@ -269,7 +257,7 @@ impl ConnectionManager {
             .collect();
 
         if attempt_peers.is_empty() {
-            info!("No peers available for replication")
+            debug!("No peers available for replication")
         }
 
         for peer_id in attempt_peers {
@@ -299,21 +287,20 @@ impl ConnectionManager {
 
     pub async fn run(mut self) {
         loop {
-            match self.rx.recv().await {
-                Ok(message) => self.handle_service_message(message).await,
-                Err(err) => {
-                    panic!("Service bus subscriber failed: {}", err);
+            tokio::select! {
+                event = self.rx.next() => match event {
+                    Some(Ok(message)) => self.handle_service_message(message).await,
+                    Some(Err(err)) => {
+                        panic!("Service bus subscriber for connection manager loop failed: {}", err);
+                    }
+                    // Command channel closed, thus shutting down the network event loop
+                    None => {
+                        return
+                    },
+                },
+                Some(_) = self.scheduler.next() => {
+                    self.update_sessions().await
                 }
-            }
-        }
-    }
-
-    pub async fn start_scheduler(tx: ServiceSender) {
-        loop {
-            sleep(Duration::from_secs(5)).await;
-            if tx.send(ServiceMessage::InitiateReplication).is_err() {
-                // Silently fail here as we don't care if the message was received at this
-                // point
             }
         }
     }

@@ -15,9 +15,6 @@ pub enum ServiceMessage {
     /// A new operation arrived at the node.
     NewOperation(OperationId),
 
-    /// Message from scheduler to initiate replication on available peers.
-    InitiateReplication,
-
     /// Node established a bi-directional connection to another node.
     PeerConnected(PeerId),
 
