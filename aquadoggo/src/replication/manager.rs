@@ -203,8 +203,8 @@ where
         existing_session: &Session,
     ) -> Result<SyncResult, ReplicationError> {
         match existing_session.local {
-            // Remote peer sent a sync request for an already pending inbound session, we should ignore
-            // this second request.
+            // Remote peer sent a sync request for an already pending inbound session, we should
+            // ignore this second request.
             false => Err(DuplicateSessionRequestError::InboundPendingSession(
                 existing_session.id,
             )),
@@ -277,8 +277,8 @@ where
         existing_session: &Session,
     ) -> Result<SyncResult, ReplicationError> {
         match existing_session.local {
-            // Remote peer sent a sync request for an already pending inbound session, we should ignore
-            // this second request.
+            // Remote peer sent a sync request for an already pending inbound session, we should
+            // ignore this second request.
             false => Err(DuplicateSessionRequestError::InboundExistingTargetSet(
                 existing_session.target_set(),
             )),
@@ -344,9 +344,10 @@ where
 
         let sessions = self.get_sessions(remote_peer);
 
-        // Check if a session with this id already exists for this peer, this can happen if both
-        // peers started to initiate a session at the same time, or if the remote peer sent two
-        // sync request messages with the same session id.
+        // Check if a session with this id already exists for this peer.
+        //
+        // This can happen if both peers started to initiate a session at the same time, or if the
+        // remote peer sent two sync request messages with the same session id.
         if let Some(existing_session) = sessions
             .iter()
             .find(|existing_session| existing_session.id == *session_id)
@@ -357,8 +358,7 @@ where
                 .await;
         }
 
-        // Check if a session with this target set already exists for this peer, this always gets
-        // rejected because it is clearly redundant
+        // Check if a session with this target set already exists for this peer.
         if let Some(session) = sessions
             .iter()
             .find(|session| session.target_set() == *target_set)
