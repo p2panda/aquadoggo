@@ -244,6 +244,9 @@ impl ConnectionManager {
     }
 
     async fn update_sessions(&mut self) {
+        // Determine the target set our node is interested in
+        let target_set = self.target_set().await;
+
         // Iterate through all currently connected peers
         let attempt_peers: Vec<PeerId> = self
             .peers
@@ -251,16 +254,24 @@ impl ConnectionManager {
             .into_iter()
             .filter_map(|(peer_id, _)| {
                 let sessions = self.sync_manager.get_sessions(&peer_id);
+
+                // 1. Check if we're running too many sessions with that peer on this connection
+                //    already. This limit is configurable.
                 let active_sessions: Vec<&Session> = sessions
                     .iter()
                     .filter(|session| !session.is_done())
                     .collect();
 
-                // Check if we're running too many sessions with that peer on this connection already
-                if active_sessions.len() < MAX_SESSIONS_PER_PEER {
+                // 2. Check if we're already having at least one session concerning the same target
+                //    set. If we would start that session again it would be considered an error.
+                let has_active_target_set_session = active_sessions
+                    .iter()
+                    .any(|session| session.target_set() == target_set);
+
+                if active_sessions.len() < MAX_SESSIONS_PER_PEER && !has_active_target_set_session {
                     Some(peer_id)
                 } else {
-                    debug!("Max sessions reached for peer: {:?}", peer_id);
+                    debug!("Max sessions reached for peer: {peer_id}");
                     None
                 }
             })
@@ -271,16 +282,14 @@ impl ConnectionManager {
         }
 
         for peer_id in attempt_peers {
-            self.initiate_replication(&peer_id).await;
+            self.initiate_replication(&peer_id, &target_set).await;
         }
     }
 
-    async fn initiate_replication(&mut self, peer_id: &PeerId) {
-        let target_set = self.target_set().await;
-
+    async fn initiate_replication(&mut self, peer_id: &PeerId, target_set: &TargetSet) {
         match self
             .sync_manager
-            .initiate_session(peer_id, &target_set, &Mode::Naive)
+            .initiate_session(peer_id, target_set, &Mode::Naive)
             .await
         {
             Ok(messages) => {
