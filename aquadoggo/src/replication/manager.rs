@@ -255,8 +255,14 @@ where
                 .await;
             all_messages.extend(to_sync_messages(existing_session.id, messages));
 
-            // @TODO: Do we want to re-initiate the dropped session if it was concerning a
-            // different target set?
+            // If we dropped our own outbound session request regarding a different target set, we
+            // need to re-establish it with another session id, otherwise it would get lost
+            if existing_session.target_set() != *target_set {
+                let messages = self
+                    .initiate_session(remote_peer, target_set, &existing_session.mode())
+                    .await?;
+                all_messages.extend(messages)
+            }
         }
 
         Ok(SyncResult {
