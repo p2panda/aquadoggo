@@ -244,10 +244,6 @@ where
         let mut all_messages: Vec<SyncMessage> = vec![];
 
         if accept_inbound_request {
-            debug!(
-                "Accept duplicate session request with id {} for peer {:?}",
-                existing_session.id, remote_peer
-            );
             let messages = self
                 .insert_and_initialize_session(
                     remote_peer,
