@@ -184,11 +184,10 @@ impl EventLoop {
             SwarmEvent::Dialing(peer_id) => info!("Dialing: {peer_id}"),
             SwarmEvent::ConnectionEstablished {
                 peer_id,
-                endpoint,
                 num_established,
                 ..
             } => {
-                info!("ConnectionEstablished: {peer_id} {endpoint:?} {num_established}");
+                info!("Established new connection (total {num_established}) with {peer_id}");
 
                 // Match on a connection with the rendezvous server
                 if let Some(rendezvous_peer_id) = self.network_config.rendezvous_peer_id {
@@ -210,11 +209,11 @@ impl EventLoop {
             }
             SwarmEvent::ConnectionClosed {
                 peer_id,
-                endpoint,
                 num_established,
                 cause,
+                ..
             } => {
-                info!("ConnectionClosed: {peer_id} {endpoint:?} {num_established} {cause:?}");
+                info!("Connection closed (total {num_established}) with {peer_id}: {cause:?}");
             }
             SwarmEvent::ExpiredListenAddr {
                 listener_id,

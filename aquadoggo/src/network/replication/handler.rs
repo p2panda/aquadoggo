@@ -41,7 +41,10 @@ pub struct Handler {
     /// Last time we've observed inbound or outbound messaging activity.
     last_io_activity: Instant,
 
-    /// Flag indicating if a critical replication error occurred.
+    /// Flag indicating that we want to close _all_ connection handlers related to that peer.
+    ///
+    /// This is useful in scenarios where a critical error occurred outside of the libp2p stack
+    /// (for example in the replication service) and we need to accordingly close all connections.
     critical_error: bool,
 }
 
@@ -102,6 +105,12 @@ pub enum HandlerOutEvent {
 pub enum HandlerError {
     #[error("Failed to encode or decode CBOR")]
     Codec(#[from] CodecError),
+
+    #[error("Critical replication protocol error")]
+    ReplicationError,
+
+    #[error("Remote peer closed connection")]
+    RemotePeerDisconnected,
 }
 
 type Stream = Framed<NegotiatedSubstream, Codec>;
@@ -182,9 +191,11 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        // Close connection immediately on critical errors coming from replication service
-        if self.critical_error {
-            return KeepAlive::No;
+        if let Some(
+            OutboundSubstreamState::PendingSend(_, _) | OutboundSubstreamState::PendingFlush(_),
+        ) = self.outbound_substream
+        {
+            return KeepAlive::Yes;
         }
 
         KeepAlive::Until(self.last_io_activity + IDLE_TIMEOUT)
@@ -201,6 +212,14 @@ impl ConnectionHandler for Handler {
             Self::Error,
         >,
     > {
+        if self.critical_error {
+            // Returning a `Close` event will inform all other handlers to close their connections
+            // to that peer
+            return Poll::Ready(ConnectionHandlerEvent::Close(
+                HandlerError::ReplicationError,
+            ));
+        }
+
         // Determine if we need to create the outbound stream
         if !self.send_queue.is_empty()
             && self.outbound_substream.is_none()
@@ -234,8 +253,8 @@ impl ConnectionHandler for Handler {
                         Poll::Ready(Some(Err(err))) => {
                             warn!("Error decoding inbound message: {err}");
 
-                            // More serious errors, close this side of the stream. If the peer is
-                            // still around, they will re-establish their connection
+                            // Close this side of the stream. If the peer is still around, they
+                            // will re-establish their connection
                             self.inbound_substream =
                                 Some(InboundSubstreamState::Closing(substream));
                         }
@@ -255,13 +274,17 @@ impl ConnectionHandler for Handler {
                     match Sink::poll_close(Pin::new(&mut substream), cx) {
                         Poll::Ready(res) => {
                             if let Err(err) = res {
-                                // Don't close the connection but just drop the inbound substream.
-                                // In case the remote has more to send, they will open up a new
-                                // substream.
                                 warn!("Error during closing inbound connection: {err}")
                             }
+
                             self.inbound_substream = None;
-                            break;
+
+                            // Close all connection handlers because we can assume that the remote
+                            // peer actively closed an existing connection and probably went
+                            // offline
+                            return Poll::Ready(ConnectionHandlerEvent::Close(
+                                HandlerError::RemotePeerDisconnected,
+                            ));
                         }
                         Poll::Pending => {
                             self.inbound_substream =
@@ -291,6 +314,8 @@ impl ConnectionHandler for Handler {
                         Some(message) => {
                             self.outbound_substream =
                                 Some(OutboundSubstreamState::PendingSend(substream, message));
+
+                            // Continue loop in case there is more messages to be sent
                             continue;
                         }
                         None => {

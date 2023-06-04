@@ -10,7 +10,7 @@ use libp2p::swarm::{
     PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use libp2p::{Multiaddr, PeerId};
-use log::{trace, warn};
+use log::trace;
 use p2panda_rs::Human;
 
 use crate::network::replication::handler::{Handler, HandlerInEvent, HandlerOutEvent};
@@ -68,8 +68,6 @@ impl Behaviour {
         self.events.push_back(ToSwarm::NotifyHandler {
             peer_id,
             event: HandlerInEvent::ReplicationError,
-            // Inform all connections related to that peer, this means that all of them (inbound or
-            // outbound) will be closed
             handler: NotifyHandler::Any,
         });
     }
@@ -130,13 +128,7 @@ impl NetworkBehaviour for Behaviour {
                 other_established,
                 ..
             }) => {
-                if other_established > 0 {
-                    warn!(
-                        "Multiple connections established to peer: {} {}",
-                        other_established + 1,
-                        peer_id
-                    );
-                } else {
+                if other_established == 0 {
                     self.events
                         .push_back(ToSwarm::GenerateEvent(Event::PeerConnected(peer_id)));
                 }
