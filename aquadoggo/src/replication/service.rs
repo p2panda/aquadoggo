@@ -42,7 +42,6 @@ pub async fn replication_service(
         .peer_id
         .expect("Peer id needs to be given");
 
-    // Run a connection manager which deals with the replication logic
     let manager =
         ConnectionManager::new(&context.schema_provider, &context.store, &tx, local_peer_id);
     let handle = task::spawn(manager.run());
@@ -53,10 +52,7 @@ pub async fn replication_service(
 
     tokio::select! {
         _ = handle => (),
-        _ = shutdown => {
-            // @TODO: Wait until all pending replication processes are completed during graceful
-            // shutdown
-        }
+        _ = shutdown => (),
     }
 
     Ok(())
@@ -219,6 +215,9 @@ impl ConnectionManager {
             }
             _ => (), // Don't try and close the session on other errors as it should not have been initiated
         }
+
+        // Inform network service about error, so it can accordingly react
+        self.send_service_message(ServiceMessage::ReplicationFailed(peer_id));
     }
 
     async fn handle_service_message(&mut self, message: ServiceMessage) {

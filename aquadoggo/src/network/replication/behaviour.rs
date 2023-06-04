@@ -39,9 +39,18 @@ impl Behaviour {
             events: VecDeque::new(),
         }
     }
-}
 
-impl Behaviour {
+    fn handle_received_message(&mut self, peer_id: &PeerId, message: SyncMessage) {
+        trace!(
+            "Notify swarm of received sync message: {peer_id} {}",
+            message.display()
+        );
+        self.events
+            .push_back(ToSwarm::GenerateEvent(Event::MessageReceived(
+                *peer_id, message,
+            )));
+    }
+
     pub fn send_message(&mut self, peer_id: PeerId, message: SyncMessage) {
         trace!(
             "Notify handler of sent sync message: {peer_id} {}",
@@ -54,15 +63,15 @@ impl Behaviour {
         });
     }
 
-    fn handle_received_message(&mut self, peer_id: &PeerId, message: SyncMessage) {
-        trace!(
-            "Notify swarm of received sync message: {peer_id} {}",
-            message.display()
-        );
-        self.events
-            .push_back(ToSwarm::GenerateEvent(Event::MessageReceived(
-                *peer_id, message,
-            )));
+    /// React to errors coming from the replication protocol living inside the replication service.
+    pub fn handle_error(&mut self, peer_id: PeerId) {
+        self.events.push_back(ToSwarm::NotifyHandler {
+            peer_id,
+            event: HandlerInEvent::ReplicationError,
+            // Inform all connections related to that peer, this means that all of them (inbound or
+            // outbound) will be closed
+            handler: NotifyHandler::Any,
+        });
     }
 }
 

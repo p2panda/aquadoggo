@@ -26,4 +26,7 @@ pub enum ServiceMessage {
 
     /// Node received a message from remote node for replication.
     ReceivedReplicationMessage(PeerId, SyncMessage),
+
+    /// Replication protocol failed with an critical error.
+    ReplicationFailed(PeerId),
 }

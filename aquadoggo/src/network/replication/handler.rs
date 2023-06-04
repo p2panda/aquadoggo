@@ -3,6 +3,7 @@
 use std::collections::VecDeque;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use std::time::{Duration, Instant};
 
 use asynchronous_codec::Framed;
 use futures::{Sink, StreamExt};
@@ -15,6 +16,10 @@ use thiserror::Error;
 
 use crate::network::replication::{Codec, CodecError, Protocol};
 use crate::replication::SyncMessage;
+
+/// The time a connection is maintained to a peer without being in live mode and without
+/// send/receiving a message from. Connections that idle beyond this timeout are disconnected.
+const IDLE_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub struct Handler {
     /// Upgrade configuration for the replication protocol.
@@ -33,8 +38,11 @@ pub struct Handler {
     /// Queue of messages that we want to send to the remote.
     send_queue: VecDeque<SyncMessage>,
 
-    /// Flag determining whether to maintain the connection to the peer.
-    keep_alive: KeepAlive,
+    /// Last time we've observed inbound or outbound messaging activity.
+    last_io_activity: Instant,
+
+    /// Flag indicating if a critical replication error occurred.
+    critical_error: bool,
 }
 
 impl Handler {
@@ -45,7 +53,8 @@ impl Handler {
             inbound_substream: None,
             outbound_substream_establishing: false,
             send_queue: VecDeque::new(),
-            keep_alive: KeepAlive::Yes,
+            last_io_activity: Instant::now(),
+            critical_error: false,
         }
     }
 
@@ -75,6 +84,9 @@ impl Handler {
 pub enum HandlerInEvent {
     /// Replication message to send on outbound stream.
     Message(SyncMessage),
+
+    /// Replication protocol failed with an error.
+    ReplicationError,
 }
 
 /// The event emitted by the connection handler.
@@ -159,17 +171,23 @@ impl ConnectionHandler for Handler {
     }
 
     fn on_behaviour_event(&mut self, event: Self::InEvent) {
-        self.keep_alive = KeepAlive::Yes;
-
         match event {
             HandlerInEvent::Message(message) => {
                 self.send_queue.push_back(message);
+            }
+            HandlerInEvent::ReplicationError => {
+                self.critical_error = true;
             }
         }
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
+        // Close connection immediately on critical errors coming from replication service
+        if self.critical_error {
+            return KeepAlive::No;
+        }
+
+        KeepAlive::Until(self.last_io_activity + IDLE_TIMEOUT)
     }
 
     fn poll(
@@ -203,17 +221,18 @@ impl ConnectionHandler for Handler {
                 Some(InboundSubstreamState::WaitingInput(mut substream)) => {
                     match substream.poll_next_unpin(cx) {
                         Poll::Ready(Some(Ok(message))) => {
+                            self.last_io_activity = Instant::now();
+
                             // Received message from remote peer
                             self.inbound_substream =
                                 Some(InboundSubstreamState::WaitingInput(substream));
-                            self.keep_alive = KeepAlive::Yes;
 
                             return Poll::Ready(ConnectionHandlerEvent::Custom(
                                 HandlerOutEvent::Message(message),
                             ));
                         }
                         Poll::Ready(Some(Err(err))) => {
-                            warn!("Error decoding inbound message: {err:#?}");
+                            warn!("Error decoding inbound message: {err}");
 
                             // More serious errors, close this side of the stream. If the peer is
                             // still around, they will re-establish their connection
@@ -235,19 +254,13 @@ impl ConnectionHandler for Handler {
                 Some(InboundSubstreamState::Closing(mut substream)) => {
                     match Sink::poll_close(Pin::new(&mut substream), cx) {
                         Poll::Ready(res) => {
-                            if res.is_err() {
+                            if let Err(err) = res {
                                 // Don't close the connection but just drop the inbound substream.
                                 // In case the remote has more to send, they will open up a new
                                 // substream.
-                                warn!("Error during closing inbound connection: {res:#?}")
+                                warn!("Error during closing inbound connection: {err}")
                             }
-
                             self.inbound_substream = None;
-
-                            if self.outbound_substream.is_none() {
-                                self.keep_alive = KeepAlive::No;
-                            }
-
                             break;
                         }
                         Poll::Pending => {
@@ -278,6 +291,7 @@ impl ConnectionHandler for Handler {
                         Some(message) => {
                             self.outbound_substream =
                                 Some(OutboundSubstreamState::PendingSend(substream, message));
+                            continue;
                         }
                         None => {
                             self.outbound_substream =
@@ -295,7 +309,7 @@ impl ConnectionHandler for Handler {
                                         Some(OutboundSubstreamState::PendingFlush(substream))
                                 }
                                 Err(err) => {
-                                    warn!("Error sending outbound message: {err:#?}");
+                                    warn!("Error sending outbound message: {err}");
 
                                     return Poll::Ready(ConnectionHandlerEvent::Close(
                                         HandlerError::Codec(err),
@@ -304,7 +318,7 @@ impl ConnectionHandler for Handler {
                             }
                         }
                         Poll::Ready(Err(err)) => {
-                            warn!("Error encoding outbound message: {err:#?}");
+                            warn!("Error encoding outbound message: {err}");
 
                             return Poll::Ready(ConnectionHandlerEvent::Close(
                                 HandlerError::Codec(err),
@@ -320,11 +334,12 @@ impl ConnectionHandler for Handler {
                 Some(OutboundSubstreamState::PendingFlush(mut substream)) => {
                     match Sink::poll_flush(Pin::new(&mut substream), cx) {
                         Poll::Ready(Ok(())) => {
+                            self.last_io_activity = Instant::now();
                             self.outbound_substream =
                                 Some(OutboundSubstreamState::WaitingOutput(substream))
                         }
                         Poll::Ready(Err(err)) => {
-                            warn!("Error flushing outbound message: {err:#?}");
+                            warn!("Error flushing outbound message: {err}");
 
                             return Poll::Ready(ConnectionHandlerEvent::Close(
                                 HandlerError::Codec(err),
