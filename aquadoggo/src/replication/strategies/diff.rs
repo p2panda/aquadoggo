@@ -3,11 +3,9 @@
 use std::collections::HashMap;
 
 use log::trace;
-use p2panda_rs::{
-    entry::{LogId, SeqNum},
-    identity::PublicKey,
-    Human,
-};
+use p2panda_rs::entry::{LogId, SeqNum};
+use p2panda_rs::identity::PublicKey;
+use p2panda_rs::Human;
 
 use crate::replication::LogHeight;
 
