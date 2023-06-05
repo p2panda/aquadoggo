@@ -270,7 +270,6 @@ impl ConnectionManager {
                 if active_sessions.len() < MAX_SESSIONS_PER_PEER && !has_active_target_set_session {
                     Some(peer_id)
                 } else {
-                    debug!("Max sessions reached for peer: {peer_id}");
                     None
                 }
             })
