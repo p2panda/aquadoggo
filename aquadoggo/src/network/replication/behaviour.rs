@@ -167,10 +167,8 @@ mod tests {
     use p2panda_rs::schema::SchemaId;
     use rstest::rstest;
 
-    use crate::{
-        replication::{Message, SyncMessage, TargetSet},
-        test_utils::helpers::random_target_set,
-    };
+    use crate::replication::{Message, SyncMessage, TargetSet};
+    use crate::test_utils::helpers::random_target_set;
 
     use super::{Behaviour as ReplicationBehaviour, Event};
 
