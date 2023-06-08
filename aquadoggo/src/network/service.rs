@@ -255,8 +255,11 @@ impl EventLoop {
                     for (peer_id, multiaddr) in list {
                         debug!("mDNS discovered a new peer: {peer_id}");
 
-                        if let Err(err) = self.swarm.dial(multiaddr) {
+                        if let Err(err) = self.swarm.dial(peer_id) {
                             warn!("Failed to dial: {}", err);
+                        } else {
+                            debug!("Dial success: skip remaining addresses for: {peer_id}");
+                            break
                         }
 
                         // // Only dial the newly discovered peer if we're not already connected.
