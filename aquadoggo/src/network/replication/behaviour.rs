@@ -6,9 +6,8 @@ use std::task::{Context, Poll};
 use libp2p::core::Endpoint;
 use libp2p::swarm::derive_prelude::ConnectionEstablished;
 use libp2p::swarm::{
-    ConnectionClosed, ConnectionDenied, ConnectionId, DialFailure, FromSwarm, ListenFailure,
-    ListenerClosed, ListenerError, NetworkBehaviour, NotifyHandler, PollParameters, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionClosed, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, NotifyHandler,
+    PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use libp2p::{Multiaddr, PeerId};
 use log::{debug, trace, warn};
