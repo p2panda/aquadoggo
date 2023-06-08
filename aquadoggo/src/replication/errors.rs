@@ -1,8 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use libp2p::PeerId;
 use thiserror::Error;
 
 use crate::replication::TargetSet;
+
+#[derive(Error, Debug)]
+pub enum ConnectionError {
+    #[error("Reject duplicate inbound connection with peer: {0}")]
+    MultipleInboundConnections(PeerId),
+
+    #[error("Reject duplicate outbound connection with peer: {0}")]
+    MultipleOutboundConnections(PeerId),
+}
 
 #[derive(Error, Debug)]
 pub enum ReplicationError {

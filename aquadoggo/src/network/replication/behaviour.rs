@@ -1,19 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::task::{Context, Poll};
 
 use libp2p::core::Endpoint;
 use libp2p::swarm::derive_prelude::ConnectionEstablished;
 use libp2p::swarm::{
-    ConnectionClosed, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, NotifyHandler,
-    PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionClosed, ConnectionDenied, ConnectionId, DialFailure, FromSwarm, ListenFailure,
+    ListenerClosed, ListenerError, NetworkBehaviour, NotifyHandler, PollParameters, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use libp2p::{Multiaddr, PeerId};
-use log::trace;
+use log::{debug, trace, warn};
 use p2panda_rs::Human;
 
 use crate::network::replication::handler::{Handler, HandlerInEvent, HandlerOutEvent};
+use crate::replication::errors::ConnectionError;
 use crate::replication::SyncMessage;
 
 #[derive(Debug)]
@@ -31,13 +33,33 @@ pub enum Event {
 #[derive(Debug)]
 pub struct Behaviour {
     events: VecDeque<ToSwarm<Event, HandlerInEvent>>,
+    inbound_connections: HashMap<PeerId, ConnectionId>,
+    outbound_connections: HashMap<PeerId, ConnectionId>,
 }
 
 impl Behaviour {
     pub fn new() -> Self {
         Self {
             events: VecDeque::new(),
+            inbound_connections: HashMap::new(),
+            outbound_connections: HashMap::new(),
         }
+    }
+
+    fn set_inbound_connection(&mut self, peer_id: PeerId, connection_id: ConnectionId) -> bool {
+        if self.inbound_connections.get(&peer_id).is_some() {
+            return false;
+        }
+        self.inbound_connections.insert(peer_id, connection_id);
+        true
+    }
+
+    fn set_outbound_connection(&mut self, peer_id: PeerId, connection_id: ConnectionId) -> bool {
+        if self.outbound_connections.get(&peer_id).is_some() {
+            return false;
+        }
+        self.outbound_connections.insert(peer_id, connection_id);
+        true
     }
 
     fn handle_received_message(&mut self, peer_id: &PeerId, message: SyncMessage) {
@@ -80,34 +102,72 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_inbound_connection(
         &mut self,
-        _: ConnectionId,
-        _: PeerId,
-        _: &Multiaddr,
-        _: &Multiaddr,
+        connection_id: ConnectionId,
+        peer_id: PeerId,
+        _local_addr: &Multiaddr,
+        remote_address: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
+        // We only want max one inbound connection per peer, so reject this connection if we
+        // already have one assigned.
+        if self.inbound_connections.get(&peer_id).is_some() {
+            debug!("Connection denied: inbound connection already exists for: {peer_id}");
+            return Err(ConnectionDenied::new(
+                ConnectionError::MultipleInboundConnections(peer_id.to_owned()),
+            ));
+        }
+        debug!(
+            "New connection: established inbound connection with peer: {peer_id} {remote_address}"
+        );
+        self.set_inbound_connection(peer_id, connection_id);
         Ok(Handler::new())
     }
 
     fn handle_established_outbound_connection(
         &mut self,
-        _: ConnectionId,
-        _: PeerId,
+        connection_id: ConnectionId,
+        peer_id: PeerId,
         _: &Multiaddr,
         _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
+        // We only want max one outbound connection per peer, so reject this connection if we
+        // already have one assigned.
+        if self.outbound_connections.get(&peer_id).is_some() {
+            debug!("Connection denied: outbound connection already exists for: {peer_id}");
+            return Err(ConnectionDenied::new(
+                ConnectionError::MultipleOutboundConnections(peer_id),
+            ));
+        }
+        debug!("New connection: established outbound connection with peer: {peer_id}");
+        self.set_outbound_connection(peer_id, connection_id);
         Ok(Handler::new())
     }
 
     fn on_connection_handler_event(
         &mut self,
-        peer: PeerId,
-        _connection_id: ConnectionId,
+        peer_id: PeerId,
+        connection_id: ConnectionId,
         handler_event: THandlerOutEvent<Self>,
     ) {
-        match handler_event {
-            HandlerOutEvent::Message(message) => {
-                self.handle_received_message(&peer, message);
+        // We only want to process messages which arrive for connections we have assigned to this peer.
+        let mut current_inbound = false;
+        let mut current_outbound = false;
+
+        if let Some(inbound_connection_id) = self.inbound_connections.get(&peer_id) {
+            current_inbound = *inbound_connection_id == connection_id;
+        }
+
+        if let Some(outbound_connection_id) = self.outbound_connections.get(&peer_id) {
+            current_outbound = *outbound_connection_id == connection_id;
+        }
+
+        if current_inbound || current_outbound {
+            match handler_event {
+                HandlerOutEvent::Message(message) => {
+                    self.handle_received_message(&peer_id, message);
+                }
             }
+        } else {
+            debug!("Message ignored: message arrived on an unknown connection for: {peer_id}");
         }
     }
 
@@ -115,22 +175,82 @@ impl NetworkBehaviour for Behaviour {
         match event {
             FromSwarm::ConnectionClosed(ConnectionClosed {
                 peer_id,
-                remaining_established,
+                connection_id,
                 ..
             }) => {
-                if remaining_established == 0 {
-                    self.events
-                        .push_back(ToSwarm::GenerateEvent(Event::PeerDisconnected(peer_id)));
+                let inbound = self.inbound_connections.get(&peer_id);
+                let outbound = self.outbound_connections.get(&peer_id);
+
+                match (inbound, outbound) {
+                    // An inbound and outbound connection exists for this peer
+                    (Some(inbound_connection_id), Some(outbound_connection_id)) => {
+                        if *outbound_connection_id == connection_id {
+                            debug!(
+                                "Remove connections: remove outbound connection with peer: {peer_id}"
+                            );
+                            self.outbound_connections.remove(&peer_id);
+                        }
+
+                        if *inbound_connection_id == connection_id {
+                            debug!(
+                                "Remove connections: remove inbound connection with peer: {peer_id}"
+                            );
+                            self.inbound_connections.remove(&peer_id);
+                        }
+                    }
+                    // Only an outbound connection exists
+                    (None, Some(outbound_connection_id)) => {
+                        debug!(
+                            "Remove connections: remove outbound connection with peer: {peer_id}"
+                        );
+                        if *outbound_connection_id == connection_id {
+                            self.outbound_connections.remove(&peer_id);
+                            self.events
+                                .push_back(ToSwarm::GenerateEvent(Event::PeerDisconnected(
+                                    peer_id,
+                                )));
+                        }
+                    }
+                    // Only an inbound connection exists,
+                    (Some(inbound_connection_id), None) => {
+                        debug!(
+                            "Remove connections: remove inbound connection with peer: {peer_id}"
+                        );
+                        if *inbound_connection_id == connection_id {
+                            self.inbound_connections.remove(&peer_id);
+                            self.events
+                                .push_back(ToSwarm::GenerateEvent(Event::PeerDisconnected(
+                                    peer_id,
+                                )));
+                        }
+                    }
+                    (None, None) => {
+                        warn!("Attempted to disconnect a peer with no known connections");
+                    }
                 }
             }
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
                 peer_id,
-                other_established,
+                connection_id,
                 ..
             }) => {
-                if other_established == 0 {
+                // We only want to issue PeerConnected messages for connections we have accepted.
+                let mut current_inbound = false;
+                let mut current_outbound = false;
+
+                if let Some(inbound_connection_id) = self.inbound_connections.get(&peer_id) {
+                    current_inbound = *inbound_connection_id == connection_id;
+                }
+
+                if let Some(outbound_connection_id) = self.outbound_connections.get(&peer_id) {
+                    current_outbound = *outbound_connection_id == connection_id;
+                }
+
+                if current_inbound || current_outbound {
                     self.events
                         .push_back(ToSwarm::GenerateEvent(Event::PeerConnected(peer_id)));
+                } else {
+                    warn!("Unknown connection: ignoring unknown connection with: {peer_id}");
                 }
             }
             FromSwarm::AddressChange(_)
