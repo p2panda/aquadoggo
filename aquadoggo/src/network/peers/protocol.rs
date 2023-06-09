@@ -9,7 +9,7 @@ use libp2p::{InboundUpgrade, OutboundUpgrade};
 
 use crate::replication::SyncMessage;
 
-pub const PROTOCOL_NAME: &[u8] = b"/p2p/p2panda/1.0.0";
+pub const PROTOCOL_NAME: &str = "/p2p/p2panda/1.0.0";
 
 pub type CodecError = CborCodecError;
 
@@ -25,11 +25,11 @@ impl Protocol {
 }
 
 impl UpgradeInfo for Protocol {
-    type Info = Vec<u8>;
+    type Info = String;
     type InfoIter = Vec<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        vec![PROTOCOL_NAME.to_vec()]
+        vec![PROTOCOL_NAME.to_string()]
     }
 }
 

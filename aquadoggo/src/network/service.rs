@@ -5,8 +5,8 @@ use std::time::Duration;
 use anyhow::Result;
 use libp2p::multiaddr::Protocol;
 use libp2p::ping::Event;
-use libp2p::swarm::{AddressScore, ConnectionError, SwarmEvent};
-use libp2p::{autonat, identify, mdns, rendezvous, Multiaddr, PeerId, Swarm};
+use libp2p::swarm::SwarmEvent;
+use libp2p::{autonat, identify, mdns, rendezvous, Multiaddr, Swarm};
 use log::{debug, info, trace, warn};
 use tokio::task;
 use tokio_stream::wrappers::BroadcastStream;
@@ -17,7 +17,10 @@ use crate::context::Context;
 use crate::manager::{ServiceReadySender, Shutdown};
 use crate::network::behaviour::{Behaviour, BehaviourEvent};
 use crate::network::config::NODE_NAMESPACE;
-use crate::network::{identity, peers, swarm, NetworkConfiguration, ShutdownHandler};
+use crate::network::replication;
+use crate::network::swarm;
+use crate::network::NetworkConfiguration;
+use crate::replication::errors::ConnectionError;
 
 /// Network service that configures and deploys a libp2p network swarm over QUIC transports.
 ///
@@ -271,10 +274,12 @@ impl EventLoop {
                 address,
             } => trace!("Expired listen address: {listener_id:?} {address}"),
             SwarmEvent::IncomingConnection {
+                connection_id,
                 local_addr,
                 send_back_addr,
             } => trace!("Incoming connection: {local_addr} {send_back_addr}"),
             SwarmEvent::IncomingConnectionError {
+                connection_id,
                 local_addr,
                 send_back_addr,
                 error,
@@ -295,7 +300,7 @@ impl EventLoop {
             } => {
                 debug!("Listening on {address}");
             }
-            SwarmEvent::OutgoingConnectionError { peer_id, error } => match peer_id {
+            SwarmEvent::OutgoingConnectionError { connection_id, peer_id, error } => match peer_id {
                 Some(id) => {
                     warn!("Outgoing connection error with peer {id} occurred: {error}");
                 }
@@ -330,7 +335,7 @@ impl EventLoop {
             // ~~~~
             // Ping
             // ~~~~
-            SwarmEvent::Behaviour(BehaviourEvent::Ping(Event { peer, result: _ })) => {
+            SwarmEvent::Behaviour(BehaviourEvent::Ping(Event { _connection, peer, result: _ })) => {
                 trace!("Ping from: {peer}")
             }
 
@@ -357,7 +362,7 @@ impl EventLoop {
                             if peer_id != local_peer_id {
                                 debug!("Discovered peer {peer_id} at {address}");
 
-                                let p2p_suffix = Protocol::P2p(*peer_id.as_ref());
+                                let p2p_suffix = Protocol::P2p(peer_id);
                                 let address_with_p2p = if !address
                                     .ends_with(&Multiaddr::empty().with(p2p_suffix.clone()))
                                 {
@@ -455,8 +460,7 @@ impl EventLoop {
 
                         if let Some(addr) = self.external_circuit_addr.clone() {
                             trace!("Adding external relayed listen address: {}", addr);
-                            self.swarm
-                                .add_external_address(addr, AddressScore::Finite(1));
+                            self.swarm.add_external_address(addr);
 
                             if let Some(rendezvous_peer_id) = self.network_config.rendezvous_peer_id
                             {
