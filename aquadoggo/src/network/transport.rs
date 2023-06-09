@@ -5,10 +5,8 @@ use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::transport::upgrade::Version;
 use libp2p::core::transport::{Boxed, OrTransport};
 use libp2p::identity::Keypair;
-#[allow(deprecated)]
-use libp2p::noise::NoiseAuthenticated;
-#[allow(deprecated)]
-use libp2p::yamux::YamuxConfig;
+use libp2p::noise::Config as NoiseConfig;
+use libp2p::yamux::Config as YamuxConfig;
 use libp2p::{relay, PeerId, Transport};
 use libp2p_quic as quic;
 
@@ -34,7 +32,7 @@ pub async fn build_transport(
         // Add encryption and multiplexing to the relay transport
         let relay_transport = relay_transport
             .upgrade(Version::V1)
-            .authenticate(NoiseAuthenticated::xx(key_pair).unwrap())
+            .authenticate(NoiseConfig::new(key_pair).unwrap())
             .multiplex(YamuxConfig::default());
 
         // The relay transport only handles listening and dialing on a relayed Multiaddr; it depends

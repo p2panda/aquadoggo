@@ -20,11 +20,11 @@ path = "src/main.rs"
 doc = false
 
 [dependencies]
-anyhow = "=1.0.62"
-tokio = { version = "=1.25.0", features = ["full"] }
-env_logger = "=0.9.0"
-clap = { version = "=4.1.8", features = ["derive"] }
-libp2p = "=0.51.3"
+anyhow = "1.0.62"
+tokio = { version = "1.25.0", features = ["full"] }
+env_logger = "0.9.0"
+clap = { version = "4.1.8", features = ["derive"] }
+libp2p = { git = "https://github.com/libp2p/rust-libp2p" }
 
 [dependencies.aquadoggo]
 version = "~0.4.0"

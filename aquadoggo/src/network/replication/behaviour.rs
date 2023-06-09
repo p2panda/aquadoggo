@@ -13,7 +13,7 @@ use libp2p::{Multiaddr, PeerId};
 use log::{debug, trace, warn};
 use p2panda_rs::Human;
 
-use crate::network::replication::handler::{Handler, HandlerInEvent, HandlerOutEvent};
+use crate::network::replication::handler::{Handler, HandlerFromBehaviour, HandlerToBehaviour};
 use crate::replication::errors::ConnectionError;
 use crate::replication::SyncMessage;
 
@@ -31,7 +31,7 @@ pub enum Event {
 
 #[derive(Debug)]
 pub struct Behaviour {
-    events: VecDeque<ToSwarm<Event, HandlerInEvent>>,
+    events: VecDeque<ToSwarm<Event, HandlerFromBehaviour>>,
     inbound_connections: HashMap<PeerId, ConnectionId>,
     outbound_connections: HashMap<PeerId, ConnectionId>,
 }
@@ -79,7 +79,7 @@ impl Behaviour {
         );
         self.events.push_back(ToSwarm::NotifyHandler {
             peer_id,
-            event: HandlerInEvent::Message(message),
+            event: HandlerFromBehaviour::Message(message),
             handler: NotifyHandler::Any,
         });
     }
@@ -88,7 +88,7 @@ impl Behaviour {
     pub fn handle_error(&mut self, peer_id: PeerId) {
         self.events.push_back(ToSwarm::NotifyHandler {
             peer_id,
-            event: HandlerInEvent::ReplicationError,
+            event: HandlerFromBehaviour::ReplicationError,
             handler: NotifyHandler::Any,
         });
     }
@@ -97,7 +97,7 @@ impl Behaviour {
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Handler;
 
-    type OutEvent = Event;
+    type ToSwarm = Event;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -161,7 +161,7 @@ impl NetworkBehaviour for Behaviour {
 
         if current_inbound || current_outbound {
             match handler_event {
-                HandlerOutEvent::Message(message) => {
+                HandlerToBehaviour::Message(message) => {
                     self.handle_received_message(&peer_id, message);
                 }
             }
@@ -260,8 +260,9 @@ impl NetworkBehaviour for Behaviour {
             | FromSwarm::ExpiredListenAddr(_)
             | FromSwarm::ListenerError(_)
             | FromSwarm::ListenerClosed(_)
-            | FromSwarm::NewExternalAddr(_)
-            | FromSwarm::ExpiredExternalAddr(_) => {}
+            | FromSwarm::NewExternalAddrCandidate(_)
+            | FromSwarm::ExternalAddrConfirmed(_)
+            | FromSwarm::ExternalAddrExpired(_) => {}
         }
     }
 
@@ -269,7 +270,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _cx: &mut Context<'_>,
         _params: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }
