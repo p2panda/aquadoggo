@@ -229,7 +229,29 @@ impl EventLoop {
                 local_addr,
                 send_back_addr,
                 error,
-            } => warn!("IncomingConnectionError: {local_addr} {send_back_addr} {error:?}"),
+            } => {
+                warn!("IncomingConnectionError: {local_addr} {send_back_addr} {error:?}");
+                debug!("{:#?}", self.swarm.network_info());
+                // We can access the PeerId here and call disconnect_peer_id on swarm to clean up
+                // any dangling connections, but there shouldn't actually be any.... and when i
+                // try this it doesn't have an effect (we still hit pending/established connection
+                // limits)
+                //
+                // match error {
+                //     libp2p::swarm::ListenError::Denied { cause } => {
+                //         let error = cause.downcast::<ConnectionError>();
+                //         if let Ok(error) = error {
+                //             match error {
+                //                 ConnectionError::MultipleInboundConnections(peer_id) => {
+                //                     let _ = self.swarm.disconnect_peer_id(peer_id);
+                //                 }
+                //                 _ => (),
+                //             }
+                //         }
+                //     }
+                //     _ => (),
+                // }
+            }
             SwarmEvent::ListenerClosed {
                 listener_id,
                 addresses,
