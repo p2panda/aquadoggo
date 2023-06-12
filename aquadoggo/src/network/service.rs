@@ -244,7 +244,6 @@ impl EventLoop {
             }
             SwarmEvent::OutgoingConnectionError { peer_id, error } => {
                 warn!("OutgoingConnectionError: {peer_id:?} {error:?}");
-                // self.send_service_message(ServiceMessage::ConnectionError(peer_id));
             }
 
             // ~~~~
