@@ -2,7 +2,6 @@
 
 #![allow(clippy::uninlined_format_args)]
 use std::convert::{TryFrom, TryInto};
-use std::str::FromStr;
 
 use anyhow::Result;
 use aquadoggo::{Configuration, NetworkConfiguration, Node};
@@ -66,34 +65,33 @@ struct Cli {
 impl Cli {
     // Run custom validators on parsed CLI input
     fn validate(self) -> Self {
-        // @TODO: This needs updating for v0.5.2 https://github.com/libp2p/rust-libp2p/pull/3656
-        //         // Ensure rendezvous server address includes a peer ID
-        //         if let Some(addr) = &self.rendezvous_address {
-        //             // Check if the given `Multiaddr` contains a `PeerId`
-        //             if PeerId::try_from_multiaddr(addr).is_none() {
-        //                 // Print a help message about the missing value(s) and exit
-        //                 Cli::command()
-        //                     .error(
-        //                         ClapErrorKind::ValueValidation,
-        //                         "'--rendezvous-address' must include the peer ID of the server",
-        //                     )
-        //                     .exit()
-        //             }
-        //         }
-        //
-        //         // Ensure relay server address includes a peer ID
-        //         if let Some(addr) = &self.relay_address {
-        //             // Check if the given `Multiaddr` contains a `PeerId`
-        //             if PeerId::try_from_multiaddr(addr).is_none() {
-        //                 // Print a help message about the missing value(s) and exit
-        //                 Cli::command()
-        //                     .error(
-        //                         ClapErrorKind::ValueValidation,
-        //                         "'--relay-address' must include the peer ID of the server",
-        //                     )
-        //                     .exit()
-        //             }
-        //         }
+        // Ensure rendezvous server address includes a peer ID
+        if let Some(addr) = &self.rendezvous_address {
+            // Check if the given `Multiaddr` contains a `PeerId`
+            if PeerId::try_from_multiaddr(addr).is_none() {
+                // Print a help message about the missing value(s) and exit
+                Cli::command()
+                    .error(
+                        ClapErrorKind::ValueValidation,
+                        "'--rendezvous-address' must include the peer ID of the server",
+                    )
+                    .exit()
+            }
+        }
+
+        // Ensure relay server address includes a peer ID
+        if let Some(addr) = &self.relay_address {
+            // Check if the given `Multiaddr` contains a `PeerId`
+            if PeerId::try_from_multiaddr(addr).is_none() {
+                // Print a help message about the missing value(s) and exit
+                Cli::command()
+                    .error(
+                        ClapErrorKind::ValueValidation,
+                        "'--relay-address' must include the peer ID of the server",
+                    )
+                    .exit()
+            }
+        }
 
         self
     }
@@ -106,16 +104,13 @@ impl TryFrom<Cli> for Configuration {
         let mut config = Configuration::new(cli.data_dir)?;
 
         let relay_peer_id = if let Some(addr) = &cli.relay_address {
-            // @TODO: This needs updating for v0.5.2 https://github.com/libp2p/rust-libp2p/pull/3656
-
-            Some(PeerId::from_str(&addr.into_iter().last().unwrap().to_string()).unwrap())
+            PeerId::try_from_multiaddr(addr)
         } else {
             None
         };
 
         let rendezvous_peer_id = if let Some(addr) = &cli.rendezvous_address {
-            // @TODO: This needs updating for v0.5.2 https://github.com/libp2p/rust-libp2p/pull/3656
-            Some(PeerId::from_str(&addr.into_iter().last().unwrap().to_string()).unwrap())
+            PeerId::try_from_multiaddr(addr)
         } else {
             None
         };

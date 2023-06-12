@@ -47,8 +47,12 @@ impl Identity for Keypair {
 
     /// Encode the private key as a hex string and save it to the given file path.
     // See: https://github.com/p2panda/aquadoggo/issues/295
+    #[allow(deprecated)]
     fn save(&self, path: &Path) -> Result<()> {
-        let encoded_private_key = hex::encode(self.key_pair().try_into_ed25519()?.secret());
+        let private_key = match self {
+            Keypair::Ed25519(key_pair) => key_pair.secret(),
+        };
+        let encoded_private_key = hex::encode(private_key);
 
         fs::create_dir_all(path.parent().unwrap())?;
         let mut file = File::create(path)?;
@@ -64,6 +68,7 @@ impl Identity for Keypair {
 
     /// Load a key pair from file at the given path.
     // See: https://github.com/p2panda/aquadoggo/issues/295
+    #[allow(deprecated)]
     fn load(path: &Path) -> Result<Self>
     where
         Self: Sized,
@@ -73,7 +78,8 @@ impl Identity for Keypair {
         file.read_to_string(&mut contents)?;
 
         let private_key_bytes = hex::decode(contents)?;
-        let key_pair = Keypair::ed25519_from_bytes(private_key_bytes)?;
+        let private_key = ed25519::SecretKey::from_bytes(private_key_bytes)?;
+        let key_pair = Keypair::Ed25519(private_key.into());
 
         Ok(key_pair)
     }
