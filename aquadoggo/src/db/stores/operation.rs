@@ -76,94 +76,8 @@ impl OperationStore for SqlStore {
         operation: &Operation,
         document_id: &DocumentId,
     ) -> Result<(), OperationStorageError> {
-        // Start a transaction, any db insertions after this point, and before the `commit()` will
-        // be rolled back in the event of an error.
-        let mut tx = self
-            .pool
-            .begin()
+        self.insert_operation_with_index(id, public_key, operation, document_id, None)
             .await
-            .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
-
-        // Construct query for inserting operation an row, execute it and check exactly one row was
-        // affected.
-        query(
-            "
-            INSERT INTO
-                operations_v1 (
-                    public_key,
-                    document_id,
-                    operation_id,
-                    action,
-                    schema_id,
-                    previous,
-                    sorted_index
-                )
-            VALUES
-                ($1, $2, $3, $4, $5, $6, null)
-            ",
-        )
-        .bind(public_key.to_string())
-        .bind(document_id.as_str())
-        .bind(id.as_str())
-        .bind(operation.action().as_str())
-        .bind(operation.schema_id().to_string())
-        .bind(
-            operation
-                .previous()
-                .map(|document_view_id| document_view_id.to_string()),
-        )
-        .execute(&mut tx)
-        .await
-        .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
-
-        let mut results = Vec::new();
-        if let Some(fields) = operation.fields() {
-            for (name, value) in fields.iter() {
-                // If the value is a relation_list or pinned_relation_list we need to insert a new
-                // field row for every item in the list. Here we collect these items and return
-                // them in a vector. If this operation value is anything except for the above list
-                // types, we will return a vec containing a single item.
-                let db_values = parse_value_to_string_vec(value);
-
-                for (index, db_value) in db_values.into_iter().enumerate() {
-                    let cursor = OperationCursor::new(index, name, id);
-
-                    let result = query(
-                        "
-                        INSERT INTO
-                            operation_fields_v1 (
-                                operation_id,
-                                name,
-                                field_type,
-                                value,
-                                list_index,
-                                cursor
-                            )
-                        VALUES
-                            ($1, $2, $3, $4, $5, $6)
-                        ",
-                    )
-                    .bind(id.as_str().to_owned())
-                    .bind(name.to_owned())
-                    .bind(value.field_type().to_string())
-                    .bind(db_value)
-                    .bind(index as i32)
-                    .bind(cursor.to_string())
-                    .execute(&mut tx)
-                    .await
-                    .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
-
-                    results.push(result);
-                }
-            }
-        };
-
-        // Commit the transaction.
-        tx.commit()
-            .await
-            .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
-
-        Ok(())
     }
 
     /// Get an operation identified by it's `OperationId`.
@@ -356,6 +270,105 @@ impl SqlStore {
         .fetch_all(&self.pool)
         .await
         .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
+
+        Ok(())
+    }
+
+    pub async fn insert_operation_with_index(
+        &self,
+        id: &OperationId,
+        public_key: &PublicKey,
+        operation: &Operation,
+        document_id: &DocumentId,
+        sorted_index: Option<i32>,
+    ) -> Result<(), OperationStorageError> {
+        // Start a transaction, any db insertions after this point, and before the `commit()` will
+        // be rolled back in the event of an error.
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
+
+        // Construct query for inserting operation an row, execute it and check exactly one row was
+        // affected.
+        query(
+            "
+            INSERT INTO
+                operations_v1 (
+                    public_key,
+                    document_id,
+                    operation_id,
+                    action,
+                    schema_id,
+                    previous,
+                    sorted_index
+                )
+            VALUES
+                ($1, $2, $3, $4, $5, $6, $7)
+            ",
+        )
+        .bind(public_key.to_string())
+        .bind(document_id.as_str())
+        .bind(id.as_str())
+        .bind(operation.action().as_str())
+        .bind(operation.schema_id().to_string())
+        .bind(
+            operation
+                .previous()
+                .map(|document_view_id| document_view_id.to_string()),
+        )
+        .bind(sorted_index)
+        .execute(&mut tx)
+        .await
+        .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
+
+        let mut results = Vec::new();
+        if let Some(fields) = operation.fields() {
+            for (name, value) in fields.iter() {
+                // If the value is a relation_list or pinned_relation_list we need to insert a new
+                // field row for every item in the list. Here we collect these items and return
+                // them in a vector. If this operation value is anything except for the above list
+                // types, we will return a vec containing a single item.
+                let db_values = parse_value_to_string_vec(value);
+
+                for (index, db_value) in db_values.into_iter().enumerate() {
+                    let cursor = OperationCursor::new(index, name, id);
+
+                    let result = query(
+                        "
+                        INSERT INTO
+                            operation_fields_v1 (
+                                operation_id,
+                                name,
+                                field_type,
+                                value,
+                                list_index,
+                                cursor
+                            )
+                        VALUES
+                            ($1, $2, $3, $4, $5, $6)
+                        ",
+                    )
+                    .bind(id.as_str().to_owned())
+                    .bind(name.to_owned())
+                    .bind(value.field_type().to_string())
+                    .bind(db_value)
+                    .bind(index as i32)
+                    .bind(cursor.to_string())
+                    .execute(&mut tx)
+                    .await
+                    .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
+
+                    results.push(result);
+                }
+            }
+        };
+
+        // Commit the transaction.
+        tx.commit()
+            .await
+            .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
 
         Ok(())
     }
