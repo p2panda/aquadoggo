@@ -209,12 +209,7 @@ impl ConnectionManager {
             }
         }
 
-        match error {
-            ReplicationError::StrategyFailed(_) | ReplicationError::Validation(_) => {
-                self.sync_manager.remove_session(&peer_id, &session_id);
-            }
-            _ => (), // Don't try and close the session on other errors as it should not have been initiated
-        }
+        self.sync_manager.remove_session(&peer_id, &session_id);
 
         // Inform network service about error, so it can accordingly react
         self.send_service_message(ServiceMessage::ReplicationFailed(peer_id));
