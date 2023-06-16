@@ -24,7 +24,7 @@ pub enum ReplicationError {
     #[error("Replication strategy failed with error: {0}")]
     StrategyFailed(String),
 
-    #[error("Incoming data could not be ingested")]
+    #[error("Incoming data could not be ingested: {0}")]
     Validation(#[from] IngestError),
 }
 
@@ -37,10 +37,10 @@ pub enum IngestError {
     #[error(transparent)]
     Domain(#[from] p2panda_rs::api::DomainError),
 
-    #[error("Decoding entry failed")]
+    #[error("Decoding entry failed: {0}")]
     DecodeEntry(#[from] p2panda_rs::entry::error::DecodeEntryError),
 
-    #[error("Decoding operation failed")]
+    #[error("Decoding operation failed: {0}")]
     DecodeOperation(#[from] p2panda_rs::operation::error::DecodeOperationError),
 }
 
