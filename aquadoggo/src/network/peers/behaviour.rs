@@ -13,12 +13,12 @@ use libp2p::{Multiaddr, PeerId};
 use log::{info, trace};
 use p2panda_rs::Human;
 
-use crate::network::replication::handler::{Handler, HandlerInEvent, HandlerOutEvent};
+use crate::network::peers::handler::{Handler, HandlerInEvent, HandlerOutEvent};
 use crate::replication::SyncMessage;
 
 #[derive(Debug)]
 pub enum Event {
-    /// Replication message received on the inbound stream.
+    /// Message received on the inbound stream.
     MessageReceived(PeerId, SyncMessage),
 
     /// We established an inbound or outbound connection to a peer for the first time.
@@ -116,7 +116,7 @@ impl Behaviour {
         });
     }
 
-    /// React to errors coming from the replication protocol living inside the replication service.
+    /// React to errors from other services (for example replication service).
     pub fn handle_error(&mut self, peer_id: PeerId) {
         let connection_id = self
             .peers
@@ -127,7 +127,7 @@ impl Behaviour {
 
         self.events.push_back(ToSwarm::NotifyHandler {
             peer_id,
-            event: HandlerInEvent::ReplicationError,
+            event: HandlerInEvent::CriticalError,
             handler: NotifyHandler::One(connection_id.to_owned()),
         });
     }
@@ -224,13 +224,13 @@ mod tests {
     use crate::replication::{Message, SyncMessage, TargetSet};
     use crate::test_utils::helpers::random_target_set;
 
-    use super::{Behaviour as ReplicationBehaviour, Event};
+    use super::{Behaviour as PeersBehaviour, Event};
 
     #[tokio::test]
     async fn peers_connect() {
         // Create two swarms
-        let mut swarm1 = Swarm::new_ephemeral(|_| ReplicationBehaviour::new());
-        let mut swarm2 = Swarm::new_ephemeral(|_| ReplicationBehaviour::new());
+        let mut swarm1 = Swarm::new_ephemeral(|_| PeersBehaviour::new());
+        let mut swarm2 = Swarm::new_ephemeral(|_| PeersBehaviour::new());
 
         // Listen on swarm1 and connect from swarm2, this should establish a bi-directional
         // connection.
@@ -259,7 +259,7 @@ mod tests {
     #[tokio::test]
     async fn incompatible_network_behaviour() {
         // Create two swarms
-        let mut swarm1 = Swarm::new_ephemeral(|_| ReplicationBehaviour::new());
+        let mut swarm1 = Swarm::new_ephemeral(|_| PeersBehaviour::new());
         let mut swarm2 = Swarm::new_ephemeral(|_| keep_alive::Behaviour);
 
         // Listen on swarm1 and connect from swarm2, this should establish a bi-directional connection.
@@ -312,8 +312,8 @@ mod tests {
         #[case] target_set_2: TargetSet,
     ) {
         // Create two swarms
-        let mut swarm1 = Swarm::new_ephemeral(|_| ReplicationBehaviour::new());
-        let mut swarm2 = Swarm::new_ephemeral(|_| ReplicationBehaviour::new());
+        let mut swarm1 = Swarm::new_ephemeral(|_| PeersBehaviour::new());
+        let mut swarm2 = Swarm::new_ephemeral(|_| PeersBehaviour::new());
 
         // Listen on swarm1 and connect from swarm2, this should establish a bi-directional connection.
         swarm1.listen().await;

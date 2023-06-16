@@ -14,7 +14,7 @@ use libp2p::swarm::{
 use log::warn;
 use thiserror::Error;
 
-use crate::network::replication::{Codec, CodecError, Protocol};
+use crate::network::peers::{Codec, CodecError, Protocol};
 use crate::replication::SyncMessage;
 
 /// The time a connection is maintained to a peer without being in live mode and without
@@ -22,7 +22,7 @@ use crate::replication::SyncMessage;
 const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub struct Handler {
-    /// Upgrade configuration for the replication protocol.
+    /// Upgrade configuration for the protocol.
     listen_protocol: SubstreamProtocol<Protocol, ()>,
 
     /// The single long-lived outbound substream.
@@ -86,11 +86,11 @@ impl Handler {
 /// An event sent from the network behaviour to the connection handler.
 #[derive(Debug)]
 pub enum HandlerInEvent {
-    /// Replication message to send on outbound stream.
+    /// Message to send on outbound stream.
     Message(SyncMessage),
 
-    /// Replication protocol failed with an error.
-    ReplicationError,
+    /// Protocol failed with a critical error.
+    CriticalError,
 }
 
 /// The event emitted by the connection handler.
@@ -98,7 +98,7 @@ pub enum HandlerInEvent {
 /// This informs the network behaviour of various events created by the handler.
 #[derive(Debug)]
 pub enum HandlerOutEvent {
-    /// Replication message received on the inbound stream.
+    /// Message received on the inbound stream.
     Message(SyncMessage),
 }
 
@@ -179,7 +179,7 @@ impl ConnectionHandler for Handler {
             HandlerInEvent::Message(message) => {
                 self.send_queue.push_back(message);
             }
-            HandlerInEvent::ReplicationError => {
+            HandlerInEvent::CriticalError => {
                 self.critical_error = true;
             }
         }

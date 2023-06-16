@@ -10,7 +10,7 @@ use libp2p::{autonat, connection_limits, identify, mdns, ping, relay, rendezvous
 use log::debug;
 
 use crate::network::config::NODE_NAMESPACE;
-use crate::network::replication;
+use crate::network::peers;
 use crate::network::NetworkConfiguration;
 
 /// How often do we broadcast mDNS queries into the network.
@@ -59,7 +59,8 @@ pub struct Behaviour {
     /// the addresses of other peers.
     pub rendezvous_server: Toggle<rendezvous::server::Behaviour>,
 
-    pub replication: replication::Behaviour,
+    /// Register peer connections and handle p2panda messaging with them.
+    pub peers: peers::Behaviour,
 }
 
 impl Behaviour {
@@ -157,7 +158,8 @@ impl Behaviour {
             None
         };
 
-        let replication = replication::Behaviour::new();
+        // Create behaviour to manage peer connections and handle p2panda messaging
+        let peers = peers::Behaviour::new();
 
         Ok(Self {
             autonat: autonat.into(),
@@ -169,7 +171,7 @@ impl Behaviour {
             rendezvous_server: rendezvous_server.into(),
             relay_client: relay_client.into(),
             relay_server: relay_server.into(),
-            replication,
+            peers,
         })
     }
 }

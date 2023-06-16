@@ -3,7 +3,7 @@
 mod behaviour;
 mod config;
 pub mod identity;
-mod replication;
+mod peers;
 mod service;
 mod swarm;
 mod transport;

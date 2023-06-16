@@ -15,7 +15,7 @@ use crate::context::Context;
 use crate::manager::{ServiceReadySender, Shutdown};
 use crate::network::behaviour::{Behaviour, BehaviourEvent};
 use crate::network::config::NODE_NAMESPACE;
-use crate::network::replication;
+use crate::network::peers;
 use crate::network::swarm;
 use crate::network::NetworkConfiguration;
 
@@ -162,11 +162,11 @@ impl EventLoop {
             ServiceMessage::SentReplicationMessage(peer_id, sync_message) => {
                 self.swarm
                     .behaviour_mut()
-                    .replication
+                    .peers
                     .send_message(peer_id, sync_message);
             }
             ServiceMessage::ReplicationFailed(peer_id) => {
-                self.swarm.behaviour_mut().replication.handle_error(peer_id);
+                self.swarm.behaviour_mut().peers.handle_error(peer_id);
             }
             _ => (),
         }
@@ -426,18 +426,18 @@ impl EventLoop {
                 debug!("Unhandled connection limit event: {event:?}")
             }
 
-            // ~~~~~~~~~~~
-            // Replication
-            // ~~~~~~~~~~~
-            SwarmEvent::Behaviour(BehaviourEvent::Replication(event)) => match event {
-                replication::Event::MessageReceived(peer_id, message) => self.send_service_message(
+            // ~~~~~~~~~~~~~
+            // p2panda peers
+            // ~~~~~~~~~~~~~
+            SwarmEvent::Behaviour(BehaviourEvent::Peers(event)) => match event {
+                peers::Event::MessageReceived(peer_id, message) => self.send_service_message(
                     ServiceMessage::ReceivedReplicationMessage(peer_id, message),
                 ),
-                replication::Event::PeerConnected(peer_id) => {
+                peers::Event::PeerConnected(peer_id) => {
                     // Inform other services about new connection
                     self.send_service_message(ServiceMessage::PeerConnected(peer_id));
                 }
-                replication::Event::PeerDisconnected(peer_id) => {
+                peers::Event::PeerDisconnected(peer_id) => {
                     // Inform other services about closed connection
                     self.send_service_message(ServiceMessage::PeerDisconnected(peer_id));
                 }
