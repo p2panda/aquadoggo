@@ -19,7 +19,7 @@ use crate::replication::SyncMessage;
 
 /// The time a connection is maintained to a peer without being in live mode and without
 /// send/receiving a message from. Connections that idle beyond this timeout are disconnected.
-const IDLE_TIMEOUT: Duration = Duration::from_secs(30);
+const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub struct Handler {
     /// Upgrade configuration for the replication protocol.
@@ -69,6 +69,7 @@ impl Handler {
         >,
     ) {
         self.outbound_substream = Some(OutboundSubstreamState::WaitingOutput(protocol));
+        self.outbound_substream_establishing = false;
     }
 
     fn on_fully_negotiated_inbound(
