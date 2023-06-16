@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::task::{Context, Poll};
 
 use libp2p::core::Endpoint;
@@ -10,7 +10,7 @@ use libp2p::swarm::{
     PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use libp2p::{Multiaddr, PeerId};
-use log::trace;
+use log::{info, trace};
 use p2panda_rs::Human;
 
 use crate::network::replication::handler::{Handler, HandlerInEvent, HandlerOutEvent};
@@ -31,12 +31,57 @@ pub enum Event {
 #[derive(Debug)]
 pub struct Behaviour {
     events: VecDeque<ToSwarm<Event, HandlerInEvent>>,
+    peers: HashMap<PeerId, Vec<ConnectionId>>,
 }
 
 impl Behaviour {
     pub fn new() -> Self {
         Self {
             events: VecDeque::new(),
+            peers: HashMap::new(),
+        }
+    }
+
+    fn on_connection_established(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
+        // Register latest connection at the end of our list for peer
+        let connections = match self.peers.get(&peer_id) {
+            Some(vec) => {
+                let mut vec = vec.clone();
+                vec.push(connection_id);
+                vec
+            }
+            None => {
+                // Inform other services about new peer when we see it for the first time
+                info!("Connected to new peer {peer_id}");
+                self.events
+                    .push_back(ToSwarm::GenerateEvent(Event::PeerConnected(peer_id)));
+
+                vec![connection_id]
+            }
+        };
+
+        self.peers.insert(peer_id, connections);
+    }
+
+    fn on_connection_closed(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
+        if let Some(connections) = self.peers.get(&peer_id) {
+            let filtered: Vec<ConnectionId> = connections
+                .to_owned()
+                .into_iter()
+                .filter(|connection| connection != &connection_id)
+                .collect();
+
+            if filtered.is_empty() {
+                info!("Disconnected from peer {peer_id}");
+                self.events
+                    .push_back(ToSwarm::GenerateEvent(Event::PeerDisconnected(peer_id)));
+
+                self.peers.remove(&peer_id);
+            } else {
+                self.peers.insert(peer_id, filtered);
+            }
+        } else {
+            panic!("Tried to close connection of inexistent peer");
         }
     }
 
@@ -52,23 +97,38 @@ impl Behaviour {
     }
 
     pub fn send_message(&mut self, peer_id: PeerId, message: SyncMessage) {
+        let connection_id = self
+            .peers
+            .get(&peer_id)
+            .expect("Tried to handle error for unknown peer")
+            .last()
+            .expect("Tried to handle error for peer with inexistent connections");
+
         trace!(
             "Notify handler of sent sync message: {peer_id} {}",
             message.display()
         );
+
         self.events.push_back(ToSwarm::NotifyHandler {
             peer_id,
             event: HandlerInEvent::Message(message),
-            handler: NotifyHandler::Any,
+            handler: NotifyHandler::One(connection_id.to_owned()),
         });
     }
 
     /// React to errors coming from the replication protocol living inside the replication service.
     pub fn handle_error(&mut self, peer_id: PeerId) {
+        let connection_id = self
+            .peers
+            .get(&peer_id)
+            .expect("Tried to handle error for unknown peer")
+            .last()
+            .expect("Tried to handle error for peer with inexistent connections");
+
         self.events.push_back(ToSwarm::NotifyHandler {
             peer_id,
             event: HandlerInEvent::ReplicationError,
-            handler: NotifyHandler::Any,
+            handler: NotifyHandler::One(connection_id.to_owned()),
         });
     }
 }
@@ -113,25 +173,19 @@ impl NetworkBehaviour for Behaviour {
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
         match event {
-            FromSwarm::ConnectionClosed(ConnectionClosed {
-                peer_id,
-                remaining_established,
-                ..
-            }) => {
-                if remaining_established == 0 {
-                    self.events
-                        .push_back(ToSwarm::GenerateEvent(Event::PeerDisconnected(peer_id)));
-                }
-            }
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
                 peer_id,
-                other_established,
+                connection_id,
                 ..
             }) => {
-                if other_established == 0 {
-                    self.events
-                        .push_back(ToSwarm::GenerateEvent(Event::PeerConnected(peer_id)));
-                }
+                self.on_connection_established(peer_id, connection_id);
+            }
+            FromSwarm::ConnectionClosed(ConnectionClosed {
+                peer_id,
+                connection_id,
+                ..
+            }) => {
+                self.on_connection_closed(peer_id, connection_id);
             }
             FromSwarm::AddressChange(_)
             | FromSwarm::DialFailure(_)
