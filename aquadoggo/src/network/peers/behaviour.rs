@@ -66,8 +66,8 @@ impl Behaviour {
     fn on_connection_closed(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
         if let Some(connections) = self.peers.get(&peer_id) {
             let filtered: Vec<ConnectionId> = connections
-                .to_owned()
-                .into_iter()
+                .iter()
+                .copied()
                 .filter(|connection| connection != &connection_id)
                 .collect();
 
