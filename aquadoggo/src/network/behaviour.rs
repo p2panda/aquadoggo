@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::time::Duration;
+
 use anyhow::Result;
 use libp2p::identity::Keypair;
 use libp2p::swarm::behaviour::toggle::Toggle;
@@ -10,6 +12,16 @@ use log::debug;
 use crate::network::config::NODE_NAMESPACE;
 use crate::network::replication;
 use crate::network::NetworkConfiguration;
+
+/// How often do we broadcast mDNS queries into the network.
+const MDNS_QUERY_INTERVAL: Duration = Duration::from_secs(5);
+
+/// How often do we ping other peers to check for a healthy connection.
+const PING_INTERVAL: Duration = Duration::from_secs(5);
+
+/// How long do we wait for an answer from the other peer before we consider the connection as
+/// stale.
+const PING_TIMEOUT: Duration = Duration::from_secs(3);
 
 /// Network behaviour for the aquadoggo node.
 #[derive(NetworkBehaviour)]
@@ -89,7 +101,13 @@ impl Behaviour {
         // Create an mDNS behaviour with default configuration if the mDNS flag is set
         let mdns = if network_config.mdns {
             debug!("mDNS network behaviour enabled");
-            Some(mdns::Behaviour::new(Default::default(), peer_id)?)
+            Some(mdns::Behaviour::new(
+                mdns::Config {
+                    query_interval: MDNS_QUERY_INTERVAL,
+                    ..mdns::Config::default()
+                },
+                peer_id,
+            )?)
         } else {
             None
         };
@@ -97,7 +115,11 @@ impl Behaviour {
         // Create a ping behaviour with default configuration if the ping flag is set
         let ping = if network_config.ping {
             debug!("Ping network behaviour enabled");
-            Some(ping::Behaviour::default())
+            Some(ping::Behaviour::new(
+                ping::Config::new()
+                    .with_interval(PING_INTERVAL)
+                    .with_timeout(PING_TIMEOUT),
+            ))
         } else {
             None
         };
@@ -106,7 +128,6 @@ impl Behaviour {
         // address has been provided
         let rendezvous_client = if network_config.rendezvous_address.is_some() {
             debug!("Rendezvous client network behaviour enabled");
-            // @TODO: Why does this need the whole key pair?!
             Some(rendezvous::client::Behaviour::new(key_pair))
         } else {
             None
