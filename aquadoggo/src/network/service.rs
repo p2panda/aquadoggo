@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::time::Duration;
+
 use anyhow::Result;
 use libp2p::multiaddr::Protocol;
 use libp2p::ping::Event;
 use libp2p::swarm::{AddressScore, ConnectionError, SwarmEvent};
-use libp2p::{autonat, identify, mdns, rendezvous, Multiaddr, Swarm};
+use libp2p::{autonat, identify, mdns, rendezvous, Multiaddr, PeerId, Swarm};
 use log::{debug, trace, warn};
 use tokio::task;
 use tokio_stream::wrappers::BroadcastStream;
@@ -17,7 +19,7 @@ use crate::network::behaviour::{Behaviour, BehaviourEvent};
 use crate::network::config::NODE_NAMESPACE;
 use crate::network::peers;
 use crate::network::swarm;
-use crate::network::NetworkConfiguration;
+use crate::network::{NetworkConfiguration, ShutdownHandler};
 
 /// Network service that configures and deploys a libp2p network swarm over QUIC transports.
 ///
@@ -83,8 +85,16 @@ pub async fn network_service(
         swarm.dial(addr)?;
     }
 
+    let mut shutdown_handler = ShutdownHandler::new();
+
     // Spawn a task to run swarm in event loop
-    let event_loop = EventLoop::new(swarm, tx, external_circuit_addr, network_config);
+    let event_loop = EventLoop::new(
+        swarm,
+        tx,
+        external_circuit_addr,
+        network_config,
+        shutdown_handler.clone(),
+    );
     let handle = task::spawn(event_loop.run());
 
     if tx_ready.send(()).is_err() {
@@ -97,6 +107,8 @@ pub async fn network_service(
         _ = shutdown => (),
     }
 
+    shutdown_handler.is_done().await;
+
     Ok(())
 }
 
@@ -107,6 +119,7 @@ struct EventLoop {
     rx: BroadcastStream<ServiceMessage>,
     external_circuit_addr: Option<Multiaddr>,
     network_config: NetworkConfiguration,
+    shutdown_handler: ShutdownHandler,
 }
 
 impl EventLoop {
@@ -115,6 +128,7 @@ impl EventLoop {
         tx: ServiceSender,
         external_circuit_addr: Option<Multiaddr>,
         network_config: NetworkConfiguration,
+        shutdown_handler: ShutdownHandler,
     ) -> Self {
         Self {
             swarm,
@@ -122,12 +136,31 @@ impl EventLoop {
             tx,
             external_circuit_addr,
             network_config,
+            shutdown_handler,
         }
+    }
+
+    /// Close all connections actively.
+    pub async fn shutdown(&mut self) {
+        let peers: Vec<PeerId> = self.swarm.connected_peers().copied().collect();
+
+        for peer_id in peers {
+            if self.swarm.disconnect_peer_id(peer_id).is_err() {
+                // Silently ignore errors when disconnecting during shutdown
+            }
+        }
+
+        // Wait a little bit for libp2p to actually close all connections
+        tokio::time::sleep(Duration::from_millis(25)).await;
+
+        self.shutdown_handler.set_done();
     }
 
     /// Main event loop handling libp2p swarm events and incoming messages from the service bus as
     /// an ongoing async stream.
     pub async fn run(mut self) {
+        let mut shutdown_request_received = self.shutdown_handler.is_requested();
+
         loop {
             tokio::select! {
                 event = self.swarm.next() => {
@@ -143,6 +176,9 @@ impl EventLoop {
                         return
                     },
                 },
+                _ = shutdown_request_received.next() => {
+                    self.shutdown().await;
+                }
             }
         }
     }
@@ -208,11 +244,20 @@ impl EventLoop {
             }
             SwarmEvent::ConnectionClosed { peer_id, cause, .. } => match cause {
                 Some(ConnectionError::IO(error)) => {
-                    if error.to_string() == "timed out" {
-                        // Sometimes we receive time out errors from here
-                        debug!("Connection timed out with peer {peer_id}");
-                    } else {
-                        warn!("Connection error occurred with peer {peer_id}: {error}");
+                    // IO errors coming from libp2p are cumbersome to match, so we just convert
+                    // them to their string representation
+                    match error.to_string().as_str() {
+                        "timed out" => {
+                            debug!("Connection timed out with peer {peer_id}");
+                        }
+                        "closed by peer: 0" => {
+                            // We received an `ApplicationClose` with code 0 here which means the
+                            // other peer actively closed the connection
+                            debug!("Connection closed with peer {peer_id}");
+                        }
+                        _ => {
+                            warn!("Connection error occurred with peer {peer_id}: {error}");
+                        }
                     }
                 }
                 Some(ConnectionError::KeepAliveTimeout) => {
