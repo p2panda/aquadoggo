@@ -69,7 +69,6 @@ where
     /// Warning: This might also remove actively running sessions. Do only clear sessions when you
     /// are sure they are a) done or b) the peer closed its connection.
     pub fn remove_sessions(&mut self, remote_peer: &P) {
-        debug!("Remove all sessions with peer: {}", remote_peer.display());
         self.sessions.remove(remote_peer);
     }
 
@@ -130,11 +129,6 @@ where
                 .enumerate()
                 .find(|(_, session)| session.id == *session_id)
             {
-                debug!(
-                    "Remove session {} with peer: {}",
-                    session_id,
-                    remote_peer.display()
-                );
                 sessions.remove(index);
             } else {
                 warn!(
@@ -309,8 +303,7 @@ where
                 if &self.local_peer < remote_peer {
                     // Drop our pending session
                     debug!(
-                        "Drop pending outbound session and process inbound session request with duplicate target set {:?}",
-                        existing_session.target_set()
+                        "Drop pending outbound session and process inbound session request with duplicate target set"
                     );
                     self.remove_session(remote_peer, &existing_session.id);
 
@@ -319,8 +312,7 @@ where
                 } else {
                     // Keep our pending session, ignore inbound request
                     debug!(
-                        "Ignore inbound request and keep pending outbound session with duplicate target set {:?}",
-                        existing_session.target_set()
+                        "Ignore inbound request and keep pending outbound session with duplicate target set",
                     );
                     Ok(false)
                 }
@@ -370,7 +362,7 @@ where
             .iter()
             .find(|existing_session| existing_session.id == *session_id)
         {
-            debug!("Handle sync request containing duplicate session id");
+            trace!("Handle sync request containing duplicate session id");
             return self
                 .handle_duplicate_session(remote_peer, target_set, existing_session)
                 .await;
@@ -381,7 +373,7 @@ where
             .iter()
             .find(|session| session.target_set() == *target_set)
         {
-            debug!("Handle sync request containing duplicate target sets");
+            trace!("Handle sync request containing duplicate target sets");
             return self
                 .handle_duplicate_target_set(remote_peer, session_id, mode, session)
                 .await;
