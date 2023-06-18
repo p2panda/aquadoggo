@@ -21,6 +21,59 @@ use crate::replication::SyncMessage;
 /// send/receiving a message from. Connections that idle beyond this timeout are disconnected.
 const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 
+/// Handler for an incoming or outgoing connection to a remote peer dealing with the p2panda
+/// protocol.
+///
+/// Manages the bi-directional data streams and encodes and decodes p2panda messages on them using
+/// the CBOR format.
+///
+/// Connection handlers can be closed due to critical errors, for example when a replication error
+/// occurred. They also can close after a certain duration of no networking activity (timeout).
+/// Note that this does _not_ close the connection to the peer in general, only the p2panda
+/// messaging protocol.
+///
+/// Peers can have multiple connections to peers, even if it is the same one. This especially is
+/// the case when both peers dial each other at the same time. Then we will have two connections
+/// (and two handlers) for each an incoming (remote peer dialed us) and outgoing (we dialed remote
+/// peer) connection. Please note that this is a special (but not unusual) case. The regular case
+/// is that we will only maintain one connection (either incoming or outgoing) to a peer.
+///
+/// Each connection is managed by one connection handler each. Inside of each connection we
+/// maintain a bi-directional (inbound & outbound) data stream.
+///
+/// The following diagram is an example of two connections to one remote peer:
+///
+///       Connection
+///       (Incoming)
+/// ┌───────────────────┐
+/// │                   │
+/// │  ┌─────────────┐  │          ┌─────────────┐
+/// │  │   Stream    ◄──┼──────────┤             │
+/// │  │  (Inbound)  │  │          │             │
+/// │  └─────────────┘  │          │             │
+/// │                   │          │             │
+/// │  ┌─────────────┐  │          │             │
+/// │  │   Stream    ├──┼──────────►             │
+/// │  │  (Outbound) │  │          │             │
+/// │  └─────────────┘  │          │             │
+/// │                   │          │             │
+/// └───────────────────┘          │             │
+///                                │             │
+///       Connection               │ Remote Peer │
+///       (Outgoing)               │             │
+/// ┌───────────────────┐          │             │
+/// │                   │          │             │
+/// │  ┌─────────────┐  │          │             │
+/// │  │   Stream    ◄──┼──────────┤             │
+/// │  │  (Inbound)  │  │          │             │
+/// │  └─────────────┘  │          │             │
+/// │                   │          │             │
+/// │  ┌─────────────┐  │          │             │
+/// │  │   Stream    ├──┼──────────►             │
+/// │  │  (Outbound) │  │          │             │
+/// │  └─────────────┘  │          └─────────────┘
+/// │                   │
+/// └───────────────────┘
 pub struct Handler {
     /// Upgrade configuration for the protocol.
     listen_protocol: SubstreamProtocol<Protocol, ()>,

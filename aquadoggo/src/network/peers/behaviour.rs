@@ -29,6 +29,8 @@ pub enum Event {
     PeerDisconnected(Peer),
 }
 
+/// p2panda network behaviour managing peers who can speak the p2panda protocol, handling incoming
+/// and outgoing messages.
 #[derive(Debug)]
 pub struct Behaviour {
     events: VecDeque<ToSwarm<Event, HandlerInEvent>>,

@@ -60,6 +60,7 @@ pub async fn replication_service(
     Ok(())
 }
 
+/// Statistics about successful and failed replication sessions for each connected peer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PeerStatus {
     peer: Peer,
@@ -77,6 +78,16 @@ impl PeerStatus {
     }
 }
 
+/// Coordinates peer connections and replication sessions.
+///
+/// This entails:
+///
+/// 1. Handles incoming replication- and peer connection messages from other services
+/// 2. Maintains a list of currently connected p2panda peers
+/// 3. Routes messages to the right replication session with help of the `SyncManager` and returns
+///    responses to other services
+/// 4. Schedules new replication sessions
+/// 5. Handles replication errors and informs other services about them
 struct ConnectionManager {
     /// List of peers the connection mananger knows about and are available for replication.
     peers: HashMap<Peer, PeerStatus>,
@@ -99,6 +110,7 @@ struct ConnectionManager {
 }
 
 impl ConnectionManager {
+    /// Returns a new instance of `ConnectionManager`.
     pub fn new(
         schema_provider: &SchemaProvider,
         store: &SqlStore,
@@ -132,13 +144,7 @@ impl ConnectionManager {
         TargetSet::new(&supported_schema_ids)
     }
 
-    fn remove_connection(&mut self, peer: Peer) {
-        match self.peers.remove(&peer) {
-            Some(_) => debug!("Remove peer: {}", peer.display()),
-            None => warn!("Tried to remove connection from unknown peer"),
-        }
-    }
-
+    /// Register a new peer in the network.
     async fn on_connection_established(&mut self, peer: Peer) {
         info!("Connected to peer: {}", peer.display());
 
@@ -153,6 +159,7 @@ impl ConnectionManager {
         }
     }
 
+    /// Handle a peer disconnecting from the network.
     async fn on_connection_closed(&mut self, peer: Peer) {
         info!("Disconnected from peer: {}", peer.display());
 
@@ -161,6 +168,15 @@ impl ConnectionManager {
         self.remove_connection(peer)
     }
 
+    /// Remove a peer from the network.
+    fn remove_connection(&mut self, peer: Peer) {
+        match self.peers.remove(&peer) {
+            Some(_) => debug!("Remove peer: {}", peer.display()),
+            None => warn!("Tried to remove connection from unknown peer"),
+        }
+    }
+
+    /// Route incoming replication messages to the right session.
     async fn on_replication_message(&mut self, peer: Peer, message: SyncMessage) {
         let session_id = message.session_id();
 
@@ -182,6 +198,7 @@ impl ConnectionManager {
         }
     }
 
+    /// Handle successful replication sessions.
     async fn on_replication_finished(&mut self, peer: Peer, _session_id: SessionId) {
         info!("Finished replication with peer {}", peer.display());
 
@@ -195,6 +212,7 @@ impl ConnectionManager {
         }
     }
 
+    /// Handle replication errors and inform other services about them.
     async fn on_replication_error(
         &mut self,
         peer: Peer,
@@ -218,28 +236,8 @@ impl ConnectionManager {
         self.send_service_message(ServiceMessage::ReplicationFailed(peer));
     }
 
-    async fn handle_service_message(&mut self, message: ServiceMessage) {
-        match message {
-            ServiceMessage::PeerConnected(peer) => {
-                self.on_connection_established(peer).await;
-            }
-            ServiceMessage::PeerDisconnected(peer) => {
-                self.on_connection_closed(peer).await;
-            }
-            ServiceMessage::ReceivedReplicationMessage(peer, message) => {
-                self.on_replication_message(peer, message).await;
-            }
-            _ => (), // Ignore all other messages
-        }
-    }
-
-    fn send_service_message(&self, message: ServiceMessage) {
-        if self.tx.send(message).is_err() {
-            // Silently fail here as we don't care if the message was received at this
-            // point
-        }
-    }
-
+    /// Determine if we can attempt new replication sessions with the peers we currently know
+    /// about.
     async fn update_sessions(&mut self) {
         // Determine the target set our node is interested in
         let target_set = self.target_set().await;
@@ -282,6 +280,7 @@ impl ConnectionManager {
         }
     }
 
+    /// Initiate a new replication session with remote peer.
     async fn initiate_replication(&mut self, peer: &Peer, target_set: &TargetSet) {
         match self
             .sync_manager
@@ -301,6 +300,31 @@ impl ConnectionManager {
         }
     }
 
+    /// Handles incoming messages from other services via the bus.
+    async fn handle_service_message(&mut self, message: ServiceMessage) {
+        match message {
+            ServiceMessage::PeerConnected(peer) => {
+                self.on_connection_established(peer).await;
+            }
+            ServiceMessage::PeerDisconnected(peer) => {
+                self.on_connection_closed(peer).await;
+            }
+            ServiceMessage::ReceivedReplicationMessage(peer, message) => {
+                self.on_replication_message(peer, message).await;
+            }
+            _ => (), // Ignore all other messages
+        }
+    }
+
+    /// Sends a message on the bus to other services.
+    fn send_service_message(&self, message: ServiceMessage) {
+        if self.tx.send(message).is_err() {
+            // Silently fail here as we don't care if the message was received at this
+            // point
+        }
+    }
+
+    /// Main event loop running the async streams.
     pub async fn run(mut self) {
         loop {
             tokio::select! {

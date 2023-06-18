@@ -19,7 +19,7 @@ use crate::network::peers;
 use crate::network::swarm;
 use crate::network::NetworkConfiguration;
 
-/// Network service that configures and deploys a network swarm over QUIC transports.
+/// Network service that configures and deploys a libp2p network swarm over QUIC transports.
 ///
 /// The swarm listens for incoming connections, dials remote nodes, manages connections and
 /// executes predefined network behaviours.
@@ -100,6 +100,7 @@ pub async fn network_service(
     Ok(())
 }
 
+/// Main loop polling the async swarm event stream and incoming service messages stream.
 struct EventLoop {
     swarm: Swarm<Behaviour>,
     tx: ServiceSender,

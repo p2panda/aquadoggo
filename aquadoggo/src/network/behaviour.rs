@@ -24,6 +24,17 @@ const PING_INTERVAL: Duration = Duration::from_secs(5);
 const PING_TIMEOUT: Duration = Duration::from_secs(3);
 
 /// Network behaviour for the aquadoggo node.
+///
+/// In libp2p all different behaviours are "merged" into one "main behaviour" with help of the
+/// `NetworkBehaviour` derive macro.
+///
+/// All behaviours share the same connections with each other. Together they form something we
+/// could call our "custom" networking behaviour.
+///
+/// It is possible for a peer to not support all behaviours, internally libp2p negotiates the
+/// capabilities of each peer for us and upgrades the protocol accordingly. For example two peers
+/// can handle p2panda messages with each others (using the `peers` behaviour) but do not
+/// necessarily need to be able to support the `relay` behaviour.
 #[derive(NetworkBehaviour)]
 pub struct Behaviour {
     /// Determine NAT status by requesting remote peers to dial the public address of the
