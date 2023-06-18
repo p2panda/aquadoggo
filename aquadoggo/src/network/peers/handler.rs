@@ -32,17 +32,15 @@ const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 /// Note that this does _not_ close the connection to the peer in general, only the p2panda
 /// messaging protocol.
 ///
-/// Peers can have multiple connections to peers, even if it is the same one. This especially is
-/// the case when both peers dial each other at the same time. Then we will have two connections
-/// (and two handlers) for each an incoming (remote peer dialed us) and outgoing (we dialed remote
-/// peer) connection. Please note that this is a special (but not unusual) case. The regular case
-/// is that we will only maintain one connection (either incoming or outgoing) to a peer.
+/// Usually one connection is established to one peer. Multiple connections to the same peer are
+/// also possible. This especially is the case when both peers dial each other at the same time.
 ///
 /// Each connection is managed by one connection handler each. Inside of each connection we
 /// maintain a bi-directional (inbound & outbound) data stream.
 ///
-/// The following diagram is an example of two connections to one remote peer:
+/// The following diagram is an example of two connections from one local to one remote peer:
 ///
+/// ```text
 ///       Connection
 ///       (Incoming)
 /// ┌───────────────────┐
@@ -74,6 +72,7 @@ const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 /// │  └─────────────┘  │          └─────────────┘
 /// │                   │
 /// └───────────────────┘
+/// ```
 pub struct Handler {
     /// Upgrade configuration for the protocol.
     listen_protocol: SubstreamProtocol<Protocol, ()>,

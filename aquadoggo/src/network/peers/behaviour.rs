@@ -29,8 +29,56 @@ pub enum Event {
     PeerDisconnected(Peer),
 }
 
-/// p2panda network behaviour managing peers who can speak the p2panda protocol, handling incoming
-/// and outgoing messages.
+/// p2panda network behaviour managing peers who can speak the "p2panda" protocol, handling
+/// incoming and outgoing messages related to it.
+///
+/// This custom behaviour represents the "p2panda" protocol. As soon as both peers agree that they
+/// can speak the "p2panda" protocol libp2p will upgrade the connection and enable this custom
+/// `NetworkBehaviour` implementation.
+///
+/// All behaviours will share the same connections but each individual behaviour maintains its own
+/// connection handlers on top of them. With this in mind the following procedure takes place:
+///
+/// 1. Swarm discovers a node and dials a new outgoing connection OR swarm listener was dialed from
+///    a remote peer, establishes a new incoming connection
+/// 2. Swarm negotiates if new node can speak the "p2panda" protocol. If this is the case the
+///    connection gets upgraded
+/// 3. Custom p2panda `NetworkBehaviour` initialises the `ConnectionHandler` for the underlying
+///    connection (see `handle_established_inbound_connection` or
+///    `handle_established_outbound_connection`) and informs other services about new peer
+/// 4. Custom p2panda `ConnectionHandler` establishes bi-directional streams which encode and
+///    decode CBOR messages for us. As soon as a new message arrives the handler informs the
+///    behaviour about it
+/// 5. Custom p2panda `NetworkBehaviour` receives incoming message from handler and passes it
+///    further to other services
+/// 6. Custom p2panda `NetworkBehaviour` receives messages from other services and passes them down
+///    again to `ConnectionHandler` which sends them over the data stream to remote node
+/// 7. Swarm informs `NetworkBehaviour` about closed connection handlers (gracefully or via
+///    time-out). The custom p2panda `NetworkBehaviour` informs other services about disconnected
+///    peer
+///
+/// ```text
+///           Swarm
+///          ┌──────────────────────────────────────────────────────────────────┐
+///          │  ┌──────────────┐       ┌──────────────┐       ┌──────────────┐  │
+///          │  │  Connection  │       │  Connection  │       │  Connection  │  │
+///          │  └──────┬───────┘       └───────┬──────┘       └───────┬──────┘  │
+///          │         │                       │                      │         │
+///          │      Upgrade                 Upgrade                Upgrade      │
+///          │         │                       │                      │         │
+///          └─────────┼───────────────────────┼──────────────────────┼─────────┘
+///                    │                       │                      │
+///    ┌───────────────┼───────────────────────┼──────────────────────┼────────────────┐
+///    │    ┌──────────┴───────────────────────┴──────────────────────┴───────────┐    │
+///    │    │                          NetworkBehaviour                           │    │
+///    │    └──────────┬───────────────────────┬──────────────────────┬───────────┘    │
+///    │               │                       │                      │                │
+///    │    ┌──────────▼──────────┐ ┌──────────▼──────────┐ ┌─────────▼───────────┐    │
+///    │    │  ConnectionHandler  │ │  ConnectionHandler  │ │  ConnectionHandler  │    │
+///    │    └─────────────────────┘ └─────────────────────┘ └─────────────────────┘    │
+///    └───────────────────────────────────────────────────────────────────────────────┘
+///     p2panda protocol
+/// ```
 #[derive(Debug)]
 pub struct Behaviour {
     events: VecDeque<ToSwarm<Event, HandlerInEvent>>,
