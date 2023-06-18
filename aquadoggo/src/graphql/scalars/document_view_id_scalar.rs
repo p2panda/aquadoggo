@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::{fmt::Display, str::FromStr};
+use std::fmt::Display;
+use std::str::FromStr;
 
 use dynamic_graphql::{Error, Result, Scalar, ScalarValue, Value};
 use p2panda_rs::document::DocumentViewId;

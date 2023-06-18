@@ -159,14 +159,14 @@ impl EventLoop {
     /// Handle an incoming message via the communication bus from other services.
     async fn handle_service_message(&mut self, message: ServiceMessage) {
         match message {
-            ServiceMessage::SentReplicationMessage(peer_id, sync_message) => {
+            ServiceMessage::SentReplicationMessage(peer, sync_message) => {
                 self.swarm
                     .behaviour_mut()
                     .peers
-                    .send_message(peer_id, sync_message);
+                    .send_message(peer, sync_message);
             }
-            ServiceMessage::ReplicationFailed(peer_id) => {
-                self.swarm.behaviour_mut().peers.handle_error(peer_id);
+            ServiceMessage::ReplicationFailed(peer) => {
+                self.swarm.behaviour_mut().peers.handle_critical_error(peer);
             }
             _ => (),
         }
@@ -430,16 +430,19 @@ impl EventLoop {
             // p2panda peers
             // ~~~~~~~~~~~~~
             SwarmEvent::Behaviour(BehaviourEvent::Peers(event)) => match event {
-                peers::Event::MessageReceived(peer_id, message) => self.send_service_message(
-                    ServiceMessage::ReceivedReplicationMessage(peer_id, message),
-                ),
-                peers::Event::PeerConnected(peer_id) => {
-                    // Inform other services about new connection
-                    self.send_service_message(ServiceMessage::PeerConnected(peer_id));
+                peers::Event::PeerConnected(peer) => {
+                    // Inform other services about new peer
+                    self.send_service_message(ServiceMessage::PeerConnected(peer));
                 }
-                peers::Event::PeerDisconnected(peer_id) => {
-                    // Inform other services about closed connection
-                    self.send_service_message(ServiceMessage::PeerDisconnected(peer_id));
+                peers::Event::PeerDisconnected(peer) => {
+                    // Inform other services about peer leaving
+                    self.send_service_message(ServiceMessage::PeerDisconnected(peer));
+                }
+                peers::Event::MessageReceived(peer, message) => {
+                    // Inform other services about received messages from peer
+                    self.send_service_message(ServiceMessage::ReceivedReplicationMessage(
+                        peer, message,
+                    ))
                 }
             },
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::task::{Context, Poll};
 
 use libp2p::core::Endpoint;
@@ -14,121 +14,81 @@ use log::{info, trace};
 use p2panda_rs::Human;
 
 use crate::network::peers::handler::{Handler, HandlerInEvent, HandlerOutEvent};
+use crate::network::peers::Peer;
 use crate::replication::SyncMessage;
 
 #[derive(Debug)]
 pub enum Event {
     /// Message received on the inbound stream.
-    MessageReceived(PeerId, SyncMessage),
+    MessageReceived(Peer, SyncMessage),
 
     /// We established an inbound or outbound connection to a peer for the first time.
-    PeerConnected(PeerId),
+    PeerConnected(Peer),
 
     /// Peer does not have any inbound or outbound connections left with us.
-    PeerDisconnected(PeerId),
+    PeerDisconnected(Peer),
 }
 
 #[derive(Debug)]
 pub struct Behaviour {
     events: VecDeque<ToSwarm<Event, HandlerInEvent>>,
-    peers: HashMap<PeerId, Vec<ConnectionId>>,
 }
 
 impl Behaviour {
     pub fn new() -> Self {
         Self {
             events: VecDeque::new(),
-            peers: HashMap::new(),
         }
     }
 
     fn on_connection_established(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
-        // Register latest connection at the end of our list for peer
-        let connections = match self.peers.get(&peer_id) {
-            Some(vec) => {
-                let mut vec = vec.clone();
-                vec.push(connection_id);
-                vec
-            }
-            None => {
-                // Inform other services about new peer when we see it for the first time
-                info!("Connected to new peer {peer_id}");
-                self.events
-                    .push_back(ToSwarm::GenerateEvent(Event::PeerConnected(peer_id)));
-
-                vec![connection_id]
-            }
-        };
-
-        self.peers.insert(peer_id, connections);
+        let peer = Peer::new(peer_id, connection_id);
+        info!("New peer connected: {peer}");
+        self.events
+            .push_back(ToSwarm::GenerateEvent(Event::PeerConnected(peer)));
     }
 
     fn on_connection_closed(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
-        if let Some(connections) = self.peers.get(&peer_id) {
-            let filtered: Vec<ConnectionId> = connections
-                .iter()
-                .copied()
-                .filter(|connection| connection != &connection_id)
-                .collect();
-
-            if filtered.is_empty() {
-                info!("Disconnected from peer {peer_id}");
-                self.events
-                    .push_back(ToSwarm::GenerateEvent(Event::PeerDisconnected(peer_id)));
-
-                self.peers.remove(&peer_id);
-            } else {
-                self.peers.insert(peer_id, filtered);
-            }
-        } else {
-            panic!("Tried to close connection of inexistent peer");
-        }
+        let peer = Peer::new(peer_id, connection_id);
+        info!("Peer disconnected: {peer}");
+        self.events
+            .push_back(ToSwarm::GenerateEvent(Event::PeerDisconnected(peer)));
     }
 
-    fn handle_received_message(&mut self, peer_id: &PeerId, message: SyncMessage) {
+    fn on_received_message(
+        &mut self,
+        peer_id: PeerId,
+        connection_id: ConnectionId,
+        message: SyncMessage,
+    ) {
+        let peer = Peer::new(peer_id, connection_id);
         trace!(
-            "Notify swarm of received sync message: {peer_id} {}",
+            "Notify swarm of received sync message: {peer} {}",
             message.display()
         );
         self.events
             .push_back(ToSwarm::GenerateEvent(Event::MessageReceived(
-                *peer_id, message,
+                peer, message,
             )));
     }
 
-    pub fn send_message(&mut self, peer_id: PeerId, message: SyncMessage) {
-        let connection_id = self
-            .peers
-            .get(&peer_id)
-            .expect("Tried to handle error for unknown peer")
-            .last()
-            .expect("Tried to handle error for peer with inexistent connections");
-
+    pub fn send_message(&mut self, peer: Peer, message: SyncMessage) {
         trace!(
-            "Notify handler of sent sync message: {peer_id} {}",
+            "Notify handler of sent sync message: {peer} {}",
             message.display()
         );
-
         self.events.push_back(ToSwarm::NotifyHandler {
-            peer_id,
+            peer_id: peer.id(),
             event: HandlerInEvent::Message(message),
-            handler: NotifyHandler::One(connection_id.to_owned()),
+            handler: NotifyHandler::One(peer.connection_id()),
         });
     }
 
-    /// React to errors from other services (for example replication service).
-    pub fn handle_error(&mut self, peer_id: PeerId) {
-        let connection_id = self
-            .peers
-            .get(&peer_id)
-            .expect("Tried to handle error for unknown peer")
-            .last()
-            .expect("Tried to handle error for peer with inexistent connections");
-
+    pub fn handle_critical_error(&mut self, peer: Peer) {
         self.events.push_back(ToSwarm::NotifyHandler {
-            peer_id,
+            peer_id: peer.id(),
             event: HandlerInEvent::CriticalError,
-            handler: NotifyHandler::One(connection_id.to_owned()),
+            handler: NotifyHandler::One(peer.connection_id()),
         });
     }
 }
@@ -160,13 +120,13 @@ impl NetworkBehaviour for Behaviour {
 
     fn on_connection_handler_event(
         &mut self,
-        peer: PeerId,
-        _connection_id: ConnectionId,
+        peer_id: PeerId,
+        connection_id: ConnectionId,
         handler_event: THandlerOutEvent<Self>,
     ) {
         match handler_event {
             HandlerOutEvent::Message(message) => {
-                self.handle_received_message(&peer, message);
+                self.on_received_message(peer_id, connection_id, message);
             }
         }
     }

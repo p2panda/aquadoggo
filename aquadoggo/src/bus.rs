@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use libp2p::PeerId;
 use p2panda_rs::operation::OperationId;
 
 use crate::manager::Sender;
+use crate::network::Peer;
 use crate::replication::SyncMessage;
 
 /// Sender for cross-service communication bus.
@@ -16,17 +16,17 @@ pub enum ServiceMessage {
     NewOperation(OperationId),
 
     /// Node established a bi-directional connection to another node.
-    PeerConnected(PeerId),
+    PeerConnected(Peer),
 
     /// Node closed a connection to another node.
-    PeerDisconnected(PeerId),
+    PeerDisconnected(Peer),
 
     /// Node sent a message to remote node for replication.
-    SentReplicationMessage(PeerId, SyncMessage),
+    SentReplicationMessage(Peer, SyncMessage),
 
     /// Node received a message from remote node for replication.
-    ReceivedReplicationMessage(PeerId, SyncMessage),
+    ReceivedReplicationMessage(Peer, SyncMessage),
 
     /// Replication protocol failed with an critical error.
-    ReplicationFailed(PeerId),
+    ReplicationFailed(Peer),
 }

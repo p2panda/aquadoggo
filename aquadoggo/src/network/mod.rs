@@ -9,4 +9,5 @@ mod swarm;
 mod transport;
 
 pub use config::NetworkConfiguration;
+pub use peers::Peer;
 pub use service::network_service;
