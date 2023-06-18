@@ -176,11 +176,12 @@ impl NetworkBehaviour for Behaviour {
 #[cfg(test)]
 mod tests {
     use futures::FutureExt;
-    use libp2p::swarm::{keep_alive, Swarm};
+    use libp2p::swarm::{keep_alive, ConnectionId, Swarm};
     use libp2p_swarm_test::SwarmExt;
     use p2panda_rs::schema::SchemaId;
     use rstest::rstest;
 
+    use crate::network::Peer;
     use crate::replication::{Message, SyncMessage, TargetSet};
     use crate::test_utils::helpers::random_target_set;
 
@@ -189,23 +190,23 @@ mod tests {
     #[tokio::test]
     async fn peers_connect() {
         // Create two swarms
-        let mut swarm1 = Swarm::new_ephemeral(|_| PeersBehaviour::new());
-        let mut swarm2 = Swarm::new_ephemeral(|_| PeersBehaviour::new());
+        let mut swarm_1 = Swarm::new_ephemeral(|_| PeersBehaviour::new());
+        let mut swarm_2 = Swarm::new_ephemeral(|_| PeersBehaviour::new());
 
-        // Listen on swarm1 and connect from swarm2, this should establish a bi-directional
+        // Listen on swarm_1 and connect from swarm_2, this should establish a bi-directional
         // connection.
-        swarm1.listen().await;
-        swarm2.connect(&mut swarm1).await;
+        swarm_1.listen().await;
+        swarm_2.connect(&mut swarm_1).await;
 
-        let swarm1_peer_id = *swarm1.local_peer_id();
-        let swarm2_peer_id = *swarm2.local_peer_id();
+        let swarm_1_peer_id = *swarm_1.local_peer_id();
+        let swarm_2_peer_id = *swarm_2.local_peer_id();
 
-        let info1 = swarm1.network_info();
-        let info2 = swarm2.network_info();
+        let info1 = swarm_1.network_info();
+        let info2 = swarm_2.network_info();
 
         // Peers should be connected.
-        assert!(swarm2.is_connected(&swarm1_peer_id));
-        assert!(swarm1.is_connected(&swarm2_peer_id));
+        assert!(swarm_2.is_connected(&swarm_1_peer_id));
+        assert!(swarm_1.is_connected(&swarm_2_peer_id));
 
         // Each swarm should have exactly one connected peer.
         assert_eq!(info1.num_peers(), 1);
@@ -219,25 +220,25 @@ mod tests {
     #[tokio::test]
     async fn incompatible_network_behaviour() {
         // Create two swarms
-        let mut swarm1 = Swarm::new_ephemeral(|_| PeersBehaviour::new());
-        let mut swarm2 = Swarm::new_ephemeral(|_| keep_alive::Behaviour);
+        let mut swarm_1 = Swarm::new_ephemeral(|_| PeersBehaviour::new());
+        let mut swarm_2 = Swarm::new_ephemeral(|_| keep_alive::Behaviour);
 
-        // Listen on swarm1 and connect from swarm2, this should establish a bi-directional connection.
-        swarm1.listen().await;
-        swarm2.connect(&mut swarm1).await;
+        // Listen on swarm_1 and connect from swarm_2, this should establish a bi-directional connection.
+        swarm_1.listen().await;
+        swarm_2.connect(&mut swarm_1).await;
 
-        let swarm1_peer_id = *swarm1.local_peer_id();
-        let swarm2_peer_id = *swarm2.local_peer_id();
+        let swarm_1_peer_id = *swarm_1.local_peer_id();
+        let swarm_2_peer_id = *swarm_2.local_peer_id();
 
-        let info1 = swarm1.network_info();
-        let info2 = swarm2.network_info();
+        let info1 = swarm_1.network_info();
+        let info2 = swarm_2.network_info();
 
         // Even though the network behaviours of our two peers are incompatible they still
         // establish a connection.
 
         // Peers should be connected.
-        assert!(swarm2.is_connected(&swarm1_peer_id));
-        assert!(swarm1.is_connected(&swarm2_peer_id));
+        assert!(swarm_2.is_connected(&swarm_1_peer_id));
+        assert!(swarm_1.is_connected(&swarm_2_peer_id));
 
         // Each swarm should have exactly one connected peer.
         assert_eq!(info1.num_peers(), 1);
@@ -247,16 +248,16 @@ mod tests {
         assert_eq!(info1.connection_counters().num_established(), 1);
         assert_eq!(info2.connection_counters().num_established(), 1);
 
-        // Send a message from to swarm1 local peer from swarm2 local peer.
-        swarm1.behaviour_mut().send_message(
-            swarm2_peer_id,
+        // Send a message from to swarm_1 local peer from swarm_2 local peer.
+        swarm_1.behaviour_mut().send_message(
+            Peer::new(swarm_2_peer_id, ConnectionId::new_unchecked(1)),
             SyncMessage::new(0, Message::SyncRequest(0.into(), TargetSet::new(&vec![]))),
         );
 
-        // Await a swarm event on swarm2.
+        // Await a swarm event on swarm_2.
         //
         // We expect a timeout panic as no event will occur.
-        let result = std::panic::AssertUnwindSafe(swarm2.next_swarm_event())
+        let result = std::panic::AssertUnwindSafe(swarm_2.next_swarm_event())
             .catch_unwind()
             .await;
 
@@ -264,79 +265,87 @@ mod tests {
     }
 
     #[rstest]
-    #[case(TargetSet::new(&vec![SchemaId::SchemaFieldDefinition(0)]), TargetSet::new(&vec![SchemaId::SchemaDefinition(0)]))]
+    #[case(
+        TargetSet::new(&vec![SchemaId::SchemaFieldDefinition(0)]),
+        TargetSet::new(&vec![SchemaId::SchemaDefinition(0)]),
+    )]
     #[case(random_target_set(), random_target_set())]
     #[tokio::test]
     async fn swarm_behaviour_events(
         #[case] target_set_1: TargetSet,
         #[case] target_set_2: TargetSet,
     ) {
-        // Create two swarms
-        let mut swarm1 = Swarm::new_ephemeral(|_| PeersBehaviour::new());
-        let mut swarm2 = Swarm::new_ephemeral(|_| PeersBehaviour::new());
+        let mut swarm_1 = Swarm::new_ephemeral(|_| PeersBehaviour::new());
+        let mut swarm_2 = Swarm::new_ephemeral(|_| PeersBehaviour::new());
 
-        // Listen on swarm1 and connect from swarm2, this should establish a bi-directional connection.
-        swarm1.listen().await;
-        swarm2.connect(&mut swarm1).await;
+        // Listen on swarm_1 and connect from swarm_2, this should establish a bi-directional
+        // connection
+        swarm_1.listen().await;
+        swarm_2.connect(&mut swarm_1).await;
 
-        let mut res1 = Vec::new();
-        let mut res2 = Vec::new();
+        let mut events_1 = Vec::new();
+        let mut events_2 = Vec::new();
 
-        let swarm1_peer_id = *swarm1.local_peer_id();
-        let swarm2_peer_id = *swarm2.local_peer_id();
-
-        // Send a message from swarm1 to peer2.
-        swarm1.behaviour_mut().send_message(
-            swarm2_peer_id,
-            SyncMessage::new(0, Message::SyncRequest(0.into(), target_set_1.clone())),
-        );
-
-        // Send a message from swarm2 peer1.
-        swarm2.behaviour_mut().send_message(
-            swarm1_peer_id,
-            SyncMessage::new(1, Message::SyncRequest(0.into(), target_set_2.clone())),
-        );
+        let swarm_1_peer_id = *swarm_1.local_peer_id();
+        let swarm_2_peer_id = *swarm_2.local_peer_id();
 
         // Collect the next 2 behaviour events which occur in either swarms.
         for _ in 0..2 {
             tokio::select! {
-                Event::PeerConnected(peer_id) = swarm1.next_behaviour_event() => res1.push((peer_id, None)),
-                Event::PeerConnected(peer_id) = swarm2.next_behaviour_event() => res2.push((peer_id, None)),
+                Event::PeerConnected(peer) = swarm_1.next_behaviour_event() => {
+                    events_1.push((peer, None));
+                },
+                Event::PeerConnected(peer) = swarm_2.next_behaviour_event() => events_2.push((peer, None)),
             }
         }
 
-        // And again add the next 2 behaviour events which occur in either swarms.
+        assert_eq!(events_1.len(), 1);
+        assert_eq!(events_2.len(), 1);
+
+        // The first event should have been a ConnectionEstablished containing the expected peer
+        // id
+        let (peer_2, message) = events_1[0].clone();
+        assert_eq!(peer_2.id(), swarm_2_peer_id);
+        assert!(message.is_none());
+
+        let (peer_1, message) = events_2[0].clone();
+        assert_eq!(peer_1.id(), swarm_1_peer_id);
+        assert!(message.is_none());
+
+        // Send a message from swarm_1 to swarm_2
+        swarm_1.behaviour_mut().send_message(
+            peer_2,
+            SyncMessage::new(0, Message::SyncRequest(0.into(), target_set_1.clone())),
+        );
+
+        // Send a message from swarm_2 to swarm_1
+        swarm_2.behaviour_mut().send_message(
+            peer_1,
+            SyncMessage::new(1, Message::SyncRequest(0.into(), target_set_2.clone())),
+        );
+
+        // And again add the next behaviour events which occur in either swarms
         for _ in 0..2 {
             tokio::select! {
-                Event::MessageReceived(peer_id, message) = swarm1.next_behaviour_event() => res1.push((peer_id, Some(message))),
-                Event::MessageReceived(peer_id, message) = swarm2.next_behaviour_event() => res2.push((peer_id, Some(message))),
+                Event::MessageReceived(peer, message) = swarm_1.next_behaviour_event() => events_1.push((peer, Some(message))),
+                Event::MessageReceived(peer, message) = swarm_2.next_behaviour_event() => events_2.push((peer, Some(message))),
             }
         }
 
-        // Each swarm should have emitted exactly one event.
-        assert_eq!(res1.len(), 2);
-        assert_eq!(res2.len(), 2);
+        assert_eq!(events_1.len(), 2);
+        assert_eq!(events_2.len(), 2);
 
-        // The first event should have been a ConnectionEstablished containing the expected peer id.
-        let (peer_id, message) = res1[0].clone();
-        assert_eq!(peer_id, swarm2_peer_id);
-        assert!(message.is_none());
-
-        let (peer_id, message) = res2[0].clone();
-        assert_eq!(peer_id, swarm1_peer_id);
-        assert!(message.is_none());
-
-        // swarm1 should have received the message from swarm2 peer.
-        let (peer_id, message) = res1[1].clone();
-        assert_eq!(peer_id, swarm2_peer_id);
+        // swarm_1 should have received the message from swarm_2 peer
+        let (peer, message) = events_1[1].clone();
+        assert_eq!(peer.id(), swarm_2_peer_id);
         assert_eq!(
             message.unwrap(),
             SyncMessage::new(1, Message::SyncRequest(0.into(), target_set_2.clone()))
         );
 
-        // swarm2 should have received the message from swarm1 peer.
-        let (peer_id, message) = res2[1].clone();
-        assert_eq!(peer_id, swarm1_peer_id);
+        // swarm_2 should have received the message from swarm_1 peer
+        let (peer, message) = events_2[1].clone();
+        assert_eq!(peer.id(), swarm_1_peer_id);
         assert_eq!(
             message.unwrap(),
             SyncMessage::new(0, Message::SyncRequest(0.into(), target_set_1))
