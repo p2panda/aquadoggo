@@ -17,7 +17,7 @@ pub async fn build_swarm(
     key_pair: Keypair,
 ) -> Result<Swarm<Behaviour>> {
     let peer_id = network_config.peer_id.expect("Peer id needs to be given");
-    info!("Network service peer ID: {peer_id}",);
+    info!("Local peer id: {peer_id}");
 
     let relay_client_enabled = network_config.relay_address.is_some();
 

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::collections::HashMap;
+use std::hash::Hash;
 
 use anyhow::Result;
 use log::{debug, info, trace, warn};
@@ -52,7 +53,7 @@ pub struct SyncManager<P> {
 
 impl<P> SyncManager<P>
 where
-    P: Clone + std::fmt::Debug + std::hash::Hash + Eq + PartialOrd,
+    P: Clone + Human + Hash + Eq + PartialOrd,
 {
     pub fn new(store: SqlStore, ingest: SyncIngest, local_peer: P) -> Self {
         Self {
@@ -68,7 +69,7 @@ where
     /// Warning: This might also remove actively running sessions. Do only clear sessions when you
     /// are sure they are a) done or b) the peer closed its connection.
     pub fn remove_sessions(&mut self, remote_peer: &P) {
-        debug!("Remove all sessions with peer: {remote_peer:?}");
+        debug!("Remove all sessions with peer: {}", remote_peer.display());
         self.sessions.remove(remote_peer);
     }
 
@@ -129,13 +130,24 @@ where
                 .enumerate()
                 .find(|(_, session)| session.id == *session_id)
             {
-                debug!("Remove session {session_id} with peer: {remote_peer:?}");
+                debug!(
+                    "Remove session {} with peer: {}",
+                    session_id,
+                    remote_peer.display()
+                );
                 sessions.remove(index);
             } else {
-                warn!("Tried to remove nonexistent session {session_id} with peer: {remote_peer:?}")
+                warn!(
+                    "Tried to remove nonexistent session {} with peer: {}",
+                    session_id,
+                    remote_peer.display()
+                );
             }
         } else {
-            warn!("Tried to remove sessions from unknown peer: {remote_peer:?}")
+            warn!(
+                "Tried to remove sessions from unknown peer: {}",
+                remote_peer.display()
+            );
         }
     }
 
@@ -160,8 +172,8 @@ where
         let sessions = self.get_sessions(remote_peer);
 
         info!(
-            "Initiate outbound replication session with peer {:?}",
-            remote_peer
+            "Initiate outbound replication session with peer {}",
+            remote_peer.display()
         );
 
         // Make sure to not have duplicate sessions over the same schema ids
@@ -376,8 +388,8 @@ where
         };
 
         info!(
-            "Accept inbound replication session with peer {:?}",
-            remote_peer
+            "Accept inbound replication session with peer {}",
+            remote_peer.display()
         );
 
         let messages = self
@@ -394,8 +406,10 @@ where
         message: &Message,
     ) -> Result<SyncResult, ReplicationError> {
         trace!(
-            "Message received: {session_id} {remote_peer:?} {}",
-            message.display()
+            "Message received: {} {} {}",
+            session_id,
+            remote_peer.display(),
+            message.display(),
         );
 
         let sessions = self.sessions.get_mut(remote_peer);
@@ -414,11 +428,11 @@ where
                 } else {
                     Err(ReplicationError::NoSessionFound(
                         *session_id,
-                        format!("{remote_peer:?}"),
+                        remote_peer.display(),
                     ))
                 }
             }
-            None => Err(ReplicationError::NoPeerFound(format!("{remote_peer:?}"))),
+            None => Err(ReplicationError::NoPeerFound(remote_peer.display())),
         }?;
 
         // We're done, clean up after ourselves
@@ -466,7 +480,7 @@ where
         } else {
             Err(ReplicationError::NoSessionFound(
                 *session_id,
-                format!("{remote_peer:?}"),
+                remote_peer.display(),
             ))
         }
     }

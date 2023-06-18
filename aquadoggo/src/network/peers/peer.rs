@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::cmp::Ordering;
-use std::fmt::{Display, Formatter, Result};
 
 use libp2p::swarm::ConnectionId;
 use libp2p::PeerId;
+use p2panda_rs::Human;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct Peer(PeerId, ConnectionId);
@@ -39,8 +39,10 @@ impl PartialOrd for Peer {
     }
 }
 
-impl Display for Peer {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        write!(f, "Peer({}, {:?})", self.0, self.1)
+impl Human for Peer {
+    fn display(&self) -> String {
+        // Trick to nicely display `ConnectionId` struct
+        let connection_id = &format!("{:?}", self.1)[13..][..1];
+        format!("{} ({})", self.0, connection_id)
     }
 }

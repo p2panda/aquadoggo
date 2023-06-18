@@ -3,9 +3,9 @@
 use anyhow::Result;
 use libp2p::multiaddr::Protocol;
 use libp2p::ping::Event;
-use libp2p::swarm::{AddressScore, SwarmEvent};
+use libp2p::swarm::{AddressScore, ConnectionError, SwarmEvent};
 use libp2p::{autonat, identify, mdns, rendezvous, Multiaddr, Swarm};
-use log::{debug, info, trace, warn};
+use log::{debug, trace, warn};
 use tokio::task;
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt;
@@ -86,8 +86,6 @@ pub async fn network_service(
     // Spawn a task to run swarm in event loop
     let event_loop = EventLoop::new(swarm, tx, external_circuit_addr, network_config);
     let handle = task::spawn(event_loop.run());
-
-    info!("Network service is ready");
 
     if tx_ready.send(()).is_err() {
         warn!("No subscriber informed about network service being ready");
@@ -181,13 +179,13 @@ impl EventLoop {
             // ~~~~~
             // Swarm
             // ~~~~~
-            SwarmEvent::Dialing(peer_id) => info!("Dialing: {peer_id}"),
+            SwarmEvent::Dialing(peer_id) => trace!("Dialing: {peer_id}"),
             SwarmEvent::ConnectionEstablished {
                 peer_id,
                 num_established,
                 ..
             } => {
-                info!("Established new connection (total {num_established}) with {peer_id}");
+                trace!("Established new connection (total {num_established}) with {peer_id}");
 
                 // Match on a connection with the rendezvous server
                 if let Some(rendezvous_peer_id) = self.network_config.rendezvous_peer_id {
@@ -207,44 +205,62 @@ impl EventLoop {
                     }
                 }
             }
-            SwarmEvent::ConnectionClosed {
-                peer_id,
-                num_established,
-                cause,
-                ..
-            } => {
-                info!("Connection closed (total {num_established}) with {peer_id}: {cause:?}");
-            }
+            SwarmEvent::ConnectionClosed { peer_id, cause, .. } => match cause {
+                Some(ConnectionError::IO(error)) => {
+                    if error.to_string() == "timed out" {
+                        // Sometimes we receive time out errors from here
+                        debug!("Connection timed out with peer {peer_id}");
+                    } else {
+                        warn!("Connection error occurred with peer {peer_id}: {error}");
+                    }
+                }
+                Some(ConnectionError::KeepAliveTimeout) => {
+                    debug!("Connection timed out with peer {peer_id}");
+                }
+                Some(ConnectionError::Handler(_)) => {
+                    warn!("Connection handler error occurred with peer {peer_id}");
+                }
+                None => {
+                    debug!("Connection closed with peer {peer_id}");
+                }
+            },
             SwarmEvent::ExpiredListenAddr {
                 listener_id,
                 address,
-            } => trace!("ExpiredListenAddr: {listener_id:?} {address}"),
+            } => trace!("Expired listen address: {listener_id:?} {address}"),
             SwarmEvent::IncomingConnection {
                 local_addr,
                 send_back_addr,
-            } => debug!("IncomingConnection: {local_addr} {send_back_addr}"),
+            } => trace!("Incoming connection: {local_addr} {send_back_addr}"),
             SwarmEvent::IncomingConnectionError {
                 local_addr,
                 send_back_addr,
                 error,
-            } => warn!("IncomingConnectionError: {local_addr} {send_back_addr} {error:?}"),
+            } => {
+                warn!("Incoming connection error occurred with {local_addr} and {send_back_addr}: {error}");
+            }
             SwarmEvent::ListenerClosed {
                 listener_id,
                 addresses,
                 reason,
-            } => trace!("ListenerClosed: {listener_id:?} {addresses:?} {reason:?}"),
-            SwarmEvent::ListenerError { listener_id, error } => {
-                warn!("ListenerError: {listener_id:?} {error:?}")
+            } => trace!("Listener closed: {listener_id:?} {addresses:?} {reason:?}"),
+            SwarmEvent::ListenerError { error, .. } => {
+                warn!("Listener failed with error: {error}")
             }
             SwarmEvent::NewListenAddr {
                 address,
                 listener_id: _,
             } => {
-                info!("Listening on {address}");
+                debug!("Listening on {address}");
             }
-            SwarmEvent::OutgoingConnectionError { peer_id, error } => {
-                warn!("OutgoingConnectionError: {peer_id:?} {error:?}");
-            }
+            SwarmEvent::OutgoingConnectionError { peer_id, error } => match peer_id {
+                Some(id) => {
+                    warn!("Outgoing connection error with peer {id} occurred: {error}");
+                }
+                None => {
+                    warn!("Outgoing connection error occurred: {error}");
+                }
+            },
 
             // ~~~~
             // mDNS
@@ -273,7 +289,7 @@ impl EventLoop {
             // Ping
             // ~~~~
             SwarmEvent::Behaviour(BehaviourEvent::Ping(Event { peer, result: _ })) => {
-                debug!("Ping from: {peer}")
+                trace!("Ping from: {peer}")
             }
 
             // ~~~~~~~~~~
@@ -381,10 +397,10 @@ impl EventLoop {
             // Relay
             // ~~~~~
             SwarmEvent::Behaviour(BehaviourEvent::RelayServer(event)) => {
-                debug!("Unhandled relay server event: {event:?}")
+                trace!("Unhandled relay server event: {event:?}")
             }
             SwarmEvent::Behaviour(BehaviourEvent::RelayClient(event)) => {
-                debug!("Unhandled relay client event: {event:?}")
+                trace!("Unhandled relay client event: {event:?}")
             }
 
             // ~~~~~~~

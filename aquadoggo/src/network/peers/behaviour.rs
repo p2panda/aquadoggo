@@ -10,7 +10,7 @@ use libp2p::swarm::{
     PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use libp2p::{Multiaddr, PeerId};
-use log::{info, trace};
+use log::trace;
 use p2panda_rs::Human;
 
 use crate::network::peers::handler::{Handler, HandlerInEvent, HandlerOutEvent};
@@ -43,14 +43,12 @@ impl Behaviour {
 
     fn on_connection_established(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
         let peer = Peer::new(peer_id, connection_id);
-        info!("New peer connected: {peer}");
         self.events
             .push_back(ToSwarm::GenerateEvent(Event::PeerConnected(peer)));
     }
 
     fn on_connection_closed(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
         let peer = Peer::new(peer_id, connection_id);
-        info!("Peer disconnected: {peer}");
         self.events
             .push_back(ToSwarm::GenerateEvent(Event::PeerDisconnected(peer)));
     }
@@ -63,7 +61,8 @@ impl Behaviour {
     ) {
         let peer = Peer::new(peer_id, connection_id);
         trace!(
-            "Notify swarm of received sync message: {peer} {}",
+            "Notify swarm of received sync message: {} {}",
+            peer.display(),
             message.display()
         );
         self.events
@@ -74,8 +73,9 @@ impl Behaviour {
 
     pub fn send_message(&mut self, peer: Peer, message: SyncMessage) {
         trace!(
-            "Notify handler of sent sync message: {peer} {}",
-            message.display()
+            "Notify handler of sent sync message: {} {}",
+            peer.display(),
+            message.display(),
         );
         self.events.push_back(ToSwarm::NotifyHandler {
             peer_id: peer.id(),

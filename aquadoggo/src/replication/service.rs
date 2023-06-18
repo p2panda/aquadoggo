@@ -5,8 +5,9 @@ use std::time::Duration;
 
 use anyhow::Result;
 use libp2p::PeerId;
-use log::{debug, info, warn};
+use log::{debug, info, trace, warn};
 use p2panda_rs::schema::SchemaId;
+use p2panda_rs::Human;
 use tokio::task;
 use tokio::time::interval;
 use tokio_stream::wrappers::{BroadcastStream, IntervalStream};
@@ -133,17 +134,17 @@ impl ConnectionManager {
 
     fn remove_connection(&mut self, peer: Peer) {
         match self.peers.remove(&peer) {
-            Some(_) => debug!("Remove peer: {peer}"),
+            Some(_) => debug!("Remove peer: {}", peer.display()),
             None => warn!("Tried to remove connection from unknown peer"),
         }
     }
 
     async fn on_connection_established(&mut self, peer: Peer) {
-        info!("Connected to peer: {peer}");
+        info!("Connected to peer: {}", peer.display());
 
         match self.peers.get(&peer) {
             Some(_) => {
-                warn!("Peer already known: {peer}");
+                warn!("Peer already known: {}", peer.display());
             }
             None => {
                 self.peers.insert(peer, PeerStatus::new(peer));
@@ -153,7 +154,7 @@ impl ConnectionManager {
     }
 
     async fn on_connection_closed(&mut self, peer: Peer) {
-        info!("Disconnected from peer: {peer}");
+        info!("Disconnected from peer: {}", peer.display());
 
         // Clear running replication sessions from sync manager
         self.sync_manager.remove_sessions(&peer);
@@ -182,7 +183,7 @@ impl ConnectionManager {
     }
 
     async fn on_replication_finished(&mut self, peer: Peer, _session_id: SessionId) {
-        info!("Finished replication with peer {peer}");
+        info!("Finished replication with peer {}", peer.display());
 
         match self.peers.get_mut(&peer) {
             Some(status) => {
@@ -200,7 +201,7 @@ impl ConnectionManager {
         session_id: SessionId,
         error: ReplicationError,
     ) {
-        warn!("Replication with peer {} failed: {}", peer, error);
+        warn!("Replication with peer {} failed: {}", peer.display(), error);
 
         match self.peers.get_mut(&peer) {
             Some(status) => {
@@ -273,7 +274,7 @@ impl ConnectionManager {
             .collect();
 
         if attempt_peers.is_empty() {
-            debug!("No peers available for replication")
+            trace!("No peers available for replication")
         }
 
         for peer in attempt_peers {
