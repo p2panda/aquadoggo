@@ -321,3 +321,75 @@ impl ConnectionManager {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use libp2p::swarm::ConnectionId;
+    use libp2p::PeerId;
+    use tokio::sync::broadcast;
+
+    use crate::bus::ServiceMessage;
+    use crate::network::Peer;
+    use crate::replication::{Message, Mode, SyncMessage};
+    use crate::test_utils::{test_runner, TestNode};
+
+    use super::ConnectionManager;
+
+    #[test]
+    fn peer_lifetime() {
+        let local_peer_id =
+            PeerId::from_str("12D3KooWD3JAiSNrVGxjC7vJCcjwS8egbtJV9kzrstxLRKiwb9UY").unwrap();
+        let remote_peer_id =
+            PeerId::from_str("12D3KooWCqtLMJQLY3sm9rpDampJ2nPLswPPZto3mrRY7794QATF").unwrap();
+
+        test_runner(move |node: TestNode| async move {
+            let (tx, mut rx) = broadcast::channel::<ServiceMessage>(10);
+
+            let mut manager = ConnectionManager::new(
+                &node.context.schema_provider,
+                &node.context.store,
+                &tx,
+                local_peer_id,
+            );
+
+            let target_set = manager.target_set().await;
+
+            // Inform connection manager about new peer
+            let remote_peer = Peer::new(remote_peer_id, ConnectionId::new_unchecked(1));
+
+            manager
+                .handle_service_message(ServiceMessage::PeerConnected(remote_peer))
+                .await;
+
+            let status = manager
+                .peers
+                .get(&remote_peer)
+                .expect("Peer to be registered in connection manager");
+            assert_eq!(manager.peers.len(), 1);
+            assert_eq!(status.peer, remote_peer);
+
+            // Manager attempts a replication session with that peer
+            assert_eq!(rx.len(), 1);
+            assert_eq!(
+                rx.recv().await,
+                Ok(ServiceMessage::SentReplicationMessage(
+                    remote_peer,
+                    SyncMessage::new(0, Message::SyncRequest(Mode::Naive, target_set))
+                ))
+            );
+            assert_eq!(manager.sync_manager.get_sessions(&remote_peer).len(), 1);
+
+            // Inform manager about peer disconnected
+            manager
+                .handle_service_message(ServiceMessage::PeerDisconnected(remote_peer))
+                .await;
+
+            // Manager cleans up internal state
+            assert_eq!(rx.len(), 0);
+            assert_eq!(manager.peers.len(), 0);
+            assert_eq!(manager.sync_manager.get_sessions(&remote_peer).len(), 0);
+        });
+    }
+}
