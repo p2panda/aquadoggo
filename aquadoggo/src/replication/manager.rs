@@ -17,7 +17,7 @@ use crate::replication::{
 
 pub const INITIAL_SESSION_ID: SessionId = 0;
 
-pub const SUPPORTED_MODES: [Mode; 1] = [Mode::Naive];
+pub const SUPPORTED_MODES: [Mode; 1] = [Mode::LogHeight];
 
 pub const SUPPORT_LIVE_MODE: bool = false;
 
@@ -547,7 +547,7 @@ mod tests {
         let peer_id_remote: Peer = Peer::new("remote");
 
         test_runner(move |node: TestNode| async move {
-            let mode = Mode::Naive;
+            let mode = Mode::LogHeight;
             let (tx, _rx) = broadcast::channel(8);
             let ingest = SyncIngest::new(SchemaProvider::default(), tx);
 
@@ -589,18 +589,18 @@ mod tests {
             let mut manager = SyncManager::new(node.context.store.clone(), ingest, peer_id_local);
 
             let message =
-                SyncMessage::new(0, Message::SyncRequest(Mode::Naive, target_set_1.clone()));
+                SyncMessage::new(0, Message::SyncRequest(Mode::LogHeight, target_set_1.clone()));
             let result = manager.handle_message(&peer_id_remote, &message).await;
             assert!(result.is_ok());
 
             let message =
-                SyncMessage::new(1, Message::SyncRequest(Mode::Naive, target_set_2.clone()));
+                SyncMessage::new(1, Message::SyncRequest(Mode::LogHeight, target_set_2.clone()));
             let result = manager.handle_message(&peer_id_remote, &message).await;
             assert!(result.is_ok());
 
             // Reject attempt to create session again
             let message =
-                SyncMessage::new(0, Message::SyncRequest(Mode::Naive, target_set_3.clone()));
+                SyncMessage::new(0, Message::SyncRequest(Mode::LogHeight, target_set_3.clone()));
             let result = manager.handle_message(&peer_id_remote, &message).await;
             assert!(matches!(result,
                 Err(ReplicationError::DuplicateSession(err)) if err == DuplicateSessionRequestError::InboundPendingSession(0)
@@ -608,7 +608,7 @@ mod tests {
 
             // Reject different session concerning same target set
             let message =
-                SyncMessage::new(2, Message::SyncRequest(Mode::Naive, target_set_2.clone()));
+                SyncMessage::new(2, Message::SyncRequest(Mode::LogHeight, target_set_2.clone()));
             let result = manager.handle_message(&peer_id_remote, &message).await;
             assert!(matches!(
                 result,
@@ -661,7 +661,7 @@ mod tests {
         let peer_id_remote: Peer = Peer::new("remote");
 
         test_runner(move |node: TestNode| async move {
-            let mode = Mode::Naive;
+            let mode = Mode::LogHeight;
             let (tx, _rx) = broadcast::channel(8);
             let ingest = SyncIngest::new(SchemaProvider::default(), tx);
 
@@ -862,7 +862,7 @@ mod tests {
         let peer_id_remote: Peer = Peer::new("remote");
 
         test_runner(move |node: TestNode| async move {
-            let mode = Mode::Naive;
+            let mode = Mode::LogHeight;
             let (tx, _rx) = broadcast::channel(8);
             let ingest = SyncIngest::new(SchemaProvider::default(), tx);
 
@@ -993,7 +993,7 @@ mod tests {
             );
             let message = SyncMessage::new(
                 INITIAL_SESSION_ID,
-                Message::SyncRequest(Mode::Naive, target_set.clone()),
+                Message::SyncRequest(Mode::LogHeight, target_set.clone()),
             );
             let result = manager.handle_message(&peer_id_remote, &message).await;
             assert!(result.is_ok());
@@ -1068,7 +1068,7 @@ mod tests {
 
             // Send `SyncRequest` to remote
             let messages = manager_a
-                .initiate_session(&peer_id_remote, &target_set, &Mode::Naive)
+                .initiate_session(&peer_id_remote, &target_set, &Mode::LogHeight)
                 .await
                 .unwrap();
 
@@ -1076,7 +1076,7 @@ mod tests {
                 messages,
                 vec![SyncMessage::new(
                     0,
-                    Message::SyncRequest(Mode::Naive, target_set.clone())
+                    Message::SyncRequest(Mode::LogHeight, target_set.clone())
                 )]
             );
 

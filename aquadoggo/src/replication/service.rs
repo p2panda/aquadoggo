@@ -284,7 +284,7 @@ impl ConnectionManager {
     async fn initiate_replication(&mut self, peer: &Peer, target_set: &TargetSet) {
         match self
             .sync_manager
-            .initiate_session(peer, target_set, &Mode::Naive)
+            .initiate_session(peer, target_set, &Mode::LogHeight)
             .await
         {
             Ok(messages) => {
@@ -400,7 +400,7 @@ mod tests {
                 rx.recv().await,
                 Ok(ServiceMessage::SentReplicationMessage(
                     remote_peer,
-                    SyncMessage::new(0, Message::SyncRequest(Mode::Naive, target_set))
+                    SyncMessage::new(0, Message::SyncRequest(Mode::LogHeight, target_set))
                 ))
             );
             assert_eq!(manager.sync_manager.get_sessions(&remote_peer).len(), 1);

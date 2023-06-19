@@ -17,13 +17,13 @@ use crate::replication::traits::Strategy;
 use crate::replication::{LogHeight, Message, Mode, StrategyResult, TargetSet};
 
 #[derive(Clone, Debug)]
-pub struct NaiveStrategy {
+pub struct LogHeightStrategy {
     target_set: TargetSet,
     received_remote_have: bool,
     sent_have: bool,
 }
 
-impl NaiveStrategy {
+impl LogHeightStrategy {
     pub fn new(target_set: &TargetSet) -> Self {
         Self {
             target_set: target_set.clone(),
@@ -97,9 +97,9 @@ impl NaiveStrategy {
 }
 
 #[async_trait]
-impl Strategy for NaiveStrategy {
+impl Strategy for LogHeightStrategy {
     fn mode(&self) -> Mode {
-        Mode::Naive
+        Mode::LogHeight
     }
 
     fn target_set(&self) -> TargetSet {

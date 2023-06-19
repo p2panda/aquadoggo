@@ -7,7 +7,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Mode {
-    Naive,
+    LogHeight,
     SetReconciliation,
     Unknown,
 }
@@ -15,7 +15,7 @@ pub enum Mode {
 impl Mode {
     pub fn as_str(&self) -> &str {
         match self {
-            Mode::Naive => "naive",
+            Mode::LogHeight => "log-height",
             Mode::SetReconciliation => "set-reconciliation",
             Mode::Unknown => "unknown",
         }
@@ -23,7 +23,7 @@ impl Mode {
 
     pub fn as_u64(&self) -> u64 {
         match self {
-            Mode::Naive => 0,
+            Mode::LogHeight => 0,
             Mode::SetReconciliation => 1,
             Mode::Unknown => unreachable!("Can't create an unknown replication mode"),
         }
@@ -33,7 +33,7 @@ impl Mode {
 impl From<u64> for Mode {
     fn from(value: u64) -> Self {
         match value {
-            0 => Mode::Naive,
+            0 => Mode::LogHeight,
             1 => Mode::SetReconciliation,
             _ => Mode::Unknown,
         }
@@ -81,13 +81,13 @@ mod tests {
 
     #[test]
     fn u64_representation() {
-        assert_eq!(Mode::Naive.as_u64(), 0);
+        assert_eq!(Mode::LogHeight.as_u64(), 0);
         assert_eq!(Mode::SetReconciliation.as_u64(), 1);
     }
 
     #[test]
     fn serialize() {
-        let bytes = serialize_from(Mode::Naive);
+        let bytes = serialize_from(Mode::LogHeight);
         assert_eq!(bytes, vec![0]);
     }
 
