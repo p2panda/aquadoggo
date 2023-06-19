@@ -72,12 +72,13 @@ mod tests {
     #[test]
     fn saves_and_loads_key_pair() {
         let tmp_dir = TempDir::new().unwrap();
-        let tmp_path = tmp_dir.path().to_owned();
+        let mut tmp_path = tmp_dir.path().to_owned();
+        tmp_path.push("private-key.txt");
 
         // Attempt to load the key pair from the temporary path
         // This should result in a new key pair being generated and written to file
         let key_pair_1 = generate_or_load_key_pair(tmp_path.clone());
-        assert!(key_pair_1.is_ok());
+        assert!(key_pair_1.is_ok(), "{:?}", key_pair_1.err());
 
         // Attempt to load the key pair from the same temporary path
         // This should result in the previously-generated key pair being loaded from file
