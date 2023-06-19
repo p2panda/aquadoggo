@@ -7,7 +7,7 @@ use libp2p::multiaddr::Protocol;
 use libp2p::ping::Event;
 use libp2p::swarm::{AddressScore, ConnectionError, SwarmEvent};
 use libp2p::{autonat, identify, mdns, rendezvous, Multiaddr, PeerId, Swarm};
-use log::{debug, trace, warn};
+use log::{debug, info, trace, warn};
 use tokio::task;
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt;
@@ -17,9 +17,7 @@ use crate::context::Context;
 use crate::manager::{ServiceReadySender, Shutdown};
 use crate::network::behaviour::{Behaviour, BehaviourEvent};
 use crate::network::config::NODE_NAMESPACE;
-use crate::network::peers;
-use crate::network::swarm;
-use crate::network::{NetworkConfiguration, ShutdownHandler};
+use crate::network::{identity, peers, swarm, NetworkConfiguration, ShutdownHandler};
 
 /// Network service that configures and deploys a libp2p network swarm over QUIC transports.
 ///
@@ -34,13 +32,11 @@ pub async fn network_service(
     // Subscribe to communication bus
     let _rx = tx.subscribe();
 
-    // Load the network key pair and peer ID
-    let key_pair =
-        NetworkConfiguration::load_or_generate_key_pair(context.config.base_path.clone())?;
-
     // Read the network configuration parameters from the application context
     let network_config = context.config.network.clone();
-    let local_peer_id = network_config.peer_id.expect("Peer id needs to be given");
+    let key_pair = identity::to_libp2p_key_pair(&context.key_pair);
+    let local_peer_id = key_pair.public().to_peer_id();
+    info!("Local peer id: {local_peer_id}");
 
     // Build the network swarm and retrieve the local peer ID
     let mut swarm = swarm::build_swarm(&network_config, key_pair).await?;

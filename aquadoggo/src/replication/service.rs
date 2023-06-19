@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use anyhow::Result;
-use libp2p::PeerId;
 use log::{debug, info, trace, warn};
+use p2panda_rs::identity::PublicKey;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::Human;
 use tokio::task;
@@ -38,14 +38,12 @@ pub async fn replication_service(
 ) -> Result<()> {
     let _rx = tx.subscribe();
 
-    let local_peer_id = context
-        .config
-        .network
-        .peer_id
-        .expect("Peer id needs to be given");
-
-    let manager =
-        ConnectionManager::new(&context.schema_provider, &context.store, &tx, local_peer_id);
+    let manager = ConnectionManager::new(
+        &context.schema_provider,
+        &context.store,
+        &tx,
+        context.key_pair.public_key(),
+    );
     let handle = task::spawn(manager.run());
 
     if tx_ready.send(()).is_err() {
@@ -115,9 +113,9 @@ impl ConnectionManager {
         schema_provider: &SchemaProvider,
         store: &SqlStore,
         tx: &ServiceSender,
-        local_peer_id: PeerId,
+        local_public_key: PublicKey,
     ) -> Self {
-        let local_peer = Peer::new_local_peer(local_peer_id);
+        let local_peer = Peer::new_local_peer(local_public_key);
         let ingest = SyncIngest::new(schema_provider.clone(), tx.clone());
         let sync_manager = SyncManager::new(store.clone(), ingest, local_peer);
         let scheduler = IntervalStream::new(interval(UPDATE_INTERVAL));

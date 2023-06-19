@@ -216,7 +216,9 @@ dependencies = [
  "aquadoggo",
  "clap",
  "env_logger",
+ "hex",
  "libp2p",
+ "p2panda-rs",
  "tokio",
 ]
 

@@ -2,7 +2,7 @@
 
 mod behaviour;
 mod config;
-pub mod identity;
+mod identity;
 mod peers;
 mod service;
 mod shutdown;

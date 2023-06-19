@@ -1,86 +1,57 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::fs;
-use std::fs::File;
-use std::io::{Read, Write};
-use std::os::unix::fs::PermissionsExt;
-use std::path::Path;
+use p2panda_rs::identity::{KeyPair, PublicKey};
 
-use anyhow::Result;
-use libp2p::identity::{ed25519, Keypair};
-use libp2p::PeerId;
-
-/// Utilities for dealing with the node identity in the form of an Ed25519 key pair.
-pub trait Identity {
-    fn new() -> Self
-    where
-        Self: Sized;
-
-    fn peer_id(&self) -> PeerId;
-
-    fn key_pair(&self) -> Keypair;
-
-    fn save(&self, path: &Path) -> Result<()>;
-
-    fn load(path: &Path) -> Result<Self>
-    where
-        Self: Sized;
+/// Helper method to convert p2panda `PublicKey` to libp2p `PeerId`.
+///
+/// Our specification and APIs use ed25519 public keys as client and node identifiers. Internally
+/// libp2p handles that via "peer ids" (multihashes, base58-encoded).
+pub fn to_libp2p_peer_id(public_key: &PublicKey) -> libp2p::PeerId {
+    let bytes = public_key.to_bytes();
+    // Unwrap here because we already checked the validity of this key
+    let ed25519_public = libp2p::identity::ed25519::PublicKey::try_from_bytes(&bytes).unwrap();
+    let libp2p_public = libp2p::identity::PublicKey::from(ed25519_public);
+    libp2p_public.to_peer_id()
 }
 
-// @TODO: This should use our p2panda `KeyPair` type and in general be handled outside the libp2p
-// context. Related issue: https://github.com/p2panda/aquadoggo/issues/388
-impl Identity for Keypair {
-    /// Generate a new Ed25519 key pair.
-    fn new() -> Self {
-        Keypair::generate_ed25519()
+/// Helper method to convert from libp2p `PeerId` to p2panda `PublicKey`.
+pub fn to_public_key(peer_id: &libp2p::PeerId) -> PublicKey {
+    PublicKey::new(&peer_id.to_string()).unwrap()
+}
+
+/// Helper method to convert p2panda `KeyPair` to the libp2p equivalent.
+pub fn to_libp2p_key_pair(key_pair: &KeyPair) -> libp2p::identity::Keypair {
+    let bytes = key_pair.private_key().as_bytes();
+    // Unwrap here because we already validated this private key
+    libp2p::identity::Keypair::ed25519_from_bytes(bytes.to_owned()).unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use p2panda_rs::identity::KeyPair;
+
+    use super::{to_libp2p_key_pair, to_libp2p_peer_id, to_public_key};
+
+    #[test]
+    fn peer_id_public_key_conversion() {
+        let key_pair = KeyPair::new();
+        let public_key = key_pair.public_key();
+        let peer_id = to_libp2p_peer_id(&public_key);
+        let public_key_converted = to_public_key(&peer_id);
+        assert_eq!(public_key, public_key_converted);
     }
 
-    /// Return the peer ID of a key pair.
-    fn peer_id(&self) -> PeerId {
-        PeerId::from(self.public())
-    }
-
-    /// Return the key pair.
-    fn key_pair(&self) -> Keypair {
-        self.clone()
-    }
-
-    /// Encode the private key as a hex string and save it to the given file path.
-    // See: https://github.com/p2panda/aquadoggo/issues/295
-    #[allow(deprecated)]
-    fn save(&self, path: &Path) -> Result<()> {
-        let private_key = match self {
-            Keypair::Ed25519(key_pair) => key_pair.secret(),
-        };
-        let encoded_private_key = hex::encode(private_key);
-
-        fs::create_dir_all(path.parent().unwrap())?;
-        let mut file = File::create(path)?;
-        file.write_all(encoded_private_key.as_bytes())?;
-        file.sync_all()?;
-
-        let mut permissions = file.metadata()?.permissions();
-        permissions.set_mode(0o600);
-        fs::set_permissions(path, permissions)?;
-
-        Ok(())
-    }
-
-    /// Load a key pair from file at the given path.
-    // See: https://github.com/p2panda/aquadoggo/issues/295
-    #[allow(deprecated)]
-    fn load(path: &Path) -> Result<Self>
-    where
-        Self: Sized,
-    {
-        let mut file = File::open(path)?;
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)?;
-
-        let private_key_bytes = hex::decode(contents)?;
-        let private_key = ed25519::SecretKey::from_bytes(private_key_bytes)?;
-        let key_pair = Keypair::Ed25519(private_key.into());
-
-        Ok(key_pair)
+    #[test]
+    fn key_pair_conversion() {
+        let key_pair = KeyPair::new();
+        let key_pair_converted = to_libp2p_key_pair(&key_pair);
+        assert_eq!(
+            key_pair.public_key().to_bytes(),
+            key_pair_converted
+                .public()
+                .try_into_ed25519()
+                .unwrap()
+                .to_bytes(),
+        );
     }
 }

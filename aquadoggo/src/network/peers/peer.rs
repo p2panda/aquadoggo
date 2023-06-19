@@ -3,35 +3,35 @@
 use std::cmp::Ordering;
 
 use libp2p::swarm::ConnectionId;
-use libp2p::PeerId;
+use p2panda_rs::identity::PublicKey;
 use p2panda_rs::Human;
 
 /// Identifier of a p2panda peer.
 ///
-/// Additional to the unique `PeerId` we also store the `ConnectionId` to understand which libp2p
+/// Additional to the unique public key we also store the `ConnectionId` to understand which libp2p
 /// connection handler deals with the communication with that peer. In case connections get stale
 /// or fail we can use this information to understand which peer got affected.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
-pub struct Peer(PeerId, ConnectionId);
+pub struct Peer(PublicKey, ConnectionId);
 
 impl Peer {
     /// Returns a new instance of a peer.
-    pub fn new(peer_id: PeerId, connection_id: ConnectionId) -> Self {
-        Self(peer_id, connection_id)
+    pub fn new(public_key: PublicKey, connection_id: ConnectionId) -> Self {
+        Self(public_key, connection_id)
     }
 
     /// Returns a new instance of our local peer.
     ///
     /// Local peers can not have a connection "to themselves", still we want to be able to compare
     /// our local peer with a remote one. This method therefore sets a "fake" `ConnectionId`.
-    pub fn new_local_peer(local_peer_id: PeerId) -> Self {
-        Self(local_peer_id, ConnectionId::new_unchecked(0))
+    pub fn new_local_peer(local_public_key: PublicKey) -> Self {
+        Self(local_public_key, ConnectionId::new_unchecked(0))
     }
 
-    /// Returns the `PeerId` of this peer.
+    /// Returns the public key of this peer which serves as its identifier.
     ///
-    /// The `PeerId` is used to determine which peer "wins" over a duplicate session conflict.
-    pub fn id(&self) -> PeerId {
+    /// The public key is used to determine which peer "wins" over a duplicate session conflict.
+    pub fn id(&self) -> PublicKey {
         self.0
     }
 
@@ -44,15 +44,15 @@ impl Peer {
 impl Ord for Peer {
     fn cmp(&self, other: &Self) -> Ordering {
         // When comparing `Peer` instances (for example to handle duplicate session requests), we
-        // only look at the internal `PeerId` since this is what both peers (local and remote) know
-        // about (the connection id might be different)
-        self.0.cmp(&other.0)
+        // only look at the internal `PublicKey` since this is what both peers (local and remote)
+        // know about (the connection id might be different)
+        self.0.to_bytes().cmp(&other.0.to_bytes())
     }
 }
 
 impl PartialOrd for Peer {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.0.cmp(&other.0))
+        Some(self.cmp(other))
     }
 }
 
