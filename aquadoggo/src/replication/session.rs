@@ -74,14 +74,17 @@ impl Session {
         }
     }
 
+    #[allow(dead_code)]
     pub fn is_live_mode(&self) -> bool {
         self.is_local_live_mode && self.is_remote_live_mode
     }
 
+    #[allow(dead_code)]
     pub fn is_pending(&self) -> bool {
         self.state == SessionState::Pending
     }
 
+    #[allow(dead_code)]
     pub fn is_established(&self) -> bool {
         self.state == SessionState::Established
     }
