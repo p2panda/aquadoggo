@@ -353,6 +353,7 @@ mod tests {
     use tokio::sync::broadcast;
 
     use crate::bus::ServiceMessage;
+    use crate::network::identity::to_public_key;
     use crate::network::Peer;
     use crate::replication::{Message, Mode, SyncMessage};
     use crate::test_utils::{test_runner, TestNode};
@@ -373,13 +374,16 @@ mod tests {
                 &node.context.schema_provider,
                 &node.context.store,
                 &tx,
-                local_peer_id,
+                to_public_key(&local_peer_id),
             );
 
             let target_set = manager.target_set().await;
 
             // Inform connection manager about new peer
-            let remote_peer = Peer::new(remote_peer_id, ConnectionId::new_unchecked(1));
+            let remote_peer = Peer::new(
+                to_public_key(&remote_peer_id),
+                ConnectionId::new_unchecked(1),
+            );
 
             manager
                 .handle_service_message(ServiceMessage::PeerConnected(remote_peer))

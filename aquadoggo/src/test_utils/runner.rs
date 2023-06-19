@@ -4,6 +4,7 @@ use std::panic;
 use std::sync::Arc;
 
 use futures::Future;
+use p2panda_rs::identity::KeyPair;
 use tokio::runtime::Builder;
 use tokio::sync::Mutex;
 
@@ -68,6 +69,7 @@ impl TestNodeManager {
         let test_node = TestNode {
             context: Context::new(
                 store.clone(),
+                KeyPair::new(),
                 Configuration::default(),
                 SchemaProvider::default(),
             ),
@@ -100,6 +102,7 @@ pub fn test_runner<F: AsyncTestFn + Send + Sync + 'static>(test: F) {
         let node = TestNode {
             context: Context::new(
                 store.clone(),
+                KeyPair::new(),
                 Configuration::default(),
                 SchemaProvider::default(),
             ),

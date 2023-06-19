@@ -106,11 +106,9 @@ impl Configuration {
 impl Configuration {
     /// Returns a new configuration object for a node which stores all data temporarily in memory.
     pub fn new_ephemeral() -> Self {
-        let mut config = Configuration {
+        Configuration {
             database_url: Some("sqlite::memory:".to_string()),
             ..Default::default()
-        };
-
-        config
+        }
     }
 }
