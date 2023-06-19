@@ -13,7 +13,6 @@ use libp2p::{Multiaddr, PeerId};
 use log::trace;
 use p2panda_rs::Human;
 
-use crate::network::identity::{to_libp2p_peer_id, to_public_key};
 use crate::network::peers::handler::{Handler, HandlerInEvent, HandlerOutEvent};
 use crate::network::peers::Peer;
 use crate::replication::SyncMessage;
@@ -93,13 +92,13 @@ impl Behaviour {
     }
 
     fn on_connection_established(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
-        let peer = Peer::new(to_public_key(&peer_id), connection_id);
+        let peer = Peer::new(peer_id, connection_id);
         self.events
             .push_back(ToSwarm::GenerateEvent(Event::PeerConnected(peer)));
     }
 
     fn on_connection_closed(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
-        let peer = Peer::new(to_public_key(&peer_id), connection_id);
+        let peer = Peer::new(peer_id, connection_id);
         self.events
             .push_back(ToSwarm::GenerateEvent(Event::PeerDisconnected(peer)));
     }
@@ -110,7 +109,7 @@ impl Behaviour {
         connection_id: ConnectionId,
         message: SyncMessage,
     ) {
-        let peer = Peer::new(to_public_key(&peer_id), connection_id);
+        let peer = Peer::new(peer_id, connection_id);
         trace!(
             "Notify swarm of received sync message: {} {}",
             peer.display(),
@@ -129,7 +128,7 @@ impl Behaviour {
             message.display(),
         );
         self.events.push_back(ToSwarm::NotifyHandler {
-            peer_id: to_libp2p_peer_id(&peer.id()),
+            peer_id: peer.id(),
             event: HandlerInEvent::Message(message),
             handler: NotifyHandler::One(peer.connection_id()),
         });
@@ -137,7 +136,7 @@ impl Behaviour {
 
     pub fn handle_critical_error(&mut self, peer: Peer) {
         self.events.push_back(ToSwarm::NotifyHandler {
-            peer_id: to_libp2p_peer_id(&peer.id()),
+            peer_id: peer.id(),
             event: HandlerInEvent::CriticalError,
             handler: NotifyHandler::One(peer.connection_id()),
         });
@@ -232,7 +231,6 @@ mod tests {
     use p2panda_rs::schema::SchemaId;
     use rstest::rstest;
 
-    use crate::network::identity::{to_libp2p_peer_id, to_public_key};
     use crate::network::Peer;
     use crate::replication::{Message, SyncMessage, TargetSet};
     use crate::test_utils::helpers::random_target_set;
@@ -302,10 +300,7 @@ mod tests {
 
         // Send a message from to swarm_1 local peer from swarm_2 local peer.
         swarm_1.behaviour_mut().send_message(
-            Peer::new(
-                to_public_key(&swarm_2_peer_id),
-                ConnectionId::new_unchecked(1),
-            ),
+            Peer::new(swarm_2_peer_id, ConnectionId::new_unchecked(1)),
             SyncMessage::new(0, Message::SyncRequest(0.into(), TargetSet::new(&vec![]))),
         );
 
@@ -360,11 +355,11 @@ mod tests {
         // The first event should have been a ConnectionEstablished containing the expected peer
         // id
         let (peer_2, message) = events_1[0].clone();
-        assert_eq!(to_libp2p_peer_id(&peer_2.id()), swarm_2_peer_id);
+        assert_eq!(peer_2.id(), swarm_2_peer_id);
         assert!(message.is_none());
 
         let (peer_1, message) = events_2[0].clone();
-        assert_eq!(to_libp2p_peer_id(&peer_1.id()), swarm_1_peer_id);
+        assert_eq!(peer_1.id(), swarm_1_peer_id);
         assert!(message.is_none());
 
         // Send a message from swarm_1 to swarm_2
@@ -392,7 +387,7 @@ mod tests {
 
         // swarm_1 should have received the message from swarm_2 peer
         let (peer, message) = events_1[1].clone();
-        assert_eq!(to_libp2p_peer_id(&peer.id()), swarm_2_peer_id);
+        assert_eq!(peer.id(), swarm_2_peer_id);
         assert_eq!(
             message.unwrap(),
             SyncMessage::new(1, Message::SyncRequest(0.into(), target_set_2.clone()))
@@ -400,7 +395,7 @@ mod tests {
 
         // swarm_2 should have received the message from swarm_1 peer
         let (peer, message) = events_2[1].clone();
-        assert_eq!(to_libp2p_peer_id(&peer.id()), swarm_1_peer_id);
+        assert_eq!(peer.id(), swarm_1_peer_id);
         assert_eq!(
             message.unwrap(),
             SyncMessage::new(0, Message::SyncRequest(0.into(), target_set_1))

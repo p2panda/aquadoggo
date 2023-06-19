@@ -14,11 +14,6 @@ pub fn to_libp2p_peer_id(public_key: &PublicKey) -> libp2p::PeerId {
     libp2p_public.to_peer_id()
 }
 
-/// Helper method to convert from libp2p `PeerId` to p2panda `PublicKey`.
-pub fn to_public_key(peer_id: &libp2p::PeerId) -> PublicKey {
-    PublicKey::new(&peer_id.to_string()).unwrap()
-}
-
 /// Helper method to convert p2panda `KeyPair` to the libp2p equivalent.
 pub fn to_libp2p_key_pair(key_pair: &KeyPair) -> libp2p::identity::Keypair {
     let bytes = key_pair.private_key().as_bytes();
@@ -30,15 +25,20 @@ pub fn to_libp2p_key_pair(key_pair: &KeyPair) -> libp2p::identity::Keypair {
 mod tests {
     use p2panda_rs::identity::KeyPair;
 
-    use super::{to_libp2p_key_pair, to_libp2p_peer_id, to_public_key};
+    use super::{to_libp2p_key_pair, to_libp2p_peer_id};
 
     #[test]
     fn peer_id_public_key_conversion() {
-        let key_pair = KeyPair::new();
+        let key_pair = KeyPair::from_private_key_str(
+            "799faf7a1fa47c54fac705f30d3c4d80c40efb562da19315fabefcc995a228a1",
+        )
+        .unwrap();
         let public_key = key_pair.public_key();
         let peer_id = to_libp2p_peer_id(&public_key);
-        let public_key_converted = to_public_key(&peer_id);
-        assert_eq!(public_key, public_key_converted);
+        assert_eq!(
+            peer_id.to_string(),
+            "12D3KooWCw68m5CRcV8vD9iuR325oKwJHLYqTYH5mYwD6k2QV4nm".to_string(),
+        )
     }
 
     #[test]

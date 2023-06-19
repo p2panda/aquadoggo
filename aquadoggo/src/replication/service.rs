@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use anyhow::Result;
+use libp2p::PeerId;
 use log::{debug, info, trace, warn};
-use p2panda_rs::identity::PublicKey;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::Human;
 use tokio::task;
@@ -17,6 +17,7 @@ use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
 use crate::db::SqlStore;
 use crate::manager::{ServiceReadySender, Shutdown};
+use crate::network::identity::to_libp2p_peer_id;
 use crate::network::Peer;
 use crate::replication::errors::ReplicationError;
 use crate::replication::{
@@ -42,7 +43,7 @@ pub async fn replication_service(
         &context.schema_provider,
         &context.store,
         &tx,
-        context.key_pair.public_key(),
+        to_libp2p_peer_id(&context.key_pair.public_key()),
     );
     let handle = task::spawn(manager.run());
 
@@ -113,9 +114,9 @@ impl ConnectionManager {
         schema_provider: &SchemaProvider,
         store: &SqlStore,
         tx: &ServiceSender,
-        local_public_key: PublicKey,
+        local_peer_id: PeerId,
     ) -> Self {
-        let local_peer = Peer::new_local_peer(local_public_key);
+        let local_peer = Peer::new_local_peer(local_peer_id);
         let ingest = SyncIngest::new(schema_provider.clone(), tx.clone());
         let sync_manager = SyncManager::new(store.clone(), ingest, local_peer);
         let scheduler = IntervalStream::new(interval(UPDATE_INTERVAL));
@@ -353,7 +354,6 @@ mod tests {
     use tokio::sync::broadcast;
 
     use crate::bus::ServiceMessage;
-    use crate::network::identity::to_public_key;
     use crate::network::Peer;
     use crate::replication::{Message, Mode, SyncMessage};
     use crate::test_utils::{test_runner, TestNode};
@@ -374,16 +374,13 @@ mod tests {
                 &node.context.schema_provider,
                 &node.context.store,
                 &tx,
-                to_public_key(&local_peer_id),
+                local_peer_id,
             );
 
             let target_set = manager.target_set().await;
 
             // Inform connection manager about new peer
-            let remote_peer = Peer::new(
-                to_public_key(&remote_peer_id),
-                ConnectionId::new_unchecked(1),
-            );
+            let remote_peer = Peer::new(remote_peer_id, ConnectionId::new_unchecked(1));
 
             manager
                 .handle_service_message(ServiceMessage::PeerConnected(remote_peer))
