@@ -22,14 +22,14 @@ pub type MessageType = u64;
 
 pub type LiveMode = bool;
 
-pub type LogHeight = (PublicKey, Vec<(LogId, SeqNum)>);
+pub type LogHeights = (PublicKey, Vec<(LogId, SeqNum)>);
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Message {
     SyncRequest(Mode, TargetSet),
     Entry(EncodedEntry, Option<EncodedOperation>),
     SyncDone(LiveMode),
-    Have(Vec<LogHeight>),
+    Have(Vec<LogHeights>),
 }
 
 impl Message {

@@ -13,7 +13,7 @@ pub mod traits;
 
 pub use ingest::SyncIngest;
 pub use manager::SyncManager;
-pub use message::{LiveMode, LogHeight, Message, SyncMessage};
+pub use message::{LiveMode, LogHeights, Message, SyncMessage};
 pub use mode::Mode;
 pub use service::replication_service;
 pub use session::{Session, SessionId, SessionState};

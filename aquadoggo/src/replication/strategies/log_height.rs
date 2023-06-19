@@ -14,7 +14,7 @@ use crate::db::SqlStore;
 use crate::replication::errors::ReplicationError;
 use crate::replication::strategies::diff_log_heights;
 use crate::replication::traits::Strategy;
-use crate::replication::{LogHeight, Message, Mode, StrategyResult, TargetSet};
+use crate::replication::{LogHeights, Message, Mode, StrategyResult, TargetSet};
 
 #[derive(Clone, Debug)]
 pub struct LogHeightStrategy {
@@ -60,7 +60,7 @@ impl LogHeightStrategy {
     async fn entry_responses(
         &self,
         store: &SqlStore,
-        remote_log_heights: &[LogHeight],
+        remote_log_heights: &[LogHeights],
     ) -> Vec<Message> {
         let mut messages = Vec::new();
 
