@@ -588,27 +588,35 @@ mod tests {
 
             let mut manager = SyncManager::new(node.context.store.clone(), ingest, peer_id_local);
 
-            let message =
-                SyncMessage::new(0, Message::SyncRequest(Mode::LogHeight, target_set_1.clone()));
+            let message = SyncMessage::new(
+                0,
+                Message::SyncRequest(Mode::LogHeight, target_set_1.clone()),
+            );
             let result = manager.handle_message(&peer_id_remote, &message).await;
             assert!(result.is_ok());
 
-            let message =
-                SyncMessage::new(1, Message::SyncRequest(Mode::LogHeight, target_set_2.clone()));
+            let message = SyncMessage::new(
+                1,
+                Message::SyncRequest(Mode::LogHeight, target_set_2.clone()),
+            );
             let result = manager.handle_message(&peer_id_remote, &message).await;
             assert!(result.is_ok());
 
             // Reject attempt to create session again
-            let message =
-                SyncMessage::new(0, Message::SyncRequest(Mode::LogHeight, target_set_3.clone()));
+            let message = SyncMessage::new(
+                0,
+                Message::SyncRequest(Mode::LogHeight, target_set_3.clone()),
+            );
             let result = manager.handle_message(&peer_id_remote, &message).await;
             assert!(matches!(result,
                 Err(ReplicationError::DuplicateSession(err)) if err == DuplicateSessionRequestError::InboundPendingSession(0)
             ));
 
             // Reject different session concerning same target set
-            let message =
-                SyncMessage::new(2, Message::SyncRequest(Mode::LogHeight, target_set_2.clone()));
+            let message = SyncMessage::new(
+                2,
+                Message::SyncRequest(Mode::LogHeight, target_set_2.clone()),
+            );
             let result = manager.handle_message(&peer_id_remote, &message).await;
             assert!(matches!(
                 result,

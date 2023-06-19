@@ -241,7 +241,10 @@ mod tests {
         assert_eq!(
             deserialize_into::<SyncMessage>(&serialize_value(cbor!([0, 12, 0, target_set])))
                 .unwrap(),
-            SyncMessage::new(12, Message::SyncRequest(Mode::LogHeight, target_set.clone()))
+            SyncMessage::new(
+                12,
+                Message::SyncRequest(Mode::LogHeight, target_set.clone())
+            )
         );
 
         let log_heights: Vec<(PublicKey, Vec<(LogId, SeqNum)>)> = vec![];
