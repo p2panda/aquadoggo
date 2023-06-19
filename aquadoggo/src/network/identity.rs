@@ -2,7 +2,7 @@
 
 use std::fs;
 use std::fs::File;
-use std::io::prelude::*;
+use std::io::{Read, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
@@ -27,6 +27,8 @@ pub trait Identity {
         Self: Sized;
 }
 
+// @TODO: This should use our p2panda `KeyPair` type and in general be handled outside the libp2p
+// context. Related issue: https://github.com/p2panda/aquadoggo/issues/388
 impl Identity for Keypair {
     /// Generate a new Ed25519 key pair.
     fn new() -> Self {
@@ -47,11 +49,9 @@ impl Identity for Keypair {
     // See: https://github.com/p2panda/aquadoggo/issues/295
     #[allow(deprecated)]
     fn save(&self, path: &Path) -> Result<()> {
-        // Retrieve the private key from the key pair
         let private_key = match self {
             Keypair::Ed25519(key_pair) => key_pair.secret(),
         };
-        // Encode the private key
         let encoded_private_key = hex::encode(private_key);
 
         fs::create_dir_all(path.parent().unwrap())?;
@@ -73,16 +73,12 @@ impl Identity for Keypair {
     where
         Self: Sized,
     {
-        // Read the key pair from file
         let mut file = File::open(path)?;
         let mut contents = String::new();
         file.read_to_string(&mut contents)?;
 
-        // Decode the private key
         let private_key_bytes = hex::decode(contents)?;
-        // Convert the private key bytes into a `SecretKey`
         let private_key = ed25519::SecretKey::from_bytes(private_key_bytes)?;
-        // Derive a key pair from the private key
         let key_pair = Keypair::Ed25519(private_key.into());
 
         Ok(key_pair)

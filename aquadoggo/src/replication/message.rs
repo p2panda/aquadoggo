@@ -6,6 +6,7 @@ use p2panda_rs::entry::EncodedEntry;
 use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::EncodedOperation;
+use p2panda_rs::Human;
 use serde::de::Visitor;
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Serialize};
@@ -21,14 +22,14 @@ pub type MessageType = u64;
 
 pub type LiveMode = bool;
 
-pub type LogHeight = (PublicKey, Vec<(LogId, SeqNum)>);
+pub type LogHeights = (PublicKey, Vec<(LogId, SeqNum)>);
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Message {
     SyncRequest(Mode, TargetSet),
     Entry(EncodedEntry, Option<EncodedOperation>),
     SyncDone(LiveMode),
-    Have(Vec<LogHeight>),
+    Have(Vec<LogHeights>),
 }
 
 impl Message {
@@ -38,6 +39,21 @@ impl Message {
             Message::Entry(_, _) => ENTRY_TYPE,
             Message::SyncDone(_) => SYNC_DONE_TYPE,
             Message::Have(_) => HAVE_TYPE,
+        }
+    }
+}
+
+impl Human for Message {
+    fn display(&self) -> String {
+        match &self {
+            Message::Have(log_heights) => {
+                let log_heights: Vec<(String, &Vec<(LogId, SeqNum)>)> = log_heights
+                    .iter()
+                    .map(|(public_key, log_heights)| (public_key.to_string(), log_heights))
+                    .collect();
+                format!("Have({log_heights:?})")
+            }
+            message => format!("{message:?}"),
         }
     }
 }
@@ -60,6 +76,12 @@ impl SyncMessage {
 
     pub fn message(&self) -> &Message {
         &self.1
+    }
+}
+
+impl Human for SyncMessage {
+    fn display(&self) -> String {
+        format!("SyncMessage({:?}, {})", self.0, self.1.display())
     }
 }
 
@@ -219,7 +241,10 @@ mod tests {
         assert_eq!(
             deserialize_into::<SyncMessage>(&serialize_value(cbor!([0, 12, 0, target_set])))
                 .unwrap(),
-            SyncMessage::new(12, Message::SyncRequest(Mode::Naive, target_set.clone()))
+            SyncMessage::new(
+                12,
+                Message::SyncRequest(Mode::LogHeight, target_set.clone())
+            )
         );
 
         let log_heights: Vec<(PublicKey, Vec<(LogId, SeqNum)>)> = vec![];

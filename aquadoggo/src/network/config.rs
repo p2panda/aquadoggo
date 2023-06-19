@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use libp2p::connection_limits::ConnectionLimits;
-use libp2p::identity::Keypair;
+use libp2p::identity::{Keypair, PublicKey};
 use libp2p::{Multiaddr, PeerId};
 use log::info;
 use serde::{Deserialize, Serialize};
@@ -72,8 +72,8 @@ pub struct NetworkConfiguration {
 
     /// Ping behaviour enabled.
     ///
-    /// Send outbound pings to connected peers every 15 seconds and respond to inbound pings.
-    /// Every sent ping must yield a response within 20 seconds in order to be successful.
+    /// Send outbound pings to connected peers every 15 seconds and respond to inbound pings. Every
+    /// sent ping must yield a response within 20 seconds in order to be successful.
     pub ping: bool,
 
     /// QUIC transport port.
@@ -103,6 +103,9 @@ pub struct NetworkConfiguration {
     ///
     /// Serve as a rendezvous point for peer discovery, allowing peer registration and queries.
     pub rendezvous_server_enabled: bool,
+
+    /// Our local peer id.
+    pub peer_id: Option<PeerId>,
 }
 
 impl Default for NetworkConfiguration {
@@ -127,11 +130,17 @@ impl Default for NetworkConfiguration {
             rendezvous_address: None,
             rendezvous_peer_id: None,
             rendezvous_server_enabled: false,
+            peer_id: None,
         }
     }
 }
 
 impl NetworkConfiguration {
+    /// Derive peer id from a given public key.
+    pub fn set_peer_id(&mut self, public_key: &PublicKey) {
+        self.peer_id = Some(PeerId::from_public_key(public_key));
+    }
+
     /// Define the connection limits of the swarm.
     pub fn connection_limits(&self) -> ConnectionLimits {
         ConnectionLimits::default()
@@ -144,8 +153,8 @@ impl NetworkConfiguration {
 
     /// Load the key pair from the file at the specified path.
     ///
-    /// If the file does not exist, a random key pair is generated and saved.
-    /// If no path is specified, a random key pair is generated.
+    /// If the file does not exist, a random key pair is generated and saved. If no path is
+    /// specified, a random key pair is generated.
     pub fn load_or_generate_key_pair(path: Option<PathBuf>) -> Result<Keypair> {
         let key_pair = match path {
             Some(mut path) => {

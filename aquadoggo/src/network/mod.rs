@@ -2,13 +2,14 @@
 
 mod behaviour;
 mod config;
-mod identity;
+pub mod identity;
+mod peers;
 mod service;
+mod shutdown;
 mod swarm;
 mod transport;
-// @TODO: Remove this as soon as we integrated it into the libp2p swarm
-#[allow(dead_code)]
-mod replication;
 
 pub use config::NetworkConfiguration;
+pub use peers::Peer;
 pub use service::network_service;
+pub use shutdown::ShutdownHandler;

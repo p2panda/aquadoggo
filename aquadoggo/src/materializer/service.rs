@@ -88,28 +88,30 @@ pub async fn materializer_service(
 
     // Listen to incoming new entries and operations and move them into task queue
     let handle = task::spawn(async move {
-        while let Ok(ServiceMessage::NewOperation(operation_id)) = rx.recv().await {
-            // Resolve document id of regarding operation
-            match context
-                .store
-                .get_document_id_by_operation_id(&operation_id)
-                .await
-                .unwrap_or_else(|_| {
-                    panic!(
-                        "Failed database query when retreiving document for operation_id {}",
-                        operation_id
-                    )
-                }) {
-                Some(document_id) => {
-                    // Dispatch "reduce" task which will materialize the regarding document
-                    factory.queue(Task::new("reduce", TaskInput::new(Some(document_id), None)));
-                }
-                None => {
-                    // Panic when we couldn't find the regarding document in the database. We can
-                    // safely assure that this is due to a critical bug affecting the database
-                    // integrity. Panicking here will close `handle` and by that signal a node
-                    // shutdown.
-                    panic!("Could not find document for operation_id {}", operation_id);
+        loop {
+            if let Ok(ServiceMessage::NewOperation(operation_id)) = rx.recv().await {
+                // Resolve document id of regarding operation
+                match context
+                    .store
+                    .get_document_id_by_operation_id(&operation_id)
+                    .await
+                    .unwrap_or_else(|_| {
+                        panic!(
+                            "Failed database query when retreiving document for operation_id {}",
+                            operation_id
+                        )
+                    }) {
+                    Some(document_id) => {
+                        // Dispatch "reduce" task which will materialize the regarding document
+                        factory.queue(Task::new("reduce", TaskInput::new(Some(document_id), None)));
+                    }
+                    None => {
+                        // Panic when we couldn't find the regarding document in the database. We can
+                        // safely assure that this is due to a critical bug affecting the database
+                        // integrity. Panicking here will close `handle` and by that signal a node
+                        // shutdown.
+                        panic!("Could not find document for operation_id {}", operation_id);
+                    }
                 }
             }
         }

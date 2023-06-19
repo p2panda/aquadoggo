@@ -9,7 +9,7 @@ use crate::db::SqlStore;
 use crate::replication::errors::ReplicationError;
 use crate::replication::traits::Strategy;
 use crate::replication::{
-    Message, Mode, NaiveStrategy, SetReconciliationStrategy, StrategyResult, TargetSet,
+    LogHeightStrategy, Message, Mode, SetReconciliationStrategy, StrategyResult, TargetSet,
 };
 
 pub type SessionId = u64;
@@ -57,7 +57,7 @@ impl Session {
         live_mode: bool,
     ) -> Self {
         let strategy: Box<dyn Strategy> = match mode {
-            Mode::Naive => Box::new(NaiveStrategy::new(target_set)),
+            Mode::LogHeight => Box::new(LogHeightStrategy::new(target_set)),
             Mode::SetReconciliation => Box::new(SetReconciliationStrategy::new()),
             Mode::Unknown => panic!("Unknown replication mode"),
         };
@@ -74,8 +74,20 @@ impl Session {
         }
     }
 
-    pub fn live_mode(&self) -> bool {
+    pub fn is_live_mode(&self) -> bool {
         self.is_local_live_mode && self.is_remote_live_mode
+    }
+
+    pub fn is_pending(&self) -> bool {
+        self.state == SessionState::Pending
+    }
+
+    pub fn is_established(&self) -> bool {
+        self.state == SessionState::Established
+    }
+
+    pub fn is_done(&self) -> bool {
+        self.state == SessionState::Done
     }
 
     pub fn mode(&self) -> Mode {
@@ -175,8 +187,13 @@ mod tests {
     #[rstest]
     fn state_machine(#[from(random_target_set)] target_set: TargetSet) {
         test_runner(move |node: TestNode| async move {
-            let mut session =
-                Session::new(&INITIAL_SESSION_ID, &target_set, &Mode::Naive, true, false);
+            let mut session = Session::new(
+                &INITIAL_SESSION_ID,
+                &target_set,
+                &Mode::LogHeight,
+                true,
+                false,
+            );
             assert!(!session.is_local_done);
             assert!(!session.is_local_live_mode);
             assert!(!session.is_remote_live_mode);
@@ -205,8 +222,13 @@ mod tests {
             populate_store(&node.context.store, &config).await;
 
             let target_set = TargetSet::new(&vec![config.schema.id().to_owned()]);
-            let mut session =
-                Session::new(&INITIAL_SESSION_ID, &target_set, &Mode::Naive, true, false);
+            let mut session = Session::new(
+                &INITIAL_SESSION_ID,
+                &target_set,
+                &Mode::LogHeight,
+                true,
+                false,
+            );
 
             let response_messages = session
                 .handle_message(&node.context.store, &Message::Have(vec![]))

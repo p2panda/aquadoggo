@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::time::Duration;
+
 use anyhow::Result;
 use libp2p::identity::Keypair;
 use libp2p::swarm::behaviour::toggle::Toggle;
@@ -8,9 +10,31 @@ use libp2p::{autonat, connection_limits, identify, mdns, ping, relay, rendezvous
 use log::debug;
 
 use crate::network::config::NODE_NAMESPACE;
+use crate::network::peers;
 use crate::network::NetworkConfiguration;
 
+/// How often do we broadcast mDNS queries into the network.
+const MDNS_QUERY_INTERVAL: Duration = Duration::from_secs(5);
+
+/// How often do we ping other peers to check for a healthy connection.
+const PING_INTERVAL: Duration = Duration::from_secs(5);
+
+/// How long do we wait for an answer from the other peer before we consider the connection as
+/// stale.
+const PING_TIMEOUT: Duration = Duration::from_secs(3);
+
 /// Network behaviour for the aquadoggo node.
+///
+/// In libp2p all different behaviours are "merged" into one "main behaviour" with help of the
+/// `NetworkBehaviour` derive macro.
+///
+/// All behaviours share the same connections with each other. Together they form something we
+/// could call our "custom" networking behaviour.
+///
+/// It is possible for a peer to not support all behaviours, internally libp2p negotiates the
+/// capabilities of each peer for us and upgrades the protocol accordingly. For example two peers
+/// can handle p2panda messages with each others (using the `peers` behaviour) but do not
+/// necessarily need to be able to support the `relay` behaviour.
 #[derive(NetworkBehaviour)]
 pub struct Behaviour {
     /// Determine NAT status by requesting remote peers to dial the public address of the
@@ -42,9 +66,12 @@ pub struct Behaviour {
     /// Register with a rendezvous server and query remote peer addresses.
     pub rendezvous_client: Toggle<rendezvous::client::Behaviour>,
 
-    /// Serve as a rendezvous point for remote peers to register their external addresses
-    /// and query the addresses of other peers.
+    /// Serve as a rendezvous point for remote peers to register their external addresses and query
+    /// the addresses of other peers.
     pub rendezvous_server: Toggle<rendezvous::server::Behaviour>,
+
+    /// Register peer connections and handle p2panda messaging with them.
+    pub peers: peers::Behaviour,
 }
 
 impl Behaviour {
@@ -86,7 +113,13 @@ impl Behaviour {
         // Create an mDNS behaviour with default configuration if the mDNS flag is set
         let mdns = if network_config.mdns {
             debug!("mDNS network behaviour enabled");
-            Some(mdns::Behaviour::new(Default::default(), peer_id)?)
+            Some(mdns::Behaviour::new(
+                mdns::Config {
+                    query_interval: MDNS_QUERY_INTERVAL,
+                    ..mdns::Config::default()
+                },
+                peer_id,
+            )?)
         } else {
             None
         };
@@ -94,7 +127,11 @@ impl Behaviour {
         // Create a ping behaviour with default configuration if the ping flag is set
         let ping = if network_config.ping {
             debug!("Ping network behaviour enabled");
-            Some(ping::Behaviour::default())
+            Some(ping::Behaviour::new(
+                ping::Config::new()
+                    .with_interval(PING_INTERVAL)
+                    .with_timeout(PING_TIMEOUT),
+            ))
         } else {
             None
         };
@@ -132,6 +169,9 @@ impl Behaviour {
             None
         };
 
+        // Create behaviour to manage peer connections and handle p2panda messaging
+        let peers = peers::Behaviour::new();
+
         Ok(Self {
             autonat: autonat.into(),
             identify: identify.into(),
@@ -142,6 +182,7 @@ impl Behaviour {
             rendezvous_server: rendezvous_server.into(),
             relay_client: relay_client.into(),
             relay_server: relay_server.into(),
+            peers,
         })
     }
 }

@@ -1,22 +1,29 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::collections::HashMap;
+
 use anyhow::Result;
 use async_trait::async_trait;
+use log::debug;
+use p2panda_rs::entry::traits::AsEntry;
+use p2panda_rs::entry::{LogId, SeqNum};
+use p2panda_rs::identity::PublicKey;
+use p2panda_rs::Human;
 
 use crate::db::SqlStore;
 use crate::replication::errors::ReplicationError;
 use crate::replication::strategies::diff_log_heights;
 use crate::replication::traits::Strategy;
-use crate::replication::{LogHeight, Message, Mode, StrategyResult, TargetSet};
+use crate::replication::{LogHeights, Message, Mode, StrategyResult, TargetSet};
 
 #[derive(Clone, Debug)]
-pub struct NaiveStrategy {
+pub struct LogHeightStrategy {
     target_set: TargetSet,
     received_remote_have: bool,
     sent_have: bool,
 }
 
-impl NaiveStrategy {
+impl LogHeightStrategy {
     pub fn new(target_set: &TargetSet) -> Self {
         Self {
             target_set: target_set.clone(),
@@ -25,30 +32,43 @@ impl NaiveStrategy {
         }
     }
 
-    async fn local_log_heights(&self, store: &SqlStore) -> Vec<LogHeight> {
-        let mut result = vec![];
+    async fn local_log_heights(
+        &self,
+        store: &SqlStore,
+    ) -> HashMap<PublicKey, Vec<(LogId, SeqNum)>> {
+        let mut log_heights: HashMap<PublicKey, Vec<(LogId, SeqNum)>> = HashMap::new();
 
-        // For every schema id in the target set retrieve log heights for all contributing authors
-        for schema_id in self.target_set().0.iter() {
-            let log_heights = store
+        for schema_id in self.target_set().iter() {
+            // For every schema id in the target set retrieve log heights for all contributing authors
+            let schema_logs = store
                 .get_log_heights(schema_id)
                 .await
-                .expect("Fatal database error");
-            result.extend(log_heights);
-        }
+                .expect("Fatal database error")
+                .into_iter();
 
-        result
+            // Then merge them into any existing records for the author
+            for (public_key, logs) in schema_logs {
+                let mut author_logs = log_heights.get(&public_key).cloned().unwrap_or(vec![]);
+                author_logs.extend(logs);
+                author_logs.sort();
+                log_heights.insert(public_key, author_logs);
+            }
+        }
+        log_heights
     }
 
     async fn entry_responses(
         &self,
         store: &SqlStore,
-        remote_log_heights: &[LogHeight],
+        remote_log_heights: &[LogHeights],
     ) -> Vec<Message> {
         let mut messages = Vec::new();
 
         let local_log_heights = self.local_log_heights(store).await;
-        let remote_needs = diff_log_heights(&local_log_heights, remote_log_heights);
+        let remote_needs = diff_log_heights(
+            &local_log_heights,
+            &remote_log_heights.iter().cloned().collect(),
+        );
 
         for (public_key, log_heights) in remote_needs {
             for (log_id, seq_num) in log_heights {
@@ -58,6 +78,13 @@ impl NaiveStrategy {
                     .expect("Fatal database error")
                     .iter()
                     .map(|entry| {
+                        debug!(
+                            "Prepare message containing entry at {:?} on {:?} for {}",
+                            entry.seq_num(),
+                            entry.log_id(),
+                            entry.public_key().display()
+                        );
+
                         Message::Entry(entry.clone().encoded_entry, entry.payload().cloned())
                     })
                     .collect();
@@ -70,9 +97,9 @@ impl NaiveStrategy {
 }
 
 #[async_trait]
-impl Strategy for NaiveStrategy {
+impl Strategy for LogHeightStrategy {
     fn mode(&self) -> Mode {
-        Mode::Naive
+        Mode::LogHeight
     }
 
     fn target_set(&self) -> TargetSet {
@@ -85,7 +112,7 @@ impl Strategy for NaiveStrategy {
 
         StrategyResult {
             is_local_done: log_heights.is_empty(),
-            messages: vec![Message::Have(log_heights)],
+            messages: vec![Message::Have(log_heights.into_iter().collect())],
         }
     }
 

@@ -5,7 +5,6 @@ use std::convert::TryInto;
 use anyhow::Result;
 use libp2p::identity::Keypair;
 use libp2p::swarm::SwarmBuilder;
-use libp2p::PeerId;
 use libp2p::Swarm;
 use log::info;
 
@@ -16,10 +15,9 @@ use crate::network::NetworkConfiguration;
 pub async fn build_swarm(
     network_config: &NetworkConfiguration,
     key_pair: Keypair,
-) -> Result<(Swarm<Behaviour>, PeerId)> {
-    // Read the peer ID (public key) from the key pair
-    let peer_id = PeerId::from(key_pair.public());
-    info!("Network service peer ID: {peer_id}");
+) -> Result<Swarm<Behaviour>> {
+    let peer_id = network_config.peer_id.expect("Peer id needs to be given");
+    info!("Local peer id: {peer_id}");
 
     let relay_client_enabled = network_config.relay_address.is_some();
 
@@ -39,5 +37,5 @@ pub async fn build_swarm(
         .notify_handler_buffer_size(network_config.notify_handler_buffer_size.try_into()?)
         .build();
 
-    Ok((swarm, peer_id))
+    Ok(swarm)
 }

@@ -194,7 +194,7 @@ impl GraphQLSchemaManager {
         let shared = self.shared.clone();
         let schemas = self.schemas.clone();
 
-        info!("Subscribing GraphQL manager to schema provider");
+        debug!("Subscribing GraphQL manager to schema provider");
         let mut on_schema_added = shared.schema_provider.on_schema_added();
 
         // Create the new GraphQL based on the current state of known p2panda application schemas

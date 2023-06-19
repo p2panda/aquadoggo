@@ -3,6 +3,7 @@
 use std::collections::VecDeque;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use std::time::{Duration, Instant};
 
 use asynchronous_codec::Framed;
 use futures::{Sink, StreamExt};
@@ -10,12 +11,70 @@ use libp2p::swarm::handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegot
 use libp2p::swarm::{
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, NegotiatedSubstream, SubstreamProtocol,
 };
+use log::warn;
 use thiserror::Error;
 
-use crate::network::replication::{Codec, CodecError, Message, Protocol};
+use crate::network::peers::{Codec, CodecError, Protocol};
+use crate::replication::SyncMessage;
 
+/// The time a connection is maintained to a peer without being in live mode and without
+/// send/receiving a message from. Connections that idle beyond this timeout are disconnected.
+const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// Handler for an incoming or outgoing connection to a remote peer dealing with the p2panda
+/// protocol.
+///
+/// Manages the bi-directional data streams and encodes and decodes p2panda messages on them using
+/// the CBOR format.
+///
+/// Connection handlers can be closed due to critical errors, for example when a replication error
+/// occurred. They also can close after a certain duration of no networking activity (timeout).
+/// Note that this does _not_ close the connection to the peer in general, only the p2panda
+/// messaging protocol.
+///
+/// Usually one connection is established to one peer. Multiple connections to the same peer are
+/// also possible. This especially is the case when both peers dial each other at the same time.
+///
+/// Each connection is managed by one connection handler each. Inside of each connection we
+/// maintain a bi-directional (inbound & outbound) data stream.
+///
+/// The following diagram is an example of two connections from one local to one remote peer:
+///
+/// ```text
+///       Connection
+///       (Incoming)
+/// ┌───────────────────┐
+/// │                   │
+/// │  ┌─────────────┐  │          ┌─────────────┐
+/// │  │   Stream    ◄──┼──────────┤             │
+/// │  │  (Inbound)  │  │          │             │
+/// │  └─────────────┘  │          │             │
+/// │                   │          │             │
+/// │  ┌─────────────┐  │          │             │
+/// │  │   Stream    ├──┼──────────►             │
+/// │  │  (Outbound) │  │          │             │
+/// │  └─────────────┘  │          │             │
+/// │                   │          │             │
+/// └───────────────────┘          │             │
+///                                │             │
+///       Connection               │ Remote Peer │
+///       (Outgoing)               │             │
+/// ┌───────────────────┐          │             │
+/// │                   │          │             │
+/// │  ┌─────────────┐  │          │             │
+/// │  │   Stream    ◄──┼──────────┤             │
+/// │  │  (Inbound)  │  │          │             │
+/// │  └─────────────┘  │          │             │
+/// │                   │          │             │
+/// │  ┌─────────────┐  │          │             │
+/// │  │   Stream    ├──┼──────────►             │
+/// │  │  (Outbound) │  │          │             │
+/// │  └─────────────┘  │          └─────────────┘
+/// │                   │
+/// └───────────────────┘
+/// ```
 pub struct Handler {
-    /// Upgrade configuration for the replication protocol.
+    /// Upgrade configuration for the protocol.
     listen_protocol: SubstreamProtocol<Protocol, ()>,
 
     /// The single long-lived outbound substream.
@@ -29,10 +88,16 @@ pub struct Handler {
     outbound_substream_establishing: bool,
 
     /// Queue of messages that we want to send to the remote.
-    send_queue: VecDeque<Message>,
+    send_queue: VecDeque<SyncMessage>,
 
-    /// Flag determining whether to maintain the connection to the peer.
-    keep_alive: KeepAlive,
+    /// Last time we've observed inbound or outbound messaging activity.
+    last_io_activity: Instant,
+
+    /// Flag indicating that we want to close connection handlers related to that peer.
+    ///
+    /// This is useful in scenarios where a critical error occurred outside of the libp2p stack
+    /// (for example in the replication service) and we need to accordingly close connections.
+    critical_error: bool,
 }
 
 impl Handler {
@@ -43,7 +108,8 @@ impl Handler {
             inbound_substream: None,
             outbound_substream_establishing: false,
             send_queue: VecDeque::new(),
-            keep_alive: KeepAlive::Yes,
+            last_io_activity: Instant::now(),
+            critical_error: false,
         }
     }
 
@@ -55,6 +121,7 @@ impl Handler {
         >,
     ) {
         self.outbound_substream = Some(OutboundSubstreamState::WaitingOutput(protocol));
+        self.outbound_substream_establishing = false;
     }
 
     fn on_fully_negotiated_inbound(
@@ -71,8 +138,11 @@ impl Handler {
 /// An event sent from the network behaviour to the connection handler.
 #[derive(Debug)]
 pub enum HandlerInEvent {
-    /// Replication message to send on outbound stream.
-    Message(Message),
+    /// Message to send on outbound stream.
+    Message(SyncMessage),
+
+    /// Protocol failed with a critical error.
+    CriticalError,
 }
 
 /// The event emitted by the connection handler.
@@ -80,8 +150,8 @@ pub enum HandlerInEvent {
 /// This informs the network behaviour of various events created by the handler.
 #[derive(Debug)]
 pub enum HandlerOutEvent {
-    /// Replication message received on the inbound stream.
-    Message(Message),
+    /// Message received on the inbound stream.
+    Message(SyncMessage),
 }
 
 #[derive(Debug, Error)]
@@ -110,7 +180,7 @@ enum OutboundSubstreamState {
     WaitingOutput(Stream),
 
     /// Waiting to send a message to the remote.
-    PendingSend(Stream, Message),
+    PendingSend(Stream, SyncMessage),
 
     /// Waiting to flush the substream so that the data arrives to the remote.
     PendingFlush(Stream),
@@ -150,22 +220,36 @@ impl ConnectionHandler for Handler {
             }
             ConnectionEvent::DialUpgradeError(_)
             | ConnectionEvent::AddressChange(_)
-            | ConnectionEvent::ListenUpgradeError(_) => {}
+            | ConnectionEvent::ListenUpgradeError(_) => {
+                warn!("Connection event error");
+            }
         }
     }
 
     fn on_behaviour_event(&mut self, event: Self::InEvent) {
-        self.keep_alive = KeepAlive::Yes;
-
         match event {
             HandlerInEvent::Message(message) => {
                 self.send_queue.push_back(message);
+            }
+            HandlerInEvent::CriticalError => {
+                self.critical_error = true;
             }
         }
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
+        if self.critical_error {
+            return KeepAlive::No;
+        }
+
+        if let Some(
+            OutboundSubstreamState::PendingSend(_, _) | OutboundSubstreamState::PendingFlush(_),
+        ) = self.outbound_substream
+        {
+            return KeepAlive::Yes;
+        }
+
+        KeepAlive::Until(self.last_io_activity + IDLE_TIMEOUT)
     }
 
     fn poll(
@@ -199,18 +283,21 @@ impl ConnectionHandler for Handler {
                 Some(InboundSubstreamState::WaitingInput(mut substream)) => {
                     match substream.poll_next_unpin(cx) {
                         Poll::Ready(Some(Ok(message))) => {
+                            self.last_io_activity = Instant::now();
+
                             // Received message from remote peer
                             self.inbound_substream =
                                 Some(InboundSubstreamState::WaitingInput(substream));
-                            self.keep_alive = KeepAlive::Yes;
 
                             return Poll::Ready(ConnectionHandlerEvent::Custom(
                                 HandlerOutEvent::Message(message),
                             ));
                         }
-                        Poll::Ready(Some(Err(_))) => {
-                            // More serious errors, close this side of the stream. If the peer is
-                            // still around, they will re-establish their connection
+                        Poll::Ready(Some(Err(err))) => {
+                            warn!("Error decoding inbound message: {err}");
+
+                            // Close this side of the stream. If the peer is still around, they
+                            // will re-establish their connection
                             self.inbound_substream =
                                 Some(InboundSubstreamState::Closing(substream));
                         }
@@ -229,19 +316,13 @@ impl ConnectionHandler for Handler {
                 Some(InboundSubstreamState::Closing(mut substream)) => {
                     match Sink::poll_close(Pin::new(&mut substream), cx) {
                         Poll::Ready(res) => {
-                            if res.is_err() {
+                            if let Err(err) = res {
                                 // Don't close the connection but just drop the inbound substream.
                                 // In case the remote has more to send, they will open up a new
                                 // substream.
-                                // @TODO: Log error here
+                                warn!("Error during closing inbound connection: {err}")
                             }
-
                             self.inbound_substream = None;
-
-                            if self.outbound_substream.is_none() {
-                                self.keep_alive = KeepAlive::No;
-                            }
-
                             break;
                         }
                         Poll::Pending => {
@@ -272,6 +353,9 @@ impl ConnectionHandler for Handler {
                         Some(message) => {
                             self.outbound_substream =
                                 Some(OutboundSubstreamState::PendingSend(substream, message));
+
+                            // Continue loop in case there is more messages to be sent
+                            continue;
                         }
                         None => {
                             self.outbound_substream =
@@ -289,16 +373,16 @@ impl ConnectionHandler for Handler {
                                         Some(OutboundSubstreamState::PendingFlush(substream))
                                 }
                                 Err(err) => {
-                                    return Poll::Ready(ConnectionHandlerEvent::Close(
-                                        HandlerError::Codec(err),
-                                    ));
+                                    warn!("Error sending outbound message: {err}");
+                                    self.outbound_substream = None;
+                                    break;
                                 }
                             }
                         }
                         Poll::Ready(Err(err)) => {
-                            return Poll::Ready(ConnectionHandlerEvent::Close(
-                                HandlerError::Codec(err),
-                            ));
+                            warn!("Error encoding outbound message: {err}");
+                            self.outbound_substream = None;
+                            break;
                         }
                         Poll::Pending => {
                             self.outbound_substream =
@@ -310,13 +394,14 @@ impl ConnectionHandler for Handler {
                 Some(OutboundSubstreamState::PendingFlush(mut substream)) => {
                     match Sink::poll_flush(Pin::new(&mut substream), cx) {
                         Poll::Ready(Ok(())) => {
+                            self.last_io_activity = Instant::now();
                             self.outbound_substream =
                                 Some(OutboundSubstreamState::WaitingOutput(substream))
                         }
                         Poll::Ready(Err(err)) => {
-                            return Poll::Ready(ConnectionHandlerEvent::Close(HandlerError::Codec(
-                                err,
-                            )))
+                            warn!("Error flushing outbound message: {err}");
+                            self.outbound_substream = None;
+                            break;
                         }
                         Poll::Pending => {
                             self.outbound_substream =

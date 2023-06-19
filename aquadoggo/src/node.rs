@@ -11,6 +11,7 @@ use crate::http::http_service;
 use crate::manager::ServiceManager;
 use crate::materializer::materializer_service;
 use crate::network::network_service;
+use crate::replication::replication_service;
 use crate::schema::SchemaProvider;
 
 /// Capacity of the internal broadcast channel used to communicate between services.
@@ -79,6 +80,15 @@ impl Node {
         // Start network service
         if manager.add("network", network_service).await.is_err() {
             panic!("Failed starting network service");
+        }
+
+        // Start replication service syncing data with other nodes
+        if manager
+            .add("replication", replication_service)
+            .await
+            .is_err()
+        {
+            panic!("Failed starting replication service");
         }
 
         Self { pool, manager }
