@@ -7,8 +7,9 @@ use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::identity::PublicKey;
 use p2panda_rs::Human;
 
-use crate::replication::LogHeight;
-
+/// Compare a remotes' log heights against our own and calculate which (if any) entries they are
+/// missing. The returned tuple signifies the sequence number of a log from which the remote is
+/// missing entries.
 fn remote_requires_entries(
     log_id: &LogId,
     local_seq_num: &SeqNum,
@@ -54,10 +55,16 @@ fn remote_requires_entries(
     }
 }
 
+/// Diff a set of local and remote log heights in order to calculate which, if any, entries the
+/// remote is missing.
+///
+/// The returned list contains the sequence number in every log for every author from which the
+/// remote is missing entries. Sending all entries from the returned sequence number which the
+/// local node has stored will bring the remote node up-to-date with us.
 pub fn diff_log_heights(
     local_log_heights: &HashMap<PublicKey, Vec<(LogId, SeqNum)>>,
     remote_log_heights: &HashMap<PublicKey, Vec<(LogId, SeqNum)>>,
-) -> Vec<LogHeight> {
+) -> Vec<(PublicKey, Vec<(LogId, SeqNum)>)> {
     let mut remote_needs = Vec::new();
 
     for (local_author, local_author_logs) in local_log_heights {
