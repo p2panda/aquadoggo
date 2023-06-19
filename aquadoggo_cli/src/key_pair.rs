@@ -63,17 +63,11 @@ fn load_key_pair_from_file(path: PathBuf) -> Result<KeyPair> {
     Ok(key_pair)
 }
 
-/* #[cfg(test)]
+#[cfg(test)]
 mod tests {
     use tempfile::TempDir;
 
-    use super::NetworkConfiguration;
-
-    #[test]
-    fn generates_new_key_pair() {
-        let key_pair = NetworkConfiguration::load_or_generate_key_pair(None);
-        assert!(key_pair.is_ok());
-    }
+    use super::generate_or_load_key_pair;
 
     #[test]
     fn saves_and_loads_key_pair() {
@@ -82,15 +76,18 @@ mod tests {
 
         // Attempt to load the key pair from the temporary path
         // This should result in a new key pair being generated and written to file
-        let key_pair_1 = NetworkConfiguration::load_or_generate_key_pair(Some(tmp_path.clone()));
+        let key_pair_1 = generate_or_load_key_pair(tmp_path.clone());
         assert!(key_pair_1.is_ok());
 
         // Attempt to load the key pair from the same temporary path
         // This should result in the previously-generated key pair being loaded from file
-        let key_pair_2 = NetworkConfiguration::load_or_generate_key_pair(Some(tmp_path));
+        let key_pair_2 = generate_or_load_key_pair(tmp_path);
         assert!(key_pair_2.is_ok());
 
         // Ensure that both key pairs have the same public key
-        assert_eq!(key_pair_1.unwrap().public(), key_pair_2.unwrap().public());
+        assert_eq!(
+            key_pair_1.unwrap().public_key(),
+            key_pair_2.unwrap().public_key()
+        );
     }
-} */
+}
