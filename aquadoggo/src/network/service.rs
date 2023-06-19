@@ -313,10 +313,10 @@ impl EventLoop {
             // ~~~~
             SwarmEvent::Behaviour(BehaviourEvent::Mdns(event)) => match event {
                 mdns::Event::Discovered(list) => {
-                    for (peer_id, _multiaddr) in list {
+                    for (peer_id, multiaddr) in list {
                         debug!("mDNS discovered a new peer: {peer_id}");
 
-                        if let Err(err) = self.swarm.dial(peer_id) {
+                        if let Err(err) = self.swarm.dial(multiaddr) {
                             warn!("Failed to dial: {}", err);
                         } else {
                             debug!("Dial success: skip remaining addresses for: {peer_id}");
