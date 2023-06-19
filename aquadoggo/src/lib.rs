@@ -24,9 +24,11 @@
 //! # #[tokio::main]
 //! # async fn main() {
 //! use aquadoggo::{Configuration, Node};
+//! use p2panda_rs::identity::KeyPair;
 //!
 //! let config = Configuration::default();
-//! let node = Node::start(config).await;
+//! let key_pair = KeyPair::new();
+//! let node = Node::start(key_pair, config).await;
 //! # }
 //! ```
 //!
