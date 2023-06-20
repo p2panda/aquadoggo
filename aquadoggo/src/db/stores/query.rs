@@ -2,6 +2,7 @@
 
 //! This module offers a query API to find many p2panda documents, filtered or sorted by custom
 //! parameters. The results are batched via cursor-based pagination.
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::str::FromStr;
 
@@ -936,7 +937,14 @@ impl SqlStore {
         list: Option<&RelationList>,
     ) -> Result<QueryResponse, DocumentStorageError> {
         // Get all selected application fields from query
-        let application_fields = args.select.application_fields();
+        let mut application_fields = args.select.application_fields();
+
+        // Add the field we order by to the fields we want to query in case it is not selected
+        if let Some(Field::Field(field_name)) = &args.order.field {
+            if !application_fields.contains(field_name) {
+                application_fields.push(field_name.clone());
+            }
+        }
 
         // Generate SQL based on the given schema and query
         let mut select_vec = vec![
@@ -1068,7 +1076,7 @@ impl SqlStore {
         };
 
         // Finally convert everything into the right format
-        let documents = convert_rows(rows, list, &application_fields, schema.id());
+        let documents = convert_rows(rows, &args.order, list, &application_fields, schema.id());
 
         // Determine cursors for pagination by looking at beginning and end of results
         let start_cursor = if args
@@ -1158,9 +1166,16 @@ impl SqlStore {
 /// Merges all operation fields from the database into documents.
 ///
 /// Due to the special table layout we receive one row per operation field in the query. Usually we
-/// need to merge multiple rows / operation fields fields into one document.
+/// need to merge multiple rows / operation fields into one document.
+///
+/// This method also selects one cursor per document which then can be used by the client to
+/// control pagination. Since cursors are unique per document fields this method selects the right
+/// one depending on what ordering was selected. For example if the client chose to order by
+/// "timestamp" then the cursor will be selected for each document pointing at the "timestamp"
+/// field. Like this we can correctly paginate over an ordered collection of documents.
 fn convert_rows(
     rows: Vec<QueryRow>,
+    order: &Order,
     list: Option<&RelationList>,
     fields: &ApplicationFields,
     schema_id: &SchemaId,
@@ -1173,8 +1188,10 @@ fn convert_rows(
 
     // Helper method to convert database row into final document and cursor type
     let finalize_document = |row: &QueryRow,
-                             collected_fields: Vec<DocumentViewFieldRow>|
+                             collected_fields: Vec<DocumentViewFieldRow>,
+                             collected_rows: &HashMap<FieldName, QueryRow>|
      -> (PaginationCursor, StorageDocument) {
+        // Convert all gathered data into final `StorageDocument` format
         let fields = parse_document_view_field_rows(collected_fields);
 
         let document = StorageDocument {
@@ -1186,15 +1203,31 @@ fn convert_rows(
             deleted: row.is_deleted,
         };
 
-        let cursor = row_to_cursor(row, list);
+        // Determine cursor for this document
+        let cursor = match &order.field {
+            Some(Field::Field(field_name)) => {
+                // Since pagination is affected by ordering, we need to pick the cursor from the
+                // operation field our query is ordered by
+                row_to_cursor(
+                    collected_rows
+                        .get(field_name)
+                        .expect("Field selected for ordering needs to be inside of document"),
+                    list,
+                )
+            }
+            _ => {
+                // For any other ordering (meta or undefined) we just pick the first row / field
+                // which came in for that document
+                row_to_cursor(row, list)
+            }
+        };
 
         (cursor, document)
     };
 
-    let last_row = rows.last().unwrap().clone();
-
     let mut current = rows[0].clone();
     let mut current_fields = Vec::new();
+    let mut current_rows = HashMap::new();
 
     let rows_per_document = std::cmp::max(fields.len(), 1);
 
@@ -1202,7 +1235,7 @@ fn convert_rows(
         // We observed a new document coming up in the next row, time to change
         if index % rows_per_document == 0 && index > 0 {
             // Finalize the current document, convert it and push it into the final array
-            let (cursor, document) = finalize_document(&current, current_fields);
+            let (cursor, document) = finalize_document(&current, current_fields, &current_rows);
             converted.push((cursor, document));
 
             // Change the pointer to the next document
@@ -1210,7 +1243,10 @@ fn convert_rows(
             current_fields = Vec::new();
         }
 
-        // Collect every field of the document
+        // Collect original rows from SQL query
+        current_rows.insert(row.name.clone(), row.clone());
+
+        // Collect every field of the document to assemble it later into a `StorageDocument`
         current_fields.push(DocumentViewFieldRow {
             document_id: row.document_id,
             document_view_id: row.document_view_id,
@@ -1223,7 +1259,7 @@ fn convert_rows(
     }
 
     // Do it one last time at the end for the last document
-    let (cursor, document) = finalize_document(&last_row, current_fields);
+    let (cursor, document) = finalize_document(&current, current_fields, &current_rows);
     converted.push((cursor, document));
 
     converted
@@ -1393,6 +1429,50 @@ mod tests {
         .await
     }
 
+    async fn create_chat_test_data(
+        node: &mut TestNode,
+        key_pair: &KeyPair,
+    ) -> (Schema, Vec<DocumentViewId>) {
+        add_schema_and_documents(
+            node,
+            "chat",
+            vec![
+                vec![
+                    ("message", "Hello, Panda!".into(), None),
+                    ("username", "penguin".into(), None),
+                    ("timestamp", 1687265969.into(), None),
+                ],
+                vec![
+                    ("message", "Oh, howdy, Pengi!".into(), None),
+                    ("username", "panda".into(), None),
+                    ("timestamp", 1687266014.into(), None),
+                ],
+                vec![
+                    ("message", "How are you?".into(), None),
+                    ("username", "panda".into(), None),
+                    ("timestamp", 1687266032.into(), None),
+                ],
+                vec![
+                    ("message", "I miss Pengolina. How about you?".into(), None),
+                    ("username", "penguin".into(), None),
+                    ("timestamp", 1687266055.into(), None),
+                ],
+                vec![
+                    ("message", "I'm cute and very hungry".into(), None),
+                    ("username", "panda".into(), None),
+                    ("timestamp", 1687266141.into(), None),
+                ],
+                vec![
+                    ("message", "(°◇°) !!".into(), None),
+                    ("username", "penguin".into(), None),
+                    ("timestamp", 1687266160.into(), None),
+                ],
+            ],
+            key_pair,
+        )
+        .await
+    }
+
     #[rstest]
     #[case::order_by_date_asc(
         Query::new(
@@ -1481,6 +1561,121 @@ mod tests {
                     expected_value
                 );
             }
+        });
+    }
+
+    #[rstest]
+    #[case::order_by_timestamp(
+        Order::new(&"timestamp".into(), &Direction::Ascending),
+        "message".into(),
+        vec![
+            "Hello, Panda!".into(),
+            "Oh, howdy, Pengi!".into(),
+            "How are you?".into(),
+            "I miss Pengolina. How about you?".into(),
+            "I'm cute and very hungry".into(),
+            "(°◇°) !!".into(),
+        ],
+    )]
+    #[case::order_by_timestamp_descending(
+        Order::new(&"timestamp".into(), &Direction::Descending),
+        "message".into(),
+        vec![
+            "(°◇°) !!".into(),
+            "I'm cute and very hungry".into(),
+            "I miss Pengolina. How about you?".into(),
+            "How are you?".into(),
+            "Oh, howdy, Pengi!".into(),
+            "Hello, Panda!".into(),
+        ],
+    )]
+    #[case::order_by_message(
+        Order::new(&"message".into(), &Direction::Ascending),
+        "message".into(),
+        vec![
+            "(°◇°) !!".into(),
+            "Hello, Panda!".into(),
+            "How are you?".into(),
+            "I miss Pengolina. How about you?".into(),
+            "I'm cute and very hungry".into(),
+            "Oh, howdy, Pengi!".into(),
+        ],
+    )]
+    fn pagination_over_ordered_fields(
+        key_pair: KeyPair,
+        #[case] order: Order,
+        #[case] selected_field: String,
+        #[case] expected_fields: Vec<OperationValue>,
+    ) {
+        test_runner(|mut node: TestNode| async move {
+            let (schema, view_ids) = create_chat_test_data(&mut node, &key_pair).await;
+
+            let mut cursor: Option<PaginationCursor> = None;
+
+            let mut args = Query::new(
+                &Pagination::new(
+                    &NonZeroU64::new(1).unwrap(),
+                    cursor.as_ref(),
+                    &vec![
+                        PaginationField::TotalCount,
+                        PaginationField::EndCursor,
+                        PaginationField::HasNextPage,
+                    ],
+                ),
+                &Select::new(&[
+                    Field::Meta(MetaField::DocumentViewId),
+                    Field::Field("message".into()),
+                    Field::Field("username".into()),
+                    Field::Field("timestamp".into()),
+                ]),
+                &Filter::default(),
+                &order,
+            );
+
+            // Go through all pages, one document at a time
+            for (index, expected_field) in expected_fields.into_iter().enumerate() {
+                args.pagination.after = cursor;
+
+                let (pagination_data, documents) = node
+                    .context
+                    .store
+                    .query(&schema, &args, None)
+                    .await
+                    .expect("Query failed");
+
+                match pagination_data.end_cursor {
+                    Some(end_cursor) => {
+                        cursor = Some(end_cursor);
+                    }
+                    None => panic!("Expected cursor"),
+                }
+
+                if view_ids.len() - 1 == index {
+                    assert_eq!(pagination_data.has_next_page, false);
+                } else {
+                    assert_eq!(pagination_data.has_next_page, true);
+                }
+
+                assert_eq!(pagination_data.total_count, Some(view_ids.len() as u64));
+                assert_eq!(documents.len(), 1);
+                assert_eq!(documents[0].1.get(&selected_field), Some(&expected_field));
+                assert_eq!(cursor.as_ref(), Some(&documents[0].0));
+            }
+
+            // Query one last time after we paginated through everything
+            args.pagination.after = cursor;
+
+            let (pagination_data, documents) = node
+                .context
+                .store
+                .query(&schema, &args, None)
+                .await
+                .expect("Query failed");
+
+            assert_eq!(pagination_data.total_count, Some(view_ids.len() as u64));
+            assert_eq!(pagination_data.end_cursor, None);
+            assert_eq!(pagination_data.has_next_page, false);
+            assert_eq!(documents.len(), 0);
         });
     }
 
@@ -2108,17 +2303,26 @@ mod tests {
         let root_cursor_2 = Hash::new_from_bytes(&[0, 2]).to_string();
         let cursor_1 = Hash::new_from_bytes(&[0, 3]).to_string();
         let cursor_2 = Hash::new_from_bytes(&[0, 4]).to_string();
+        let cursor_3 = Hash::new_from_bytes(&[0, 5]).to_string();
+        let cursor_4 = Hash::new_from_bytes(&[0, 6]).to_string();
 
         let query_rows = vec![
             // First document
+            // ==============
             QueryRow {
                 document_id: first_document_hash.clone(),
                 document_view_id: first_document_hash.clone(),
                 operation_id: first_document_hash.clone(),
                 is_deleted: false,
                 is_edited: false,
+                // This is the "root" cursor, marking the position of the document inside a
+                // relation list
                 root_cursor: root_cursor_1.clone(),
-                cmp_value_cursor: cursor_1.clone(),
+                // This is the "field" cursor, marking the value we're using to paginate the
+                // resulting documents with.
+                //
+                // Cursors are unique for each operation field.
+                cmp_value_cursor: cursor_1.clone(), // Cursor #1
                 owner: OptionalOwner::default(),
                 name: "username".to_string(),
                 value: Some("panda".to_string()),
@@ -2132,7 +2336,7 @@ mod tests {
                 is_deleted: false,
                 is_edited: false,
                 root_cursor: root_cursor_1.clone(),
-                cmp_value_cursor: cursor_1.clone(),
+                cmp_value_cursor: cursor_2.clone(), // Cursor #2
                 owner: OptionalOwner::default(),
                 name: "is_admin".to_string(),
                 value: Some("false".to_string()),
@@ -2140,6 +2344,7 @@ mod tests {
                 list_index: 0,
             },
             // Second document
+            // ===============
             QueryRow {
                 document_id: second_document_hash.clone(),
                 document_view_id: second_document_hash.clone(),
@@ -2147,7 +2352,7 @@ mod tests {
                 is_deleted: false,
                 is_edited: false,
                 root_cursor: root_cursor_2.clone(),
-                cmp_value_cursor: cursor_2.clone(),
+                cmp_value_cursor: cursor_3.clone(), // Cursor #3
                 owner: OptionalOwner::default(),
                 name: "username".to_string(),
                 value: Some("penguin".to_string()),
@@ -2161,7 +2366,7 @@ mod tests {
                 is_deleted: false,
                 is_edited: false,
                 root_cursor: root_cursor_2.clone(),
-                cmp_value_cursor: cursor_2.clone(),
+                cmp_value_cursor: cursor_4.clone(), // Cursor #4
                 owner: OptionalOwner::default(),
                 name: "is_admin".to_string(),
                 value: Some("true".to_string()),
@@ -2170,9 +2375,14 @@ mod tests {
             },
         ];
 
-        // convert as if this is a relation list query
+        // 1.
+        //
+        // Convert query rows into documents as if this is a relation list query. We do this by
+        // passing in the relation list information (the "root") from where this query was executed
+        // from
         let result = convert_rows(
             query_rows.clone(),
+            &Order::default(),
             Some(&RelationList::new_unpinned(
                 &relation_list_hash.parse().unwrap(),
                 "relation_list_field",
@@ -2182,6 +2392,9 @@ mod tests {
         );
 
         assert_eq!(result.len(), 2);
+
+        // We expect the cursor of the first query row to be returned per document when no ordering
+        // was set, that is cursor #1 and #3
         assert_eq!(
             result[0].0,
             PaginationCursor::new(
@@ -2193,15 +2406,53 @@ mod tests {
         assert_eq!(
             result[1].0,
             PaginationCursor::new(
-                OperationCursor::from(cursor_2.as_str()),
+                OperationCursor::from(cursor_3.as_str()),
                 Some(OperationCursor::from(root_cursor_2.as_str())),
                 Some(relation_list_hash.parse().unwrap())
             )
         );
 
-        // convert as if this is _not_ a relation list query
+        // 2.
+        //
+        // Now we do the same but this time we pass in an ordering
+        let result = convert_rows(
+            query_rows.clone(),
+            &Order::new(&"is_admin".into(), &Direction::Ascending),
+            Some(&RelationList::new_unpinned(
+                &relation_list_hash.parse().unwrap(),
+                "relation_list_field",
+            )),
+            &vec!["username".to_string(), "is_admin".to_string()],
+            &schema_id,
+        );
+
+        assert_eq!(result.len(), 2);
+
+        // We expect the cursor of the "is_admin" query row to be returned per document as that
+        // ordering was set, that is cursor #2 and #4
+        assert_eq!(
+            result[0].0,
+            PaginationCursor::new(
+                OperationCursor::from(cursor_2.as_str()),
+                Some(OperationCursor::from(root_cursor_1.as_str())),
+                Some(relation_list_hash.parse().unwrap())
+            )
+        );
+        assert_eq!(
+            result[1].0,
+            PaginationCursor::new(
+                OperationCursor::from(cursor_4.as_str()),
+                Some(OperationCursor::from(root_cursor_2.as_str())),
+                Some(relation_list_hash.parse().unwrap())
+            )
+        );
+
+        // 3.
+        //
+        // We pretend now that this query was executed without a relation list
         let result = convert_rows(
             query_rows,
+            &Order::default(),
             None,
             &vec!["username".to_string(), "is_admin".to_string()],
             &schema_id,
@@ -2214,7 +2465,7 @@ mod tests {
         );
         assert_eq!(
             result[1].0,
-            PaginationCursor::new(OperationCursor::from(cursor_2.as_str()), None, None)
+            PaginationCursor::new(OperationCursor::from(cursor_3.as_str()), None, None)
         );
     }
 

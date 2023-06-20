@@ -131,7 +131,10 @@ pub async fn resolve_document_field(
     // Determine name of the field to be resolved
     let name = ctx.field().name();
 
-    match document.get(name).unwrap() {
+    match document
+        .get(name)
+        .expect("Selected field should be in document")
+    {
         // Relation fields are expected to resolve to the related document
         OperationValue::Relation(relation) => {
             let document = match store.get_document(relation.document_id()).await? {
