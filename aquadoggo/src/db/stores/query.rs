@@ -458,13 +458,22 @@ fn where_filter_sql(filter: &Filter, schema: &Schema) -> (String, Vec<BindArgume
                             SELECT
                                 operation_fields_v1.value
                             FROM
-                                operation_fields_v1
+                                document_view_fields AS document_view_fields_subquery
+                                JOIN operation_fields_v1
+                                    ON
+                                        document_view_fields_subquery.operation_id = operation_fields_v1.operation_id
+                                    AND
+                                        document_view_fields_subquery.name = operation_fields_v1.name
                             WHERE
-                                operation_fields_v1.name = '{field_name}'
+                                -- Match document_view_fields of this subquery with the parent one
+                                document_view_fields.document_view_id = document_view_fields_subquery.document_view_id
+
+                                -- Check if this document view fullfils this filter
+                                AND operation_fields_v1.name = '{field_name}'
                                 AND
                                     {filter_cmp}
                                 AND
-                                    operation_fields_v1.operation_id = document_view_fields.operation_id
+                                    operation_fields_v1.operation_id = document_view_fields_subquery.operation_id
                         )
                         "#
                     ))
