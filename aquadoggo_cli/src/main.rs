@@ -11,8 +11,6 @@ use clap::error::ErrorKind as ClapErrorKind;
 use clap::{CommandFactory, Parser};
 use libp2p::{Multiaddr, PeerId};
 
-const KEY_PAIR_FILE_NAME: &str = "private-key";
-
 #[derive(Parser, Debug)]
 #[command(name = "aquadoggo Node", version)]
 /// Node server for the p2panda network.
@@ -150,14 +148,12 @@ async fn main() {
     // Load configuration parameters and apply defaults
     let config: Configuration = cli.try_into().expect("Could not load configuration");
 
-    // Generate new key pair or load it from file.
-    //
-    // We can unwrap the base path as we know it has been initialised during the conversion step
-    // before.
-    let mut key_pair_path = config.base_path.to_owned().unwrap();
-    key_pair_path.push(KEY_PAIR_FILE_NAME);
-    let key_pair = key_pair::generate_or_load_key_pair(key_pair_path)
-        .expect("Could not load key pair from file");
+    // We unwrap the path as we know it has been initialised during the conversion step before
+    let base_path = config.base_path.clone().unwrap();
+
+    // Generate new key pair or load it from file
+    let key_pair =
+        key_pair::generate_or_load_key_pair(base_path).expect("Could not load key pair from file");
 
     // Start p2panda node in async runtime
     let node = Node::start(key_pair, config).await;

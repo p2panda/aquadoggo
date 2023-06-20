@@ -8,14 +8,20 @@ use std::path::PathBuf;
 use anyhow::Result;
 use p2panda_rs::identity::KeyPair;
 
+/// File of the name where the private key will be stored inside.
+const KEY_PAIR_FILE_NAME: &str = "private-key";
+
 /// Returns a new instance of `KeyPair` by either loading the private key from a path or generating
-/// a new one and saving it on the file system.
-pub fn generate_or_load_key_pair(path: PathBuf) -> Result<KeyPair> {
-    let key_pair = if path.is_file() {
-        load_key_pair_from_file(path)?
+/// a new one and saving it in the file system.
+pub fn generate_or_load_key_pair(base_path: PathBuf) -> Result<KeyPair> {
+    let mut key_pair_path = base_path.clone();
+    key_pair_path.push(KEY_PAIR_FILE_NAME);
+
+    let key_pair = if key_pair_path.is_file() {
+        load_key_pair_from_file(key_pair_path)?
     } else {
         let key_pair = KeyPair::new();
-        save_key_pair_to_file(&key_pair, path)?;
+        save_key_pair_to_file(&key_pair, key_pair_path)?;
         key_pair
     };
 
