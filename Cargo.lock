@@ -198,7 +198,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sqlx",
- "tempfile",
  "thiserror",
  "tokio",
  "tokio-stream",
@@ -216,7 +215,10 @@ dependencies = [
  "aquadoggo",
  "clap",
  "env_logger",
+ "hex",
  "libp2p",
+ "p2panda-rs",
+ "tempfile",
  "tokio",
 ]
 

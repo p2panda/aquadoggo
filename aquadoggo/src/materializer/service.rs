@@ -192,6 +192,7 @@ mod tests {
             // Prepare arguments for service
             let context = Context::new(
                 node.context.store.clone(),
+                KeyPair::new(),
                 Configuration::default(),
                 SchemaProvider::default(),
             );
@@ -267,6 +268,7 @@ mod tests {
             // Prepare arguments for service
             let context = Context::new(
                 node.context.store.clone(),
+                KeyPair::new(),
                 Configuration::default(),
                 SchemaProvider::default(),
             );
@@ -332,6 +334,7 @@ mod tests {
             // Prepare arguments for service
             let context = Context::new(
                 node.context.store.clone(),
+                KeyPair::new(),
                 Configuration::default(),
                 SchemaProvider::default(),
             );
@@ -426,12 +429,14 @@ mod tests {
         key_pair: KeyPair,
     ) {
         test_runner(move |node: TestNode| async move {
-            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            // Populate the store with some entries and operations but DON'T materialise any
+            // resulting documents.
             populate_store(&node.context.store, &config).await;
 
             // Prepare arguments for service
             let context = Context::new(
                 node.context.store.clone(),
+                KeyPair::new(),
                 Configuration::default(),
                 SchemaProvider::default(),
             );

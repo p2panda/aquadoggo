@@ -6,7 +6,7 @@ use anyhow::Result;
 use libp2p::identity::Keypair;
 use libp2p::swarm::behaviour::toggle::Toggle;
 use libp2p::swarm::NetworkBehaviour;
-use libp2p::{autonat, connection_limits, identify, mdns, ping, relay, rendezvous, PeerId};
+use libp2p::{autonat, connection_limits, identify, mdns, ping, relay, rendezvous};
 use log::debug;
 
 use crate::network::config::NODE_NAMESPACE;
@@ -79,11 +79,10 @@ impl Behaviour {
     /// the network configuration context.
     pub fn new(
         network_config: &NetworkConfiguration,
-        peer_id: PeerId,
         key_pair: Keypair,
         relay_client: Option<relay::client::Behaviour>,
     ) -> Result<Self> {
-        let public_key = key_pair.public();
+        let peer_id = key_pair.public().to_peer_id();
 
         // Create an autonat behaviour with default configuration if the autonat flag is set
         let autonat = if network_config.autonat {
@@ -101,7 +100,7 @@ impl Behaviour {
             debug!("Identify network behaviour enabled");
             Some(identify::Behaviour::new(identify::Config::new(
                 format!("{NODE_NAMESPACE}/1.0.0"),
-                public_key,
+                key_pair.public(),
             )))
         } else {
             None

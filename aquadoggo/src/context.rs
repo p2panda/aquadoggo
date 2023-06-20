@@ -3,6 +3,7 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
+use p2panda_rs::identity::KeyPair;
 use p2panda_rs::storage_provider::traits::{DocumentStore, EntryStore, LogStore, OperationStore};
 
 use crate::config::Configuration;
@@ -15,6 +16,9 @@ pub struct Data<S>
 where
     S: EntryStore + OperationStore + LogStore + DocumentStore,
 {
+    /// Node authentication and identity provider.
+    pub key_pair: KeyPair,
+
     /// Node configuration.
     pub config: Configuration,
 
@@ -29,8 +33,14 @@ impl<S> Data<S>
 where
     S: EntryStore + OperationStore + LogStore + DocumentStore,
 {
-    pub fn new(store: S, config: Configuration, schema_provider: SchemaProvider) -> Self {
+    pub fn new(
+        store: S,
+        key_pair: KeyPair,
+        config: Configuration,
+        schema_provider: SchemaProvider,
+    ) -> Self {
         Self {
+            key_pair,
             config,
             store,
             schema_provider,
@@ -49,8 +59,18 @@ where
     S: EntryStore + OperationStore + LogStore + DocumentStore,
 {
     /// Returns a new instance of `Context`.
-    pub fn new(store: S, config: Configuration, schema_provider: SchemaProvider) -> Self {
-        Self(Arc::new(Data::new(store, config, schema_provider)))
+    pub fn new(
+        store: S,
+        key_pair: KeyPair,
+        config: Configuration,
+        schema_provider: SchemaProvider,
+    ) -> Self {
+        Self(Arc::new(Data::new(
+            store,
+            key_pair,
+            config,
+            schema_provider,
+        )))
     }
 }
 

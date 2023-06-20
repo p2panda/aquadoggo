@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use anyhow::Result;
+use p2panda_rs::identity::KeyPair;
 
 use crate::bus::ServiceMessage;
 use crate::config::Configuration;
@@ -48,7 +49,7 @@ pub struct Node {
 impl Node {
     /// Start p2panda node with your configuration. This method can be used to run the node within
     /// other applications.
-    pub async fn start(config: Configuration) -> Self {
+    pub async fn start(key_pair: KeyPair, config: Configuration) -> Self {
         // Initialize database and get connection pool
         let pool = initialize_db(&config)
             .await
@@ -59,7 +60,7 @@ impl Node {
         let schemas = SchemaProvider::new(store.get_all_schema().await.unwrap());
 
         // Create service manager with shared data between services
-        let context = Context::new(store, config, schemas);
+        let context = Context::new(store, key_pair, config, schemas);
         let mut manager =
             ServiceManager::<Context, ServiceMessage>::new(SERVICE_BUS_CAPACITY, context);
 

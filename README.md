@@ -71,9 +71,11 @@ Embed the node server in your Rust application or web container like [`Tauri`]:
 
 ```rust
 use aquadoggo::{Configuration, Node};
+use p2panda_rs::identity::KeyPair;
 
 let config = Configuration::default();
-let node = Node::start(config).await;
+let key_pair = KeyPair::new();
+let node = Node::start(key_pair, config).await;
 ```
 
 You can also run the node server simply as a [command line application][`command line application`]:

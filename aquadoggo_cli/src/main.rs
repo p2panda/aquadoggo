@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 #![allow(clippy::uninlined_format_args)]
+mod key_pair;
+
 use std::convert::{TryFrom, TryInto};
 
 use anyhow::Result;
@@ -144,10 +146,17 @@ async fn main() {
     let cli = Cli::parse().validate();
 
     // Load configuration parameters and apply defaults
-    let config = cli.try_into().expect("Could not load configuration");
+    let config: Configuration = cli.try_into().expect("Could not load configuration");
+
+    // We unwrap the path as we know it has been initialised during the conversion step before
+    let base_path = config.base_path.clone().unwrap();
+
+    // Generate new key pair or load it from file
+    let key_pair =
+        key_pair::generate_or_load_key_pair(base_path).expect("Could not load key pair from file");
 
     // Start p2panda node in async runtime
-    let node = Node::start(config).await;
+    let node = Node::start(key_pair, config).await;
 
     // Run this until [CTRL] + [C] got pressed or something went wrong
     tokio::select! {
