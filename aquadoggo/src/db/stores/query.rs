@@ -640,8 +640,24 @@ fn where_pagination_sql(
                     {cmp_field}
                 FROM
                     operation_fields_v1
+                    LEFT JOIN
+                        document_view_fields
+                        ON document_view_fields.operation_id = operation_fields_v1.operation_id
                 WHERE
-                    operation_fields_v1.cursor = '{operation_cursor}'
+                    document_view_fields.document_view_id = (
+                        SELECT
+                            document_view_fields.document_view_id
+                        FROM
+                            operation_fields_v1
+                            LEFT JOIN
+                                document_view_fields
+                                ON document_view_fields.operation_id = operation_fields_v1.operation_id
+                        WHERE
+                            operation_fields_v1.cursor = '{operation_cursor}'
+                        LIMIT 1
+                    )
+                    AND operation_fields_v1.name = '{order_field_name}'
+                LIMIT 1
                 "#
             );
 
@@ -937,14 +953,7 @@ impl SqlStore {
         list: Option<&RelationList>,
     ) -> Result<QueryResponse, DocumentStorageError> {
         // Get all selected application fields from query
-        let mut application_fields = args.select.application_fields();
-
-        // Add the field we order by to the fields we want to query in case it is not selected
-        if let Some(Field::Field(field_name)) = &args.order.field {
-            if !application_fields.contains(field_name) {
-                application_fields.push(field_name.clone());
-            }
-        }
+        let application_fields = args.select.application_fields();
 
         // Generate SQL based on the given schema and query
         let mut select_vec = vec![
@@ -1076,7 +1085,7 @@ impl SqlStore {
         };
 
         // Finally convert everything into the right format
-        let documents = convert_rows(rows, &args.order, list, &application_fields, schema.id());
+        let documents = convert_rows(rows, list, &application_fields, schema.id());
 
         // Determine cursors for pagination by looking at beginning and end of results
         let start_cursor = if args
@@ -1175,7 +1184,6 @@ impl SqlStore {
 /// field. Like this we can correctly paginate over an ordered collection of documents.
 fn convert_rows(
     rows: Vec<QueryRow>,
-    order: &Order,
     list: Option<&RelationList>,
     fields: &ApplicationFields,
     schema_id: &SchemaId,
@@ -1191,6 +1199,20 @@ fn convert_rows(
                              collected_fields: Vec<DocumentViewFieldRow>,
                              collected_rows: &HashMap<FieldName, QueryRow>|
      -> (PaginationCursor, StorageDocument) {
+        // Determine cursor for this document by looking at the last field
+        let cursor = {
+            let last_field = collected_fields
+                .last()
+                .expect("Needs to be at least one field");
+
+            row_to_cursor(
+                collected_rows
+                    .get(&last_field.name)
+                    .expect("Field selected for ordering needs to be inside of document"),
+                list,
+            )
+        };
+
         // Convert all gathered data into final `StorageDocument` format
         let fields = parse_document_view_field_rows(collected_fields);
 
@@ -1203,33 +1225,14 @@ fn convert_rows(
             deleted: row.is_deleted,
         };
 
-        // Determine cursor for this document
-        let cursor = match &order.field {
-            Some(Field::Field(field_name)) => {
-                // Since pagination is affected by ordering, we need to pick the cursor from the
-                // operation field our query is ordered by
-                row_to_cursor(
-                    collected_rows
-                        .get(field_name)
-                        .expect("Field selected for ordering needs to be inside of document"),
-                    list,
-                )
-            }
-            _ => {
-                // For any other ordering (meta or undefined) we just pick the first row / field
-                // which came in for that document
-                row_to_cursor(row, list)
-            }
-        };
-
         (cursor, document)
     };
 
-    let mut current = rows[0].clone();
-    let mut current_fields = Vec::new();
-    let mut current_rows = HashMap::new();
-
     let rows_per_document = std::cmp::max(fields.len(), 1);
+
+    let mut current = rows[0].clone();
+    let mut current_fields = Vec::with_capacity(rows_per_document);
+    let mut current_rows = HashMap::new();
 
     for (index, row) in rows.into_iter().enumerate() {
         // We observed a new document coming up in the next row, time to change
@@ -1240,7 +1243,7 @@ fn convert_rows(
 
             // Change the pointer to the next document
             current = row.clone();
-            current_fields = Vec::new();
+            current_fields = Vec::with_capacity(rows_per_document);
         }
 
         // Collect original rows from SQL query
@@ -1596,8 +1599,8 @@ mod tests {
             "(°◇°) !!".into(),
             "Hello, Panda!".into(),
             "How are you?".into(),
-            "I miss Pengolina. How about you?".into(),
             "I am cute and very hungry".into(),
+            "I miss Pengolina. How about you?".into(),
             "Oh, howdy, Pengi!".into(),
         ],
     )]
@@ -2382,7 +2385,6 @@ mod tests {
         // from
         let result = convert_rows(
             query_rows.clone(),
-            &Order::default(),
             Some(&RelationList::new_unpinned(
                 &relation_list_hash.parse().unwrap(),
                 "relation_list_field",
@@ -2393,43 +2395,8 @@ mod tests {
 
         assert_eq!(result.len(), 2);
 
-        // We expect the cursor of the first query row to be returned per document when no ordering
-        // was set, that is cursor #1 and #3
-        assert_eq!(
-            result[0].0,
-            PaginationCursor::new(
-                OperationCursor::from(cursor_1.as_str()),
-                Some(OperationCursor::from(root_cursor_1.as_str())),
-                Some(relation_list_hash.parse().unwrap())
-            )
-        );
-        assert_eq!(
-            result[1].0,
-            PaginationCursor::new(
-                OperationCursor::from(cursor_3.as_str()),
-                Some(OperationCursor::from(root_cursor_2.as_str())),
-                Some(relation_list_hash.parse().unwrap())
-            )
-        );
-
-        // 2.
-        //
-        // Now we do the same but this time we pass in an ordering
-        let result = convert_rows(
-            query_rows.clone(),
-            &Order::new(&"is_admin".into(), &Direction::Ascending),
-            Some(&RelationList::new_unpinned(
-                &relation_list_hash.parse().unwrap(),
-                "relation_list_field",
-            )),
-            &vec!["username".to_string(), "is_admin".to_string()],
-            &schema_id,
-        );
-
-        assert_eq!(result.len(), 2);
-
-        // We expect the cursor of the "is_admin" query row to be returned per document as that
-        // ordering was set, that is cursor #2 and #4
+        // We expect the cursor of the last query row to be returned per document, that is cursor
+        // #2 and #4
         assert_eq!(
             result[0].0,
             PaginationCursor::new(
@@ -2447,12 +2414,11 @@ mod tests {
             )
         );
 
-        // 3.
+        // 2.
         //
         // We pretend now that this query was executed without a relation list
         let result = convert_rows(
             query_rows,
-            &Order::default(),
             None,
             &vec!["username".to_string(), "is_admin".to_string()],
             &schema_id,
@@ -2461,11 +2427,11 @@ mod tests {
         assert_eq!(result.len(), 2);
         assert_eq!(
             result[0].0,
-            PaginationCursor::new(OperationCursor::from(cursor_1.as_str()), None, None)
+            PaginationCursor::new(OperationCursor::from(cursor_2.as_str()), None, None)
         );
         assert_eq!(
             result[1].0,
-            PaginationCursor::new(OperationCursor::from(cursor_3.as_str()), None, None)
+            PaginationCursor::new(OperationCursor::from(cursor_4.as_str()), None, None)
         );
     }
 
