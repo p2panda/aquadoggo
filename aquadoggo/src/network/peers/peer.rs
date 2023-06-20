@@ -8,7 +8,7 @@ use p2panda_rs::Human;
 
 /// Identifier of a p2panda peer.
 ///
-/// Additional to the unique public key we also store the `ConnectionId` to understand which libp2p
+/// Additional to the unique `PeerId` we also store the `ConnectionId` to understand which libp2p
 /// connection handler deals with the communication with that peer. In case connections get stale
 /// or fail we can use this information to understand which peer got affected.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
@@ -28,9 +28,9 @@ impl Peer {
         Self(local_peer_id, ConnectionId::new_unchecked(0))
     }
 
-    /// Returns the public key of this peer which serves as its identifier.
+    /// Returns the `PeerId` of this peer.
     ///
-    /// The public key is used to determine which peer "wins" over a duplicate session conflict.
+    /// The `PeerId` is used to determine which peer "wins" over a duplicate session conflict.
     pub fn id(&self) -> PeerId {
         self.0
     }
