@@ -634,6 +634,11 @@ fn where_pagination_sql(
             let cmp_field =
                 typecast_field_sql("operation_fields_v1.value", order_field_name, schema, false);
 
+            // Since cursors are unique per document fields this method selects the right one
+            // depending on what ordering was selected. For example if the client chose to order by
+            // "timestamp" then the cursor will be selected for each document pointing at the
+            // "timestamp" field. Like this we can correctly paginate over an ordered collection of
+            // documents.
             let cmp_value = format!(
                 r#"
                 SELECT
@@ -1176,12 +1181,6 @@ impl SqlStore {
 ///
 /// Due to the special table layout we receive one row per operation field in the query. Usually we
 /// need to merge multiple rows / operation fields into one document.
-///
-/// This method also selects one cursor per document which then can be used by the client to
-/// control pagination. Since cursors are unique per document fields this method selects the right
-/// one depending on what ordering was selected. For example if the client chose to order by
-/// "timestamp" then the cursor will be selected for each document pointing at the "timestamp"
-/// field. Like this we can correctly paginate over an ordered collection of documents.
 fn convert_rows(
     rows: Vec<QueryRow>,
     list: Option<&RelationList>,
