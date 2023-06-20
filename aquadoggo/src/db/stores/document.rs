@@ -30,6 +30,7 @@
 //! retained, we use a system of "pinned relations" to identify and materialise only views we
 //! explicitly wish to keep.
 use async_trait::async_trait;
+use log::debug;
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::{Document, DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::schema::SchemaId;
@@ -317,7 +318,8 @@ impl SqlStore {
     ///
     /// This method performs one insertion in the `document_views` table and at least one in the
     /// `document_view_fields` table. If either of these operations fail then all insertions are
-    /// rolled back.
+    /// rolled back. A success result is returned containing a bool to indicate if the insertion
+    /// was not necessary as the document view already exists in the store.
     ///
     /// An error is returned in the case of a fatal storage error.
     pub async fn insert_document_view(
@@ -325,7 +327,7 @@ impl SqlStore {
         document_view: &DocumentView,
         document_id: &DocumentId,
         schema_id: &SchemaId,
-    ) -> Result<(), DocumentStorageError> {
+    ) -> Result<bool, DocumentStorageError> {
         // Start a transaction, any db insertions after this point, and before the `commit()`
         // will be rolled back in the event of an error.
         let mut tx = self
@@ -335,15 +337,16 @@ impl SqlStore {
             .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
 
         // Insert the document view into the `document_views` table. Rollback insertions if an error occurs.
-        match insert_document_view(&mut tx, document_view, document_id, schema_id).await {
-            Ok(_) => (),
-            Err(err) => {
-                tx.rollback()
-                    .await
-                    .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
-                return Err(err);
-            }
-        };
+        let insertion_occured =
+            match insert_document_view(&mut tx, document_view, document_id, schema_id).await {
+                Ok(insertion_occured) => insertion_occured,
+                Err(err) => {
+                    tx.rollback()
+                        .await
+                        .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+                    return Err(err);
+                }
+            };
 
         // Insert the document view fields into the `document_view_fields` table. Rollback
         // insertions if an error occurs.
@@ -360,7 +363,9 @@ impl SqlStore {
         // Commit the tx here as no errors occurred.
         tx.commit()
             .await
-            .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))
+            .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+
+        Ok(insertion_occured)
     }
 }
 
@@ -448,8 +453,8 @@ async fn insert_document_view(
     document_view: &DocumentView,
     document_id: &DocumentId,
     schema_id: &SchemaId,
-) -> Result<AnyQueryResult, DocumentStorageError> {
-    query(
+) -> Result<bool, DocumentStorageError> {
+    let result = query(
         "
         INSERT INTO
             document_views (
@@ -459,14 +464,59 @@ async fn insert_document_view(
             )
         VALUES
             ($1, $2, $3)
-        ON CONFLICT(document_view_id) DO NOTHING -- @TODO: temp fix for double document view insertions: https://github.com/p2panda/aquadoggo/issues/398
         ",
     )
     .bind(document_view.id().to_string())
     .bind(document_id.to_string())
     .bind(schema_id.to_string())
-    .execute(tx)
-    .await
+    .execute(&mut *tx)
+    .await;
+
+    match result {
+        Ok(_) => Ok(true),
+        Err(err) => match err {
+            // Handle errors returned from the database
+            sqlx::Error::Database(_) => {
+                // There was an error when inserting the document view. This can happen if the
+                // same document view is inserted twice into the store. It isn't a critical error
+                // though, so we want to check if the document view we are handling here already
+                // exists and silently ignore this error if so.
+                let result = query(
+                    "
+                        SELECT
+                            document_view_id
+                        FROM
+                            document_views
+                        WHERE
+                            document_view_id = $1
+                        ",
+                )
+                .bind(document_view.id().to_string())
+                .fetch_optional(&mut *tx)
+                .await;
+
+                match result {
+                    Ok(existing_document_view) => {
+                        if existing_document_view.is_some() {
+                            // The document view already exists so we return success with a false
+                            // value to signal no insertion occurred.
+
+                            debug!(
+                                "Duplicate insertion attempted for document view: {}",
+                                document_view.id()
+                            );
+                            Ok(false)
+                        } else {
+                            Err(err)
+                        }
+                    }
+                    Err(_) => Err(err),
+                }
+            }
+            // Pass on any other errors which occur
+            err => Err(err),
+        },
+    }
     .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))
 }
 
@@ -640,6 +690,51 @@ mod tests {
             assert_eq!(retrieved_document.view_id(), document.view_id());
             assert_eq!(retrieved_document.fields(), document.fields());
         });
+    }
+
+    #[rstest]
+    fn duplicate_document_view_insertions(
+        #[from(populate_store_config)]
+        #[with(2, 1, 1)]
+        config: PopulateStoreConfig,
+    ) {
+        test_runner(|node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (_, document_ids) = populate_store(&node.context.store, &config).await;
+            let document_id = document_ids.get(0).expect("At least one document id");
+
+            // Get the operations and build the document.
+            let operations = node
+                .context
+                .store
+                .get_operations_by_document_id(&document_id)
+                .await
+                .unwrap();
+
+            // Build the document from the operations.
+            let document_builder = DocumentBuilder::from(&operations);
+            let document = document_builder.build().unwrap();
+
+            // Insert the document into the store (this inserts the view as well)
+            let result = node.context.store.insert_document(&document).await;
+            assert!(result.is_ok());
+
+            // Insert the documents' view again.
+            let result = node
+                .context
+                .store
+                .insert_document_view(
+                    &document.view().unwrap(),
+                    document.id(),
+                    document.schema_id(),
+                )
+                .await;
+
+            // This shouldn't error, but the value returned in the result should be `false` to
+            // indicate that no insertion actually occured (because the view already existed).
+            // assert!(result.is_ok());
+            assert!(!result.unwrap());
+        })
     }
 
     #[rstest]
