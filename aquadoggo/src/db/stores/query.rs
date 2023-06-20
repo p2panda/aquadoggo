@@ -1458,7 +1458,7 @@ mod tests {
                     ("timestamp", 1687266055.into(), None),
                 ],
                 vec![
-                    ("message", "I'm cute and very hungry".into(), None),
+                    ("message", "I am cute and very hungry".into(), None),
                     ("username", "panda".into(), None),
                     ("timestamp", 1687266141.into(), None),
                 ],
@@ -1573,7 +1573,7 @@ mod tests {
             "Oh, howdy, Pengi!".into(),
             "How are you?".into(),
             "I miss Pengolina. How about you?".into(),
-            "I'm cute and very hungry".into(),
+            "I am cute and very hungry".into(),
             "(°◇°) !!".into(),
         ],
     )]
@@ -1582,7 +1582,7 @@ mod tests {
         "message".into(),
         vec![
             "(°◇°) !!".into(),
-            "I'm cute and very hungry".into(),
+            "I am cute and very hungry".into(),
             "I miss Pengolina. How about you?".into(),
             "How are you?".into(),
             "Oh, howdy, Pengi!".into(),
@@ -1597,7 +1597,7 @@ mod tests {
             "Hello, Panda!".into(),
             "How are you?".into(),
             "I miss Pengolina. How about you?".into(),
-            "I'm cute and very hungry".into(),
+            "I am cute and very hungry".into(),
             "Oh, howdy, Pengi!".into(),
         ],
     )]
