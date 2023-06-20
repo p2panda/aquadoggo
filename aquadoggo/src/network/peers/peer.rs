@@ -46,7 +46,7 @@ impl Ord for Peer {
         // When comparing `Peer` instances (for example to handle duplicate session requests), we
         // only look at the internal `PeerId` since this is what both peers (local and remote)
         // know about (the connection id might be different)
-        self.0.to_bytes().cmp(&other.0.to_bytes())
+        self.0.cmp(&other.0)
     }
 }
 
