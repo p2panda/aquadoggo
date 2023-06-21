@@ -36,21 +36,6 @@ use crate::materializer::TaskInput;
 pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
     debug!("Working on {}", input);
 
-    // If this task is concerned with a document view then we can first check if it has actually
-    // already been materialized. If so, we exit this task immediately and return no new tasks.
-    if let Some(document_view_id) = &input.document_view_id {
-        let document_view_exists = context
-            .store
-            .get_document_by_view_id(document_view_id)
-            .await
-            .map_err(|err| TaskError::Critical(err.to_string()))?
-            .is_some();
-
-        if document_view_exists {
-            return Ok(None);
-        }
-    }
-
     // Find out which document we are handling
     let document_id = match resolve_document_id(&context, &input).await? {
         Some(document_id) => Ok(document_id),
@@ -174,27 +159,39 @@ async fn reduce_document_view<O: AsOperation + WithId<OperationId> + WithPublicK
         )]));
     };
 
-    // Insert the new document view into the database
-    context
+    // Make sure to not store document view twice
+    let document_view_exists = context
         .store
-        .insert_document_view(
-            &document.view().unwrap(),
-            document.id(),
-            document.schema_id(),
-        )
+        .get_document_by_view_id(document_view_id)
         .await
-        .map_err(|err| TaskError::Critical(err.to_string()))?;
+        .map_err(|err| TaskError::Critical(err.to_string()))?
+        .is_some();
 
-    info!("Stored {} document view {}", document, document.view_id());
+    if !document_view_exists {
+        context
+            .store
+            .insert_document_view(
+                &document.view().unwrap(),
+                document.id(),
+                document.schema_id(),
+            )
+            .await
+            .map_err(|err| TaskError::Critical(err.to_string()))?;
 
-    debug!(
-        "Dispatch dependency task for view with id: {}",
-        document.view_id()
-    );
-    Ok(Some(vec![Task::new(
-        "dependency",
-        TaskInput::new(None, Some(document.view_id().to_owned())),
-    )]))
+        info!("Stored {} document view {}", document, document.view_id());
+
+        debug!(
+            "Dispatch dependency task for view with id: {}",
+            document.view_id()
+        );
+
+        Ok(Some(vec![Task::new(
+            "dependency",
+            TaskInput::new(None, Some(document.view_id().to_owned())),
+        )]))
+    } else {
+        Ok(None)
+    }
 }
 
 /// Helper method to reduce an operation graph to the latest document view, returning the
