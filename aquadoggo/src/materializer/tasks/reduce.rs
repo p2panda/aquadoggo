@@ -57,14 +57,11 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
             .map_err(|err| TaskError::Critical(err.to_string()))?;
 
         // If it wasn't found then we shouldn't reduce this view yet (as the document it's part of
-        // should be reduced first). In this case we issue a reduce task for the document, and
-        // also re-issue this reduce task.
+        // should be reduced first). In this case we assume the task for reducing the document is
+        // already in the queue and so we only re-issue this reduce task.
         if existing_document.is_none() {
-            debug!("Document for view not materialized yet, issuing reduce task for document {} and reissuing current reduce task with input {}", document_id.display(), input);
-            return Ok(Some(vec![
-                Task::new("reduce", TaskInput::new(Some(document_id), None)),
-                Task::new("reduce", input),
-            ]));
+            debug!("Document {} for view not materialized yet, reissuing current reduce task with input {}", document_id.display(), input);
+            return Ok(Some(vec![Task::new("reduce", input)]));
         };
     };
 
