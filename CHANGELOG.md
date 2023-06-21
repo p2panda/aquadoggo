@@ -55,6 +55,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix missing field when filtering owner [#359](https://github.com/p2panda/aquadoggo/pull/359)
 - Bind untrusted user filter arguments in SQL query [#358](https://github.com/p2panda/aquadoggo/pull/358)
 
+### Open Sauce
+
+- CI: Temporary workaround for Rust compiler bug [#417](https://github.com/p2panda/aquadoggo/pull/417)
+
 ## [0.4.0]
 
 ### Added
