@@ -157,7 +157,7 @@ async fn reduce_document_view<O: AsOperation + WithId<OperationId> + WithPublicK
         .store
         .get_document(document_id)
         .await
-        .map_err(|err| TaskError::Critical(err.to_string()))?;
+        .map_err(|err| TaskError::Failure(err.to_string()))?;
 
     // If it wasn't found then we shouldn't reduce this view yet (as the document it's part of
     // should be reduced first). In this case we assume the task for reducing the document is
