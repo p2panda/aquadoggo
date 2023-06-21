@@ -495,19 +495,6 @@ fn where_filter_sql(filter: &Filter, schema: &Schema) -> (String, Vec<BindArgume
 /// * Cursors _always_ need to point at the _last_ field of each document. This is assured by the
 /// `convert_rows` method which returns that cursor to the client via the GraphQL response
 ///
-/// ```text
-/// -------------------------------------------------
-/// document_id | view_id | field_name | ... | cursor
-/// -------------------------------------------------
-/// 0x01        | 0x01    | username   | ... | 0xa0
-/// 0x01        | 0x01    | message    | ... | 0xc2   <---
-/// 0x02        | 0x02    | username   | ... | 0x06
-/// 0x02        | 0x02    | message    | ... | 0x8b   <---
-/// 0x04        | 0x04    | username   | ... | 0x06
-/// 0x04        | 0x04    | message    | ... | 0x8b   <---
-/// -------------------------------------------------
-/// ```
-///
 /// ## Ordering
 ///
 /// Pagination is strictly connected to the chosen ordering by the client of the results. We need
@@ -1290,6 +1277,25 @@ impl SqlStore {
 ///
 /// Due to the special table layout we receive one row per operation field in the query. Usually we
 /// need to merge multiple rows / operation fields into one document.
+///
+/// This method also returns a cursor for each document to the clients which can then use it to
+/// control pagination. Since every cursor is unique for each operation field and there might be
+/// multiple cursors for one document we need to make sure to _always_ pick the _last_ cursor for
+/// each document.
+///
+/// ```text
+/// -------------------------------------------------
+/// document_id | view_id | field_name | ... | cursor
+/// -------------------------------------------------
+/// 0x01        | 0x01    | username   | ... | 0xa0
+/// 0x01        | 0x01    | message    | ... | 0xc2   <--- Last Cursor
+/// 0x02        | 0x02    | username   | ... | 0x06
+/// 0x02        | 0x02    | message    | ... | 0x8b   <--- Last Cursor
+/// 0x04        | 0x04    | username   | ... | 0x06
+/// 0x04        | 0x04    | message    | ... | 0x8b   <--- Last Cursor
+/// -------------------------------------------------
+/// ```
+///
 fn convert_rows(
     rows: Vec<QueryRow>,
     list: Option<&RelationList>,
