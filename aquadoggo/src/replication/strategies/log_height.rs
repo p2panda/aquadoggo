@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use log::debug;
+use log::trace;
 use p2panda_rs::entry::traits::AsEntry;
 use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::identity::PublicKey;
@@ -78,7 +78,7 @@ impl LogHeightStrategy {
                     .expect("Fatal database error")
                     .iter()
                     .map(|entry| {
-                        debug!(
+                        trace!(
                             "Prepare message containing entry at {:?} on {:?} for {}",
                             entry.seq_num(),
                             entry.log_id(),
