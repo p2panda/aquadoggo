@@ -459,13 +459,22 @@ fn where_filter_sql(filter: &Filter, schema: &Schema) -> (String, Vec<BindArgume
                             SELECT
                                 operation_fields_v1.value
                             FROM
-                                operation_fields_v1
+                                document_view_fields AS document_view_fields_subquery
+                                JOIN operation_fields_v1
+                                    ON
+                                        document_view_fields_subquery.operation_id = operation_fields_v1.operation_id
+                                    AND
+                                        document_view_fields_subquery.name = operation_fields_v1.name
                             WHERE
-                                operation_fields_v1.name = '{field_name}'
+                                -- Match document_view_fields of this subquery with the parent one
+                                document_view_fields.document_view_id = document_view_fields_subquery.document_view_id
+
+                                -- Check if this document view fullfils this filter
+                                AND operation_fields_v1.name = '{field_name}'
                                 AND
                                     {filter_cmp}
                                 AND
-                                    operation_fields_v1.operation_id = document_view_fields.operation_id
+                                    operation_fields_v1.operation_id = document_view_fields_subquery.operation_id
                         )
                         "#
                     ))
@@ -1472,6 +1481,7 @@ mod tests {
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::{OperationValue, PinnedRelationList};
     use p2panda_rs::schema::{FieldType, Schema, SchemaId};
+    use p2panda_rs::storage_provider::traits::DocumentStore;
     use p2panda_rs::test_utils::fixtures::{key_pair, schema_id};
     use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
     use rstest::rstest;
@@ -2613,11 +2623,13 @@ mod tests {
     }
 
     #[rstest]
-    fn query_updated_documents(
+    fn query_updated_documents_with_filter(
         #[from(populate_store_config)]
         // This config will populate the store with 10 documents which each have their username
-        // field updated
-        #[with(2, 10, 1, false, doggo_schema(), doggo_fields(), vec!(("username", OperationValue::String("me".to_string()))))]
+        // field updated from "bubu" (doggo_schema) to "me"
+        #[with(2, 10, 1, false, doggo_schema(), doggo_fields(),
+               vec![("username", OperationValue::String("me".to_string()))]
+        )]
         config: PopulateStoreConfig,
     ) {
         test_runner(|mut node: TestNode| async move {
@@ -2625,6 +2637,19 @@ mod tests {
             populate_and_materialize(&mut node, &config).await;
 
             let schema = doggo_schema();
+
+            let documents = node
+                .context
+                .store
+                .get_documents_by_schema(schema.id())
+                .await
+                .unwrap();
+            assert_eq!(documents.len(), 10);
+            for document in documents {
+                if document.get("username").unwrap() != &OperationValue::String("me".into()) {
+                    panic!("All 'username' fields should have been updated to 'me'");
+                }
+            }
 
             let args = Query::new(
                 &Pagination::new(
@@ -2639,7 +2664,7 @@ mod tests {
                     Field::Field("age".into()),
                     Field::Field("is_admin".into()),
                 ]),
-                &Filter::default(),
+                &Filter::default().fields(&[("username", &["me".into()])]),
                 &Order::default(),
             );
 

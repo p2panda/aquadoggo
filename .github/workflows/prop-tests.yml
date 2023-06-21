@@ -1,4 +1,4 @@
-name: aquadoggo property tests
+name: aquadoggo
 
 on: push
 
@@ -10,7 +10,7 @@ env:
   cargo_manifest: aquadoggo/Cargo.toml
 
 jobs:
-  rust-test-sqlite:
+  rust-prop-test-sqlite:
     runs-on: ubuntu-latest
 
     steps:
