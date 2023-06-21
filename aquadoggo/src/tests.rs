@@ -44,6 +44,7 @@ async fn e2e() {
     // in-memory sqlite database for this test.
 
     let config = Configuration::new_ephemeral();
+    let key_pair = KeyPair::new();
 
     // Start the node.
     //
@@ -54,7 +55,7 @@ async fn e2e() {
     //
     // Nodes are the workhorses of the p2panda network, we thank you for all your efforts 🙏🏻.
 
-    let aquadoggo = Node::start(config).await; // 🐬🐕
+    let aquadoggo = Node::start(key_pair, config).await; // 🐬🐕
 
     // Create some authors.
     //

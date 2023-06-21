@@ -98,11 +98,6 @@ impl Configuration {
             }
         };
 
-        // Derive peer id from key pair
-        // @TODO: This needs refactoring: https://github.com/p2panda/aquadoggo/issues/388
-        let key_pair = NetworkConfiguration::load_or_generate_key_pair(config.base_path.clone())?;
-        config.network.set_peer_id(&key_pair.public());
-
         Ok(config)
     }
 }
@@ -111,16 +106,9 @@ impl Configuration {
 impl Configuration {
     /// Returns a new configuration object for a node which stores all data temporarily in memory.
     pub fn new_ephemeral() -> Self {
-        let mut config = Configuration {
+        Configuration {
             database_url: Some("sqlite::memory:".to_string()),
             ..Default::default()
-        };
-
-        // Generate a random key pair and just keep it in memory
-        // @TODO: This needs refactoring: https://github.com/p2panda/aquadoggo/issues/388
-        let key_pair: libp2p::identity::Keypair = crate::network::identity::Identity::new();
-        config.network.set_peer_id(&key_pair.public());
-
-        config
+        }
     }
 }

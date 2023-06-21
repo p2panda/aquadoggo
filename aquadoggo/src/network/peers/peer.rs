@@ -44,15 +44,15 @@ impl Peer {
 impl Ord for Peer {
     fn cmp(&self, other: &Self) -> Ordering {
         // When comparing `Peer` instances (for example to handle duplicate session requests), we
-        // only look at the internal `PeerId` since this is what both peers (local and remote) know
-        // about (the connection id might be different)
+        // only look at the internal `PeerId` since this is what both peers (local and remote)
+        // know about (the connection id might be different)
         self.0.cmp(&other.0)
     }
 }
 
 impl PartialOrd for Peer {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.0.cmp(&other.0))
+        Some(self.cmp(other))
     }
 }
 

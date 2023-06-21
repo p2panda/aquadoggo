@@ -17,6 +17,7 @@ use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
 use crate::db::SqlStore;
 use crate::manager::{ServiceReadySender, Shutdown};
+use crate::network::identity::to_libp2p_peer_id;
 use crate::network::Peer;
 use crate::replication::errors::ReplicationError;
 use crate::replication::{
@@ -38,14 +39,12 @@ pub async fn replication_service(
 ) -> Result<()> {
     let _rx = tx.subscribe();
 
-    let local_peer_id = context
-        .config
-        .network
-        .peer_id
-        .expect("Peer id needs to be given");
-
-    let manager =
-        ConnectionManager::new(&context.schema_provider, &context.store, &tx, local_peer_id);
+    let manager = ConnectionManager::new(
+        &context.schema_provider,
+        &context.store,
+        &tx,
+        to_libp2p_peer_id(&context.key_pair.public_key()),
+    );
     let handle = task::spawn(manager.run());
 
     if tx_ready.send(()).is_err() {

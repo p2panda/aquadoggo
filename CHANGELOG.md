@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Move GraphQL `types` into separate modules [#343](https://github.com/p2panda/aquadoggo/pull/343)
 - Set default order for root queries to document id [#352](https://github.com/p2panda/aquadoggo/pull/352)
 - Remove property tests again because of concurrency bug [#347](https://github.com/p2panda/aquadoggo/pull/347)
+- Decouple p2panda's authentication data types from libp2p's [#408](https://github.com/p2panda/aquadoggo/pull/408)
 
 ### Fixed
 
@@ -55,6 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix missing field when filtering owner [#359](https://github.com/p2panda/aquadoggo/pull/359)
 - Bind untrusted user filter arguments in SQL query [#358](https://github.com/p2panda/aquadoggo/pull/358)
 - Fix insertion of view before document is materialized [#413](https://github.com/p2panda/aquadoggo/pull/413)
+- Handle duplicate document view insertions in reduce task [#410](https://github.com/p2panda/aquadoggo/pull/410)
 
 ## [0.4.0]
 
