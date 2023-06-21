@@ -27,7 +27,7 @@ use crate::db::SqlStore;
 /// Configure query to select documents based on a relation list field.
 pub struct RelationList {
     /// View id of document which holds relation list field.
-    pub root: DocumentViewId,
+    pub root_view_id: DocumentViewId,
 
     /// Field which contains the relation list values.
     pub field: FieldName,
@@ -42,17 +42,17 @@ pub enum RelationListType {
 }
 
 impl RelationList {
-    pub fn new_unpinned(root: &DocumentViewId, field: &str) -> Self {
+    pub fn new_unpinned(root_view_id: &DocumentViewId, field: &str) -> Self {
         Self {
-            root: root.to_owned(),
+            root_view_id: root_view_id.to_owned(),
             field: field.to_string(),
             list_type: RelationListType::Unpinned,
         }
     }
 
-    pub fn new_pinned(root: &DocumentViewId, field: &str) -> Self {
+    pub fn new_pinned(root_view_id: &DocumentViewId, field: &str) -> Self {
         Self {
-            root: root.to_owned(),
+            root_view_id: root_view_id.to_owned(),
             field: field.to_string(),
             list_type: RelationListType::Pinned,
         }
@@ -478,6 +478,40 @@ fn where_filter_sql(filter: &Filter, schema: &Schema) -> (String, Vec<BindArgume
     (sql, args)
 }
 
+/// Generate SQL for cursor-based pagination.
+///
+/// Read more about cursor-based pagination here:
+/// https://brunoscheufler.com/blog/2022-01-01-paginating-large-ordered-datasets-with-cursor-based-pagination
+///
+/// ## Cursors
+///
+/// Our implementation follows the principle mentioned in that article, with a couple of
+/// specialities due to our SQL table layout:
+///
+/// * We don't have auto incrementing `id` but `cursor` fields
+/// * We can have duplicate, multiple document id and view id values since one row represents only
+/// one document field. A document can consist of many fields. So pagination over document id's or
+/// view id's is non-trivial and needs extra aid from our `cursor`
+/// * Cursors _always_ need to point at the _last_ field of each document. This is assured by the
+/// `convert_rows` method which returns that cursor to the client via the GraphQL response
+///
+/// ```text
+/// -------------------------------------------------
+/// document_id | view_id | field_name | ... | cursor
+/// -------------------------------------------------
+/// 0x01        | 0x01    | username   | ... | 0xa0
+/// 0x01        | 0x01    | message    | ... | 0xc2   <---
+/// 0x02        | 0x02    | username   | ... | 0x06
+/// 0x02        | 0x02    | message    | ... | 0x8b   <---
+/// 0x04        | 0x04    | username   | ... | 0x06
+/// 0x04        | 0x04    | message    | ... | 0x8b   <---
+/// -------------------------------------------------
+/// ```
+///
+/// ## Ordering
+///
+/// Pagination is strictly connected to the chosen ordering by the client of the results. We need
+/// to take the ordering into account to understand which "next page" to show.
 fn where_pagination_sql(
     pagination: &Pagination<PaginationCursor>,
     fields: &ApplicationFields,
@@ -485,20 +519,24 @@ fn where_pagination_sql(
     schema: &Schema,
     order: &Order,
 ) -> String {
-    // Ignore pagination if we're in a relation list query and the cursor does not match the parent
-    // document view id
-    if let (Some(relation_list), Some(cursor)) = (list, pagination.after.as_ref()) {
-        if Some(&relation_list.root) != cursor.root_view_id.as_ref() {
-            return "".to_string();
-        }
-    }
-
+    // No pagination cursor was given
     if pagination.after.is_none() {
         return "".to_string();
     }
 
-    // Unwrap as we know now that a cursor exists
-    let cursor = pagination.after.as_ref().unwrap();
+    // Ignore pagination if we're in a relation list query and the cursor does not match the parent
+    // document view id
+    if let (Some(relation_list), Some(cursor)) = (list, pagination.after.as_ref()) {
+        if Some(&relation_list.root_view_id) != cursor.root_view_id.as_ref() {
+            return "".to_string();
+        }
+    }
+
+    // Unwrap as we know now that a cursor exists at this point
+    let cursor = pagination
+        .after
+        .as_ref()
+        .expect("Expect cursor to be set at this point");
     let operation_cursor = &cursor.operation_cursor;
 
     let cursor_sql = match list {
@@ -521,10 +559,30 @@ fn where_pagination_sql(
     };
 
     match &order.field {
-        // If no ordering has been applied we can simply paginate over the unique cursor. If we're
-        // in a relation list we need to paginate over the unique list index.
+        // 1. No ordering has been chosen by the client
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        //
+        // We order by default which is either:
+        //
+        // a) Simply paginate over document view ids, from the view where the cursor points at
+        // b) If we're in a relation list, we paginate over the list index values, from where the
+        // root_cursor points at
         None => match list {
             None => {
+                // Collection of all documents following a certain schema id:
+                //
+                // -------------------------------------------------
+                // document_id | view_id | field_name | ... | cursor
+                // -------------------------------------------------
+                // 0x01        | 0x01    | username   | ... | 0xa0
+                // 0x01        | 0x01    | message    | ... | 0xc2   <--- Select
+                // 0x02        | 0x02    | username   | ... | 0x06
+                // 0x02        | 0x02    | message    | ... | 0x8b
+                // -------------------------------------------------
+                //
+                // -> Select document_view_id at cursor 0xc2
+                // -> Show results from document_view_id > 0x01
+                // @TODO: Factor this out into separate SQL pre-query
                 let cmp_value = format!(
                     r#"
                     SELECT
@@ -542,6 +600,22 @@ fn where_pagination_sql(
                 format!("AND documents.document_view_id > ({cmp_value})")
             }
             Some(_) => {
+                // All documents mentioned in a root document's relation list, note that duplicates
+                // are possible in relation lists:
+                //
+                // --------------------------------------------------||-------------------------
+                // Documents from relation list                      || Relation list
+                // --------------------------------------------------||-------------------------
+                // document_id | view_id | field_name | ... | cursor || list_index | root_cursor
+                // --------------------------------------------------||-------------------------
+                // 0x03        | 0x03    | username   | ... | 0x99   || 0          | 0x54  <--- Select
+                // 0x03        | 0x03    | message    | ... | 0xc2   || 0          | 0x54
+                // 0x01        | 0x01    | username   | ... | 0xcd   || 1          | 0x8a
+                // 0x01        | 0x01    | message    | ... | 0xea   || 1          | 0x8a
+                // --------------------------------------------------||-------------------------
+                //
+                // -> Select list_index of relation list at root_cursor 0x54
+                // -> Show results from list_index > 0
                 let root_cursor = cursor
                     .root_operation_cursor
                     .as_ref()
@@ -565,10 +639,15 @@ fn where_pagination_sql(
             }
         },
 
-        // Ordering over a meta field
+        // 2. Ordering over a meta field
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        //
+        // We select the meta data from the document the cursor points at and use it to paginate
+        // over.
         Some(Field::Meta(meta_field)) => {
             let (cmp_value, cmp_field) = match meta_field {
                 MetaField::DocumentId => {
+                    // Select document_id of operation where the cursor points at
                     let cmp_value = format!(
                         r#"
                         SELECT
@@ -586,6 +665,7 @@ fn where_pagination_sql(
                     (cmp_value, "documents.document_id")
                 }
                 MetaField::DocumentViewId => {
+                    // Select document_view_id of operation where the cursor points at
                     let cmp_value = format!(
                         r#"
                         SELECT
@@ -609,10 +689,17 @@ fn where_pagination_sql(
             };
 
             if fields.is_empty() && list.is_none() {
-                // When a root query was grouped by documents / no fields have been selected we can
-                // assume that document id and view id are unique
+                // If:
+                //
+                // 1. No application fields have been selected by the client
+                // 2. We're not paginating over a relation list
+                //
+                // .. then we can do a simplification of the query, since the results were grouped
+                // by documents and we can be sure that for each row the document id and view are
+                // unique.
                 format!("AND {cmp_field} {cmp_direction} ({cmp_value})")
             } else {
+                // Cursor-based pagination
                 format!(
                     r#"
                     AND (
@@ -629,16 +716,37 @@ fn where_pagination_sql(
             }
         }
 
-        // Ordering over an application field
+        // 3. Ordering over an application field
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        //
+        // Cursors are always pointing at the last field of a document. In the following example
+        // this is the "message" field. Since we've ordered the results by "timestamp" we need to
+        // manually find out what this value is by tracing back the cursor to the document to that
+        // ordered field.
+        //
+        // Collection of all documents, ordered by "timestamp", following a certain schema id:
+        //
+        // -------------------------------------------------
+        // document_id | view_id | field_name | ... | cursor
+        // -------------------------------------------------
+        // 0x01        | 0x01    | username   | ... | 0xa0
+        // 0x01        | 0x01    | timestamp  | ... | 0x72 <-- Compare
+        // 0x01        | 0x01    | message    | ... | 0xc2 <-- Select
+        // 0x02        | 0x02    | username   | ... | 0x06
+        // 0x02        | 0x02    | timestamp  | ... | 0x8f
+        // 0x02        | 0x02    | message    | ... | 0x8b
+        // -------------------------------------------------
+        //
+        // -> Select document_view_id where cursor points at
+        // -> Find "timestamp" field of that document and use this value
+        // -> Show results from "timestamp" value > other "timestamp" values
         Some(Field::Field(order_field_name)) => {
             let cmp_field =
                 typecast_field_sql("operation_fields_v1.value", order_field_name, schema, false);
 
-            // Since cursors are unique per document fields this method selects the right one
-            // depending on what ordering was selected. For example if the client chose to order by
-            // "timestamp" then the cursor will be selected for each document pointing at the
-            // "timestamp" field. Like this we can correctly paginate over an ordered collection of
-            // documents.
+            // Select the value we want to compare with from the document the cursor is pointing
+            // at. This is the value which we also order the whole results by
+            // @TODO: Factor this out into separate SQL pre-query
             let cmp_value = format!(
                 r#"
                 SELECT
@@ -666,6 +774,7 @@ fn where_pagination_sql(
                 "#
             );
 
+            // Cursor-based pagination
             format!(
                 r#"
                 AND EXISTS (
@@ -887,7 +996,7 @@ fn where_sql(schema: &Schema, fields: &ApplicationFields, list: Option<&Relation
         Some(relation_list) => {
             // Filter by the parent document view id of this relation list
             let field_name = &relation_list.field;
-            let view_id = &relation_list.root;
+            let root_view_id = &relation_list.root_view_id;
             let field_type = match relation_list.list_type {
                 RelationListType::Pinned => "pinned_relation_list",
                 RelationListType::Unpinned => "relation_list",
@@ -895,7 +1004,7 @@ fn where_sql(schema: &Schema, fields: &ApplicationFields, list: Option<&Relation
 
             format!(
                 r#"
-                document_view_fields_list.document_view_id = '{view_id}'
+                document_view_fields_list.document_view_id = '{root_view_id}'
                 AND
                     operation_fields_v1_list.field_type = '{field_type}'
                 AND
@@ -1277,7 +1386,7 @@ fn row_to_cursor(row: &QueryRow, list: Option<&RelationList>) -> PaginationCurso
             PaginationCursor::new(
                 row.cmp_value_cursor.as_str().into(),
                 Some(row.root_cursor.as_str().into()),
-                Some(relation_list.root.clone()),
+                Some(relation_list.root_view_id.clone()),
             )
         }
         None => PaginationCursor::new(row.cmp_value_cursor.as_str().into(), None, None),
