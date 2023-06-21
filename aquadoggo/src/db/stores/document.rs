@@ -459,7 +459,6 @@ async fn insert_document_view(
             )
         VALUES
             ($1, $2, $3)
-        ON CONFLICT(document_view_id) DO NOTHING -- @TODO: temp fix for double document view insertions: https://github.com/p2panda/aquadoggo/issues/398
         ",
     )
     .bind(document_view.id().to_string())
