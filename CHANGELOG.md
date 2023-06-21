@@ -58,6 +58,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix insertion of view before document is materialized [#413](https://github.com/p2panda/aquadoggo/pull/413)
 - Handle duplicate document view insertions in reduce task [#410](https://github.com/p2panda/aquadoggo/pull/410)
 
+### Open Sauce
+
+- CI: Temporary workaround for Rust compiler bug [#417](https://github.com/p2panda/aquadoggo/pull/417)
+
 ## [0.4.0]
 
 ### Added

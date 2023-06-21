@@ -41,6 +41,12 @@ jobs:
             --verbose
             --manifest-path ${{ env.cargo_manifest }}
 
+      # Related issue: https://github.com/p2panda/aquadoggo/issues/414
+      - name: Temporary workaround for rustc bug
+        uses: actions-rs/cargo@v1
+        with:
+          command: clean
+
       - name: Run tests
         uses: actions-rs/cargo@v1
         with:
@@ -88,6 +94,12 @@ jobs:
         with:
           path: ${{ env.cache_path }}
           key: ${{ runner.os }}-test-${{ hashFiles('**/Cargo.lock') }}
+
+      # Related issue: https://github.com/p2panda/aquadoggo/issues/414
+      - name: Temporary workaround for rustc bug
+        uses: actions-rs/cargo@v1
+        with:
+          command: clean
 
       - name: Run tests
         uses: actions-rs/cargo@v1
