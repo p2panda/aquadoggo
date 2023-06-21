@@ -36,6 +36,21 @@ use crate::materializer::TaskInput;
 pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
     debug!("Working on {}", input);
 
+    // If this task is concerned with a document view then we can first check if it has actually
+    // already been materialized. If so, we exit this task immediately and return no new tasks.
+    if let Some(document_view_id) = &input.document_view_id {
+        let document_view_exists = context
+            .store
+            .get_document_by_view_id(document_view_id)
+            .await
+            .map_err(|err| TaskError::Critical(err.to_string()))?
+            .is_some();
+
+        if document_view_exists {
+            return Ok(None);
+        }
+    }
+
     // Find out which document we are handling
     let document_id = match resolve_document_id(&context, &input).await? {
         Some(document_id) => Ok(document_id),
@@ -512,5 +527,39 @@ mod tests {
             let input = TaskInput::new(None, Some(document_view_id));
             assert!(reduce_task(node.context.clone(), input).await.is_ok());
         });
+    }
+
+    #[rstest]
+    fn duplicate_document_view_insertions(
+        #[from(populate_store_config)]
+        #[with(2, 1, 1)]
+        config: PopulateStoreConfig,
+    ) {
+        test_runner(|node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (_, document_ids) = populate_store(&node.context.store, &config).await;
+            let document_id = document_ids.get(0).expect("At least one document id");
+
+            // Get the operations and build the document.
+            let operations = node
+                .context
+                .store
+                .get_operations_by_document_id(document_id)
+                .await
+                .unwrap();
+
+            // Build the document from the operations.
+            let document_builder = DocumentBuilder::from(&operations);
+            let document = document_builder.build().unwrap();
+
+            // Issue a reduce task for the document, which also inserts the current view.
+            let input = TaskInput::new(Some(document_id.to_owned()), None);
+            assert!(reduce_task(node.context.clone(), input).await.is_ok());
+
+            // Issue a reduce task for the document view, which should succeed although no new
+            // view is inserted. 
+            let input = TaskInput::new(None, Some(document.view_id().to_owned()));
+            assert!(reduce_task(node.context.clone(), input).await.is_ok());
+        })
     }
 }
