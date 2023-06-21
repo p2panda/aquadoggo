@@ -22,7 +22,7 @@ use crate::db::query::{
 };
 use crate::db::stores::OperationCursor;
 use crate::db::types::StorageDocument;
-use crate::db::SqlStore;
+use crate::db::{Pool, SqlStore};
 
 /// Configure query to select documents based on a relation list field.
 pub struct RelationList {
@@ -499,23 +499,32 @@ fn where_filter_sql(filter: &Filter, schema: &Schema) -> (String, Vec<BindArgume
 ///
 /// Pagination is strictly connected to the chosen ordering by the client of the results. We need
 /// to take the ordering into account to understand which "next page" to show.
-fn where_pagination_sql(
+///
+/// ## Pre-Queries
+///
+/// This method is async as it does some smaller "pre" SQL queries before the "main" query. This is
+/// an optimization over the fact that cursors sometimes point at values which stay the same for
+/// each SQL sub-SELECT, so we just do this query once and pass the values over into the "main"
+/// query.
+async fn where_pagination_sql(
+    pool: &Pool,
+    bind_args: &mut Vec<BindArgument>,
     pagination: &Pagination<PaginationCursor>,
     fields: &ApplicationFields,
     list: Option<&RelationList>,
     schema: &Schema,
     order: &Order,
-) -> String {
+) -> Result<String, DocumentStorageError> {
     // No pagination cursor was given
     if pagination.after.is_none() {
-        return "".to_string();
+        return Ok("".to_string());
     }
 
     // Ignore pagination if we're in a relation list query and the cursor does not match the parent
     // document view id
     if let (Some(relation_list), Some(cursor)) = (list, pagination.after.as_ref()) {
         if Some(&relation_list.root_view_id) != cursor.root_view_id.as_ref() {
-            return "".to_string();
+            return Ok("".to_string());
         }
     }
 
@@ -569,8 +578,7 @@ fn where_pagination_sql(
                 //
                 // -> Select document_view_id at cursor 0xc2
                 // -> Show results from document_view_id > 0x01
-                // @TODO: Factor this out into separate SQL pre-query
-                let cmp_value = format!(
+                let cmp_value_pre = format!(
                     r#"
                     SELECT
                         document_view_fields.document_view_id
@@ -584,7 +592,17 @@ fn where_pagination_sql(
                     "#
                 );
 
-                format!("AND documents.document_view_id > ({cmp_value})")
+                // Make a "pre" SQL query to avoid duplicate sub SELECT's always returning the same
+                // result
+                let document_view_id: (String,) = query_as(&cmp_value_pre)
+                    .fetch_one(pool)
+                    .await
+                    .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
+
+                Ok(format!(
+                    "AND documents.document_view_id > '{}'",
+                    document_view_id.0
+                ))
             }
             Some(_) => {
                 // All documents mentioned in a root document's relation list, note that duplicates
@@ -608,7 +626,7 @@ fn where_pagination_sql(
                     .as_ref()
                     .expect("Expect root_operation_cursor to be set when querying relation list");
 
-                let cmp_value = format!(
+                let cmp_value_pre = format!(
                     r#"
                     -- When ordering is activated we need to compare against the value
                     -- of the ordered field - but from the row where the cursor points at
@@ -621,8 +639,18 @@ fn where_pagination_sql(
                     "#
                 );
 
+                // Make a "pre" SQL query to avoid duplicate sub SELECT's always returning the same
+                // result
+                let list_index: (i32,) = query_as(&cmp_value_pre)
+                    .fetch_one(pool)
+                    .await
+                    .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
+
                 // List indexes are always unique so we can simply just compare them like that
-                format!("AND operation_fields_v1_list.list_index > ({cmp_value})")
+                Ok(format!(
+                    "AND operation_fields_v1_list.list_index > {}",
+                    list_index.0
+                ))
             }
         },
 
@@ -632,7 +660,7 @@ fn where_pagination_sql(
         // We select the meta data from the document the cursor points at and use it to paginate
         // over.
         Some(Field::Meta(meta_field)) => {
-            let (cmp_value, cmp_field) = match meta_field {
+            let (cmp_value_pre, cmp_field) = match meta_field {
                 MetaField::DocumentId => {
                     // Select document_id of operation where the cursor points at
                     let cmp_value = format!(
@@ -675,6 +703,14 @@ fn where_pagination_sql(
                 }
             };
 
+            // Make a "pre" SQL query to avoid duplicate sub SELECT's always returning the same
+            // result
+            let cmp_value: (String,) = query_as(&cmp_value_pre)
+                .fetch_one(pool)
+                .await
+                .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
+            let cmp_value = format!("'{}'", cmp_value.0);
+
             if fields.is_empty() && list.is_none() {
                 // If:
                 //
@@ -684,22 +720,22 @@ fn where_pagination_sql(
                 // .. then we can do a simplification of the query, since the results were grouped
                 // by documents and we can be sure that for each row the document id and view are
                 // unique.
-                format!("AND {cmp_field} {cmp_direction} ({cmp_value})")
+                Ok(format!("AND {cmp_field} {cmp_direction} {cmp_value}"))
             } else {
                 // Cursor-based pagination
-                format!(
+                Ok(format!(
                     r#"
                     AND (
-                        {cmp_field} {cmp_direction} ({cmp_value})
+                        {cmp_field} {cmp_direction} {cmp_value}
                         OR
                         (
-                            {cmp_field} = ({cmp_value})
+                            {cmp_field} = {cmp_value}
                             AND
                                 {cursor_sql}
                         )
                     )
                     "#
-                )
+                ))
             }
         }
 
@@ -728,41 +764,65 @@ fn where_pagination_sql(
         // -> Find "timestamp" field of that document and use this value
         // -> Show results from "timestamp" value > other "timestamp" values
         Some(Field::Field(order_field_name)) => {
-            let cmp_field =
-                typecast_field_sql("operation_fields_v1.value", order_field_name, schema, false);
-
             // Select the value we want to compare with from the document the cursor is pointing
             // at. This is the value which we also order the whole results by
-            // @TODO: Factor this out into separate SQL pre-query
-            let cmp_value = format!(
+            let cmp_value_pre = format!(
                 r#"
                 SELECT
-                    {cmp_field}
+                    operation_fields_v1.value
+
                 FROM
                     operation_fields_v1
                     LEFT JOIN
                         document_view_fields
                         ON document_view_fields.operation_id = operation_fields_v1.operation_id
+
                 WHERE
                     document_view_fields.document_view_id = (
                         SELECT
                             document_view_fields.document_view_id
+
                         FROM
                             operation_fields_v1
                             LEFT JOIN
                                 document_view_fields
                                 ON document_view_fields.operation_id = operation_fields_v1.operation_id
+
                         WHERE
                             operation_fields_v1.cursor = '{operation_cursor}'
+
                         LIMIT 1
                     )
                     AND operation_fields_v1.name = '{order_field_name}'
+
                 LIMIT 1
                 "#
             );
 
+            // Make a "pre" SQL query to avoid duplicate sub SELECT's always returning the same
+            // result.
+            //
+            // The returned value is added to the bindable arguments array since this is untrusted
+            // user content.
+            let operation_fields_value: (String,) = query_as(&cmp_value_pre)
+                .fetch_one(pool)
+                .await
+                .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
+            bind_args.push(BindArgument::String(operation_fields_value.0));
+
+            // Necessary casting for operation values of different type
+            let cmp_field =
+                typecast_field_sql("operation_fields_v1.value", order_field_name, schema, false);
+
+            let bind_arg_marker = typecast_field_sql(
+                &format!("${}", bind_args.len()),
+                order_field_name,
+                schema,
+                false,
+            );
+
             // Cursor-based pagination
-            format!(
+            Ok(format!(
                 r#"
                 AND EXISTS (
                     SELECT
@@ -775,17 +835,17 @@ fn where_pagination_sql(
                             operation_fields_v1.operation_id = document_view_fields.operation_id
                         AND
                             (
-                                {cmp_field} {cmp_direction} ({cmp_value})
+                                {cmp_field} {cmp_direction} {bind_arg_marker}
                                 OR
                                 (
-                                    {cmp_field} = ({cmp_value})
+                                    {cmp_field} = {bind_arg_marker}
                                     AND
                                         {cursor_sql}
                                 )
                             )
                 )
                 "#
-            )
+            ))
         }
     }
 }
@@ -1083,14 +1143,17 @@ impl SqlStore {
 
         let where_ = where_sql(schema, &application_fields, list);
         let and_fields = where_fields_sql(&application_fields);
-        let (and_filters, bind_args) = where_filter_sql(&args.filter, schema);
+        let (and_filters, mut bind_args) = where_filter_sql(&args.filter, schema);
         let and_pagination = where_pagination_sql(
+            &self.pool,
+            &mut bind_args,
             &args.pagination,
             &application_fields,
             list,
             schema,
             &args.order,
-        );
+        )
+        .await?;
 
         let order = order_sql(&args.order, schema, list);
         let (page_size, limit) = limit_sql(&args.pagination, &application_fields);
