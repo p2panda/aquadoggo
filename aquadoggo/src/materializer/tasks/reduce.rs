@@ -557,7 +557,7 @@ mod tests {
             assert!(reduce_task(node.context.clone(), input).await.is_ok());
 
             // Issue a reduce task for the document view, which should succeed although no new
-            // view is inserted. 
+            // view is inserted.
             let input = TaskInput::new(None, Some(document.view_id().to_owned()));
             assert!(reduce_task(node.context.clone(), input).await.is_ok());
         })
