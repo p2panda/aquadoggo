@@ -45,26 +45,6 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
         }
     }?;
 
-    // If the reduce task is reducing to a document view id we need to also check that the
-    // document it is part of was materialized already.
-    if input.document_view_id.is_some() {
-        // Attempt to retrieve the document this view is part of in order to determine if it has
-        // been once already materialized yet.
-        let existing_document = context
-            .store
-            .get_document(&document_id)
-            .await
-            .map_err(|err| TaskError::Critical(err.to_string()))?;
-
-        // If it wasn't found then we shouldn't reduce this view yet (as the document it's part of
-        // should be reduced first). In this case we assume the task for reducing the document is
-        // already in the queue and so we only re-issue this reduce task.
-        if existing_document.is_none() {
-            debug!("Document {} for view not materialized yet, reissuing current reduce task with input {}", document_id.display(), input);
-            return Ok(Some(vec![Task::new("reduce", input)]));
-        };
-    };
-
     // Get all operations for the requested document
     let operations = context
         .store
@@ -72,28 +52,12 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
         .await
         .map_err(|err| TaskError::Critical(err.to_string()))?;
 
-    let document_view_id = match &input.document_view_id {
+    match &input.document_view_id {
         // If this task was passed a document_view_id as input then we want to build to document
         // only to the requested view
-        Some(view_id) => reduce_document_view(&context, view_id, &operations).await?,
+        Some(view_id) => reduce_document_view(&context, &document_id, view_id, &operations).await,
         // If no document_view_id was passed, this is a document_id reduce task.
-        None => reduce_document(&context, &operations).await?,
-    };
-
-    // Dispatch a "dependency" task if we created a new document view
-    match document_view_id {
-        Some(view_id) => {
-            debug!("Dispatch dependency task for view with id: {}", view_id);
-
-            Ok(Some(vec![Task::new(
-                "dependency",
-                TaskInput::new(None, Some(view_id)),
-            )]))
-        }
-        None => {
-            debug!("No dependency tasks to dispatch");
-            Ok(None)
-        }
+        None => reduce_document(&context, &operations).await,
     }
 }
 
@@ -141,9 +105,10 @@ async fn resolve_document_id<S: EntryStore + OperationStore + LogStore + Documen
 /// operations to materialise.
 async fn reduce_document_view<O: AsOperation + WithId<OperationId> + WithPublicKey>(
     context: &Context,
+    document_id: &DocumentId,
     document_view_id: &DocumentViewId,
     operations: &Vec<O>,
-) -> Result<Option<DocumentViewId>, TaskError> {
+) -> Result<Option<Vec<Task<TaskInput>>>, TaskError> {
     let document_builder: DocumentBuilder = operations.into();
     let document = match document_builder.build_to_view_id(Some(document_view_id.to_owned())) {
         Ok(document) => {
@@ -171,6 +136,29 @@ async fn reduce_document_view<O: AsOperation + WithId<OperationId> + WithPublicK
         }
     };
 
+    // Attempt to retrieve the document this view is part of in order to determine if it has
+    // been once already materialized yet.
+    let existing_document = context
+        .store
+        .get_document(&document_id)
+        .await
+        .map_err(|err| TaskError::Critical(err.to_string()))?;
+
+    // If it wasn't found then we shouldn't reduce this view yet (as the document it's part of
+    // should be reduced first). In this case we assume the task for reducing the document is
+    // already in the queue and so we simply re-issue this reduce task.
+    if existing_document.is_none() {
+        debug!(
+            "Document {} for view not materialized yet, reissuing current reduce task for {}",
+            document_id.display(),
+            document_view_id.display()
+        );
+        return Ok(Some(vec![Task::new(
+            "reduce",
+            TaskInput::new(None, Some(document_view_id.to_owned())),
+        )]));
+    };
+
     // Insert the new document view into the database
     context
         .store
@@ -184,8 +172,11 @@ async fn reduce_document_view<O: AsOperation + WithId<OperationId> + WithPublicK
 
     info!("Stored {} document view {}", document, document.view_id());
 
-    // Return the new view id to be used in the resulting dependency task
-    Ok(Some(document.view_id().to_owned()))
+    debug!("Dispatch dependency task for view with id: {}", document.view_id());
+    Ok(Some(vec![Task::new(
+        "dependency",
+        TaskInput::new(None, Some(document.view_id().to_owned())),
+    )]))
 }
 
 /// Helper method to reduce an operation graph to the latest document view, returning the
@@ -196,7 +187,7 @@ async fn reduce_document_view<O: AsOperation + WithId<OperationId> + WithPublicK
 async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
     context: &Context,
     operations: &Vec<O>,
-) -> Result<Option<DocumentViewId>, TaskError> {
+) -> Result<Option<Vec<Task<TaskInput>>>, TaskError> {
     match Document::try_from(operations) {
         Ok(document) => {
             // Insert this document into storage. If it already existed, this will update it's
@@ -225,10 +216,13 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
                 );
             } else {
                 info!("Created {}", document.display(),);
-            }
+            };
 
-            // Return the new document_view id to be used in the resulting dependency task
-            Ok(Some(document.view_id().to_owned()))
+            debug!("Dispatch dependency task for view with id: {}", document.view_id());
+            Ok(Some(vec![Task::new(
+                "dependency",
+                TaskInput::new(None, Some(document.view_id().to_owned())),
+            )]))
         }
         Err(err) => {
             // There is not enough operations yet to materialise this view. Maybe next time!
