@@ -54,6 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sort paginated query field rows by document view id [#354](https://github.com/p2panda/aquadoggo/pull/354)
 - Fix missing field when filtering owner [#359](https://github.com/p2panda/aquadoggo/pull/359)
 - Bind untrusted user filter arguments in SQL query [#358](https://github.com/p2panda/aquadoggo/pull/358)
+- Handle duplicate document view insertions in reduce task [#410](https://github.com/p2panda/aquadoggo/pull/410)
 
 ## [0.4.0]
 
