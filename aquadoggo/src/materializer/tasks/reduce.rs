@@ -45,6 +45,29 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
         }
     }?;
 
+    // If the reduce task is reducing to a document view id we need to also check that the
+    // document it is part of was materialized already.
+    if input.document_view_id.is_some() {
+        // Attempt to retrieve the document this view is part of in order to determine if it has
+        // been once already materialized yet.
+        let existing_document = context
+            .store
+            .get_document(&document_id)
+            .await
+            .map_err(|err| TaskError::Critical(err.to_string()))?;
+
+        // If it wasn't found then we shouldn't reduce this view yet (as the document it's part of
+        // should be reduced first). In this case we issue a reduce task for the document, and
+        // also re-issue this reduce task.
+        if existing_document.is_none() {
+            debug!("Document for view not materialized yet, issuing reduce task for document {} and reissuing current reduce task with input {}", document_id.display(), input);
+            return Ok(Some(vec![
+                Task::new("reduce", TaskInput::new(Some(document_id), None)),
+                Task::new("reduce", input),
+            ]));
+        };
+    };
+
     // Get all operations for the requested document
     let operations = context
         .store
@@ -96,8 +119,13 @@ async fn resolve_document_id<S: EntryStore + OperationStore + LogStore + Documen
             // https://github.com/p2panda/aquadoggo/issues/148
             debug!("Find document for view with id: {}", document_view_id);
 
+            // Pick one operation from the view, this is all we need to determine the document id.
             let operation_id = document_view_id.iter().next().unwrap();
 
+            // Determine document id by looking into the operations stored on the node already.
+            // Note, finding a document id here does not mean the document has been materialized
+            // yet, just that we have the operations waiting. We need to check the document exists
+            // in a following step.
             context
                 .store
                 .get_document_id_by_operation_id(operation_id)
