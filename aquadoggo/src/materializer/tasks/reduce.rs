@@ -67,28 +67,12 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
         .await
         .map_err(|err| TaskError::Critical(err.to_string()))?;
 
-    let document_view_id = match &input.document_view_id {
+    match &input.document_view_id {
         // If this task was passed a document_view_id as input then we want to build to document
         // only to the requested view
-        Some(view_id) => reduce_document_view(&context, view_id, &operations).await?,
+        Some(view_id) => reduce_document_view(&context, &document_id, view_id, &operations).await,
         // If no document_view_id was passed, this is a document_id reduce task.
-        None => reduce_document(&context, &operations).await?,
-    };
-
-    // Dispatch a "dependency" task if we created a new document view
-    match document_view_id {
-        Some(view_id) => {
-            debug!("Dispatch dependency task for view with id: {}", view_id);
-
-            Ok(Some(vec![Task::new(
-                "dependency",
-                TaskInput::new(None, Some(view_id)),
-            )]))
-        }
-        None => {
-            debug!("No dependency tasks to dispatch");
-            Ok(None)
-        }
+        None => reduce_document(&context, &operations).await,
     }
 }
 
@@ -111,8 +95,13 @@ async fn resolve_document_id<S: EntryStore + OperationStore + LogStore + Documen
             // https://github.com/p2panda/aquadoggo/issues/148
             debug!("Find document for view with id: {}", document_view_id);
 
+            // Pick one operation from the view, this is all we need to determine the document id.
             let operation_id = document_view_id.iter().next().unwrap();
 
+            // Determine document id by looking into the operations stored on the node already.
+            // Note, finding a document id here does not mean the document has been materialized
+            // yet, just that we have the operations waiting. We need to check the document exists
+            // in a following step.
             context
                 .store
                 .get_document_id_by_operation_id(operation_id)
@@ -131,9 +120,10 @@ async fn resolve_document_id<S: EntryStore + OperationStore + LogStore + Documen
 /// operations to materialise.
 async fn reduce_document_view<O: AsOperation + WithId<OperationId> + WithPublicKey>(
     context: &Context,
+    document_id: &DocumentId,
     document_view_id: &DocumentViewId,
     operations: &Vec<O>,
-) -> Result<Option<DocumentViewId>, TaskError> {
+) -> Result<Option<Vec<Task<TaskInput>>>, TaskError> {
     let document_builder: DocumentBuilder = operations.into();
     let document = match document_builder.build_to_view_id(Some(document_view_id.to_owned())) {
         Ok(document) => {
@@ -161,6 +151,29 @@ async fn reduce_document_view<O: AsOperation + WithId<OperationId> + WithPublicK
         }
     };
 
+    // Attempt to retrieve the document this view is part of in order to determine if it has
+    // been once already materialized yet.
+    let existing_document = context
+        .store
+        .get_document(document_id)
+        .await
+        .map_err(|err| TaskError::Critical(err.to_string()))?;
+
+    // If it wasn't found then we shouldn't reduce this view yet (as the document it's part of
+    // should be reduced first). In this case we assume the task for reducing the document is
+    // already in the queue and so we simply re-issue this reduce task.
+    if existing_document.is_none() {
+        debug!(
+            "Document {} for view not materialized yet, reissuing current reduce task for {}",
+            document_id.display(),
+            document_view_id.display()
+        );
+        return Ok(Some(vec![Task::new(
+            "reduce",
+            TaskInput::new(None, Some(document_view_id.to_owned())),
+        )]));
+    };
+
     // Insert the new document view into the database
     context
         .store
@@ -174,8 +187,14 @@ async fn reduce_document_view<O: AsOperation + WithId<OperationId> + WithPublicK
 
     info!("Stored {} document view {}", document, document.view_id());
 
-    // Return the new view id to be used in the resulting dependency task
-    Ok(Some(document.view_id().to_owned()))
+    debug!(
+        "Dispatch dependency task for view with id: {}",
+        document.view_id()
+    );
+    Ok(Some(vec![Task::new(
+        "dependency",
+        TaskInput::new(None, Some(document.view_id().to_owned())),
+    )]))
 }
 
 /// Helper method to reduce an operation graph to the latest document view, returning the
@@ -186,7 +205,7 @@ async fn reduce_document_view<O: AsOperation + WithId<OperationId> + WithPublicK
 async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
     context: &Context,
     operations: &Vec<O>,
-) -> Result<Option<DocumentViewId>, TaskError> {
+) -> Result<Option<Vec<Task<TaskInput>>>, TaskError> {
     match Document::try_from(operations) {
         Ok(document) => {
             // Insert this document into storage. If it already existed, this will update it's
@@ -215,10 +234,16 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
                 );
             } else {
                 info!("Created {}", document.display(),);
-            }
+            };
 
-            // Return the new document_view id to be used in the resulting dependency task
-            Ok(Some(document.view_id().to_owned()))
+            debug!(
+                "Dispatch dependency task for view with id: {}",
+                document.view_id()
+            );
+            Ok(Some(vec![Task::new(
+                "dependency",
+                TaskInput::new(None, Some(document.view_id().to_owned())),
+            )]))
         }
         Err(err) => {
             // There is not enough operations yet to materialise this view. Maybe next time!
@@ -249,7 +274,7 @@ mod tests {
     use rstest::rstest;
 
     use crate::materializer::tasks::reduce_task;
-    use crate::materializer::TaskInput;
+    use crate::materializer::{Task, TaskInput};
     use crate::test_utils::{
         doggo_fields, doggo_schema, populate_store_config, test_runner, TestNode,
     };
@@ -431,6 +456,45 @@ mod tests {
                 document.unwrap().get("username").unwrap(),
                 &OperationValue::String("bubu".to_string())
             );
+        });
+    }
+
+    #[rstest]
+    fn reissue_reduce_when_document_does_not_exist(
+        #[from(populate_store_config)]
+        #[with( 2, 1, 1, false, doggo_schema(), doggo_fields(), vec![("username", OperationValue::String("PANDA".into()))])]
+        config: PopulateStoreConfig,
+    ) {
+        test_runner(move |node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any
+            // resulting documents
+            let (_, document_ids) = populate_store(&node.context.store, &config).await;
+            let document_id = document_ids
+                .get(0)
+                .expect("There should be at least one document id");
+
+            // Get the operations
+            let document_operations = node
+                .context
+                .store
+                .get_operations_by_document_id(document_id)
+                .await
+                .unwrap();
+
+            // Build the document.
+            let document = DocumentBuilder::from(&document_operations).build().unwrap();
+
+            // Run a reduce task for this documents current view. The operations are already in
+            // the store, but the document is not materialized yet. This means we shouldn't insert
+            // any views for it yet. In that case, we expect this task to issue another reduce
+            // task with the same input.
+            let input = TaskInput::new(None, Some(document.view_id().clone()));
+            let next_tasks = reduce_task(node.context.clone(), input.clone())
+                .await
+                .expect("Task should succeed")
+                .expect("Task to be returned");
+
+            assert_eq!(next_tasks, vec![Task::new("reduce", input)]);
         });
     }
 
