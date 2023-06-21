@@ -140,7 +140,7 @@ async fn reduce_document_view<O: AsOperation + WithId<OperationId> + WithPublicK
     // been once already materialized yet.
     let existing_document = context
         .store
-        .get_document(&document_id)
+        .get_document(document_id)
         .await
         .map_err(|err| TaskError::Critical(err.to_string()))?;
 
