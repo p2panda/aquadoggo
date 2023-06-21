@@ -172,7 +172,10 @@ async fn reduce_document_view<O: AsOperation + WithId<OperationId> + WithPublicK
 
     info!("Stored {} document view {}", document, document.view_id());
 
-    debug!("Dispatch dependency task for view with id: {}", document.view_id());
+    debug!(
+        "Dispatch dependency task for view with id: {}",
+        document.view_id()
+    );
     Ok(Some(vec![Task::new(
         "dependency",
         TaskInput::new(None, Some(document.view_id().to_owned())),
@@ -218,7 +221,10 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
                 info!("Created {}", document.display(),);
             };
 
-            debug!("Dispatch dependency task for view with id: {}", document.view_id());
+            debug!(
+                "Dispatch dependency task for view with id: {}",
+                document.view_id()
+            );
             Ok(Some(vec![Task::new(
                 "dependency",
                 TaskInput::new(None, Some(document.view_id().to_owned())),
