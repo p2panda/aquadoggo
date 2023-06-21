@@ -259,7 +259,7 @@ mod tests {
     use rstest::rstest;
 
     use crate::materializer::tasks::reduce_task;
-    use crate::materializer::TaskInput;
+    use crate::materializer::{TaskInput, Task};
     use crate::test_utils::{
         doggo_fields, doggo_schema, populate_store_config, test_runner, TestNode,
     };
@@ -441,6 +441,45 @@ mod tests {
                 document.unwrap().get("username").unwrap(),
                 &OperationValue::String("bubu".to_string())
             );
+        });
+    }
+
+    #[rstest]
+    fn reissue_reduce_when_document_does_not_exist(
+        #[from(populate_store_config)]
+        #[with( 2, 1, 1, false, doggo_schema(), doggo_fields(), vec![("username", OperationValue::String("PANDA".into()))])]
+        config: PopulateStoreConfig,
+    ) {
+        test_runner(move |node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any
+            // resulting documents
+            let (_, document_ids) = populate_store(&node.context.store, &config).await;
+            let document_id = document_ids
+                .get(0)
+                .expect("There should be at least one document id");
+
+            // Get the operations
+            let document_operations = node
+                .context
+                .store
+                .get_operations_by_document_id(document_id)
+                .await
+                .unwrap();
+
+            // Build the document.
+            let document = DocumentBuilder::from(&document_operations).build().unwrap();
+
+            // Run a reduce task for this documents current view. The operations are already in
+            // the store, but the document is not materialized yet. This means we shouldn't insert
+            // any views for it yet. In that case, we expect this task to issue another reduce
+            // task with the same input.
+            let input = TaskInput::new(None, Some(document.view_id().clone()));
+            let next_tasks = reduce_task(node.context.clone(), input.clone())
+                .await
+                .expect("Task should succeed")
+                .expect("Task to be returned");
+
+            assert_eq!(next_tasks, vec![Task::new("reduce", input)]);
         });
     }
 
