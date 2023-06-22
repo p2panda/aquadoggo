@@ -8,6 +8,7 @@ use libp2p::ping::Event;
 use libp2p::swarm::{AddressScore, ConnectionError, SwarmEvent};
 use libp2p::{autonat, identify, mdns, rendezvous, Multiaddr, PeerId, Swarm};
 use log::{debug, info, trace, warn};
+use p2panda_rs::Human;
 use tokio::task;
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt;
@@ -495,6 +496,15 @@ impl EventLoop {
                 peers::Event::PeerDisconnected(peer) => {
                     // Inform other services about peer leaving
                     self.send_service_message(ServiceMessage::PeerDisconnected(peer));
+
+                    // If a peer disconnected because of a replication error we want to try and
+                    // reconnect in order to resume replication. If the peer is actually no longer
+                    // reachable then this redial attempt will simply fail, not triggering further
+                    // redials.
+                    debug!("Attempting redial of disconnected peer: {}", peer.display());
+                    if let Err(err) = self.swarm.dial(peer.id()) {
+                        warn!("Failed to dial: {}", err);
+                    }
                 }
                 peers::Event::MessageReceived(peer, message) => {
                     // Inform other services about received messages from peer
