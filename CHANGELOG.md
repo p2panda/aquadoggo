@@ -51,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix missing field when filtering owner [#359](https://github.com/p2panda/aquadoggo/pull/359)
 - Bind untrusted user filter arguments in SQL query [#358](https://github.com/p2panda/aquadoggo/pull/358)
 - Reintroduce property tests for GraphQL query api [#362](https://github.com/p2panda/aquadoggo/pull/362)
+- Fix cursor pagination over ordered queries [#412](https://github.com/p2panda/aquadoggo/pull/412)
 - Fix issue where filtered queries fail on updated fields [#409](https://github.com/p2panda/aquadoggo/pull/409)
 
 ## [0.4.0]

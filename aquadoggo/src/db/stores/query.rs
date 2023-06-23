@@ -2,6 +2,7 @@
 
 //! This module offers a query API to find many p2panda documents, filtered or sorted by custom
 //! parameters. The results are batched via cursor-based pagination.
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::str::FromStr;
 
@@ -21,12 +22,12 @@ use crate::db::query::{
 };
 use crate::db::stores::OperationCursor;
 use crate::db::types::StorageDocument;
-use crate::db::SqlStore;
+use crate::db::{Pool, SqlStore};
 
 /// Configure query to select documents based on a relation list field.
 pub struct RelationList {
     /// View id of document which holds relation list field.
-    pub root: DocumentViewId,
+    pub root_view_id: DocumentViewId,
 
     /// Field which contains the relation list values.
     pub field: FieldName,
@@ -41,17 +42,17 @@ pub enum RelationListType {
 }
 
 impl RelationList {
-    pub fn new_unpinned(root: &DocumentViewId, field: &str) -> Self {
+    pub fn new_unpinned(root_view_id: &DocumentViewId, field: &str) -> Self {
         Self {
-            root: root.to_owned(),
+            root_view_id: root_view_id.to_owned(),
             field: field.to_string(),
             list_type: RelationListType::Unpinned,
         }
     }
 
-    pub fn new_pinned(root: &DocumentViewId, field: &str) -> Self {
+    pub fn new_pinned(root_view_id: &DocumentViewId, field: &str) -> Self {
         Self {
-            root: root.to_owned(),
+            root_view_id: root_view_id.to_owned(),
             field: field.to_string(),
             list_type: RelationListType::Pinned,
         }
@@ -486,27 +487,61 @@ fn where_filter_sql(filter: &Filter, schema: &Schema) -> (String, Vec<BindArgume
     (sql, args)
 }
 
-fn where_pagination_sql(
+/// Generate SQL for cursor-based pagination.
+///
+/// Read more about cursor-based pagination here:
+/// https://brunoscheufler.com/blog/2022-01-01-paginating-large-ordered-datasets-with-cursor-based-pagination
+///
+/// ## Cursors
+///
+/// Our implementation follows the principle mentioned in that article, with a couple of
+/// specialities due to our SQL table layout:
+///
+/// * We don't have auto incrementing `id` but `cursor` fields
+/// * We can have duplicate, multiple document id and view id values since one row represents only
+/// one document field. A document can consist of many fields. So pagination over document id's or
+/// view id's is non-trivial and needs extra aid from our `cursor`
+/// * Cursors _always_ need to point at the _last_ field of each document. This is assured by the
+/// `convert_rows` method which returns that cursor to the client via the GraphQL response
+///
+/// ## Ordering
+///
+/// Pagination is strictly connected to the chosen ordering by the client of the results. We need
+/// to take the ordering into account to understand which "next page" to show.
+///
+/// ## Pre-Queries
+///
+/// This method is async as it does some smaller "pre" SQL queries before the "main" query. This is
+/// an optimization over the fact that cursors sometimes point at values which stay the same for
+/// each SQL sub-SELECT, so we just do this query once and pass the values over into the "main"
+/// query.
+async fn where_pagination_sql(
+    pool: &Pool,
+    bind_args: &mut Vec<BindArgument>,
     pagination: &Pagination<PaginationCursor>,
     fields: &ApplicationFields,
     list: Option<&RelationList>,
     schema: &Schema,
     order: &Order,
-) -> String {
+) -> Result<String, DocumentStorageError> {
+    // No pagination cursor was given
+    if pagination.after.is_none() {
+        return Ok("".to_string());
+    }
+
     // Ignore pagination if we're in a relation list query and the cursor does not match the parent
     // document view id
     if let (Some(relation_list), Some(cursor)) = (list, pagination.after.as_ref()) {
-        if Some(&relation_list.root) != cursor.root_view_id.as_ref() {
-            return "".to_string();
+        if Some(&relation_list.root_view_id) != cursor.root_view_id.as_ref() {
+            return Ok("".to_string());
         }
     }
 
-    if pagination.after.is_none() {
-        return "".to_string();
-    }
-
-    // Unwrap as we know now that a cursor exists
-    let cursor = pagination.after.as_ref().unwrap();
+    // Unwrap as we know now that a cursor exists at this point
+    let cursor = pagination
+        .after
+        .as_ref()
+        .expect("Expect cursor to be set at this point");
     let operation_cursor = &cursor.operation_cursor;
 
     let cursor_sql = match list {
@@ -529,11 +564,30 @@ fn where_pagination_sql(
     };
 
     match &order.field {
-        // If no ordering has been applied we can simply paginate over the unique cursor. If we're
-        // in a relation list we need to paginate over the unique list index.
+        // 1. No ordering has been chosen by the client
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        //
+        // We order by default which is either:
+        //
+        // a) Simply paginate over document view ids, from the view where the cursor points at
+        // b) If we're in a relation list, we paginate over the list index values, from where the
+        // root_cursor points at
         None => match list {
             None => {
-                let cmp_value = format!(
+                // Collection of all documents following a certain schema id:
+                //
+                // -------------------------------------------------
+                // document_id | view_id | field_name | ... | cursor
+                // -------------------------------------------------
+                // 0x01        | 0x01    | username   | ... | 0xa0
+                // 0x01        | 0x01    | message    | ... | 0xc2   <--- Select
+                // 0x02        | 0x02    | username   | ... | 0x06
+                // 0x02        | 0x02    | message    | ... | 0x8b
+                // -------------------------------------------------
+                //
+                // -> Select document_view_id at cursor 0xc2
+                // -> Show results from document_view_id > 0x01
+                let cmp_value_pre = format!(
                     r#"
                     SELECT
                         document_view_fields.document_view_id
@@ -547,15 +601,41 @@ fn where_pagination_sql(
                     "#
                 );
 
-                format!("AND documents.document_view_id > ({cmp_value})")
+                // Make a "pre" SQL query to avoid duplicate sub SELECT's always returning the same
+                // result
+                let document_view_id: (String,) = query_as(&cmp_value_pre)
+                    .fetch_one(pool)
+                    .await
+                    .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
+
+                Ok(format!(
+                    "AND documents.document_view_id > '{}'",
+                    document_view_id.0
+                ))
             }
             Some(_) => {
+                // All documents mentioned in a root document's relation list, note that duplicates
+                // are possible in relation lists:
+                //
+                // --------------------------------------------------||-------------------------
+                // Documents from relation list                      || Relation list
+                // --------------------------------------------------||-------------------------
+                // document_id | view_id | field_name | ... | cursor || list_index | root_cursor
+                // --------------------------------------------------||-------------------------
+                // 0x03        | 0x03    | username   | ... | 0x99   || 0          | 0x54  <--- Select
+                // 0x03        | 0x03    | message    | ... | 0xc2   || 0          | 0x54
+                // 0x01        | 0x01    | username   | ... | 0xcd   || 1          | 0x8a
+                // 0x01        | 0x01    | message    | ... | 0xea   || 1          | 0x8a
+                // --------------------------------------------------||-------------------------
+                //
+                // -> Select list_index of relation list at root_cursor 0x54
+                // -> Show results from list_index > 0
                 let root_cursor = cursor
                     .root_operation_cursor
                     .as_ref()
                     .expect("Expect root_operation_cursor to be set when querying relation list");
 
-                let cmp_value = format!(
+                let cmp_value_pre = format!(
                     r#"
                     -- When ordering is activated we need to compare against the value
                     -- of the ordered field - but from the row where the cursor points at
@@ -568,15 +648,30 @@ fn where_pagination_sql(
                     "#
                 );
 
+                // Make a "pre" SQL query to avoid duplicate sub SELECT's always returning the same
+                // result
+                let list_index: (i32,) = query_as(&cmp_value_pre)
+                    .fetch_one(pool)
+                    .await
+                    .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
+
                 // List indexes are always unique so we can simply just compare them like that
-                format!("AND operation_fields_v1_list.list_index > ({cmp_value})")
+                Ok(format!(
+                    "AND operation_fields_v1_list.list_index > {}",
+                    list_index.0
+                ))
             }
         },
 
-        // Ordering over a meta field
+        // 2. Ordering over a meta field
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        //
+        // We select the meta data from the document the cursor points at and use it to paginate
+        // over.
         Some(Field::Meta(meta_field)) => {
-            let (cmp_value, cmp_field) = match meta_field {
+            let (cmp_value_pre, cmp_field) = match meta_field {
                 MetaField::DocumentId => {
+                    // Select document_id of operation where the cursor points at
                     let cmp_value = format!(
                         r#"
                         SELECT
@@ -594,6 +689,7 @@ fn where_pagination_sql(
                     (cmp_value, "documents.document_id")
                 }
                 MetaField::DocumentViewId => {
+                    // Select document_view_id of operation where the cursor points at
                     let cmp_value = format!(
                         r#"
                         SELECT
@@ -616,44 +712,126 @@ fn where_pagination_sql(
                 }
             };
 
+            // Make a "pre" SQL query to avoid duplicate sub SELECT's always returning the same
+            // result
+            let cmp_value: (String,) = query_as(&cmp_value_pre)
+                .fetch_one(pool)
+                .await
+                .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
+            let cmp_value = format!("'{}'", cmp_value.0);
+
             if fields.is_empty() && list.is_none() {
-                // When a root query was grouped by documents / no fields have been selected we can
-                // assume that document id and view id are unique
-                format!("AND {cmp_field} {cmp_direction} ({cmp_value})")
+                // If:
+                //
+                // 1. No application fields have been selected by the client
+                // 2. We're not paginating over a relation list
+                //
+                // .. then we can do a simplification of the query, since the results were grouped
+                // by documents and we can be sure that for each row the document id and view are
+                // unique.
+                Ok(format!("AND {cmp_field} {cmp_direction} {cmp_value}"))
             } else {
-                format!(
+                // Cursor-based pagination
+                Ok(format!(
                     r#"
                     AND (
-                        {cmp_field} {cmp_direction} ({cmp_value})
+                        {cmp_field} {cmp_direction} {cmp_value}
                         OR
                         (
-                            {cmp_field} = ({cmp_value})
+                            {cmp_field} = {cmp_value}
                             AND
                                 {cursor_sql}
                         )
                     )
                     "#
-                )
+                ))
             }
         }
 
-        // Ordering over an application field
+        // 3. Ordering over an application field
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        //
+        // Cursors are always pointing at the last field of a document. In the following example
+        // this is the "message" field. Since we've ordered the results by "timestamp" we need to
+        // manually find out what this value is by tracing back the cursor to the document to that
+        // ordered field.
+        //
+        // Collection of all documents, ordered by "timestamp", following a certain schema id:
+        //
+        // -------------------------------------------------
+        // document_id | view_id | field_name | ... | cursor
+        // -------------------------------------------------
+        // 0x01        | 0x01    | username   | ... | 0xa0
+        // 0x01        | 0x01    | timestamp  | ... | 0x72 <-- Compare
+        // 0x01        | 0x01    | message    | ... | 0xc2 <-- Select
+        // 0x02        | 0x02    | username   | ... | 0x06
+        // 0x02        | 0x02    | timestamp  | ... | 0x8f
+        // 0x02        | 0x02    | message    | ... | 0x8b
+        // -------------------------------------------------
+        //
+        // -> Select document_view_id where cursor points at
+        // -> Find "timestamp" field of that document and use this value
+        // -> Show results from "timestamp" value > other "timestamp" values
         Some(Field::Field(order_field_name)) => {
-            let cmp_field =
-                typecast_field_sql("operation_fields_v1.value", order_field_name, schema, false);
-
-            let cmp_value = format!(
+            // Select the value we want to compare with from the document the cursor is pointing
+            // at. This is the value which we also order the whole results by
+            let cmp_value_pre = format!(
                 r#"
                 SELECT
-                    {cmp_field}
+                    operation_fields_v1.value
+
                 FROM
                     operation_fields_v1
+                    LEFT JOIN
+                        document_view_fields
+                        ON document_view_fields.operation_id = operation_fields_v1.operation_id
+
                 WHERE
-                    operation_fields_v1.cursor = '{operation_cursor}'
+                    document_view_fields.document_view_id = (
+                        SELECT
+                            document_view_fields.document_view_id
+
+                        FROM
+                            operation_fields_v1
+                            LEFT JOIN
+                                document_view_fields
+                                ON document_view_fields.operation_id = operation_fields_v1.operation_id
+
+                        WHERE
+                            operation_fields_v1.cursor = '{operation_cursor}'
+
+                        LIMIT 1
+                    )
+                    AND operation_fields_v1.name = '{order_field_name}'
+
+                LIMIT 1
                 "#
             );
 
-            format!(
+            // Make a "pre" SQL query to avoid duplicate sub SELECT's always returning the same
+            // result.
+            //
+            // The returned value is added to the bindable arguments array since this is untrusted
+            // user content.
+            let operation_fields_value: (String,) = query_as(&cmp_value_pre)
+                .fetch_one(pool)
+                .await
+                .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
+            bind_args.push(BindArgument::String(operation_fields_value.0));
+
+            // Necessary casting for operation values of different type
+            let cmp_field =
+                typecast_field_sql("operation_fields_v1.value", order_field_name, schema, false);
+
+            let bind_arg_marker = typecast_field_sql(
+                &format!("${}", bind_args.len()),
+                order_field_name,
+                schema,
+                false,
+            );
+
+            // Cursor-based pagination
+            Ok(format!(
                 r#"
                 AND EXISTS (
                     SELECT
@@ -666,17 +844,17 @@ fn where_pagination_sql(
                             operation_fields_v1.operation_id = document_view_fields.operation_id
                         AND
                             (
-                                {cmp_field} {cmp_direction} ({cmp_value})
+                                {cmp_field} {cmp_direction} {bind_arg_marker}
                                 OR
                                 (
-                                    {cmp_field} = ({cmp_value})
+                                    {cmp_field} = {bind_arg_marker}
                                     AND
                                         {cursor_sql}
                                 )
                             )
                 )
                 "#
-            )
+            ))
         }
     }
 }
@@ -874,7 +1052,7 @@ fn where_sql(schema: &Schema, fields: &ApplicationFields, list: Option<&Relation
         Some(relation_list) => {
             // Filter by the parent document view id of this relation list
             let field_name = &relation_list.field;
-            let view_id = &relation_list.root;
+            let root_view_id = &relation_list.root_view_id;
             let field_type = match relation_list.list_type {
                 RelationListType::Pinned => "pinned_relation_list",
                 RelationListType::Unpinned => "relation_list",
@@ -882,7 +1060,7 @@ fn where_sql(schema: &Schema, fields: &ApplicationFields, list: Option<&Relation
 
             format!(
                 r#"
-                document_view_fields_list.document_view_id = '{view_id}'
+                document_view_fields_list.document_view_id = '{root_view_id}'
                 AND
                     operation_fields_v1_list.field_type = '{field_type}'
                 AND
@@ -974,14 +1152,17 @@ impl SqlStore {
 
         let where_ = where_sql(schema, &application_fields, list);
         let and_fields = where_fields_sql(&application_fields);
-        let (and_filters, bind_args) = where_filter_sql(&args.filter, schema);
+        let (and_filters, mut bind_args) = where_filter_sql(&args.filter, schema);
         let and_pagination = where_pagination_sql(
+            &self.pool,
+            &mut bind_args,
             &args.pagination,
             &application_fields,
             list,
             schema,
             &args.order,
-        );
+        )
+        .await?;
 
         let order = order_sql(&args.order, schema, list);
         let (page_size, limit) = limit_sql(&args.pagination, &application_fields);
@@ -1167,7 +1348,26 @@ impl SqlStore {
 /// Merges all operation fields from the database into documents.
 ///
 /// Due to the special table layout we receive one row per operation field in the query. Usually we
-/// need to merge multiple rows / operation fields fields into one document.
+/// need to merge multiple rows / operation fields into one document.
+///
+/// This method also returns a cursor for each document to the clients which can then use it to
+/// control pagination. Since every cursor is unique for each operation field and there might be
+/// multiple cursors for one document we need to make sure to _always_ pick the _last_ cursor for
+/// each document.
+///
+/// ```text
+/// -------------------------------------------------
+/// document_id | view_id | field_name | ... | cursor
+/// -------------------------------------------------
+/// 0x01        | 0x01    | username   | ... | 0xa0
+/// 0x01        | 0x01    | message    | ... | 0xc2   <--- Last Cursor
+/// 0x02        | 0x02    | username   | ... | 0x06
+/// 0x02        | 0x02    | message    | ... | 0x8b   <--- Last Cursor
+/// 0x04        | 0x04    | username   | ... | 0x06
+/// 0x04        | 0x04    | message    | ... | 0x8b   <--- Last Cursor
+/// -------------------------------------------------
+/// ```
+///
 fn convert_rows(
     rows: Vec<QueryRow>,
     list: Option<&RelationList>,
@@ -1182,8 +1382,24 @@ fn convert_rows(
 
     // Helper method to convert database row into final document and cursor type
     let finalize_document = |row: &QueryRow,
-                             collected_fields: Vec<DocumentViewFieldRow>|
+                             collected_fields: Vec<DocumentViewFieldRow>,
+                             collected_rows: &HashMap<FieldName, QueryRow>|
      -> (PaginationCursor, StorageDocument) {
+        // Determine cursor for this document by looking at the last field
+        let cursor = {
+            let last_field = collected_fields
+                .last()
+                .expect("Needs to be at least one field");
+
+            row_to_cursor(
+                collected_rows
+                    .get(&last_field.name)
+                    .expect("Field selected for ordering needs to be inside of document"),
+                list,
+            )
+        };
+
+        // Convert all gathered data into final `StorageDocument` format
         let fields = parse_document_view_field_rows(collected_fields);
 
         let document = StorageDocument {
@@ -1195,31 +1411,31 @@ fn convert_rows(
             deleted: row.is_deleted,
         };
 
-        let cursor = row_to_cursor(row, list);
-
         (cursor, document)
     };
 
-    let last_row = rows.last().unwrap().clone();
+    let rows_per_document = std::cmp::max(fields.len(), 1);
 
     let mut current = rows[0].clone();
-    let mut current_fields = Vec::new();
-
-    let rows_per_document = std::cmp::max(fields.len(), 1);
+    let mut current_fields = Vec::with_capacity(rows_per_document);
+    let mut current_rows = HashMap::new();
 
     for (index, row) in rows.into_iter().enumerate() {
         // We observed a new document coming up in the next row, time to change
         if index % rows_per_document == 0 && index > 0 {
             // Finalize the current document, convert it and push it into the final array
-            let (cursor, document) = finalize_document(&current, current_fields);
+            let (cursor, document) = finalize_document(&current, current_fields, &current_rows);
             converted.push((cursor, document));
 
             // Change the pointer to the next document
             current = row.clone();
-            current_fields = Vec::new();
+            current_fields = Vec::with_capacity(rows_per_document);
         }
 
-        // Collect every field of the document
+        // Collect original rows from SQL query
+        current_rows.insert(row.name.clone(), row.clone());
+
+        // Collect every field of the document to assemble it later into a `StorageDocument`
         current_fields.push(DocumentViewFieldRow {
             document_id: row.document_id,
             document_view_id: row.document_view_id,
@@ -1232,7 +1448,7 @@ fn convert_rows(
     }
 
     // Do it one last time at the end for the last document
-    let (cursor, document) = finalize_document(&last_row, current_fields);
+    let (cursor, document) = finalize_document(&current, current_fields, &current_rows);
     converted.push((cursor, document));
 
     converted
@@ -1248,7 +1464,7 @@ fn row_to_cursor(row: &QueryRow, list: Option<&RelationList>) -> PaginationCurso
             PaginationCursor::new(
                 row.cmp_value_cursor.as_str().into(),
                 Some(row.root_cursor.as_str().into()),
-                Some(relation_list.root.clone()),
+                Some(relation_list.root_view_id.clone()),
             )
         }
         None => PaginationCursor::new(row.cmp_value_cursor.as_str().into(), None, None),
@@ -1403,6 +1619,50 @@ mod tests {
         .await
     }
 
+    async fn create_chat_test_data(
+        node: &mut TestNode,
+        key_pair: &KeyPair,
+    ) -> (Schema, Vec<DocumentViewId>) {
+        add_schema_and_documents(
+            node,
+            "chat",
+            vec![
+                vec![
+                    ("message", "Hello, Panda!".into(), None),
+                    ("username", "penguin".into(), None),
+                    ("timestamp", 1687265969.into(), None),
+                ],
+                vec![
+                    ("message", "Oh, howdy, Pengi!".into(), None),
+                    ("username", "panda".into(), None),
+                    ("timestamp", 1687266014.into(), None),
+                ],
+                vec![
+                    ("message", "How are you?".into(), None),
+                    ("username", "panda".into(), None),
+                    ("timestamp", 1687266032.into(), None),
+                ],
+                vec![
+                    ("message", "I miss Pengolina. How about you?".into(), None),
+                    ("username", "penguin".into(), None),
+                    ("timestamp", 1687266055.into(), None),
+                ],
+                vec![
+                    ("message", "I am cute and very hungry".into(), None),
+                    ("username", "panda".into(), None),
+                    ("timestamp", 1687266141.into(), None),
+                ],
+                vec![
+                    ("message", "(°◇°) !!".into(), None),
+                    ("username", "penguin".into(), None),
+                    ("timestamp", 1687266160.into(), None),
+                ],
+            ],
+            key_pair,
+        )
+        .await
+    }
+
     #[rstest]
     #[case::order_by_date_asc(
         Query::new(
@@ -1491,6 +1751,121 @@ mod tests {
                     expected_value
                 );
             }
+        });
+    }
+
+    #[rstest]
+    #[case::order_by_timestamp(
+        Order::new(&"timestamp".into(), &Direction::Ascending),
+        "message".into(),
+        vec![
+            "Hello, Panda!".into(),
+            "Oh, howdy, Pengi!".into(),
+            "How are you?".into(),
+            "I miss Pengolina. How about you?".into(),
+            "I am cute and very hungry".into(),
+            "(°◇°) !!".into(),
+        ],
+    )]
+    #[case::order_by_timestamp_descending(
+        Order::new(&"timestamp".into(), &Direction::Descending),
+        "message".into(),
+        vec![
+            "(°◇°) !!".into(),
+            "I am cute and very hungry".into(),
+            "I miss Pengolina. How about you?".into(),
+            "How are you?".into(),
+            "Oh, howdy, Pengi!".into(),
+            "Hello, Panda!".into(),
+        ],
+    )]
+    #[case::order_by_message(
+        Order::new(&"message".into(), &Direction::Ascending),
+        "message".into(),
+        vec![
+            "(°◇°) !!".into(),
+            "Hello, Panda!".into(),
+            "How are you?".into(),
+            "I am cute and very hungry".into(),
+            "I miss Pengolina. How about you?".into(),
+            "Oh, howdy, Pengi!".into(),
+        ],
+    )]
+    fn pagination_over_ordered_fields(
+        key_pair: KeyPair,
+        #[case] order: Order,
+        #[case] selected_field: String,
+        #[case] expected_fields: Vec<OperationValue>,
+    ) {
+        test_runner(|mut node: TestNode| async move {
+            let (schema, view_ids) = create_chat_test_data(&mut node, &key_pair).await;
+
+            let mut cursor: Option<PaginationCursor> = None;
+
+            let mut args = Query::new(
+                &Pagination::new(
+                    &NonZeroU64::new(1).unwrap(),
+                    cursor.as_ref(),
+                    &vec![
+                        PaginationField::TotalCount,
+                        PaginationField::EndCursor,
+                        PaginationField::HasNextPage,
+                    ],
+                ),
+                &Select::new(&[
+                    Field::Meta(MetaField::DocumentViewId),
+                    Field::Field("message".into()),
+                    Field::Field("username".into()),
+                    Field::Field("timestamp".into()),
+                ]),
+                &Filter::default(),
+                &order,
+            );
+
+            // Go through all pages, one document at a time
+            for (index, expected_field) in expected_fields.into_iter().enumerate() {
+                args.pagination.after = cursor;
+
+                let (pagination_data, documents) = node
+                    .context
+                    .store
+                    .query(&schema, &args, None)
+                    .await
+                    .expect("Query failed");
+
+                match pagination_data.end_cursor {
+                    Some(end_cursor) => {
+                        cursor = Some(end_cursor);
+                    }
+                    None => panic!("Expected cursor"),
+                }
+
+                if view_ids.len() - 1 == index {
+                    assert_eq!(pagination_data.has_next_page, false);
+                } else {
+                    assert_eq!(pagination_data.has_next_page, true);
+                }
+
+                assert_eq!(pagination_data.total_count, Some(view_ids.len() as u64));
+                assert_eq!(documents.len(), 1);
+                assert_eq!(documents[0].1.get(&selected_field), Some(&expected_field));
+                assert_eq!(cursor.as_ref(), Some(&documents[0].0));
+            }
+
+            // Query one last time after we paginated through everything
+            args.pagination.after = cursor;
+
+            let (pagination_data, documents) = node
+                .context
+                .store
+                .query(&schema, &args, None)
+                .await
+                .expect("Query failed");
+
+            assert_eq!(pagination_data.total_count, Some(view_ids.len() as u64));
+            assert_eq!(pagination_data.end_cursor, None);
+            assert_eq!(pagination_data.has_next_page, false);
+            assert_eq!(documents.len(), 0);
         });
     }
 
@@ -2118,17 +2493,26 @@ mod tests {
         let root_cursor_2 = Hash::new_from_bytes(&[0, 2]).to_string();
         let cursor_1 = Hash::new_from_bytes(&[0, 3]).to_string();
         let cursor_2 = Hash::new_from_bytes(&[0, 4]).to_string();
+        let cursor_3 = Hash::new_from_bytes(&[0, 5]).to_string();
+        let cursor_4 = Hash::new_from_bytes(&[0, 6]).to_string();
 
         let query_rows = vec![
             // First document
+            // ==============
             QueryRow {
                 document_id: first_document_hash.clone(),
                 document_view_id: first_document_hash.clone(),
                 operation_id: first_document_hash.clone(),
                 is_deleted: false,
                 is_edited: false,
+                // This is the "root" cursor, marking the position of the document inside a
+                // relation list
                 root_cursor: root_cursor_1.clone(),
-                cmp_value_cursor: cursor_1.clone(),
+                // This is the "field" cursor, marking the value we're using to paginate the
+                // resulting documents with.
+                //
+                // Cursors are unique for each operation field.
+                cmp_value_cursor: cursor_1.clone(), // Cursor #1
                 owner: OptionalOwner::default(),
                 name: "username".to_string(),
                 value: Some("panda".to_string()),
@@ -2142,7 +2526,7 @@ mod tests {
                 is_deleted: false,
                 is_edited: false,
                 root_cursor: root_cursor_1.clone(),
-                cmp_value_cursor: cursor_1.clone(),
+                cmp_value_cursor: cursor_2.clone(), // Cursor #2
                 owner: OptionalOwner::default(),
                 name: "is_admin".to_string(),
                 value: Some("false".to_string()),
@@ -2150,6 +2534,7 @@ mod tests {
                 list_index: 0,
             },
             // Second document
+            // ===============
             QueryRow {
                 document_id: second_document_hash.clone(),
                 document_view_id: second_document_hash.clone(),
@@ -2157,7 +2542,7 @@ mod tests {
                 is_deleted: false,
                 is_edited: false,
                 root_cursor: root_cursor_2.clone(),
-                cmp_value_cursor: cursor_2.clone(),
+                cmp_value_cursor: cursor_3.clone(), // Cursor #3
                 owner: OptionalOwner::default(),
                 name: "username".to_string(),
                 value: Some("penguin".to_string()),
@@ -2171,7 +2556,7 @@ mod tests {
                 is_deleted: false,
                 is_edited: false,
                 root_cursor: root_cursor_2.clone(),
-                cmp_value_cursor: cursor_2.clone(),
+                cmp_value_cursor: cursor_4.clone(), // Cursor #4
                 owner: OptionalOwner::default(),
                 name: "is_admin".to_string(),
                 value: Some("true".to_string()),
@@ -2180,7 +2565,11 @@ mod tests {
             },
         ];
 
-        // convert as if this is a relation list query
+        // 1.
+        //
+        // Convert query rows into documents as if this is a relation list query. We do this by
+        // passing in the relation list information (the "root") from where this query was executed
+        // from
         let result = convert_rows(
             query_rows.clone(),
             Some(&RelationList::new_unpinned(
@@ -2192,10 +2581,13 @@ mod tests {
         );
 
         assert_eq!(result.len(), 2);
+
+        // We expect the cursor of the last query row to be returned per document, that is cursor
+        // #2 and #4
         assert_eq!(
             result[0].0,
             PaginationCursor::new(
-                OperationCursor::from(cursor_1.as_str()),
+                OperationCursor::from(cursor_2.as_str()),
                 Some(OperationCursor::from(root_cursor_1.as_str())),
                 Some(relation_list_hash.parse().unwrap())
             )
@@ -2203,13 +2595,15 @@ mod tests {
         assert_eq!(
             result[1].0,
             PaginationCursor::new(
-                OperationCursor::from(cursor_2.as_str()),
+                OperationCursor::from(cursor_4.as_str()),
                 Some(OperationCursor::from(root_cursor_2.as_str())),
                 Some(relation_list_hash.parse().unwrap())
             )
         );
 
-        // convert as if this is _not_ a relation list query
+        // 2.
+        //
+        // We pretend now that this query was executed without a relation list
         let result = convert_rows(
             query_rows,
             None,
@@ -2220,11 +2614,11 @@ mod tests {
         assert_eq!(result.len(), 2);
         assert_eq!(
             result[0].0,
-            PaginationCursor::new(OperationCursor::from(cursor_1.as_str()), None, None)
+            PaginationCursor::new(OperationCursor::from(cursor_2.as_str()), None, None)
         );
         assert_eq!(
             result[1].0,
-            PaginationCursor::new(OperationCursor::from(cursor_2.as_str()), None, None)
+            PaginationCursor::new(OperationCursor::from(cursor_4.as_str()), None, None)
         );
     }
 
