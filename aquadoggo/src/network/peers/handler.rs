@@ -7,9 +7,7 @@ use std::time::{Duration, Instant};
 
 use asynchronous_codec::Framed;
 use futures::{Sink, StreamExt};
-use libp2p::swarm::handler::{
-    ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound, ProtocolsChange,
-};
+use libp2p::swarm::handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound};
 use libp2p::swarm::{
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, Stream as NegotiatedStream,
     SubstreamProtocol,
