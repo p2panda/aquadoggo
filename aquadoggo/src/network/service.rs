@@ -245,21 +245,21 @@ impl EventLoop {
                     }
                 }
             }
-            SwarmEvent::ConnectionClosed { peer_id, cause, .. } => match cause {
+            SwarmEvent::ConnectionClosed { peer_id, connection_id, cause, .. } => match cause {
                 Some(ConnectionError::IO(error)) => {
                     // IO errors coming from libp2p are cumbersome to match, so we just convert
                     // them to their string representation
                     match error.to_string().as_str() {
                         "timed out" => {
-                            debug!("Connection timed out with peer {peer_id}");
+                            debug!("Connection {connection_id:?} timed out with peer {peer_id}");
                         }
                         "closed by peer: 0" => {
                             // We received an `ApplicationClose` with code 0 here which means the
                             // other peer actively closed the connection
-                            debug!("Connection closed with peer {peer_id}");
+                            debug!("Connection {connection_id:?} closed with peer {peer_id}");
                         }
                         _ => {
-                            warn!("Connection error occurred with peer {peer_id}: {error}");
+                            warn!("Connection error occurred with peer {peer_id} on connection {connection_id:?}: {error}");
                         }
                     }
                 }
