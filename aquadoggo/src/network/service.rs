@@ -245,7 +245,12 @@ impl EventLoop {
                     }
                 }
             }
-            SwarmEvent::ConnectionClosed { peer_id, connection_id, cause, .. } => match cause {
+            SwarmEvent::ConnectionClosed {
+                peer_id,
+                connection_id,
+                cause,
+                ..
+            } => match cause {
                 Some(ConnectionError::IO(error)) => {
                     // IO errors coming from libp2p are cumbersome to match, so we just convert
                     // them to their string representation
