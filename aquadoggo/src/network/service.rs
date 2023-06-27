@@ -59,11 +59,7 @@ pub async fn network_service(
                 .with(Protocol::P2pCircuit);
 
             // Dialable circuit relay address for local node
-            external_circuit_addr = Some(
-                circuit_addr
-                    .clone()
-                    .with(Protocol::P2p(local_peer_id)),
-            );
+            external_circuit_addr = Some(circuit_addr.clone().with(Protocol::P2p(local_peer_id)));
 
             swarm.listen_on(circuit_addr)?;
         } else {
