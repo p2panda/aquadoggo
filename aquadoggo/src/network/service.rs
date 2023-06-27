@@ -55,14 +55,14 @@ pub async fn network_service(
         if let Some(rendezvous_peer_id) = network_config.rendezvous_peer_id {
             let circuit_addr = relay_addr
                 .clone()
-                .with(Protocol::P2p(rendezvous_peer_id.into()))
+                .with(Protocol::P2p(rendezvous_peer_id))
                 .with(Protocol::P2pCircuit);
 
             // Dialable circuit relay address for local node
             external_circuit_addr = Some(
                 circuit_addr
                     .clone()
-                    .with(Protocol::P2p(local_peer_id.into())),
+                    .with(Protocol::P2p(local_peer_id)),
             );
 
             swarm.listen_on(circuit_addr)?;
