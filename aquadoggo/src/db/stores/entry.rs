@@ -5,6 +5,7 @@ use std::vec;
 
 use async_trait::async_trait;
 use lipmaa_link::get_lipmaa_links_back_to;
+use p2panda_rs::document::DocumentId;
 use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
 use p2panda_rs::entry::{EncodedEntry, Entry, LogId, SeqNum};
 use p2panda_rs::hash::Hash;
@@ -412,6 +413,41 @@ impl SqlStore {
 
         Ok(entries.into_iter().map(|row| row.into()).collect())
     }
+
+    /// Get all operations that are part of a given document.
+    pub async fn get_entries_from_operation_index(
+        &self,
+        id: &DocumentId,
+        index: i32,
+    ) -> Result<Vec<StorageEntry>, EntryStorageError> {
+        let entries = query_as::<_, EntryRow>(
+            "
+            SELECT
+                entries.public_key,
+                entries.entry_bytes,
+                entries.entry_hash,
+                entries.log_id,
+                entries.payload_bytes,
+                entries.payload_hash,
+                entries.seq_num
+            FROM
+                entries
+            LEFT JOIN operations_v1
+                ON operations_v1.operation_id = entries.entry_hash
+            WHERE
+                operations_v1.document_id = $1 AND operations_v1.sorted_index >= $2
+            ORDER BY
+                operations_v1.sorted_index
+            ",
+        )
+        .bind(id.as_str())
+        .bind(index)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| EntryStorageError::Custom(e.to_string()))?;
+
+        Ok(entries.into_iter().map(|row| row.into()).collect())
+    }
 }
 
 #[cfg(test)]
@@ -427,7 +463,9 @@ mod tests {
     use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
     use rstest::rstest;
 
-    use crate::test_utils::{populate_store_config, test_runner, TestNode};
+    use crate::test_utils::{
+        populate_and_materialize, populate_store_config, test_runner, TestNode,
+    };
 
     #[rstest]
     fn insert_entry(
@@ -877,6 +915,32 @@ mod tests {
                 .unwrap();
 
             assert_eq!(entries.len(), 11);
+        });
+    }
+
+    #[rstest]
+    #[case(0, 20)]
+    #[case(10, 10)]
+    #[case(19, 1)]
+    #[case(20, 0)]
+    fn get_entries_from_operation_index(
+        #[from(populate_store_config)]
+        #[with(20, 2, 1)]
+        config: PopulateStoreConfig,
+        #[case] index: i32,
+        #[case] expected_entries: usize,
+    ) {
+        test_runner(move |mut node: TestNode| async move {
+            // Populate the store and materialise any resulting documents.
+            let (_, document_ids) = populate_and_materialize(&mut node, &config).await;
+            let entries = node
+                .context
+                .store
+                .get_entries_from_operation_index(&document_ids[0], index)
+                .await
+                .unwrap();
+
+            assert_eq!(entries.len(), expected_entries);
         });
     }
 }
