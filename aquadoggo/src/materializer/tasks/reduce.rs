@@ -216,10 +216,9 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
             // Iterate over the sorted document operations and update their sorted index on the
             // operations_v1 table.
             for (index, (operation_id, _, _)) in sorted_operations.iter().enumerate() {
-                let sorted_index = { index + 1 } as i32;
                 context
                     .store
-                    .update_operation_index(operation_id, sorted_index)
+                    .update_operation_index(operation_id, index as i32)
                     .await
                     .map_err(|err| TaskError::Critical(err.to_string()))?;
             }
