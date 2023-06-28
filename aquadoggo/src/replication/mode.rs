@@ -8,6 +8,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Mode {
     LogHeight,
+    Document,
     SetReconciliation,
     Unknown,
 }
@@ -16,6 +17,7 @@ impl Mode {
     pub fn as_str(&self) -> &str {
         match self {
             Mode::LogHeight => "log-height",
+            Mode::Document => "document",
             Mode::SetReconciliation => "set-reconciliation",
             Mode::Unknown => "unknown",
         }
@@ -24,7 +26,8 @@ impl Mode {
     pub fn as_u64(&self) -> u64 {
         match self {
             Mode::LogHeight => 0,
-            Mode::SetReconciliation => 1,
+            Mode::Document => 1,
+            Mode::SetReconciliation => 2,
             Mode::Unknown => unreachable!("Can't create an unknown replication mode"),
         }
     }
@@ -34,7 +37,8 @@ impl From<u64> for Mode {
     fn from(value: u64) -> Self {
         match value {
             0 => Mode::LogHeight,
-            1 => Mode::SetReconciliation,
+            1 => Mode::Document,
+            2 => Mode::SetReconciliation,
             _ => Mode::Unknown,
         }
     }
@@ -89,12 +93,14 @@ mod tests {
     fn serialize() {
         let bytes = serialize_from(Mode::LogHeight);
         assert_eq!(bytes, vec![0]);
+        let bytes = serialize_from(Mode::Document);
+        assert_eq!(bytes, vec![1]);
     }
 
     #[test]
     fn deserialize() {
         let version: Mode = deserialize_into(&serialize_value(cbor!(1))).unwrap();
-        assert_eq!(version, Mode::SetReconciliation);
+        assert_eq!(version, Mode::Document);
 
         // Can not be a string
         let invalid_type = deserialize_into::<Mode>(&serialize_value(cbor!("0")));
