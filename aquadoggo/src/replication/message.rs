@@ -224,10 +224,11 @@ impl<'de> Deserialize<'de> for SyncMessage {
 mod tests {
     use ciborium::cbor;
     use ciborium::value::{Error, Value};
+    use p2panda_rs::document::DocumentViewId;
     use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::identity::PublicKey;
     use p2panda_rs::serde::{deserialize_into, serialize_from, serialize_value};
-    use p2panda_rs::test_utils::fixtures::public_key;
+    use p2panda_rs::test_utils::fixtures::{document_view_id, public_key};
     use rstest::rstest;
 
     use crate::replication::{Mode, TargetSet};
@@ -236,7 +237,11 @@ mod tests {
     use super::{Message, SyncMessage};
 
     #[rstest]
-    fn serialize(#[from(random_target_set)] target_set: TargetSet, public_key: PublicKey) {
+    fn serialize(
+        #[from(random_target_set)] target_set: TargetSet,
+        public_key: PublicKey,
+        document_view_id: DocumentViewId,
+    ) {
         assert_eq!(
             serialize_from(SyncMessage::new(
                 51,
@@ -250,10 +255,21 @@ mod tests {
             serialize_from(SyncMessage::new(51, Message::Have(log_heights.clone()))),
             serialize_value(cbor!([10, 51, log_heights]))
         );
+        assert_eq!(
+            serialize_from(SyncMessage::new(
+                51,
+                Message::HaveDocuments(vec![document_view_id.clone()])
+            )),
+            serialize_value(cbor!([11, 51, vec![document_view_id]]))
+        );
     }
 
     #[rstest]
-    fn deserialize(#[from(random_target_set)] target_set: TargetSet, public_key: PublicKey) {
+    fn deserialize(
+        #[from(random_target_set)] target_set: TargetSet,
+        public_key: PublicKey,
+        document_view_id: DocumentViewId,
+    ) {
         assert_eq!(
             deserialize_into::<SyncMessage>(&serialize_value(cbor!([0, 12, 0, target_set])))
                 .unwrap(),
@@ -275,6 +291,16 @@ mod tests {
             deserialize_into::<SyncMessage>(&serialize_value(cbor!([10, 12, log_heights.clone()])))
                 .unwrap(),
             SyncMessage::new(12, Message::Have(log_heights))
+        );
+
+        assert_eq!(
+            deserialize_into::<SyncMessage>(&serialize_value(cbor!([
+                11,
+                12,
+                [document_view_id.clone()]
+            ])))
+            .unwrap(),
+            SyncMessage::new(12, Message::HaveDocuments(vec![document_view_id]))
         );
     }
 
