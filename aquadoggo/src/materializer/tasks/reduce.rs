@@ -97,6 +97,36 @@ async fn reduce_document_view<O: AsOperation + WithId<OperationId> + WithPublicK
     document_view_id: &DocumentViewId,
     operations: &Vec<O>,
 ) -> Result<Option<Vec<Task<TaskInput>>>, TaskError> {
+    // Attempt to retrieve the document this view is part of in order to determine if it has
+    // been once already materialized yet.
+    let existing_document = context
+        .store
+        .get_document(document_id)
+        .await
+        .map_err(|err| TaskError::Critical(err.to_string()))?;
+
+    // If it wasn't found then we shouldn't reduce this view yet (as the document it's part of
+    // should be reduced first).
+    //
+    // In this case, we assume the task for reducing the document is triggered in the future which
+    // is followed by a dependency task finally looking at all view ids of this document (through
+    // pinned relation ids pointing at it).
+    if existing_document.is_none() {
+        return Ok(None);
+    };
+
+    // Make sure to not materialize and store document view twice
+    let document_view_exists = context
+        .store
+        .get_document_by_view_id(document_view_id)
+        .await
+        .map_err(|err| TaskError::Critical(err.to_string()))?
+        .is_some();
+
+    if !document_view_exists {
+        return Ok(None);
+    }
+
     // Materialize document view
     let document_builder: DocumentBuilder = operations.into();
     let document = match document_builder.build_to_view_id(Some(document_view_id.to_owned())) {
@@ -125,62 +155,27 @@ async fn reduce_document_view<O: AsOperation + WithId<OperationId> + WithPublicK
         }
     };
 
-    // Attempt to retrieve the document this view is part of in order to determine if it has
-    // been once already materialized yet.
-    let existing_document = context
+    context
         .store
-        .get_document(document_id)
+        .insert_document_view(
+            &document.view().unwrap(),
+            document.id(),
+            document.schema_id(),
+        )
         .await
         .map_err(|err| TaskError::Critical(err.to_string()))?;
 
-    // If it wasn't found then we shouldn't reduce this view yet (as the document it's part of
-    // should be reduced first). In this case we assume the task for reducing the document is
-    // already in the queue and so we simply re-issue this reduce task.
-    if existing_document.is_none() {
-        debug!(
-            "Document {} for view not materialized yet, reissuing current reduce task for {}",
-            document_id.display(),
-            document_view_id.display()
-        );
-        return Ok(Some(vec![Task::new(
-            "reduce",
-            TaskInput::DocumentViewId(document_view_id.to_owned()),
-        )]));
-    };
+    info!("Stored {} document view {}", document, document.view_id());
 
-    // Make sure to not store document view twice
-    let document_view_exists = context
-        .store
-        .get_document_by_view_id(document_view_id)
-        .await
-        .map_err(|err| TaskError::Critical(err.to_string()))?
-        .is_some();
+    debug!(
+        "Dispatch dependency task for view with id: {}",
+        document.view_id()
+    );
 
-    if !document_view_exists {
-        context
-            .store
-            .insert_document_view(
-                &document.view().unwrap(),
-                document.id(),
-                document.schema_id(),
-            )
-            .await
-            .map_err(|err| TaskError::Critical(err.to_string()))?;
-
-        info!("Stored {} document view {}", document, document.view_id());
-
-        debug!(
-            "Dispatch dependency task for view with id: {}",
-            document.view_id()
-        );
-
-        Ok(Some(vec![Task::new(
-            "dependency",
-            TaskInput::DocumentViewId(document.view_id().to_owned()),
-        )]))
-    } else {
-        Ok(None)
-    }
+    Ok(Some(vec![Task::new(
+        "dependency",
+        TaskInput::DocumentViewId(document.view_id().to_owned()),
+    )]))
 }
 
 /// Helper method to reduce an operation graph to the latest document view, returning the
