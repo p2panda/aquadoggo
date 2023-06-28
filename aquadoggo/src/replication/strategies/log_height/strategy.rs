@@ -15,7 +15,7 @@ use p2panda_rs::Human;
 use crate::db::types::StorageEntry;
 use crate::db::SqlStore;
 use crate::replication::errors::ReplicationError;
-use crate::replication::strategies::diff_log_heights;
+use crate::replication::strategies::log_height::diff_log_heights;
 use crate::replication::traits::Strategy;
 use crate::replication::{LogHeights, Message, Mode, StrategyResult, TargetSet};
 
