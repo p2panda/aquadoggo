@@ -34,20 +34,8 @@ impl DocumentViewIdStrategy {
             sent_have: false,
         }
     }
-}
 
-#[async_trait]
-impl Strategy for DocumentViewIdStrategy {
-    fn mode(&self) -> Mode {
-        Mode::LogHeight
-    }
-
-    fn target_set(&self) -> TargetSet {
-        self.target_set.clone()
-    }
-
-    async fn initial_messages(&mut self, store: &SqlStore) -> StrategyResult {
-
+    async fn local_view_ids(&self, store: &SqlStore) -> Vec<DocumentViewId> {
         // Collect current view ids for all documents we have materialized for the specified
         // target set.
         let mut document_view_ids = Vec::new();
@@ -62,7 +50,22 @@ impl Strategy for DocumentViewIdStrategy {
                     .map(|document| document.view_id().to_owned()),
             );
         }
+        document_view_ids
+    }
+}
 
+#[async_trait]
+impl Strategy for DocumentViewIdStrategy {
+    fn mode(&self) -> Mode {
+        Mode::LogHeight
+    }
+
+    fn target_set(&self) -> TargetSet {
+        self.target_set.clone()
+    }
+
+    async fn initial_messages(&mut self, store: &SqlStore) -> StrategyResult {
+        let document_view_ids = self.local_view_ids(store).await;
         self.sent_have = true;
 
         StrategyResult {
@@ -87,12 +90,14 @@ impl Strategy for DocumentViewIdStrategy {
         }
 
         match message {
-            Message::Have(_) => {
+            Message::HaveDocuments(remote_document_view_ids) => {
                 if self.received_remote_have {
                     return Err(ReplicationError::StrategyFailed(
                         "Received Have from remote message twice".into(),
                     ));
                 }
+
+                let local_document_view_ids = self.local_view_ids(store).await;
 
                 // @TODO: Calculate entries we should respond with.
 
