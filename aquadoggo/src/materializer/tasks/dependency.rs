@@ -110,22 +110,18 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
     }
 
     // Construct additional tasks if the task input matches certain system schemas and all
-    // dependencies have been reduced.
+    // dependencies have been reduced
     let all_dependencies_met = !next_tasks.iter().any(|task| task.is_some());
     if all_dependencies_met {
-        // Helper that returns a schema task for the current task input.
-        let schema_task = || {
-            Some(Task::new(
-                "schema",
-                TaskInput::DocumentViewId(document_view.id().clone()),
-            ))
-        };
-
         match document.schema_id() {
             // Start `schema` task when a schema (field) definition view is completed with
             // dependencies
-            SchemaId::SchemaDefinition(_) => next_tasks.push(schema_task()),
-            SchemaId::SchemaFieldDefinition(_) => next_tasks.push(schema_task()),
+            SchemaId::SchemaDefinition(_) | SchemaId::SchemaFieldDefinition(_) => {
+                next_tasks.push(Some(Task::new(
+                    "schema",
+                    TaskInput::DocumentViewId(document_view.id().clone()),
+                )));
+            }
             _ => {}
         }
     }
