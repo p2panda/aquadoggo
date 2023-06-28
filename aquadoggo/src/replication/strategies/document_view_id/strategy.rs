@@ -6,7 +6,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use log::trace;
 use p2panda_rs::document::traits::AsDocument;
-use p2panda_rs::document::DocumentViewId;
+use p2panda_rs::document::{DocumentViewId, DocumentId};
 use p2panda_rs::entry::traits::AsEntry;
 use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::identity::PublicKey;
@@ -60,17 +60,17 @@ impl Strategy for DocumentViewIdStrategy {
     }
 
     async fn initial_messages(&mut self, store: &SqlStore) -> StrategyResult {
-        let document_view_ids: Vec<DocumentViewId> = self
+        let documents: Vec<(DocumentId, DocumentViewId)> = self
             .local_documents(store)
             .await
             .iter()
-            .map(|document| document.view_id().to_owned())
+            .map(|document| (document.id().clone(), document.view_id().to_owned()))
             .collect();
         self.sent_have = true;
 
         StrategyResult {
-            is_local_done: document_view_ids.is_empty(),
-            messages: vec![Message::HaveDocuments(document_view_ids)],
+            is_local_done: documents.is_empty(),
+            messages: vec![Message::HaveDocuments(documents)],
         }
     }
 
@@ -90,7 +90,7 @@ impl Strategy for DocumentViewIdStrategy {
         }
 
         match message {
-            Message::HaveDocuments(remote_document_view_ids) => {
+            Message::HaveDocuments(remote_documents) => {
                 if self.received_remote_have {
                     return Err(ReplicationError::StrategyFailed(
                         "Received Have from remote message twice".into(),
