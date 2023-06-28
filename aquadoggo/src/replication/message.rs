@@ -2,6 +2,7 @@
 
 use std::fmt;
 
+use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::entry::EncodedEntry;
 use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::identity::PublicKey;
@@ -17,6 +18,7 @@ pub const SYNC_REQUEST_TYPE: MessageType = 0;
 pub const ENTRY_TYPE: MessageType = 8;
 pub const SYNC_DONE_TYPE: MessageType = 9;
 pub const HAVE_TYPE: MessageType = 10;
+pub const HAVE_DOCUMENTS_TYPE: MessageType = 11;
 
 pub type MessageType = u64;
 
@@ -30,6 +32,7 @@ pub enum Message {
     Entry(EncodedEntry, Option<EncodedOperation>),
     SyncDone(LiveMode),
     Have(Vec<LogHeights>),
+    HaveDocuments(Vec<DocumentViewId>),
 }
 
 impl Message {
@@ -39,6 +42,7 @@ impl Message {
             Message::Entry(_, _) => ENTRY_TYPE,
             Message::SyncDone(_) => SYNC_DONE_TYPE,
             Message::Have(_) => HAVE_TYPE,
+            Message::HaveDocuments(_) => HAVE_DOCUMENTS_TYPE,
         }
     }
 }
@@ -118,6 +122,11 @@ impl Serialize for SyncMessage {
             Message::Have(log_heights) => {
                 let mut seq = serialize_header(serializer.serialize_seq(Some(3))?)?;
                 seq.serialize_element(log_heights)?;
+                seq.end()
+            }
+            Message::HaveDocuments(document_view_id) => {
+                let mut seq = serialize_header(serializer.serialize_seq(Some(3))?)?;
+                seq.serialize_element(document_view_id)?;
                 seq.end()
             }
         }
