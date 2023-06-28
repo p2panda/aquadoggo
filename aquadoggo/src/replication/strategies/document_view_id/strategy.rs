@@ -34,22 +34,18 @@ impl DocumentViewIdStrategy {
         }
     }
 
-    async fn local_view_ids(&self, store: &SqlStore) -> Vec<DocumentViewId> {
+    async fn local_documents(&self, store: &SqlStore) -> Vec<impl AsDocument> {
         // Collect current view ids for all documents we have materialized for the specified
         // target set.
-        let mut document_view_ids = Vec::new();
+        let mut documents = Vec::new();
         for schema_id in self.target_set().iter() {
-            let documents = store
+            let schema_documents = store
                 .get_documents_by_schema(schema_id)
                 .await
                 .expect("Fatal database error");
-            document_view_ids.extend(
-                documents
-                    .iter()
-                    .map(|document| document.view_id().to_owned()),
-            );
+            documents.extend(schema_documents.into_iter());
         }
-        document_view_ids
+        documents
     }
 }
 
@@ -64,7 +60,12 @@ impl Strategy for DocumentViewIdStrategy {
     }
 
     async fn initial_messages(&mut self, store: &SqlStore) -> StrategyResult {
-        let document_view_ids = self.local_view_ids(store).await;
+        let document_view_ids: Vec<DocumentViewId> = self
+            .local_documents(store)
+            .await
+            .iter()
+            .map(|document| document.view_id().to_owned())
+            .collect();
         self.sent_have = true;
 
         StrategyResult {
@@ -96,7 +97,7 @@ impl Strategy for DocumentViewIdStrategy {
                     ));
                 }
 
-                let local_document_view_ids = self.local_view_ids(store).await;
+                let local_documents = self.local_documents(store).await;
 
                 // @TODO: Calculate entries we should respond with.
 
