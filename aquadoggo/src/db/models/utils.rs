@@ -188,6 +188,7 @@ pub fn parse_operation_rows(
         previous: operation.previous(),
         fields: operation.fields(),
         public_key,
+        sorted_index,
     };
 
     Some(operation)
