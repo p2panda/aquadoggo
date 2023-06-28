@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use p2panda_rs::document::DocumentViewId;
+use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::entry::EncodedEntry;
 use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::identity::PublicKey;
@@ -32,7 +32,7 @@ pub enum Message {
     Entry(EncodedEntry, Option<EncodedOperation>),
     SyncDone(LiveMode),
     Have(Vec<LogHeights>),
-    HaveDocuments(Vec<DocumentViewId>),
+    HaveDocuments(Vec<(DocumentId, DocumentViewId)>),
 }
 
 impl Message {
@@ -124,9 +124,9 @@ impl Serialize for SyncMessage {
                 seq.serialize_element(log_heights)?;
                 seq.end()
             }
-            Message::HaveDocuments(document_view_id) => {
+            Message::HaveDocuments(documents) => {
                 let mut seq = serialize_header(serializer.serialize_seq(Some(3))?)?;
-                seq.serialize_element(document_view_id)?;
+                seq.serialize_element(documents)?;
                 seq.end()
             }
         }
@@ -191,12 +191,12 @@ impl<'de> Deserialize<'de> for SyncMessage {
 
                     Ok(Message::Have(log_heights))
                 } else if message_type == HAVE_DOCUMENTS_TYPE {
-                    let document_view_ids: Vec<DocumentViewId> =
+                    let documents: Vec<(DocumentId, DocumentViewId)> =
                         seq.next_element()?.ok_or_else(|| {
                             serde::de::Error::custom("missing documents in have message")
                         })?;
 
-                    Ok(Message::HaveDocuments(document_view_ids))
+                    Ok(Message::HaveDocuments(documents))
                 } else {
                     Err(serde::de::Error::custom(format!(
                         "unknown message type {} in replication message",
@@ -224,11 +224,11 @@ impl<'de> Deserialize<'de> for SyncMessage {
 mod tests {
     use ciborium::cbor;
     use ciborium::value::{Error, Value};
-    use p2panda_rs::document::DocumentViewId;
+    use p2panda_rs::document::{DocumentViewId, DocumentId};
     use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::identity::PublicKey;
     use p2panda_rs::serde::{deserialize_into, serialize_from, serialize_value};
-    use p2panda_rs::test_utils::fixtures::{document_view_id, public_key};
+    use p2panda_rs::test_utils::fixtures::{document_id, document_view_id, public_key};
     use rstest::rstest;
 
     use crate::replication::{Mode, TargetSet};
@@ -240,6 +240,7 @@ mod tests {
     fn serialize(
         #[from(random_target_set)] target_set: TargetSet,
         public_key: PublicKey,
+        document_id: DocumentId,
         document_view_id: DocumentViewId,
     ) {
         assert_eq!(
@@ -258,9 +259,9 @@ mod tests {
         assert_eq!(
             serialize_from(SyncMessage::new(
                 51,
-                Message::HaveDocuments(vec![document_view_id.clone()])
+                Message::HaveDocuments(vec![(document_id.clone(), document_view_id.clone())])
             )),
-            serialize_value(cbor!([11, 51, vec![document_view_id]]))
+            serialize_value(cbor!([11, 51, vec![(document_id, document_view_id)]]))
         );
     }
 
@@ -268,6 +269,7 @@ mod tests {
     fn deserialize(
         #[from(random_target_set)] target_set: TargetSet,
         public_key: PublicKey,
+        document_id: DocumentId,
         document_view_id: DocumentViewId,
     ) {
         assert_eq!(
@@ -297,10 +299,10 @@ mod tests {
             deserialize_into::<SyncMessage>(&serialize_value(cbor!([
                 11,
                 12,
-                [document_view_id.clone()]
+                [(document_id.clone(), document_view_id.clone())]
             ])))
             .unwrap(),
-            SyncMessage::new(12, Message::HaveDocuments(vec![document_view_id]))
+            SyncMessage::new(12, Message::HaveDocuments(vec![(document_id, document_view_id)]))
         );
     }
 
