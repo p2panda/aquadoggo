@@ -52,7 +52,7 @@ fn determine_document_height(document_view_operations: &Vec<StorageOperation>) -
     height
 }
 
-async fn diff_document_view_ids(
+pub async fn diff_documents(
     store: &SqlStore,
     local_documents: Vec<impl AsDocument>,
     remote_documents: Vec<(DocumentId, DocumentViewId)>,
