@@ -117,50 +117,10 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
         }
     }
 
-    // Now we check all the "parent" relations, that is _other_ documents pointing at the one we're
-    // currently looking at
-    let schema_id = document.schema_id();
-
-    let parent_schema_ids: Vec<SchemaId> = context
-        .schema_provider
-        .all()
-        .await
-        .iter()
-        .filter_map(|schema| {
-            let has_relation_to_schema =
-                schema
-                    .fields()
-                    .iter()
-                    .any(|(_, field_type)| match field_type {
-                        FieldType::PinnedRelation(relation_schema_id)
-                        | FieldType::PinnedRelationList(relation_schema_id) => {
-                            relation_schema_id == schema_id
-                        }
-                        _ => false,
-                    });
-
-            if has_relation_to_schema {
-                Some(schema.id().to_owned())
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    for parent_schema_id in parent_schema_ids {
-        let parent_documents = context
-            .store
-            .get_documents_by_schema(&parent_schema_id)
-            .await
-            .map_err(|err| TaskError::Critical(err.to_string()))?;
-
-        for parent_document in parent_documents {
-            next_tasks.push(Task::new(
-                "reduce",
-                TaskInput::DocumentId(parent_document.id().to_owned()),
-            ));
-        }
-    }
+    // Now we check all the "parent" or "inverse" relations, that is _other_ documents pointing at
+    // the one we're currently looking at
+    let mut reverse_tasks = get_inverse_relation_tasks(&context, document.schema_id()).await?;
+    next_tasks.append(&mut reverse_tasks);
 
     // Construct additional tasks if the task input matches certain system schemas and all
     // dependencies have been reduced
@@ -210,6 +170,62 @@ async fn get_relation_task(
             )))
         }
     }
+}
+
+/// Returns _reduce_ tasks for every document which has a pinned relation or pinned relation list
+/// to a document view with the given schema id.
+async fn get_inverse_relation_tasks(
+    context: &Context,
+    schema_id: &SchemaId,
+) -> Result<Vec<Task<TaskInput>>, TaskError> {
+    let mut tasks = Vec::new();
+
+    // Find all "parent" schemas which have at least one relation field pointing at documents of
+    // the given schema id
+    let parent_schema_ids: Vec<SchemaId> = context
+        .schema_provider
+        .all()
+        .await
+        .iter()
+        .filter_map(|schema| {
+            let has_relation_to_schema =
+                schema
+                    .fields()
+                    .iter()
+                    .any(|(_, field_type)| match field_type {
+                        FieldType::PinnedRelation(relation_schema_id)
+                        | FieldType::PinnedRelationList(relation_schema_id) => {
+                            relation_schema_id == schema_id
+                        }
+                        _ => false,
+                    });
+
+            if has_relation_to_schema {
+                Some(schema.id().to_owned())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // Find all documents which follow these "parent" schemas
+    for parent_schema_id in parent_schema_ids {
+        // @TODO: Use a more efficient SQL query here, this does too much
+        let parent_documents = context
+            .store
+            .get_documents_by_schema(&parent_schema_id)
+            .await
+            .map_err(|err| TaskError::Critical(err.to_string()))?;
+
+        for parent_document in parent_documents {
+            tasks.push(Task::new(
+                "reduce",
+                TaskInput::DocumentId(parent_document.id().to_owned()),
+            ));
+        }
+    }
+
+    Ok(tasks)
 }
 
 #[cfg(test)]
