@@ -99,6 +99,8 @@ async fn reduce_document_view<O: AsOperation + WithId<OperationId> + WithPublicK
 ) -> Result<Option<Vec<Task<TaskInput>>>, TaskError> {
     // Attempt to retrieve the document this view is part of in order to determine if it has
     // been once already materialized yet.
+    // @TODO: This can be a more efficient storage method. See issue:
+    // https://github.com/p2panda/aquadoggo/issues/431
     let document_exists = context
         .store
         .get_document(document_id)
@@ -117,6 +119,8 @@ async fn reduce_document_view<O: AsOperation + WithId<OperationId> + WithPublicK
     };
 
     // Make sure to not materialize and store document view twice
+    // @TODO: This can be a more efficient storage method. See issue:
+    // https://github.com/p2panda/aquadoggo/issues/431
     let document_view_exists = context
         .store
         .get_document_by_view_id(document_view_id)
@@ -191,6 +195,8 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
     match Document::try_from(operations) {
         Ok(document) => {
             // Make sure to not materialize and store document view twice
+            // @TODO: This can be a more efficient storage method. See issue:
+            // https://github.com/p2panda/aquadoggo/issues/431
             let document_view_exists = context
                 .store
                 .get_document_by_view_id(document.view_id())
