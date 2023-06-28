@@ -104,7 +104,7 @@ struct ConnectionManager {
     /// Sender for messages to other services.
     rx: BroadcastStream<ServiceMessage>,
 
-    /// Provider to retreive our currently supported schema ids.
+    /// Provider to retrieve our currently supported schema ids.
     schema_provider: SchemaProvider,
 }
 
