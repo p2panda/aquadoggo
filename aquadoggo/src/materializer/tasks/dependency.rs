@@ -4,7 +4,7 @@ use log::{debug, trace};
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::operation::OperationValue;
-use p2panda_rs::schema::SchemaId;
+use p2panda_rs::schema::{FieldType, SchemaId};
 use p2panda_rs::storage_provider::traits::DocumentStore;
 
 use crate::context::Context;
@@ -87,8 +87,12 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
                     "Pinned relation field found referring to view id: {}",
                     pinned_relation.view_id()
                 );
-                next_tasks
-                    .push(get_relation_task(&context, pinned_relation.view_id().clone()).await?);
+
+                if let Some(task) =
+                    get_relation_task(&context, pinned_relation.view_id().clone()).await?
+                {
+                    next_tasks.push(task);
+                }
             }
             OperationValue::PinnedRelationList(pinned_relation_list) => {
                 // same as above...
@@ -100,8 +104,12 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
                             "Pinned relation list field found containing view id: {}",
                             document_view_id
                         );
-                        next_tasks
-                            .push(get_relation_task(&context, document_view_id.clone()).await?);
+
+                        if let Some(task) =
+                            get_relation_task(&context, document_view_id.clone()).await?
+                        {
+                            next_tasks.push(task);
+                        }
                     }
                 }
             }
@@ -109,29 +117,71 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
         }
     }
 
+    // Now we check all the "parent" relations, that is _other_ documents pointing at the one we're
+    // currently looking at
+    let schema_id = document.schema_id();
+
+    let parent_schema_ids: Vec<SchemaId> = context
+        .schema_provider
+        .all()
+        .await
+        .iter()
+        .filter_map(|schema| {
+            let has_relation_to_schema =
+                schema
+                    .fields()
+                    .iter()
+                    .any(|(_, field_type)| match field_type {
+                        FieldType::PinnedRelation(relation_schema_id)
+                        | FieldType::PinnedRelationList(relation_schema_id) => {
+                            relation_schema_id == schema_id
+                        }
+                        _ => false,
+                    });
+
+            if has_relation_to_schema {
+                Some(schema.id().to_owned())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    for parent_schema_id in parent_schema_ids {
+        let parent_documents = context
+            .store
+            .get_documents_by_schema(&parent_schema_id)
+            .await
+            .map_err(|err| TaskError::Critical(err.to_string()))?;
+
+        for parent_document in parent_documents {
+            next_tasks.push(Task::new(
+                "reduce",
+                TaskInput::DocumentId(parent_document.id().to_owned()),
+            ));
+        }
+    }
+
     // Construct additional tasks if the task input matches certain system schemas and all
     // dependencies have been reduced
-    let all_dependencies_met = !next_tasks.iter().any(|task| task.is_some());
+    let all_dependencies_met = next_tasks.is_empty();
     if all_dependencies_met {
         match document.schema_id() {
             // Start `schema` task when a schema (field) definition view is completed with
             // dependencies
             SchemaId::SchemaDefinition(_) | SchemaId::SchemaFieldDefinition(_) => {
-                next_tasks.push(Some(Task::new(
+                next_tasks.push(Task::new(
                     "schema",
                     TaskInput::DocumentViewId(document_view.id().clone()),
-                )));
+                ));
             }
             _ => {}
         }
     }
 
-    debug!(
-        "Scheduling {} reduce tasks",
-        next_tasks.iter().filter(|t| t.is_some()).count()
-    );
+    debug!("Scheduling {} tasks", next_tasks.len());
 
-    Ok(Some(next_tasks.into_iter().flatten().collect()))
+    Ok(Some(next_tasks))
 }
 
 /// Returns a _reduce_ task for a given document view only if that view does not yet exist in the

@@ -42,12 +42,11 @@ pub fn parse_operation_rows(
     let mut operation_fields = Vec::new();
 
     // Iterate over returned field values, for each value:
-    //  - if it is a simple value type, parse it into an OperationValue and add it to the
-    //  operation_fields
-    //  - if it is a relation list value type:
-    //    - if the row.value is None then this list is empty and we should create a relation list with no items
-    //    - otherwise safely unwrap each item and parse into a DocumentId/DocumentViewId then push to the suitable
-    //      list vec
+    // * if it is a simple value type, parse it into an OperationValue and add it to the
+    // operation_fields
+    // * if it is a relation list value type: if the row.value is None then this list is empty and
+    // we should create a relation list with no items, otherwise safely unwrap each item and parse
+    // into a DocumentId/DocumentViewId then push to the suitable list vec
     if first_row.action != "delete" {
         operation_rows.iter().for_each(|row| {
             let field_type = row.field_type.as_ref().unwrap().as_str();
@@ -93,7 +92,8 @@ pub fn parse_operation_rows(
                 // to the operation_fields yet.
                 "relation_list" => {
                     match relation_lists.get_mut(field_name) {
-                        // We unwrap the field value here as if the list already exists then we can assume this next item contains a value
+                        // We unwrap the field value here as if the list already exists then we can
+                        // assume this next item contains a value
                         Some(list) => {
                             list.push(field_value.unwrap().parse::<DocumentId>().unwrap())
                         }
@@ -120,7 +120,8 @@ pub fn parse_operation_rows(
                 // to the operation_fields yet.
                 "pinned_relation_list" => {
                     match pinned_relation_lists.get_mut(field_name) {
-                        // We unwrap the field value here as if the list already exists then we can assume this next item contains a value
+                        // We unwrap the field value here as if the list already exists then we can
+                        // assume this next item contains a value
                         Some(list) => {
                             list.push(field_value.unwrap().parse::<DocumentViewId>().unwrap())
                         }
@@ -250,12 +251,11 @@ pub fn parse_document_view_field_rows(
     let mut document_view_fields = DocumentViewFields::new();
 
     // Iterate over returned field values, for each value:
-    //  - if it is a simple value type, safely unwrap it, parse it into an DocumentViewValue and add it to the
-    //  document_view_fields
-    //  - if it is a relation list value type:
-    //    - if the row.value is None then this list is empty and we should create a relation list with no items
-    //    - otherwise safely unwrap each item and parse into a DocumentId/DocumentViewId then push to the suitable
-    //      list vec
+    // - if it is a simple value type, safely unwrap it, parse it into an DocumentViewValue and add
+    // it to the document_view_fields
+    // - if it is a relation list value type: if the row.value is None then this list is empty and
+    // we should create a relation list with no items, otherwise safely unwrap each item and parse
+    // into a DocumentId/DocumentViewId then push to the suitable list vec
     document_field_rows.iter().for_each(|row| {
         match row.field_type.as_str() {
             "bool" => {
