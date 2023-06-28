@@ -190,6 +190,13 @@ impl<'de> Deserialize<'de> for SyncMessage {
                         })?;
 
                     Ok(Message::Have(log_heights))
+                } else if message_type == HAVE_DOCUMENTS_TYPE {
+                    let document_view_ids: Vec<DocumentViewId> =
+                        seq.next_element()?.ok_or_else(|| {
+                            serde::de::Error::custom("missing documents in have message")
+                        })?;
+
+                    Ok(Message::HaveDocuments(document_view_ids))
                 } else {
                     Err(serde::de::Error::custom(format!(
                         "unknown message type {} in replication message",
