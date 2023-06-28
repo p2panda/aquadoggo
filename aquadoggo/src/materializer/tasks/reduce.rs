@@ -99,11 +99,12 @@ async fn reduce_document_view<O: AsOperation + WithId<OperationId> + WithPublicK
 ) -> Result<Option<Vec<Task<TaskInput>>>, TaskError> {
     // Attempt to retrieve the document this view is part of in order to determine if it has
     // been once already materialized yet.
-    let existing_document = context
+    let document_exists = context
         .store
         .get_document(document_id)
         .await
-        .map_err(|err| TaskError::Critical(err.to_string()))?;
+        .map_err(|err| TaskError::Critical(err.to_string()))?
+        .is_some();
 
     // If it wasn't found then we shouldn't reduce this view yet (as the document it's part of
     // should be reduced first).
@@ -111,7 +112,7 @@ async fn reduce_document_view<O: AsOperation + WithId<OperationId> + WithPublicK
     // In this case, we assume the task for reducing the document is triggered in the future which
     // is followed by a dependency task finally looking at all view ids of this document (through
     // pinned relation ids pointing at it).
-    if existing_document.is_none() {
+    if !document_exists {
         return Ok(None);
     };
 
@@ -123,7 +124,7 @@ async fn reduce_document_view<O: AsOperation + WithId<OperationId> + WithPublicK
         .map_err(|err| TaskError::Critical(err.to_string()))?
         .is_some();
 
-    if !document_view_exists {
+    if document_view_exists {
         return Ok(None);
     }
 
@@ -189,6 +190,18 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
 ) -> Result<Option<Vec<Task<TaskInput>>>, TaskError> {
     match Document::try_from(operations) {
         Ok(document) => {
+            // Make sure to not materialize and store document view twice
+            let document_view_exists = context
+                .store
+                .get_document_by_view_id(document.view_id())
+                .await
+                .map_err(|err| TaskError::Critical(err.to_string()))?
+                .is_some();
+
+            if document_view_exists {
+                return Ok(None);
+            }
+
             // Insert this document into storage. If it already existed, this will update it's
             // current view
             context
@@ -214,7 +227,7 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
                     document.view_id().display()
                 );
             } else {
-                info!("Created {}", document.display(),);
+                info!("Created {}", document.display());
             };
 
             debug!(
