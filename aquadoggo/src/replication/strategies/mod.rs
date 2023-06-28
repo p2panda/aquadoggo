@@ -2,6 +2,7 @@
 
 mod diff;
 mod log_height;
+mod document_view_id;
 mod set_reconciliation;
 
 pub use diff::diff_log_heights;
