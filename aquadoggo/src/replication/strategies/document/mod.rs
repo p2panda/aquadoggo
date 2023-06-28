@@ -4,4 +4,4 @@ mod diff;
 mod strategy;
 
 pub use strategy::DocumentViewIdStrategy;
-pub use diff::diff_document_view_ids;
+pub use diff::diff_documents;

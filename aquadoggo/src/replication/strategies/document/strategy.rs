@@ -6,7 +6,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use log::trace;
 use p2panda_rs::document::traits::AsDocument;
-use p2panda_rs::document::{DocumentViewId, DocumentId};
+use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::entry::traits::AsEntry;
 use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::identity::PublicKey;
@@ -15,6 +15,7 @@ use p2panda_rs::Human;
 
 use crate::db::SqlStore;
 use crate::replication::errors::ReplicationError;
+use crate::replication::strategies::document::diff_documents;
 use crate::replication::traits::Strategy;
 use crate::replication::{LogHeights, Message, Mode, StrategyResult, TargetSet};
 
@@ -97,11 +98,34 @@ impl Strategy for DocumentViewIdStrategy {
                     ));
                 }
 
+                // Get all documents we have locally for the sessions target set.
                 let local_documents = self.local_documents(store).await;
+                
+                // Diff the received documents against what we have locally and calculate what the
+                // remote node is missing. This gives us the document height from which the remote
+                // node needs updating.
+                let remote_requires =
+                    diff_documents(store, local_documents, remote_documents.to_owned()).await;
 
-                // @TODO: Calculate entries we should respond with.
+                // Get the actual entries we should sent to the remote.
+                let mut entries = Vec::new();
+                for (document_id, index) in remote_requires {
+                    let document_entries = store
+                        .get_entries_from_operation_index(&document_id, index)
+                        .await
+                        .expect("Fatal database error");
+                    entries.extend(document_entries);
+                }
 
-                // result.messages.extend(response);
+                // Parse the entries into the correct message response type.
+                let response: Vec<Message> = entries
+                    .iter()
+                    .map(|entry| {
+                        Message::Entry(entry.clone().encoded_entry, entry.payload().cloned())
+                    })
+                    .collect();
+
+                result.messages.extend(response);
                 result.is_local_done = true;
 
                 self.received_remote_have = true;
