@@ -5,10 +5,12 @@ use std::collections::HashMap;
 use anyhow::Result;
 use async_trait::async_trait;
 use log::trace;
+use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::entry::traits::AsEntry;
 use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::identity::PublicKey;
+use p2panda_rs::storage_provider::traits::DocumentStore;
 use p2panda_rs::Human;
 
 use crate::db::SqlStore;
@@ -45,15 +47,27 @@ impl Strategy for DocumentViewIdStrategy {
     }
 
     async fn initial_messages(&mut self, store: &SqlStore) -> StrategyResult {
-        let log_heights = Vec::<DocumentViewId>::new();
 
-        // @TODO: Retrieve document view ids for target set from db
-        
+        // Collect current view ids for all documents we have materialized for the specified
+        // target set.
+        let mut document_view_ids = Vec::new();
+        for schema_id in self.target_set().iter() {
+            let documents = store
+                .get_documents_by_schema(schema_id)
+                .await
+                .expect("Fatal database error");
+            document_view_ids.extend(
+                documents
+                    .iter()
+                    .map(|document| document.view_id().to_owned()),
+            );
+        }
+
         self.sent_have = true;
 
         StrategyResult {
-            is_local_done: log_heights.is_empty(),
-            messages: vec![], // @TODO: Return new HaveDocuments message containing document view ids retrieved above
+            is_local_done: document_view_ids.is_empty(),
+            messages: vec![Message::HaveDocuments(document_view_ids)],
         }
     }
 
