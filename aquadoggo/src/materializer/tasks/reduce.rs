@@ -268,7 +268,7 @@ mod tests {
     use rstest::rstest;
 
     use crate::materializer::tasks::reduce_task;
-    use crate::materializer::{Task, TaskInput};
+    use crate::materializer::TaskInput;
     use crate::test_utils::{
         doggo_fields, doggo_schema, populate_store_config, test_runner, TestNode,
     };
