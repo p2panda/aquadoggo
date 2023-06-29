@@ -121,6 +121,12 @@ impl Strategy for DocumentViewIdStrategy {
                 let response: Vec<Message> = entries
                     .iter()
                     .map(|entry| {
+                        trace!(
+                            "Prepare entry message: {} {:?} {:?}",
+                            entry.public_key().display(),
+                            entry.log_id(),
+                            entry.seq_num()
+                        );
                         Message::Entry(entry.clone().encoded_entry, entry.payload().cloned())
                     })
                     .collect();

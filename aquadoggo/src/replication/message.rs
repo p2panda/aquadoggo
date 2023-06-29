@@ -57,6 +57,13 @@ impl Human for Message {
                     .collect();
                 format!("Have({log_heights:?})")
             }
+            Message::Entry(entry, operation) => {
+                format!(
+                    "Entry({}, {:?})",
+                    entry.to_string(),
+                    operation.as_ref().map(|op| op.to_string())
+                )
+            }
             message => format!("{message:?}"),
         }
     }
@@ -224,7 +231,7 @@ impl<'de> Deserialize<'de> for SyncMessage {
 mod tests {
     use ciborium::cbor;
     use ciborium::value::{Error, Value};
-    use p2panda_rs::document::{DocumentViewId, DocumentId};
+    use p2panda_rs::document::{DocumentId, DocumentViewId};
     use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::identity::PublicKey;
     use p2panda_rs::serde::{deserialize_into, serialize_from, serialize_value};
@@ -302,7 +309,10 @@ mod tests {
                 [(document_id.clone(), document_view_id.clone())]
             ])))
             .unwrap(),
-            SyncMessage::new(12, Message::HaveDocuments(vec![(document_id, document_view_id)]))
+            SyncMessage::new(
+                12,
+                Message::HaveDocuments(vec![(document_id, document_view_id)])
+            )
         );
     }
 

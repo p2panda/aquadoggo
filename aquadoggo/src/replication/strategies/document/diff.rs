@@ -5,9 +5,11 @@ use std::collections::HashMap;
 use crate::db::types::StorageOperation;
 use crate::db::SqlStore;
 
+use log::trace;
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::storage_provider::traits::OperationStore;
+use p2panda_rs::Human;
 
 async fn get_document_view_id_operations(
     store: &SqlStore,
@@ -95,15 +97,28 @@ pub async fn diff_documents(
     let mut remote_needs = HashMap::new();
 
     for (document_id, (local_view_id, local_height)) in local_document_heights {
+        trace!(
+            "Local document height: {} {} {local_height:?}",
+            document_id.display(),
+            local_view_id.display()
+        );
+
         if let Some((remote_view_id, remote_height, is_complete)) =
             remote_document_heights.get(document_id)
         {
+            trace!(
+                "Remote document height: {} {} {remote_height:?} {is_complete}",
+                document_id.display(),
+                remote_view_id.display()
+            );
+
             // If the local and remote view ids are the same then we know they're at the same
             // state and don't need to send anything.
             //
             // @TODO: We can handle this case in the logic above so as to not perform unnecessary
             // document height calculations.
             if local_view_id == remote_view_id {
+                trace!("Local and remote document state matches (view ids are equal): no action required");
                 continue;
             }
 
@@ -112,6 +127,7 @@ pub async fn diff_documents(
             // now as not all branches are included in the calculation. We can send all our
             // operations to make sure we bring the remote up-to-date though.
             if !is_complete {
+                trace!("Local missing some remote branches: send all document operations");
                 // @TODO: I'm pretty sure this can be optimized, need to think it through a bit
                 // more though.
                 remote_needs.insert(document_id.to_owned(), 0_i32);
@@ -121,6 +137,7 @@ pub async fn diff_documents(
             // If the height for the remote of this document couldn't be calculated then they are
             // more progressed than us and so we should do nothing.
             if remote_height.is_none() {
+                trace!("Remote document height greater than local: no action required");
                 continue;
             };
 
@@ -130,9 +147,12 @@ pub async fn diff_documents(
             // If the remote height is less than the local height then we want to send them
             // all operations at an index greater than the remote height.
             if remote_height < local_height {
+                trace!("Local document height greater than remote: send new operations");
                 remote_needs.insert(document_id.to_owned(), remote_height + 1);
             }
         } else {
+            trace!("Document not known by remote: send all document operations");
+
             // The remote didn't know about this document yet so we send them everything we have.
             remote_needs.insert(document_id.to_owned(), 0_i32);
         };
