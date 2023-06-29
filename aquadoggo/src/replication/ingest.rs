@@ -5,7 +5,7 @@ use p2panda_rs::api::validation::{
     ensure_document_not_deleted, get_checked_document_id_for_view_id, get_expected_skiplink,
     is_next_seq_num, validate_claimed_schema_id,
 };
-use p2panda_rs::api::DomainError;
+use p2panda_rs::api::{publish, DomainError};
 use p2panda_rs::document::DocumentId;
 use p2panda_rs::entry::decode::decode_entry;
 use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
@@ -22,6 +22,7 @@ use p2panda_rs::Human;
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::SqlStore;
 use crate::replication::errors::IngestError;
+use crate::replication::Mode;
 use crate::schema::SchemaProvider;
 
 // @TODO: This method exists in `p2panda-rs`, we need to make it public there
@@ -127,73 +128,121 @@ impl SyncIngest {
     pub async fn handle_entry(
         &self,
         store: &SqlStore,
+        mode: Mode,
         encoded_entry: &EncodedEntry,
         encoded_operation: &EncodedOperation,
     ) -> Result<(), IngestError> {
-        let entry = decode_entry(encoded_entry)?;
+        match mode {
+            Mode::LogHeight => {
+                let entry = decode_entry(encoded_entry)?;
 
-        trace!(
-            "Received entry {:?} for log {:?} and {}",
-            entry.seq_num(),
-            entry.log_id(),
-            entry.public_key().display()
-        );
-
-        let plain_operation = decode_operation(encoded_operation)?;
-
-        let schema = self
-            .schema_provider
-            .get(plain_operation.schema_id())
-            .await
-            .ok_or_else(|| IngestError::UnsupportedSchema)?;
-
-        let (operation, operation_id) = validate_entry_and_operation(
-            store,
-            &schema,
-            &entry,
-            encoded_entry,
-            &plain_operation,
-            encoded_operation,
-        )
-        .await?;
-
-        let document_id = determine_document_id(store, &operation, &operation_id).await?;
-
-        // If the entries' seq num is 1 we insert a new log here
-        if entry.seq_num().is_first() {
-            store
-                .insert_log(
+                trace!(
+                    "Received entry {:?} for log {:?} and {}",
+                    entry.seq_num(),
                     entry.log_id(),
-                    entry.public_key(),
-                    Schematic::schema_id(&operation),
-                    &document_id,
+                    entry.public_key().display()
+                );
+
+                let plain_operation = decode_operation(encoded_operation)?;
+
+                let schema = self
+                    .schema_provider
+                    .get(plain_operation.schema_id())
+                    .await
+                    .ok_or_else(|| IngestError::UnsupportedSchema)?;
+
+                let (operation, operation_id) = validate_entry_and_operation(
+                    store,
+                    &schema,
+                    &entry,
+                    encoded_entry,
+                    &plain_operation,
+                    encoded_operation,
                 )
-                .await
-                .expect("Fatal database error");
+                .await?;
+
+                let document_id = determine_document_id(store, &operation, &operation_id).await?;
+
+                // If the entries' seq num is 1 we insert a new log here
+                if entry.seq_num().is_first() {
+                    store
+                        .insert_log(
+                            entry.log_id(),
+                            entry.public_key(),
+                            Schematic::schema_id(&operation),
+                            &document_id,
+                        )
+                        .await
+                        .expect("Fatal database error");
+                }
+
+                store
+                    .insert_entry(&entry, encoded_entry, Some(encoded_operation))
+                    .await
+                    .expect("Fatal database error");
+
+                store
+                    .insert_operation(&operation_id, entry.public_key(), &operation, &document_id)
+                    .await
+                    .expect("Fatal database error");
+
+                // Inform other services about received data
+                let operation_id: OperationId = encoded_entry.hash().into();
+
+                if self
+                    .tx
+                    .send(ServiceMessage::NewOperation(operation_id))
+                    .is_err()
+                {
+                    // Silently fail here as we don't mind if there are no subscribers. We have
+                    // tests in other places to check if messages arrive.
+                }
+
+                Ok(())
+            }
+            Mode::Document => {
+                let operation = decode_operation(&encoded_operation)?;
+
+                let schema = self
+                    .schema_provider
+                    .get(operation.schema_id())
+                    .await
+                    .ok_or_else(|| IngestError::UnsupportedSchema)?;
+
+                /////////////////////////////////////
+                // PUBLISH THE ENTRY AND OPERATION //
+                /////////////////////////////////////
+
+                let _ = publish(
+                    store,
+                    &schema,
+                    &encoded_entry,
+                    &operation,
+                    &encoded_operation,
+                )
+                .await?;
+
+                ////////////////////////////////////////
+                // SEND THE OPERATION TO MATERIALIZER //
+                ////////////////////////////////////////
+
+                // Send new operation on service communication bus, this will arrive eventually at
+                // the materializer service
+
+                let operation_id: OperationId = encoded_entry.hash().into();
+
+                if self
+                    .tx
+                    .send(ServiceMessage::NewOperation(operation_id))
+                    .is_err()
+                {
+                    // Silently fail here as we don't mind if there are no subscribers. We have
+                    // tests in other places to check if messages arrive.
+                };
+
+                Ok(())
+            }
+            _ => panic!("Unsupported mode"),
         }
-
-        store
-            .insert_entry(&entry, encoded_entry, Some(encoded_operation))
-            .await
-            .expect("Fatal database error");
-
-        store
-            .insert_operation(&operation_id, entry.public_key(), &operation, &document_id)
-            .await
-            .expect("Fatal database error");
-
-        // Inform other services about received data
-        let operation_id: OperationId = encoded_entry.hash().into();
-
-        if self
-            .tx
-            .send(ServiceMessage::NewOperation(operation_id))
-            .is_err()
-        {
-            // Silently fail here as we don't mind if there are no subscribers. We have
-            // tests in other places to check if messages arrive.
-        }
-
-        Ok(())
     }
 }

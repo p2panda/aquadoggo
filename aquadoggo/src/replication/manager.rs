@@ -17,7 +17,7 @@ use crate::replication::{
 
 pub const INITIAL_SESSION_ID: SessionId = 0;
 
-pub const SUPPORTED_MODES: [Mode; 1] = [Mode::LogHeight];
+pub const SUPPORTED_MODES: [Mode; 2] = [Mode::LogHeight, Mode::Document];
 
 pub const SUPPORT_LIVE_MODE: bool = false;
 
@@ -457,6 +457,7 @@ where
             self.ingest
                 .handle_entry(
                     &self.store,
+                    session.mode(),
                     entry_bytes,
                     // @TODO: This should handle entries with removed payloads
                     operation_bytes
@@ -512,7 +513,7 @@ mod tests {
     use tokio::sync::broadcast;
 
     use crate::replication::errors::{DuplicateSessionRequestError, ReplicationError};
-    use crate::replication::message::{Message, HAVE_TYPE, SYNC_DONE_TYPE};
+    use crate::replication::message::{Message, MessageType, HAVE_DOCUMENTS_TYPE, HAVE_TYPE, SYNC_DONE_TYPE};
     use crate::replication::{Mode, SyncIngest, SyncMessage, TargetSet};
     use crate::schema::SchemaProvider;
     use crate::test_utils::helpers::random_target_set;
@@ -1043,16 +1044,21 @@ mod tests {
     //                      │
     // ◄────────────────────┘
     #[rstest]
+    #[case(Mode::LogHeight, Message::Have(vec![]), HAVE_TYPE)]
+    #[case(Mode::Document, Message::HaveDocuments(vec![]), HAVE_DOCUMENTS_TYPE)]
     fn sync_lifetime(
         #[from(populate_store_config)]
         #[with(2, 1, 3)]
         config_a: PopulateStoreConfig,
         #[from(populate_store_config)] config_b: PopulateStoreConfig,
+        #[case] mode: Mode,
+        #[case] expected_have: Message,
+        #[case] expected_have_type: MessageType,
     ) {
         let peer_id_local: Peer = Peer::new("local");
         let peer_id_remote: Peer = Peer::new("remote");
 
-        test_runner_with_manager(|manager: TestNodeManager| async move {
+        test_runner_with_manager(move |manager: TestNodeManager| async move {
             let mut node_a = manager.create().await;
             let mut node_b = manager.create().await;
 
@@ -1076,7 +1082,7 @@ mod tests {
 
             // Send `SyncRequest` to remote
             let messages = manager_a
-                .initiate_session(&peer_id_remote, &target_set, &Mode::LogHeight)
+                .initiate_session(&peer_id_remote, &target_set, &mode)
                 .await
                 .unwrap();
 
@@ -1084,7 +1090,7 @@ mod tests {
                 messages,
                 vec![SyncMessage::new(
                     0,
-                    Message::SyncRequest(Mode::LogHeight, target_set.clone())
+                    Message::SyncRequest(mode, target_set.clone())
                 )]
             );
 
@@ -1099,7 +1105,7 @@ mod tests {
             assert_eq!(
                 result.messages,
                 vec![
-                    SyncMessage::new(0, Message::Have(vec![])),
+                    SyncMessage::new(0, expected_have),
                     SyncMessage::new(0, Message::SyncDone(false)),
                 ]
             );
@@ -1121,7 +1127,7 @@ mod tests {
             assert_eq!(result_have.messages.len(), 8);
             assert_eq!(
                 result_have.messages.first().unwrap().message_type(),
-                HAVE_TYPE
+                expected_have_type
             );
             assert_eq!(
                 result_have.messages.last().unwrap().message_type(),
