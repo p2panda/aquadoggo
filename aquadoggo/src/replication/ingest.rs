@@ -39,6 +39,8 @@ impl SyncIngest {
     ) -> Result<(), IngestError> {
         match mode {
             Mode::Document => {
+                trace!("Received entry and operation: {}", encoded_entry.hash());
+
                 let operation = decode_operation(&encoded_operation)?;
 
                 let schema = self
