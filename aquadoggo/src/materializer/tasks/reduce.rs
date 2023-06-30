@@ -2,7 +2,7 @@
 
 use std::convert::TryFrom;
 
-use log::{debug, info};
+use log::{debug, info, trace};
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::{Document, DocumentBuilder, DocumentId, DocumentViewId};
 use p2panda_rs::operation::traits::{AsOperation, WithPublicKey};
@@ -68,10 +68,10 @@ async fn resolve_document_id<S: EntryStore + OperationStore + LogStore + Documen
         }
         TaskInput::DocumentViewId(document_view_id) => {
             // Document view id is given, let's find out its document id
-            debug!("Find document for view with id: {}", document_view_id);
+            trace!("Find document for view with id: {}", document_view_id);
 
             // Pick one operation from the view, this is all we need to determine the document id
-            let operation_id = document_view_id.iter().next().unwrap();
+            let operation_id = document_view_id.iter().last().unwrap();
 
             // Determine document id by looking into the operations stored on the node already.
             // Note, finding a document id here does not mean the document has been materialized
