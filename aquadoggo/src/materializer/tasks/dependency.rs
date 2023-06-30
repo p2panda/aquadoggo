@@ -44,7 +44,7 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
 
     let document = match document {
         Some(document) => {
-            debug!("Document retrieved from storage with view id: {}", view_id);
+            trace!("Document retrieved from storage with view id: {}", view_id);
             Ok(document)
         }
         // If no document with the view for the id passed into this task could be retrieved then
@@ -218,9 +218,12 @@ async fn get_inverse_relation_tasks(
             .map_err(|err| TaskError::Critical(err.to_string()))?;
 
         for parent_document in parent_documents {
+            // Dispatch dependency tasks from the latest document view of each parent document. We
+            // _only_ materialise historical document views when at least one _latest_ document
+            // view points at it.
             tasks.push(Task::new(
-                "reduce",
-                TaskInput::DocumentId(parent_document.id().to_owned()),
+                "dependency",
+                TaskInput::DocumentViewId(parent_document.view_id().to_owned()),
             ));
         }
     }
