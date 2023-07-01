@@ -9,9 +9,10 @@ use asynchronous_codec::Framed;
 use futures::{Sink, StreamExt};
 use libp2p::swarm::handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound};
 use libp2p::swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, NegotiatedSubstream, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, Stream as NegotiatedStream,
+    SubstreamProtocol,
 };
-use log::warn;
+use log::{debug, warn};
 use thiserror::Error;
 
 use crate::network::peers::{Codec, CodecError, Protocol};
@@ -137,7 +138,7 @@ impl Handler {
 
 /// An event sent from the network behaviour to the connection handler.
 #[derive(Debug)]
-pub enum HandlerInEvent {
+pub enum HandlerFromBehaviour {
     /// Message to send on outbound stream.
     Message(SyncMessage),
 
@@ -149,7 +150,7 @@ pub enum HandlerInEvent {
 ///
 /// This informs the network behaviour of various events created by the handler.
 #[derive(Debug)]
-pub enum HandlerOutEvent {
+pub enum HandlerToBehaviour {
     /// Message received on the inbound stream.
     Message(SyncMessage),
 }
@@ -160,7 +161,7 @@ pub enum HandlerError {
     Codec(#[from] CodecError),
 }
 
-type Stream = Framed<NegotiatedSubstream, Codec>;
+type Stream = Framed<NegotiatedStream, Codec>;
 
 /// State of the inbound substream, opened either by us or by the remote.
 enum InboundSubstreamState {
@@ -190,8 +191,8 @@ enum OutboundSubstreamState {
 }
 
 impl ConnectionHandler for Handler {
-    type InEvent = HandlerInEvent;
-    type OutEvent = HandlerOutEvent;
+    type FromBehaviour = HandlerFromBehaviour;
+    type ToBehaviour = HandlerToBehaviour;
     type Error = HandlerError;
     type InboundProtocol = Protocol;
     type OutboundProtocol = Protocol;
@@ -223,15 +224,21 @@ impl ConnectionHandler for Handler {
             | ConnectionEvent::ListenUpgradeError(_) => {
                 warn!("Connection event error");
             }
+            ConnectionEvent::LocalProtocolsChange(_) => {
+                debug!("ConnectionEvent: LocalProtocolsChange")
+            }
+            ConnectionEvent::RemoteProtocolsChange(_) => {
+                debug!("ConnectionEvent: RemoteProtocolsChange")
+            }
         }
     }
 
-    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+    fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         match event {
-            HandlerInEvent::Message(message) => {
+            HandlerFromBehaviour::Message(message) => {
                 self.send_queue.push_back(message);
             }
-            HandlerInEvent::CriticalError => {
+            HandlerFromBehaviour::CriticalError => {
                 self.critical_error = true;
             }
         }
@@ -259,7 +266,7 @@ impl ConnectionHandler for Handler {
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {
@@ -289,8 +296,8 @@ impl ConnectionHandler for Handler {
                             self.inbound_substream =
                                 Some(InboundSubstreamState::WaitingInput(substream));
 
-                            return Poll::Ready(ConnectionHandlerEvent::Custom(
-                                HandlerOutEvent::Message(message),
+                            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                                HandlerToBehaviour::Message(message),
                             ));
                         }
                         Poll::Ready(Some(Err(err))) => {

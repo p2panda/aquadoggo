@@ -5,7 +5,7 @@ use std::time::Duration;
 use anyhow::Result;
 use libp2p::multiaddr::Protocol;
 use libp2p::ping::Event;
-use libp2p::swarm::{AddressScore, ConnectionError, SwarmEvent};
+use libp2p::swarm::{ConnectionError, SwarmEvent};
 use libp2p::{autonat, identify, mdns, rendezvous, Multiaddr, PeerId, Swarm};
 use log::{debug, info, trace, warn};
 use tokio::task;
@@ -55,15 +55,11 @@ pub async fn network_service(
         if let Some(rendezvous_peer_id) = network_config.rendezvous_peer_id {
             let circuit_addr = relay_addr
                 .clone()
-                .with(Protocol::P2p(rendezvous_peer_id.into()))
+                .with(Protocol::P2p(rendezvous_peer_id))
                 .with(Protocol::P2pCircuit);
 
             // Dialable circuit relay address for local node
-            external_circuit_addr = Some(
-                circuit_addr
-                    .clone()
-                    .with(Protocol::P2p(local_peer_id.into())),
-            );
+            external_circuit_addr = Some(circuit_addr.clone().with(Protocol::P2p(local_peer_id)));
 
             swarm.listen_on(circuit_addr)?;
         } else {
@@ -212,13 +208,20 @@ impl EventLoop {
             // ~~~~~
             // Swarm
             // ~~~~~
-            SwarmEvent::Dialing(peer_id) => trace!("Dialing: {peer_id}"),
+            SwarmEvent::Dialing {
+                peer_id,
+                connection_id,
+            } => match peer_id {
+                Some(peer_id) => trace!("Dialing: {peer_id} on connection {connection_id:?}"),
+                None => trace!("Dialing: unknown peer on connection {connection_id:?}"),
+            },
             SwarmEvent::ConnectionEstablished {
                 peer_id,
                 num_established,
+                connection_id,
                 ..
             } => {
-                trace!("Established new connection (total {num_established}) with {peer_id}");
+                trace!("Established new connection (total {num_established}) with {peer_id} on connection {connection_id:?}");
 
                 // Match on a connection with the rendezvous server
                 if let Some(rendezvous_peer_id) = self.network_config.rendezvous_peer_id {
@@ -238,21 +241,26 @@ impl EventLoop {
                     }
                 }
             }
-            SwarmEvent::ConnectionClosed { peer_id, cause, .. } => match cause {
+            SwarmEvent::ConnectionClosed {
+                peer_id,
+                connection_id,
+                cause,
+                ..
+            } => match cause {
                 Some(ConnectionError::IO(error)) => {
                     // IO errors coming from libp2p are cumbersome to match, so we just convert
                     // them to their string representation
                     match error.to_string().as_str() {
                         "timed out" => {
-                            debug!("Connection timed out with peer {peer_id}");
+                            debug!("Connection {connection_id:?} timed out with peer {peer_id}");
                         }
                         "closed by peer: 0" => {
                             // We received an `ApplicationClose` with code 0 here which means the
                             // other peer actively closed the connection
-                            debug!("Connection closed with peer {peer_id}");
+                            debug!("Connection {connection_id:?} closed with peer {peer_id}");
                         }
                         _ => {
-                            warn!("Connection error occurred with peer {peer_id}: {error}");
+                            warn!("Connection error occurred with peer {peer_id} on connection {connection_id:?}: {error}");
                         }
                     }
                 }
@@ -271,15 +279,17 @@ impl EventLoop {
                 address,
             } => trace!("Expired listen address: {listener_id:?} {address}"),
             SwarmEvent::IncomingConnection {
+                connection_id,
                 local_addr,
                 send_back_addr,
-            } => trace!("Incoming connection: {local_addr} {send_back_addr}"),
+            } => trace!("Incoming connection {connection_id:?}: {local_addr} {send_back_addr}"),
             SwarmEvent::IncomingConnectionError {
+                connection_id,
                 local_addr,
                 send_back_addr,
                 error,
             } => {
-                warn!("Incoming connection error occurred with {local_addr} and {send_back_addr}: {error}");
+                warn!("Incoming connection error occurred with {local_addr} and {send_back_addr} on connectino {connection_id:?}: {error}");
             }
             SwarmEvent::ListenerClosed {
                 listener_id,
@@ -295,12 +305,16 @@ impl EventLoop {
             } => {
                 debug!("Listening on {address}");
             }
-            SwarmEvent::OutgoingConnectionError { peer_id, error } => match peer_id {
+            SwarmEvent::OutgoingConnectionError {
+                connection_id,
+                peer_id,
+                error,
+            } => match peer_id {
                 Some(id) => {
-                    warn!("Outgoing connection error with peer {id} occurred: {error}");
+                    warn!("Outgoing connection error with peer {id} occurred on connection {connection_id:?}: {error}");
                 }
                 None => {
-                    warn!("Outgoing connection error occurred: {error}");
+                    warn!("Outgoing connection error occurred on connection {connection_id:?}: {error}");
                 }
             },
 
@@ -330,7 +344,11 @@ impl EventLoop {
             // ~~~~
             // Ping
             // ~~~~
-            SwarmEvent::Behaviour(BehaviourEvent::Ping(Event { peer, result: _ })) => {
+            SwarmEvent::Behaviour(BehaviourEvent::Ping(Event {
+                connection: _,
+                peer,
+                result: _,
+            })) => {
                 trace!("Ping from: {peer}")
             }
 
@@ -357,7 +375,7 @@ impl EventLoop {
                             if peer_id != local_peer_id {
                                 debug!("Discovered peer {peer_id} at {address}");
 
-                                let p2p_suffix = Protocol::P2p(*peer_id.as_ref());
+                                let p2p_suffix = Protocol::P2p(peer_id);
                                 let address_with_p2p = if !address
                                     .ends_with(&Multiaddr::empty().with(p2p_suffix.clone()))
                                 {
@@ -375,10 +393,15 @@ impl EventLoop {
                         }
                     }
                 }
-                rendezvous::client::Event::RegisterFailed(error) => {
-                    warn!("Failed to register with rendezvous point: {error}");
+                rendezvous::client::Event::RegisterFailed { error, .. } => {
+                    warn!("Failed to register with rendezvous point: {error:?}");
                 }
-                other => trace!("Unhandled rendezvous client event: {other:?}"),
+                rendezvous::client::Event::DiscoverFailed { error, .. } => {
+                    trace!("Discovery failed: {error:?}")
+                }
+                rendezvous::client::Event::Expired { peer } => {
+                    trace!("Peer registration with rendezvous expired: {peer:?}")
+                }
             },
             SwarmEvent::Behaviour(BehaviourEvent::RendezvousServer(event)) => match event {
                 rendezvous::server::Event::PeerRegistered { peer, registration } => {
@@ -416,11 +439,16 @@ impl EventLoop {
                             if let Some(rendezvous_client) =
                                 self.swarm.behaviour_mut().rendezvous_client.as_mut()
                             {
-                                rendezvous_client.register(
+                                match rendezvous_client.register(
                                     rendezvous::Namespace::from_static(NODE_NAMESPACE),
                                     rendezvous_peer_id,
                                     None,
-                                );
+                                ) {
+                                    Ok(_) => (),
+                                    Err(_) => {
+                                        warn!("Failed to register peer: {rendezvous_peer_id}")
+                                    }
+                                };
                             }
                         }
                     }
@@ -455,8 +483,7 @@ impl EventLoop {
 
                         if let Some(addr) = self.external_circuit_addr.clone() {
                             trace!("Adding external relayed listen address: {}", addr);
-                            self.swarm
-                                .add_external_address(addr, AddressScore::Finite(1));
+                            self.swarm.add_external_address(addr);
 
                             if let Some(rendezvous_peer_id) = self.network_config.rendezvous_peer_id
                             {
@@ -464,11 +491,16 @@ impl EventLoop {
                                 if let Some(rendezvous_client) =
                                     self.swarm.behaviour_mut().rendezvous_client.as_mut()
                                 {
-                                    rendezvous_client.register(
+                                    match rendezvous_client.register(
                                         rendezvous::Namespace::from_static(NODE_NAMESPACE),
                                         rendezvous_peer_id,
                                         None,
-                                    );
+                                    ) {
+                                        Ok(_) => (),
+                                        Err(_) => {
+                                            warn!("Failed to register peer: {rendezvous_peer_id}")
+                                        }
+                                    };
                                 }
                             }
                         }
@@ -503,11 +535,6 @@ impl EventLoop {
                     ))
                 }
             },
-
-            // ~~~~~~~
-            // Unknown
-            // ~~~~~~~
-            event => debug!("Unhandled swarm event: {event:?}"),
         }
     }
 }
