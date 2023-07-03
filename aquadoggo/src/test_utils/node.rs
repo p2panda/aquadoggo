@@ -69,11 +69,11 @@ pub fn populate_store_config(
 }
 
 /// Populate the store of a `TestNode` with entries and operations according to the passed config
-/// and materialise the resulting documents. Additionally adds the relevant schema to the
-/// schema provider.
+/// and materialise the resulting documents. Additionally adds the relevant schema to the schema
+/// provider.
 ///
-/// Returns the key pairs of authors who published to the node and id's for all documents that
-/// were materialised.
+/// Returns the key pairs of authors who published to the node and id's for all documents that were
+/// materialised.
 pub async fn populate_and_materialize(
     node: &mut TestNode,
     config: &PopulateStoreConfig,
@@ -84,8 +84,8 @@ pub async fn populate_and_materialize(
     // Add the passed schema to the schema store.
     //
     // Note: The entries and operations which would normally exist for this schema will NOT be
-    // present in the store, however the node will behave as expect as we directly inserted it
-    // into the schema provider.
+    // present in the store, however the node will behave as expect as we directly inserted it into
+    // the schema provider.
     node.context
         .schema_provider
         .update(config.schema.clone())
