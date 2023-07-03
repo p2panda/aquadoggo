@@ -14,22 +14,22 @@ use p2panda_rs::Human;
 async fn get_document_view_id_operations(
     store: &SqlStore,
     document_view_id: &DocumentViewId,
-) -> (Vec<StorageOperation>, bool) {
-    let mut is_complete = true;
+) -> Vec<StorageOperation> {
     let mut document_view_operations = Vec::new();
     for operation_id in document_view_id.iter() {
-        let operation = store
+        if let Some(operation) = store
             .get_operation(operation_id)
             .await
-            .expect("Fatal storage error");
-        if let Some(operation) = operation {
+            .expect("Fatal storage error")
+        {
             document_view_operations.push(operation)
-        } else {
-            is_complete = false
         }
+        // There may be cases where an operation for one or more tips couldn't be found, this
+        // means the remote has branches we don't know about yet. We can still diff the document
+        // only taking account of branches we know about though.
     }
 
-    (document_view_operations, is_complete)
+    document_view_operations
 }
 
 fn determine_document_height(document_view_operations: &Vec<StorageOperation>) -> Option<i32> {
@@ -67,7 +67,7 @@ pub async fn diff_documents(
     let mut remote_document_heights = HashMap::new();
 
     for (document_id, document_view_id) in remote_documents {
-        let (document_view_id_operations, is_complete) =
+        let document_view_id_operations =
             get_document_view_id_operations(store, &document_view_id).await;
 
         for operation in &document_view_id_operations {
@@ -78,14 +78,14 @@ pub async fn diff_documents(
 
         let height = determine_document_height(&document_view_id_operations);
 
-        remote_document_heights.insert(document_id, (document_view_id, height, is_complete));
+        remote_document_heights.insert(document_id, (document_view_id, height));
     }
 
     // Calculate the document height for all passed local documents.
     let mut local_document_heights = HashMap::new();
 
     for document in &local_documents {
-        let (document_view_id_operations, _) =
+        let document_view_id_operations =
             get_document_view_id_operations(store, &document.view_id()).await;
 
         let height = determine_document_height(&document_view_id_operations)
@@ -103,11 +103,11 @@ pub async fn diff_documents(
             local_view_id.display()
         );
 
-        if let Some((remote_view_id, remote_height, is_complete)) =
+        if let Some((remote_view_id, remote_height)) =
             remote_document_heights.get(document_id)
         {
             trace!(
-                "Remote document height: {} {} {remote_height:?} {is_complete}",
+                "Remote document height: {} {} {remote_height:?}",
                 document_id.display(),
                 remote_view_id.display()
             );
@@ -121,18 +121,6 @@ pub async fn diff_documents(
                 trace!("Local and remote document state matches (view ids are equal): no action required");
                 continue;
             }
-
-            // The remote has branches we don't know about but we could still identify the
-            // document from operations in the view id. We can't use the heights to compare state
-            // now as not all branches are included in the calculation. We can send all our
-            // operations to make sure we bring the remote up-to-date though.
-            if !is_complete {
-                trace!("Local missing some remote branches: send all document operations");
-                // @TODO: I'm pretty sure this can be optimized, need to think it through a bit
-                // more though.
-                remote_needs.insert(document_id.to_owned(), 0_i32);
-                continue;
-            };
 
             // If the height for the remote of this document couldn't be calculated then they are
             // more progressed than us and so we should do nothing.
