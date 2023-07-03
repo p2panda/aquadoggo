@@ -2896,7 +2896,7 @@ checksum = "ceedf44fb00f2d1984b0bc98102627ce622e083e49a5bacdb3e514fa4238e267"
 [[package]]
 name = "p2panda-rs"
 version = "0.7.0"
-source = "git+https://github.com/p2panda/p2panda?rev=b0d8182908b14f6ac492d3ed4edbbdb690ce3e7b#b0d8182908b14f6ac492d3ed4edbbdb690ce3e7b"
+source = "git+https://github.com/p2panda/p2panda?rev=a535ee229b367c79f18a50626c6bcab61581e32b#a535ee229b367c79f18a50626c6bcab61581e32b"
 dependencies = [
  "arrayvec 0.5.2",
  "async-trait",
