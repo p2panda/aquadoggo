@@ -9,7 +9,7 @@ use anyhow::Result;
 use aquadoggo::{Configuration, NetworkConfiguration, Node};
 use clap::error::ErrorKind as ClapErrorKind;
 use clap::{CommandFactory, Parser};
-use libp2p::{Multiaddr, PeerId};
+use libp2p::Multiaddr;
 
 #[derive(Parser, Debug)]
 #[command(name = "aquadoggo Node", version)]
@@ -70,13 +70,18 @@ impl Cli {
         // Ensure rendezvous server address includes a peer ID
         if let Some(addr) = &self.rendezvous_address {
             // Check if the given `Multiaddr` contains a `PeerId`
-            if PeerId::try_from_multiaddr(addr).is_none() {
+            let error = match addr.clone().pop() {
+                Some(protocol) => match protocol {
+                    libp2p::multiaddr::Protocol::P2p(_) => None,
+                    _ => Some("'--rendezvous-address' address must support the `p2p` protocol"),
+                },
+                None => Some("'--rendezvous-address' must include the peer ID of the server"),
+            };
+
+            if let Some(error) = error {
                 // Print a help message about the missing value(s) and exit
                 Cli::command()
-                    .error(
-                        ClapErrorKind::ValueValidation,
-                        "'--rendezvous-address' must include the peer ID of the server",
-                    )
+                    .error(ClapErrorKind::ValueValidation, error)
                     .exit()
             }
         }
@@ -84,13 +89,18 @@ impl Cli {
         // Ensure relay server address includes a peer ID
         if let Some(addr) = &self.relay_address {
             // Check if the given `Multiaddr` contains a `PeerId`
-            if PeerId::try_from_multiaddr(addr).is_none() {
+            let error = match addr.clone().pop() {
+                Some(protocol) => match protocol {
+                    libp2p::multiaddr::Protocol::P2p(_) => None,
+                    _ => Some("'--relay-address' address must support the `p2p` protocol"),
+                },
+                None => Some("'--relay-address' must include the peer ID of the server"),
+            };
+
+            if let Some(error) = error {
                 // Print a help message about the missing value(s) and exit
                 Cli::command()
-                    .error(
-                        ClapErrorKind::ValueValidation,
-                        "'--relay-address' must include the peer ID of the server",
-                    )
+                    .error(ClapErrorKind::ValueValidation, error)
                     .exit()
             }
         }
@@ -106,13 +116,29 @@ impl TryFrom<Cli> for Configuration {
         let mut config = Configuration::new(cli.data_dir)?;
 
         let relay_peer_id = if let Some(addr) = &cli.relay_address {
-            PeerId::try_from_multiaddr(addr)
+            let peer_id = match addr
+                .clone()
+                .pop()
+                .expect("Address has already been validated and contains expected protocol")
+            {
+                libp2p::multiaddr::Protocol::P2p(peer_id) => peer_id,
+                _ => panic!("Expected p2p protocol to be defined on relay multiaddr"),
+            };
+            Some(peer_id)
         } else {
             None
         };
 
         let rendezvous_peer_id = if let Some(addr) = &cli.rendezvous_address {
-            PeerId::try_from_multiaddr(addr)
+            let peer_id = match addr
+                .clone()
+                .pop()
+                .expect("Address has already been validated and contains expected protocol")
+            {
+                libp2p::multiaddr::Protocol::P2p(peer_id) => peer_id,
+                _ => panic!("Expected p2p protocol to be defined on rendezvous multiaddr"),
+            };
+            Some(peer_id)
         } else {
             None
         };
