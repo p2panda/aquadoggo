@@ -15,11 +15,16 @@ impl SqlStore {
     pub async fn insert_task(&self, task: &Task<TaskInput>) -> Result<(), SqlStoreError> {
         // Convert task input to correct database types
         let task_input = task.input();
-        let document_id = task_input.document_id.as_ref().map(|id| id.as_str());
-        let document_view_id = task_input
-            .document_view_id
-            .as_ref()
-            .map(|view_id| view_id.to_string());
+
+        let document_id = match task_input {
+            TaskInput::DocumentId(id) => Some(id.to_string()),
+            TaskInput::DocumentViewId(_) => None,
+        };
+
+        let document_view_id = match task_input {
+            TaskInput::DocumentViewId(view_id) => Some(view_id.to_string()),
+            TaskInput::DocumentId(_) => None,
+        };
 
         // Insert task into database
         query(
@@ -49,11 +54,16 @@ impl SqlStore {
     pub async fn remove_task(&self, task: &Task<TaskInput>) -> Result<(), SqlStoreError> {
         // Convert task input to correct database types
         let task_input = task.input();
-        let document_id = task_input.document_id.as_ref().map(|id| id.as_str());
-        let document_view_id = task_input
-            .document_view_id
-            .as_ref()
-            .map(|view_id| view_id.to_string());
+
+        let document_id = match task_input {
+            TaskInput::DocumentId(id) => Some(id.to_string()),
+            TaskInput::DocumentViewId(_) => None,
+        };
+
+        let document_view_id = match task_input {
+            TaskInput::DocumentViewId(view_id) => Some(view_id.to_string()),
+            TaskInput::DocumentId(_) => None,
+        };
 
         // Remove task from database
         let result = query(
@@ -112,10 +122,15 @@ impl SqlStore {
                 })
             });
 
-            tasks.push(Task::new(
-                &task.name,
-                TaskInput::new(document_id, document_view_id),
-            ));
+            let input = match (document_id, document_view_id) {
+                (None, Some(view_id)) => TaskInput::DocumentViewId(view_id),
+                (Some(id), None) => TaskInput::DocumentId(id),
+                _ => {
+                    panic!("Invalid task input stored in database")
+                }
+            };
+
+            tasks.push(Task::new(&task.name, input));
         }
 
         Ok(tasks)
@@ -135,7 +150,7 @@ mod tests {
     fn insert_get_remove_tasks(document_view_id: DocumentViewId) {
         test_runner(|node: TestNode| async move {
             // Prepare test data
-            let task = Task::new("reduce", TaskInput::new(None, Some(document_view_id)));
+            let task = Task::new("reduce", TaskInput::DocumentViewId(document_view_id));
 
             // Insert task
             let result = node.context.store.insert_task(&task).await;
@@ -159,7 +174,7 @@ mod tests {
     fn avoid_duplicates(document_id: DocumentId) {
         test_runner(|node: TestNode| async move {
             // Prepare test data
-            let task = Task::new("reduce", TaskInput::new(Some(document_id), None));
+            let task = Task::new("reduce", TaskInput::DocumentId(document_id));
 
             // Insert task
             let result = node.context.store.insert_task(&task).await;

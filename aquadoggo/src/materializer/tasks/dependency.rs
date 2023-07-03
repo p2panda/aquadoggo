@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use log::debug;
+use log::{debug, trace};
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::DocumentViewId;
+use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::DocumentStore;
 
@@ -17,35 +18,33 @@ use crate::materializer::TaskInput;
 /// This task is dispatched after a reduce task completes. It identifies any pinned relations
 /// present in a given document view as we need to guarantee the required document views are
 /// materialised and stored in the database. We may have the required operations on the node
-/// already, but they were never materialised to the document view required by the pinned
-/// relation. In order to guarantee all required document views are present we dispatch a
-/// reduce task for the view of each pinned relation found.
+/// already, but they were never materialised to the document view required by the pinned relation.
+/// In order to guarantee all required document views are present we dispatch a reduce task for the
+/// view of each pinned relation found.
 ///
 /// Expects a _reduce_ task to have completed successfully for the given document view itself and
 /// returns a critical error otherwise.
 pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
     debug!("Working on {}", input);
 
-    // Here we retrieve the document by document view id.
-    let document = match &input.document_view_id {
-        Some(view_id) => context
-            .store
-            .get_document_by_view_id(view_id)
-            .await
-            .map_err(|err| {
-                TaskError::Critical(err.to_string())
-            })
-            ,
-        // We expect to handle document_view_ids in a dependency task.
-        None => Err(TaskError::Critical("Missing document_view_id in task input".into())),
-    }?;
+    let view_id = match input {
+        TaskInput::DocumentViewId(view_id) => view_id,
+        _ => {
+            return Err(TaskError::Critical(
+                "Missing document view id in task input".into(),
+            ))
+        }
+    };
+
+    let document = context
+        .store
+        .get_document_by_view_id(&view_id)
+        .await
+        .map_err(|err| TaskError::Critical(err.to_string()))?;
 
     let document = match document {
         Some(document) => {
-            debug!(
-                "Document retrieved from storage with view id: {}",
-                document.view_id()
-            );
+            debug!("Document retrieved from storage with view id: {}", view_id);
             Ok(document)
         }
         // If no document with the view for the id passed into this task could be retrieved then
@@ -54,7 +53,7 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
         // happen, so this is a critical error.
         None => Err(TaskError::Critical(format!(
             "Expected document with view {} not found in store",
-            &input.document_view_id.unwrap()
+            view_id
         ))),
     }?;
 
@@ -64,47 +63,45 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
 
     let mut next_tasks = Vec::new();
 
-    // First we handle all pinned or unpinned relations defined in this task's document view.
-    // We can think of these as "child" relations.
-    for (_key, document_view_value) in document_view.fields().iter() {
+    // First we handle all pinned or unpinned relations defined in this document view. We can think
+    // of these as "child" relations.
+    for (_field_name, document_view_value) in document_view.fields().iter() {
         match document_view_value.value() {
-            p2panda_rs::operation::OperationValue::Relation(_) => {
+            OperationValue::Relation(_) => {
                 // This is a relation to a document, if it doesn't exist in the db yet, then that
                 // means we either have no entries for this document, or we are not materialising
                 // it for some reason. We don't want to kick of a "reduce" or "dependency" task in
                 // either of these cases.
-                debug!("Relation field found, no action required.");
+                trace!("Relation field found, no action required.");
             }
-            p2panda_rs::operation::OperationValue::RelationList(_) => {
+            OperationValue::RelationList(_) => {
                 // same as above...
-                debug!("Relation list field found, no action required.");
+                trace!("Relation list field found, no action required.");
             }
-            p2panda_rs::operation::OperationValue::PinnedRelation(pinned_relation) => {
-                // These are pinned relations. We may have the operations for these views in the db,
-                // but this view wasn't pinned yet, so hasn't been materialised. To make sure it is
-                // materialised when possible, we dispatch a "reduce" task for any pinned relations
-                // which aren't found.
-                debug!(
-                    "Pinned relation field found refering to view id: {}",
+            OperationValue::PinnedRelation(pinned_relation) => {
+                // These are pinned relations. We may have the operations for these views in the
+                // db, but this view wasn't pinned yet, so hasn't been materialised. To make sure
+                // it is materialised when possible, we dispatch a "reduce" task for any pinned
+                // relations which aren't found.
+                trace!(
+                    "Pinned relation field found referring to view id: {}",
                     pinned_relation.view_id()
                 );
-                next_tasks.push(
-                    construct_relation_task(&context, pinned_relation.view_id().clone()).await?,
-                );
+                next_tasks
+                    .push(get_relation_task(&context, pinned_relation.view_id().clone()).await?);
             }
-            p2panda_rs::operation::OperationValue::PinnedRelationList(pinned_relation_list) => {
+            OperationValue::PinnedRelationList(pinned_relation_list) => {
                 // same as above...
                 if pinned_relation_list.len() == 0 {
-                    debug!("Pinned relation list field containing no items");
+                    trace!("Pinned relation list field containing no items");
                 } else {
                     for document_view_id in pinned_relation_list.iter() {
-                        debug!(
+                        trace!(
                             "Pinned relation list field found containing view id: {}",
                             document_view_id
                         );
-                        next_tasks.push(
-                            construct_relation_task(&context, document_view_id.clone()).await?,
-                        );
+                        next_tasks
+                            .push(get_relation_task(&context, document_view_id.clone()).await?);
                     }
                 }
             }
@@ -120,7 +117,7 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
         let schema_task = || {
             Some(Task::new(
                 "schema",
-                TaskInput::new(None, Some(document_view.id().clone())),
+                TaskInput::DocumentViewId(document_view.id().clone()),
             ))
         };
 
@@ -143,7 +140,7 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
 
 /// Returns a _reduce_ task for a given document view only if that view does not yet exist in the
 /// store.
-async fn construct_relation_task(
+async fn get_relation_task(
     context: &Context,
     document_view_id: DocumentViewId,
 ) -> Result<Option<Task<TaskInput>>, TaskError> {
@@ -163,7 +160,7 @@ async fn construct_relation_task(
             debug!("No view found for pinned relation: {}", document_view_id);
             Ok(Some(Task::new(
                 "reduce",
-                TaskInput::new(None, Some(document_view_id)),
+                TaskInput::DocumentViewId(document_view_id),
             )))
         }
     }
@@ -336,7 +333,7 @@ mod tests {
             let (_, document_ids) = populate_store(&node.context.store, &config).await;
 
             for document_id in &document_ids {
-                let input = TaskInput::new(Some(document_id.clone()), None);
+                let input = TaskInput::DocumentId(document_id.clone());
                 reduce_task(node.context.clone(), input)
                     .await
                     .unwrap()
@@ -352,7 +349,7 @@ mod tests {
                     .unwrap()
                     .unwrap();
 
-                let input = TaskInput::new(None, Some(document.view_id().clone()));
+                let input = TaskInput::DocumentViewId(document.view_id().clone());
 
                 let reduce_tasks = dependency_task(node.context.clone(), input)
                     .await
@@ -380,7 +377,7 @@ mod tests {
                 .get(0)
                 .expect("Should be at least one document id");
 
-            let input = TaskInput::new(Some(document_id.clone()), None);
+            let input = TaskInput::DocumentId(document_id.clone());
             reduce_task(node.context.clone(), input)
                 .await
                 .unwrap()
@@ -439,7 +436,7 @@ mod tests {
 
             // The new document should now dispatch one dependency task for the child relation which
             // has not been materialised yet.
-            let input = TaskInput::new(None, Some(document_view_id.clone()));
+            let input = TaskInput::DocumentViewId(document_view_id.clone());
             let tasks = dependency_task(node.context.clone(), input)
                 .await
                 .unwrap()
@@ -447,22 +444,6 @@ mod tests {
 
             assert_eq!(tasks.len(), 1);
             assert_eq!(tasks[0].worker_name(), "reduce");
-        });
-    }
-
-    #[rstest]
-    #[case(None, Some(random_document_view_id()))]
-    #[case(None, None)]
-    #[case(Some(random_document_id()), None)]
-    #[case(Some(random_document_id()), Some(random_document_view_id()))]
-    fn fails_correctly(
-        #[case] document_id: Option<DocumentId>,
-        #[case] document_view_id: Option<DocumentViewId>,
-    ) {
-        test_runner(|node: TestNode| async move {
-            let input = TaskInput::new(document_id, document_view_id);
-            let next_tasks = dependency_task(node.context.clone(), input).await;
-            assert!(next_tasks.is_err())
         });
     }
 
@@ -517,7 +498,7 @@ mod tests {
                 .get(0)
                 .expect("Should be at least one document id");
 
-            let input = TaskInput::new(Some(document_id.clone()), None);
+            let input = TaskInput::DocumentId(document_id.clone());
             reduce_task(node.context.clone(), input).await.unwrap();
 
             let document_operations = node
@@ -532,7 +513,7 @@ mod tests {
                     .clone()
                     .into();
 
-            let input = TaskInput::new(None, Some(document_view_id.clone()));
+            let input = TaskInput::DocumentViewId(document_view_id.clone());
 
             let result = dependency_task(node.context.clone(), input).await;
 
@@ -550,22 +531,24 @@ mod tests {
         config: PopulateStoreConfig,
     ) {
         test_runner(|node: TestNode| async move {
-            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            // Populate the store with some entries and operations but DON'T materialise any
+            // resulting documents.
             let (_, document_ids) = populate_store(&node.context.store, &config).await;
             let document_id = document_ids
                 .get(0)
                 .expect("Should be at least one document id");
 
             // Materialise the schema field definition.
-            let input = TaskInput::new(Some(document_id.to_owned()), None);
+            let input = TaskInput::DocumentId(document_id.to_owned());
             reduce_task(node.context.clone(), input.clone())
                 .await
                 .unwrap();
 
             // Parse the document_id into a document_view_id.
             let document_view_id = document_id.as_str().parse().unwrap();
+
             // Dispatch a dependency task for this document_view_id.
-            let input = TaskInput::new(None, Some(document_view_id));
+            let input = TaskInput::DocumentViewId(document_view_id);
             let tasks = dependency_task(node.context.clone(), input)
                 .await
                 .unwrap()
@@ -637,7 +620,7 @@ mod tests {
                 .expect("Should be at least one document id");
 
             // Materialise the schema field definition.
-            let input = TaskInput::new(Some(schema_field_document_id.to_owned()), None);
+            let input = TaskInput::DocumentId(schema_field_document_id.to_owned());
             reduce_task(node.context.clone(), input.clone())
                 .await
                 .unwrap();
@@ -654,14 +637,14 @@ mod tests {
 
             // Materialise the schema definition.
             let document_id: DocumentId = entry_signed.hash().into();
-            let input = TaskInput::new(Some(document_id.clone()), None);
+            let input = TaskInput::DocumentId(document_id.clone());
             reduce_task(node.context.clone(), input.clone())
                 .await
                 .unwrap();
 
             // Dispatch a dependency task for the schema definition.
             let document_view_id: DocumentViewId = entry_signed.hash().into();
-            let input = TaskInput::new(None, Some(document_view_id));
+            let input = TaskInput::DocumentViewId(document_view_id);
             let tasks = dependency_task(node.context.clone(), input)
                 .await
                 .unwrap()

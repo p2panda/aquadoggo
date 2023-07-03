@@ -538,10 +538,7 @@ where
                             error_signal.trigger();
                         }
                         Err(TaskError::Failure(err)) => {
-                            debug!(
-                                "Silently failing worker {} with task {}: {}",
-                                name, item, err
-                            );
+                            debug!("Worker {} aborted task {}: {}", name, item, err);
                         }
                         _ => (), // Task succeeded, but nothing to dispatch
                     };

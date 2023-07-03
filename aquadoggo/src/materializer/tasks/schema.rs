@@ -19,11 +19,10 @@ use crate::materializer::TaskInput;
 pub async fn schema_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
     debug!("Working on {}", input);
 
-    let input_view_id = match (input.document_id, input.document_view_id) {
-        (None, Some(view_id)) => Ok(view_id),
-        // The task input must contain only a view id.
-        (_, _) => Err(TaskError::Critical("Invalid task input".into())),
-    }?;
+    let input_view_id = match input {
+        TaskInput::DocumentViewId(view_id) => view_id,
+        _ => return Err(TaskError::Critical("Invalid task input".into())),
+    };
 
     // Determine the schema of the updated view id.
     let schema = context
@@ -172,10 +171,10 @@ mod tests {
             .await;
 
             // Run a schema task with each as input
-            let input = TaskInput::new(None, Some(schema_view_id.clone()));
+            let input = TaskInput::DocumentViewId(schema_view_id.clone());
             assert!(schema_task(node.context.clone(), input).await.is_ok());
 
-            let input = TaskInput::new(None, Some(field_view_id));
+            let input = TaskInput::DocumentViewId(field_view_id);
             assert!(schema_task(node.context.clone(), input).await.is_ok());
 
             // The new schema should be available on storage provider.

@@ -14,12 +14,12 @@ use crate::context::Context;
 use crate::materializer::worker::{Task, TaskError, TaskResult};
 use crate::materializer::TaskInput;
 
-/// Build a materialised view for a document by reducing the document's operation graph and storing to disk.
+/// Build a materialised view for a document by reducing the document's operation graph and storing
+/// it to disk.
 ///
 /// ## Task input
 ///
-/// If the task input contains a document view id, only this view is stored and any document id
-/// also existing on the task input is ignored.
+/// If the task input contains a document view id, only this particular view is materialised.
 ///
 /// If the task input contains a document id, the latest view for that document is built and stored
 /// and also, the document itself is updated in the store.
@@ -30,20 +30,16 @@ use crate::materializer::TaskInput;
 ///
 /// They may also be dispatched from a dependency task when a pinned relations is present on an
 /// already materialised document view.
-///
-/// After succesfully reducing and storing a document view an array of dependency tasks is returned.
-/// If invalid inputs were passed or a fatal db error occured a critical error is returned.
 pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
     debug!("Working on {}", input);
 
     // Find out which document we are handling
-    let document_id = match resolve_document_id(&context, &input).await? {
-        Some(document_id) => Ok(document_id),
-        None => {
-            debug!("No document found for this view, exit without dispatching any other tasks");
-            return Ok(None);
-        }
-    }?;
+    let document_id = if let Some(document_id) = resolve_document_id(&context, &input).await? {
+        document_id
+    } else {
+        debug!("No document found for this view, exit without dispatching any other tasks");
+        return Ok(None);
+    };
 
     // Get all operations for the requested document
     let operations = context
@@ -52,35 +48,29 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
         .await
         .map_err(|err| TaskError::Critical(err.to_string()))?;
 
-    match &input.document_view_id {
-        // If this task was passed a document_view_id as input then we want to build to document
-        // only to the requested view
-        Some(view_id) => reduce_document_view(&context, &document_id, view_id, &operations).await,
-        // If no document_view_id was passed, this is a document_id reduce task.
-        None => reduce_document(&context, &operations).await,
+    match &input {
+        TaskInput::DocumentId(_) => reduce_document(&context, &operations).await,
+        TaskInput::DocumentViewId(view_id) => {
+            reduce_document_view(&context, &document_id, view_id, &operations).await
+        }
     }
 }
 
-/// Helper method to resolve a `DocumentId` from task input.
-///
-/// If the task input is invalid (both document_id and document_view_id missing or given) we
-/// critically fail the task at this point. If only a document_view_id was passed we retrieve the
-/// document_id as it is needed later.
+/// Helper method to resolve a document id from a task input.
 async fn resolve_document_id<S: EntryStore + OperationStore + LogStore + DocumentStore>(
     context: &Context<S>,
     input: &TaskInput,
 ) -> Result<Option<DocumentId>, TaskError> {
-    match (&input.document_id, &input.document_view_id) {
-        // The `DocumentId` is already given, we don't have to do anything
-        (Some(document_id), None) => Ok(Some(document_id.to_owned())),
-
-        // A `DocumentViewId` is given, let's find out its document id
-        (None, Some(document_view_id)) => {
-            // @TODO: We can skip this step if we implement:
-            // https://github.com/p2panda/aquadoggo/issues/148
+    match input {
+        TaskInput::DocumentId(document_id) => {
+            // Id is already given, we don't have to do anything
+            Ok(Some(document_id.to_owned()))
+        }
+        TaskInput::DocumentViewId(document_view_id) => {
+            // Document view id is given, let's find out its document id
             debug!("Find document for view with id: {}", document_view_id);
 
-            // Pick one operation from the view, this is all we need to determine the document id.
+            // Pick one operation from the view, this is all we need to determine the document id
             let operation_id = document_view_id.iter().next().unwrap();
 
             // Determine document id by looking into the operations stored on the node already.
@@ -93,13 +83,11 @@ async fn resolve_document_id<S: EntryStore + OperationStore + LogStore + Documen
                 .await
                 .map_err(|err| TaskError::Critical(err.to_string()))
         }
-        // None or both have been provided which smells like a bug
-        (_, _) => Err(TaskError::Critical("Invalid task input".into())),
     }
 }
 
-/// Helper method to reduce an operation graph to a specific document view, returning the
-/// `DocumentViewId` of the just created new document view.
+/// Helper method to reduce an operation graph to a specific document view, returning the view id
+/// of the just created new document view.
 ///
 /// It returns `None` if either that document view reached "deleted" status or we don't have enough
 /// operations to materialise.
@@ -109,6 +97,7 @@ async fn reduce_document_view<O: AsOperation + WithId<OperationId> + WithPublicK
     document_view_id: &DocumentViewId,
     operations: &Vec<O>,
 ) -> Result<Option<Vec<Task<TaskInput>>>, TaskError> {
+    // Materialize document view
     let document_builder: DocumentBuilder = operations.into();
     let document = match document_builder.build_to_view_id(Some(document_view_id.to_owned())) {
         Ok(document) => {
@@ -155,7 +144,7 @@ async fn reduce_document_view<O: AsOperation + WithId<OperationId> + WithPublicK
         );
         return Ok(Some(vec![Task::new(
             "reduce",
-            TaskInput::new(None, Some(document_view_id.to_owned())),
+            TaskInput::DocumentViewId(document_view_id.to_owned()),
         )]));
     };
 
@@ -187,7 +176,7 @@ async fn reduce_document_view<O: AsOperation + WithId<OperationId> + WithPublicK
 
         Ok(Some(vec![Task::new(
             "dependency",
-            TaskInput::new(None, Some(document.view_id().to_owned())),
+            TaskInput::DocumentViewId(document.view_id().to_owned()),
         )]))
     } else {
         Ok(None)
@@ -239,7 +228,7 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
             );
             Ok(Some(vec![Task::new(
                 "dependency",
-                TaskInput::new(None, Some(document.view_id().to_owned())),
+                TaskInput::DocumentViewId(document.view_id().to_owned()),
             )]))
         }
         Err(err) => {
@@ -295,7 +284,7 @@ mod tests {
             let (_, document_ids) = populate_store(&node.context.store, &config).await;
 
             for document_id in &document_ids {
-                let input = TaskInput::new(Some(document_id.clone()), None);
+                let input = TaskInput::DocumentId(document_id.clone());
                 assert!(reduce_task(node.context.clone(), input).await.is_ok());
             }
 
@@ -336,7 +325,7 @@ mod tests {
                 .get(0)
                 .expect("There should be at least one key_pair");
 
-            let input = TaskInput::new(Some(document_id.clone()), None);
+            let input = TaskInput::DocumentId(document_id.clone());
 
             // There is one CREATE operation for this document in the db, it should create a document
             // in the documents table.
@@ -377,7 +366,15 @@ mod tests {
     #[rstest]
     fn reduces_document_to_specific_view_id(
         #[from(populate_store_config)]
-        #[with( 2, 1, 1, false, doggo_schema(), doggo_fields(), vec![("username", OperationValue::String("PANDA".into()))])]
+        #[with(
+            2,
+            1,
+            1,
+            false,
+            doggo_schema(),
+            doggo_fields(),
+            vec![("username", OperationValue::String("PANDA".into()))]
+        )]
         config: PopulateStoreConfig,
     ) {
         test_runner(move |node: TestNode| async move {
@@ -405,7 +402,7 @@ mod tests {
                 .sorted();
 
             // Reduce document to it's current view and insert into database
-            let input = TaskInput::new(Some(document_id.clone()), None);
+            let input = TaskInput::DocumentId(document_id.clone());
             assert!(reduce_task(node.context.clone(), input).await.is_ok());
 
             // We should be able to query this specific view now and receive the expected state
@@ -437,7 +434,7 @@ mod tests {
             assert!(document.is_none());
 
             // But now if we do request an earlier view is materialised for this document...
-            let input = TaskInput::new(None, Some(document_view_id.clone()));
+            let input = TaskInput::DocumentViewId(document_view_id.clone());
             assert!(reduce_task(node.context.clone(), input).await.is_ok());
 
             // Then we should now be able to query it and revieve the expected value.
@@ -459,7 +456,15 @@ mod tests {
     #[rstest]
     fn reissue_reduce_when_document_does_not_exist(
         #[from(populate_store_config)]
-        #[with( 2, 1, 1, false, doggo_schema(), doggo_fields(), vec![("username", OperationValue::String("PANDA".into()))])]
+        #[with(
+            2,
+            1,
+            1,
+            false,
+            doggo_schema(),
+            doggo_fields(),
+            vec![("username", OperationValue::String("PANDA".into()))]
+        )]
         config: PopulateStoreConfig,
     ) {
         test_runner(move |node: TestNode| async move {
@@ -485,7 +490,7 @@ mod tests {
             // the store, but the document is not materialized yet. This means we shouldn't insert
             // any views for it yet. In that case, we expect this task to issue another reduce
             // task with the same input.
-            let input = TaskInput::new(None, Some(document.view_id().clone()));
+            let input = TaskInput::DocumentViewId(document.view_id().clone());
             let next_tasks = reduce_task(node.context.clone(), input.clone())
                 .await
                 .expect("Task should succeed")
@@ -506,7 +511,7 @@ mod tests {
             let (_, document_ids) = populate_store(&node.context.store, &config).await;
 
             for document_id in &document_ids {
-                let input = TaskInput::new(Some(document_id.clone()), None);
+                let input = TaskInput::DocumentId(document_id.clone());
                 let tasks = reduce_task(node.context.clone(), input).await.unwrap();
                 assert!(tasks.is_none());
             }
@@ -525,7 +530,7 @@ mod tests {
 
             let document = Document::try_from(&document_operations).unwrap();
 
-            let input = TaskInput::new(None, Some(document.view_id().clone()));
+            let input = TaskInput::DocumentViewId(document.view_id().clone());
             let tasks = reduce_task(node.context.clone(), input).await.unwrap();
 
             assert!(tasks.is_none());
@@ -547,29 +552,17 @@ mod tests {
         #[case] is_next_task: bool,
     ) {
         test_runner(move |node: TestNode| async move {
-            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            // Populate the store with some entries and operations but DON'T materialise any
+            // resulting documents.
             let (_, document_ids) = populate_store(&node.context.store, &config).await;
             let document_id = document_ids
                 .get(0)
                 .expect("There should be at least one document id");
 
-            let input = TaskInput::new(Some(document_id.clone()), None);
+            let input = TaskInput::DocumentId(document_id.clone());
             let next_task_inputs = reduce_task(node.context.clone(), input).await.unwrap();
 
             assert_eq!(next_task_inputs.is_some(), is_next_task);
-        });
-    }
-
-    #[rstest]
-    #[case(None, None)]
-    fn fails_correctly(
-        #[case] document_id: Option<DocumentId>,
-        #[case] document_view_id: Option<DocumentViewId>,
-    ) {
-        test_runner(move |node: TestNode| async move {
-            let input = TaskInput::new(document_id, document_view_id);
-
-            assert!(reduce_task(node.context.clone(), input).await.is_err());
         });
     }
 
@@ -581,11 +574,11 @@ mod tests {
         // Prepare empty database.
         test_runner(move |node: TestNode| async move {
             // Dispatch a reduce task for a document which doesn't exist by it's document id.
-            let input = TaskInput::new(Some(document_id), None);
+            let input = TaskInput::DocumentId(document_id);
             assert!(reduce_task(node.context.clone(), input).await.is_ok());
 
             // Dispatch a reduce task for a document which doesn't exist by it's document view id.
-            let input = TaskInput::new(None, Some(document_view_id));
+            let input = TaskInput::DocumentViewId(document_view_id);
             assert!(reduce_task(node.context.clone(), input).await.is_ok());
         });
     }
@@ -597,11 +590,12 @@ mod tests {
         config: PopulateStoreConfig,
     ) {
         test_runner(|node: TestNode| async move {
-            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            // Populate the store with some entries and operations but DON'T materialise any
+            // resulting documents
             let (_, document_ids) = populate_store(&node.context.store, &config).await;
             let document_id = document_ids.get(0).expect("At least one document id");
 
-            // Get the operations and build the document.
+            // Get the operations and build the document
             let operations = node
                 .context
                 .store
@@ -609,17 +603,17 @@ mod tests {
                 .await
                 .unwrap();
 
-            // Build the document from the operations.
+            // Build the document from the operations
             let document_builder = DocumentBuilder::from(&operations);
             let document = document_builder.build().unwrap();
 
-            // Issue a reduce task for the document, which also inserts the current view.
-            let input = TaskInput::new(Some(document_id.to_owned()), None);
+            // Issue a reduce task for the document, which also inserts the current view
+            let input = TaskInput::DocumentId(document_id.clone());
             assert!(reduce_task(node.context.clone(), input).await.is_ok());
 
-            // Issue a reduce task for the document view, which should succeed although no new
-            // view is inserted.
-            let input = TaskInput::new(None, Some(document.view_id().to_owned()));
+            // Issue a reduce task for the document view, which should succeed although no new view
+            // is inserted
+            let input = TaskInput::DocumentViewId(document.view_id().clone());
             assert!(reduce_task(node.context.clone(), input).await.is_ok());
         })
     }

@@ -103,13 +103,13 @@ pub async fn materializer_service(
                     }) {
                     Some(document_id) => {
                         // Dispatch "reduce" task which will materialize the regarding document
-                        factory.queue(Task::new("reduce", TaskInput::new(Some(document_id), None)));
+                        factory.queue(Task::new("reduce", TaskInput::DocumentId(document_id)));
                     }
                     None => {
-                        // Panic when we couldn't find the regarding document in the database. We can
-                        // safely assure that this is due to a critical bug affecting the database
-                        // integrity. Panicking here will close `handle` and by that signal a node
-                        // shutdown.
+                        // Panic when we couldn't find the regarding document in the database. We
+                        // can safely assure that this is due to a critical bug affecting the
+                        // database integrity. Panicking here will close `handle` and by that
+                        // signal a node shutdown.
                         panic!("Could not find document for operation_id {}", operation_id);
                     }
                 }
@@ -126,10 +126,7 @@ pub async fn materializer_service(
     tokio::select! {
         _ = handle => (),
         _ = status_handle => (),
-        _ = shutdown => {
-            // @TODO: Wait until all pending tasks have been completed during graceful shutdown.
-            // Related issue: https://github.com/p2panda/aquadoggo/issues/164
-        },
+        _ = shutdown => (),
         _ = on_error => (),
     }
 
@@ -260,7 +257,7 @@ mod tests {
                 .store
                 .insert_task(&Task::new(
                     "reduce",
-                    TaskInput::new(Some(document_id.to_owned()), None),
+                    TaskInput::DocumentId(document_id.to_owned()),
                 ))
                 .await
                 .unwrap();
