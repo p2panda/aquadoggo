@@ -131,7 +131,7 @@ pub async fn diff_documents(
 
             // Calculate the remote document height.
             let (remote_height, _) =
-                determine_document_height(store, &remote_document_view_id).await;
+                determine_document_height(store, remote_document_view_id).await;
 
             // If the height for the remote of this document couldn't be calculated then they are
             // further progressed for this document and so we don't need to send them anything.
