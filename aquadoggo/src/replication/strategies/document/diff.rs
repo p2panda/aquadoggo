@@ -11,6 +11,13 @@ use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::storage_provider::traits::OperationStore;
 use p2panda_rs::Human;
 
+/// Get the operations we have on the node for the passed document view id.
+///
+/// Note: If some of the operations identified in the document view id are not present on the node
+/// we _still_ collect and return the ones we have. This occurs when the view id we're handling
+/// was sent from the remote, and it contains branches we don't know about yet. We can still
+/// diff the document only looking at the branches we _can_ identify though, so we still collect
+/// and return the operations which are found.
 async fn get_document_view_id_operations(
     store: &SqlStore,
     document_view_id: &DocumentViewId,
@@ -24,18 +31,30 @@ async fn get_document_view_id_operations(
         {
             document_view_operations.push(operation)
         }
-        // There may be cases where an operation for one or more tips couldn't be found, this
-        // means the remote has branches we don't know about yet. We can still diff the document
-        // only taking account of branches we know about though.
+        // We ignore None cases and continue the loop.
     }
 
     document_view_operations
 }
 
-fn determine_document_height(document_view_operations: &Vec<StorageOperation>) -> Option<i32> {
+/// Determine the document height for the passed documents identified by their document view id.
+///
+/// This retrieves the operations identified in the view id, iterates over them and returns the
+/// highest `sorted_index`. In the case where the operation has not been reduced as part of a view
+/// yet, it's `sorted_index` will be none. If this is the case for all operations in the view then
+/// the document height will be `None`.
+///
+/// @TODO: This can be optimized with a single `get_document_height_by_view_id()` method on the store.
+async fn determine_document_height(
+    store: &SqlStore,
+    document_view_id: &DocumentViewId,
+) -> (Option<i32>, Vec<StorageOperation>) {
     let mut height = None::<i32>;
 
-    for operation in document_view_operations {
+    let document_view_id_operations =
+        get_document_view_id_operations(store, document_view_id).await;
+
+    for operation in &document_view_id_operations {
         height = match operation.sorted_index {
             Some(index) => Some(height.map_or_else(
                 || index,
@@ -51,9 +70,12 @@ fn determine_document_height(document_view_operations: &Vec<StorageOperation>) -
         };
     }
 
-    height
+    (height, document_view_id_operations)
 }
 
+/// Compare a set of local documents and a set of remote documents (identified by their document
+/// id and view id) and return a map of document ids and heights signifying from where the remote
+/// peer needs to be updated in order to bring them in line with our current state.
 pub async fn diff_documents(
     store: &SqlStore,
     local_documents: Vec<impl AsDocument>,
@@ -67,48 +89,42 @@ pub async fn diff_documents(
     let mut remote_document_heights = HashMap::new();
 
     for (document_id, document_view_id) in remote_documents {
-        let document_view_id_operations =
-            get_document_view_id_operations(store, &document_view_id).await;
+        let (height, document_view_id_operations) =
+            determine_document_height(store, &document_view_id).await;
+
+        remote_document_heights.insert(document_id.clone(), (document_view_id, height));
 
         for operation in &document_view_id_operations {
             if operation.document_id != document_id {
                 panic!("They tricked us!!")
             }
         }
-
-        let height = determine_document_height(&document_view_id_operations);
-
-        remote_document_heights.insert(document_id, (document_view_id, height));
-    }
-
-    // Calculate the document height for all passed local documents.
-    let mut local_document_heights = HashMap::new();
-
-    for document in &local_documents {
-        let document_view_id_operations =
-            get_document_view_id_operations(store, &document.view_id()).await;
-
-        let height = determine_document_height(&document_view_id_operations)
-            .expect("All local documents have been materialized");
-
-        local_document_heights.insert(document.id(), (document.view_id(), height));
     }
 
     let mut remote_needs = HashMap::new();
 
-    for (document_id, (local_view_id, local_height)) in local_document_heights {
+    // Iterate over all local documents.
+    for local_document in local_documents {
+        // Calculate the height for each local document.
+        //
+        // @TODO: This could be made more efficient if we store the current document height in the
+        // store.
+        let (local_height, _) = determine_document_height(store, local_document.view_id()).await;
+        let local_height = local_height.expect("All local documents have been materialized");
+
         trace!(
             "Local document height: {} {} {local_height:?}",
-            document_id.display(),
-            local_view_id.display()
+            local_document.id().display(),
+            local_document.view_id().display()
         );
 
+        // Get details for the matching remote document by it's id.
         if let Some((remote_view_id, remote_height)) =
-            remote_document_heights.get(document_id)
+            remote_document_heights.get(local_document.id())
         {
             trace!(
                 "Remote document height: {} {} {remote_height:?}",
-                document_id.display(),
+                local_document.id().display(),
                 remote_view_id.display()
             );
 
@@ -117,7 +133,7 @@ pub async fn diff_documents(
             //
             // @TODO: We can handle this case in the logic above so as to not perform unnecessary
             // document height calculations.
-            if local_view_id == remote_view_id {
+            if local_document.view_id() == remote_view_id {
                 trace!("Local and remote document state matches (view ids are equal): no action required");
                 continue;
             }
@@ -136,13 +152,13 @@ pub async fn diff_documents(
             // all operations at an index greater than the remote height.
             if remote_height < local_height {
                 trace!("Local document height greater than remote: send new operations");
-                remote_needs.insert(document_id.to_owned(), remote_height + 1);
+                remote_needs.insert(local_document.id().to_owned(), remote_height + 1);
             }
         } else {
             trace!("Document not known by remote: send all document operations");
 
             // The remote didn't know about this document yet so we send them everything we have.
-            remote_needs.insert(document_id.to_owned(), 0_i32);
+            remote_needs.insert(local_document.id().to_owned(), 0_i32);
         };
     }
 
