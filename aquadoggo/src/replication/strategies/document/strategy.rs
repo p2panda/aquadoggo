@@ -102,7 +102,7 @@ impl Strategy for DocumentViewIdStrategy {
                 // remote node is missing. This gives us the document height from which the remote
                 // node needs updating.
                 let remote_requires =
-                    diff_documents(store, self.target_set(), remote_documents.to_owned()).await;
+                    diff_documents(store, &self.target_set(), remote_documents).await;
 
                 // Get the actual entries we should sent to the remote.
                 let mut entries = Vec::new();

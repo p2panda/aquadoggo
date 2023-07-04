@@ -80,11 +80,11 @@ async fn determine_document_height(
 /// to bring them in line with our current state.
 pub async fn diff_documents(
     store: &SqlStore,
-    target_set: TargetSet,
-    remote_documents: Vec<(DocumentId, DocumentViewId)>,
+    target_set: &TargetSet,
+    remote_documents: &Vec<(DocumentId, DocumentViewId)>,
 ) -> HashMap<DocumentId, i32> {
     let remote_documents: HashMap<DocumentId, DocumentViewId> =
-        remote_documents.into_iter().collect();
+        remote_documents.iter().cloned().collect();
 
     // Collect all documents which we have locally for the target set.
     let mut local_documents = HashMap::new();
