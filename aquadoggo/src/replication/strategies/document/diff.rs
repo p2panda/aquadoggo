@@ -81,7 +81,7 @@ async fn determine_document_height(
 pub async fn diff_documents(
     store: &SqlStore,
     target_set: &TargetSet,
-    remote_documents: &Vec<(DocumentId, DocumentViewId)>,
+    remote_documents: &[(DocumentId, DocumentViewId)],
 ) -> HashMap<DocumentId, i32> {
     let remote_documents: HashMap<DocumentId, DocumentViewId> =
         remote_documents.iter().cloned().collect();
