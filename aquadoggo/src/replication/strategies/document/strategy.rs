@@ -98,14 +98,11 @@ impl Strategy for DocumentViewIdStrategy {
                     ));
                 }
 
-                // Get all documents we have locally for the sessions target set.
-                let local_documents = self.local_documents(store).await;
-                
                 // Diff the received documents against what we have locally and calculate what the
                 // remote node is missing. This gives us the document height from which the remote
                 // node needs updating.
                 let remote_requires =
-                    diff_documents(store, local_documents, remote_documents.to_owned()).await;
+                    diff_documents(store, self.target_set(), remote_documents.to_owned()).await;
 
                 // Get the actual entries we should sent to the remote.
                 let mut entries = Vec::new();

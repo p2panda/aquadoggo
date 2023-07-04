@@ -4,11 +4,12 @@ use std::collections::HashMap;
 
 use crate::db::types::StorageOperation;
 use crate::db::SqlStore;
+use crate::replication::TargetSet;
 
 use log::trace;
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
-use p2panda_rs::storage_provider::traits::OperationStore;
+use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
 use p2panda_rs::Human;
 
 /// Get the operations we have on the node for the passed document view id.
@@ -73,14 +74,25 @@ async fn determine_document_height(
     (height, document_view_id_operations)
 }
 
-/// Compare a set of local documents and a set of remote documents (identified by their document
-/// id and view id) and return a map of document ids and heights signifying from where the remote
-/// peer needs to be updated in order to bring them in line with our current state.
+/// Compare a set of remote documents (identified by their document id and view id) with the
+/// documents we have in our local store for the passed target set. Return a map of document ids
+/// and heights signifying from where in the document the remote peer needs to be updated in order
+/// to bring them in line with our current state.
 pub async fn diff_documents(
     store: &SqlStore,
-    local_documents: Vec<impl AsDocument>,
+    target_set: TargetSet,
     remote_documents: Vec<(DocumentId, DocumentViewId)>,
 ) -> HashMap<DocumentId, i32> {
+    // Collect all documents which we have locally for the target set.
+    let mut local_documents = Vec::new();
+    for schema_id in target_set.iter() {
+        let schema_documents = store
+            .get_documents_by_schema(schema_id)
+            .await
+            .expect("Fatal database error");
+        local_documents.extend(schema_documents.into_iter());
+    }
+
     // Calculate the document height for all passed remote documents.
     //
     // This is done by retrieving the operations for the remote document view id and taking the
