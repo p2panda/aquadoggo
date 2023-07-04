@@ -4,10 +4,10 @@ version = "0.4.0"
 authors = [
     "adz <x1d@adz.garden>",
     "cafca <cafca@001.land>",
+    "glyph <glyph@mycelial.technology>",
     "pietgeursen <pietgeursen@gmail.com>",
     "sandreae <contact@samandreae.com>",
     "sophiiistika <sophiiistika@mailbox.org>",
-    "glyph <glyph@mycelial.technology>",
 ]
 description = "Embeddable p2p network node"
 license = "AGPL-3.0-or-later"
