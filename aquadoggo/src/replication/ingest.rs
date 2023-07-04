@@ -132,12 +132,18 @@ impl SyncIngest {
     ) -> Result<(), IngestError> {
         let entry = decode_entry(encoded_entry)?;
 
-        trace!(
-            "Received entry {:?} for log {:?} and {}",
-            entry.seq_num(),
-            entry.log_id(),
-            entry.public_key().display()
-        );
+        trace!("Received entry and operation: {}", encoded_entry.hash());
+
+        // Check if we already have this entry. This can happen if another peer sent it to
+        // us during a concurrent sync session.
+        let is_duplicate = store
+            .get_entry(&encoded_entry.hash())
+            .await
+            .expect("Fatal database error")
+            .is_some();
+        if is_duplicate {
+            return Err(IngestError::DuplicateEntry(encoded_entry.hash()));
+        }
 
         let plain_operation = decode_operation(encoded_operation)?;
 

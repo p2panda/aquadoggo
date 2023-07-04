@@ -10,7 +10,7 @@ use p2panda_rs::operation::EncodedOperation;
 use p2panda_rs::Human;
 
 use crate::db::SqlStore;
-use crate::replication::errors::{DuplicateSessionRequestError, ReplicationError};
+use crate::replication::errors::{DuplicateSessionRequestError, ReplicationError, IngestError};
 use crate::replication::{
     Message, Mode, Session, SessionId, SessionState, SyncIngest, SyncMessage, TargetSet,
 };
@@ -454,7 +454,8 @@ where
         {
             session.validate_entry(entry_bytes, operation_bytes.as_ref())?;
 
-            self.ingest
+            let res = self
+                .ingest
                 .handle_entry(
                     &self.store,
                     entry_bytes,
@@ -463,12 +464,25 @@ where
                         .as_ref()
                         .expect("For now we always expect an operation here"),
                 )
-                .await?;
+                .await;
 
-            Ok(SyncResult {
+            let ok_result = Ok(SyncResult {
                 messages: vec![],
                 is_done: session.state == SessionState::Done,
-            })
+            });
+
+            // If the error which occurred was because of a duplicate entry arriving at a node we
+            // don't want to escalate this error up and cause the connection to this peer to be
+            // closed. This is expected behavior which may occur when concurrent sync sessions
+            // are running. We catch and handle this error here, returning an Ok result.
+            if let Err(IngestError::DuplicateEntry(_)) = res {
+                return ok_result
+            }
+
+            // Return any other errors.
+            res?;
+
+            ok_result
         } else {
             Err(ReplicationError::NoSessionFound(
                 *session_id,
