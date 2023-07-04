@@ -83,82 +83,90 @@ pub async fn diff_documents(
     target_set: TargetSet,
     remote_documents: Vec<(DocumentId, DocumentViewId)>,
 ) -> HashMap<DocumentId, i32> {
+    let remote_documents: HashMap<DocumentId, DocumentViewId> =
+        remote_documents.into_iter().collect();
+
     // Collect all documents which we have locally for the target set.
-    let mut local_documents = Vec::new();
+    let mut local_documents = HashMap::new();
     for schema_id in target_set.iter() {
         let schema_documents = store
             .get_documents_by_schema(schema_id)
             .await
             .expect("Fatal database error");
-        local_documents.extend(schema_documents.into_iter());
-    }
-
-    // Calculate the document height for all passed remote documents.
-    //
-    // This is done by retrieving the operations for the remote document view id and taking the
-    // hightest index. We also validate that the retrieved and claimed document id match the view
-    // id (when found).
-    let mut remote_document_heights = HashMap::new();
-
-    for (document_id, document_view_id) in remote_documents {
-        let (height, document_view_id_operations) =
-            determine_document_height(store, &document_view_id).await;
-
-        remote_document_heights.insert(document_id.clone(), (document_view_id, height));
-
-        for operation in &document_view_id_operations {
-            if operation.document_id != document_id {
-                panic!("They tricked us!!")
-            }
-        }
+        local_documents.extend(
+            schema_documents
+                .into_iter()
+                .map(|document| (document.id().to_owned(), document)),
+        );
     }
 
     let mut remote_needs = HashMap::new();
 
-    // Iterate over all local documents.
-    for local_document in local_documents {
-        // Calculate the height for each local document.
-        //
-        // @TODO: This could be made more efficient if we store the current document height in the
-        // store.
-        let (local_height, _) = determine_document_height(store, local_document.view_id()).await;
-        let local_height = local_height.expect("All local documents have been materialized");
+    // Iterate over all local documents and perform a number of state checks in order to
+    // efficiently conclude which operations we should send the remote.
+    //
+    // 1) If the remote doesn't know about our document then we already know they need all
+    //    operations we have.
+    // 2) If they know our document and the view ids are the same then we know the states are
+    //    equal and we don't need to send anything.
+    // 3) If they know our document but we can't calculate their height document height, then they
+    //    are have operations to send us.
+    // 4) If they know our document and we can calculate the height, then compare local and remote
+    //    heights and send operations if they are behind our state.
+    for (document_id, local_document) in local_documents {
+        let remote_document_view_id = remote_documents.get(&document_id);
 
-        trace!(
-            "Local document height: {} {} {local_height:?}",
-            local_document.id().display(),
-            local_document.view_id().display()
-        );
-
-        // Get details for the matching remote document by it's id.
-        if let Some((remote_view_id, remote_height)) =
-            remote_document_heights.get(local_document.id())
-        {
-            trace!(
-                "Remote document height: {} {} {remote_height:?}",
-                local_document.id().display(),
-                remote_view_id.display()
-            );
-
+        if let Some(remote_document_view_id) = remote_document_view_id {
             // If the local and remote view ids are the same then we know they're at the same
-            // state and don't need to send anything.
-            //
-            // @TODO: We can handle this case in the logic above so as to not perform unnecessary
-            // document height calculations.
-            if local_document.view_id() == remote_view_id {
-                trace!("Local and remote document state matches (view ids are equal): no action required");
+            // state and we don't need to send anything.
+            if local_document.view_id() == remote_document_view_id {
+                trace!(
+                    "Local and remote document views are equal {} <DocumentViewId {}>: no action required",
+                    document_id.display(),
+                    local_document.view_id().display()
+                );
+                // Continue to loop over the remaining documents.
                 continue;
             }
 
+            // Calculate the remote document height.
+            let (remote_height, _) =
+                determine_document_height(store, &remote_document_view_id).await;
+
             // If the height for the remote of this document couldn't be calculated then they are
-            // more progressed than us and so we should do nothing.
+            // further progressed for this document and so we don't need to send them anything.
             if remote_height.is_none() {
-                trace!("Remote document height greater than local: no action required");
+                trace!(
+                    "Could not calculate remote document height {} <DocumentViewId {}>: no action required",
+                    document_id.display(),
+                    remote_document_view_id.display()
+                );
+                // Continue to loop over the remaining documents.
                 continue;
             };
 
             // Safely unwrap as None case handled above.
             let remote_height = remote_height.unwrap();
+
+            trace!(
+                "Remote document height: {} <DocumentViewId {}> {remote_height}",
+                local_document.id().display(),
+                remote_document_view_id.display()
+            );
+
+            // Calculate the local document height.
+            //
+            // @TODO: This could be made more efficient if we store the current document height in the
+            // store.
+            let (local_height, _) =
+                determine_document_height(store, local_document.view_id()).await;
+            let local_height = local_height.expect("All local documents have been materialized");
+
+            trace!(
+                "Local document height: {} <DocumentViewId {}> {local_height:?}",
+                local_document.id().display(),
+                local_document.view_id().display()
+            );
 
             // If the remote height is less than the local height then we want to send them
             // all operations at an index greater than the remote height.
@@ -167,7 +175,10 @@ pub async fn diff_documents(
                 remote_needs.insert(local_document.id().to_owned(), remote_height + 1);
             }
         } else {
-            trace!("Document not known by remote: send all document operations");
+            trace!(
+                "Document not known by remote {}: send all document operations",
+                document_id.display()
+            );
 
             // The remote didn't know about this document yet so we send them everything we have.
             remote_needs.insert(local_document.id().to_owned(), 0_i32);
