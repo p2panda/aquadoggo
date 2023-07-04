@@ -117,15 +117,10 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
         }
     }
 
-    // Now we check all the "parent" or "inverse" relations, that is _other_ documents pointing at
-    // the one we're currently looking at
-    let mut reverse_tasks = get_inverse_relation_tasks(&context, document.schema_id()).await?;
-    next_tasks.append(&mut reverse_tasks);
-
     // Construct additional tasks if the task input matches certain system schemas and all
-    // dependencies have been reduced
-    let all_dependencies_met = next_tasks.is_empty();
-    if all_dependencies_met {
+    // "child" dependencies have been reduced
+    let child_dependencies_met = next_tasks.is_empty();
+    if child_dependencies_met {
         match document.schema_id() {
             // Start `schema` task when a schema (field) definition view is completed with
             // dependencies
@@ -138,6 +133,11 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
             _ => {}
         }
     }
+
+    // Now we check all the "parent" or "inverse" relations, that is _other_ documents pointing at
+    // the one we're currently looking at
+    let mut reverse_tasks = get_inverse_relation_tasks(&context, document.schema_id()).await?;
+    next_tasks.append(&mut reverse_tasks);
 
     debug!("Scheduling {} tasks", next_tasks.len());
 
