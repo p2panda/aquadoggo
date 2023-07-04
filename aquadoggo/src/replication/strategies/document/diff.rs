@@ -187,3 +187,121 @@ pub async fn diff_documents(
 
     remote_needs
 }
+
+#[cfg(test)]
+mod tests {
+    use p2panda_rs::document::traits::AsDocument;
+    use p2panda_rs::document::{DocumentId, DocumentViewId};
+    use p2panda_rs::storage_provider::traits::DocumentStore;
+    use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
+    use rstest::rstest;
+
+    use crate::replication::strategies::document::diff_documents;
+    use crate::replication::TargetSet;
+    use crate::test_utils::{
+        populate_and_materialize, populate_store_config, test_runner_with_manager, TestNode,
+        TestNodeManager,
+    };
+
+    async fn node_has(
+        node: &TestNode,
+        target_set: &TargetSet,
+    ) -> Vec<(DocumentId, DocumentViewId)> {
+        let mut documents = Vec::new();
+        for schema_id in target_set.iter() {
+            let schema_documents = node
+                .context
+                .store
+                .get_documents_by_schema(schema_id)
+                .await
+                .expect("Fatal database error");
+            documents.extend(
+                schema_documents
+                    .into_iter()
+                    .map(|document| (document.id().to_owned(), document.view_id().to_owned())),
+            );
+        }
+        documents
+    }
+
+    #[rstest]
+    fn does_diff_documents(
+        #[from(populate_store_config)]
+        #[with(10, 2, 1)]
+        config_a: PopulateStoreConfig,
+        #[from(populate_store_config)]
+        #[with(5, 4, 1)]
+        config_b: PopulateStoreConfig,
+        #[from(populate_store_config)] config_c: PopulateStoreConfig,
+    ) {
+        test_runner_with_manager(move |manager: TestNodeManager| async move {
+            let schema_id = config_a.schema.id();
+            let target_set = TargetSet::new(&[schema_id.to_owned()]);
+
+            // Create three nodes.
+            let mut node_a = manager.create().await;
+            let mut node_b = manager.create().await;
+            let mut node_c = manager.create().await;
+
+            // Populate them each with documents.
+            populate_and_materialize(&mut node_a, &config_a).await;
+            populate_and_materialize(&mut node_b, &config_b).await;
+            populate_and_materialize(&mut node_c, &config_c).await;
+
+            // Compose the state of each node in the method param format.
+            let node_a_has = node_has(&node_a, &target_set).await;
+            let node_b_has = node_has(&node_b, &target_set).await;
+            let node_c_has = node_has(&node_c, &target_set).await;
+
+            // Diffing nodes against their own state should return empty maps.
+            let remote_needs =
+                diff_documents(&node_a.context.store, &target_set, &node_a_has).await;
+            assert!(remote_needs.is_empty());
+
+            let remote_needs =
+                diff_documents(&node_b.context.store, &target_set, &node_b_has).await;
+            assert!(remote_needs.is_empty());
+
+            let remote_needs =
+                diff_documents(&node_c.context.store, &target_set, &node_c_has).await;
+            assert!(remote_needs.is_empty());
+
+            // Node C has no documents, they need operations for all documents present on other nodes.
+            let remote_needs =
+                diff_documents(&node_a.context.store, &target_set, &node_c_has).await;
+
+            assert_eq!(remote_needs.len(), node_a_has.len());
+            for (_, height) in remote_needs {
+                assert_eq!(height, 0);
+            }
+
+            // Node B has all of Node A's documents, but needs new operations from height 5 and above.
+            let node_b_needs_from_node_a =
+                diff_documents(&node_a.context.store, &target_set, &node_b_has).await;
+
+            let expected_needs = node_a_has
+                .clone()
+                .into_iter()
+                .map(|(document_id, _)| (document_id, 5))
+                .collect();
+
+            assert_eq!(node_b_needs_from_node_a.len(), 2);
+            assert_eq!(node_b_needs_from_node_a, expected_needs);
+
+            // Node A is needs all operations for 2 new documents from Node B.
+            let mut node_a_needs_from_node_b =
+                diff_documents(&node_b.context.store, &target_set, &node_a_has)
+                    .await
+                    .into_iter();
+
+            assert_eq!(node_a_needs_from_node_b.len(), 2);
+            assert!(matches!(node_a_needs_from_node_b.next(), Some((_, 0))));
+            assert!(matches!(node_a_needs_from_node_b.next(), Some((_, 0))));
+
+            // Node A doesn't need anything from Node C (because it is empty)
+            let remote_needs =
+                diff_documents(&node_c.context.store, &target_set, &node_a_has).await;
+            assert!(remote_needs.is_empty());
+        })
+    }
+}
