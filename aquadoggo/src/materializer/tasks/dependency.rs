@@ -172,8 +172,8 @@ async fn get_relation_task(
     }
 }
 
-/// Returns _reduce_ tasks for every document which has a pinned relation or pinned relation list
-/// to a document view with the given schema id.
+/// Returns _dependency_ tasks for every document which has a pinned relation or pinned relation
+/// list to a document view with the given schema id.
 async fn get_inverse_relation_tasks(
     context: &Context,
     schema_id: &SchemaId,
