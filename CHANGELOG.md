@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Replication message de- / serialization [#375](https://github.com/p2panda/aquadoggo/pull/375)
 - Naive protocol replication [#380](https://github.com/p2panda/aquadoggo/pull/380)
 - Integrate replication manager with networking stack [#387](https://github.com/p2panda/aquadoggo/pull/387) 🥞
+- Reverse lookup for pinned relations in dependency task  [#434](https://github.com/p2panda/aquadoggo/pull/434)
 
 ### Changed
 
