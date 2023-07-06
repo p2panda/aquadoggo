@@ -12,7 +12,6 @@ use p2panda_rs::storage_provider::traits::EntryStore;
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::SqlStore;
 use crate::replication::errors::IngestError;
-use crate::replication::Mode;
 use crate::schema::SchemaProvider;
 
 #[derive(Debug, Clone)]
@@ -49,7 +48,7 @@ impl SyncIngest {
         }
 
         // Make sure we have the relevant schema materialized on the node.
-        let operation = decode_operation(&encoded_operation)?;
+        let operation = decode_operation(encoded_operation)?;
         let schema = self
             .schema_provider
             .get(operation.schema_id())
@@ -63,9 +62,9 @@ impl SyncIngest {
         let _ = publish(
             store,
             &schema,
-            &encoded_entry,
+            encoded_entry,
             &operation,
-            &encoded_operation,
+            encoded_operation,
         )
         .await?;
 
@@ -101,7 +100,7 @@ mod tests {
     use tokio::sync::broadcast;
 
     use crate::replication::errors::IngestError;
-    use crate::replication::{Mode, SyncIngest};
+    use crate::replication::SyncIngest;
     use crate::test_utils::{test_runner_with_manager, TestNodeManager};
 
     #[rstest]
@@ -111,28 +110,20 @@ mod tests {
         encoded_operation: EncodedOperation,
     ) {
         test_runner_with_manager(move |manager: TestNodeManager| async move {
-            let mut node = manager.create().await;
+            let node = manager.create().await;
             node.context.schema_provider.update(schema).await;
 
             let (tx, _rx) = broadcast::channel(8);
             let ingest = SyncIngest::new(node.context.schema_provider.clone(), tx.clone());
 
             let result = ingest
-                .handle_entry(
-                    &node.context.store,
-                    &encoded_entry,
-                    &encoded_operation,
-                )
+                .handle_entry(&node.context.store, &encoded_entry, &encoded_operation)
                 .await;
 
             assert!(result.is_ok());
 
             let result = ingest
-                .handle_entry(
-                    &node.context.store,
-                    &encoded_entry,
-                    &encoded_operation,
-                )
+                .handle_entry(&node.context.store, &encoded_entry, &encoded_operation)
                 .await;
 
             assert!(matches!(result, Err(IngestError::DuplicateEntry(_))));

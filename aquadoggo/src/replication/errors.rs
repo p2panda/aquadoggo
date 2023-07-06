@@ -45,7 +45,7 @@ pub enum IngestError {
     DecodeOperation(#[from] p2panda_rs::operation::error::DecodeOperationError),
 
     #[error("Duplicate entry received: {0}")]
-    DuplicateEntry(Hash)
+    DuplicateEntry(Hash),
 }
 
 #[derive(Error, Debug)]
