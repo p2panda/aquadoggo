@@ -13,7 +13,9 @@ use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
 use p2panda_rs::Human;
 
 fn compare_view_ids(received_view_id: &DocumentViewId, expected_view_id: &DocumentViewId) -> bool {
-    expected_view_id.iter().all(|item| received_view_id.graph_tips().contains(item))
+    expected_view_id
+        .iter()
+        .all(|item| received_view_id.graph_tips().contains(item))
 }
 
 /// Get the operations we have on the node for the passed document view id.
@@ -191,7 +193,7 @@ pub async fn diff_documents(
             }
 
             // Finally here we know that that the remote and local contain the same past state,
-            // and so here we can calculate only the new operations which we should send to the remote.
+            // we can calculate only the new operations which we should send to the remote.
             if remote_height < local_height {
                 trace!("Local document height greater than remote: send new operations");
                 remote_needs.insert(local_document.id().to_owned(), remote_height + 1);

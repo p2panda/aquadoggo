@@ -2,7 +2,7 @@
 
 use std::convert::TryFrom;
 
-use log::{debug, info, trace};
+use log::{debug, info};
 use p2panda_rs::document::materialization::build_graph;
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::{Document, DocumentBuilder, DocumentId, DocumentViewId};
@@ -297,7 +297,7 @@ mod tests {
         DocumentViewValue,
     };
     use p2panda_rs::operation::traits::AsOperation;
-    use p2panda_rs::operation::{OperationId, OperationValue};
+    use p2panda_rs::operation::OperationValue;
     use p2panda_rs::schema::Schema;
     use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
     use p2panda_rs::test_utils::constants;

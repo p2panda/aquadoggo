@@ -36,7 +36,10 @@ pub fn parse_operation_rows(
     let operation_id = first_row.operation_id.parse().unwrap();
     let document_id = first_row.document_id.parse().unwrap();
     let sorted_index = first_row.sorted_index;
-    let document_view_id = first_row.document_view_id.as_ref().map(|id| id.parse().unwrap());
+    let document_view_id = first_row
+        .document_view_id
+        .as_ref()
+        .map(|id| id.parse().unwrap());
 
     let mut relation_lists: BTreeMap<String, Vec<DocumentId>> = BTreeMap::new();
     let mut pinned_relation_lists: BTreeMap<String, Vec<DocumentViewId>> = BTreeMap::new();
