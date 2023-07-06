@@ -362,14 +362,16 @@ mod tests {
                 .build()
                 .unwrap();
 
-            send_to_store(
-                &node_a.context.store,
-                &update_operation,
-                &schema,
-                &KeyPair::new(),
+            // We use a hard-coded key pair as we want an operation id which will cause the branch
+            // to be visited first.
+            let key_pair = KeyPair::from_private_key_str(
+                "799faf7a1fa47c54fac705f30d3c4d80c40efb562da19315fabefcc995a228a1",
             )
-            .await
             .unwrap();
+
+            send_to_store(&node_a.context.store, &update_operation, &schema, &key_pair)
+                .await
+                .unwrap();
 
             // Reduce the updated document.
             let input = TaskInput::DocumentId(document_id.clone());
@@ -397,10 +399,7 @@ mod tests {
 
             // Node B identified that node A is is up to date, even though they sent them a
             // document view id containing a branch they don't know about.
-            assert_eq!(
-                node_a_needs_from_node_a,
-                vec![].into_iter().collect()
-            );
+            assert_eq!(node_a_needs_from_node_a, vec![].into_iter().collect());
         })
     }
 }
