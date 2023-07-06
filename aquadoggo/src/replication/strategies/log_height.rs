@@ -5,11 +5,14 @@ use std::collections::HashMap;
 use anyhow::Result;
 use async_trait::async_trait;
 use log::trace;
-use p2panda_rs::entry::traits::AsEntry;
+use p2panda_rs::document::DocumentId;
+use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
 use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::identity::PublicKey;
+use p2panda_rs::storage_provider::traits::OperationStore;
 use p2panda_rs::Human;
 
+use crate::db::types::StorageEntry;
 use crate::db::SqlStore;
 use crate::replication::errors::ReplicationError;
 use crate::replication::strategies::diff_log_heights;
@@ -62,9 +65,12 @@ impl LogHeightStrategy {
         store: &SqlStore,
         remote_log_heights: &[LogHeights],
     ) -> Vec<Message> {
-        let mut messages = Vec::new();
+        let mut entries = Vec::<(StorageEntry, DocumentId, i32)>::new();
 
+        // Get local log heights for the configured target set.
         let local_log_heights = self.local_log_heights(store).await;
+
+        // Compare local and remote log heights to determine what they need from us.
         let remote_needs = diff_log_heights(
             &local_log_heights,
             &remote_log_heights.iter().cloned().collect(),
@@ -72,27 +78,50 @@ impl LogHeightStrategy {
 
         for (public_key, log_heights) in remote_needs {
             for (log_id, seq_num) in log_heights {
-                let entry_messages: Vec<Message> = store
+                // Get the entries the remote needs for each log.
+                let log_entries = store
                     .get_entries_from(&public_key, &log_id, &seq_num)
                     .await
-                    .expect("Fatal database error")
-                    .iter()
-                    .map(|entry| {
-                        trace!(
-                            "Prepare message containing entry at {:?} on {:?} for {}",
-                            entry.seq_num(),
-                            entry.log_id(),
-                            entry.public_key().display()
-                        );
+                    .expect("Fatal database error");
 
-                        Message::Entry(entry.clone().encoded_entry, entry.payload().cloned())
-                    })
-                    .collect();
-                messages.extend(entry_messages);
+                for entry in log_entries {
+                    // Get the entry as well as we need some additional information in order to
+                    // send the entries in the correct order.
+                    let operation = store
+                        .get_operation(&entry.hash().into())
+                        .await
+                        .expect("Fatal database error")
+                        .expect("Operation should be in store");
+
+                    // We only send entries if their operation has been materialized.
+                    if let Some(sorted_index) = operation.sorted_index {
+                        entries.push((entry, operation.document_id, sorted_index));
+                    }
+                }
             }
         }
 
-        messages
+        // Sort all entries by document_id & sorted_index.
+        entries.sort_by(
+            |(_, document_id_a, sorted_index_a), (_, document_id_b, sorted_index_b)| {
+                (document_id_a, sorted_index_a).cmp(&(document_id_b, sorted_index_b))
+            },
+        );
+
+        // Compose the actual messages.
+        entries
+            .iter()
+            .map(|(entry, _, _)| {
+                trace!(
+                    "Prepare message containing entry at {:?} on {:?} for {}",
+                    entry.seq_num(),
+                    entry.log_id(),
+                    entry.public_key().display()
+                );
+
+                Message::Entry(entry.clone().encoded_entry, entry.payload().cloned())
+            })
+            .collect()
     }
 }
 
