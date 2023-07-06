@@ -192,10 +192,14 @@ pub async fn diff_documents(
 mod tests {
     use p2panda_rs::document::traits::AsDocument;
     use p2panda_rs::document::{DocumentId, DocumentViewId};
+    use p2panda_rs::identity::KeyPair;
+    use p2panda_rs::operation::{OperationAction, OperationBuilder};
     use p2panda_rs::storage_provider::traits::DocumentStore;
-    use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
+    use p2panda_rs::test_utils::memory_store::helpers::{send_to_store, PopulateStoreConfig};
     use rstest::rstest;
 
+    use crate::materializer::tasks::reduce_task;
+    use crate::materializer::TaskInput;
     use crate::replication::strategies::document::diff_documents;
     use crate::replication::TargetSet;
     use crate::test_utils::{
@@ -302,6 +306,58 @@ mod tests {
             let remote_needs =
                 diff_documents(&node_c.context.store, &target_set, &node_a_has).await;
             assert!(remote_needs.is_empty());
+        })
+    }
+
+    #[rstest]
+    fn one_node_missing_branch(
+        #[from(populate_store_config)]
+        #[with(10, 1, 1)]
+        config: PopulateStoreConfig,
+    ) {
+        test_runner_with_manager(move |manager: TestNodeManager| async move {
+            let schema = config.schema.clone();
+            let target_set = TargetSet::new(&[schema.id().to_owned()]);
+
+            // Create three nodes.
+            let mut node_a = manager.create().await;
+            let mut node_b = manager.create().await;
+
+            // Populate them each with documents.
+            let (_, documents) = populate_and_materialize(&mut node_a, &config).await;
+            populate_and_materialize(&mut node_b, &config).await;
+
+            // Compose the state of node b in the method param format.
+            let node_b_has = node_has(&node_b, &target_set).await;
+
+            let document_id = documents[0].clone();
+
+            let update_operation = OperationBuilder::new(schema.id())
+                .action(OperationAction::Update)
+                .previous(&document_id.as_str().parse().unwrap())
+                .fields(&[("username", "よつばと".into())])
+                .build()
+                .unwrap();
+
+            send_to_store(
+                &node_a.context.store,
+                &update_operation,
+                &schema,
+                &KeyPair::new(),
+            )
+            .await
+            .unwrap();
+
+            let input = TaskInput::DocumentId(document_id.clone());
+            let _ = reduce_task(node_a.context.clone(), input).await.unwrap();
+
+            let node_b_needs_from_node_a =
+                diff_documents(&node_a.context.store, &target_set, &node_b_has).await;
+
+            assert_eq!(
+                node_b_needs_from_node_a,
+                vec![(document_id, 5)].into_iter().collect()
+            )
         })
     }
 }
