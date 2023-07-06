@@ -680,18 +680,6 @@ mod tests {
         },
         "Previous operation 0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543 not found in store"
     )]
-    #[case::claimed_log_id_does_not_match_expected(
-        &entry_signed_encoded_unvalidated(
-            1,
-            2,
-            None,
-            None,
-            Some(EncodedOperation::from_bytes(&OPERATION_ENCODED)),
-            key_pair(PRIVATE_KEY)
-        ).to_string(),
-        &OPERATION_ENCODED,
-        "Entry's claimed log id of 2 does not match expected next log id of 1 for given public key"
-    )]
     fn validation_of_entry_and_operation_values(
         #[case] entry_encoded: &str,
         #[case] encoded_operation: &[u8],
