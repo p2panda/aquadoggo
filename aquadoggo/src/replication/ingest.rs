@@ -36,69 +36,59 @@ impl SyncIngest {
         encoded_entry: &EncodedEntry,
         encoded_operation: &EncodedOperation,
     ) -> Result<(), IngestError> {
-        match mode {
-            Mode::Document => {
-                trace!("Received entry and operation: {}", encoded_entry.hash());
+        trace!("Received entry and operation: {}", encoded_entry.hash());
 
-                // Check if we already have this entry. This can happen if another peer sent it to
-                // us during a concurrent sync session.
-                let is_duplicate = store
-                    .get_entry(&encoded_entry.hash())
-                    .await
-                    .expect("Fatal database error")
-                    .is_some();
-                if is_duplicate {
-                    return Err(IngestError::DuplicateEntry(encoded_entry.hash()));
-                }
-
-                // Make sure we have the relevant schema materialized on the node.
-                let operation = decode_operation(&encoded_operation)?;
-                let schema = self
-                    .schema_provider
-                    .get(operation.schema_id())
-                    .await
-                    .ok_or_else(|| IngestError::UnsupportedSchema)?;
-
-                /////////////////////////////////////
-                // PUBLISH THE ENTRY AND OPERATION //
-                /////////////////////////////////////
-
-                let _ = publish(
-                    store,
-                    &schema,
-                    &encoded_entry,
-                    &operation,
-                    &encoded_operation,
-                )
-                .await?;
-
-                ////////////////////////////////////////
-                // SEND THE OPERATION TO MATERIALIZER //
-                ////////////////////////////////////////
-
-                // Send new operation on service communication bus, this will arrive eventually at
-                // the materializer service
-
-                let operation_id: OperationId = encoded_entry.hash().into();
-
-                if self
-                    .tx
-                    .send(ServiceMessage::NewOperation(operation_id))
-                    .is_err()
-                {
-                    // Silently fail here as we don't mind if there are no subscribers. We have
-                    // tests in other places to check if messages arrive.
-                };
-
-                Ok(())
-            }
-            _ => {
-                // @TODO: For now we just don't ingest any enries arriving via other modes, we can
-                // remove support for LogHeight replication completely if we want to migrate to
-                // the new Document approach.
-                Ok(())
-            }
+        // Check if we already have this entry. This can happen if another peer sent it to
+        // us during a concurrent sync session.
+        let is_duplicate = store
+            .get_entry(&encoded_entry.hash())
+            .await
+            .expect("Fatal database error")
+            .is_some();
+        if is_duplicate {
+            return Err(IngestError::DuplicateEntry(encoded_entry.hash()));
         }
+
+        // Make sure we have the relevant schema materialized on the node.
+        let operation = decode_operation(&encoded_operation)?;
+        let schema = self
+            .schema_provider
+            .get(operation.schema_id())
+            .await
+            .ok_or_else(|| IngestError::UnsupportedSchema)?;
+
+        /////////////////////////////////////
+        // PUBLISH THE ENTRY AND OPERATION //
+        /////////////////////////////////////
+
+        let _ = publish(
+            store,
+            &schema,
+            &encoded_entry,
+            &operation,
+            &encoded_operation,
+        )
+        .await?;
+
+        ////////////////////////////////////////
+        // SEND THE OPERATION TO MATERIALIZER //
+        ////////////////////////////////////////
+
+        // Send new operation on service communication bus, this will arrive eventually at
+        // the materializer service
+
+        let operation_id: OperationId = encoded_entry.hash().into();
+
+        if self
+            .tx
+            .send(ServiceMessage::NewOperation(operation_id))
+            .is_err()
+        {
+            // Silently fail here as we don't mind if there are no subscribers. We have
+            // tests in other places to check if messages arrive.
+        };
+
+        Ok(())
     }
 }
 
@@ -131,7 +121,7 @@ mod tests {
             let result = ingest
                 .handle_entry(
                     &node.context.store,
-                    Mode::Document,
+                    Mode::LogHeight,
                     &encoded_entry,
                     &encoded_operation,
                 )
@@ -142,7 +132,7 @@ mod tests {
             let result = ingest
                 .handle_entry(
                     &node.context.store,
-                    Mode::Document,
+                    Mode::LogHeight,
                     &encoded_entry,
                     &encoded_operation,
                 )

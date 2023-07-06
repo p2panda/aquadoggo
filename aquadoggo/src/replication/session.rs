@@ -177,7 +177,7 @@ impl Session {
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
+    use p2panda_rs::test_utils::memory_store::helpers::{PopulateStoreConfig, populate_store};
     use rstest::rstest;
 
     use crate::replication::manager::INITIAL_SESSION_ID;

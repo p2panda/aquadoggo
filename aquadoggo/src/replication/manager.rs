@@ -19,7 +19,7 @@ use super::errors::IngestError;
 
 pub const INITIAL_SESSION_ID: SessionId = 0;
 
-pub const SUPPORTED_MODES: [Mode; 2] = [Mode::LogHeight, Mode::Document];
+pub const SUPPORTED_MODES: [Mode; 1] = [Mode::LogHeight];
 
 pub const SUPPORT_LIVE_MODE: bool = false;
 
@@ -529,7 +529,7 @@ mod tests {
     use tokio::sync::broadcast;
 
     use crate::replication::errors::{DuplicateSessionRequestError, ReplicationError};
-    use crate::replication::message::{Message, MessageType, HAVE_DOCUMENTS_TYPE, HAVE_TYPE, SYNC_DONE_TYPE};
+    use crate::replication::message::{Message, MessageType, HAVE_TYPE, SYNC_DONE_TYPE};
     use crate::replication::{Mode, SyncIngest, SyncMessage, TargetSet};
     use crate::schema::SchemaProvider;
     use crate::test_utils::helpers::random_target_set;
@@ -1061,7 +1061,6 @@ mod tests {
     // ◄────────────────────┘
     #[rstest]
     #[case(Mode::LogHeight, Message::Have(vec![]), HAVE_TYPE)]
-    #[case(Mode::Document, Message::HaveDocuments(vec![]), HAVE_DOCUMENTS_TYPE)]
     fn sync_lifetime(
         #[from(populate_store_config)]
         #[with(2, 1, 3)]
