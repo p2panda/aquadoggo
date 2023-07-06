@@ -225,7 +225,6 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
 
             for (index, (operation_id, _, _)) in sorted_operations.iter().enumerate() {
                 let operations = sorted_operations.clone()[..=index].to_vec();
-                println!("{operations:#?}");
                 let document = DocumentBuilder::new(operations)
                     .build()
                     .map_err(|err| TaskError::Critical(err.to_string()))?;

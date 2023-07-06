@@ -12,6 +12,10 @@ use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
 use p2panda_rs::Human;
 
+fn compare_view_ids(received_view_id: &DocumentViewId, expected_view_id: &DocumentViewId) -> bool {
+    expected_view_id.iter().all(|item| received_view_id.graph_tips().contains(item))
+}
+
 /// Get the operations we have on the node for the passed document view id.
 ///
 /// Note: If some of the operations identified in the document view id are not present on the node
@@ -38,40 +42,42 @@ async fn get_document_view_id_operations(
     document_view_operations
 }
 
-/// Determine the document height for the passed documents identified by their document view id.
+/// Determine the document_height and expected document_view_id for the passed document view id.
 ///
 /// This retrieves the operations identified in the view id, iterates over them and returns the
-/// highest `sorted_index`. In the case where the operation has not been reduced as part of a view
-/// yet, it's `sorted_index` will be none. If this is the case for all operations in the view then
-/// the document height will be `None`.
+/// highest `sorted_index` and `document_view_id` at that point in the documents history. In the
+/// case where the operation has not been reduced as part of a view yet, both values will
+/// be none. If this is the case for all operations in the view then the document state will be
+/// `None`.
 ///
 /// @TODO: This can be optimized with a single `get_document_height_by_view_id()` method on the store.
-async fn determine_document_height(
+async fn determine_document_state(
     store: &SqlStore,
-    document_view_id: &DocumentViewId,
-) -> (Option<i32>, Vec<StorageOperation>) {
-    let mut height = None::<i32>;
+    remote_document_view_id: &DocumentViewId,
+) -> Option<(i32, DocumentViewId)> {
+    let mut local_document_state = None::<(i32, DocumentViewId)>;
 
     let document_view_id_operations =
-        get_document_view_id_operations(store, document_view_id).await;
+        get_document_view_id_operations(store, remote_document_view_id).await;
 
     for operation in &document_view_id_operations {
-        height = match operation.sorted_index {
-            Some(index) => Some(height.map_or_else(
-                || index,
-                |current_index| {
-                    if current_index < index {
-                        index
-                    } else {
-                        current_index
-                    }
-                },
-            )),
-            None => height,
+        local_document_state = match (operation.sorted_index, operation.clone().document_view_id) {
+            (Some(index), Some(document_view_id)) => {
+                let is_greater = local_document_state
+                    .as_ref()
+                    .map_or(true, |(current_index, _)| current_index < &index);
+
+                if is_greater {
+                    Some((index, document_view_id))
+                } else {
+                    local_document_state
+                }
+            }
+            (_, _) => local_document_state,
         };
     }
 
-    (height, document_view_id_operations)
+    local_document_state
 }
 
 /// Compare a set of remote documents (identified by their document id and view id) with the
@@ -109,10 +115,13 @@ pub async fn diff_documents(
     //    operations we have.
     // 2) If they know our document and the view ids are the same then we know the states are
     //    equal and we don't need to send anything.
-    // 3) If they know our document but we can't calculate their height document height, then they
-    //    are have operations to send us.
-    // 4) If they know our document and we can calculate the height, then compare local and remote
-    //    heights and send operations if they are behind our state.
+    // 3) If they know our document but we can't calculate their document height, then they are
+    //    have operations to send us.
+    // 4) If the received view id doesn't contain all tips from the expected view id then they are
+    //    missing a branch and we send all operations for the document to bring them up-to-date
+    //    with us.
+    // 5) Finally we know they aren't missing any branches and so we can compare document heights
+    //    and send only the new operations the remote needs to get up to date.
     for (document_id, local_document) in local_documents {
         let remote_document_view_id = remote_documents.get(&document_id);
 
@@ -129,13 +138,14 @@ pub async fn diff_documents(
                 continue;
             }
 
-            // Calculate the remote document height.
-            let (remote_height, _) =
-                determine_document_height(store, remote_document_view_id).await;
+            // Calculate the remote document state. This includes getting the locally known height
+            // and expected document view.
+            let remote_document_state =
+                determine_document_state(store, remote_document_view_id).await;
 
-            // If the height for the remote of this document couldn't be calculated then they are
+            // If the state for the remote of this document couldn't be calculated then they are
             // further progressed for this document and so we don't need to send them anything.
-            if remote_height.is_none() {
+            if remote_document_state.is_none() {
                 trace!(
                     "Could not calculate remote document height {} <DocumentViewId {}>: no action required",
                     document_id.display(),
@@ -146,7 +156,7 @@ pub async fn diff_documents(
             };
 
             // Safely unwrap as None case handled above.
-            let remote_height = remote_height.unwrap();
+            let (remote_height, expected_remote_view_id) = remote_document_state.unwrap();
 
             trace!(
                 "Remote document height: {} <DocumentViewId {}> {remote_height}",
@@ -154,13 +164,17 @@ pub async fn diff_documents(
                 remote_document_view_id.display()
             );
 
-            // Calculate the local document height.
+            // Calculate the local document state.
             //
             // @TODO: This could be made more efficient if we store the current document height in the
             // store.
+            let local_document_state =
+                determine_document_state(store, local_document.view_id()).await;
+
+            // Unwrap as we know local documents have been materialized, we only care about the
+            // document height here.
             let (local_height, _) =
-                determine_document_height(store, local_document.view_id()).await;
-            let local_height = local_height.expect("All local documents have been materialized");
+                local_document_state.expect("All local documents have been materialized");
 
             trace!(
                 "Local document height: {} <DocumentViewId {}> {local_height:?}",
@@ -168,8 +182,16 @@ pub async fn diff_documents(
                 local_document.view_id().display()
             );
 
-            // If the remote height is less than the local height then we want to send them
-            // all operations at an index greater than the remote height.
+            // Check that the expected view id for the remote document is a sub-set of the
+            // received view id. This means they know about all branches we have locally at this
+            // point in the document.
+            if compare_view_ids(remote_document_view_id, &expected_remote_view_id) {
+                trace!("Remote view id is missing branches: send all operations");
+                remote_needs.insert(local_document.id().to_owned(), 0);
+            }
+
+            // Finally here we know that that the remote and local contain the same past state,
+            // and so here we can calculate only the new operations which we should send to the remote.
             if remote_height < local_height {
                 trace!("Local document height greater than remote: send new operations");
                 remote_needs.insert(local_document.id().to_owned(), remote_height + 1);
@@ -330,6 +352,7 @@ mod tests {
             // Compose the state of node b in the method param format.
             let node_b_has = node_has(&node_b, &target_set).await;
 
+            // Publish an update into this documents past.
             let document_id = documents[0].clone();
 
             let update_operation = OperationBuilder::new(schema.id())
@@ -348,16 +371,36 @@ mod tests {
             .await
             .unwrap();
 
+            // Reduce the updated document.
             let input = TaskInput::DocumentId(document_id.clone());
             let _ = reduce_task(node_a.context.clone(), input).await.unwrap();
 
+            // Diff between nodes.
             let node_b_needs_from_node_a =
                 diff_documents(&node_a.context.store, &target_set, &node_b_has).await;
 
+            // Node A identified that node B is missing a branch and so sends them all documents
+            // to keep them up to date.
             assert_eq!(
                 node_b_needs_from_node_a,
-                vec![(document_id, 5)].into_iter().collect()
-            )
+                vec![(document_id, 10)].into_iter().collect()
+            );
+
+            // Now we do it the other way around.
+
+            // Compose the state of node a in the method param format.
+            let node_a_has = node_has(&node_b, &target_set).await;
+
+            // Diff between nodes.
+            let node_a_needs_from_node_a =
+                diff_documents(&node_b.context.store, &target_set, &node_a_has).await;
+
+            // Node B identified that node A is is up to date, even though they sent them a
+            // document view id containing a branch they don't know about.
+            assert_eq!(
+                node_a_needs_from_node_a,
+                vec![].into_iter().collect()
+            );
         })
     }
 }
