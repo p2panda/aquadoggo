@@ -248,23 +248,26 @@ fn group_and_parse_operation_rows(
 impl SqlStore {
     /// Update the sorted index of an operation. This method is used in `reduce` tasks as each
     /// operation is processed.
-    pub async fn update_operation_index(
+    pub async fn update_operation_index_and_view_id(
         &self,
         operation_id: &OperationId,
         sorted_index: i32,
+        document_view_id: &DocumentViewId,
     ) -> Result<(), OperationStorageError> {
         query::<Any>(
             "
             UPDATE
                 operations_v1
             SET
-                sorted_index = $2
+                sorted_index = $2,
+                document_view_id = $3
             WHERE
                 operation_id = $1
             ",
         )
         .bind(operation_id.as_str())
         .bind(sorted_index)
+        .bind(document_view_id.to_string())
         .fetch_all(&self.pool)
         .await
         .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;

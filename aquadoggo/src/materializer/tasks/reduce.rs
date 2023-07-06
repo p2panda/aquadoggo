@@ -209,16 +209,34 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
                 return Ok(None);
             };
 
-            // @TODO: Make sorted operations available after building the document above so we can skip this step.
-            let operations = DocumentBuilder::from(operations).operations();
-            let sorted_operations = build_graph(&operations).unwrap().sort().unwrap().sorted();
+            // Sort and then iterate over the document operations and update their sorted_index and
+            // document_view_id on the operations_v1 table.
+            //
+            // @TODO: We are iterating over all operations in the document a couple of times here
+            // in order to calculate sorted_index and document_view_id for every operation. This
+            // is computationally expensive. We can improve this greatly by calculating these
+            // values during document building.
+            let document_builder = DocumentBuilder::from(operations);
+            let sorted_operations = build_graph(&document_builder.operations())
+                .unwrap()
+                .sort()
+                .unwrap()
+                .sorted();
 
-            // Iterate over the sorted document operations and update their sorted index on the
-            // operations_v1 table.
             for (index, (operation_id, _, _)) in sorted_operations.iter().enumerate() {
+                let operations = sorted_operations.clone()[..=index].to_vec();
+                println!("{operations:#?}");
+                let document = DocumentBuilder::new(operations)
+                    .build()
+                    .map_err(|err| TaskError::Critical(err.to_string()))?;
+
                 context
                     .store
-                    .update_operation_index(operation_id, index as i32)
+                    .update_operation_index_and_view_id(
+                        operation_id,
+                        index as i32,
+                        document.view_id(),
+                    )
                     .await
                     .map_err(|err| TaskError::Critical(err.to_string()))?;
             }
@@ -280,7 +298,7 @@ mod tests {
         DocumentViewValue,
     };
     use p2panda_rs::operation::traits::AsOperation;
-    use p2panda_rs::operation::OperationValue;
+    use p2panda_rs::operation::{OperationId, OperationValue};
     use p2panda_rs::schema::Schema;
     use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
     use p2panda_rs::test_utils::constants;
@@ -660,9 +678,9 @@ mod tests {
 
             // Run a reduce task with the document id as input.
             let input = TaskInput::DocumentId(document_id.clone());
-            assert!(reduce_task(node.context.clone(), input.clone())
+            reduce_task(node.context.clone(), input.clone())
                 .await
-                .is_ok());
+                .unwrap();
 
             // Retrieve the operations again, they should now be in their topologically sorted order.
             let post_materialization_operations = node
@@ -680,6 +698,12 @@ mod tests {
                 pre_materialization_operations,
                 post_materialization_operations
             );
+
+            // All operations should now have a sorted index and document view id.
+            for (index, operation) in post_materialization_operations.iter().enumerate() {
+                assert_eq!(operation.sorted_index, Some(index as i32));
+                assert!(operation.document_view_id.is_some())
+            }
 
             // The first operation should be a CREATE.
             let create_operation = post_materialization_operations.first().unwrap();
