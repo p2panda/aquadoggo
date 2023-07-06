@@ -35,6 +35,7 @@ pub fn parse_operation_rows(
     let public_key = PublicKey::new(&first_row.public_key).unwrap();
     let operation_id = first_row.operation_id.parse().unwrap();
     let document_id = first_row.document_id.parse().unwrap();
+    let sorted_index = first_row.sorted_index;
 
     let mut relation_lists: BTreeMap<String, Vec<DocumentId>> = BTreeMap::new();
     let mut pinned_relation_lists: BTreeMap<String, Vec<DocumentViewId>> = BTreeMap::new();

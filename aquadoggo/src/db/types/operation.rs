@@ -32,6 +32,12 @@ pub struct StorageOperation {
 
     /// The public key of the key pair used to publish this operation.
     pub(crate) public_key: PublicKey,
+
+    /// Index for the position of this operation once topological sorting of the operation graph
+    /// has been performed.
+    ///
+    /// Is None when the operation has not been materialized into it's document yet.
+    pub(crate) sorted_index: Option<i32>,
 }
 
 impl WithPublicKey for StorageOperation {
