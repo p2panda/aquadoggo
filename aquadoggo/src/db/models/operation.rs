@@ -31,6 +31,12 @@ pub struct OperationRow {
     /// If this value is `None` we can assume the operation has not been processed yet and we are
     /// waiting for the `reduce` task to complete materialization.
     pub sorted_index: Option<i32>,
+
+    /// The document view id of the document this operation is part of at the point this operation
+    /// was visited during materialization.
+    ///
+    /// This can be used to understand the state of the document when this operation was visited.
+    pub document_view_id: Option<String>,
 }
 
 /// A struct representing a single operation field row as it is inserted in the database.
@@ -111,4 +117,10 @@ pub struct OperationFieldsJoinedRow {
     /// If this value is `None` we can assume the operation has not been processed yet and we are
     /// waiting for the `reduce` task to complete materialization.
     pub sorted_index: Option<i32>,
+
+    /// The document view id of the document this operation is part of at the point this operation
+    /// was visited during materialization.
+    ///
+    /// This can be used to understand the state of the document when this operation was visited.
+    pub document_view_id: Option<String>,
 }

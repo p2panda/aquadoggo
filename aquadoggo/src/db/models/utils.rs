@@ -36,6 +36,7 @@ pub fn parse_operation_rows(
     let operation_id = first_row.operation_id.parse().unwrap();
     let document_id = first_row.document_id.parse().unwrap();
     let sorted_index = first_row.sorted_index;
+    let document_view_id = first_row.document_view_id.as_ref().map(|id| id.parse().unwrap());
 
     let mut relation_lists: BTreeMap<String, Vec<DocumentId>> = BTreeMap::new();
     let mut pinned_relation_lists: BTreeMap<String, Vec<DocumentViewId>> = BTreeMap::new();
@@ -190,6 +191,7 @@ pub fn parse_operation_rows(
         fields: operation.fields(),
         public_key,
         sorted_index,
+        document_view_id,
     };
 
     Some(operation)
@@ -434,6 +436,7 @@ mod tests {
                 value: Some("28".to_string()),
                 list_index: Some(0),
                 sorted_index: None,
+                document_view_id: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -453,6 +456,7 @@ mod tests {
                 value: Some("3.5".to_string()),
                 list_index: Some(0),
                 sorted_index: None,
+                document_view_id: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -472,6 +476,7 @@ mod tests {
                 value: Some("false".to_string()),
                 list_index: Some(0),
                 sorted_index: None,
+                document_view_id: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -494,6 +499,7 @@ mod tests {
                 ),
                 list_index: Some(0),
                 sorted_index: None,
+                document_view_id: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -516,6 +522,7 @@ mod tests {
                 ),
                 list_index: Some(1),
                 sorted_index: None,
+                document_view_id: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -538,6 +545,7 @@ mod tests {
                 ),
                 list_index: Some(0),
                 sorted_index: None,
+                document_view_id: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -560,6 +568,7 @@ mod tests {
                 ),
                 list_index: Some(1),
                 sorted_index: None,
+                document_view_id: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -582,6 +591,7 @@ mod tests {
                 ),
                 list_index: Some(0),
                 sorted_index: None,
+                document_view_id: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -604,6 +614,7 @@ mod tests {
                 ),
                 list_index: Some(1),
                 sorted_index: None,
+                document_view_id: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -626,6 +637,7 @@ mod tests {
                 ),
                 list_index: Some(0),
                 sorted_index: None,
+                document_view_id: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -648,6 +660,7 @@ mod tests {
                 ),
                 list_index: Some(0),
                 sorted_index: None,
+                document_view_id: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -667,6 +680,7 @@ mod tests {
                 value: Some("bubu".to_string()),
                 list_index: Some(0),
                 sorted_index: None,
+                document_view_id: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -686,6 +700,7 @@ mod tests {
                 value: None,
                 list_index: Some(0),
                 sorted_index: None,
+                document_view_id: None,
             },
         ];
 

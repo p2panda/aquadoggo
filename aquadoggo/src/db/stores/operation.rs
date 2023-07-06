@@ -3,7 +3,7 @@
 use std::fmt::Display;
 
 use async_trait::async_trait;
-use p2panda_rs::document::DocumentId;
+use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::traits::AsOperation;
@@ -73,7 +73,7 @@ impl OperationStore for SqlStore {
         operation: &Operation,
         document_id: &DocumentId,
     ) -> Result<(), OperationStorageError> {
-        self.insert_operation_with_index(id, public_key, operation, document_id, None)
+        self.insert_operation_with_index(id, public_key, operation, document_id, None, None)
             .await
     }
 
@@ -95,6 +95,7 @@ impl OperationStore for SqlStore {
                 operations_v1.schema_id,
                 operations_v1.previous,
                 operations_v1.sorted_index,
+                operations_v1.document_view_id,
                 operation_fields_v1.name,
                 operation_fields_v1.field_type,
                 operation_fields_v1.value,
@@ -134,6 +135,7 @@ impl OperationStore for SqlStore {
                 operations_v1.schema_id,
                 operations_v1.previous,
                 operations_v1.sorted_index,
+                operations_v1.document_view_id,
                 operation_fields_v1.name,
                 operation_fields_v1.field_type,
                 operation_fields_v1.value,
@@ -178,6 +180,7 @@ impl OperationStore for SqlStore {
                     operations_v1.schema_id,
                     operations_v1.previous,
                     operations_v1.sorted_index,
+                    operations_v1.document_view_id,
                     operation_fields_v1.name,
                     operation_fields_v1.field_type,
                     operation_fields_v1.value,
@@ -278,6 +281,7 @@ impl SqlStore {
         operation: &Operation,
         document_id: &DocumentId,
         sorted_index: Option<i32>,
+        document_view_id: Option<&DocumentViewId>,
     ) -> Result<(), OperationStorageError> {
         // Start a transaction, any db insertions after this point, and before the `commit()` will
         // be rolled back in the event of an error.
@@ -299,10 +303,11 @@ impl SqlStore {
                     action,
                     schema_id,
                     previous,
-                    sorted_index
+                    sorted_index,
+                    document_view_id
                 )
             VALUES
-                ($1, $2, $3, $4, $5, $6, $7)
+                ($1, $2, $3, $4, $5, $6, $7, $8)
             ",
         )
         .bind(public_key.to_string())
@@ -316,6 +321,7 @@ impl SqlStore {
                 .map(|document_view_id| document_view_id.to_string()),
         )
         .bind(sorted_index)
+        .bind(document_view_id.map(|id| id.to_string()))
         .execute(&mut tx)
         .await
         .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;

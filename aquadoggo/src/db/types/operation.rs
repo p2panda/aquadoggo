@@ -38,6 +38,12 @@ pub struct StorageOperation {
     ///
     /// Is `None` when the operation has not been materialized into it's document yet.
     pub(crate) sorted_index: Option<i32>,
+
+    /// The document view id of the document this operation is part of at the point this operation
+    /// was visited during materialization.
+    ///
+    /// This can be used to understand the state of the document when this operation was visited.
+    pub(crate) document_view_id: Option<DocumentViewId>,
 }
 
 impl WithPublicKey for StorageOperation {
