@@ -59,14 +59,7 @@ impl SyncIngest {
         // PUBLISH THE ENTRY AND OPERATION //
         /////////////////////////////////////
 
-        let _ = publish(
-            store,
-            &schema,
-            encoded_entry,
-            &operation,
-            encoded_operation,
-        )
-        .await?;
+        let _ = publish(store, &schema, encoded_entry, &operation, encoded_operation).await?;
 
         ////////////////////////////////////////
         // SEND THE OPERATION TO MATERIALIZER //
