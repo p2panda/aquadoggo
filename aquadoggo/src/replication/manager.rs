@@ -460,7 +460,6 @@ where
                 .ingest
                 .handle_entry(
                     &self.store,
-                    session.mode(),
                     entry_bytes,
                     // @TODO: This should handle entries with removed payloads
                     operation_bytes

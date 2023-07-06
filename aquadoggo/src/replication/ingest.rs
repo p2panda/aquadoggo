@@ -32,7 +32,6 @@ impl SyncIngest {
     pub async fn handle_entry(
         &self,
         store: &SqlStore,
-        mode: Mode,
         encoded_entry: &EncodedEntry,
         encoded_operation: &EncodedOperation,
     ) -> Result<(), IngestError> {
@@ -121,7 +120,6 @@ mod tests {
             let result = ingest
                 .handle_entry(
                     &node.context.store,
-                    Mode::LogHeight,
                     &encoded_entry,
                     &encoded_operation,
                 )
@@ -132,7 +130,6 @@ mod tests {
             let result = ingest
                 .handle_entry(
                     &node.context.store,
-                    Mode::LogHeight,
                     &encoded_entry,
                     &encoded_operation,
                 )
