@@ -183,7 +183,7 @@ mod tests {
     use crate::replication::manager::INITIAL_SESSION_ID;
     use crate::replication::{Message, Mode, SessionState, TargetSet};
     use crate::test_utils::helpers::random_target_set;
-    use crate::test_utils::{populate_store_config, test_runner, TestNode};
+    use crate::test_utils::{populate_store_config, test_runner, TestNode, populate_and_materialize, test_runner_with_manager, TestNodeManager};
 
     use super::Session;
 
@@ -221,8 +221,29 @@ mod tests {
         #[with(5, 2, 1)]
         config: PopulateStoreConfig,
     ) {
-        test_runner(move |node: TestNode| async move {
-            populate_store(&node.context.store, &config).await;
+        test_runner_with_manager(move |manager: TestNodeManager | async move {
+            let target_set = TargetSet::new(&vec![config.schema.id().to_owned()]);
+            let mut session = Session::new(
+                &INITIAL_SESSION_ID,
+                &target_set,
+                &Mode::LogHeight,
+                true,
+                false,
+            );
+
+            let mut node_a = manager.create().await;
+            populate_and_materialize(&mut node_a, &config).await;
+
+            let response_messages = session
+                .handle_message(&node_a.context.store, &Message::Have(vec![]))
+                .await
+                .unwrap();
+
+            // This node has materialized their documents already so we expect the following
+            // messages.
+            //
+            // 1x Have + 10x Entry + 1x SyncDone = 12 messages
+            assert_eq!(response_messages.len(), 12);
 
             let target_set = TargetSet::new(&vec![config.schema.id().to_owned()]);
             let mut session = Session::new(
@@ -233,13 +254,19 @@ mod tests {
                 false,
             );
 
+            let node_b: TestNode = manager.create().await;
+            populate_store(&node_b.context.store, &config).await;
+
             let response_messages = session
-                .handle_message(&node.context.store, &Message::Have(vec![]))
+                .handle_message(&node_b.context.store, &Message::Have(vec![]))
                 .await
                 .unwrap();
 
-            // 1x Have + 10x Entry + 1x SyncDone = 12 messages
-            assert_eq!(response_messages.len(), 12);
+            // This node has not materialized any documents so they can't compose their return
+            // entries yet.
+            //
+            // 1x Have + 1x SyncDone = 2 messages
+            assert_eq!(response_messages.len(), 2);
         });
     }
 }
