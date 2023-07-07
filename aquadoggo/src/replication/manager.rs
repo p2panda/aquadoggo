@@ -10,7 +10,7 @@ use p2panda_rs::operation::EncodedOperation;
 use p2panda_rs::Human;
 
 use crate::db::SqlStore;
-use crate::replication::errors::{DuplicateSessionRequestError, ReplicationError, IngestError};
+use crate::replication::errors::{DuplicateSessionRequestError, IngestError, ReplicationError};
 use crate::replication::{
     Message, Mode, Session, SessionId, SessionState, SyncIngest, SyncMessage, TargetSet,
 };
@@ -476,7 +476,7 @@ where
             // closed. This is expected behavior which may occur when concurrent sync sessions
             // are running. We catch and handle this error here, returning an Ok result.
             if let Err(IngestError::DuplicateEntry(_)) = res {
-                return ok_result
+                return ok_result;
             }
 
             // Return any other errors.

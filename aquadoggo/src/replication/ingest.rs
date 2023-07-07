@@ -230,21 +230,13 @@ mod tests {
             let ingest = SyncIngest::new(node.context.schema_provider.clone(), tx.clone());
 
             let result = ingest
-                .handle_entry(
-                    &node.context.store,
-                    &encoded_entry,
-                    &encoded_operation,
-                )
+                .handle_entry(&node.context.store, &encoded_entry, &encoded_operation)
                 .await;
 
             assert!(result.is_ok());
 
             let result = ingest
-                .handle_entry(
-                    &node.context.store,
-                    &encoded_entry,
-                    &encoded_operation,
-                )
+                .handle_entry(&node.context.store, &encoded_entry, &encoded_operation)
                 .await;
 
             assert!(matches!(result, Err(IngestError::DuplicateEntry(_))));
