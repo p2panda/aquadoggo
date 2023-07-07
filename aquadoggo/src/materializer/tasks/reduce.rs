@@ -659,7 +659,7 @@ mod tests {
                 .unwrap();
 
             // Run a reduce task with the document id as input.
-            let input = TaskInput::new(Some(document_id.clone()), None);
+            let input = TaskInput::DocumentId(document_id.clone());
             assert!(reduce_task(node.context.clone(), input.clone())
                 .await
                 .is_ok());
