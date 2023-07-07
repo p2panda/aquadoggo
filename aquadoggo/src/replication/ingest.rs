@@ -133,14 +133,14 @@ impl SyncIngest {
 
         trace!("Received entry and operation: {}", encoded_entry.hash());
 
-        // Check if we already have this entry. This can happen if another peer sent it to
-        // us during a concurrent sync session.
-        let is_duplicate = store
+        // Check if we already have this entry. This can happen if another peer sent it to us
+        // during a concurrent sync session.
+        if store
             .get_entry(&encoded_entry.hash())
             .await
             .expect("Fatal database error")
-            .is_some();
-        if is_duplicate {
+            .is_some()
+        {
             return Err(IngestError::DuplicateEntry(encoded_entry.hash()));
         }
 
