@@ -17,7 +17,6 @@ use p2panda_rs::operation::validate::validate_operation_with_entry;
 use p2panda_rs::operation::{EncodedOperation, Operation, OperationAction, OperationId};
 use p2panda_rs::schema::Schema;
 use p2panda_rs::storage_provider::traits::{EntryStore, LogStore, OperationStore};
-use p2panda_rs::Human;
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::SqlStore;
@@ -214,7 +213,7 @@ mod tests {
     use tokio::sync::broadcast;
 
     use crate::replication::errors::IngestError;
-    use crate::replication::{Mode, SyncIngest};
+    use crate::replication::SyncIngest;
     use crate::test_utils::{test_runner_with_manager, TestNodeManager};
 
     #[rstest]
@@ -224,7 +223,7 @@ mod tests {
         encoded_operation: EncodedOperation,
     ) {
         test_runner_with_manager(move |manager: TestNodeManager| async move {
-            let mut node = manager.create().await;
+            let node = manager.create().await;
             node.context.schema_provider.update(schema).await;
 
             let (tx, _rx) = broadcast::channel(8);
@@ -233,7 +232,6 @@ mod tests {
             let result = ingest
                 .handle_entry(
                     &node.context.store,
-                    Mode::Document,
                     &encoded_entry,
                     &encoded_operation,
                 )
@@ -244,7 +242,6 @@ mod tests {
             let result = ingest
                 .handle_entry(
                     &node.context.store,
-                    Mode::Document,
                     &encoded_entry,
                     &encoded_operation,
                 )
