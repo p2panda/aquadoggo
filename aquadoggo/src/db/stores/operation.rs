@@ -58,10 +58,10 @@ impl OperationStore for SqlStore {
         Ok(document_id.map(|id_str| id_str.parse().unwrap()))
     }
 
-    /// Insert an operation into storage along with the `PublicKey` of the author who created it the 
+    /// Insert an operation into storage along with the `PublicKey` of the author who created it the
     /// `DocumentId` of the document it's part of and it's `OperationId` derived from the hash of
     /// the entry it was published with.
-    /// 
+    ///
     /// The `sorted_index` of the inserted operation will be set to `null` as this value is only
     /// available once materialization has occurred. Use `update_operation_index` to set this
     /// value.
@@ -273,7 +273,7 @@ impl SqlStore {
     }
 
     /// Insert an operation as well as the index for it's position in the document after
-    /// materialization has occurred. 
+    /// materialization has occurred.
     async fn insert_operation_with_index(
         &self,
         id: &OperationId,
