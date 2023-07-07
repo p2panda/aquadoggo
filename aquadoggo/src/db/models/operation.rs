@@ -28,11 +28,11 @@ pub struct OperationRow {
 
     /// Index for the position of this operation once topological sorting of the operation graph
     /// has been performed.
-    /// 
+    ///
     /// This is an option as when an operation which is not appended to the tip of a
     /// document graph is handled then a `reduce` materialization task will be issued and all
     /// indexes for operations in the effected document re-calculated.
-    /// 
+    ///
     /// If this value is None we can assume the operation has not been processed yet and we are
     /// waiting for the reduce task to complete.
     pub sorted_index: Option<i32>,
@@ -113,11 +113,11 @@ pub struct OperationFieldsJoinedRow {
 
     /// Index for the position of this operation once topological sorting of the operation graph
     /// has been performed.
-    /// 
+    ///
     /// This is an option as when an operation which is not appended to the tip of a
     /// document graph is handled then a `reduce` materialization task will be issued and all
     /// indexes for operations in the effected document re-calculated.
-    /// 
+    ///
     /// If this value is None we can assume the operation has not been processed yet and we are
     /// waiting for the reduce task to complete.
     pub sorted_index: Option<i32>,
