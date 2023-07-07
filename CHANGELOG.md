@@ -42,7 +42,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Decouple p2panda's authentication data types from libp2p's [#408](https://github.com/p2panda/aquadoggo/pull/408)
 - Make `TaskInput` an enum and other minor clean ups in materialiser [#429](https://github.com/p2panda/aquadoggo/pull/429)
 - Use `libp2p` `0.52.0` [#425](https://github.com/p2panda/aquadoggo/pull/425)
-- Use fork of `asynchronous-codec` [#440](https://github.com/p2panda/aquadoggo/pull/440)
 
 ### Fixed
 
@@ -62,6 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix insertion of view before document is materialized [#413](https://github.com/p2panda/aquadoggo/pull/413)
 - Handle duplicate document view insertions in reduce task [#410](https://github.com/p2panda/aquadoggo/pull/410)
 - Fix race condition when check for existing view ids was too early [#420](https://github.com/p2panda/aquadoggo/pull/420)
+- Use fork of `asynchronous-codec` to temporarily fix CBOR decoding bug [#440](https://github.com/p2panda/aquadoggo/pull/440)
 
 ### Open Sauce
 
