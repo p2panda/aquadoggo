@@ -3,6 +3,7 @@
 use std::convert::TryFrom;
 
 use log::{debug, info, trace};
+use p2panda_rs::document::materialization::build_graph;
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::{Document, DocumentBuilder, DocumentId, DocumentViewId};
 use p2panda_rs::operation::traits::{AsOperation, WithPublicKey};
@@ -206,6 +207,20 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
 
             if document_view_exists {
                 return Ok(None);
+            };
+
+            // @TODO: Make sorted operations available after building the document above so we can skip this step.
+            let operations = DocumentBuilder::from(operations).operations();
+            let sorted_operations = build_graph(&operations).unwrap().sort().unwrap().sorted();
+
+            // Iterate over the sorted document operations and update their sorted index on the
+            // operations_v1 table.
+            for (index, (operation_id, _, _)) in sorted_operations.iter().enumerate() {
+                context
+                    .store
+                    .update_operation_index(operation_id, index as i32)
+                    .await
+                    .map_err(|err| TaskError::Critical(err.to_string()))?;
             }
 
             // Insert this document into storage. If it already existed, this will update it's
@@ -260,7 +275,11 @@ mod tests {
 
     use p2panda_rs::document::materialization::build_graph;
     use p2panda_rs::document::traits::AsDocument;
-    use p2panda_rs::document::{Document, DocumentBuilder, DocumentId, DocumentViewId};
+    use p2panda_rs::document::{
+        Document, DocumentBuilder, DocumentId, DocumentViewFields, DocumentViewId,
+        DocumentViewValue,
+    };
+    use p2panda_rs::operation::traits::AsOperation;
     use p2panda_rs::operation::OperationValue;
     use p2panda_rs::schema::Schema;
     use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
@@ -271,6 +290,7 @@ mod tests {
     use p2panda_rs::test_utils::memory_store::helpers::{
         populate_store, send_to_store, PopulateStoreConfig,
     };
+    use p2panda_rs::WithId;
     use rstest::rstest;
 
     use crate::materializer::tasks::reduce_task;
@@ -582,6 +602,110 @@ mod tests {
             // is inserted
             let input = TaskInput::DocumentViewId(document.view_id().clone());
             assert!(reduce_task(node.context.clone(), input).await.is_ok());
+        })
+    }
+
+    #[rstest]
+    fn updates_operations_sorted_index(
+        schema: Schema,
+        #[from(populate_store_config)]
+        #[with(
+            3,
+            1,
+            1,
+            false,
+            constants::schema(),
+            constants::test_fields(),
+            constants::test_fields()
+        )]
+        config: PopulateStoreConfig,
+    ) {
+        test_runner(move |node: TestNode| async move {
+            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            let (key_pairs, document_ids) = populate_store(&node.context.store, &config).await;
+            let document_id = document_ids
+                .get(0)
+                .expect("There should be at least one document id");
+
+            let key_pair = key_pairs
+                .get(0)
+                .expect("There should be at least one key_pair");
+
+            // Now we create and insert an UPDATE operation for this document which is pointing at
+            // the root CREATE operation.
+            let (_, _) = send_to_store(
+                &node.context.store,
+                &operation(
+                    Some(operation_fields(vec![(
+                        "username",
+                        OperationValue::String("hello".to_string()),
+                    )])),
+                    Some(document_id.as_str().parse().unwrap()),
+                    schema.id().to_owned(),
+                ),
+                &schema,
+                key_pair,
+            )
+            .await
+            .unwrap();
+
+            // Before running the reduce task retrieve the operations. These should not be in
+            // their topologically sorted order.
+            let pre_materialization_operations = node
+                .context
+                .store
+                .get_operations_by_document_id(&document_id)
+                .await
+                .unwrap();
+
+            // Run a reduce task with the document id as input.
+            let input = TaskInput::DocumentId(document_id.clone());
+            assert!(reduce_task(node.context.clone(), input.clone())
+                .await
+                .is_ok());
+
+            // Retrieve the operations again, they should now be in their topologically sorted order.
+            let post_materialization_operations = node
+                .context
+                .store
+                .get_operations_by_document_id(&document_id)
+                .await
+                .unwrap();
+
+            // Check we got 4 operations both times.
+            assert_eq!(pre_materialization_operations.len(), 4);
+            assert_eq!(post_materialization_operations.len(), 4);
+            // Check the ordering is different.
+            assert_ne!(
+                pre_materialization_operations,
+                post_materialization_operations
+            );
+
+            // The first operation should be a CREATE.
+            let create_operation = post_materialization_operations.first().unwrap();
+            assert!(create_operation.is_create());
+
+            // Reduce the operations to a document view.
+            let mut document_view_fields = DocumentViewFields::new();
+            for operation in post_materialization_operations {
+                let fields = operation.fields().unwrap();
+                for (key, value) in fields.iter() {
+                    let document_view_value = DocumentViewValue::new(operation.id(), value);
+                    document_view_fields.insert(key, document_view_value);
+                }
+            }
+
+            // Retrieve the expected document from the store.
+            let expected_document = node
+                .context
+                .store
+                .get_document(document_id)
+                .await
+                .unwrap()
+                .unwrap();
+
+            // The fields should be the same.
+            assert_eq!(document_view_fields, *expected_document.fields().unwrap());
         })
     }
 }

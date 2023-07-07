@@ -7,7 +7,7 @@ use p2panda_rs::operation::{OperationAction, OperationFields, OperationId, Opera
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::WithId;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct StorageOperation {
     /// The id of the document this operation is part of.
     pub(crate) document_id: DocumentId,
@@ -32,6 +32,12 @@ pub struct StorageOperation {
 
     /// The public key of the key pair used to publish this operation.
     pub(crate) public_key: PublicKey,
+
+    /// Index for the position of this operation once topological sorting of the operation graph
+    /// has been performed.
+    ///
+    /// Is `None` when the operation has not been materialized into it's document yet.
+    pub(crate) sorted_index: Option<i32>,
 }
 
 impl WithPublicKey for StorageOperation {
