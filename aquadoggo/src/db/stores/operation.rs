@@ -274,7 +274,7 @@ impl SqlStore {
         Ok(())
     }
 
-    pub async fn insert_operation_with_index(
+    async fn insert_operation_with_index(
         &self,
         id: &OperationId,
         public_key: &PublicKey,
