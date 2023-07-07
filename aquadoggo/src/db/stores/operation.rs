@@ -58,17 +58,13 @@ impl OperationStore for SqlStore {
         Ok(document_id.map(|id_str| id_str.parse().unwrap()))
     }
 
-    /// Insert an operation into storage.
-    ///
-    /// This requires a DoggoOperation to be composed elsewhere, it contains an `PublicKey`,
-    /// `DocumentId`, `OperationId` and the actual `Operation` we want to store.
-    ///
-    /// Returns a result containing `true` when one insertion occured, and false when no insertions
-    /// occured. Errors when a fatal storage error occurs.
-    ///
-    /// In aquadoggo we store an operation in the database in three different tables: `operations`,
-    /// `previous` and `operation_fields`. This means that this method actually makes 3
-    /// different sets of insertions.
+    /// Insert an operation into storage along with the `PublicKey` of the author who created it the 
+    /// `DocumentId` of the document it's part of and it's `OperationId` derived from the hash of
+    /// the entry it was published with.
+    /// 
+    /// The `sorted_index` of the inserted operation will be set to `null` as this value is only
+    /// available once materialization has occurred. Use `update_operation_index` to set this
+    /// value.
     async fn insert_operation(
         &self,
         id: &OperationId,
@@ -250,6 +246,8 @@ fn group_and_parse_operation_rows(
 }
 
 impl SqlStore {
+    /// Update the sorted index of an operation. This method is used in `reduce` tasks as each
+    /// operation is processed.
     pub async fn update_operation_index(
         &self,
         operation_id: &OperationId,
@@ -274,6 +272,8 @@ impl SqlStore {
         Ok(())
     }
 
+    /// Insert an operation as well as the index for it's position in the document after
+    /// materialization has occurred. 
     async fn insert_operation_with_index(
         &self,
         id: &OperationId,
