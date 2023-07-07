@@ -17,7 +17,6 @@ use p2panda_rs::operation::validate::validate_operation_with_entry;
 use p2panda_rs::operation::{EncodedOperation, Operation, OperationAction, OperationId};
 use p2panda_rs::schema::Schema;
 use p2panda_rs::storage_provider::traits::{EntryStore, LogStore, OperationStore};
-use p2panda_rs::Human;
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::SqlStore;
@@ -132,12 +131,18 @@ impl SyncIngest {
     ) -> Result<(), IngestError> {
         let entry = decode_entry(encoded_entry)?;
 
-        trace!(
-            "Received entry {:?} for log {:?} and {}",
-            entry.seq_num(),
-            entry.log_id(),
-            entry.public_key().display()
-        );
+        trace!("Received entry and operation: {}", encoded_entry.hash());
+
+        // Check if we already have this entry. This can happen if another peer sent it to us
+        // during a concurrent sync session.
+        if store
+            .get_entry(&encoded_entry.hash())
+            .await
+            .expect("Fatal database error")
+            .is_some()
+        {
+            return Err(IngestError::DuplicateEntry(encoded_entry.hash()));
+        }
 
         let plain_operation = decode_operation(encoded_operation)?;
 
@@ -195,5 +200,46 @@ impl SyncIngest {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use p2panda_rs::entry::EncodedEntry;
+    use p2panda_rs::operation::EncodedOperation;
+    use p2panda_rs::schema::Schema;
+    use p2panda_rs::test_utils::fixtures::{encoded_entry, encoded_operation, schema};
+    use rstest::rstest;
+    use tokio::sync::broadcast;
+
+    use crate::replication::errors::IngestError;
+    use crate::replication::SyncIngest;
+    use crate::test_utils::{test_runner_with_manager, TestNodeManager};
+
+    #[rstest]
+    fn reject_duplicate_entries(
+        schema: Schema,
+        encoded_entry: EncodedEntry,
+        encoded_operation: EncodedOperation,
+    ) {
+        test_runner_with_manager(move |manager: TestNodeManager| async move {
+            let node = manager.create().await;
+            node.context.schema_provider.update(schema).await;
+
+            let (tx, _rx) = broadcast::channel(8);
+            let ingest = SyncIngest::new(node.context.schema_provider.clone(), tx.clone());
+
+            let result = ingest
+                .handle_entry(&node.context.store, &encoded_entry, &encoded_operation)
+                .await;
+
+            assert!(result.is_ok());
+
+            let result = ingest
+                .handle_entry(&node.context.store, &encoded_entry, &encoded_operation)
+                .await;
+
+            assert!(matches!(result, Err(IngestError::DuplicateEntry(_))));
+        })
     }
 }

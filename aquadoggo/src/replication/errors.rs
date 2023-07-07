@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use p2panda_rs::hash::Hash;
 use thiserror::Error;
 
 use crate::replication::TargetSet;
@@ -42,6 +43,9 @@ pub enum IngestError {
 
     #[error("Decoding operation failed: {0}")]
     DecodeOperation(#[from] p2panda_rs::operation::error::DecodeOperationError),
+
+    #[error("Duplicate entry received: {0}")]
+    DuplicateEntry(Hash),
 }
 
 #[derive(Error, Debug)]
