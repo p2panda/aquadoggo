@@ -36,7 +36,7 @@ pub struct StorageOperation {
     /// Index for the position of this operation once topological sorting of the operation graph
     /// has been performed.
     ///
-    /// Is None when the operation has not been materialized into it's document yet.
+    /// Is `None` when the operation has not been materialized into it's document yet.
     pub(crate) sorted_index: Option<i32>,
 }
 

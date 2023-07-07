@@ -58,13 +58,14 @@ impl OperationStore for SqlStore {
         Ok(document_id.map(|id_str| id_str.parse().unwrap()))
     }
 
-    /// Insert an operation into storage along with the `PublicKey` of the author who created it the
-    /// `DocumentId` of the document it's part of and it's `OperationId` derived from the hash of
-    /// the entry it was published with.
+    /// Insert an operation into storage.
     ///
-    /// The `sorted_index` of the inserted operation will be set to `null` as this value is only
-    /// available once materialization has occurred. Use `update_operation_index` to set this
-    /// value.
+    /// The `PublicKey` is determined by the author who created the operation, the `DocumentId` is
+    /// of the document this operation is part of and the `OperationId` is derived from the hash of
+    /// the `Entry` it was published with.
+    ///
+    /// The `sorted_index` of the inserted operation will be set to `None` as this value is only
+    /// available once materialization completed. Use `update_operation_index` to set this value.
     async fn insert_operation(
         &self,
         id: &OperationId,
@@ -139,14 +140,14 @@ impl OperationStore for SqlStore {
                 operation_fields_v1.list_index
             FROM
                 operations_v1
-            LEFT JOIN operation_fields_v1
-                ON
-                    operation_fields_v1.operation_id = operations_v1.operation_id
+                LEFT JOIN operation_fields_v1
+                    ON operation_fields_v1.operation_id = operations_v1.operation_id
             WHERE
                 operations_v1.document_id = $1
             ORDER BY
-                -- order the operations by their index when topologically sorted, in the case where this may not be set yet
-                -- we fall back to ordering by operation id. In both cases we additionally order by list index.
+                -- order the operations by their index when topologically sorted, in the case where
+                -- this may not be set yet we fall back to ordering by operation id. In both cases
+                -- we additionally order by list index.
                 operations_v1.sorted_index ASC, operations_v1.operation_id ASC, operation_fields_v1.list_index ASC
             ",
         )
@@ -183,9 +184,8 @@ impl OperationStore for SqlStore {
                     operation_fields_v1.list_index
                 FROM
                     operations_v1
-                LEFT JOIN operation_fields_v1
-                    ON
-                        operation_fields_v1.operation_id = operations_v1.operation_id
+                    LEFT JOIN operation_fields_v1
+                        ON operation_fields_v1.operation_id = operations_v1.operation_id
                 WHERE
                     operations_v1.schema_id = $1
                 ORDER BY
@@ -211,11 +211,9 @@ impl OperationStore for SqlStore {
 fn group_and_parse_operation_rows(
     operation_rows: Vec<OperationFieldsJoinedRow>,
 ) -> Vec<StorageOperation> {
-    // We need to group all the operation rows so they can be parsed into operations.
-    // They come from the database ordered by their index once topologically sorted when
-    // present, otherwise by operation id. List items are additionally ordered by their
-    // list index.
-
+    // We need to group all the operation rows so they can be parsed into operations. They come
+    // from the database ordered by their index once topologically sorted when present, otherwise
+    // by operation id. List items are additionally ordered by their list index.
     let mut grouped_operation_rows = vec![];
 
     let mut current_operation_id = operation_rows.first().unwrap().operation_id.clone();
@@ -226,9 +224,8 @@ fn group_and_parse_operation_rows(
             // If this row is part of the current operation push it to the current rows vec.
             current_operation_rows.push(row);
         } else {
-            // If we've moved on to the next operation, then push the complete vec of
-            // operation rows to the grouped rows collection and then setup for the next
-            // iteration.
+            // If we've moved on to the next operation, then push the complete vec of operation
+            // rows to the grouped rows collection and then setup for the next iteration.
             grouped_operation_rows.push(current_operation_rows.clone());
             current_operation_id = row.operation_id.clone();
             current_operation_rows = vec![row];
@@ -255,7 +252,7 @@ impl SqlStore {
     ) -> Result<(), OperationStorageError> {
         query::<Any>(
             "
-            UPDATE 
+            UPDATE
                 operations_v1
             SET
                 sorted_index = $2
