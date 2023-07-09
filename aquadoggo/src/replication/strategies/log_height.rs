@@ -309,7 +309,7 @@ mod tests {
             // Compose expected returned entries for each document, identified by the document id
             // and sorted_index value. Entries should always be grouped into documents and then
             // ordered by their index number.
-            let expected_entries = vec![
+            let mut expected_entries = vec![
                 (document_a.to_owned(), 0),
                 (document_a.to_owned(), 1),
                 (document_a.to_owned(), 2),
@@ -317,6 +317,9 @@ mod tests {
                 (document_b.to_owned(), 1),
                 (document_b.to_owned(), 2),
             ];
+
+            // Sort to account for indeterminate document ids
+            expected_entries.sort();
 
             // Retrieve entries and test against expected.
             retrieve_and_test_entries(&node, &remote_needs_all, &expected_entries).await;
@@ -335,7 +338,10 @@ mod tests {
             ];
 
             // Compose expected value and test.
-            let expected_entries = vec![(document_a.to_owned(), 2), (document_b.to_owned(), 2)];
+            let mut expected_entries = vec![(document_a.to_owned(), 2), (document_b.to_owned(), 2)];
+            // Sort to account for indeterminate document ids
+            expected_entries.sort();
+
             retrieve_and_test_entries(&node, &remote_needs_some, &expected_entries).await;
 
             // We also want to make sure to with documents which contain concurrent updates. Here
@@ -371,7 +377,7 @@ mod tests {
             ));
 
             // Now we expect 5 entries in document a still ordered by sorted index.
-            let expected_entries = vec![
+            let mut expected_entries = vec![
                 (document_a.to_owned(), 0),
                 (document_a.to_owned(), 1),
                 (document_a.to_owned(), 2),
@@ -381,6 +387,9 @@ mod tests {
                 (document_b.to_owned(), 1),
                 (document_b.to_owned(), 2),
             ];
+
+            // Sort to account for indeterminate document ids
+            expected_entries.sort();
 
             // Retrieve entries and test against expected.
             retrieve_and_test_entries(&node, &remote_needs_all, &expected_entries).await;
