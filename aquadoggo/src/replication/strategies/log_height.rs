@@ -19,6 +19,52 @@ use crate::replication::strategies::diff_log_heights;
 use crate::replication::traits::Strategy;
 use crate::replication::{LogHeights, Message, Mode, StrategyResult, TargetSet};
 
+type SortedIndex = i32;
+
+
+/// Retrieve entries from the store, group the result by document id and then sub-order them by
+/// their sorted index.
+async fn retrieve_entries(
+    store: &SqlStore,
+    remote_needs: &[LogHeights],
+) -> Vec<(StorageEntry, DocumentId, SortedIndex)> {
+    let mut entries = Vec::new();
+
+    for (public_key, log_heights) in remote_needs {
+        for (log_id, seq_num) in log_heights {
+            // Get the entries the remote needs for each log.
+            let log_entries = store
+                .get_entries_from(&public_key, &log_id, &seq_num)
+                .await
+                .expect("Fatal database error");
+
+            for entry in log_entries {
+                // Get the entry as well as we need some additional information in order to
+                // send the entries in the correct order.
+                let operation = store
+                    .get_operation(&entry.hash().into())
+                    .await
+                    .expect("Fatal database error")
+                    .expect("Operation should be in store");
+
+                // We only send entries if their operation has been materialized.
+                if let Some(sorted_index) = operation.sorted_index {
+                    entries.push((entry, operation.document_id, sorted_index));
+                }
+            }
+        }
+    }
+
+    // Sort all entries by document_id & sorted_index.
+    entries.sort_by(
+        |(_, document_id_a, sorted_index_a), (_, document_id_b, sorted_index_b)| {
+            (document_id_a, sorted_index_a).cmp(&(document_id_b, sorted_index_b))
+        },
+    );
+
+    entries
+}
+
 #[derive(Clone, Debug)]
 pub struct LogHeightStrategy {
     target_set: TargetSet,
@@ -35,6 +81,7 @@ impl LogHeightStrategy {
         }
     }
 
+    // Calculate the heights of all logs which contain contributions to documents in the current `TargetSet`.
     async fn local_log_heights(
         &self,
         store: &SqlStore,
@@ -60,13 +107,15 @@ impl LogHeightStrategy {
         log_heights
     }
 
+    // Prepare entry responses based on a remotes log heights. The response contains all entries
+    // the remote needs to bring their state in line with our own. The returned entries are
+    // grouped by document and ordered by the `sorted_index` of the operations they carry. With
+    // this ordering they can be ingested and validated easily on the remote.
     async fn entry_responses(
         &self,
         store: &SqlStore,
         remote_log_heights: &[LogHeights],
     ) -> Vec<Message> {
-        let mut entries = Vec::<(StorageEntry, DocumentId, i32)>::new();
-
         // Get local log heights for the configured target set.
         let local_log_heights = self.local_log_heights(store).await;
 
@@ -76,37 +125,7 @@ impl LogHeightStrategy {
             &remote_log_heights.iter().cloned().collect(),
         );
 
-        for (public_key, log_heights) in remote_needs {
-            for (log_id, seq_num) in log_heights {
-                // Get the entries the remote needs for each log.
-                let log_entries = store
-                    .get_entries_from(&public_key, &log_id, &seq_num)
-                    .await
-                    .expect("Fatal database error");
-
-                for entry in log_entries {
-                    // Get the entry as well as we need some additional information in order to
-                    // send the entries in the correct order.
-                    let operation = store
-                        .get_operation(&entry.hash().into())
-                        .await
-                        .expect("Fatal database error")
-                        .expect("Operation should be in store");
-
-                    // We only send entries if their operation has been materialized.
-                    if let Some(sorted_index) = operation.sorted_index {
-                        entries.push((entry, operation.document_id, sorted_index));
-                    }
-                }
-            }
-        }
-
-        // Sort all entries by document_id & sorted_index.
-        entries.sort_by(
-            |(_, document_id_a, sorted_index_a), (_, document_id_b, sorted_index_b)| {
-                (document_id_a, sorted_index_a).cmp(&(document_id_b, sorted_index_b))
-            },
-        );
+        let entries = retrieve_entries(store, &remote_needs).await;
 
         // Compose the actual messages.
         entries
@@ -182,5 +201,268 @@ impl Strategy for LogHeightStrategy {
         }
 
         Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use p2panda_rs::document::DocumentId;
+    use p2panda_rs::entry::{EncodedEntry, LogId, SeqNum};
+    use p2panda_rs::identity::KeyPair;
+    use p2panda_rs::operation::{
+        EncodedOperation, OperationAction, OperationBuilder, OperationValue,
+    };
+    use p2panda_rs::schema::Schema;
+    use p2panda_rs::test_utils::memory_store::helpers::{send_to_store, PopulateStoreConfig};
+    use rstest::rstest;
+    use tokio::sync::broadcast;
+
+    use crate::materializer::tasks::reduce_task;
+    use crate::materializer::TaskInput;
+    use crate::replication::ingest::SyncIngest;
+    use crate::replication::strategies::log_height::{retrieve_entries, SortedIndex};
+    use crate::replication::{LogHeightStrategy, LogHeights, Message, TargetSet};
+    use crate::test_utils::{
+        populate_and_materialize, populate_store_config, test_runner_with_manager, TestNode,
+        TestNodeManager,
+    };
+
+    // Helper for retrieving operations ordered as expected for replication and testing the result.
+    async fn retrieve_and_test_entries(
+        node: &TestNode,
+        remote_needs: &[LogHeights],
+        expected_entries: &Vec<(DocumentId, SortedIndex)>,
+    ) {
+        // Retrieve the entries.
+        let entries = retrieve_entries(&node.context.store, &remote_needs).await;
+
+        // Map the returned value into a more easily testable form (we assume the entries are
+        // correct, here we are testing the entry retrieval logic mainly)
+        let entries: Vec<(DocumentId, SortedIndex)> = entries
+            .into_iter()
+            .map(|(_, document_id, sorted_index)| (document_id, sorted_index))
+            .collect();
+
+        assert_eq!(&entries, expected_entries, "{remote_needs:#?}");
+    }
+
+    // Helper for updating a document.
+    async fn update_and_materialize_document(
+        node: &TestNode,
+        key_pair: &KeyPair,
+        schema: &Schema,
+        document_id: &DocumentId,
+        values: Vec<(&str, impl Into<OperationValue>)>,
+    ) {
+        let values: Vec<(&str, OperationValue)> = values
+            .into_iter()
+            .map(|(key, value)| (key, value.into()))
+            .collect();
+
+        // Publish an update into this documents past.
+        let update_operation = OperationBuilder::new(schema.id())
+            .action(OperationAction::Update)
+            .previous(&document_id.as_str().parse().unwrap())
+            .fields(&values)
+            .build()
+            .unwrap();
+
+        send_to_store(&node.context.store, &update_operation, schema, key_pair)
+            .await
+            .unwrap();
+
+        // Reduce the updated document.
+        let input = TaskInput::DocumentId(document_id.clone());
+        let _ = reduce_task(node.context.clone(), input).await.unwrap();
+    }
+
+    #[rstest]
+    fn retrieves_and_sorts_entries(
+        #[from(populate_store_config)]
+        #[with(3, 1, 2)]
+        config: PopulateStoreConfig,
+    ) {
+        test_runner_with_manager(move |manager: TestNodeManager| async move {
+            // Create one node and materialize some documents on it.
+            let mut node = manager.create().await;
+            let (key_pairs, document_ids) = populate_and_materialize(&mut node, &config).await;
+            let schema = config.schema.clone();
+
+            // Collect the values for the two authors and documents.
+            let key_pair_a = key_pairs.get(0).unwrap();
+            let key_pair_b = key_pairs.get(1).unwrap();
+
+            let document_a = document_ids.get(0).unwrap();
+            let document_b = document_ids.get(1).unwrap();
+
+            // Compose the list of logs the a remote might need.
+            let mut remote_needs_all = vec![
+                (
+                    key_pair_a.public_key(),
+                    vec![(LogId::default(), SeqNum::default())],
+                ),
+                (
+                    key_pair_b.public_key(),
+                    vec![(LogId::default(), SeqNum::default())],
+                ),
+            ];
+
+            // Compose expected returned entries for each document, identified by the document id
+            // and sorted_index value. Entries should always be grouped into documents and then
+            // ordered by their index number.
+            let expected_entries = vec![
+                (document_a.to_owned(), 0),
+                (document_a.to_owned(), 1),
+                (document_a.to_owned(), 2),
+                (document_b.to_owned(), 0),
+                (document_b.to_owned(), 1),
+                (document_b.to_owned(), 2),
+            ];
+
+            // Retrieve entries and test against expected.
+            retrieve_and_test_entries(&node, &remote_needs_all, &expected_entries).await;
+
+            // Compose a different "needs" list now with values which should now only return a
+            // section of the log.
+            let remote_needs_some = [
+                (
+                    key_pair_a.public_key(),
+                    vec![(LogId::default(), SeqNum::new(3).unwrap())],
+                ),
+                (
+                    key_pair_b.public_key(),
+                    vec![(LogId::default(), SeqNum::new(3).unwrap())],
+                ),
+            ];
+
+            // Compose expected value and test.
+            let expected_entries = vec![(document_a.to_owned(), 2), (document_b.to_owned(), 2)];
+            retrieve_and_test_entries(&node, &remote_needs_some, &expected_entries).await;
+
+            // We also want to make sure to with documents which contain concurrent updates. Here
+            // we publish two operations into the documents past, causing branches to occur.
+
+            // Create a new author.
+            let key_pair = KeyPair::new();
+
+            // Publish a concurrent update.
+            update_and_materialize_document(
+                &node,
+                &key_pair,
+                &schema,
+                &document_a,
+                vec![("username", "よつば")],
+            )
+            .await;
+
+            // Publish another concurrent update.
+            update_and_materialize_document(
+                &node,
+                &key_pair,
+                &schema,
+                &document_a,
+                vec![("username", "ヂャンボ")],
+            )
+            .await;
+
+            // Add the new author to the "needs" list
+            remote_needs_all.push((
+                key_pair.public_key(),
+                vec![(LogId::default(), SeqNum::default())],
+            ));
+
+            // Now we expect 5 entries in document a still ordered by sorted index.
+            let expected_entries = vec![
+                (document_a.to_owned(), 0),
+                (document_a.to_owned(), 1),
+                (document_a.to_owned(), 2),
+                (document_a.to_owned(), 3),
+                (document_a.to_owned(), 4),
+                (document_b.to_owned(), 0),
+                (document_b.to_owned(), 1),
+                (document_b.to_owned(), 2),
+            ];
+
+            // Retrieve entries and test against expected.
+            retrieve_and_test_entries(&node, &remote_needs_all, &expected_entries).await;
+        })
+    }
+
+    #[rstest]
+    fn entry_responses_can_be_ingested(
+        #[from(populate_store_config)]
+        #[with(5, 2, 1)]
+        config: PopulateStoreConfig,
+    ) {
+        test_runner_with_manager(move |manager: TestNodeManager| async move {
+            let schema = config.schema.clone();
+            let target_set = TargetSet::new(&vec![schema.id().to_owned()]);
+
+            let strategy_a = LogHeightStrategy::new(&target_set);
+            let mut node_a = manager.create().await;
+            populate_and_materialize(&mut node_a, &config).await;
+
+            let node_b = manager.create().await;
+            let schema_provider = node_b.context.schema_provider.clone();
+            schema_provider.update(schema).await;
+            let (tx, _) = broadcast::channel(50);
+            let ingest = SyncIngest::new(schema_provider, tx);
+
+            let entry_responses: Vec<(EncodedEntry, Option<EncodedOperation>)> = strategy_a
+                .entry_responses(&node_a.context.store, &[])
+                .await
+                .into_iter()
+                .map(|message| match message {
+                    Message::Entry(entry, operation) => (entry, operation),
+                    _ => panic!(),
+                })
+                .collect();
+
+            for (entry, operation) in &entry_responses {
+                let result = ingest
+                    .handle_entry(
+                        &node_b.context.store,
+                        entry,
+                        operation
+                            .as_ref()
+                            .expect("All messages contain an operation"),
+                    )
+                    .await;
+
+                assert!(result.is_ok());
+            }
+        });
+    }
+
+    #[rstest]
+    fn calculates_log_heights(
+        #[from(populate_store_config)]
+        #[with(5, 2, 1)]
+        config: PopulateStoreConfig,
+    ) {
+        test_runner_with_manager(move |manager: TestNodeManager| async move {
+            let target_set = TargetSet::new(&vec![config.schema.id().to_owned()]);
+
+            let strategy_a = LogHeightStrategy::new(&target_set);
+            let mut node_a = manager.create().await;
+            let (key_pairs, _) = populate_and_materialize(&mut node_a, &config).await;
+
+            let log_heights = strategy_a.local_log_heights(&node_a.context.store).await;
+
+            let expected_log_heights = key_pairs
+                .into_iter()
+                .map(|key_pair| {
+                    (
+                        key_pair.public_key(),
+                        vec![
+                            (LogId::default(), SeqNum::new(5).unwrap()),
+                            (LogId::new(1), SeqNum::new(5).unwrap()),
+                        ],
+                    )
+                })
+                .collect();
+
+            assert_eq!(log_heights, expected_log_heights);
+        });
     }
 }
