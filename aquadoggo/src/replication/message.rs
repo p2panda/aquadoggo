@@ -255,7 +255,7 @@ mod tests {
                 51,
                 Message::SyncRequest(Mode::SetReconciliation, target_set.clone())
             )),
-            serialize_value(cbor!([0, 51, 1, target_set]))
+            serialize_value(cbor!([0, 51, 2, target_set]))
         );
 
         let log_heights = vec![(public_key, vec![(LogId::default(), SeqNum::default())])];

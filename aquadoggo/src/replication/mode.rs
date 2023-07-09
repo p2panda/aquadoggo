@@ -86,7 +86,8 @@ mod tests {
     #[test]
     fn u64_representation() {
         assert_eq!(Mode::LogHeight.as_u64(), 0);
-        assert_eq!(Mode::SetReconciliation.as_u64(), 1);
+        assert_eq!(Mode::Document.as_u64(), 1);
+        assert_eq!(Mode::SetReconciliation.as_u64(), 2);
     }
 
     #[test]
