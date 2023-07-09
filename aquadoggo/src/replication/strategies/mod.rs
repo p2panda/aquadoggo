@@ -4,7 +4,7 @@ mod log_height;
 mod document;
 mod set_reconciliation;
 
-
+pub use document::DocumentStrategy;
 pub use log_height::LogHeightStrategy;
 pub use set_reconciliation::SetReconciliationStrategy;
 

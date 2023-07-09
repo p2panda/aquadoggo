@@ -3,5 +3,5 @@
 mod diff;
 mod strategy;
 
-pub use strategy::DocumentViewIdStrategy;
+pub use strategy::DocumentStrategy;
 pub use diff::diff_documents;

@@ -20,13 +20,13 @@ use crate::replication::traits::Strategy;
 use crate::replication::{LogHeights, Message, Mode, StrategyResult, TargetSet};
 
 #[derive(Clone, Debug)]
-pub struct DocumentViewIdStrategy {
+pub struct DocumentStrategy {
     target_set: TargetSet,
     received_remote_have: bool,
     sent_have: bool,
 }
 
-impl DocumentViewIdStrategy {
+impl DocumentStrategy {
     pub fn new(target_set: &TargetSet) -> Self {
         Self {
             target_set: target_set.clone(),
@@ -51,7 +51,7 @@ impl DocumentViewIdStrategy {
 }
 
 #[async_trait]
-impl Strategy for DocumentViewIdStrategy {
+impl Strategy for DocumentStrategy {
     fn mode(&self) -> Mode {
         Mode::LogHeight
     }

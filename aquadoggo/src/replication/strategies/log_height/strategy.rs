@@ -219,12 +219,13 @@ mod tests {
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
     use crate::replication::ingest::SyncIngest;
-    use crate::replication::strategies::log_height::{retrieve_entries, SortedIndex};
     use crate::replication::{LogHeightStrategy, LogHeights, Message, TargetSet};
     use crate::test_utils::{
         populate_and_materialize, populate_store_config, test_runner_with_manager, TestNode,
         TestNodeManager,
     };
+
+    use super::{retrieve_entries, SortedIndex};
 
     // Helper for retrieving operations ordered as expected for replication and testing the result.
     async fn retrieve_and_test_entries(

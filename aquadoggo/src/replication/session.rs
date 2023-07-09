@@ -9,7 +9,7 @@ use crate::db::SqlStore;
 use crate::replication::errors::ReplicationError;
 use crate::replication::traits::Strategy;
 use crate::replication::{
-    LogHeightStrategy, Message, Mode, SetReconciliationStrategy, StrategyResult, TargetSet,
+    DocumentStrategy, LogHeightStrategy, Message, Mode, SetReconciliationStrategy, StrategyResult, TargetSet,
 };
 
 pub type SessionId = u64;
@@ -58,6 +58,7 @@ impl Session {
     ) -> Self {
         let strategy: Box<dyn Strategy> = match mode {
             Mode::LogHeight => Box::new(LogHeightStrategy::new(target_set)),
+            Mode::Document => Box::new(DocumentStrategy::new(target_set)),
             Mode::SetReconciliation => Box::new(SetReconciliationStrategy::new()),
             Mode::Unknown => panic!("Unknown replication mode"),
         };
