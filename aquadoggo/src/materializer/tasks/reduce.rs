@@ -2,7 +2,7 @@
 
 use std::convert::TryFrom;
 
-use log::{debug, info};
+use log::{debug, info, trace};
 use p2panda_rs::document::materialization::build_graph;
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::{Document, DocumentBuilder, DocumentId, DocumentViewId};
