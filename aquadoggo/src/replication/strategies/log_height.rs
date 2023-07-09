@@ -21,7 +21,6 @@ use crate::replication::{LogHeights, Message, Mode, StrategyResult, TargetSet};
 
 type SortedIndex = i32;
 
-
 /// Retrieve entries from the store, group the result by document id and then sub-order them by
 /// their sorted index.
 async fn retrieve_entries(
@@ -34,7 +33,7 @@ async fn retrieve_entries(
         for (log_id, seq_num) in log_heights {
             // Get the entries the remote needs for each log.
             let log_entries = store
-                .get_entries_from(&public_key, &log_id, &seq_num)
+                .get_entries_from(public_key, log_id, seq_num)
                 .await
                 .expect("Fatal database error");
 

@@ -62,9 +62,9 @@ impl SyncIngest {
         let _ = publish(
             store,
             &schema,
-            &encoded_entry,
+            encoded_entry,
             &plain_operation,
-            &encoded_operation,
+            encoded_operation,
         )
         .await?;
 
