@@ -143,9 +143,9 @@ impl ConnectionManager {
         TargetSet::new(&supported_schema_ids)
     }
 
-    /// Register a new peer in the network.
+    /// Register a new peer connection on the manager.
     async fn on_connection_established(&mut self, peer: Peer) {
-        info!("Connected to peer: {}", peer.display());
+        info!("Established connection with peer: {}", peer.display());
 
         match self.peers.get(&peer) {
             Some(_) => {
@@ -158,20 +158,19 @@ impl ConnectionManager {
         }
     }
 
-    /// Handle a peer disconnecting from the network.
+    /// Handle a peer connection closing.
     async fn on_connection_closed(&mut self, peer: Peer) {
-        info!("Disconnected from peer: {}", peer.display());
+        info!("Closed connection with peer: {}", peer.display());
 
         // Clear running replication sessions from sync manager
         self.sync_manager.remove_sessions(&peer);
         self.remove_connection(peer)
     }
 
-    /// Remove a peer from the network.
+    /// Remove a peer connection from the manager.
     fn remove_connection(&mut self, peer: Peer) {
-        match self.peers.remove(&peer) {
-            Some(_) => debug!("Remove peer: {}", peer.display()),
-            None => warn!("Tried to remove connection from unknown peer"),
+        if self.peers.remove(&peer).is_none() {
+            warn!("Tried to remove connection from unknown peer")
         }
     }
 
