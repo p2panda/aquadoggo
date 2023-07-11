@@ -325,18 +325,13 @@ impl EventLoop {
                 mdns::Event::Discovered(list) => {
                     for (peer_id, multiaddr) in list {
                         debug!("mDNS discovered a new peer: {peer_id}");
-
-                        if let Err(err) = self.swarm.dial(multiaddr) {
-                            warn!("Failed to dial: {}", err);
-                        } else {
-                            debug!("Dial success: skip remaining addresses for: {peer_id}");
-                            break;
-                        }
+                        self.swarm.behaviour_mut().redial.peer_discovered(peer_id)
                     }
                 }
                 mdns::Event::Expired(list) => {
-                    for (peer, _multiaddr) in list {
-                        trace!("mDNS peer has expired: {peer}");
+                    for (peer_id, _multiaddr) in list {
+                        trace!("mDNS peer has expired: {peer_id}");
+                        self.swarm.behaviour_mut().redial.peer_expired(peer_id)
                     }
                 }
             },
@@ -535,6 +530,8 @@ impl EventLoop {
                     ))
                 }
             },
+
+            SwarmEvent::Behaviour(BehaviourEvent::Redial(_)) => (),
         }
     }
 }
