@@ -221,15 +221,9 @@ impl ConnectionHandler for Handler {
             }
             ConnectionEvent::DialUpgradeError(_)
             | ConnectionEvent::AddressChange(_)
-            | ConnectionEvent::ListenUpgradeError(_) => {
-                warn!("Connection event error");
-            }
-            ConnectionEvent::LocalProtocolsChange(_) => {
-                debug!("ConnectionEvent: LocalProtocolsChange")
-            }
-            ConnectionEvent::RemoteProtocolsChange(_) => {
-                debug!("ConnectionEvent: RemoteProtocolsChange")
-            }
+            | ConnectionEvent::ListenUpgradeError(_)
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_) => (),
         }
     }
 

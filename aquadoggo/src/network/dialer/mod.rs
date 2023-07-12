@@ -2,4 +2,4 @@
 
 mod behaviour;
 
-pub use behaviour::Behaviour;
+pub use behaviour::{Behaviour, Event};

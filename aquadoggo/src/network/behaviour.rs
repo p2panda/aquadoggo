@@ -11,7 +11,7 @@ use log::debug;
 
 use crate::network::config::NODE_NAMESPACE;
 use crate::network::NetworkConfiguration;
-use crate::network::{peers, redial};
+use crate::network::{peers, dialer};
 
 /// How often do we broadcast mDNS queries into the network.
 const MDNS_QUERY_INTERVAL: Duration = Duration::from_secs(5);
@@ -73,7 +73,7 @@ pub struct Behaviour {
     /// Register peer connections and handle p2panda messaging with them.
     pub peers: peers::Behaviour,
 
-    pub redial: redial::Behaviour,
+    pub redial: dialer::Behaviour,
 }
 
 impl Behaviour {
@@ -173,7 +173,7 @@ impl Behaviour {
         // Create behaviour to manage peer connections and handle p2panda messaging
         let peers = peers::Behaviour::new();
 
-        let redial = redial::Behaviour::new();
+        let redial = dialer::Behaviour::new();
 
         Ok(Self {
             autonat: autonat.into(),

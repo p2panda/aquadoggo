@@ -4,7 +4,7 @@ mod behaviour;
 mod config;
 pub mod identity;
 mod peers;
-mod redial;
+mod dialer;
 mod service;
 mod shutdown;
 mod swarm;

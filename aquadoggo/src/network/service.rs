@@ -5,6 +5,7 @@ use std::time::Duration;
 use anyhow::Result;
 use libp2p::multiaddr::Protocol;
 use libp2p::ping::Event;
+use libp2p::swarm::dial_opts::{DialOpts, PeerCondition};
 use libp2p::swarm::{ConnectionError, SwarmEvent};
 use libp2p::{autonat, identify, mdns, rendezvous, Multiaddr, PeerId, Swarm};
 use log::{debug, info, trace, warn};
@@ -17,7 +18,7 @@ use crate::context::Context;
 use crate::manager::{ServiceReadySender, Shutdown};
 use crate::network::behaviour::{Behaviour, BehaviourEvent};
 use crate::network::config::NODE_NAMESPACE;
-use crate::network::{identity, peers, swarm, NetworkConfiguration, ShutdownHandler};
+use crate::network::{identity, peers, dialer, swarm, NetworkConfiguration, ShutdownHandler};
 
 /// Network service that configures and deploys a libp2p network swarm over QUIC transports.
 ///
@@ -260,7 +261,7 @@ impl EventLoop {
                             debug!("Connection {connection_id:?} closed with peer {peer_id}");
                         }
                         _ => {
-                            warn!("Connection error occurred with peer {peer_id} on connection {connection_id:?}: {error}");
+                            warn!("Connection error occurred with peer {peer_id} on connection {connection_id:?}");
                         }
                     }
                 }
@@ -287,9 +288,9 @@ impl EventLoop {
                 connection_id,
                 local_addr,
                 send_back_addr,
-                error,
+                ..
             } => {
-                warn!("Incoming connection error occurred with {local_addr} and {send_back_addr} on connectino {connection_id:?}: {error}");
+                warn!("Incoming connection error occurred with {local_addr} and {send_back_addr} on connection {connection_id:?}");
             }
             SwarmEvent::ListenerClosed {
                 listener_id,
@@ -308,13 +309,13 @@ impl EventLoop {
             SwarmEvent::OutgoingConnectionError {
                 connection_id,
                 peer_id,
-                error,
+                ..
             } => match peer_id {
                 Some(id) => {
-                    warn!("Outgoing connection error with peer {id} occurred on connection {connection_id:?}: {error}");
+                    warn!("Outgoing connection error with peer {id} occurred on connection {connection_id:?}");
                 }
                 None => {
-                    warn!("Outgoing connection error occurred on connection {connection_id:?}: {error}");
+                    warn!("Outgoing connection error occurred on connection {connection_id:?}");
                 }
             },
 
@@ -531,7 +532,19 @@ impl EventLoop {
                 }
             },
 
-            SwarmEvent::Behaviour(BehaviourEvent::Redial(_)) => (),
+            SwarmEvent::Behaviour(BehaviourEvent::Redial(event)) => match event {
+                dialer::Event::Dial(peer_id) => {
+                    match self.swarm.dial(
+                        DialOpts::peer_id(peer_id)
+                        .condition(PeerCondition::Disconnected)
+                        .condition(PeerCondition::NotDialing)
+                        .build(),
+                    ) {
+                        Ok(_) => debug!("Dialing peer: {peer_id}"),
+                        Err(_) => warn!("Error dialing peer: {peer_id}"),
+                    };
+                }
+            },
         }
     }
 }
