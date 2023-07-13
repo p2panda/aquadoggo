@@ -207,7 +207,8 @@ impl NetworkBehaviour for Behaviour {
         _id: PeerId,
         _: ConnectionId,
         _: THandlerOutEvent<Self>,
-    ) {}
+    ) {
+    }
 
     fn poll(
         &mut self,
