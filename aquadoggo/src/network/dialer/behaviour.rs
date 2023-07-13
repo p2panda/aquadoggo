@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 
 const RETRY_LIMIT: u32 = 8;
 const BACKOFF_SEC_MIN: u64 = 1;
-const BACKOFF_SEC_MAX: u64 = 10;
+const BACKOFF_SEC_MAX: u64 = 60;
 
 /// Events which are sent to the swarm from the dialer.
 #[derive(Clone, Debug)]
