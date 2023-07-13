@@ -246,6 +246,7 @@ impl EventLoop {
                 peer_id,
                 connection_id,
                 cause,
+                num_established,
                 ..
             } => match cause {
                 Some(ConnectionError::IO(error)) => {
@@ -254,6 +255,10 @@ impl EventLoop {
                     match error.to_string().as_str() {
                         "timed out" => {
                             debug!("Connection {connection_id:?} timed out with peer {peer_id}");
+                            self.swarm
+                                .behaviour_mut()
+                                .dialer
+                                .connection_error(peer_id, num_established);
                         }
                         "closed by peer: 0" => {
                             // We received an `ApplicationClose` with code 0 here which means the
@@ -262,6 +267,10 @@ impl EventLoop {
                         }
                         _ => {
                             warn!("Connection error occurred with peer {peer_id} on connection {connection_id:?}");
+                            self.swarm
+                                .behaviour_mut()
+                                .dialer
+                                .connection_error(peer_id, num_established);
                         }
                     }
                 }
@@ -270,6 +279,10 @@ impl EventLoop {
                 }
                 Some(ConnectionError::Handler(_)) => {
                     warn!("Connection handler error occurred with peer {peer_id}");
+                    self.swarm
+                        .behaviour_mut()
+                        .dialer
+                        .connection_error(peer_id, num_established);
                 }
                 None => {
                     debug!("Connection closed with peer {peer_id}");
@@ -326,13 +339,12 @@ impl EventLoop {
                 mdns::Event::Discovered(list) => {
                     for (peer_id, _multiaddr) in list {
                         debug!("mDNS discovered a new peer: {peer_id}");
-                        self.swarm.behaviour_mut().dialer.peer_discovered(peer_id)
+                        self.swarm.behaviour_mut().dialer.dial_peer(peer_id)
                     }
                 }
                 mdns::Event::Expired(list) => {
                     for (peer_id, _multiaddr) in list {
                         trace!("mDNS peer has expired: {peer_id}");
-                        self.swarm.behaviour_mut().dialer.peer_expired(peer_id)
                     }
                 }
             },
@@ -370,7 +382,7 @@ impl EventLoop {
                             // Only dial remote peers discovered via rendezvous server
                             if peer_id != local_peer_id {
                                 debug!("Discovered peer {peer_id} at {address}");
-                                self.swarm.behaviour_mut().dialer.peer_discovered(peer_id);
+                                self.swarm.behaviour_mut().dialer.dial_peer(peer_id);
                             }
                         }
                     }
@@ -383,7 +395,6 @@ impl EventLoop {
                 }
                 rendezvous::client::Event::Expired { peer } => {
                     trace!("Peer registration with rendezvous expired: {peer:?}");
-                    self.swarm.behaviour_mut().dialer.peer_expired(peer);
                 }
             },
             SwarmEvent::Behaviour(BehaviourEvent::RendezvousServer(event)) => match event {
