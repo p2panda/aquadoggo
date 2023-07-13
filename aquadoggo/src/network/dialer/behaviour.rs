@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::task::{Context, Poll};
 
+use exponential_backoff::Backoff;
 use libp2p::core::Endpoint;
 use libp2p::swarm::derive_prelude::ConnectionEstablished;
 use libp2p::swarm::dummy::ConnectionHandler as DummyConnectionHandler;
@@ -12,13 +13,16 @@ use libp2p::swarm::{
 };
 use libp2p::{Multiaddr, PeerId};
 use log::{debug, warn};
-use void::Void;
+use std::time::{Duration, Instant};
 
-const DIAL_LIMIT: i32 = 10;
+const RETRY_LIMIT: u32 = 8;
+const BACKOFF_SEC_MIN: u64 = 1;
+const BACKOFF_SEC_MAX: u64 = 10;
 
 /// Events which are sent to the swarm from the dialer.
 #[derive(Clone, Debug)]
 pub enum Event {
+    /// Event sent to request that the swarm dials a known peer.
     Dial(PeerId),
 }
 
@@ -26,65 +30,73 @@ pub enum Event {
 #[derive(Clone, Debug, Default)]
 pub struct PeerStatus {
     /// Number of existing connections to this peer.
-    connections: i32,
+    connections: u32,
 
-    /// Number of failed dial attempts since the last successful connection.
+    /// Number of dial attempts to this peer since it was last disconnected.
     ///
-    /// Resets back to zero once a connection is established.
-    dial_attempts: i32,
+    /// Is reset to 0 once a connection is successfully established.
+    attempts: u32,
+
+    /// Time at which the peer should be dialed. Is None if this peer has a successfully
+    /// established connection.
+    next_dial: Option<Instant>,
 }
 
 /// Behaviour responsible for dialing peers discovered by the `swarm`. If all connections close to
 /// a peer, then the dialer attempts to reconnect to the peer.
 ///
-/// @TODO: Need to add back-off to redial attempts.
+/// @TODO: Need to add back-off to next_dial attempts.
 #[derive(Debug)]
 pub struct Behaviour {
-    /// The behaviours event queue which gets consumed when `poll` is called.
-    events: VecDeque<ToSwarm<Event, Void>>,
-
-    /// Peers we are dialing.
+    /// Peers we want to dial.
     peers: HashMap<PeerId, PeerStatus>,
+
+    /// The backoff instance used for scheduling next_dials.
+    backoff: Backoff,
 }
 
 impl Behaviour {
     pub fn new() -> Self {
+        let min = Duration::from_secs(BACKOFF_SEC_MIN);
+        let max = Duration::from_secs(BACKOFF_SEC_MAX);
+        let backoff = Backoff::new(RETRY_LIMIT, min, max);
+
         Self {
-            events: VecDeque::new(),
             peers: HashMap::new(),
+            backoff,
         }
     }
 
-    /// Add a peer to the map of known peers which this behaviour should be dialing.
+    /// Add a peer to the map of known peers who should be dialed.
     pub fn peer_discovered(&mut self, peer_id: PeerId) {
         if self.peers.get(&peer_id).is_none() {
             self.peers.insert(peer_id, PeerStatus::default());
-            self.events
-                .push_back(ToSwarm::GenerateEvent(Event::Dial(peer_id.clone())));
+            self.schedule_dial(&peer_id);
         }
     }
 
-    /// Remove a peer from the behaviours map of known peers.
+    /// Remove a peer from the map of known peers.
     ///
-    /// Called externally if a peer is known to have expired.
+    /// Called externally if a peers registration expires on the `swarm`.
     pub fn peer_expired(&mut self, peer_id: PeerId) {
-        self.remove_peer(&peer_id)
+        // If the peer doesn't exist this means it was already dropped because the RETRY_LIMIT was
+        // reached, so don't try and remove it again.
+        if self.peers.get(&peer_id).is_some() {
+            self.remove_peer(&peer_id)
+        }
     }
 
-    /// Issues `Dial` event to the `swarm` for the passed peer.
+    /// Schedule a peer to be dialed.
     ///
-    /// Checks `dial_attempts` for peer first, if this has exceeded the `DIAL_LIMIT` then no
-    /// `Dial` event is issued.
-    fn dial_peer(&mut self, peer_id: &PeerId) {
+    /// Uses the configured `backoff` instance for the behaviour and the current `attempts` count
+    /// for the passed node to set the `next_dial` time for this peer.
+    ///
+    /// If the `REDIAL_LIMIT` is reached then the peer is removed from the map of known peers and
+    /// no more redial attempts will occur.
+    fn schedule_dial(&mut self, peer_id: &PeerId) {
         if let Some(status) = self.peers.get_mut(peer_id) {
-            status.dial_attempts += 1;
-            if status.dial_attempts < DIAL_LIMIT {
-                debug!(
-                    "Attempt redial {} with peer: {peer_id:?}",
-                    status.dial_attempts
-                );
-                self.events
-                    .push_back(ToSwarm::GenerateEvent(Event::Dial(peer_id.clone())));
+            if let Some(backoff_delay) = self.backoff.next(status.attempts) {
+                status.next_dial = Some(Instant::now() + backoff_delay);
             } else {
                 debug!("Re-dial attempt limit reached: remove peer {peer_id:?}");
                 self.remove_peer(&peer_id)
@@ -95,7 +107,6 @@ impl Behaviour {
     fn on_connection_established(&mut self, peer_id: PeerId) {
         match self.peers.get_mut(&peer_id) {
             Some(status) => {
-                status.dial_attempts = 0;
                 status.connections += 1;
             }
             None => {
@@ -110,7 +121,7 @@ impl Behaviour {
                 status.connections -= 1;
 
                 if status.connections == 0 {
-                    self.dial_peer(peer_id)
+                    self.schedule_dial(peer_id)
                 }
             }
             None => {
@@ -123,7 +134,7 @@ impl Behaviour {
         match self.peers.get_mut(peer_id) {
             Some(status) => {
                 if status.connections == 0 {
-                    self.dial_peer(peer_id)
+                    self.schedule_dial(peer_id)
                 }
             }
             None => warn!("Dial failed to unknown peer"),
@@ -132,7 +143,8 @@ impl Behaviour {
 
     fn remove_peer(&mut self, peer_id: &PeerId) {
         if self.peers.remove(&peer_id).is_none() {
-            warn!("Tried to remove unknown peer")
+            // Don't warn here, peers can be removed twice if their registration on the swarm
+            // expired at the same time as their RETRY_LIMIT was reached.
         }
     }
 }
@@ -204,8 +216,31 @@ impl NetworkBehaviour for Behaviour {
         _cx: &mut Context<'_>,
         _params: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
-        if let Some(event) = self.events.pop_front() {
-            return Poll::Ready(event);
+        let mut peer_to_dial = None;
+        let now = Instant::now();
+
+        // Iterate over all peers and take the first one which has `next_dial` set and the
+        // scheduled dial time has passed.
+        for (peer_id, status) in &self.peers {
+            if let Some(next_dial) = status.next_dial {
+                if next_dial < now {
+                    peer_to_dial = Some(peer_id.to_owned());
+                }
+            }
+        }
+
+        if let Some(peer_id) = peer_to_dial {
+            // Unwrap safely as we know the peer exists.
+            let status = self.peers.get_mut(&peer_id).unwrap();
+
+            // Increment the peers dial attempts.
+            status.attempts += 1;
+
+            // Set the peers `next_dial` value to None. This get's set again if the dial attempt fails.
+            status.next_dial = None;
+
+            debug!("Dial attempt {} for peer {peer_id}", status.attempts);
+            return Poll::Ready(ToSwarm::GenerateEvent(Event::Dial(peer_id.to_owned())));
         }
 
         Poll::Pending
