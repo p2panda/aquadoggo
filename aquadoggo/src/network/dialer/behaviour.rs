@@ -26,7 +26,7 @@ pub enum Event {
     Dial(PeerId),
 }
 
-/// Status of a peer known to the dealer behaviour.
+/// Status of a peer known to the dialer behaviour.
 #[derive(Clone, Debug, Default)]
 pub struct PeerStatus {
     /// Number of existing connections to this peer.
@@ -43,12 +43,11 @@ pub struct PeerStatus {
 }
 
 /// Behaviour responsible for dialing peers discovered by the `swarm`. If all connections close to
-/// a peer, then the dialer attempts to reconnect to the peer.
-///
-/// @TODO: Need to add back-off to next_dial attempts.
+/// a peer, then the dialer attempts to reconnect to the peer with backoff until `RETRY_LIMIT` is
+/// reached.
 #[derive(Debug)]
 pub struct Behaviour {
-    /// Peers we want to dial.
+    /// Discovered peers we want to dial.
     peers: HashMap<PeerId, PeerStatus>,
 
     /// The backoff instance used for scheduling next_dials.
