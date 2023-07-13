@@ -370,21 +370,7 @@ impl EventLoop {
                             // Only dial remote peers discovered via rendezvous server
                             if peer_id != local_peer_id {
                                 debug!("Discovered peer {peer_id} at {address}");
-
-                                let p2p_suffix = Protocol::P2p(peer_id);
-                                let address_with_p2p = if !address
-                                    .ends_with(&Multiaddr::empty().with(p2p_suffix.clone()))
-                                {
-                                    address.clone().with(p2p_suffix)
-                                } else {
-                                    address.clone()
-                                };
-
-                                debug!("Preparing to dial peer {peer_id} at {address}");
-
-                                if let Err(err) = self.swarm.dial(address_with_p2p) {
-                                    warn!("Failed to dial: {}", err);
-                                }
+                                self.swarm.behaviour_mut().redial.peer_discovered(peer_id);
                             }
                         }
                     }
@@ -396,7 +382,8 @@ impl EventLoop {
                     trace!("Discovery failed: {error:?}")
                 }
                 rendezvous::client::Event::Expired { peer } => {
-                    trace!("Peer registration with rendezvous expired: {peer:?}")
+                    trace!("Peer registration with rendezvous expired: {peer:?}");
+                    self.swarm.behaviour_mut().redial.peer_expired(peer);
                 }
             },
             SwarmEvent::Behaviour(BehaviourEvent::RendezvousServer(event)) => match event {
