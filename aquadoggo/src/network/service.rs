@@ -326,13 +326,13 @@ impl EventLoop {
                 mdns::Event::Discovered(list) => {
                     for (peer_id, multiaddr) in list {
                         debug!("mDNS discovered a new peer: {peer_id}");
-                        self.swarm.behaviour_mut().redial.peer_discovered(peer_id)
+                        self.swarm.behaviour_mut().dialer.peer_discovered(peer_id)
                     }
                 }
                 mdns::Event::Expired(list) => {
                     for (peer_id, _multiaddr) in list {
                         trace!("mDNS peer has expired: {peer_id}");
-                        self.swarm.behaviour_mut().redial.peer_expired(peer_id)
+                        self.swarm.behaviour_mut().dialer.peer_expired(peer_id)
                     }
                 }
             },
@@ -370,7 +370,7 @@ impl EventLoop {
                             // Only dial remote peers discovered via rendezvous server
                             if peer_id != local_peer_id {
                                 debug!("Discovered peer {peer_id} at {address}");
-                                self.swarm.behaviour_mut().redial.peer_discovered(peer_id);
+                                self.swarm.behaviour_mut().dialer.peer_discovered(peer_id);
                             }
                         }
                     }
@@ -383,7 +383,7 @@ impl EventLoop {
                 }
                 rendezvous::client::Event::Expired { peer } => {
                     trace!("Peer registration with rendezvous expired: {peer:?}");
-                    self.swarm.behaviour_mut().redial.peer_expired(peer);
+                    self.swarm.behaviour_mut().dialer.peer_expired(peer);
                 }
             },
             SwarmEvent::Behaviour(BehaviourEvent::RendezvousServer(event)) => match event {
@@ -519,7 +519,7 @@ impl EventLoop {
                 }
             },
 
-            SwarmEvent::Behaviour(BehaviourEvent::Redial(event)) => match event {
+            SwarmEvent::Behaviour(BehaviourEvent::Dialer(event)) => match event {
                 dialer::Event::Dial(peer_id) => {
                     match self.swarm.dial(
                         DialOpts::peer_id(peer_id)
