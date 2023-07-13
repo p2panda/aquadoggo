@@ -2,9 +2,9 @@
 
 mod behaviour;
 mod config;
+mod dialer;
 pub mod identity;
 mod peers;
-mod dialer;
 mod service;
 mod shutdown;
 mod swarm;

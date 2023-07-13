@@ -11,7 +11,7 @@ use log::debug;
 
 use crate::network::config::NODE_NAMESPACE;
 use crate::network::NetworkConfiguration;
-use crate::network::{peers, dialer};
+use crate::network::{dialer, peers};
 
 /// How often do we broadcast mDNS queries into the network.
 const MDNS_QUERY_INTERVAL: Duration = Duration::from_secs(5);
@@ -188,7 +188,7 @@ impl Behaviour {
             relay_client: relay_client.into(),
             relay_server: relay_server.into(),
             peers,
-            dialer
+            dialer,
         })
     }
 }

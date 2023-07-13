@@ -18,7 +18,7 @@ use crate::context::Context;
 use crate::manager::{ServiceReadySender, Shutdown};
 use crate::network::behaviour::{Behaviour, BehaviourEvent};
 use crate::network::config::NODE_NAMESPACE;
-use crate::network::{identity, peers, dialer, swarm, NetworkConfiguration, ShutdownHandler};
+use crate::network::{dialer, identity, peers, swarm, NetworkConfiguration, ShutdownHandler};
 
 /// Network service that configures and deploys a libp2p network swarm over QUIC transports.
 ///
@@ -324,7 +324,7 @@ impl EventLoop {
             // ~~~~
             SwarmEvent::Behaviour(BehaviourEvent::Mdns(event)) => match event {
                 mdns::Event::Discovered(list) => {
-                    for (peer_id, multiaddr) in list {
+                    for (peer_id, _multiaddr) in list {
                         debug!("mDNS discovered a new peer: {peer_id}");
                         self.swarm.behaviour_mut().dialer.peer_discovered(peer_id)
                     }
@@ -523,9 +523,9 @@ impl EventLoop {
                 dialer::Event::Dial(peer_id) => {
                     match self.swarm.dial(
                         DialOpts::peer_id(peer_id)
-                        .condition(PeerCondition::Disconnected)
-                        .condition(PeerCondition::NotDialing)
-                        .build(),
+                            .condition(PeerCondition::Disconnected)
+                            .condition(PeerCondition::NotDialing)
+                            .build(),
                     ) {
                         Ok(_) => debug!("Dialing peer: {peer_id}"),
                         Err(_) => warn!("Error dialing peer: {peer_id}"),

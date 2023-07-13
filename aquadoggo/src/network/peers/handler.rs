@@ -12,7 +12,7 @@ use libp2p::swarm::{
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, Stream as NegotiatedStream,
     SubstreamProtocol,
 };
-use log::{debug, warn};
+use log::warn;
 use thiserror::Error;
 
 use crate::network::peers::{Codec, CodecError, Protocol};

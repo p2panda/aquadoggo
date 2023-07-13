@@ -99,7 +99,7 @@ impl Behaviour {
                 status.next_dial = Some(Instant::now() + backoff_delay);
             } else {
                 debug!("Re-dial attempt limit reached: remove peer {peer_id:?}");
-                self.remove_peer(&peer_id)
+                self.remove_peer(peer_id)
             }
         }
     }
@@ -142,7 +142,7 @@ impl Behaviour {
     }
 
     fn remove_peer(&mut self, peer_id: &PeerId) {
-        if self.peers.remove(&peer_id).is_none() {
+        if self.peers.remove(peer_id).is_none() {
             // Don't warn here, peers can be removed twice if their registration on the swarm
             // expired at the same time as their RETRY_LIMIT was reached.
         }
@@ -207,9 +207,7 @@ impl NetworkBehaviour for Behaviour {
         _id: PeerId,
         _: ConnectionId,
         _: THandlerOutEvent<Self>,
-    ) {
-        ();
-    }
+    ) {}
 
     fn poll(
         &mut self,
