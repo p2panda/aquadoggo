@@ -5,6 +5,7 @@ use std::time::Duration;
 use anyhow::Result;
 use libp2p::multiaddr::Protocol;
 use libp2p::ping::Event;
+use libp2p::swarm::dial_opts::{DialOpts, PeerCondition};
 use libp2p::swarm::{ConnectionError, SwarmEvent};
 use libp2p::{autonat, identify, mdns, rendezvous, Multiaddr, PeerId, Swarm};
 use log::{debug, info, trace, warn};
@@ -17,7 +18,7 @@ use crate::context::Context;
 use crate::manager::{ServiceReadySender, Shutdown};
 use crate::network::behaviour::{Behaviour, BehaviourEvent};
 use crate::network::config::NODE_NAMESPACE;
-use crate::network::{identity, peers, swarm, NetworkConfiguration, ShutdownHandler};
+use crate::network::{dialer, identity, peers, swarm, NetworkConfiguration, ShutdownHandler};
 
 /// Network service that configures and deploys a libp2p network swarm over QUIC transports.
 ///
@@ -245,6 +246,7 @@ impl EventLoop {
                 peer_id,
                 connection_id,
                 cause,
+                num_established,
                 ..
             } => match cause {
                 Some(ConnectionError::IO(error)) => {
@@ -253,6 +255,10 @@ impl EventLoop {
                     match error.to_string().as_str() {
                         "timed out" => {
                             debug!("Connection {connection_id:?} timed out with peer {peer_id}");
+                            self.swarm
+                                .behaviour_mut()
+                                .dialer
+                                .connection_error(peer_id, num_established);
                         }
                         "closed by peer: 0" => {
                             // We received an `ApplicationClose` with code 0 here which means the
@@ -260,7 +266,11 @@ impl EventLoop {
                             debug!("Connection {connection_id:?} closed with peer {peer_id}");
                         }
                         _ => {
-                            warn!("Connection error occurred with peer {peer_id} on connection {connection_id:?}: {error}");
+                            warn!("Connection error occurred with peer {peer_id} on connection {connection_id:?}");
+                            self.swarm
+                                .behaviour_mut()
+                                .dialer
+                                .connection_error(peer_id, num_established);
                         }
                     }
                 }
@@ -269,6 +279,10 @@ impl EventLoop {
                 }
                 Some(ConnectionError::Handler(_)) => {
                     warn!("Connection handler error occurred with peer {peer_id}");
+                    self.swarm
+                        .behaviour_mut()
+                        .dialer
+                        .connection_error(peer_id, num_established);
                 }
                 None => {
                     debug!("Connection closed with peer {peer_id}");
@@ -287,9 +301,9 @@ impl EventLoop {
                 connection_id,
                 local_addr,
                 send_back_addr,
-                error,
+                ..
             } => {
-                warn!("Incoming connection error occurred with {local_addr} and {send_back_addr} on connectino {connection_id:?}: {error}");
+                warn!("Incoming connection error occurred with {local_addr} and {send_back_addr} on connection {connection_id:?}");
             }
             SwarmEvent::ListenerClosed {
                 listener_id,
@@ -308,13 +322,13 @@ impl EventLoop {
             SwarmEvent::OutgoingConnectionError {
                 connection_id,
                 peer_id,
-                error,
+                ..
             } => match peer_id {
                 Some(id) => {
-                    warn!("Outgoing connection error with peer {id} occurred on connection {connection_id:?}: {error}");
+                    warn!("Outgoing connection error with peer {id} occurred on connection {connection_id:?}");
                 }
                 None => {
-                    warn!("Outgoing connection error occurred on connection {connection_id:?}: {error}");
+                    warn!("Outgoing connection error occurred on connection {connection_id:?}");
                 }
             },
 
@@ -323,20 +337,14 @@ impl EventLoop {
             // ~~~~
             SwarmEvent::Behaviour(BehaviourEvent::Mdns(event)) => match event {
                 mdns::Event::Discovered(list) => {
-                    for (peer_id, multiaddr) in list {
+                    for (peer_id, _multiaddr) in list {
                         debug!("mDNS discovered a new peer: {peer_id}");
-
-                        if let Err(err) = self.swarm.dial(multiaddr) {
-                            warn!("Failed to dial: {}", err);
-                        } else {
-                            debug!("Dial success: skip remaining addresses for: {peer_id}");
-                            break;
-                        }
+                        self.swarm.behaviour_mut().dialer.dial_peer(peer_id)
                     }
                 }
                 mdns::Event::Expired(list) => {
-                    for (peer, _multiaddr) in list {
-                        trace!("mDNS peer has expired: {peer}");
+                    for (peer_id, _multiaddr) in list {
+                        trace!("mDNS peer has expired: {peer_id}");
                     }
                 }
             },
@@ -374,21 +382,7 @@ impl EventLoop {
                             // Only dial remote peers discovered via rendezvous server
                             if peer_id != local_peer_id {
                                 debug!("Discovered peer {peer_id} at {address}");
-
-                                let p2p_suffix = Protocol::P2p(peer_id);
-                                let address_with_p2p = if !address
-                                    .ends_with(&Multiaddr::empty().with(p2p_suffix.clone()))
-                                {
-                                    address.clone().with(p2p_suffix)
-                                } else {
-                                    address.clone()
-                                };
-
-                                debug!("Preparing to dial peer {peer_id} at {address}");
-
-                                if let Err(err) = self.swarm.dial(address_with_p2p) {
-                                    warn!("Failed to dial: {}", err);
-                                }
+                                self.swarm.behaviour_mut().dialer.dial_peer(peer_id);
                             }
                         }
                     }
@@ -400,7 +394,7 @@ impl EventLoop {
                     trace!("Discovery failed: {error:?}")
                 }
                 rendezvous::client::Event::Expired { peer } => {
-                    trace!("Peer registration with rendezvous expired: {peer:?}")
+                    trace!("Peer registration with rendezvous expired: {peer:?}");
                 }
             },
             SwarmEvent::Behaviour(BehaviourEvent::RendezvousServer(event)) => match event {
@@ -533,6 +527,20 @@ impl EventLoop {
                     self.send_service_message(ServiceMessage::ReceivedReplicationMessage(
                         peer, message,
                     ))
+                }
+            },
+
+            SwarmEvent::Behaviour(BehaviourEvent::Dialer(event)) => match event {
+                dialer::Event::Dial(peer_id) => {
+                    match self.swarm.dial(
+                        DialOpts::peer_id(peer_id)
+                            .condition(PeerCondition::Disconnected)
+                            .condition(PeerCondition::NotDialing)
+                            .build(),
+                    ) {
+                        Ok(_) => debug!("Dialing peer: {peer_id}"),
+                        Err(_) => warn!("Error dialing peer: {peer_id}"),
+                    };
                 }
             },
         }

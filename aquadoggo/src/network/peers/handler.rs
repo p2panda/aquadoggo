@@ -12,7 +12,7 @@ use libp2p::swarm::{
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, Stream as NegotiatedStream,
     SubstreamProtocol,
 };
-use log::{debug, warn};
+use log::warn;
 use thiserror::Error;
 
 use crate::network::peers::{Codec, CodecError, Protocol};
@@ -221,15 +221,9 @@ impl ConnectionHandler for Handler {
             }
             ConnectionEvent::DialUpgradeError(_)
             | ConnectionEvent::AddressChange(_)
-            | ConnectionEvent::ListenUpgradeError(_) => {
-                warn!("Connection event error");
-            }
-            ConnectionEvent::LocalProtocolsChange(_) => {
-                debug!("ConnectionEvent: LocalProtocolsChange")
-            }
-            ConnectionEvent::RemoteProtocolsChange(_) => {
-                debug!("ConnectionEvent: RemoteProtocolsChange")
-            }
+            | ConnectionEvent::ListenUpgradeError(_)
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_) => (),
         }
     }
 

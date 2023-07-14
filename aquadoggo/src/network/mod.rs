@@ -2,6 +2,7 @@
 
 mod behaviour;
 mod config;
+mod dialer;
 pub mod identity;
 mod peers;
 mod service;
