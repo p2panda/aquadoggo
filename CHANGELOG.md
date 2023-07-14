@@ -70,6 +70,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Handle duplicate document view insertions in reduce task [#410](https://github.com/p2panda/aquadoggo/pull/410)
 - Fix race condition when check for existing view ids was too early [#420](https://github.com/p2panda/aquadoggo/pull/420)
 - Use fork of `asynchronous-codec` to temporarily fix CBOR decoding bug [#440](https://github.com/p2panda/aquadoggo/pull/440)
+- Fix composing of circuit relay address [#451](https://github.com/p2panda/aquadoggo/pull/451)
 
 ### Open Sauce
 
