@@ -53,19 +53,12 @@ pub async fn network_service(
 
     // Construct circuit relay addresses and listen on relayed address
     if let Some(relay_addr) = &network_config.relay_address {
-        if let Some(rendezvous_peer_id) = network_config.rendezvous_peer_id {
-            let circuit_addr = relay_addr
-                .clone()
-                .with(Protocol::P2p(rendezvous_peer_id))
-                .with(Protocol::P2pCircuit);
+        let circuit_addr = relay_addr.clone().with(Protocol::P2pCircuit);
 
-            // Dialable circuit relay address for local node
-            external_circuit_addr = Some(circuit_addr.clone().with(Protocol::P2p(local_peer_id)));
+        // Dialable circuit relay address for local node
+        external_circuit_addr = Some(circuit_addr.clone().with(Protocol::P2p(local_peer_id)));
 
-            swarm.listen_on(circuit_addr)?;
-        } else {
-            warn!("Unable to construct relay circuit address because rendezvous server peer ID was not provided");
-        }
+        swarm.listen_on(circuit_addr)?;
     }
 
     // Dial each peer identified by the multi-address provided via `--remote-peers` if given
