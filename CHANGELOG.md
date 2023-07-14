@@ -47,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Use `libp2p` `0.52.0` [#425](https://github.com/p2panda/aquadoggo/pull/425)
 - Check for duplicate entries arriving to `Ingest` before consuming [#439](https://github.com/p2panda/aquadoggo/pull/439)
 - Replicate entries in their topologically sorted document order [#442](https://github.com/p2panda/aquadoggo/pull/442)
+- Remove `quick_commit` from materialization service [#450](https://github.com/p2panda/aquadoggo/pull/450)
 
 ### Fixed
 
