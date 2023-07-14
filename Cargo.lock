@@ -130,7 +130,6 @@ dependencies = [
  "tower-http",
  "tower-service",
  "triggered",
- "void",
 ]
 
 [[package]]
