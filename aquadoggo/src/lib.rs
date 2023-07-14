@@ -24,9 +24,11 @@
 //! # #[tokio::main]
 //! # async fn main() {
 //! use aquadoggo::{Configuration, Node};
+//! use p2panda_rs::identity::KeyPair;
 //!
 //! let config = Configuration::default();
-//! let node = Node::start(config).await;
+//! let key_pair = KeyPair::new();
+//! let node = Node::start(key_pair, config).await;
 //! # }
 //! ```
 //!
@@ -54,6 +56,7 @@ mod network;
 mod node;
 #[cfg(all(test, feature = "proptests"))]
 mod proptests;
+mod replication;
 mod schema;
 #[cfg(test)]
 mod test_utils;

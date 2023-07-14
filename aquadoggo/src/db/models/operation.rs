@@ -25,6 +25,12 @@ pub struct OperationRow {
     /// The previous operations of this operation concatenated into string format with `_`
     /// separator.
     pub previous: Option<String>,
+
+    /// Index of this operation once topological sorting of the operation graph has been performed.
+    ///
+    /// If this value is `None` we can assume the operation has not been processed yet and we are
+    /// waiting for the `reduce` task to complete materialization.
+    pub sorted_index: Option<i32>,
 }
 
 /// A struct representing a single operation field row as it is inserted in the database.
@@ -99,4 +105,10 @@ pub struct OperationFieldsJoinedRow {
     /// This numeric value is a simple list index to represent multiple values within one operation
     /// field.
     pub list_index: Option<i32>,
+
+    /// Index of this operation once topological sorting of the operation graph has been performed.
+    ///
+    /// If this value is `None` we can assume the operation has not been processed yet and we are
+    /// waiting for the `reduce` task to complete materialization.
+    pub sorted_index: Option<i32>,
 }

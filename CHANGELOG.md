@@ -19,6 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SQL query for collections [#311](https://github.com/p2panda/aquadoggo/pull/311)
 - Add custom validation to GraphQL scalar types [#318](https://github.com/p2panda/aquadoggo/pull/318)
 - Introduce property tests for GraphQL query API with `proptest` [#338](https://github.com/p2panda/aquadoggo/pull/338)
+- Introduce initial libp2p network behaviour for replication protocol [#365](https://github.com/p2panda/aquadoggo/pull/365)
+- Replication protocol session manager [#363](https://github.com/p2panda/aquadoggo/pull/363)
+- Replication message de- / serialization [#375](https://github.com/p2panda/aquadoggo/pull/375)
+- Naive protocol replication [#380](https://github.com/p2panda/aquadoggo/pull/380)
+- Integrate replication manager with networking stack [#387](https://github.com/p2panda/aquadoggo/pull/387) 🥞
+- Reverse lookup for pinned relations in dependency task  [#434](https://github.com/p2panda/aquadoggo/pull/434)
+- Persist and maintain index of operation's position in document [#438](https://github.com/p2panda/aquadoggo/pull/438)
+- Introduce `dialer` behaviour with retry logic [#444](https://github.com/p2panda/aquadoggo/pull/444)
 
 ### Changed
 
@@ -34,6 +42,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Set default order for root queries to document id [#352](https://github.com/p2panda/aquadoggo/pull/352)
 - Remove property tests again because of concurrency bug [#347](https://github.com/p2panda/aquadoggo/pull/347)
 - Incrementally update documents in materializer [#280](https://github.com/p2panda/aquadoggo/pull/280)
+- Decouple p2panda's authentication data types from libp2p's [#408](https://github.com/p2panda/aquadoggo/pull/408)
+- Make `TaskInput` an enum and other minor clean ups in materialiser [#429](https://github.com/p2panda/aquadoggo/pull/429)
+- Use `libp2p` `0.52.0` [#425](https://github.com/p2panda/aquadoggo/pull/425)
+- Check for duplicate entries arriving to `Ingest` before consuming [#439](https://github.com/p2panda/aquadoggo/pull/439)
+- Replicate entries in their topologically sorted document order [#442](https://github.com/p2panda/aquadoggo/pull/442)
 
 ### Fixed
 
@@ -53,6 +66,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reintroduce property tests for GraphQL query api [#362](https://github.com/p2panda/aquadoggo/pull/362)
 - Fix cursor pagination over ordered queries [#412](https://github.com/p2panda/aquadoggo/pull/412)
 - Fix issue where filtered queries fail on updated fields [#409](https://github.com/p2panda/aquadoggo/pull/409)
+- Fix insertion of view before document is materialized [#413](https://github.com/p2panda/aquadoggo/pull/413)
+- Handle duplicate document view insertions in reduce task [#410](https://github.com/p2panda/aquadoggo/pull/410)
+- Fix race condition when check for existing view ids was too early [#420](https://github.com/p2panda/aquadoggo/pull/420)
+- Use fork of `asynchronous-codec` to temporarily fix CBOR decoding bug [#440](https://github.com/p2panda/aquadoggo/pull/440)
+
+### Open Sauce
+
+- CI: Temporary workaround for Rust compiler bug [#417](https://github.com/p2panda/aquadoggo/pull/417)
 
 ## [0.4.0]
 

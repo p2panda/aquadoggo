@@ -69,11 +69,11 @@ pub fn populate_store_config(
 }
 
 /// Populate the store of a `TestNode` with entries and operations according to the passed config
-/// and materialise the resulting documents. Additionally adds the relevant schema to the
-/// schema provider.
+/// and materialise the resulting documents. Additionally adds the relevant schema to the schema
+/// provider.
 ///
-/// Returns the key pairs of authors who published to the node and id's for all documents that
-/// were materialised.
+/// Returns the key pairs of authors who published to the node and id's for all documents that were
+/// materialised.
 pub async fn populate_and_materialize(
     node: &mut TestNode,
     config: &PopulateStoreConfig,
@@ -84,8 +84,8 @@ pub async fn populate_and_materialize(
     // Add the passed schema to the schema store.
     //
     // Note: The entries and operations which would normally exist for this schema will NOT be
-    // present in the store, however the node will behave as expect as we directly inserted it
-    // into the schema provider.
+    // present in the store, however the node will behave as expect as we directly inserted it into
+    // the schema provider.
     node.context
         .schema_provider
         .update(config.schema.clone())
@@ -94,7 +94,7 @@ pub async fn populate_and_materialize(
     // Iterate over document id's and materialize into the store.
     for document_id in document_ids.clone() {
         // Create reduce task input.
-        let input = TaskInput::new(Some(document_id), None);
+        let input = TaskInput::DocumentId(document_id);
         // Run reduce task and collect returned dependency tasks.
         let dependency_tasks = reduce_task(node.context.clone(), input.clone())
             .await
@@ -143,7 +143,7 @@ pub async fn add_document(
         .await
         .expect("Publish CREATE operation");
 
-    let input = TaskInput::new(Some(DocumentId::from(entry_signed.hash())), None);
+    let input = TaskInput::DocumentId(DocumentId::from(entry_signed.hash()));
     let dependency_tasks = reduce_task(node.context.clone(), input.clone())
         .await
         .expect("Reduce document");
@@ -181,7 +181,7 @@ pub async fn add_schema(
         .await
         .expect("Publish schema fields");
 
-        let input = TaskInput::new(Some(DocumentId::from(entry_signed.hash())), None);
+        let input = TaskInput::DocumentId(DocumentId::from(entry_signed.hash()));
         reduce_task(node.context.clone(), input).await.unwrap();
 
         info!("Added field '{}' ({})", field.0, field.1);
@@ -199,13 +199,13 @@ pub async fn add_schema(
     .await
     .expect("Publish schema");
 
-    let input = TaskInput::new(Some(DocumentId::from(entry_signed.hash())), None);
+    let input = TaskInput::DocumentId(DocumentId::from(entry_signed.hash()));
     reduce_task(node.context.clone(), input.clone())
         .await
         .expect("Reduce schema document");
 
     // Run schema task for this spec
-    let input = TaskInput::new(None, Some(DocumentViewId::from(entry_signed.hash())));
+    let input = TaskInput::DocumentViewId(DocumentViewId::from(entry_signed.hash()));
     schema_task(node.context.clone(), input)
         .await
         .expect("Run schema task");

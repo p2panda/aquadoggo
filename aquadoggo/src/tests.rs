@@ -43,10 +43,8 @@ async fn e2e() {
     // default options. The only thing we want to do change is the database config. We want an
     // in-memory sqlite database for this test.
 
-    let config = Configuration {
-        database_url: Some("sqlite::memory:".to_string()),
-        ..Default::default()
-    };
+    let config = Configuration::new_ephemeral();
+    let key_pair = KeyPair::new();
 
     // Start the node.
     //
@@ -57,7 +55,7 @@ async fn e2e() {
     //
     // Nodes are the workhorses of the p2panda network, we thank you for all your efforts 🙏🏻.
 
-    let aquadoggo = Node::start(config).await; // 🐬🐕
+    let aquadoggo = Node::start(key_pair, config).await; // 🐬🐕
 
     // Create some authors.
     //

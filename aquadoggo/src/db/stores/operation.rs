@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::collections::BTreeMap;
 use std::fmt::Display;
 
 use async_trait::async_trait;
@@ -12,7 +11,7 @@ use p2panda_rs::operation::{Operation, OperationId};
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::error::OperationStorageError;
 use p2panda_rs::storage_provider::traits::OperationStore;
-use sqlx::{query, query_as, query_scalar};
+use sqlx::{query, query_as, query_scalar, Any};
 
 use crate::db::models::utils::{parse_operation_rows, parse_value_to_string_vec};
 use crate::db::models::{DocumentViewFieldRow, OperationFieldsJoinedRow};
@@ -61,21 +60,224 @@ impl OperationStore for SqlStore {
 
     /// Insert an operation into storage.
     ///
-    /// This requires a DoggoOperation to be composed elsewhere, it contains an `PublicKey`,
-    /// `DocumentId`, `OperationId` and the actual `Operation` we want to store.
+    /// The `PublicKey` is determined by the author who created the operation, the `DocumentId` is
+    /// of the document this operation is part of and the `OperationId` is derived from the hash of
+    /// the `Entry` it was published with.
     ///
-    /// Returns a result containing `true` when one insertion occured, and false when no insertions
-    /// occured. Errors when a fatal storage error occurs.
-    ///
-    /// In aquadoggo we store an operation in the database in three different tables: `operations`,
-    /// `previous` and `operation_fields`. This means that this method actually makes 3
-    /// different sets of insertions.
+    /// The `sorted_index` of the inserted operation will be set to `None` as this value is only
+    /// available once materialization completed. Use `update_operation_index` to set this value.
     async fn insert_operation(
         &self,
         id: &OperationId,
         public_key: &PublicKey,
         operation: &Operation,
         document_id: &DocumentId,
+    ) -> Result<(), OperationStorageError> {
+        self.insert_operation_with_index(id, public_key, operation, document_id, None)
+            .await
+    }
+
+    /// Get an operation identified by it's `OperationId`.
+    ///
+    /// Returns a result containing an `VerifiedOperation` wrapped in an option, if no operation
+    /// with this id was found, returns none. Errors if a fatal storage error occured.
+    async fn get_operation(
+        &self,
+        id: &OperationId,
+    ) -> Result<Option<StorageOperation>, OperationStorageError> {
+        let operation_rows = query_as::<_, OperationFieldsJoinedRow>(
+            "
+            SELECT
+                operations_v1.public_key,
+                operations_v1.document_id,
+                operations_v1.operation_id,
+                operations_v1.action,
+                operations_v1.schema_id,
+                operations_v1.previous,
+                operations_v1.sorted_index,
+                operation_fields_v1.name,
+                operation_fields_v1.field_type,
+                operation_fields_v1.value,
+                operation_fields_v1.list_index
+            FROM
+                operations_v1
+            LEFT JOIN operation_fields_v1
+                ON
+                    operation_fields_v1.operation_id = operations_v1.operation_id
+            WHERE
+                operations_v1.operation_id = $1
+            ORDER BY
+                operation_fields_v1.list_index ASC
+            ",
+        )
+        .bind(id.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
+
+        let operation = parse_operation_rows(operation_rows);
+        Ok(operation)
+    }
+
+    /// Get all operations that are part of a given document.
+    async fn get_operations_by_document_id(
+        &self,
+        id: &DocumentId,
+    ) -> Result<Vec<StorageOperation>, OperationStorageError> {
+        let operation_rows = query_as::<_, OperationFieldsJoinedRow>(
+            "
+            SELECT
+                operations_v1.public_key,
+                operations_v1.document_id,
+                operations_v1.operation_id,
+                operations_v1.action,
+                operations_v1.schema_id,
+                operations_v1.previous,
+                operations_v1.sorted_index,
+                operation_fields_v1.name,
+                operation_fields_v1.field_type,
+                operation_fields_v1.value,
+                operation_fields_v1.list_index
+            FROM
+                operations_v1
+                LEFT JOIN operation_fields_v1
+                    ON operation_fields_v1.operation_id = operations_v1.operation_id
+            WHERE
+                operations_v1.document_id = $1
+            ORDER BY
+                -- order the operations by their index when topologically sorted, in the case where
+                -- this may not be set yet we fall back to ordering by operation id. In both cases
+                -- we additionally order by list index.
+                operations_v1.sorted_index ASC, operations_v1.operation_id ASC, operation_fields_v1.list_index ASC
+            ",
+        )
+        .bind(id.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
+
+        if operation_rows.is_empty() {
+            return Ok(vec![]);
+        }
+
+        Ok(group_and_parse_operation_rows(operation_rows))
+    }
+
+    /// Get all operations that are part of a given document.
+    async fn get_operations_by_schema_id(
+        &self,
+        id: &SchemaId,
+    ) -> Result<Vec<StorageOperation>, OperationStorageError> {
+        let operation_rows = query_as::<_, OperationFieldsJoinedRow>(
+            "
+                SELECT
+                    operations_v1.public_key,
+                    operations_v1.document_id,
+                    operations_v1.operation_id,
+                    operations_v1.action,
+                    operations_v1.schema_id,
+                    operations_v1.previous,
+                    operations_v1.sorted_index,
+                    operation_fields_v1.name,
+                    operation_fields_v1.field_type,
+                    operation_fields_v1.value,
+                    operation_fields_v1.list_index
+                FROM
+                    operations_v1
+                    LEFT JOIN operation_fields_v1
+                        ON operation_fields_v1.operation_id = operations_v1.operation_id
+                WHERE
+                    operations_v1.schema_id = $1
+                ORDER BY
+                    operations_v1.operation_id ASC, operation_fields_v1.list_index ASC
+                ",
+        )
+        .bind(id.to_string())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
+
+        if operation_rows.is_empty() {
+            return Ok(vec![]);
+        }
+
+        Ok(group_and_parse_operation_rows(operation_rows))
+    }
+}
+
+/// Parse a collection of operation rows from multiple operations, into a list of `StorageOperation`.
+///
+/// Expects the rows to be grouped by operation id.
+fn group_and_parse_operation_rows(
+    operation_rows: Vec<OperationFieldsJoinedRow>,
+) -> Vec<StorageOperation> {
+    // We need to group all the operation rows so they can be parsed into operations. They come
+    // from the database ordered by their index once topologically sorted when present, otherwise
+    // by operation id. List items are additionally ordered by their list index.
+    let mut grouped_operation_rows = vec![];
+
+    let mut current_operation_id = operation_rows.first().unwrap().operation_id.clone();
+    let mut current_operation_rows = vec![];
+
+    for row in operation_rows {
+        if row.operation_id == current_operation_id {
+            // If this row is part of the current operation push it to the current rows vec.
+            current_operation_rows.push(row);
+        } else {
+            // If we've moved on to the next operation, then push the complete vec of operation
+            // rows to the grouped rows collection and then setup for the next iteration.
+            grouped_operation_rows.push(current_operation_rows.clone());
+            current_operation_id = row.operation_id.clone();
+            current_operation_rows = vec![row];
+        }
+    }
+
+    // Push the final operation to the grouped rows.
+    grouped_operation_rows.push(current_operation_rows);
+
+    // Parse all the operation rows into operations.
+    grouped_operation_rows
+        .into_iter()
+        .filter_map(parse_operation_rows)
+        .collect()
+}
+
+impl SqlStore {
+    /// Update the sorted index of an operation. This method is used in `reduce` tasks as each
+    /// operation is processed.
+    pub async fn update_operation_index(
+        &self,
+        operation_id: &OperationId,
+        sorted_index: i32,
+    ) -> Result<(), OperationStorageError> {
+        query::<Any>(
+            "
+            UPDATE
+                operations_v1
+            SET
+                sorted_index = $2
+            WHERE
+                operation_id = $1
+            ",
+        )
+        .bind(operation_id.as_str())
+        .bind(sorted_index)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Insert an operation as well as the index for it's position in the document after
+    /// materialization has occurred.
+    async fn insert_operation_with_index(
+        &self,
+        id: &OperationId,
+        public_key: &PublicKey,
+        operation: &Operation,
+        document_id: &DocumentId,
+        sorted_index: Option<i32>,
     ) -> Result<(), OperationStorageError> {
         // Start a transaction, any db insertions after this point, and before the `commit()` will
         // be rolled back in the event of an error.
@@ -96,10 +298,11 @@ impl OperationStore for SqlStore {
                     operation_id,
                     action,
                     schema_id,
-                    previous
+                    previous,
+                    sorted_index
                 )
             VALUES
-                ($1, $2, $3, $4, $5, $6)
+                ($1, $2, $3, $4, $5, $6, $7)
             ",
         )
         .bind(public_key.to_string())
@@ -112,6 +315,7 @@ impl OperationStore for SqlStore {
                 .previous()
                 .map(|document_view_id| document_view_id.to_string()),
         )
+        .bind(sorted_index)
         .execute(&mut tx)
         .await
         .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
@@ -165,159 +369,6 @@ impl OperationStore for SqlStore {
 
         Ok(())
     }
-
-    /// Get an operation identified by it's `OperationId`.
-    ///
-    /// Returns a result containing an `VerifiedOperation` wrapped in an option, if no operation
-    /// with this id was found, returns none. Errors if a fatal storage error occured.
-    async fn get_operation(
-        &self,
-        id: &OperationId,
-    ) -> Result<Option<StorageOperation>, OperationStorageError> {
-        let operation_rows = query_as::<_, OperationFieldsJoinedRow>(
-            "
-            SELECT
-                operations_v1.public_key,
-                operations_v1.document_id,
-                operations_v1.operation_id,
-                operations_v1.action,
-                operations_v1.schema_id,
-                operations_v1.previous,
-                operation_fields_v1.name,
-                operation_fields_v1.field_type,
-                operation_fields_v1.value,
-                operation_fields_v1.list_index
-            FROM
-                operations_v1
-            LEFT JOIN operation_fields_v1
-                ON
-                    operation_fields_v1.operation_id = operations_v1.operation_id
-            WHERE
-                operations_v1.operation_id = $1
-            ORDER BY
-                operation_fields_v1.list_index ASC
-            ",
-        )
-        .bind(id.as_str())
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
-
-        let operation = parse_operation_rows(operation_rows);
-        Ok(operation)
-    }
-
-    /// Get all operations that are part of a given document.
-    async fn get_operations_by_document_id(
-        &self,
-        id: &DocumentId,
-    ) -> Result<Vec<StorageOperation>, OperationStorageError> {
-        let operation_rows = query_as::<_, OperationFieldsJoinedRow>(
-            "
-            SELECT
-                operations_v1.public_key,
-                operations_v1.document_id,
-                operations_v1.operation_id,
-                operations_v1.action,
-                operations_v1.schema_id,
-                operations_v1.previous,
-                operation_fields_v1.name,
-                operation_fields_v1.field_type,
-                operation_fields_v1.value,
-                operation_fields_v1.list_index
-            FROM
-                operations_v1
-            LEFT JOIN operation_fields_v1
-                ON
-                    operation_fields_v1.operation_id = operations_v1.operation_id
-            WHERE
-                operations_v1.document_id = $1
-            ORDER BY
-                operation_fields_v1.list_index ASC
-            ",
-        )
-        .bind(id.as_str())
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
-
-        let mut grouped_operation_rows: BTreeMap<String, Vec<OperationFieldsJoinedRow>> =
-            BTreeMap::new();
-
-        for operation_row in operation_rows {
-            if let Some(current_operations) =
-                grouped_operation_rows.get_mut(&operation_row.operation_id)
-            {
-                current_operations.push(operation_row)
-            } else {
-                grouped_operation_rows
-                    .insert(operation_row.clone().operation_id, vec![operation_row]);
-            };
-        }
-
-        let operations: Vec<StorageOperation> = grouped_operation_rows
-            .iter()
-            .filter_map(|(_id, operation_rows)| parse_operation_rows(operation_rows.to_owned()))
-            .collect();
-
-        Ok(operations)
-    }
-
-    /// Get all operations that are part of a given document.
-    async fn get_operations_by_schema_id(
-        &self,
-        id: &SchemaId,
-    ) -> Result<Vec<StorageOperation>, OperationStorageError> {
-        let operation_rows = query_as::<_, OperationFieldsJoinedRow>(
-            "
-                SELECT
-                    operations_v1.public_key,
-                    operations_v1.document_id,
-                    operations_v1.operation_id,
-                    operations_v1.action,
-                    operations_v1.schema_id,
-                    operations_v1.previous,
-                    operation_fields_v1.name,
-                    operation_fields_v1.field_type,
-                    operation_fields_v1.value,
-                    operation_fields_v1.list_index
-                FROM
-                    operations_v1
-                LEFT JOIN operation_fields_v1
-                    ON
-                        operation_fields_v1.operation_id = operations_v1.operation_id
-                WHERE
-                    operations_v1.schema_id = $1
-                ORDER BY
-                    operation_fields_v1.list_index ASC
-                ",
-        )
-        .bind(id.to_string())
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
-
-        let mut grouped_operation_rows: BTreeMap<String, Vec<OperationFieldsJoinedRow>> =
-            BTreeMap::new();
-
-        for operation_row in operation_rows {
-            if let Some(current_operations) =
-                grouped_operation_rows.get_mut(&operation_row.operation_id)
-            {
-                current_operations.push(operation_row)
-            } else {
-                grouped_operation_rows
-                    .insert(operation_row.clone().operation_id, vec![operation_row]);
-            };
-        }
-
-        let operations: Vec<StorageOperation> = grouped_operation_rows
-            .iter()
-            .filter_map(|(_id, operation_rows)| parse_operation_rows(operation_rows.to_owned()))
-            .collect();
-
-        Ok(operations)
-    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -359,7 +410,8 @@ impl From<&DocumentViewFieldRow> for OperationCursor {
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::document::DocumentId;
+    use p2panda_rs::document::materialization::build_graph;
+    use p2panda_rs::document::{DocumentBuilder, DocumentId};
     use p2panda_rs::identity::PublicKey;
     use p2panda_rs::operation::traits::{AsOperation, WithPublicKey};
     use p2panda_rs::operation::{Operation, OperationAction, OperationBuilder, OperationId};
@@ -370,11 +422,13 @@ mod tests {
         document_id, operation, operation_id, operation_with_schema, public_key,
         random_document_view_id, random_operation_id, random_previous_operations, schema_id,
     };
-    use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
+    use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
     use p2panda_rs::WithId;
     use rstest::rstest;
 
-    use crate::test_utils::{doggo_fields, populate_store_config, test_runner, TestNode};
+    use crate::test_utils::{
+        doggo_fields, populate_and_materialize, populate_store_config, test_runner, TestNode,
+    };
 
     use super::OperationCursor;
 
@@ -531,9 +585,9 @@ mod tests {
         #[with(10, 1, 1)]
         config: PopulateStoreConfig,
     ) {
-        test_runner(|node: TestNode| async move {
-            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let (_, document_ids) = populate_store(&node.context.store, &config).await;
+        test_runner(|mut node: TestNode| async move {
+            // Populate the store with some entries and operations and materialize documents.
+            let (_, document_ids) = populate_and_materialize(&mut node, &config).await;
             let document_id = document_ids.get(0).expect("At least one document id");
 
             let operations_by_document_id = node
@@ -544,7 +598,14 @@ mod tests {
                 .expect("Get operations by their document id");
 
             // We expect the number of operations returned to match the expected number.
-            assert_eq!(operations_by_document_id.len(), 10)
+            assert_eq!(operations_by_document_id.len(), 10);
+
+            // The operations should be in their topologically sorted order.
+            let operations = DocumentBuilder::from(&operations_by_document_id).operations();
+            let expected_operation_order =
+                build_graph(&operations).unwrap().sort().unwrap().sorted();
+
+            assert_eq!(operations, expected_operation_order);
         });
     }
 

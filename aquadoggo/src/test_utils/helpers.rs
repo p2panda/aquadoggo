@@ -10,7 +10,10 @@ use p2panda_rs::operation::{
 use p2panda_rs::schema::{Schema, SchemaId, SchemaName};
 use p2panda_rs::storage_provider::traits::OperationStore;
 use p2panda_rs::test_utils::constants;
-use p2panda_rs::test_utils::fixtures::{schema, schema_fields};
+use p2panda_rs::test_utils::fixtures::{random_document_view_id, schema, schema_fields};
+use rstest::fixture;
+
+use crate::replication::TargetSet;
 
 /// Schema id used in aquadoggo tests.
 fn doggo_schema_id() -> SchemaId {
@@ -111,4 +114,16 @@ pub fn schema_from_fields(fields: Vec<(&str, OperationValue)>) -> Schema {
         constants::SCHEMA_ID.parse().unwrap(),
         "A doggo schema for testing",
     )
+}
+
+#[fixture]
+pub fn random_target_set() -> TargetSet {
+    let system_schema_id = SchemaId::SchemaFieldDefinition(1);
+    let document_view_id_1 = random_document_view_id();
+    let schema_id_1 =
+        SchemaId::new_application(&SchemaName::new("messages").unwrap(), &document_view_id_1);
+    let document_view_id_2 = random_document_view_id();
+    let schema_id_2 =
+        SchemaId::new_application(&SchemaName::new("events").unwrap(), &document_view_id_2);
+    TargetSet::new(&[system_schema_id, schema_id_1, schema_id_2])
 }

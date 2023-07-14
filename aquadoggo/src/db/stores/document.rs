@@ -264,10 +264,10 @@ impl DocumentStore for SqlStore {
     }
 }
 
-/// Storage api offering an interface for inserting documents and document views into the database.
+/// Storage API offering an interface for inserting documents and document views into the database.
 ///
-/// These methods are specific to `aquadoggo`s approach to document caching and are defined
-/// outside of the required `DocumentStore` trait.
+/// These methods are specific to aquadoggos approach to document caching and are defined outside
+/// of the required `DocumentStore` trait.
 impl SqlStore {
     /// Insert a document into the database.
     ///
@@ -288,8 +288,8 @@ impl SqlStore {
         &self,
         document: &impl AsDocument,
     ) -> Result<(), DocumentStorageError> {
-        // Start a transaction, any db insertions after this point, and before the `commit()`
-        // can be rolled back in the event of an error.
+        // Start a transaction, any db insertions after this point, and before the `commit()` can
+        // be rolled back in the event of an error.
         let mut tx = self
             .pool
             .begin()
@@ -419,6 +419,7 @@ async fn insert_document_fields(
     document_view: &DocumentView,
 ) -> Result<Vec<AnyQueryResult>, DocumentStorageError> {
     let mut results = Vec::with_capacity(document_view.len());
+
     for (name, value) in document_view.iter() {
         let result = query(
             "
@@ -501,7 +502,7 @@ async fn insert_document(
     .bind(document.schema_id().to_string())
     .execute(&mut *tx)
     .await
-    .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+    .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
 
     // If the document is not deleted, then we also want to insert it's view and fields.
     if !document.is_deleted() && document.view().is_some() {
@@ -509,7 +510,7 @@ async fn insert_document(
         let document_view =
             DocumentView::new(document.view_id(), document.view().unwrap().fields());
 
-        // Insert the document view.
+        // Insert the document view
         insert_document_view(
             &mut *tx,
             &document_view,
@@ -517,7 +518,8 @@ async fn insert_document(
             document.schema_id(),
         )
         .await?;
-        // Insert the document view fields.
+
+        // Insert the document view fields
         insert_document_fields(&mut *tx, &document_view).await?;
     };
 

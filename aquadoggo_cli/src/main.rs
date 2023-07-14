@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 #![allow(clippy::uninlined_format_args)]
+mod key_pair;
+
 use std::convert::{TryFrom, TryInto};
 
 use anyhow::Result;
 use aquadoggo::{Configuration, NetworkConfiguration, Node};
 use clap::error::ErrorKind as ClapErrorKind;
 use clap::{CommandFactory, Parser};
-use libp2p::{Multiaddr, PeerId};
+use libp2p::Multiaddr;
 
 #[derive(Parser, Debug)]
 #[command(name = "aquadoggo Node", version)]
@@ -68,13 +70,18 @@ impl Cli {
         // Ensure rendezvous server address includes a peer ID
         if let Some(addr) = &self.rendezvous_address {
             // Check if the given `Multiaddr` contains a `PeerId`
-            if PeerId::try_from_multiaddr(addr).is_none() {
+            let error = match addr.clone().pop() {
+                Some(protocol) => match protocol {
+                    libp2p::multiaddr::Protocol::P2p(_) => None,
+                    _ => Some("'--rendezvous-address' address must support the `p2p` protocol"),
+                },
+                None => Some("'--rendezvous-address' must include the peer ID of the server"),
+            };
+
+            if let Some(error) = error {
                 // Print a help message about the missing value(s) and exit
                 Cli::command()
-                    .error(
-                        ClapErrorKind::ValueValidation,
-                        "'--rendezvous-address' must include the peer ID of the server",
-                    )
+                    .error(ClapErrorKind::ValueValidation, error)
                     .exit()
             }
         }
@@ -82,13 +89,18 @@ impl Cli {
         // Ensure relay server address includes a peer ID
         if let Some(addr) = &self.relay_address {
             // Check if the given `Multiaddr` contains a `PeerId`
-            if PeerId::try_from_multiaddr(addr).is_none() {
+            let error = match addr.clone().pop() {
+                Some(protocol) => match protocol {
+                    libp2p::multiaddr::Protocol::P2p(_) => None,
+                    _ => Some("'--relay-address' address must support the `p2p` protocol"),
+                },
+                None => Some("'--relay-address' must include the peer ID of the server"),
+            };
+
+            if let Some(error) = error {
                 // Print a help message about the missing value(s) and exit
                 Cli::command()
-                    .error(
-                        ClapErrorKind::ValueValidation,
-                        "'--relay-address' must include the peer ID of the server",
-                    )
+                    .error(ClapErrorKind::ValueValidation, error)
                     .exit()
             }
         }
@@ -104,13 +116,29 @@ impl TryFrom<Cli> for Configuration {
         let mut config = Configuration::new(cli.data_dir)?;
 
         let relay_peer_id = if let Some(addr) = &cli.relay_address {
-            PeerId::try_from_multiaddr(addr)
+            let peer_id = match addr
+                .clone()
+                .pop()
+                .expect("Address has already been validated and contains expected protocol")
+            {
+                libp2p::multiaddr::Protocol::P2p(peer_id) => peer_id,
+                _ => panic!("Expected p2p protocol to be defined on relay multiaddr"),
+            };
+            Some(peer_id)
         } else {
             None
         };
 
         let rendezvous_peer_id = if let Some(addr) = &cli.rendezvous_address {
-            PeerId::try_from_multiaddr(addr)
+            let peer_id = match addr
+                .clone()
+                .pop()
+                .expect("Address has already been validated and contains expected protocol")
+            {
+                libp2p::multiaddr::Protocol::P2p(peer_id) => peer_id,
+                _ => panic!("Expected p2p protocol to be defined on rendezvous multiaddr"),
+            };
+            Some(peer_id)
         } else {
             None
         };
@@ -129,7 +157,7 @@ impl TryFrom<Cli> for Configuration {
             rendezvous_address: cli.rendezvous_address,
             rendezvous_peer_id,
             rendezvous_server_enabled: cli.enable_rendezvous_server,
-            ..NetworkConfiguration::default()
+            ..config.network
         };
 
         Ok(config)
@@ -144,10 +172,17 @@ async fn main() {
     let cli = Cli::parse().validate();
 
     // Load configuration parameters and apply defaults
-    let config = cli.try_into().expect("Could not load configuration");
+    let config: Configuration = cli.try_into().expect("Could not load configuration");
+
+    // We unwrap the path as we know it has been initialised during the conversion step before
+    let base_path = config.base_path.clone().unwrap();
+
+    // Generate new key pair or load it from file
+    let key_pair =
+        key_pair::generate_or_load_key_pair(base_path).expect("Could not load key pair from file");
 
     // Start p2panda node in async runtime
-    let node = Node::start(config).await;
+    let node = Node::start(key_pair, config).await;
 
     // Run this until [CTRL] + [C] got pressed or something went wrong
     tokio::select! {

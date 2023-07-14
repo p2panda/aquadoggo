@@ -35,6 +35,7 @@ pub fn parse_operation_rows(
     let public_key = PublicKey::new(&first_row.public_key).unwrap();
     let operation_id = first_row.operation_id.parse().unwrap();
     let document_id = first_row.document_id.parse().unwrap();
+    let sorted_index = first_row.sorted_index;
 
     let mut relation_lists: BTreeMap<String, Vec<DocumentId>> = BTreeMap::new();
     let mut pinned_relation_lists: BTreeMap<String, Vec<DocumentViewId>> = BTreeMap::new();
@@ -42,12 +43,11 @@ pub fn parse_operation_rows(
     let mut operation_fields = Vec::new();
 
     // Iterate over returned field values, for each value:
-    //  - if it is a simple value type, parse it into an OperationValue and add it to the
-    //  operation_fields
-    //  - if it is a relation list value type:
-    //    - if the row.value is None then this list is empty and we should create a relation list with no items
-    //    - otherwise safely unwrap each item and parse into a DocumentId/DocumentViewId then push to the suitable
-    //      list vec
+    // * if it is a simple value type, parse it into an OperationValue and add it to the
+    // operation_fields
+    // * if it is a relation list value type: if the row.value is None then this list is empty and
+    // we should create a relation list with no items, otherwise safely unwrap each item and parse
+    // into a DocumentId/DocumentViewId then push to the suitable list vec
     if first_row.action != "delete" {
         operation_rows.iter().for_each(|row| {
             let field_type = row.field_type.as_ref().unwrap().as_str();
@@ -93,7 +93,8 @@ pub fn parse_operation_rows(
                 // to the operation_fields yet.
                 "relation_list" => {
                     match relation_lists.get_mut(field_name) {
-                        // We unwrap the field value here as if the list already exists then we can assume this next item contains a value
+                        // We unwrap the field value here as if the list already exists then we can
+                        // assume this next item contains a value
                         Some(list) => {
                             list.push(field_value.unwrap().parse::<DocumentId>().unwrap())
                         }
@@ -120,7 +121,8 @@ pub fn parse_operation_rows(
                 // to the operation_fields yet.
                 "pinned_relation_list" => {
                     match pinned_relation_lists.get_mut(field_name) {
-                        // We unwrap the field value here as if the list already exists then we can assume this next item contains a value
+                        // We unwrap the field value here as if the list already exists then we can
+                        // assume this next item contains a value
                         Some(list) => {
                             list.push(field_value.unwrap().parse::<DocumentViewId>().unwrap())
                         }
@@ -187,6 +189,7 @@ pub fn parse_operation_rows(
         previous: operation.previous(),
         fields: operation.fields(),
         public_key,
+        sorted_index,
     };
 
     Some(operation)
@@ -250,12 +253,11 @@ pub fn parse_document_view_field_rows(
     let mut document_view_fields = DocumentViewFields::new();
 
     // Iterate over returned field values, for each value:
-    //  - if it is a simple value type, safely unwrap it, parse it into an DocumentViewValue and add it to the
-    //  document_view_fields
-    //  - if it is a relation list value type:
-    //    - if the row.value is None then this list is empty and we should create a relation list with no items
-    //    - otherwise safely unwrap each item and parse into a DocumentId/DocumentViewId then push to the suitable
-    //      list vec
+    // - if it is a simple value type, safely unwrap it, parse it into an DocumentViewValue and add
+    // it to the document_view_fields
+    // - if it is a relation list value type: if the row.value is None then this list is empty and
+    // we should create a relation list with no items, otherwise safely unwrap each item and parse
+    // into a DocumentId/DocumentViewId then push to the suitable list vec
     document_field_rows.iter().for_each(|row| {
         match row.field_type.as_str() {
             "bool" => {
@@ -431,6 +433,7 @@ mod tests {
                 field_type: Some("int".to_string()),
                 value: Some("28".to_string()),
                 list_index: Some(0),
+                sorted_index: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -449,6 +452,7 @@ mod tests {
                 field_type: Some("float".to_string()),
                 value: Some("3.5".to_string()),
                 list_index: Some(0),
+                sorted_index: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -467,6 +471,7 @@ mod tests {
                 field_type: Some("bool".to_string()),
                 value: Some("false".to_string()),
                 list_index: Some(0),
+                sorted_index: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -488,6 +493,7 @@ mod tests {
                         .to_string(),
                 ),
                 list_index: Some(0),
+                sorted_index: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -509,6 +515,7 @@ mod tests {
                         .to_string(),
                 ),
                 list_index: Some(1),
+                sorted_index: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -530,6 +537,7 @@ mod tests {
                         .to_string(),
                 ),
                 list_index: Some(0),
+                sorted_index: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -551,6 +559,7 @@ mod tests {
                         .to_string(),
                 ),
                 list_index: Some(1),
+                sorted_index: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -572,6 +581,7 @@ mod tests {
                         .to_string(),
                 ),
                 list_index: Some(0),
+                sorted_index: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -593,6 +603,7 @@ mod tests {
                         .to_string(),
                 ),
                 list_index: Some(1),
+                sorted_index: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -614,6 +625,7 @@ mod tests {
                         .to_string(),
                 ),
                 list_index: Some(0),
+                sorted_index: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -635,6 +647,7 @@ mod tests {
                         .to_string(),
                 ),
                 list_index: Some(0),
+                sorted_index: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -653,6 +666,7 @@ mod tests {
                 field_type: Some("str".to_string()),
                 value: Some("bubu".to_string()),
                 list_index: Some(0),
+                sorted_index: None,
             },
             OperationFieldsJoinedRow {
                 public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
@@ -671,6 +685,7 @@ mod tests {
                 field_type: Some("pinned_relation_list".to_string()),
                 value: None,
                 list_index: Some(0),
+                sorted_index: None,
             },
         ];
 

@@ -4,10 +4,10 @@ version = "0.4.0"
 authors = [
     "adz <x1d@adz.garden>",
     "cafca <cafca@001.land>",
+    "glyph <glyph@mycelial.technology>",
     "pietgeursen <pietgeursen@gmail.com>",
     "sandreae <contact@samandreae.com>",
     "sophiiistika <sophiiistika@mailbox.org>",
-    "glyph <glyph@mycelial.technology>",
 ]
 description = "Embeddable p2p network node"
 license = "AGPL-3.0-or-later"
@@ -23,6 +23,7 @@ anyhow = "1.0.62"
 async-graphql = { version = "5.0.6", features = ["dynamic-schema"] }
 async-graphql-axum = "5.0.6"
 async-trait = "0.1.64"
+asynchronous-codec = { git = "https://github.com/p2panda/asynchronous-codec", rev = "6eef38b30ade6ce2d66accc966652bd15d74e274", features = ["cbor"] }
 axum = "0.6.10"
 bamboo-rs-core-ed25519-yasmf = "0.1.1"
 bs58 = "0.4.0"
@@ -32,10 +33,11 @@ deadqueue = { version = "0.2.3", default-features = false, features = [
 directories = "4.0.1"
 dynamic-graphql = "0.7.3"
 envy = "0.4.2"
+exponential-backoff = "1.2.0"
 futures = "0.3.23"
 hex = "0.4.3"
 http = "0.2.9"
-libp2p = { version = "0.51.3", features = [
+libp2p = { version = "0.52.0", features = [
     "autonat",
     "identify",
     "macros",
@@ -48,12 +50,12 @@ libp2p = { version = "0.51.3", features = [
     "tokio",
     "yamux",
 ] }
-libp2p-quic = { version = "0.7.0-alpha.3", features = ["tokio"] }
+libp2p-quic = { version = "0.8.0-alpha", features = ["tokio"] }
 lipmaa-link = "0.2.2"
-log = "0.4.17"
-once_cell = "1.17.0"
+log = "0.4.19"
+once_cell = "1.18.0"
 openssl-probe = "0.1.5"
-p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "50f9f0b02570c8ed895baf499cb0d98bbadd1687", features = [
+p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "a535ee229b367c79f18a50626c6bcab61581e32b", features = [
     "storage-provider",
 ] }
 serde = { version = "1.0.152", features = ["derive"] }
@@ -64,7 +66,7 @@ sqlx = { version = "0.6.1", features = [
     "runtime-tokio-rustls",
 ] }
 thiserror = "1.0.39"
-tokio = { version = "1.25.0", features = [
+tokio = { version = "1.28.2", features = [
     "macros",
     "net",
     "rt",
@@ -72,6 +74,7 @@ tokio = { version = "1.25.0", features = [
     "sync",
     "time",
 ] }
+tokio-stream = { version = "0.1.14", features = ["sync"] }
 tower-http = { version = "0.3.4", default-features = false, features = [
     "cors",
 ] }
@@ -84,8 +87,9 @@ ctor = "0.1.23"
 env_logger = "0.9.0"
 http = "0.2.9"
 hyper = "0.14.19"
+libp2p-swarm-test = "0.2.0"
 once_cell = "1.17.0"
-p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "50f9f0b02570c8ed895baf499cb0d98bbadd1687", features = [
+p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "a535ee229b367c79f18a50626c6bcab61581e32b", features = [
     "test-utils",
     "storage-provider",
 ] }
@@ -99,6 +103,5 @@ reqwest = { version = "0.11.11", default-features = false, features = [
 rstest = "0.15.0"
 rstest_reuse = "0.3.0"
 serde_json = "1.0.85"
-tempfile = "3.4.0"
 tower = "0.4.13"
 tower-service = "0.3.2"

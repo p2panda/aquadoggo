@@ -91,68 +91,70 @@ pub async fn materializer_service(
 
     // Listen to incoming new entries and operations and move them into task queue
     let handle = task::spawn(async move {
-        while let Ok(ServiceMessage::NewOperation(operation_id)) = rx.recv().await {
-            // Resolve document id of regarding operation
-            let document_id = context
-                .store
-                .get_document_id_by_operation_id(&operation_id)
-                .await
-                .unwrap_or_else(|_| {
-                    panic!(
-                        "Failed database query when retrieving document id by operation_id {}",
-                        operation_id
-                    )
-                });
+        loop {
+            if let Ok(ServiceMessage::NewOperation(operation_id)) = rx.recv().await {
+                // Resolve document id of regarding operation
+                let document_id = context
+                    .store
+                    .get_document_id_by_operation_id(&operation_id)
+                    .await
+                    .unwrap_or_else(|_| {
+                        panic!(
+                            "Failed database query when retrieving document id by operation_id {}",
+                            operation_id
+                        )
+                    });
 
-            match document_id {
-                Some(document_id) => {
-                    // Get the document by it's document id.
-                    let document = context
-                        .store
-                        .get_document(&document_id)
-                        .await
-                        .unwrap_or_else(|_| {
-                            panic!(
-                                "Failed database query when retrieving document {}",
-                                document_id
-                            )
-                        });
+                match document_id {
+                    Some(document_id) => {
+                        // Get the document by it's document id.
+                        let document = context
+                            .store
+                            .get_document(&document_id)
+                            .await
+                            .unwrap_or_else(|_| {
+                                panic!(
+                                    "Failed database query when retrieving document {}",
+                                    document_id
+                                )
+                            });
 
-                    let mut quick_commit_success = false;
+                        let mut quick_commit_success = false;
 
-                    // If a document was found we can try to incrementally update the document.
-                    if document.is_some() {
-                        // Attempt a quick commit of the document.
-                        //
-                        // This succeeds if the operation passed on the bus refers to the documents'
-                        // current view in it's previous field.
-                        if let Some(mut document) = document {
-                            quick_commit_success =
-                                quick_commit(&context, &mut document, &operation_id).await;
+                        // If a document was found we can try to incrementally update the document.
+                        if document.is_some() {
+                            // Attempt a quick commit of the document.
+                            //
+                            // This succeeds if the operation passed on the bus refers to the documents'
+                            // current view in it's previous field.
+                            if let Some(mut document) = document {
+                                quick_commit_success =
+                                    quick_commit(&context, &mut document, &operation_id).await;
 
-                            // If the commit succeeded and the document isn't now deleted dispatch "dependency" task for the documents new view.
-                            if quick_commit_success && !document.is_deleted() {
-                                factory.queue(Task::new(
-                                    "dependency",
-                                    TaskInput::new(None, Some(document.view_id().to_owned())),
-                                ))
+                                // If the commit succeeded and the document isn't now deleted dispatch "dependency" task for the documents new view.
+                                if quick_commit_success && !document.is_deleted() {
+                                    factory.queue(Task::new(
+                                        "dependency",
+                                        TaskInput::DocumentViewId(document.view_id().to_owned()),
+                                    ))
+                                };
                             };
-                        };
-                    }
+                        }
 
-                    if !quick_commit_success {
-                        // We couldn't perform a quick commit for this document.
-                        // Dispatch "reduce" task which will materialize the regarding document.
-                        factory.queue(Task::new("reduce", TaskInput::new(Some(document_id), None)))
+                        if !quick_commit_success {
+                            // We couldn't perform a quick commit for this document.
+                            // Dispatch "reduce" task which will materialize the regarding document.
+                            factory.queue(Task::new("reduce", TaskInput::DocumentId(document_id)))
+                        }
                     }
-                }
-                None => {
-                    // Panic when we couldn't find the regarding document in the database. We can
-                    // safely assure that this is due to a critical bug affecting the database
-                    // integrity. Panicking here will close `handle` and by that signal a node
-                    // shutdown.
-                    panic!("Could not find document for operation_id {}", operation_id);
-                }
+                    None => {
+                        // Panic when we couldn't find the regarding document in the database. We can
+                        // safely assure that this is due to a critical bug affecting the database
+                        // integrity. Panicking here will close `handle` and by that signal a node
+                        // shutdown.
+                        panic!("Could not find document for operation_id {}", operation_id);
+                    }
+                };
             }
         }
     });
@@ -166,10 +168,7 @@ pub async fn materializer_service(
     tokio::select! {
         _ = handle => (),
         _ = status_handle => (),
-        _ = shutdown => {
-            // @TODO: Wait until all pending tasks have been completed during graceful shutdown.
-            // Related issue: https://github.com/p2panda/aquadoggo/issues/164
-        },
+        _ = shutdown => (),
         _ = on_error => (),
     }
 
@@ -272,6 +271,7 @@ mod tests {
             // Prepare arguments for service
             let context = Context::new(
                 node.context.store.clone(),
+                KeyPair::new(),
                 Configuration::default(),
                 SchemaProvider::default(),
             );
@@ -339,7 +339,7 @@ mod tests {
                 .store
                 .insert_task(&Task::new(
                     "reduce",
-                    TaskInput::new(Some(document_id.to_owned()), None),
+                    TaskInput::DocumentId(document_id.to_owned()),
                 ))
                 .await
                 .unwrap();
@@ -347,6 +347,7 @@ mod tests {
             // Prepare arguments for service
             let context = Context::new(
                 node.context.store.clone(),
+                KeyPair::new(),
                 Configuration::default(),
                 SchemaProvider::default(),
             );
@@ -412,6 +413,7 @@ mod tests {
             // Prepare arguments for service
             let context = Context::new(
                 node.context.store.clone(),
+                KeyPair::new(),
                 Configuration::default(),
                 SchemaProvider::default(),
             );
@@ -506,6 +508,7 @@ mod tests {
             // Prepare arguments for service
             let context = Context::new(
                 node.context.store.clone(),
+                KeyPair::new(),
                 Configuration::default(),
                 SchemaProvider::default(),
             );
