@@ -2,6 +2,7 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::task::{Context, Poll};
+use std::time::{Duration, Instant};
 
 use exponential_backoff::Backoff;
 use libp2p::core::Endpoint;
@@ -13,7 +14,6 @@ use libp2p::swarm::{
 };
 use libp2p::{Multiaddr, PeerId};
 use log::{debug, warn};
-use std::time::{Duration, Instant};
 
 const RETRY_LIMIT: u32 = 8;
 const BACKOFF_SEC_MIN: u64 = 1;
