@@ -39,6 +39,8 @@ pub struct RelayBehaviour {
     /// Serve as a rendezvous point for remote peers to register their external addresses and query
     /// the addresses of other peers.
     pub rendezvous_server: rendezvous::server::Behaviour,
+
+    pub ping: ping::Behaviour,
 }
 
 impl RelayBehaviour {
@@ -69,6 +71,7 @@ impl RelayBehaviour {
             limits,
             rendezvous_server,
             relay_server,
+            ping: ping::Behaviour::new(ping::Config::default()),
         })
     }
 }
@@ -88,6 +91,8 @@ pub struct ClientBehaviour {
 
     /// Register with a rendezvous server and query remote peer addresses.
     pub rendezvous_client: rendezvous::client::Behaviour,
+
+    pub ping: ping::Behaviour,
 }
 
 impl ClientBehaviour {
@@ -117,6 +122,7 @@ impl ClientBehaviour {
             limits,
             rendezvous_client,
             relay_client,
+            ping: ping::Behaviour::new(ping::Config::default()),
         })
     }
 }
