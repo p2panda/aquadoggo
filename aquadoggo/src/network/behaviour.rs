@@ -8,6 +8,7 @@ use libp2p::swarm::behaviour::toggle::Toggle;
 use libp2p::swarm::NetworkBehaviour;
 use libp2p::{autonat, connection_limits, identify, mdns, ping, relay, rendezvous};
 use log::debug;
+use void;
 
 use crate::network::config::NODE_NAMESPACE;
 use crate::network::NetworkConfiguration;
@@ -24,6 +25,7 @@ const PING_INTERVAL: Duration = Duration::from_secs(5);
 const PING_TIMEOUT: Duration = Duration::from_secs(3);
 
 #[derive(NetworkBehaviour)]
+#[behaviour(to_swarm = "Event", event_process = false)]
 pub struct RelayBehaviour {
     /// Periodically exchange information between peer on an established connection. This
     /// is useful for learning the external address of the local node from a remote peer.
@@ -77,6 +79,7 @@ impl RelayBehaviour {
 }
 
 #[derive(NetworkBehaviour)]
+#[behaviour(to_swarm = "Event", event_process = false)]
 pub struct ClientBehaviour {
     /// Periodically exchange information between peer on an established connection. This
     /// is useful for learning the external address of the local node from a remote peer.
@@ -124,5 +127,58 @@ impl ClientBehaviour {
             relay_client,
             ping: ping::Behaviour::new(ping::Config::default()),
         })
+    }
+}
+
+#[derive(Debug)]
+pub enum Event {
+    Ping(ping::Event),
+    Identify(identify::Event),
+    RelayClient(relay::client::Event),
+    RelayServer(relay::Event),
+    RendezvousClient(rendezvous::client::Event),
+    RendezvousServer(rendezvous::server::Event),
+    Void,
+}
+
+impl From<ping::Event> for Event {
+    fn from(e: ping::Event) -> Self {
+        Event::Ping(e)
+    }
+}
+
+impl From<identify::Event> for Event {
+    fn from(e: identify::Event) -> Self {
+        Event::Identify(e)
+    }
+}
+
+impl From<relay::client::Event> for Event {
+    fn from(e: relay::client::Event) -> Self {
+        Event::RelayClient(e)
+    }
+}
+
+impl From<relay::Event> for Event {
+    fn from(e: relay::Event) -> Self {
+        Event::RelayServer(e)
+    }
+}
+
+impl From<rendezvous::client::Event> for Event {
+    fn from(e: rendezvous::client::Event) -> Self {
+        Event::RendezvousClient(e)
+    }
+}
+
+impl From<rendezvous::server::Event> for Event {
+    fn from(e: rendezvous::server::Event) -> Self {
+        Event::RendezvousServer(e)
+    }
+}
+
+impl From<void::Void> for Event {
+    fn from(e: void::Void) -> Self {
+        Event::Void
     }
 }
