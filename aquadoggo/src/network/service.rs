@@ -8,7 +8,7 @@ use libp2p::multiaddr::Protocol;
 use libp2p::ping::Event;
 use libp2p::swarm::dial_opts::{DialOpts, PeerCondition};
 use libp2p::swarm::{ConnectionError, NetworkBehaviour, SwarmEvent};
-use libp2p::{autonat, identify, mdns, rendezvous, Multiaddr, PeerId, Swarm};
+use libp2p::{autonat, identify, mdns, relay, rendezvous, Multiaddr, PeerId, Swarm};
 use log::{debug, info, trace, warn};
 use tokio::task;
 use tokio_stream::wrappers::BroadcastStream;
@@ -136,8 +136,10 @@ pub async fn client(
 
     let mut learned_observed_addr = false;
     let mut told_relay_observed_addr = false;
-    let mut registered = false;
+    let mut rendezvous_registered = false;
     let mut dial_discovered = false;
+    let mut relay_request_accepted = false;
+    let mut regs = vec![];
 
     loop {
         match swarm.next().await.unwrap() {
@@ -162,15 +164,30 @@ pub async fn client(
                     None,
                 ) {
                     Ok(_) => {
-                        info!("Registered on rendezvous in namespace \"{NODE_NAMESPACE}\"");
-                        registered = true;
                     },
                     Err(err) => warn!(
                         "Failed to register on rendezvous server in namespace \"{NODE_NAMESPACE}\": {err:?}"
                     ),
                 };
+
+                swarm
+                    .listen_on(relay_address.clone().with(Protocol::P2pCircuit))
+                    .unwrap();
             }
-            SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == rendezvous_point => {
+            SwarmEvent::Behaviour(ClientBehaviourEvent::RelayClient(
+                relay::client::Event::ReservationReqAccepted { relay_peer_id, .. },
+            )) => {
+                info!("Relay reservation request accepted: {relay_peer_id:?}");
+
+                relay_request_accepted = true;
+            }
+
+            SwarmEvent::Behaviour(ClientBehaviourEvent::RendezvousClient(
+                rendezvous::client::Event::Registered { namespace, .. },
+            )) => {
+                info!("Registered on rendezvous in namespace \"{namespace}\"");
+                rendezvous_registered = true;
+
                 info!(
                     "Connected to rendezvous point, discovering nodes in '{}' namespace ...",
                     NODE_NAMESPACE
@@ -183,34 +200,49 @@ pub async fn client(
                     rendezvous_point,
                 );
             }
+            // SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == rendezvous_point => {}
             SwarmEvent::Behaviour(ClientBehaviourEvent::RendezvousClient(
-                rendezvous::client::Event::Discovered {
-                    registrations,
-                    ..
-                },
+                rendezvous::client::Event::Discovered { registrations, .. },
             )) => {
                 info!("Discovered peers registered at rendezvous: {registrations:?}",);
 
                 dial_discovered = true;
-
-                for reg in registrations {
-                    let peer_id = reg.record.peer_id();
-                    swarm.dial(peer_id)?;
-                }
+                regs = registrations;
             }
             event => debug!("{event:?}"),
         }
 
-        if learned_observed_addr && told_relay_observed_addr && registered && dial_discovered {
+        if learned_observed_addr
+            && told_relay_observed_addr
+            && rendezvous_registered
+            && dial_discovered
+            && relay_request_accepted
+        {
             break;
         }
     }
 
-    swarm
-        .listen_on(relay_address.with(Protocol::P2pCircuit))
-        .unwrap();
+    info!("Node initialized in client mode");
 
-    info!("Client initialized");
+    for registration in regs {
+        for address in registration.record.addresses() {
+            let peer = registration.record.peer_id();
+            if peer != local_peer_id {
+                info!("Dialing peer {} at {}", peer, address);
+
+                let opts = DialOpts::peer_id(peer)
+                    .addresses(vec![relay_address
+                        .clone()
+                        .with(Protocol::P2pCircuit)
+                        .with(Protocol::P2p(PeerId::from(peer).into()))])
+                    .extend_addresses_through_behaviour()
+                    .build();
+
+                // establish relay-connection with remote peer
+                swarm.dial(opts).unwrap();
+            }
+        }
+    }
 
     Ok(swarm)
 }
