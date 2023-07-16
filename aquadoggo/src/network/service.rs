@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::net::Ipv4Addr;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -16,7 +17,7 @@ use tokio_stream::StreamExt;
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
 use crate::manager::{ServiceReadySender, Shutdown};
-use crate::network::behaviour::{ClientBehaviour, RelayBehaviour};
+use crate::network::behaviour::{ClientBehaviour, RelayBehaviour, RelayBehaviourEvent};
 use crate::network::config::NODE_NAMESPACE;
 use crate::network::{dialer, identity, peers, swarm, NetworkConfiguration, ShutdownHandler};
 
@@ -128,12 +129,40 @@ pub async fn relay(
     // Build the network swarm and retrieve the local peer ID
     let mut swarm = swarm::build_relay_swarm(&network_config, key_pair).await?;
 
-    // Define the QUIC multiaddress on which the swarm will listen for connections
-    let quic_multiaddr =
-        format!("/ip4/0.0.0.0/udp/{}/quic-v1", network_config.quic_port).parse()?;
+    // Listen on all interfaces
+    let listen_addr_tcp = Multiaddr::empty()
+        .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
+        .with(Protocol::Tcp(2030));
+    swarm.listen_on(listen_addr_tcp)?;
 
-    // Listen for incoming connection requests over the QUIC transport
-    swarm.listen_on(quic_multiaddr)?;
+    let listen_addr_quic = Multiaddr::empty()
+        .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
+        .with(Protocol::Udp(network_config.quic_port))
+        .with(Protocol::QuicV1);
+    swarm.listen_on(listen_addr_quic)?;
+
+    loop {
+        match swarm.next().await.expect("Infinite Stream.") {
+            SwarmEvent::Behaviour(event) => {
+                if let RelayBehaviourEvent::Identify(identify::Event::Received {
+                    info: identify::Info { observed_addr, .. },
+                    ..
+                }) = &event
+                {
+                    swarm.add_external_address(observed_addr.clone());
+                }
+
+                info!("{event:?}");
+                break;
+            }
+            SwarmEvent::NewListenAddr { address, .. } => {
+                info!("Listening on {address:?}");
+            }
+            _ => {}
+        }
+    }
+
+    info!("Relay initialized");
 
     Ok(swarm)
 }
@@ -196,7 +225,7 @@ where
             tokio::select! {
                 event = self.swarm.next() => {
                     let event = event.unwrap();
-                    println!("{event:?}");
+                    info!("{event:?}");
                 }
                 event = self.rx.next() => match event {
                     Some(Ok(message)) => (),
