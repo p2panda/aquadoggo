@@ -85,6 +85,7 @@ pub async fn client(
 ) -> Result<Swarm<ClientBehaviour>> {
     let local_peer_id = key_pair.public().to_peer_id();
     let relay_address = network_config.relay_address.clone().unwrap();
+    let rendezvous_point = network_config.relay_peer_id.unwrap();
 
     // Build the network swarm and retrieve the local peer ID
     let mut swarm = swarm::build_client_swarm(&network_config, key_pair).await?;
@@ -92,7 +93,7 @@ pub async fn client(
     // Listen on all interfaces
     let listen_addr_tcp = Multiaddr::empty()
         .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
-        .with(Protocol::Tcp(2031));
+        .with(Protocol::Tcp(0));
     match swarm.listen_on(listen_addr_tcp.clone()) {
         Ok(_) => (),
         Err(_) => warn!("Failed to listen on address: {listen_addr_tcp:?}"),
@@ -100,7 +101,7 @@ pub async fn client(
 
     let listen_addr_quic = Multiaddr::empty()
         .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
-        .with(Protocol::Udp(network_config.quic_port))
+        .with(Protocol::Udp(0))
         .with(Protocol::QuicV1);
     match swarm.listen_on(listen_addr_quic.clone()) {
         Ok(_) => (),
@@ -135,12 +136,11 @@ pub async fn client(
 
     let mut learned_observed_addr = false;
     let mut told_relay_observed_addr = false;
+    let mut registered = false;
+    let mut dial_discovered = false;
 
     loop {
         match swarm.next().await.unwrap() {
-            SwarmEvent::NewListenAddr { .. } => {}
-            SwarmEvent::Dialing { .. } => {}
-            SwarmEvent::ConnectionEstablished { .. } => {}
             SwarmEvent::Behaviour(ClientBehaviourEvent::Identify(identify::Event::Sent {
                 ..
             })) => {
@@ -154,11 +154,54 @@ pub async fn client(
                 info!("Relay told us our public address: {:?}", observed_addr);
                 swarm.add_external_address(observed_addr);
                 learned_observed_addr = true;
+
+                // default ttl is 7200s
+                match swarm.behaviour_mut().rendezvous_client.register(
+                    rendezvous::Namespace::from_static(NODE_NAMESPACE),
+                    rendezvous_point,
+                    None,
+                ) {
+                    Ok(_) => {
+                        info!("Registered on rendezvous in namespace \"{NODE_NAMESPACE}\"");
+                        registered = true;
+                    },
+                    Err(err) => warn!(
+                        "Failed to register on rendezvous server in namespace \"{NODE_NAMESPACE}\": {err:?}"
+                    ),
+                };
+            }
+            SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == rendezvous_point => {
+                info!(
+                    "Connected to rendezvous point, discovering nodes in '{}' namespace ...",
+                    NODE_NAMESPACE
+                );
+
+                swarm.behaviour_mut().rendezvous_client.discover(
+                    Some(rendezvous::Namespace::new(NODE_NAMESPACE.to_string()).unwrap()),
+                    None,
+                    None,
+                    rendezvous_point,
+                );
+            }
+            SwarmEvent::Behaviour(ClientBehaviourEvent::RendezvousClient(
+                rendezvous::client::Event::Discovered {
+                    registrations,
+                    ..
+                },
+            )) => {
+                info!("Discovered peers registered at rendezvous: {registrations:?}",);
+
+                dial_discovered = true;
+
+                for reg in registrations {
+                    let peer_id = reg.record.peer_id();
+                    swarm.dial(peer_id)?;
+                }
             }
             event => debug!("{event:?}"),
         }
 
-        if learned_observed_addr && told_relay_observed_addr {
+        if learned_observed_addr && told_relay_observed_addr && registered && dial_discovered {
             break;
         }
     }
