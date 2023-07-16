@@ -21,6 +21,8 @@ use crate::network::behaviour::{ClientBehaviour, RelayBehaviour, RelayBehaviourE
 use crate::network::config::NODE_NAMESPACE;
 use crate::network::{dialer, identity, peers, swarm, NetworkConfiguration, ShutdownHandler};
 
+use super::behaviour::ClientBehaviourEvent;
+
 pub async fn spawn_event_loop<T>(
     swarm: Swarm<T>,
     network_config: NetworkConfiguration,
@@ -82,38 +84,90 @@ pub async fn client(
     key_pair: libp2p::identity::Keypair,
 ) -> Result<Swarm<ClientBehaviour>> {
     let local_peer_id = key_pair.public().to_peer_id();
+    let relay_address = network_config.relay_address.clone().unwrap();
 
     // Build the network swarm and retrieve the local peer ID
     let mut swarm = swarm::build_client_swarm(&network_config, key_pair).await?;
 
-    // Define the QUIC multiaddress on which the swarm will listen for connections
-    let quic_multiaddr =
-        format!("/ip4/0.0.0.0/udp/{}/quic-v1", network_config.quic_port).parse()?;
+    // Listen on all interfaces
+    let listen_addr_tcp = Multiaddr::empty()
+        .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
+        .with(Protocol::Tcp(2031));
+    match swarm.listen_on(listen_addr_tcp.clone()) {
+        Ok(_) => (),
+        Err(_) => warn!("Failed to listen on address: {listen_addr_tcp:?}"),
+    };
 
-    // Listen for incoming connection requests over the QUIC transport
-    swarm.listen_on(quic_multiaddr)?;
+    let listen_addr_quic = Multiaddr::empty()
+        .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
+        .with(Protocol::Udp(network_config.quic_port))
+        .with(Protocol::QuicV1);
+    match swarm.listen_on(listen_addr_quic.clone()) {
+        Ok(_) => (),
+        Err(_) => warn!("Failed to listen on address: {listen_addr_quic:?}"),
+    };
 
-    let mut external_circuit_addr = None;
-
-    // Construct circuit relay addresses and listen on relayed address
-    if let Some(relay_addr) = &network_config.relay_address {
-        let circuit_addr = relay_addr.clone().with(Protocol::P2pCircuit);
-
-        // Dialable circuit relay address for local node
-        external_circuit_addr = Some(circuit_addr.clone().with(Protocol::P2p(local_peer_id)));
-
-        swarm.listen_on(circuit_addr)?;
+    // Wait to listen on all interfaces.
+    let mut delay = tokio::time::interval(std::time::Duration::from_secs(1));
+    loop {
+        tokio::select! {
+            event = swarm.next() => {
+                match event.unwrap() {
+                    SwarmEvent::NewListenAddr { address, .. } => {
+                        info!("Listening on {:?}", address);
+                    }
+                    event => panic!("{event:?}"),
+                }
+            }
+            _ = delay.tick() => {
+                // Likely listening on all interfaces now, thus continuing by breaking the loop.
+                break;
+            }
+        }
     }
 
-    // Dial each peer identified by the multi-address provided via `--remote-peers` if given
-    for addr in network_config.remote_peers.clone() {
-        swarm.dial(addr)?
+    // Connect to the relay server. Not for the reservation or relayed connection, but to (a) learn
+    // our local public address and (b) enable a freshly started relay to learn its public address.
+    match swarm.dial(relay_address.clone()) {
+        Ok(_) => (),
+        Err(_) => warn!("Failed to dial relay: {relay_address:?}"),
+    };
+
+    let mut learned_observed_addr = false;
+    let mut told_relay_observed_addr = false;
+
+    loop {
+        match swarm.next().await.unwrap() {
+            SwarmEvent::NewListenAddr { .. } => {}
+            SwarmEvent::Dialing { .. } => {}
+            SwarmEvent::ConnectionEstablished { .. } => {}
+            SwarmEvent::Behaviour(ClientBehaviourEvent::Identify(identify::Event::Sent {
+                ..
+            })) => {
+                info!("Told relay its public address.");
+                told_relay_observed_addr = true;
+            }
+            SwarmEvent::Behaviour(ClientBehaviourEvent::Identify(identify::Event::Received {
+                info: identify::Info { observed_addr, .. },
+                ..
+            })) => {
+                info!("Relay told us our public address: {:?}", observed_addr);
+                swarm.add_external_address(observed_addr);
+                learned_observed_addr = true;
+            }
+            event => debug!("{event:?}"),
+        }
+
+        if learned_observed_addr && told_relay_observed_addr {
+            break;
+        }
     }
 
-    // Dial the peer identified by the multi-address provided via `--rendezvous_address` if given
-    if let Some(addr) = network_config.rendezvous_address.clone() {
-        swarm.dial(addr)?;
-    }
+    swarm
+        .listen_on(relay_address.with(Protocol::P2pCircuit))
+        .unwrap();
+
+    info!("Client initialized");
 
     Ok(swarm)
 }
