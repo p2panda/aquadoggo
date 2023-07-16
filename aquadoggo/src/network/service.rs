@@ -6,7 +6,7 @@ use anyhow::Result;
 use libp2p::multiaddr::Protocol;
 use libp2p::ping::Event;
 use libp2p::swarm::dial_opts::{DialOpts, PeerCondition};
-use libp2p::swarm::{ConnectionError, SwarmEvent};
+use libp2p::swarm::{ConnectionError, NetworkBehaviour, SwarmEvent};
 use libp2p::{autonat, identify, mdns, rendezvous, Multiaddr, PeerId, Swarm};
 use log::{debug, info, trace, warn};
 use tokio::task;
@@ -16,31 +16,74 @@ use tokio_stream::StreamExt;
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
 use crate::manager::{ServiceReadySender, Shutdown};
-use crate::network::behaviour::{Behaviour, BehaviourEvent};
+use crate::network::behaviour::{ClientBehaviour, RelayBehaviour};
 use crate::network::config::NODE_NAMESPACE;
 use crate::network::{dialer, identity, peers, swarm, NetworkConfiguration, ShutdownHandler};
 
-/// Network service that configures and deploys a libp2p network swarm over QUIC transports.
-///
-/// The swarm listens for incoming connections, dials remote nodes, manages connections and
-/// executes predefined network behaviours.
+pub async fn spawn_event_loop<T>(
+    swarm: Swarm<T>,
+    network_config: NetworkConfiguration,
+    shutdown: Shutdown,
+    tx: ServiceSender,
+    tx_ready: ServiceReadySender,
+) -> Result<()>
+where
+    T: NetworkBehaviour + Send,
+    <T as NetworkBehaviour>::ToSwarm: std::fmt::Debug,
+{
+    let mut shutdown_handler = ShutdownHandler::new();
+
+    // Spawn a task to run swarm in event loop
+    let event_loop = EventLoop::new(swarm, tx, network_config, shutdown_handler.clone());
+    let handle = task::spawn(event_loop.run());
+
+    if tx_ready.send(()).is_err() {
+        warn!("No subscriber informed about network service being ready");
+    };
+
+    // Wait until we received the application shutdown signal or handle closed
+    tokio::select! {
+        _ = handle => (),
+        _ = shutdown => (),
+    }
+
+    shutdown_handler.is_done().await;
+
+    Ok(())
+}
+
 pub async fn network_service(
     context: Context,
     shutdown: Shutdown,
     tx: ServiceSender,
     tx_ready: ServiceReadySender,
 ) -> Result<()> {
-    // Subscribe to communication bus
-    let _rx = tx.subscribe();
-
     // Read the network configuration parameters from the application context
     let network_config = context.config.network.clone();
     let key_pair = identity::to_libp2p_key_pair(&context.key_pair);
     let local_peer_id = key_pair.public().to_peer_id();
     info!("Local peer id: {local_peer_id}");
 
+    match &network_config.relay_address {
+        Some(_) => {
+            let swarm = client(&network_config, key_pair).await?;
+            spawn_event_loop(swarm, network_config, shutdown, tx, tx_ready).await
+        }
+        None => {
+            let swarm = relay(&network_config, key_pair).await?;
+            spawn_event_loop(swarm, network_config, shutdown, tx, tx_ready).await
+        }
+    }
+}
+
+pub async fn client(
+    network_config: &NetworkConfiguration,
+    key_pair: libp2p::identity::Keypair,
+) -> Result<Swarm<ClientBehaviour>> {
+    let local_peer_id = key_pair.public().to_peer_id();
+
     // Build the network swarm and retrieve the local peer ID
-    let mut swarm = swarm::build_swarm(&network_config, key_pair).await?;
+    let mut swarm = swarm::build_client_swarm(&network_config, key_pair).await?;
 
     // Define the QUIC multiaddress on which the swarm will listen for connections
     let quic_multiaddr =
@@ -71,48 +114,51 @@ pub async fn network_service(
         swarm.dial(addr)?;
     }
 
-    let mut shutdown_handler = ShutdownHandler::new();
+    Ok(swarm)
+}
 
-    // Spawn a task to run swarm in event loop
-    let event_loop = EventLoop::new(
-        swarm,
-        tx,
-        external_circuit_addr,
-        network_config,
-        shutdown_handler.clone(),
-    );
-    let handle = task::spawn(event_loop.run());
+/// Network service that configures and deploys a libp2p network swarm over QUIC transports.
+///
+/// The swarm listens for incoming connections, dials remote nodes, manages connections and
+/// executes predefined network behaviours.
+pub async fn relay(
+    network_config: &NetworkConfiguration,
+    key_pair: libp2p::identity::Keypair,
+) -> Result<Swarm<RelayBehaviour>> {
+    // Build the network swarm and retrieve the local peer ID
+    let mut swarm = swarm::build_relay_swarm(&network_config, key_pair).await?;
 
-    if tx_ready.send(()).is_err() {
-        warn!("No subscriber informed about network service being ready");
-    };
+    // Define the QUIC multiaddress on which the swarm will listen for connections
+    let quic_multiaddr =
+        format!("/ip4/0.0.0.0/udp/{}/quic-v1", network_config.quic_port).parse()?;
 
-    // Wait until we received the application shutdown signal or handle closed
-    tokio::select! {
-        _ = handle => (),
-        _ = shutdown => (),
-    }
+    // Listen for incoming connection requests over the QUIC transport
+    swarm.listen_on(quic_multiaddr)?;
 
-    shutdown_handler.is_done().await;
-
-    Ok(())
+    Ok(swarm)
 }
 
 /// Main loop polling the async swarm event stream and incoming service messages stream.
-struct EventLoop {
-    swarm: Swarm<Behaviour>,
+struct EventLoop<T: NetworkBehaviour>
+where
+    T: NetworkBehaviour,
+    <T as NetworkBehaviour>::ToSwarm: std::fmt::Debug,
+{
+    swarm: Swarm<T>,
     tx: ServiceSender,
     rx: BroadcastStream<ServiceMessage>,
-    external_circuit_addr: Option<Multiaddr>,
     network_config: NetworkConfiguration,
     shutdown_handler: ShutdownHandler,
 }
 
-impl EventLoop {
+impl<T> EventLoop<T>
+where
+    T: NetworkBehaviour,
+    <T as NetworkBehaviour>::ToSwarm: std::fmt::Debug,
+{
     pub fn new(
-        swarm: Swarm<Behaviour>,
+        swarm: Swarm<T>,
         tx: ServiceSender,
-        external_circuit_addr: Option<Multiaddr>,
         network_config: NetworkConfiguration,
         shutdown_handler: ShutdownHandler,
     ) -> Self {
@@ -120,7 +166,6 @@ impl EventLoop {
             swarm,
             rx: BroadcastStream::new(tx.subscribe()),
             tx,
-            external_circuit_addr,
             network_config,
             shutdown_handler,
         }
@@ -150,10 +195,11 @@ impl EventLoop {
         loop {
             tokio::select! {
                 event = self.swarm.next() => {
-                    self.handle_swarm_event(event.expect("Swarm stream to be infinite")).await
+                    let event = event.unwrap();
+                    println!("{event:?}");
                 }
                 event = self.rx.next() => match event {
-                    Some(Ok(message)) => self.handle_service_message(message).await,
+                    Some(Ok(message)) => (),
                     Some(Err(err)) => {
                         panic!("Service bus subscriber for event loop failed: {}", err);
                     }
@@ -166,40 +212,6 @@ impl EventLoop {
                     self.shutdown().await;
                 }
             }
-        }
-    }
-
-    /// Send a message on the communication bus to inform other services.
-    fn send_service_message(&mut self, message: ServiceMessage) {
-        if self.tx.send(message).is_err() {
-            // Silently fail here as we don't care if the message was received at this
-            // point
-        }
-    }
-
-    /// Handle an incoming message via the communication bus from other services.
-    async fn handle_service_message(&mut self, message: ServiceMessage) {
-        match message {
-            ServiceMessage::SentReplicationMessage(peer, sync_message) => {
-                self.swarm
-                    .behaviour_mut()
-                    .peers
-                    .send_message(peer, sync_message);
-            }
-            ServiceMessage::ReplicationFailed(peer) => {
-                self.swarm.behaviour_mut().peers.handle_critical_error(peer);
-            }
-            _ => (),
-        }
-    }
-
-    /// Handle an event coming from the libp2p swarm.
-    async fn handle_swarm_event<E: std::fmt::Debug>(
-        &mut self,
-        event: SwarmEvent<BehaviourEvent, E>,
-    ) {
-        match event {
-            event => debug!("{event:?}")
         }
     }
 }

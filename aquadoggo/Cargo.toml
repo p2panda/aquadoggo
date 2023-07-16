@@ -49,6 +49,7 @@ libp2p = { version = "0.52.0", features = [
     "serde",
     "tokio",
     "yamux",
+    "tcp",
 ] }
 libp2p-quic = { version = "0.8.0-alpha", features = ["tokio"] }
 lipmaa-link = "0.2.2"
