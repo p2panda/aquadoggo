@@ -279,10 +279,10 @@ pub async fn relay(
                 }) = &event
                 {
                     swarm.add_external_address(observed_addr.clone());
+                    break;
                 }
 
                 info!("{event:?}");
-                break;
             }
             SwarmEvent::NewListenAddr { address, .. } => {
                 info!("Listening on {address:?}");
