@@ -233,7 +233,7 @@ pub async fn client(
             rendezvous_point,
         );
 
-    // All swarm setup complete and we are connected to the network. 
+    // All swarm setup complete and we are connected to the network.
 
     info!("Node initialized in client mode");
 
@@ -381,7 +381,6 @@ impl EventLoop {
     /// Handle an event coming from the libp2p swarm.
     async fn handle_swarm_event<E: std::fmt::Debug>(&mut self, event: SwarmEvent<Event, E>) {
         match event {
-
             // ~~~~~~~~~~~~~~~~~~~~
             // rendezvous discovery
             // ~~~~~~~~~~~~~~~~~~~~
