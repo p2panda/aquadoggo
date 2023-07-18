@@ -25,7 +25,7 @@ clap = { version = "4.1.8", features = ["derive"] }
 env_logger = "0.9.0"
 hex = "0.4.3"
 libp2p = "0.52.0"
-p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "24d8be7fb130eaa5bf0f4a58e3712aefe2f7baab" }
+p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "0d73ab7836cf89124adfa20d1b5f69374407e132" }
 tokio = { version = "1.28.2", features = ["full"] }
 
 [dependencies.aquadoggo]

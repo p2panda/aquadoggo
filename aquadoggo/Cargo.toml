@@ -55,7 +55,7 @@ lipmaa-link = "0.2.2"
 log = "0.4.19"
 once_cell = "1.18.0"
 openssl-probe = "0.1.5"
-p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "24d8be7fb130eaa5bf0f4a58e3712aefe2f7baab", features = [
+p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "0d73ab7836cf89124adfa20d1b5f69374407e132", features = [
     "storage-provider",
 ] }
 serde = { version = "1.0.152", features = ["derive"] }
@@ -89,7 +89,7 @@ http = "0.2.9"
 hyper = "0.14.19"
 libp2p-swarm-test = "0.2.0"
 once_cell = "1.17.0"
-p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "24d8be7fb130eaa5bf0f4a58e3712aefe2f7baab", features = [
+p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "0d73ab7836cf89124adfa20d1b5f69374407e132", features = [
     "test-utils",
     "storage-provider",
 ] }
@@ -102,6 +102,7 @@ reqwest = { version = "0.11.11", default-features = false, features = [
 ] }
 rstest = "0.15.0"
 rstest_reuse = "0.3.0"
+serde_bytes = "0.11.12"
 serde_json = "1.0.85"
 tower = "0.4.13"
 tower-service = "0.3.2"

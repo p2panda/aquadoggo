@@ -229,10 +229,24 @@ mod tests {
             serialize_value(cbor!([0, 51, 1, target_set]))
         );
 
-        let log_heights = vec![(public_key, vec![(LogId::default(), SeqNum::default())])];
         assert_eq!(
-            serialize_from(SyncMessage::new(51, Message::Have(log_heights.clone()))),
-            serialize_value(cbor!([10, 51, log_heights]))
+            serialize_from(SyncMessage::new(
+                51,
+                Message::Have(vec![(
+                    public_key,
+                    vec![(LogId::default(), SeqNum::default())]
+                )])
+            )),
+            serialize_value(cbor!([
+                10,
+                51,
+                vec![(
+                    // Convert explicitly to bytes as `cbor!` macro doesn't understand somehow that
+                    // `PublicKey` serializes to a byte array
+                    serde_bytes::Bytes::new(&public_key.to_bytes()),
+                    vec![(LogId::default(), SeqNum::default())]
+                )]
+            ]))
         );
     }
 
@@ -254,11 +268,25 @@ mod tests {
             SyncMessage::new(12, Message::Have(vec![]))
         );
 
-        let log_heights = vec![(public_key, vec![(LogId::default(), SeqNum::default())])];
         assert_eq!(
-            deserialize_into::<SyncMessage>(&serialize_value(cbor!([10, 12, log_heights.clone()])))
-                .unwrap(),
-            SyncMessage::new(12, Message::Have(log_heights))
+            deserialize_into::<SyncMessage>(&serialize_value(cbor!([
+                10,
+                12,
+                vec![(
+                    // Convert explicitly to bytes as `cbor!` macro doesn't understand somehow that
+                    // `PublicKey` serializes to a byte array
+                    serde_bytes::Bytes::new(&public_key.to_bytes()),
+                    vec![(LogId::default(), SeqNum::default())]
+                )]
+            ])))
+            .unwrap(),
+            SyncMessage::new(
+                12,
+                Message::Have(vec![(
+                    public_key,
+                    vec![(LogId::default(), SeqNum::default())]
+                )])
+            )
         );
     }
 
