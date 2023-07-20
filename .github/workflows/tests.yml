@@ -212,7 +212,6 @@ jobs:
       - name: Setup Rust toolchain with grcov
         uses: actions-rs/toolchain@v1
         with:
-          profile: minimal
           toolchain: stable
           override: true
           components: grcov
