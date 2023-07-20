@@ -76,6 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Open Sauce
 
 - CI: Temporary workaround for Rust compiler bug [#417](https://github.com/p2panda/aquadoggo/pull/417)
+- CI: Update actions [#455](https://github.com/p2panda/aquadoggo/pull/455)
 
 ## [0.4.0]
 
