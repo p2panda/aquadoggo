@@ -170,8 +170,10 @@ jobs:
       - name: Setup Rust toolchain
         uses: moonrepo/setup-rust@v0
         with:
-          cargo: grcov
           components: llvm-tools-preview
+
+      - name: Install grcov
+        run: cargo install grcov
 
       - name: Run compiler for source based coverage
         env:
