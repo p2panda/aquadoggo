@@ -209,12 +209,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Setup Rust toolchain
+      - name: Setup Rust toolchain with grcov
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: stable
           override: true
+          components: grcov
 
       - name: Restore from cargo cache
         uses: actions/cache@v3
@@ -222,19 +223,26 @@ jobs:
           path: ${{ env.cache_path }}
           key: ${{ runner.os }}-tarpaulin-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Run cargo-tarpaulin
-        uses: actions-rs/tarpaulin@v0.1
-        with:
-          version: '0.20.1'
-          # Force cleaning via `--force-clean` flag to prevent buggy code coverage
-          args: >-
-            --manifest-path ${{ env.cargo_manifest }}
-            --locked
-            --force-clean
-            -- --test-threads=1
+      - name: Run compiler for source based coverage
         env:
-          # Ensure debug output is also tested
-          RUST_LOG: debug
+          CARGO_INCREMENTAL=0
+          RUSTFLAGS='-Cinstrument-coverage'
+          LLVM_PROFILE_FILE='cargo-test-%p-%m.profraw'
+        run: cargo test
+
+      - name: Run grcov to generate .lcov file
+        run: |
+          grcov . \
+            --binary-path ./target/debug/deps/ \
+            -s \
+            -t lcov \
+            --branch \
+            --ignore-not-existing \
+            --ignore '../*' \
+            --ignore "/*" \
+            -o coverage.lcov
 
       - name: Upload to codecov.io
-        uses: codecov/codecov-action@v2
+        uses: codecov/codecov-action@v3
+        with:
+          files: coverage.lcov
