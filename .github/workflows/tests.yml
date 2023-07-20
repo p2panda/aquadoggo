@@ -217,13 +217,16 @@ jobs:
           override: true
 
       - name: Install grcov
-        run: cargo install grcov
+        uses: actions-rs/cargo@v1
+        with:
+          command: install
+          args: grcov
 
       - name: Restore from cargo cache
         uses: actions/cache@v3
         with:
           path: ${{ env.cache_path }}
-          key: ${{ runner.os }}-tarpaulin-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-coverage-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run compiler for source based coverage
         env:
