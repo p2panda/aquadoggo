@@ -4,9 +4,6 @@ on: push
 
 env:
   CARGO_TERM_COLOR: always
-  cache_path: |
-    target
-    ~/.cargo
   cargo_manifest: aquadoggo/Cargo.toml
 
 jobs:
@@ -21,40 +18,25 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Setup Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-
-      - name: Restore from cargo cache
-        uses: actions/cache@v3
-        with:
-          path: ${{ env.cache_path }}
-          key: ${{ runner.os }}-test-${{ hashFiles('**/Cargo.lock') }}
+        uses: moonrepo/setup-rust@v0
 
       - name: Build binary
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: >-
-            --verbose
+        run: |
+          cargo build \
+            --verbose \
             --manifest-path ${{ env.cargo_manifest }}
 
       # Related issue: https://github.com/p2panda/aquadoggo/issues/414
       - name: Temporary workaround for rustc bug
-        uses: actions-rs/cargo@v1
-        with:
-          command: clean
+        run: cargo clean
 
       - name: Run tests
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --manifest-path ${{ env.cargo_manifest }}
         env:
           # Ensure debug output is also tested
           RUST_LOG: debug
+        run: |
+          cargo test \
+            --manifest-path ${{ env.cargo_manifest }}
 
   rust-test-postgres:
     runs-on: ubuntu-latest
@@ -83,35 +65,21 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Setup Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-
-      - name: Restore from cargo cache
-        uses: actions/cache@v3
-        with:
-          path: ${{ env.cache_path }}
-          key: ${{ runner.os }}-test-${{ hashFiles('**/Cargo.lock') }}
+        uses: moonrepo/setup-rust@v0
 
       # Related issue: https://github.com/p2panda/aquadoggo/issues/414
       - name: Temporary workaround for rustc bug
-        uses: actions-rs/cargo@v1
-        with:
-          command: clean
+        run: cargo clean
 
       - name: Run tests
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          # Make sure the tests run consecutively to avoid accessing the same
-          # database by multiple test threads
-          args: >-
-            --manifest-path ${{ env.cargo_manifest }}
-            -- --test-threads 1
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/aquadoggo-development
+        # Make sure the tests run consecutively to avoid accessing the same
+        # database by multiple test threads
+        run: |
+          cargo test \
+              --manifest-path ${{ env.cargo_manifest }} \
+              -- --test-threads 1
 
   rust-check:
     runs-on: ubuntu-latest
@@ -124,23 +92,12 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Setup Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-
-      - name: Restore from cargo cache
-        uses: actions/cache@v3
-        with:
-          path: ${{ env.cache_path }}
-          key: ${{ runner.os }}-check-${{ hashFiles('**/Cargo.lock') }}
+        uses: moonrepo/setup-rust@v0
 
       - name: Check project and dependencies
-        uses: actions-rs/cargo@v1
-        with:
-          command: check
-          args: --manifest-path ${{ env.cargo_manifest }}
+        run: |
+          cargo check \
+            --manifest-path ${{ env.cargo_manifest }}
 
   rust-fmt:
     runs-on: ubuntu-latest
@@ -150,24 +107,15 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Setup Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: moonrepo/setup-rust@v0
         with:
-          profile: minimal
-          toolchain: stable
           components: rustfmt
-          override: true
-
-      - name: Restore from cargo cache
-        uses: actions/cache@v3
-        with:
-          path: ${{ env.cache_path }}
-          key: ${{ runner.os }}-fmt-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Check formatting
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --manifest-path ${{ env.cargo_manifest }} -- --check
+        run: |
+          cargo fmt \
+            --manifest-path ${{ env.cargo_manifest }} \
+            -- --check
 
   rust-clippy:
     runs-on: ubuntu-latest
@@ -180,24 +128,15 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Setup Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: moonrepo/setup-rust@v0
         with:
-          profile: minimal
-          toolchain: stable
           components: clippy
-          override: true
-
-      - name: Restore from cargo cache
-        uses: actions/cache@v3
-        with:
-          path: ${{ env.cache_path }}
-          key: ${{ runner.os }}-clippy-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Check code with clippy
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --manifest-path ${{ env.cargo_manifest }} -- -D warnings --no-deps
+        run: |
+          cargo clippy \
+            --manifest-path ${{ env.cargo_manifest }} \
+            -- -D warnings --no-deps
 
   rust-coverage:
     runs-on: ubuntu-latest
@@ -210,24 +149,19 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Setup Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: moonrepo/setup-rust@v0
         with:
-          toolchain: stable
-          override: true
+          cargo: grcov
           components: llvm-tools-preview
-
-      - name: Install grcov
-        uses: actions-rs/cargo@v1
-        with:
-          command: install
-          args: grcov
 
       - name: Run compiler for source based coverage
         env:
           CARGO_INCREMENTAL: 0
           RUSTFLAGS: '-Cinstrument-coverage'
           LLVM_PROFILE_FILE: 'cargo-test-%p-%m.profraw'
-        run: cargo test
+        run: |
+          cargo test \
+            --manifest-path ${{ env.cargo_manifest }}
 
       - name: Run grcov to generate .lcov file
         run: |
