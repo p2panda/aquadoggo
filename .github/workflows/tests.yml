@@ -7,6 +7,28 @@ env:
   cargo_manifest: aquadoggo/Cargo.toml
 
 jobs:
+  rust-build-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install Protocol Buffers compiler
+        run: sudo apt-get install protobuf-compiler
+
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Rust toolchain
+        uses: moonrepo/setup-rust@v0
+        with:
+          cache-target: release
+
+      - name: Build binary
+        run: |
+          cargo build \
+            --verbose \
+            --release \
+            --manifest-path ${{ env.cargo_manifest }}
+
   rust-test-sqlite:
     runs-on: ubuntu-latest
 
@@ -19,12 +41,6 @@ jobs:
 
       - name: Setup Rust toolchain
         uses: moonrepo/setup-rust@v0
-
-      - name: Build binary
-        run: |
-          cargo build \
-            --verbose \
-            --manifest-path ${{ env.cargo_manifest }}
 
       # Related issue: https://github.com/p2panda/aquadoggo/issues/414
       - name: Temporary workaround for rustc bug
