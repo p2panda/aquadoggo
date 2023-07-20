@@ -81,6 +81,25 @@ jobs:
               --manifest-path ${{ env.cargo_manifest }} \
               -- --test-threads 1
 
+  rust-prop-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install Protocol Buffers compiler
+        run: sudo apt-get install protobuf-compiler
+
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Rust toolchain
+        uses: moonrepo/setup-rust@v0
+
+      - name: Run tests
+        runs: |
+          cargo test proptests::tests \
+            --manifest-path ${{ env.cargo_manifest }} \
+            --features=proptests
+
   rust-check:
     runs-on: ubuntu-latest
 
