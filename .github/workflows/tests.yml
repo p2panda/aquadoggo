@@ -95,7 +95,7 @@ jobs:
         uses: moonrepo/setup-rust@v0
 
       - name: Run tests
-        runs: |
+        run: |
           cargo test proptests::tests \
             --manifest-path ${{ env.cargo_manifest }} \
             --features=proptests
