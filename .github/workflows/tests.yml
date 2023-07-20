@@ -225,15 +225,15 @@ jobs:
       - name: Run compiler for source based coverage
         env:
           CARGO_INCREMENTAL: 0
-          RUSTFLAGS: -Cinstrument-coverage
-          LLVM_PROFILE_FILE: cargo-test-%p-%m.profraw
+          RUSTFLAGS: '-Cinstrument-coverage'
+          LLVM_PROFILE_FILE: 'cargo-test-%p-%m.profraw'
         run: cargo test
 
       - name: Run grcov to generate .lcov file
         run: |
           grcov . \
             --binary-path ./target/debug/deps/ \
-            -s \
+            -s . \
             -t lcov \
             --branch \
             --ignore-not-existing \
