@@ -209,12 +209,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Setup Rust toolchain with grcov
+      - name: Setup Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
+          profile: minimal
           toolchain: stable
           override: true
-          components: grcov
+
+      - name: Install grcov
+        run: cargo install grcov
 
       - name: Restore from cargo cache
         uses: actions/cache@v3
