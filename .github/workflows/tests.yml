@@ -222,12 +222,6 @@ jobs:
           command: install
           args: grcov
 
-      - name: Restore from cargo cache
-        uses: actions/cache@v3
-        with:
-          path: ${{ env.cache_path }}
-          key: ${{ runner.os }}-coverage-${{ hashFiles('**/Cargo.lock') }}
-
       - name: Run compiler for source based coverage
         env:
           CARGO_INCREMENTAL: 0
