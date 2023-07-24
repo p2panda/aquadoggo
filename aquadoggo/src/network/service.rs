@@ -86,7 +86,8 @@ pub async fn client(
     key_pair: libp2p::identity::Keypair,
 ) -> Result<Swarm<P2pandaBehaviour>> {
     let relay_address = network_config.relay_address.clone().unwrap();
-    let rendezvous_point = network_config.relay_peer_id.unwrap();
+    let rendezvous_point = network_config.clone().relay_peer_id.unwrap();
+    let rendezvous_address = network_config.clone().rendezvous_address.unwrap();
 
     // Build the network swarm and retrieve the local peer ID
     let mut swarm = swarm::build_client_swarm(&network_config, key_pair).await?;
@@ -133,9 +134,9 @@ pub async fn client(
 
     // Connect to the relay server. Not for the reservation or relayed connection, but to (a) learn
     // our local public address and (b) enable a freshly started relay to learn its public address.
-    match swarm.dial(relay_address.clone()) {
+    match swarm.dial(rendezvous_address.clone()) {
         Ok(_) => (),
-        Err(_) => warn!("Failed to dial relay: {relay_address:?}"),
+        Err(_) => warn!("Failed to dial relay: {rendezvous_address:?}"),
     };
 
     // Wait to get confirmation that we told the relay node it's public address and that they told
@@ -168,9 +169,8 @@ pub async fn client(
 
     // Now we have received our external address, and we know the relay has too, listen on our
     // relay circuit address.
-    swarm
-        .listen_on(relay_address.clone().with(Protocol::P2pCircuit))
-        .unwrap();
+    let circuit_relay_address = relay_address.clone().with(Protocol::P2pCircuit);
+    swarm.listen_on(circuit_relay_address.clone()).unwrap();
 
     // Register in the `NODE_NAMESPACE` on the rendezvous server. Doing this will mean that we can
     // discover other peers also registered to the same rendezvous server and namespace.
@@ -190,37 +190,39 @@ pub async fn client(
     // `NODE_NAMESPACE` was successful and that the relay server has accepted our reservation.
 
     let mut rendezvous_registered = false;
-    let mut relay_request_accepted = false;
+    let mut relay_reservation_accepted = false;
 
     loop {
-        match swarm.next().await.unwrap() {
+        match swarm.next().await.expect("Infinite Stream") {
             SwarmEvent::Behaviour(Event::RelayClient(
-                relay::client::Event::ReservationReqAccepted { relay_peer_id, .. },
+                relay::client::Event::ReservationReqAccepted { .. },
             )) => {
-                info!("Relay reservation request accepted: {relay_peer_id:?}");
-
-                relay_request_accepted = true;
+                info!("Relay circuit reservation request accepted");
+                relay_reservation_accepted = true;
             }
             SwarmEvent::Behaviour(Event::RendezvousClient(
                 rendezvous::client::Event::Registered { namespace, .. },
             )) => {
                 info!("Registered on rendezvous in namespace \"{namespace}\"");
                 rendezvous_registered = true;
-
-                info!(
-                    "Connected to rendezvous point, discovering nodes in '{}' namespace ...",
-                    NODE_NAMESPACE
-                );
+            }
+            SwarmEvent::ConnectionClosed { .. } => {
+                // Listening on a relay circuit address opens a connection to the relay node, this
+                // doesn't always succeed first time though, so we catch if the connection closed
+                // and retry listening.
+                warn!("Relay circuit connection closed, re-attempting listening on: {circuit_relay_address}");
+                swarm.listen_on(circuit_relay_address.clone()).unwrap();
             }
             event => debug!("{event:?}"),
         }
-        if relay_request_accepted && rendezvous_registered {
+
+        if relay_reservation_accepted && rendezvous_registered {
             break;
         }
     }
 
     // Now request to discover other peers in `NODE_NAMESPACE`.
-
+    info!("Discovering peers in namespace \"{NODE_NAMESPACE}\"",);
     swarm
         .behaviour_mut()
         .rendezvous_client
@@ -234,7 +236,6 @@ pub async fn client(
         );
 
     // All swarm setup complete and we are connected to the network.
-
     info!("Node initialized in client mode");
 
     Ok(swarm)
@@ -265,6 +266,7 @@ pub async fn relay(
                     ..
                 }) = &event
                 {
+                    info!("Observed external address reported: {observed_addr}");
                     swarm.add_external_address(observed_addr.clone());
                     break;
                 }
