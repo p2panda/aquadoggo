@@ -5,7 +5,7 @@ use std::time::Duration;
 use anyhow::Result;
 use libp2p::identity::Keypair;
 use libp2p::swarm::behaviour::toggle::Toggle;
-use libp2p::swarm::NetworkBehaviour;
+use libp2p::swarm::{NetworkBehaviour};
 use libp2p::{autonat, connection_limits, identify, mdns, ping, relay, rendezvous};
 use log::debug;
 use void;
@@ -50,7 +50,7 @@ pub struct P2pandaBehaviour {
     pub rendezvous_server: Toggle<rendezvous::server::Behaviour>,
 
     /// Register peer connections and handle p2panda messaging with them.
-    pub peers: peers::Behaviour,
+    pub peers: Toggle<peers::Behaviour>,
 }
 
 impl P2pandaBehaviour {
@@ -114,7 +114,11 @@ impl P2pandaBehaviour {
         };
 
         // Create behaviour to manage peer connections and handle p2panda messaging
-        let peers = peers::Behaviour::new();
+        let peers = if !network_config.relay_server_enabled {
+            Some(peers::Behaviour::new())
+        } else {
+            None
+        };
 
         Ok(Self {
             identify: identify.into(),
@@ -123,7 +127,7 @@ impl P2pandaBehaviour {
             rendezvous_server: rendezvous_server.into(),
             relay_client: relay_client.into(),
             relay_server: relay_server.into(),
-            peers,
+            peers: peers.into(),
         })
     }
 }
