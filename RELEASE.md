@@ -17,7 +17,7 @@ _This is an example for publising version `1.2.0`._
 
 6. Bump the package version in `Cargo.toml` by hand.
 7. Commit the version changes with a commit message `1.2.0`.
-8. Run `git tag v1.2.0` and push including your tags using `pit push origin main --tags`.
+8. Run `git tag v1.2.0` and push including your tags using `git push origin main --tags`.
 
 ## Publishing releases
 
