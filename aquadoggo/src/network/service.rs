@@ -337,7 +337,13 @@ impl EventLoop {
         loop {
             tokio::select! {
                 event = self.swarm.next() => {
-                    self.handle_swarm_event(event.expect("Swarm stream to be infinite")).await
+                    let event = event.expect("Swarm stream to be infinite");
+                    self.handle_identity_event(&event).await;
+
+                    if self.swarm.behaviour().peers.is_enabled() {
+                        self.handle_discovery(&event).await;
+                        self.handle_peer_connections(&event).await;
+                    }
                 }
                 event = self.rx.next() => match event {
                     Some(Ok(message)) => self.handle_service_message(message).await,
@@ -368,20 +374,46 @@ impl EventLoop {
     async fn handle_service_message(&mut self, message: ServiceMessage) {
         match message {
             ServiceMessage::SentReplicationMessage(peer, sync_message) => {
-                self.swarm
-                    .behaviour_mut()
-                    .peers
-                    .send_message(peer, sync_message);
+                if let Some(peers) = self.swarm.behaviour_mut().peers.as_mut() {
+                    peers.send_message(peer, sync_message)
+                }
             }
             ServiceMessage::ReplicationFailed(peer) => {
-                self.swarm.behaviour_mut().peers.handle_critical_error(peer);
+                if let Some(peers) = self.swarm.behaviour_mut().peers.as_mut() {
+                    peers.handle_critical_error(peer);
+                }
             }
             _ => (),
         }
     }
 
-    /// Handle an event coming from the libp2p swarm.
-    async fn handle_swarm_event<E: std::fmt::Debug>(&mut self, event: SwarmEvent<Event, E>) {
+    async fn handle_peer_connections<E: std::fmt::Debug>(&mut self, event: &SwarmEvent<Event, E>) {
+        match event {
+            // ~~~~~~~~~~~~~
+            // p2panda peers
+            // ~~~~~~~~~~~~~
+            SwarmEvent::Behaviour(Event::Peers(event)) => match event {
+                peers::Event::PeerConnected(peer) => {
+                    // Inform other services about new peer
+                    self.send_service_message(ServiceMessage::PeerConnected(*peer));
+                }
+                peers::Event::PeerDisconnected(peer) => {
+                    // Inform other services about peer leaving
+                    self.send_service_message(ServiceMessage::PeerDisconnected(*peer));
+                }
+                peers::Event::MessageReceived(peer, message) => {
+                    // Inform other services about received messages from peer
+                    self.send_service_message(ServiceMessage::ReceivedReplicationMessage(
+                        *peer,
+                        message.clone(),
+                    ))
+                }
+            },
+            _ => (),
+        }
+    }
+
+    async fn handle_discovery<E: std::fmt::Debug>(&mut self, event: &SwarmEvent<Event, E>) {
         match event {
             // ~~~~~~~~~~~~~~~~~~~~
             // rendezvous discovery
@@ -418,28 +450,26 @@ impl EventLoop {
                     }
                 }
             }
+            _ => (),
+        }
+    }
 
-            // ~~~~~~~~~~~~~
-            // p2panda peers
-            // ~~~~~~~~~~~~~
-            SwarmEvent::Behaviour(Event::Peers(event)) => match event {
-                peers::Event::PeerConnected(peer) => {
-                    // Inform other services about new peer
-                    self.send_service_message(ServiceMessage::PeerConnected(peer));
+    async fn handle_identity_event<E: std::fmt::Debug>(&mut self, event: &SwarmEvent<Event, E>) {
+        match event {
+            SwarmEvent::Behaviour(Event::Identify(identify::Event::Received {
+                info: identify::Info { observed_addr, .. },
+                ..
+            })) => {
+                info!("Observed external address reported: {observed_addr}");
+                if !self
+                    .swarm
+                    .external_addresses()
+                    .any(|addr| addr == observed_addr)
+                {
+                    self.swarm.add_external_address(observed_addr.clone());
                 }
-                peers::Event::PeerDisconnected(peer) => {
-                    // Inform other services about peer leaving
-                    self.send_service_message(ServiceMessage::PeerDisconnected(peer));
-                }
-                peers::Event::MessageReceived(peer, message) => {
-                    // Inform other services about received messages from peer
-                    self.send_service_message(ServiceMessage::ReceivedReplicationMessage(
-                        peer, message,
-                    ))
-                }
-            },
-
-            event => debug!("{event:?}"),
+            }
+            _ => (),
         }
     }
 }
