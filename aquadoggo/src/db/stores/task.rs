@@ -66,7 +66,7 @@ impl SqlStore {
         };
 
         // Remove task from database
-        let result = query(
+        query(
             "
             DELETE FROM
                 tasks
@@ -85,11 +85,7 @@ impl SqlStore {
         .await
         .map_err(|err| SqlStoreError::Transaction(err.to_string()))?;
 
-        if result.rows_affected() != 1 {
-            Err(SqlStoreError::Deletion("tasks".into()))
-        } else {
-            Ok(())
-        }
+        Ok(())
     }
 
     /// Returns "pending" tasks of the materialization service worker.
