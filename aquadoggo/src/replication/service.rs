@@ -8,6 +8,8 @@ use libp2p::PeerId;
 use log::{info, trace, warn};
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::Human;
+use rand::seq::SliceRandom;
+use rand::thread_rng;
 use tokio::task;
 use tokio::time::interval;
 use tokio_stream::wrappers::{BroadcastStream, IntervalStream};
@@ -24,6 +26,9 @@ use crate::replication::{
     Mode, Session, SessionId, SyncIngest, SyncManager, SyncMessage, TargetSet,
 };
 use crate::schema::SchemaProvider;
+
+/// Maximum number of peers we replicate with at one a time.
+const MAX_PEER_SAMPLE: usize = 3;
 
 /// Maximum of replication sessions per peer.
 const MAX_SESSIONS_PER_PEER: usize = 3;
@@ -241,7 +246,7 @@ impl ConnectionManager {
         let target_set = self.target_set().await;
 
         // Iterate through all currently connected peers
-        let attempt_peers: Vec<Peer> = self
+        let mut attempt_peers: Vec<Peer> = self
             .peers
             .clone()
             .into_iter()
@@ -272,6 +277,10 @@ impl ConnectionManager {
         if attempt_peers.is_empty() {
             trace!("No peers available for replication")
         }
+
+        // Take a random sample of the remaining peers up to MAX_PEER_SAMPLE
+        attempt_peers.shuffle(&mut thread_rng());
+        attempt_peers.truncate(MAX_PEER_SAMPLE);
 
         for peer in attempt_peers {
             self.initiate_replication(&peer, &target_set).await;
