@@ -178,6 +178,25 @@ impl ConnectionManager {
     async fn on_replication_message(&mut self, peer: Peer, message: SyncMessage) {
         let session_id = message.session_id();
 
+        // If this is a SyncRequest message first we check if the contained TargetSet matches our
+        // own locally configured TargetSet.
+        match message.message() {
+            super::Message::SyncRequest(_, target_set) => {
+                if target_set != &self.target_set().await {
+                    // If it doesn't match we signal that an error occurred and return at this point.
+                    self.on_replication_error(
+                        peer,
+                        session_id,
+                        ReplicationError::UnsupportedTargetSet,
+                    )
+                    .await;
+
+                    return;
+                }
+            }
+            _ => (),
+        }
+
         match self.sync_manager.handle_message(&peer, &message).await {
             Ok(result) => {
                 for message in result.messages {
@@ -354,11 +373,16 @@ mod tests {
 
     use libp2p::swarm::ConnectionId;
     use libp2p::PeerId;
+    use p2panda_rs::document::DocumentViewId;
+    use p2panda_rs::schema::{SchemaId, SchemaName};
+    use p2panda_rs::test_utils::fixtures::random_document_view_id;
+    use rstest::rstest;
     use tokio::sync::broadcast;
 
     use crate::bus::ServiceMessage;
     use crate::network::Peer;
-    use crate::replication::{Message, Mode, SyncMessage};
+    use crate::replication::service::PeerStatus;
+    use crate::replication::{Message, Mode, SyncMessage, TargetSet};
     use crate::test_utils::{test_runner, TestNode};
 
     use super::ConnectionManager;
@@ -415,6 +439,55 @@ mod tests {
             // Manager cleans up internal state
             assert_eq!(rx.len(), 0);
             assert_eq!(manager.peers.len(), 0);
+            assert_eq!(manager.sync_manager.get_sessions(&remote_peer).len(), 0);
+        });
+    }
+
+    #[rstest]
+    fn unsupported_schema(#[from(random_document_view_id)] document_view_id: DocumentViewId) {
+        let local_peer_id =
+            PeerId::from_str("12D3KooWD3JAiSNrVGxjC7vJCcjwS8egbtJV9kzrstxLRKiwb9UY").unwrap();
+        let remote_peer_id =
+            PeerId::from_str("12D3KooWCqtLMJQLY3sm9rpDampJ2nPLswPPZto3mrRY7794QATF").unwrap();
+
+        test_runner(move |node: TestNode| async move {
+            let (tx, mut rx) = broadcast::channel::<ServiceMessage>(10);
+
+            let mut manager = ConnectionManager::new(
+                &node.context.schema_provider,
+                &node.context.store,
+                &tx,
+                local_peer_id,
+            );
+
+            let remote_peer = Peer::new(remote_peer_id, ConnectionId::new_unchecked(1));
+
+            manager
+                .peers
+                .insert(remote_peer, PeerStatus::new(remote_peer));
+
+            let unsupported_schema_id = SchemaId::new_application(
+                &SchemaName::new("bad_schema").unwrap(),
+                &document_view_id,
+            );
+            let unsupported_target_set = TargetSet::new(&[unsupported_schema_id]);
+            manager
+                .handle_service_message(ServiceMessage::ReceivedReplicationMessage(
+                    remote_peer,
+                    SyncMessage::new(
+                        0,
+                        Message::SyncRequest(Mode::LogHeight, unsupported_target_set),
+                    ),
+                ))
+                .await;
+
+            assert_eq!(rx.len(), 1);
+            assert_eq!(
+                rx.recv().await,
+                Ok(ServiceMessage::ReplicationFailed(remote_peer))
+            );
+
+            assert_eq!(manager.peers.len(), 1);
             assert_eq!(manager.sync_manager.get_sessions(&remote_peer).len(), 0);
         });
     }

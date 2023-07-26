@@ -10,6 +10,9 @@ pub enum ReplicationError {
     #[error("Remote peer requested unsupported replication mode")]
     UnsupportedMode,
 
+    #[error("Sync request received containing unsupported target set")]
+    UnsupportedTargetSet,
+
     #[error("Duplicate session error: {0}")]
     DuplicateSession(#[from] DuplicateSessionRequestError),
 
