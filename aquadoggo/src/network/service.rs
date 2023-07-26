@@ -296,7 +296,7 @@ impl EventLoop {
                 send_back_addr,
                 ..
             } => {
-                warn!("Incoming connection error occurred with {local_addr} and {send_back_addr} on connection {connection_id:?}");
+                debug!("Incoming connection error occurred with {local_addr} and {send_back_addr} on connection {connection_id:?}");
             }
             SwarmEvent::ListenerClosed {
                 listener_id,
@@ -304,7 +304,7 @@ impl EventLoop {
                 reason,
             } => trace!("Listener closed: {listener_id:?} {addresses:?} {reason:?}"),
             SwarmEvent::ListenerError { error, .. } => {
-                warn!("Listener failed with error: {error}")
+                debug!("Listener failed with error: {error}")
             }
             SwarmEvent::NewListenAddr {
                 address,
@@ -318,10 +318,10 @@ impl EventLoop {
                 ..
             } => match peer_id {
                 Some(id) => {
-                    warn!("Outgoing connection error with peer {id} occurred on connection {connection_id:?}");
+                    debug!("Outgoing connection error with peer {id} occurred on connection {connection_id:?}");
                 }
                 None => {
-                    warn!("Outgoing connection error occurred on connection {connection_id:?}");
+                    debug!("Outgoing connection error occurred on connection {connection_id:?}");
                 }
             },
 
@@ -381,7 +381,7 @@ impl EventLoop {
                     }
                 }
                 rendezvous::client::Event::RegisterFailed { error, .. } => {
-                    warn!("Failed to register with rendezvous point: {error:?}");
+                    debug!("Failed to register with rendezvous point: {error:?}");
                 }
                 rendezvous::client::Event::DiscoverFailed { error, .. } => {
                     trace!("Discovery failed: {error:?}")
@@ -433,7 +433,7 @@ impl EventLoop {
                                 ) {
                                     Ok(_) => (),
                                     Err(_) => {
-                                        warn!("Failed to register peer: {rendezvous_peer_id}")
+                                        debug!("Failed to register peer: {rendezvous_peer_id}")
                                     }
                                 };
                             }
@@ -445,7 +445,7 @@ impl EventLoop {
                         )
                     }
                     identify::Event::Error { peer_id, error } => {
-                        warn!("Failed to identify the remote peer {peer_id}: {error}")
+                        debug!("Failed to identify the remote peer {peer_id}: {error}")
                     }
                 }
             }
@@ -485,7 +485,7 @@ impl EventLoop {
                                     ) {
                                         Ok(_) => (),
                                         Err(_) => {
-                                            warn!("Failed to register peer: {rendezvous_peer_id}")
+                                            debug!("Failed to register peer: {rendezvous_peer_id}")
                                         }
                                     };
                                 }
@@ -531,8 +531,8 @@ impl EventLoop {
                             .condition(PeerCondition::NotDialing)
                             .build(),
                     ) {
-                        Ok(_) => debug!("Dialing peer: {peer_id}"),
-                        Err(_) => warn!("Error dialing peer: {peer_id}"),
+                        Ok(()) => debug!("Dialing peer: {peer_id}"),
+                        Err(error) => debug!("Error dialing peer {peer_id}: {error}"),
                     };
                 }
             },
