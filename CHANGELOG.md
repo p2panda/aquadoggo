@@ -72,6 +72,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix race condition when check for existing view ids was too early [#420](https://github.com/p2panda/aquadoggo/pull/420)
 - Use fork of `asynchronous-codec` to temporarily fix CBOR decoding bug [#440](https://github.com/p2panda/aquadoggo/pull/440)
 - Fix composing of circuit relay address [#451](https://github.com/p2panda/aquadoggo/pull/451)
+- Don't check for `affected_rows` on task deletion [#461](https://github.com/p2panda/aquadoggo/pull/461)
 - Do not critically fail when view does not exist due to race condition [#460](https://github.com/p2panda/aquadoggo/pull/460)
 
 ### Open Sauce
