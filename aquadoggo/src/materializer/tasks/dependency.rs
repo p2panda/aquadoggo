@@ -49,9 +49,10 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
         }
         // If no document with the view for the id passed into this task could be retrieved then
         // this document has been deleted or the document view does not exist. As "dependency"
-        // tasks are only dispatched after a successful "reduce" task, neither `None` case should
-        // happen, so this is a critical error.
-        None => Err(TaskError::Critical(format!(
+        // tasks are only dispatched after a successful "reduce" task this is fairly rare, usually
+        // a result of a race condition where other tasks changed the state before the "dependency"
+        // task got dispatched.
+        None => Err(TaskError::Failure(format!(
             "Expected document with view {} not found in store",
             view_id
         ))),
