@@ -20,7 +20,7 @@ use crate::network::identity::to_libp2p_peer_id;
 use crate::network::Peer;
 use crate::replication::errors::ReplicationError;
 use crate::replication::{
-    Mode, Session, SessionId, SyncIngest, SyncManager, SyncMessage, TargetSet,
+    Message, Mode, Session, SessionId, SyncIngest, SyncManager, SyncMessage, TargetSet,
 };
 use crate::schema::SchemaProvider;
 
@@ -172,21 +172,14 @@ impl ConnectionManager {
 
         // If this is a SyncRequest message first we check if the contained TargetSet matches our
         // own locally configured TargetSet.
-        match message.message() {
-            super::Message::SyncRequest(_, target_set) => {
-                if target_set != &self.target_set().await {
-                    // If it doesn't match we signal that an error occurred and return at this point.
-                    self.on_replication_error(
-                        peer,
-                        session_id,
-                        ReplicationError::UnsupportedTargetSet,
-                    )
+        if let Message::SyncRequest(_, target_set) = message.message() {
+            if target_set != &self.target_set().await {
+                // If it doesn't match we signal that an error occurred and return at this point.
+                self.on_replication_error(peer, session_id, ReplicationError::UnsupportedTargetSet)
                     .await;
 
-                    return;
-                }
+                return;
             }
-            _ => (),
         }
 
         match self.sync_manager.handle_message(&peer, &message).await {

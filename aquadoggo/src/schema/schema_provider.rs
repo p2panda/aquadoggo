@@ -112,17 +112,14 @@ impl SchemaProvider {
     ///
     /// Returns `true` if a schema was updated and `false` if it was inserted.
     pub async fn update(&self, schema: Schema) -> Result<bool> {
-        match self.supported_schema.as_ref() {
-            Some(supported_schema) => {
-                if !supported_schema.contains(schema.id()) {
-                    return Err(anyhow!(
-                        "Attempted to add unsupported schema to schema provider"
-                    ));
-                }
+        if let Some(supported_schema) = self.supported_schema.as_ref() {
+            if !supported_schema.contains(schema.id()) {
+                return Err(anyhow!(
+                    "Attempted to add unsupported schema to schema provider"
+                ));
             }
-            None => (),
         };
-
+        
         info!("Updating {}", schema.id().display());
         let mut schemas = self.schemas.lock().await;
         let is_update = schemas

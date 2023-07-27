@@ -46,7 +46,7 @@ pub struct Configuration {
     pub worker_pool_size: u32,
 
     /// The schema this node supports.
-    pub supported_schema: Vec<SchemaId>
+    pub supported_schema: Vec<SchemaId>,
 }
 
 impl Default for Configuration {

@@ -21,7 +21,7 @@ struct Cli {
     data_dir: Option<std::path::PathBuf>,
 
     /// The schema that this node is configured to replicate.
-    /// 
+    ///
     /// eg. -s schema_field_definition_v1 -s schema_definition_v1
     #[arg(short, long)]
     supported_schema: Vec<SchemaId>,
@@ -168,7 +168,7 @@ impl TryFrom<Cli> for Configuration {
         };
 
         // De-duplicate and set supported schema.
-        let mut supported_schema = cli.supported_schema.clone();
+        let mut supported_schema = cli.supported_schema;
         supported_schema.dedup();
         config.supported_schema = supported_schema;
 
