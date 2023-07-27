@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Persist and maintain index of operation's position in document [#438](https://github.com/p2panda/aquadoggo/pull/438)
 - Introduce `dialer` behaviour with retry logic [#444](https://github.com/p2panda/aquadoggo/pull/444)
 - Introduce peer sampling to the replication service [#463](https://github.com/p2panda/aquadoggo/pull/463)
+- Only replicate and materialize configured "supported schema" [#569](https://github.com/p2panda/aquadoggo/pull/469)
 
 ### Changed
 
