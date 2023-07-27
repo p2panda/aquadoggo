@@ -52,6 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Replicate entries in their topologically sorted document order [#442](https://github.com/p2panda/aquadoggo/pull/442)
 - Remove `quick_commit` from materialization service [#450](https://github.com/p2panda/aquadoggo/pull/450)
 - Reduce `warn` logging in network and replication services [#467](https://github.com/p2panda/aquadoggo/pull/467)
+- `mdns` and `autonat` disabled by default [#475](https://github.com/p2panda/aquadoggo/pull/475)
 
 ### Fixed
 
