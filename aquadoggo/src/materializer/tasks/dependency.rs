@@ -845,8 +845,8 @@ mod tests {
 
             // INSERT SCHEMAS INTO NODE B
 
-            node_b.context.schema_provider.update(post_schema).await;
-            node_b.context.schema_provider.update(comment_schema).await;
+            let _ = node_b.context.schema_provider.update(post_schema).await;
+            let _ = node_b.context.schema_provider.update(comment_schema).await;
 
             // INSERT "COMMENT" INTO NODE B'S DATABASE
 

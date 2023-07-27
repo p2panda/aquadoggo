@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use anyhow::Result;
+use log::{debug, info};
 use p2panda_rs::identity::KeyPair;
+use p2panda_rs::schema::SYSTEM_SCHEMAS;
 
 use crate::bus::ServiceMessage;
 use crate::config::Configuration;
@@ -57,10 +59,29 @@ impl Node {
 
         // Prepare storage and schema providers using connection pool
         let store = SqlStore::new(pool.clone());
-        let schemas = SchemaProvider::new(store.get_all_schema().await.unwrap());
+
+        let schema_provider = if config.dynamic_schema {
+            SchemaProvider::default()
+        } else {
+            SchemaProvider::new_with_supported_schema(config.supported_schema.clone())
+        };
+
+        let mut all_schemas = SYSTEM_SCHEMAS.clone();
+        let application_schema = store.get_all_schema().await.unwrap();
+        all_schemas.extend(&application_schema);
+
+        for schema in all_schemas {
+            match schema_provider.update(schema.clone()).await {
+                Ok(_) => info!("Schema added to schema provider: {}", schema.id()),
+                Err(_) => debug!(
+                    "Schema not added to schema provider: not supported {}",
+                    schema.id()
+                ),
+            }
+        }
 
         // Create service manager with shared data between services
-        let context = Context::new(store, key_pair, config, schemas);
+        let context = Context::new(store, key_pair, config, schema_provider);
         let mut manager =
             ServiceManager::<Context, ServiceMessage>::new(SERVICE_BUS_CAPACITY, context);
 

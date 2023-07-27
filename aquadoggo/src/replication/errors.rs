@@ -10,6 +10,9 @@ pub enum ReplicationError {
     #[error("Remote peer requested unsupported replication mode")]
     UnsupportedMode,
 
+    #[error("Sync request received containing unsupported target set")]
+    UnsupportedTargetSet,
+
     #[error("Duplicate session error: {0}")]
     DuplicateSession(#[from] DuplicateSessionRequestError),
 
@@ -34,6 +37,9 @@ pub enum ReplicationError {
 pub enum IngestError {
     #[error("Schema is not supported")]
     UnsupportedSchema,
+
+    #[error("Schema not found")]
+    SchemaNotFound,
 
     #[error(transparent)]
     Domain(#[from] p2panda_rs::api::DomainError),

@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use directories::ProjectDirs;
+use p2panda_rs::schema::SchemaId;
 use serde::Deserialize;
 
 use crate::network::NetworkConfiguration;
@@ -43,6 +44,12 @@ pub struct Configuration {
 
     /// Materializer worker pool size.
     pub worker_pool_size: u32,
+
+    /// The schema this node supports.
+    pub supported_schema: Vec<SchemaId>,
+
+    /// If set to true then the node will dynamically support any new schema it replicates.
+    pub dynamic_schema: bool,
 }
 
 impl Default for Configuration {
@@ -54,6 +61,8 @@ impl Default for Configuration {
             http_port: 2020,
             network: NetworkConfiguration::default(),
             worker_pool_size: 16,
+            supported_schema: vec![],
+            dynamic_schema: false,
         }
     }
 }

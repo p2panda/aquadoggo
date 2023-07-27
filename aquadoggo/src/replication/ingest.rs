@@ -49,11 +49,22 @@ impl SyncIngest {
 
         let plain_operation = decode_operation(encoded_operation)?;
 
+        // Check that the sent operation follows one of our supported schema.
+        if !self
+            .schema_provider
+            .supported_schema()
+            .await
+            .contains(plain_operation.schema_id())
+        {
+            return Err(IngestError::UnsupportedSchema);
+        }
+
+        // Retrieve the schema if it has been materialized on the node.
         let schema = self
             .schema_provider
             .get(plain_operation.schema_id())
             .await
-            .ok_or_else(|| IngestError::UnsupportedSchema)?;
+            .ok_or_else(|| IngestError::SchemaNotFound)?;
 
         /////////////////////////////////////
         // PUBLISH THE ENTRY AND OPERATION //
@@ -111,7 +122,7 @@ mod tests {
     ) {
         test_runner_with_manager(move |manager: TestNodeManager| async move {
             let node = manager.create().await;
-            node.context.schema_provider.update(schema).await;
+            let _ = node.context.schema_provider.update(schema).await;
 
             let (tx, _rx) = broadcast::channel(8);
             let ingest = SyncIngest::new(node.context.schema_provider.clone(), tx.clone());

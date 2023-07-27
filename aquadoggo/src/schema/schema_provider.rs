@@ -3,7 +3,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use log::{debug, info, warn};
+use anyhow::{anyhow, Result};
+use log::{debug, info};
 use p2panda_rs::schema::{Schema, SchemaId, SYSTEM_SCHEMAS};
 use p2panda_rs::Human;
 use tokio::sync::broadcast::{channel, Receiver, Sender};
@@ -16,6 +17,10 @@ use tokio::sync::Mutex;
 pub struct SchemaProvider {
     /// In-memory store of registered schemas.
     schemas: Arc<Mutex<HashMap<SchemaId, Schema>>>,
+
+    /// Optional list of schema this provider supports. If set only these schema will be added to the schema
+    /// registry once materialized.
+    supported_schema: Option<Vec<SchemaId>>,
 
     /// Sender for broadcast channel informing subscribers about updated schemas.
     tx: Sender<SchemaId>,
@@ -47,6 +52,43 @@ impl SchemaProvider {
 
         Self {
             schemas: Arc::new(Mutex::new(index)),
+            supported_schema: None,
+            tx,
+        }
+    }
+
+    pub fn new_with_supported_schema(supported_schema: Vec<SchemaId>) -> Self {
+        // Validate that the passed known schema are all mentioned in the supported schema list.
+
+        // Collect all system and application schemas.
+        let system_schemas = SYSTEM_SCHEMAS.clone();
+
+        // Filter system schema against passed supported schema and collect into index Hashmap.
+        let index: HashMap<SchemaId, Schema> = system_schemas
+            .into_iter()
+            .filter_map(|schema| {
+                if supported_schema.contains(schema.id()) {
+                    Some((schema.id().to_owned(), schema.to_owned()))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let (tx, _) = channel(64);
+
+        debug!(
+            "Initialised schema provider:\n- {}",
+            index
+                .values()
+                .map(|schema| schema.to_string())
+                .collect::<Vec<String>>()
+                .join("\n- ")
+        );
+
+        Self {
+            schemas: Arc::new(Mutex::new(index)),
+            supported_schema: Some(supported_schema),
             tx,
         }
     }
@@ -69,7 +111,15 @@ impl SchemaProvider {
     /// Inserts or updates the given schema in this provider.
     ///
     /// Returns `true` if a schema was updated and `false` if it was inserted.
-    pub async fn update(&self, schema: Schema) -> bool {
+    pub async fn update(&self, schema: Schema) -> Result<bool> {
+        if let Some(supported_schema) = self.supported_schema.as_ref() {
+            if !supported_schema.contains(schema.id()) {
+                return Err(anyhow!(
+                    "Attempted to add unsupported schema to schema provider"
+                ));
+            }
+        };
+
         info!("Updating {}", schema.id().display());
         let mut schemas = self.schemas.lock().await;
         let is_update = schemas
@@ -78,10 +128,21 @@ impl SchemaProvider {
 
         // Inform subscribers about new schema
         if self.tx.send(schema.id().to_owned()).is_err() {
-            warn!("No subscriber has been informed about inserted / updated schema");
+            debug!("No subscriber has been informed about inserted / updated schema");
         }
 
-        is_update
+        Ok(is_update)
+    }
+
+    // Return the configured supported schema, or all schema we know about if no restrictions on
+    // schema have been set.
+    pub async fn supported_schema(&self) -> Vec<SchemaId> {
+        match &self.supported_schema {
+            Some(supported_schema) => supported_schema.to_owned(),
+            // If `supported_schema` is None it means there are no limits on schema and so we
+            // support all schema we know about.
+            None => self.schemas.lock().await.keys().cloned().collect(),
+        }
     }
 }
 
@@ -125,9 +186,49 @@ mod test {
             &[("test_field", FieldType::String)],
         )
         .unwrap();
-        let is_update = provider.update(new_schema).await;
-        assert!(!is_update);
+        let result = provider.update(new_schema).await;
+        assert!(result.is_ok());
+        assert!(!result.unwrap());
 
         assert!(provider.get(&new_schema_id).await.is_some());
+    }
+
+    #[tokio::test]
+    async fn update_supported_schemas() {
+        let new_schema_id = SchemaId::Application(
+            SchemaName::new("test_schema").unwrap(),
+            random_document_view_id(),
+        );
+        let new_schema = Schema::new(
+            &new_schema_id,
+            "description",
+            &[("test_field", FieldType::String)],
+        )
+        .unwrap();
+        let provider = SchemaProvider::new_with_supported_schema(vec![new_schema_id.clone()]);
+        let result = provider.update(new_schema).await;
+        assert!(result.is_ok());
+        assert!(!result.unwrap());
+
+        assert!(provider.get(&new_schema_id).await.is_some());
+    }
+
+    #[tokio::test]
+    async fn update_unsupported_schemas() {
+        let provider = SchemaProvider::new_with_supported_schema(vec![]);
+        let new_schema_id = SchemaId::Application(
+            SchemaName::new("test_schema").unwrap(),
+            random_document_view_id(),
+        );
+        let new_schema = Schema::new(
+            &new_schema_id,
+            "description",
+            &[("test_field", FieldType::String)],
+        )
+        .unwrap();
+        let result = provider.update(new_schema).await;
+        assert!(result.is_err());
+
+        assert!(provider.get(&new_schema_id).await.is_none());
     }
 }

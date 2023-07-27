@@ -10,6 +10,7 @@ use aquadoggo::{Configuration, NetworkConfiguration, Node};
 use clap::error::ErrorKind as ClapErrorKind;
 use clap::{CommandFactory, Parser};
 use libp2p::Multiaddr;
+use p2panda_rs::schema::SchemaId;
 
 #[derive(Parser, Debug)]
 #[command(name = "aquadoggo Node", version)]
@@ -18,6 +19,12 @@ struct Cli {
     /// Path to data folder, $HOME/.local/share/aquadoggo by default on Linux.
     #[arg(short, long)]
     data_dir: Option<std::path::PathBuf>,
+
+    /// The schema that this node is configured to replicate.
+    ///
+    /// eg. -s schema_field_definition_v1 -s schema_definition_v1
+    #[arg(short, long)]
+    supported_schema: Vec<SchemaId>,
 
     /// Port for the http server, 2020 by default.
     #[arg(short = 'P', long)]
@@ -159,6 +166,11 @@ impl TryFrom<Cli> for Configuration {
             rendezvous_server_enabled: cli.enable_rendezvous_server,
             ..config.network
         };
+
+        // De-duplicate and set supported schema.
+        let mut supported_schema = cli.supported_schema;
+        supported_schema.dedup();
+        config.supported_schema = supported_schema;
 
         Ok(config)
     }
