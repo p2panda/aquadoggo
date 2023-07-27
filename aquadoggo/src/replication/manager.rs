@@ -466,13 +466,15 @@ where
                 )
                 .await
             {
-                // Duplicate entries arriving at a node we don't want to treat as an error and
-                // don't want to cause the connection to this peer to be closed. This is expected
+                // Duplicate entries arriving at a node, or the case where a schema has not been
+                // materialized yet, we don't want to treat as an error. This is expected
                 // behavior which may occur when concurrent sync sessions are running.
-                Ok(_) | Err(IngestError::DuplicateEntry(_)) => Ok(SyncResult {
-                    messages: vec![],
-                    is_done: session.state == SessionState::Done,
-                }),
+                Ok(_) | Err(IngestError::DuplicateEntry(_)) | Err(IngestError::SchemaNotFound) => {
+                    Ok(SyncResult {
+                        messages: vec![],
+                        is_done: session.state == SessionState::Done,
+                    })
+                }
                 Err(err) => Err(ReplicationError::Validation(err)),
             }
         } else {

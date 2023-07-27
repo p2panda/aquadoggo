@@ -6,7 +6,6 @@ use std::time::Duration;
 use anyhow::Result;
 use libp2p::PeerId;
 use log::{debug, info, trace, warn};
-use p2panda_rs::schema::SchemaId;
 use p2panda_rs::{Human, Validate};
 use rand::seq::SliceRandom;
 use rand::thread_rng;
