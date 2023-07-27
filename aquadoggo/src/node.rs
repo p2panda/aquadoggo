@@ -59,8 +59,12 @@ impl Node {
 
         // Prepare storage and schema providers using connection pool
         let store = SqlStore::new(pool.clone());
-        let schema_provider =
-            SchemaProvider::new_with_supported_schema(config.supported_schema.clone());
+
+        let schema_provider = if config.dynamic_schema {
+            SchemaProvider::default()
+        } else {
+            SchemaProvider::new_with_supported_schema(config.supported_schema.clone())
+        };
 
         let mut all_schemas = SYSTEM_SCHEMAS.clone();
         let application_schema = store.get_all_schema().await.unwrap();

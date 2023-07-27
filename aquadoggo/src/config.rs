@@ -47,6 +47,9 @@ pub struct Configuration {
 
     /// The schema this node supports.
     pub supported_schema: Vec<SchemaId>,
+
+    /// If set to true then the node will dynamically support any new schema it replicates.
+    pub dynamic_schema: bool,
 }
 
 impl Default for Configuration {
@@ -59,6 +62,7 @@ impl Default for Configuration {
             network: NetworkConfiguration::default(),
             worker_pool_size: 16,
             supported_schema: vec![],
+            dynamic_schema: false,
         }
     }
 }

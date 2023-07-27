@@ -134,8 +134,15 @@ impl SchemaProvider {
         Ok(is_update)
     }
 
-    pub fn supported_schema(&self) -> Vec<SchemaId> {
-        self.supported_schema.clone().unwrap_or_default()
+    // Return the configured supported schema, or all schema we know about if no restrictions on
+    // schema have been set.
+    pub async fn supported_schema(&self) -> Vec<SchemaId> {
+        match &self.supported_schema {
+            Some(supported_schema) => supported_schema.to_owned(),
+            // If `supported_schema` is None it means there are no limits on schema and so we
+            // support all schema we know about.
+            None => self.schemas.lock().await.keys().cloned().collect(),
+        }
     }
 }
 

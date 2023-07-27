@@ -132,7 +132,7 @@ impl ConnectionManager {
 
     /// Returns set of schema ids we are interested in and support on this node.
     async fn target_set(&self) -> TargetSet {
-        TargetSet::new(&self.schema_provider.supported_schema())
+        TargetSet::new(&self.schema_provider.supported_schema().await)
     }
 
     /// Register a new peer connection on the manager.
