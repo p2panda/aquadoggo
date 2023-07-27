@@ -6,8 +6,7 @@ use std::time::Duration;
 use anyhow::Result;
 use libp2p::PeerId;
 use log::{debug, info, trace, warn};
-use p2panda_rs::schema::SchemaId;
-use p2panda_rs::Human;
+use p2panda_rs::{Human, Validate};
 use tokio::task;
 use tokio::time::interval;
 use tokio_stream::wrappers::{BroadcastStream, IntervalStream};
@@ -133,14 +132,7 @@ impl ConnectionManager {
 
     /// Returns set of schema ids we are interested in and support on this node.
     async fn target_set(&self) -> TargetSet {
-        let supported_schema_ids: Vec<SchemaId> = self
-            .schema_provider
-            .all()
-            .await
-            .iter()
-            .map(|schema| schema.id().to_owned())
-            .collect();
-        TargetSet::new(&supported_schema_ids)
+        TargetSet::new(&self.schema_provider.supported_schema())
     }
 
     /// Register a new peer connection on the manager.
@@ -262,6 +254,11 @@ impl ConnectionManager {
     async fn update_sessions(&mut self) {
         // Determine the target set our node is interested in
         let target_set = self.target_set().await;
+
+        if let Err(err) = target_set.validate() {
+            warn!("Not initiating validation: {err}");
+            return;
+        }
 
         // Iterate through all currently connected peers
         let attempt_peers: Vec<Peer> = self
