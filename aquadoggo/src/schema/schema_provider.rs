@@ -110,7 +110,8 @@ impl SchemaProvider {
 
     /// Inserts or updates the given schema in this provider.
     ///
-    /// Returns `true` if a schema was updated and `false` if it was inserted.
+    /// Returns `true` if a schema was updated or it already existed in it's current state, and
+    /// `false` if it was inserted.
     pub async fn update(&self, schema: Schema) -> Result<bool> {
         if let Some(supported_schema) = self.supported_schema.as_ref() {
             if !supported_schema.contains(schema.id()) {
@@ -120,8 +121,16 @@ impl SchemaProvider {
             }
         };
 
-        info!("Updating {}", schema.id().display());
         let mut schemas = self.schemas.lock().await;
+        let schema_exists = schemas.get(schema.id()).is_some();
+
+        if schema_exists {
+            // Return true here as the schema already exists in it's current state so we don't
+            // need to mutate the schema store or announce any change.
+            return Ok(true);
+        }
+
+        info!("Updating {}", schema.id().display());
         let is_update = schemas
             .insert(schema.id().clone(), schema.clone())
             .is_some();
