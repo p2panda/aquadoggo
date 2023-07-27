@@ -35,11 +35,11 @@ struct Cli {
     #[arg(short, long)]
     remote_node_addresses: Vec<Multiaddr>,
 
-    /// Enable AutoNAT to facilitate NAT status determination, true by default.
+    /// Enable AutoNAT to facilitate NAT status determination, false by default.
     #[arg(short, long)]
     autonat: Option<bool>,
 
-    /// Enable mDNS for peer discovery over LAN (using port 5353), true by default.
+    /// Enable mDNS for peer discovery over LAN (using port 5353), false by default.
     #[arg(short, long)]
     mdns: Option<bool>,
 
@@ -150,8 +150,8 @@ impl TryFrom<Cli> for Configuration {
         config.http_port = cli.http_port.unwrap_or(2020);
 
         config.network = NetworkConfiguration {
-            autonat: cli.autonat.unwrap_or(true),
-            mdns: cli.mdns.unwrap_or(true),
+            autonat: cli.autonat.unwrap_or(false),
+            mdns: cli.mdns.unwrap_or(false),
             ping: cli.ping.unwrap_or(false),
             quic_port: cli.quic_port.unwrap_or(2022),
             relay_address: cli.relay_address,

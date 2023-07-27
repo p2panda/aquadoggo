@@ -19,12 +19,12 @@ Options:
           URLs of remote nodes to replicate with
 
   -a, --autonat <AUTONAT>
-          Enable AutoNAT to facilitate NAT status determination, true by default
+          Enable AutoNAT to facilitate NAT status determination, false by default
 
           [possible values: true, false]
 
   -m, --mdns <MDNS>
-          Enable mDNS for peer discovery over LAN (using port 5353), true by default
+          Enable mDNS for peer discovery over LAN (using port 5353), false by default
 
           [possible values: true, false]
 
