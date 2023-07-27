@@ -64,13 +64,6 @@ Options:
 * `HTTP_PORT` HTTP server port for GraphQL API (default `2020`).
 * `WORKER_POOL_SIZE` Materializer worker pool size (default `16`).
 
-## Configuring supported schema
-
-If a `config.toml` file is present then `aquadoggo` will read `supported_schema_ids` at start-up
-and be configured to only replicate and offer a query API for schema identified by the listed ids.
-
-See `example_config.toml` for further instructions.
-
 **Example:**
 
 ```bash
@@ -80,6 +73,13 @@ RUST_LOG=debug DATABASE_URL=postgres://postgres:postgres@localhost:5432/db cargo
 # For compact info logs, only directly coming from `aquadoggo`
 RUST_LOG=aquadoggo=info DATABASE_URL=postgres://postgres:postgres@localhost:5432/db cargo run
 ```
+
+## Configuring supported schema
+
+If a `config.toml` file is present then `aquadoggo` will read `supported_schema_ids` at start-up
+and be configured to only replicate and offer a query API for schema identified by the listed ids.
+
+See `example_config.toml` for further instructions.
 
 ## Development
 
