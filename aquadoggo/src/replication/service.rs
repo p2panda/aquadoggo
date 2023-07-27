@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use libp2p::PeerId;
-use log::{info, trace, warn};
+use log::{debug, info, trace, warn};
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::Human;
 use rand::seq::SliceRandom;
@@ -222,7 +222,11 @@ impl ConnectionManager {
         session_id: SessionId,
         error: ReplicationError,
     ) {
-        warn!("Replication with peer {} failed: {}", peer.display(), error);
+        if let ReplicationError::NoSessionFound(_, _) = error {
+            debug!("Replication session not found: {}", error);
+        } else {
+            warn!("Replication failed: {}", error);
+        }
 
         match self.peers.get_mut(&peer) {
             Some(status) => {

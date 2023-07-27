@@ -131,7 +131,7 @@ where
             {
                 sessions.remove(index);
             } else {
-                warn!(
+                debug!(
                     "Tried to remove nonexistent session {} with peer: {}",
                     session_id,
                     remote_peer.display()
