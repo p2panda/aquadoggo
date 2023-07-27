@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
-use log::{debug, info, warn};
+use log::{debug, info};
 use p2panda_rs::schema::{Schema, SchemaId, SYSTEM_SCHEMAS};
 use p2panda_rs::Human;
 use tokio::sync::broadcast::{channel, Receiver, Sender};
@@ -128,7 +128,7 @@ impl SchemaProvider {
 
         // Inform subscribers about new schema
         if self.tx.send(schema.id().to_owned()).is_err() {
-            warn!("No subscriber has been informed about inserted / updated schema");
+            debug!("No subscriber has been informed about inserted / updated schema");
         }
 
         Ok(is_update)
