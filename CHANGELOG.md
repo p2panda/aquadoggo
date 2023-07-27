@@ -79,6 +79,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Don't check for `affected_rows` on task deletion [#461](https://github.com/p2panda/aquadoggo/pull/461)
 - Do not critically fail when view does not exist due to race condition [#460](https://github.com/p2panda/aquadoggo/pull/460)
 - Do nothing on log insertion conflict [#468](https://github.com/p2panda/aquadoggo/pull/468)
+- Don't update or announce an update in schema provider if a schema with this id exists already [#472](https://github.com/p2panda/aquadoggo/pull/472)
 
 ### Open Sauce
 
