@@ -58,6 +58,7 @@ openssl-probe = "0.1.5"
 p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "392a730b3259fd836f2414b64ebf56db7767f33f", features = [
     "storage-provider",
 ] }
+rand = "0.8.5"
 serde = { version = "1.0.152", features = ["derive"] }
 sqlx = { version = "0.6.1", features = [
     "any",
