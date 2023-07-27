@@ -3,10 +3,10 @@
 //! Dynamically create and manage GraphQL schemas.
 use std::sync::Arc;
 
-use async_graphql::dynamic::{Object, Schema};
-use async_graphql::{Request, Response};
+use async_graphql::dynamic::{Field, FieldFuture, Object, Schema, TypeRef};
+use async_graphql::{Request, Response, Value};
 use dynamic_graphql::internal::Registry;
-use log::{debug, info};
+use log::{debug, info, warn};
 use p2panda_rs::Human;
 use tokio::sync::Mutex;
 
@@ -38,7 +38,7 @@ pub async fn build_root_schema(
     store: SqlStore,
     tx: ServiceSender,
     schema_provider: SchemaProvider,
-) -> Schema {
+) -> Result<Schema, async_graphql::dynamic::SchemaError> {
     let all_schema = schema_provider.all().await;
 
     // Using dynamic-graphql we create a registry and add types
@@ -130,7 +130,6 @@ pub async fn build_root_schema(
         .data(schema_provider)
         .data(tx)
         .finish()
-        .unwrap()
 }
 
 /// List of created GraphQL root schemas.
@@ -172,7 +171,18 @@ pub struct GraphQLSchemaManager {
 impl GraphQLSchemaManager {
     /// Returns a new instance of `GraphQLSchemaManager`.
     pub async fn new(store: SqlStore, tx: ServiceSender, schema_provider: SchemaProvider) -> Self {
-        let schemas = Arc::new(Mutex::new(Vec::new()));
+        // Initialize a default GraphQL schema. Used as a fallback when a node has no supported schema configured.
+        let root_query = Object::new("Query").field(Field::new(
+            "hello",
+            TypeRef::named_nn(TypeRef::STRING),
+            |_| FieldFuture::new(async { Ok(Some(Value::from("I'm aquadoggo!"))) }),
+        ));
+        let initial_schema = Schema::build("Query", None, None)
+            .register(root_query)
+            .finish()
+            .expect("Empty schema should build");
+
+        let schemas = Arc::new(Mutex::new(vec![initial_schema]));
         let shared = GraphQLSharedData {
             store,
             tx,
@@ -199,8 +209,10 @@ impl GraphQLSchemaManager {
 
         // Create the new GraphQL based on the current state of known p2panda application schemas
         async fn rebuild(shared: GraphQLSharedData, schemas: GraphQLSchemas) {
-            let schema = build_root_schema(shared.store, shared.tx, shared.schema_provider).await;
-            schemas.lock().await.push(schema);
+            match build_root_schema(shared.store, shared.tx, shared.schema_provider).await {
+                Ok(schema) => schemas.lock().await.push(schema),
+                Err(err) => warn!("Error building GraphQL schema: {}", err),
+            }
         }
 
         // Always build a schema right at the beginning as we don't have one yet
