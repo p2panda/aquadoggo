@@ -119,7 +119,7 @@ impl SchemaProvider {
                 ));
             }
         };
-        
+
         info!("Updating {}", schema.id().display());
         let mut schemas = self.schemas.lock().await;
         let is_update = schemas
