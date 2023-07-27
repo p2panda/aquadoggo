@@ -21,6 +21,8 @@ struct Cli {
     data_dir: Option<std::path::PathBuf>,
 
     /// The schema that this node is configured to replicate.
+    /// 
+    /// eg. -s schema_field_definition_v1 -s schema_definition_v1
     #[arg(short, long)]
     supported_schema: Vec<SchemaId>,
 
