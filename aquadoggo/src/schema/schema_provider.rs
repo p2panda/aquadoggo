@@ -136,6 +136,10 @@ impl SchemaProvider {
 
         Ok(is_update)
     }
+
+    pub fn supported_schema(&self) -> Vec<SchemaId> {
+        self.supported_schema.clone().unwrap_or_default()
+    }
 }
 
 impl Default for SchemaProvider {
