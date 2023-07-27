@@ -111,7 +111,7 @@ mod tests {
     ) {
         test_runner_with_manager(move |manager: TestNodeManager| async move {
             let node = manager.create().await;
-            node.context.schema_provider.update(schema).await;
+            let _ = node.context.schema_provider.update(schema).await;
 
             let (tx, _rx) = broadcast::channel(8);
             let ingest = SyncIngest::new(node.context.schema_provider.clone(), tx.clone());

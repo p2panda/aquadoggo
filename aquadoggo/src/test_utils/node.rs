@@ -86,7 +86,7 @@ pub async fn populate_and_materialize(
     // Note: The entries and operations which would normally exist for this schema will NOT be
     // present in the store, however the node will behave as expect as we directly inserted it into
     // the schema provider.
-    node.context
+    let _ = node.context
         .schema_provider
         .update(config.schema.clone())
         .await;

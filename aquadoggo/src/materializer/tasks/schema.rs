@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use log::debug;
+use log::{debug, warn};
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::operation::OperationValue;
@@ -63,7 +63,10 @@ pub async fn schema_task(context: Context, input: TaskInput) -> TaskResult<TaskI
         {
             // Updated schema was assembled successfully and is now passed to schema provider.
             Some(schema) => {
-                context.schema_provider.update(schema.clone()).await;
+                match context.schema_provider.update(schema.clone()).await {
+                    Ok(_) => (),
+                    Err(err) => warn!("Error updating schema: {}", err),
+                };
             }
             // This schema was not ready to be assembled after all so it is ignored.
             None => {

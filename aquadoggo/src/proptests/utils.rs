@@ -81,7 +81,7 @@ pub async fn add_schemas_from_ast(
     )
     .expect("Generated schema is valid");
 
-    node.context.schema_provider.update(schema.clone()).await;
+    node.context.schema_provider.update(schema.clone()).await.expect("Can update schema");
 
     // We also populate a list of schema for easy checking.
     schemas.push(schema.id().to_owned());

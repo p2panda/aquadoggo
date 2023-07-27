@@ -412,7 +412,7 @@ mod tests {
 
             let node_b = manager.create().await;
             let schema_provider = node_b.context.schema_provider.clone();
-            schema_provider.update(schema).await;
+            let _ = schema_provider.update(schema).await;
             let (tx, _) = broadcast::channel(50);
             let ingest = SyncIngest::new(schema_provider, tx);
 
