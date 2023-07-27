@@ -463,6 +463,7 @@ async fn insert_document_view(
             )
         VALUES
             ($1, $2, $3)
+        ON CONFLICT DO NOTHING
         ",
     )
     .bind(document_view.id().to_string())
