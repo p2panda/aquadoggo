@@ -60,12 +60,16 @@ impl Node {
         // Prepare storage and schema providers using connection pool
         let store = SqlStore::new(pool.clone());
 
+        // If the `dynamic_schema` flag is set then this node will be configured to support any
+        // schema that it discovers. Otherwise it is configured to support only the schema
+        // identified by their id in the `config.toml` file.
         let schema_provider = if config.dynamic_schema {
             SchemaProvider::default()
         } else {
-            SchemaProvider::new_with_supported_schema(config.supported_schema.clone())
+            SchemaProvider::new_with_supported_schema(config.supported_schema_ids.clone())
         };
 
+        // Attempt to add any known schema to the schema provider.
         let mut all_schemas = SYSTEM_SCHEMAS.clone();
         let application_schema = store.get_all_schema().await.unwrap();
         all_schemas.extend(&application_schema);
