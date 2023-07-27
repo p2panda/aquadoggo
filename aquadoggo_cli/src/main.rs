@@ -178,7 +178,7 @@ async fn main() {
     // Load configuration parameters and apply defaults
     let mut config: Configuration = cli.try_into().expect("Could not load configuration");
 
-    // Read schema ids from config.toml file or 
+    // Read schema ids from config.toml file or
     let supported_schemas = match File::open(CONFIG_FILE_PATH) {
         Ok(mut file) => schemas::read_schema_ids_from_file(&mut file),
         Err(_) => Ok(vec![]),

@@ -10,9 +10,9 @@ pub fn read_schema_ids_from_file(file: &mut File) -> Result<Vec<SchemaId>> {
     let mut buf = String::new();
     file.read_to_string(&mut buf)?;
     let table = buf.parse::<Table>().unwrap();
-    let value = table
-        .get("supported_schema_ids")
-        .ok_or(anyhow!("No \"supported_schema_ids\" field found config file"))?;
+    let value = table.get("supported_schema_ids").ok_or(anyhow!(
+        "No \"supported_schema_ids\" field found config file"
+    ))?;
     Ok(value.clone().try_into::<Vec<SchemaId>>()?)
 }
 
