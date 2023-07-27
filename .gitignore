@@ -1,5 +1,6 @@
 target/
 debug/
+config.toml
 
 # IDE
 .vscode

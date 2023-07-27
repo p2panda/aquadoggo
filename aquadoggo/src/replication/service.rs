@@ -254,7 +254,7 @@ impl ConnectionManager {
         let target_set = self.target_set().await;
 
         if let Err(err) = target_set.validate() {
-            warn!("Not initiating validation: {err}");
+            warn!("Not initiating replication: {err}");
             return;
         }
 

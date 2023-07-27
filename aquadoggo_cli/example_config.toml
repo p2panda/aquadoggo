@@ -1,0 +1,19 @@
+# Example config.toml file
+#
+# Copy this file to the location where aquadoggo will be run and rename to `config.toml`. Replace
+# the example values with your own desired configuration.
+
+# List of schema ids which will configure which documents a node will replicate and expose on the
+# GraphQL API.
+supported_schema_ids = [
+    # To discover new schema, set your node to replicate schema definition documents by including these
+    # two built-in schema ids. Your node will now search for and replicate schemas which have been
+    # published to the network.
+    "schema_field_definition_v1",
+    "schema_definition_v1",
+
+    # Once you discover new schemas and want to start replicating their documents, then add their
+    # schema ids to this list as well. It's also possible to load schema directly onto your node
+    # using the tool `fishy`: https://github.com/p2panda/fishy
+    "my_interesting_schema_0020a01f72a5f28f6a559b4942e3525de2bb2413d05897526fe2250e3b57384983a2",
+]

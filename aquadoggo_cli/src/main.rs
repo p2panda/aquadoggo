@@ -2,15 +2,18 @@
 
 #![allow(clippy::uninlined_format_args)]
 mod key_pair;
+mod schemas;
 
 use std::convert::{TryFrom, TryInto};
+use std::fs::File;
 
 use anyhow::Result;
 use aquadoggo::{Configuration, NetworkConfiguration, Node};
 use clap::error::ErrorKind as ClapErrorKind;
 use clap::{CommandFactory, Parser};
 use libp2p::Multiaddr;
-use p2panda_rs::schema::SchemaId;
+
+const CONFIG_FILE_PATH: &str = "config.toml";
 
 #[derive(Parser, Debug)]
 #[command(name = "aquadoggo Node", version)]
@@ -19,12 +22,6 @@ struct Cli {
     /// Path to data folder, $HOME/.local/share/aquadoggo by default on Linux.
     #[arg(short, long)]
     data_dir: Option<std::path::PathBuf>,
-
-    /// The schema that this node is configured to replicate.
-    ///
-    /// eg. -s schema_field_definition_v1 -s schema_definition_v1
-    #[arg(short, long)]
-    supported_schema: Vec<SchemaId>,
 
     /// Port for the http server, 2020 by default.
     #[arg(short = 'P', long)]
@@ -167,11 +164,6 @@ impl TryFrom<Cli> for Configuration {
             ..config.network
         };
 
-        // De-duplicate and set supported schema.
-        let mut supported_schema = cli.supported_schema;
-        supported_schema.dedup();
-        config.supported_schema = supported_schema;
-
         Ok(config)
     }
 }
@@ -184,7 +176,15 @@ async fn main() {
     let cli = Cli::parse().validate();
 
     // Load configuration parameters and apply defaults
-    let config: Configuration = cli.try_into().expect("Could not load configuration");
+    let mut config: Configuration = cli.try_into().expect("Could not load configuration");
+
+    // Read schema ids from config.toml file or 
+    let supported_schemas = match File::open(CONFIG_FILE_PATH) {
+        Ok(mut file) => schemas::read_schema_ids_from_file(&mut file),
+        Err(_) => Ok(vec![]),
+    }
+    .expect("Reading schema ids from config.toml failed");
+    config.supported_schema_ids = supported_schemas;
 
     // We unwrap the path as we know it has been initialised during the conversion step before
     let base_path = config.base_path.clone().unwrap();
