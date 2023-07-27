@@ -840,10 +840,12 @@ async fn where_pagination_sql(
                         operation_fields_v1.value
                     FROM
                         operation_fields_v1
+                        LEFT JOIN document_view_fields
+                            ON operation_fields_v1.operation_id = document_view_fields.operation_id
                     WHERE
                         operation_fields_v1.name = '{order_field_name}'
                         AND
-                            operation_fields_v1.operation_id = document_view_fields.operation_id
+                            document_view_fields.document_view_id = documents.document_view_id
                         AND
                             (
                                 {cmp_field} {cmp_direction} {bind_arg_marker}
