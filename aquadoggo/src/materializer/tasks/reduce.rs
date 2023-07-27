@@ -2,7 +2,7 @@
 
 use std::convert::TryFrom;
 
-use log::{debug, info, trace};
+use log::{debug, trace};
 use p2panda_rs::document::materialization::build_graph;
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::{Document, DocumentBuilder, DocumentId, DocumentViewId};
@@ -171,7 +171,7 @@ async fn reduce_document_view<O: AsOperation + WithId<OperationId> + WithPublicK
         .await
         .map_err(|err| TaskError::Critical(err.to_string()))?;
 
-    info!("Stored {} document view {}", document, document.view_id());
+    debug!("Stored {} document view {}", document, document.view_id());
 
     debug!(
         "Dispatch dependency task for view with id: {}",
@@ -233,7 +233,7 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
 
             // If the document was deleted, then we return nothing
             if document.is_deleted() {
-                info!(
+                debug!(
                     "Deleted {} final view {}",
                     document.display(),
                     document.view_id().display()
@@ -242,13 +242,13 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
             }
 
             if document.is_edited() {
-                info!(
+                debug!(
                     "Updated {} latest view {}",
                     document.display(),
                     document.view_id().display()
                 );
             } else {
-                info!("Created {}", document.display());
+                debug!("Created {}", document.display());
             };
 
             debug!(
