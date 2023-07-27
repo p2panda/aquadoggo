@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reverse lookup for pinned relations in dependency task  [#434](https://github.com/p2panda/aquadoggo/pull/434)
 - Persist and maintain index of operation's position in document [#438](https://github.com/p2panda/aquadoggo/pull/438)
 - Introduce `dialer` behaviour with retry logic [#444](https://github.com/p2panda/aquadoggo/pull/444)
+- Introduce peer sampling to the replication service [#463](https://github.com/p2panda/aquadoggo/pull/463)
 
 ### Changed
 
@@ -48,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Check for duplicate entries arriving to `Ingest` before consuming [#439](https://github.com/p2panda/aquadoggo/pull/439)
 - Replicate entries in their topologically sorted document order [#442](https://github.com/p2panda/aquadoggo/pull/442)
 - Remove `quick_commit` from materialization service [#450](https://github.com/p2panda/aquadoggo/pull/450)
+- Reduce `warn` logging in network and replication services [#467](https://github.com/p2panda/aquadoggo/pull/467)
 
 ### Fixed
 
@@ -73,6 +75,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Use fork of `asynchronous-codec` to temporarily fix CBOR decoding bug [#440](https://github.com/p2panda/aquadoggo/pull/440)
 - Fix composing of circuit relay address [#451](https://github.com/p2panda/aquadoggo/pull/451)
 - Correct selection of comparison field during pagination [#471](https://github.com/p2panda/aquadoggo/pull/471)
+- Don't check for `affected_rows` on task deletion [#461](https://github.com/p2panda/aquadoggo/pull/461)
+- Do not critically fail when view does not exist due to race condition [#460](https://github.com/p2panda/aquadoggo/pull/460)
+- Do nothing on log insertion conflict [#468](https://github.com/p2panda/aquadoggo/pull/468)
 
 ### Open Sauce
 

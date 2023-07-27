@@ -23,7 +23,7 @@ anyhow = "1.0.62"
 async-graphql = { version = "5.0.6", features = ["dynamic-schema"] }
 async-graphql-axum = "5.0.6"
 async-trait = "0.1.64"
-asynchronous-codec = { git = "https://github.com/p2panda/asynchronous-codec", rev = "6eef38b30ade6ce2d66accc966652bd15d74e274", features = ["cbor"] }
+asynchronous-codec = { version = "0.6.2", features = ["cbor"] }
 axum = "0.6.10"
 bamboo-rs-core-ed25519-yasmf = "0.1.1"
 bs58 = "0.4.0"
@@ -58,6 +58,7 @@ openssl-probe = "0.1.5"
 p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "392a730b3259fd836f2414b64ebf56db7767f33f", features = [
     "storage-provider",
 ] }
+rand = "0.8.5"
 serde = { version = "1.0.152", features = ["derive"] }
 sqlx = { version = "0.6.1", features = [
     "any",

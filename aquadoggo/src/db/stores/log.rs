@@ -38,6 +38,7 @@ impl LogStore for SqlStore {
                 )
             VALUES
                 ($1, $2, $3, $4)
+            ON CONFLICT DO NOTHING
             ",
         )
         .bind(public_key.to_string())
@@ -136,7 +137,7 @@ mod tests {
     use crate::test_utils::{test_runner, TestNode};
 
     #[rstest]
-    fn prevent_duplicate_log_ids(
+    fn duplicate_log_ids_are_ignored(
         #[from(public_key)] public_key: PublicKey,
         #[from(schema_id)] schema_id: SchemaId,
         #[from(random_document_id)] document: DocumentId,
@@ -153,7 +154,7 @@ mod tests {
                 .store
                 .insert_log(&LogId::default(), &public_key, &schema_id, &document)
                 .await
-                .is_err());
+                .is_ok());
         });
     }
 
