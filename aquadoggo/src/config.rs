@@ -16,6 +16,9 @@ const DATA_DIR_NAME: &str = "aquadoggo";
 /// Filename of default sqlite database.
 const DEFAULT_SQLITE_NAME: &str = "aquadoggo-node.sqlite3";
 
+/// Blobs directory
+const BLOBS_DIR_NAME: &str = "blobs";
+
 /// Configuration object holding all important variables throughout the application.
 ///
 /// Each configuration also assures that a data directory exists on the host machine where database
@@ -81,6 +84,7 @@ impl Configuration {
 
         // Create folders when they don't exist yet
         fs::create_dir_all(&base_path)?;
+        fs::create_dir(&base_path.join(BLOBS_DIR_NAME))?;
 
         Ok(base_path)
     }

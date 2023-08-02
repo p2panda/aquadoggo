@@ -25,9 +25,6 @@ const GRAPHQL_ROUTE: &str = "/graphql";
 /// Route to the blobs static file server
 pub const BLOBS_ROUTE: &str = "/blobs";
 
-/// Path to the local blobs directory
-const BLOBS_DIRECTORY_PATH: &str = "blobs";
-
 /// Build HTTP server with GraphQL API.
 pub fn build_server(http_context: HttpServiceContext) -> Router {
     // Configure CORS middleware
@@ -73,7 +70,7 @@ pub async fn http_service(
         .base_path
         .as_ref()
         .expect("Base path not set")
-        .join(BLOBS_DIRECTORY_PATH);
+        .join(BLOBS_DIR_NAME);
 
     // Introduce a new context for all HTTP routes
     let http_context = HttpServiceContext::new(graphql_schema_manager, blob_dir_path);
@@ -100,7 +97,7 @@ mod tests {
 
     use crate::graphql::GraphQLSchemaManager;
     use crate::http::context::HttpServiceContext;
-    use crate::http::service::BLOBS_DIRECTORY_PATH;
+    use crate::http::service::BLOBS_DIR_NAME;
     use crate::schema::SchemaProvider;
     use crate::test_utils::TestClient;
     use crate::test_utils::{test_runner, TestNode};
@@ -115,7 +112,7 @@ mod tests {
             let graphql_schema_manager =
                 GraphQLSchemaManager::new(node.context.store.clone(), tx, schema_provider).await;
             let context =
-                HttpServiceContext::new(graphql_schema_manager, BLOBS_DIRECTORY_PATH.into());
+                HttpServiceContext::new(graphql_schema_manager, BLOBS_DIR_NAME.into());
             let client = TestClient::new(build_server(context));
 
             let response = client
