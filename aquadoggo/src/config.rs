@@ -17,7 +17,7 @@ const DATA_DIR_NAME: &str = "aquadoggo";
 const DEFAULT_SQLITE_NAME: &str = "aquadoggo-node.sqlite3";
 
 /// Blobs directory
-const BLOBS_DIR_NAME: &str = "blobs";
+pub const BLOBS_DIR_NAME: &str = "blobs";
 
 /// Configuration object holding all important variables throughout the application.
 ///
