@@ -154,7 +154,7 @@ mod test {
     async fn get_all_schemas() {
         let provider = SchemaProvider::default();
         let result = provider.all().await;
-        assert_eq!(result.len(), 2);
+        assert_eq!(result.len(), 4);
     }
 
     #[tokio::test]

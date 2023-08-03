@@ -28,7 +28,7 @@ async fn sanity_checks(
     schemas: &Vec<SchemaId>,
 ) {
     let node_schemas = node.context.schema_provider.all().await;
-    assert_eq!(schemas.len(), node_schemas.len() - 2); // minus 2 for system schema
+    assert_eq!(schemas.len(), node_schemas.len() - 4); // minus 4 for system schema
     for schema_id in schemas {
         let result = node
             .context

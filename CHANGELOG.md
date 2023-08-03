@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Introduce `BlobStore` [#484](https://github.com/p2panda/aquadoggo/pull/484)
+
 ## [0.5.0]
 
 ### Added

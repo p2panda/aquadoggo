@@ -32,6 +32,7 @@ log = "0.4.20"
 p2panda-rs = "0.7.1"
 path-clean = "1.0.1"
 serde = { version = "1.0.185", features = ["serde_derive"] }
+p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "17f4fcb1dcf7cebabd6d9b5a824399e9384d96b2" }
 tokio = { version = "1.28.2", features = ["full"] }
 toml = "0.7.6"
 
