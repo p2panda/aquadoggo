@@ -137,8 +137,12 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
                     TaskInput::SpecificView(document_view.id().clone()),
                 ));
             }
-            // @TODO: Now we can dispatch a "blob" task here and communicate that it was a current or
-            // pinned view.
+            SchemaId::Blob(_) | SchemaId::BlobPiece(_) => {
+                next_tasks.push(Task::new(
+                    "blob",
+                    TaskInput::DocumentViewId(document_view.id().clone()),
+                ));
+            }
             _ => {}
         }
     }
