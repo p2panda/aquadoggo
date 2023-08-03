@@ -35,9 +35,14 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
     let updated_blobs: Vec<StorageDocument> = match schema {
         // This task is about an updated blob document so we only handle that.
         SchemaId::Blob(_) => {
-            let document = context.store.get_document_by_view_id(&input_view_id).await.map_err(|err| TaskError::Critical(err.to_string()))?.unwrap();
+            let document = context
+                .store
+                .get_document_by_view_id(&input_view_id)
+                .await
+                .map_err(|err| TaskError::Critical(err.to_string()))?
+                .unwrap();
             Ok(vec![document])
-        },
+        }
 
         // This task is about an updated blob piece document that may be used in one or more blob documents.
         SchemaId::BlobPiece(_) => get_related_blobs(&input_view_id, &context).await,
@@ -54,7 +59,7 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
         ));
     }
 
-    for blob in updated_blobs.iter() {
+    for _blob in updated_blobs.iter() {
         // @TODO: Materialize blobs to filesystem
     }
 
