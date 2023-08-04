@@ -206,7 +206,7 @@ pub async fn add_schema(
         .expect("Reduce schema document");
 
     // Run schema task for this spec
-    let input = TaskInput::DocumentViewId(DocumentViewId::from(entry_signed.hash()));
+    let input = TaskInput::SpecificView(DocumentViewId::from(entry_signed.hash()));
     schema_task(node.context.clone(), input)
         .await
         .expect("Run schema task");

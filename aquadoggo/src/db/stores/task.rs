@@ -18,11 +18,13 @@ impl SqlStore {
 
         let document_id = match task_input {
             TaskInput::DocumentId(id) => Some(id.to_string()),
-            TaskInput::DocumentViewId(_) => None,
+            TaskInput::SpecificView(_) | TaskInput::CurrentView(_) => None,
         };
 
         let document_view_id = match task_input {
-            TaskInput::DocumentViewId(view_id) => Some(view_id.to_string()),
+            TaskInput::SpecificView(view_id) | TaskInput::CurrentView(view_id) => {
+                Some(view_id.to_string())
+            }
             TaskInput::DocumentId(_) => None,
         };
 
@@ -57,11 +59,13 @@ impl SqlStore {
 
         let document_id = match task_input {
             TaskInput::DocumentId(id) => Some(id.to_string()),
-            TaskInput::DocumentViewId(_) => None,
+            TaskInput::SpecificView(_) | TaskInput::CurrentView(_) => None,
         };
 
         let document_view_id = match task_input {
-            TaskInput::DocumentViewId(view_id) => Some(view_id.to_string()),
+            TaskInput::SpecificView(view_id) | TaskInput::CurrentView(view_id) => {
+                Some(view_id.to_string())
+            }
             TaskInput::DocumentId(_) => None,
         };
 
@@ -119,7 +123,7 @@ impl SqlStore {
             });
 
             let input = match (document_id, document_view_id) {
-                (None, Some(view_id)) => TaskInput::DocumentViewId(view_id),
+                (None, Some(view_id)) => TaskInput::SpecificView(view_id),
                 (Some(id), None) => TaskInput::DocumentId(id),
                 _ => {
                     panic!("Invalid task input stored in database")
@@ -146,7 +150,7 @@ mod tests {
     fn insert_get_remove_tasks(document_view_id: DocumentViewId) {
         test_runner(|node: TestNode| async move {
             // Prepare test data
-            let task = Task::new("reduce", TaskInput::DocumentViewId(document_view_id));
+            let task = Task::new("reduce", TaskInput::SpecificView(document_view_id));
 
             // Insert task
             let result = node.context.store.insert_task(&task).await;

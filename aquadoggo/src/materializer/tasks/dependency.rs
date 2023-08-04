@@ -27,8 +27,14 @@ use crate::materializer::TaskInput;
 pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
     debug!("Working on {}", input);
 
+    let mut is_current_view = false;
+
     let view_id = match input {
-        TaskInput::DocumentViewId(view_id) => view_id,
+        TaskInput::SpecificView(view_id) => view_id,
+        TaskInput::CurrentView(view_id) => {
+            is_current_view = true;
+            view_id
+        }
         _ => {
             return Err(TaskError::Critical(
                 "Missing document view id in task input".into(),
@@ -128,9 +134,11 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
             SchemaId::SchemaDefinition(_) | SchemaId::SchemaFieldDefinition(_) => {
                 next_tasks.push(Task::new(
                     "schema",
-                    TaskInput::DocumentViewId(document_view.id().clone()),
+                    TaskInput::SpecificView(document_view.id().clone()),
                 ));
             }
+            // @TODO: Now we can dispatch a "blob" task here and communicate that it was a current or
+            // pinned view.
             _ => {}
         }
     }
@@ -167,7 +175,7 @@ async fn get_relation_task(
             debug!("No view found for pinned relation: {}", document_view_id);
             Ok(Some(Task::new(
                 "reduce",
-                TaskInput::DocumentViewId(document_view_id),
+                TaskInput::SpecificView(document_view_id),
             )))
         }
     }
@@ -224,7 +232,7 @@ async fn get_inverse_relation_tasks(
             // view points at it.
             tasks.push(Task::new(
                 "dependency",
-                TaskInput::DocumentViewId(parent_document.view_id().to_owned()),
+                TaskInput::SpecificView(parent_document.view_id().to_owned()),
             ));
         }
     }
@@ -417,7 +425,7 @@ mod tests {
                     .unwrap()
                     .unwrap();
 
-                let input = TaskInput::DocumentViewId(document.view_id().clone());
+                let input = TaskInput::SpecificView(document.view_id().clone());
 
                 let reduce_tasks = dependency_task(node.context.clone(), input)
                     .await
@@ -504,7 +512,7 @@ mod tests {
 
             // The new document should now dispatch one dependency task for the child relation which
             // has not been materialised yet.
-            let input = TaskInput::DocumentViewId(document_view_id.clone());
+            let input = TaskInput::SpecificView(document_view_id.clone());
             let tasks = dependency_task(node.context.clone(), input)
                 .await
                 .unwrap()
@@ -581,7 +589,7 @@ mod tests {
                     .clone()
                     .into();
 
-            let input = TaskInput::DocumentViewId(document_view_id.clone());
+            let input = TaskInput::SpecificView(document_view_id.clone());
 
             let result = dependency_task(node.context.clone(), input).await;
 
@@ -616,7 +624,7 @@ mod tests {
             let document_view_id = document_id.as_str().parse().unwrap();
 
             // Dispatch a dependency task for this document_view_id.
-            let input = TaskInput::DocumentViewId(document_view_id);
+            let input = TaskInput::SpecificView(document_view_id);
             let tasks = dependency_task(node.context.clone(), input)
                 .await
                 .unwrap()
@@ -713,7 +721,7 @@ mod tests {
 
             // Dispatch a dependency task for the schema definition.
             let document_view_id: DocumentViewId = entry_signed.hash().into();
-            let input = TaskInput::DocumentViewId(document_view_id);
+            let input = TaskInput::SpecificView(document_view_id);
             let tasks = dependency_task(node.context.clone(), input)
                 .await
                 .unwrap()
@@ -895,7 +903,7 @@ mod tests {
                 tasks,
                 Some(vec![Task::new(
                     "reduce",
-                    TaskInput::DocumentViewId(post_view_id_2.clone())
+                    TaskInput::SpecificView(post_view_id_2.clone())
                 )])
             );
 
@@ -903,7 +911,7 @@ mod tests {
             //    since not enough data exists to materialize the "post" document
             let tasks = reduce_task(
                 node_b.context.clone(),
-                TaskInput::DocumentViewId(post_view_id_2.clone()),
+                TaskInput::SpecificView(post_view_id_2.clone()),
             )
             .await
             .unwrap();
@@ -1026,7 +1034,7 @@ mod tests {
                 tasks,
                 Some(vec![Task::new(
                     "dependency",
-                    TaskInput::DocumentViewId(comment_view_id_1.clone())
+                    TaskInput::SpecificView(comment_view_id_1.clone())
                 )])
             );
 
@@ -1034,7 +1042,7 @@ mod tests {
             //    back to the missing pinned relation to the older version of the "post" document
             let tasks = dependency_task(
                 node_b.context.clone(),
-                TaskInput::DocumentViewId(comment_view_id_1.clone()),
+                TaskInput::SpecificView(comment_view_id_1.clone()),
             )
             .await
             .unwrap();
@@ -1042,14 +1050,14 @@ mod tests {
                 tasks,
                 Some(vec![Task::new(
                     "reduce",
-                    TaskInput::DocumentViewId(post_view_id_2.clone())
+                    TaskInput::SpecificView(post_view_id_2.clone())
                 )])
             );
 
             // 4. We finally materialise the missing view!
             let tasks = reduce_task(
                 node_b.context.clone(),
-                TaskInput::DocumentViewId(post_view_id_2.clone()),
+                TaskInput::SpecificView(post_view_id_2.clone()),
             )
             .await
             .unwrap();
@@ -1057,7 +1065,7 @@ mod tests {
                 tasks,
                 Some(vec![Task::new(
                     "dependency",
-                    TaskInput::DocumentViewId(post_view_id_2.clone())
+                    TaskInput::SpecificView(post_view_id_2.clone())
                 )])
             );
 
@@ -1074,7 +1082,7 @@ mod tests {
             //    is good, otherwise we would run into an infinite, recursive loop
             let tasks = dependency_task(
                 node_b.context.clone(),
-                TaskInput::DocumentViewId(post_view_id_2.clone()),
+                TaskInput::SpecificView(post_view_id_2.clone()),
             )
             .await
             .unwrap();
@@ -1082,13 +1090,13 @@ mod tests {
                 tasks,
                 Some(vec![Task::new(
                     "dependency",
-                    TaskInput::DocumentViewId(comment_view_id_1.clone())
+                    TaskInput::SpecificView(comment_view_id_1.clone())
                 )])
             );
 
             let tasks = dependency_task(
                 node_b.context.clone(),
-                TaskInput::DocumentViewId(comment_view_id_1.clone()),
+                TaskInput::SpecificView(comment_view_id_1.clone()),
             )
             .await
             .unwrap();
