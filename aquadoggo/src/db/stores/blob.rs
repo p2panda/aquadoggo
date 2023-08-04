@@ -3,7 +3,7 @@
 use std::num::NonZeroU64;
 
 use p2panda_rs::document::traits::AsDocument;
-use p2panda_rs::document::DocumentId;
+use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{Schema, SchemaId};
 use p2panda_rs::storage_provider::traits::DocumentStore;
@@ -22,9 +22,12 @@ pub type BlobData = String;
 
 impl SqlStore {
     /// Get the data for one blob from the store, identified by it's document id.
-    pub async fn get_blob(&self, id: &DocumentId) -> Result<Option<BlobData>, BlobStoreError> {
+    pub async fn get_blob(
+        &self,
+        view_id: &DocumentViewId,
+    ) -> Result<Option<BlobData>, BlobStoreError> {
         // Get the root blob document.
-        let blob = match self.get_document(id).await? {
+        let blob = match self.get_document_by_view_id(view_id).await? {
             Some(document) => {
                 if document.schema_id != SchemaId::Blob(1) {
                     return Err(BlobStoreError::NotBlobDocument);
@@ -126,7 +129,7 @@ mod tests {
                 &key_pair,
             )
             .await;
-            let blob_piece_view_id = add_document(
+            let blob_view_id = add_document(
                 &mut node,
                 &SchemaId::Blob(1),
                 vec![
@@ -141,9 +144,7 @@ mod tests {
             )
             .await;
 
-            let document_id: DocumentId = blob_piece_view_id.to_string().parse().unwrap();
-
-            let blob = node.context.store.get_blob(&document_id).await.unwrap();
+            let blob = node.context.store.get_blob(&blob_view_id).await.unwrap();
 
             assert!(blob.is_some());
             assert_eq!(blob.unwrap(), blob_data)

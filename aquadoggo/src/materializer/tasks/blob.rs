@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use log::debug;
+use std::fs::{self, File};
+use std::io::Write;
+
+use log::{debug, info};
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::DocumentStore;
 
+use crate::config::BLOBS_DIR_NAME;
 use crate::context::Context;
 use crate::db::types::StorageDocument;
 use crate::materializer::worker::{TaskError, TaskResult};
@@ -59,15 +63,43 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
         ));
     }
 
-    for _blob in updated_blobs.iter() {
-        // @TODO: Materialize blobs to filesystem
+    // Materialize all updated blobs to the filesystem.
+    for blob_document in updated_blobs.iter() {
+        // Get the raw blob data.
+        let blob_data = context
+            .store
+            .get_blob(&blob_document.view_id())
+            .await
+            .map_err(|err| TaskError::Critical(err.to_string()))?
+            .unwrap();
+
+        // Compose, and when needed create, the path for the blob file.
+        let base_path = match &context.config.base_path {
+            Some(base_path) => base_path,
+            None => return Err(TaskError::Critical("No base path configured".to_string())),
+        };
+
+        let blob_dir = base_path
+            .join(BLOBS_DIR_NAME)
+            .join(blob_document.id().as_str());
+
+        fs::create_dir_all(&blob_dir).map_err(|err| TaskError::Critical(err.to_string()))?;
+        let blob_file_path = blob_dir.join(blob_document.view_id().to_string());
+
+        // Write the blob to the filesystem.
+        info!("Creating blob at path {blob_file_path:?}");
+
+        let mut file = File::create(&blob_file_path).unwrap();
+        file.write_all(blob_data.as_bytes()).unwrap();
+
+        // @TODO: We need to determine if this view is the current view of the blob and if so
+        // create a symlink from `/document_id -> /document_id/current_view_id`
     }
 
     Ok(None)
 }
 
-/// Retrieve schema definitions that use the targeted schema field definition as one of their
-/// fields.
+/// Retrieve blobs that use the targeted blob piece as one of their fields.
 async fn get_related_blobs(
     target_blob_piece: &DocumentViewId,
     context: &Context,
