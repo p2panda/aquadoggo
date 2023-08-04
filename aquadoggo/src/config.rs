@@ -84,7 +84,7 @@ impl Configuration {
 
         // Create folders when they don't exist yet
         fs::create_dir_all(&base_path)?;
-        fs::create_dir(&base_path.join(BLOBS_DIR_NAME))?;
+        fs::create_dir(base_path.join(BLOBS_DIR_NAME))?;
 
         Ok(base_path)
     }

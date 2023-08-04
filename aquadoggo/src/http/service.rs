@@ -112,8 +112,7 @@ mod tests {
             let schema_provider = SchemaProvider::default();
             let graphql_schema_manager =
                 GraphQLSchemaManager::new(node.context.store.clone(), tx, schema_provider).await;
-            let context =
-                HttpServiceContext::new(graphql_schema_manager, BLOBS_DIR_NAME.into());
+            let context = HttpServiceContext::new(graphql_schema_manager, BLOBS_DIR_NAME.into());
             let client = TestClient::new(build_server(context));
 
             let response = client
