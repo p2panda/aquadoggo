@@ -54,10 +54,12 @@ impl SqlStore {
         // We do this using the stores' query method, targeting pieces which are in the relation
         // list of the blob.
         let schema = Schema::get_system(SchemaId::BlobPiece(1)).unwrap();
-        let list = RelationList::new_pinned(&blob.view_id(), "pieces".into());
-        let mut pagination = Pagination::default();
+        let list = RelationList::new_pinned(blob.view_id(), "pieces");
+        let pagination = Pagination {
+            first: NonZeroU64::new(MAX_BLOB_PIECES).unwrap(),
+            ..Default::default()
+        };
 
-        pagination.first = NonZeroU64::new(MAX_BLOB_PIECES).unwrap();
         let args = Query::new(
             &pagination,
             &Select::new(&[Field::new("data")]),
@@ -65,7 +67,7 @@ impl SqlStore {
             &Order::default(),
         );
 
-        let (_, results) = self.query(&schema, &args, Some(&list)).await?;
+        let (_, results) = self.query(schema, &args, Some(&list)).await?;
 
         // No pieces were found.
         if results.is_empty() {
@@ -101,7 +103,6 @@ impl SqlStore {
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::document::DocumentId;
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::test_utils::fixtures::key_pair;

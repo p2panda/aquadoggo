@@ -77,7 +77,7 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
         // Get the raw blob data.
         let blob_data = context
             .store
-            .get_blob(&blob_document.view_id())
+            .get_blob(blob_document.view_id())
             .await
             .map_err(|err| TaskError::Critical(err.to_string()))?
             .unwrap();

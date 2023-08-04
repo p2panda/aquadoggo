@@ -24,23 +24,23 @@ pub enum SqlStoreError {
 pub enum SchemaStoreError {
     /// Error returned from converting p2panda-rs `DocumentView` into `SchemaView.
     #[error(transparent)]
-    SystemSchemaError(#[from] SystemSchemaError),
+    SystemSchema(#[from] SystemSchemaError),
 
     /// Error returned from p2panda-rs `Schema` methods.
     #[error(transparent)]
-    SchemaError(#[from] SchemaError),
+    Schema(#[from] SchemaError),
 
     /// Error returned from p2panda-rs `SchemaId` methods.
     #[error(transparent)]
-    SchemaIdError(#[from] SchemaIdError),
+    SchemaId(#[from] SchemaIdError),
 
     /// Error returned from `DocumentStore` methods.
     #[error(transparent)]
-    DocumentStorageError(#[from] DocumentStorageError),
+    DocumentStorage(#[from] DocumentStorageError),
 
     /// Error returned from `OperationStore` methods.
     #[error(transparent)]
-    OperationStorageError(#[from] OperationStorageError),
+    OperationStorage(#[from] OperationStorageError),
 }
 
 #[derive(Error, Debug)]
