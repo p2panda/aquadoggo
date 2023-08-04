@@ -13,16 +13,15 @@ pub enum SqlStoreError {
 
     #[error("Deletion of row from table {0} did not show any effect")]
     Deletion(String),
+
+    /// Error returned from BlobStore.
+    #[error(transparent)]
+    BlobStoreError(#[from] BlobStoreError),
 }
 
 /// `SchemaStore` errors.
 #[derive(Error, Debug)]
 pub enum SchemaStoreError {
-    /// Catch all error which implementers can use for passing their own errors up the chain.
-    #[error("Error occured in DocumentStore: {0}")]
-    #[allow(dead_code)]
-    Custom(String),
-
     /// Error returned from converting p2panda-rs `DocumentView` into `SchemaView.
     #[error(transparent)]
     SystemSchemaError(#[from] SystemSchemaError),
@@ -42,4 +41,39 @@ pub enum SchemaStoreError {
     /// Error returned from `OperationStore` methods.
     #[error(transparent)]
     OperationStorageError(#[from] OperationStorageError),
+}
+
+#[derive(Error, Debug)]
+pub enum BlobStoreError {
+    /// Error when no "pieces" field found on blob document.
+    #[error("Missing \"pieces\" field on blob document")]
+    MissingPiecesField,
+
+    /// Error when no "length" field found on blob document.
+    #[error("Missing \"length\" field on blob document")]
+    MissingLengthField,
+
+    /// Error when no "data" field found on blob pieces document.
+    #[error("Missing \"data\" field on blob pieces document")]
+    MissingDataField,
+
+    /// Error when no "pieces" field found on blob document.
+    #[error("Missing \"pieces\" field on blob document")]
+    NotBlobDocument,
+
+    /// Error when no pieces found for existing blob document.
+    #[error("No pieces found for the requested blob")]
+    NoBlobPiecesFound,
+
+    /// Error when some pieces not found for existing blob document.
+    #[error("Some pieces missing for the requested blob")]
+    MissingPieces,
+
+    /// Error when combined pieces length and claimed blob length don't match.
+    #[error("The combined pieces length and claimed blob length don't match")]
+    IncorrectLength,
+
+    /// Error returned from `DocumentStore` methods.
+    #[error(transparent)]
+    DocumentStorageError(#[from] DocumentStorageError),
 }
