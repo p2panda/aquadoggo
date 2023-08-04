@@ -27,12 +27,12 @@ use crate::materializer::TaskInput;
 pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
     debug!("Working on {}", input);
 
-    let mut is_current_view = false;
+    let mut _is_current_view = false;
 
     let view_id = match input {
         TaskInput::SpecificView(view_id) => view_id,
         TaskInput::CurrentView(view_id) => {
-            is_current_view = true;
+            _is_current_view = true;
             view_id
         }
         _ => {
