@@ -101,6 +101,7 @@ impl SqlStore {
 #[cfg(test)]
 mod tests {
     use p2panda_rs::identity::KeyPair;
+    use p2panda_rs::document::DocumentId;
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::test_utils::fixtures::key_pair;
     use rstest::rstest;
