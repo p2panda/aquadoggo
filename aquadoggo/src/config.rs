@@ -119,8 +119,12 @@ impl Configuration {
 impl Configuration {
     /// Returns a new configuration object for a node which stores all data temporarily in memory.
     pub fn new_ephemeral() -> Self {
+        let tmp_dir = tempfile::TempDir::new().unwrap();
+        let tmp_path = tmp_dir.path().to_owned();
+
         Configuration {
             database_url: Some("sqlite::memory:".to_string()),
+            base_path: Some(tmp_path),
             ..Default::default()
         }
     }
