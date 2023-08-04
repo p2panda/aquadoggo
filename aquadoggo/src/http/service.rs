@@ -10,15 +10,21 @@ use axum::Router;
 use http::header::CONTENT_TYPE;
 use log::{debug, warn};
 use tower_http::cors::{Any, CorsLayer};
+use tower_http::services::ServeDir;
 
 use crate::bus::ServiceSender;
+use crate::config::BLOBS_DIR_NAME;
 use crate::context::Context;
 use crate::graphql::GraphQLSchemaManager;
 use crate::http::api::{handle_graphql_playground, handle_graphql_query};
 use crate::http::context::HttpServiceContext;
 use crate::manager::{ServiceReadySender, Shutdown};
 
+/// Route to the GraphQL playground
 const GRAPHQL_ROUTE: &str = "/graphql";
+
+/// Route to the blobs static file server
+pub const BLOBS_ROUTE: &str = "/blobs";
 
 /// Build HTTP server with GraphQL API.
 pub fn build_server(http_context: HttpServiceContext) -> Router {
@@ -29,7 +35,12 @@ pub fn build_server(http_context: HttpServiceContext) -> Router {
         .allow_credentials(false)
         .allow_origin(Any);
 
+    // Construct static file server
+    let blob_service = ServeDir::new(http_context.blob_dir_path.clone());
+
     Router::new()
+        // Add blobs static file server
+        .nest_service(BLOBS_ROUTE, blob_service)
         // Add GraphQL routes
         .route(
             GRAPHQL_ROUTE,
@@ -55,8 +66,15 @@ pub async fn http_service(
     let graphql_schema_manager =
         GraphQLSchemaManager::new(context.store.clone(), tx, context.schema_provider.clone()).await;
 
+    let blob_dir_path = context
+        .config
+        .base_path
+        .as_ref()
+        .expect("Base path not set")
+        .join(BLOBS_DIR_NAME);
+
     // Introduce a new context for all HTTP routes
-    let http_context = HttpServiceContext::new(graphql_schema_manager);
+    let http_context = HttpServiceContext::new(graphql_schema_manager, blob_dir_path);
 
     axum::Server::try_bind(&http_address)?
         .serve(build_server(http_context).into_make_service())
@@ -80,6 +98,7 @@ mod tests {
 
     use crate::graphql::GraphQLSchemaManager;
     use crate::http::context::HttpServiceContext;
+    use crate::http::service::BLOBS_DIR_NAME;
     use crate::schema::SchemaProvider;
     use crate::test_utils::TestClient;
     use crate::test_utils::{test_runner, TestNode};
@@ -93,7 +112,7 @@ mod tests {
             let schema_provider = SchemaProvider::default();
             let graphql_schema_manager =
                 GraphQLSchemaManager::new(node.context.store.clone(), tx, schema_provider).await;
-            let context = HttpServiceContext::new(graphql_schema_manager);
+            let context = HttpServiceContext::new(graphql_schema_manager, BLOBS_DIR_NAME.into());
             let client = TestClient::new(build_server(context));
 
             let response = client

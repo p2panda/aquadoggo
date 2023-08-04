@@ -125,7 +125,7 @@ mod tests {
 
     use crate::bus::ServiceMessage;
     use crate::graphql::GraphQLSchemaManager;
-    use crate::http::HttpServiceContext;
+    use crate::http::{HttpServiceContext, BLOBS_ROUTE};
     use crate::test_utils::{
         add_schema, doggo_fields, doggo_schema, graphql_test_client, populate_and_materialize,
         populate_store_config, test_runner, TestNode,
@@ -237,7 +237,7 @@ mod tests {
                 node.context.schema_provider.clone(),
             )
             .await;
-            let context = HttpServiceContext::new(manager);
+            let context = HttpServiceContext::new(manager, BLOBS_ROUTE.into());
 
             let response = context.schema.execute(publish_request).await;
 
@@ -298,7 +298,7 @@ mod tests {
                 node.context.schema_provider.clone(),
             )
             .await;
-            let context = HttpServiceContext::new(manager);
+            let context = HttpServiceContext::new(manager, BLOBS_ROUTE.into());
 
             let response = context
                 .schema
@@ -326,7 +326,7 @@ mod tests {
                 node.context.schema_provider.clone(),
             )
             .await;
-            let context = HttpServiceContext::new(manager);
+            let context = HttpServiceContext::new(manager, BLOBS_ROUTE.into());
 
             context.schema.execute(publish_request).await;
 
