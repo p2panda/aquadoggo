@@ -2,6 +2,7 @@
 
 use std::fs::{self, File};
 use std::io::Write;
+use std::os::unix::fs::symlink;
 
 use log::{debug, info};
 use p2panda_rs::document::traits::AsDocument;
@@ -10,7 +11,7 @@ use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::DocumentStore;
 
-use crate::config::BLOBS_DIR_NAME;
+use crate::config::{BLOBS_DIR_NAME, BLOBS_SYMLINK_DIR_NAME};
 use crate::context::Context;
 use crate::db::types::StorageDocument;
 use crate::materializer::worker::{TaskError, TaskResult};
@@ -23,8 +24,13 @@ use crate::materializer::TaskInput;
 pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
     debug!("Working on {}", input);
 
+    let mut is_current_view = false;
     let input_view_id = match input {
-        TaskInput::DocumentViewId(view_id) => view_id,
+        TaskInput::SpecificView(view_id) => view_id,
+        TaskInput::CurrentView(view_id) => {
+            is_current_view = true;
+            view_id
+        }
         _ => return Err(TaskError::Critical("Invalid task input".into())),
     };
 
@@ -49,7 +55,10 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
         }
 
         // This task is about an updated blob piece document that may be used in one or more blob documents.
-        SchemaId::BlobPiece(_) => get_related_blobs(&input_view_id, &context).await,
+        SchemaId::BlobPiece(_) => {
+            is_current_view = true;
+            get_related_blobs(&input_view_id, &context).await
+        }
         _ => Err(TaskError::Critical(format!(
             "Unknown system schema id: {}",
             schema
@@ -84,16 +93,28 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
             .join(blob_document.id().as_str());
 
         fs::create_dir_all(&blob_dir).map_err(|err| TaskError::Critical(err.to_string()))?;
-        let blob_file_path = blob_dir.join(blob_document.view_id().to_string());
+        let blob_view_path = blob_dir.join(blob_document.view_id());
 
         // Write the blob to the filesystem.
-        info!("Creating blob at path {blob_file_path:?}");
+        info!("Creating blob at path {blob_view_path:?}");
 
-        let mut file = File::create(&blob_file_path).unwrap();
+        let mut file = File::create(&blob_view_path).unwrap();
         file.write_all(blob_data.as_bytes()).unwrap();
 
-        // @TODO: We need to determine if this view is the current view of the blob and if so
-        // create a symlink from `/document_id -> /document_id/current_view_id`
+        // create a symlink from `/documents/document_id -> /document_id/current_view_id`
+        if is_current_view {
+            info!("Creating symlink from document id to current view");
+
+            let link_path = base_path
+                .join(BLOBS_DIR_NAME)
+                .join(BLOBS_SYMLINK_DIR_NAME)
+                .join(blob_document.id().as_str());
+
+            let _ = fs::remove_file(&link_path);
+
+            symlink(blob_view_path, link_path)
+                .map_err(|err| TaskError::Critical(err.to_string()))?;
+        }
     }
 
     Ok(None)

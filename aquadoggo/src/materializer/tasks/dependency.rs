@@ -138,10 +138,12 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
                 ));
             }
             SchemaId::Blob(_) | SchemaId::BlobPiece(_) => {
-                next_tasks.push(Task::new(
-                    "blob",
-                    TaskInput::DocumentViewId(document_view.id().clone()),
-                ));
+                let input = if is_current_view {
+                    TaskInput::CurrentView(document_view.id().clone())
+                } else {
+                    TaskInput::SpecificView(document_view.id().clone())
+                };
+                next_tasks.push(Task::new("blob", input));
             }
             _ => {}
         }
