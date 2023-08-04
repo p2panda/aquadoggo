@@ -20,7 +20,7 @@ pub async fn schema_task(context: Context, input: TaskInput) -> TaskResult<TaskI
     debug!("Working on {}", input);
 
     let input_view_id = match input {
-        TaskInput::DocumentViewId(view_id) => view_id,
+        TaskInput::SpecificView(view_id) => view_id,
         _ => return Err(TaskError::Critical("Invalid task input".into())),
     };
 
@@ -174,10 +174,10 @@ mod tests {
             .await;
 
             // Run a schema task with each as input
-            let input = TaskInput::DocumentViewId(schema_view_id.clone());
+            let input = TaskInput::SpecificView(schema_view_id.clone());
             assert!(schema_task(node.context.clone(), input).await.is_ok());
 
-            let input = TaskInput::DocumentViewId(field_view_id);
+            let input = TaskInput::SpecificView(field_view_id);
             assert!(schema_task(node.context.clone(), input).await.is_ok());
 
             // The new schema should be available on storage provider.

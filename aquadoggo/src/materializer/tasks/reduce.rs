@@ -51,7 +51,7 @@ pub async fn reduce_task(context: Context, input: TaskInput) -> TaskResult<TaskI
 
     match &input {
         TaskInput::DocumentId(_) => reduce_document(&context, &operations).await,
-        TaskInput::DocumentViewId(view_id) => {
+        TaskInput::SpecificView(view_id) | TaskInput::CurrentView(view_id) => {
             reduce_document_view(&context, &document_id, view_id, &operations).await
         }
     }
@@ -67,7 +67,7 @@ async fn resolve_document_id<S: EntryStore + OperationStore + LogStore + Documen
             // Id is already given, we don't have to do anything
             Ok(Some(document_id.to_owned()))
         }
-        TaskInput::DocumentViewId(document_view_id) => {
+        TaskInput::SpecificView(document_view_id) | TaskInput::CurrentView(document_view_id) => {
             // Document view id is given, let's find out its document id
             trace!("Find document for view with id: {}", document_view_id);
 
@@ -180,7 +180,7 @@ async fn reduce_document_view<O: AsOperation + WithId<OperationId> + WithPublicK
 
     Ok(Some(vec![Task::new(
         "dependency",
-        TaskInput::DocumentViewId(document.view_id().to_owned()),
+        TaskInput::SpecificView(document.view_id().to_owned()),
     )]))
 }
 
@@ -257,7 +257,7 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
             );
             Ok(Some(vec![Task::new(
                 "dependency",
-                TaskInput::DocumentViewId(document.view_id().to_owned()),
+                TaskInput::CurrentView(document.view_id().to_owned()),
             )]))
         }
         Err(err) => {
@@ -468,7 +468,7 @@ mod tests {
             assert!(document.is_none());
 
             // But now if we do request an earlier view is materialised for this document...
-            let input = TaskInput::DocumentViewId(document_view_id.clone());
+            let input = TaskInput::SpecificView(document_view_id.clone());
             assert!(reduce_task(node.context.clone(), input).await.is_ok());
 
             // Then we should now be able to query it and revieve the expected value.
@@ -517,7 +517,7 @@ mod tests {
 
             let document = Document::try_from(&document_operations).unwrap();
 
-            let input = TaskInput::DocumentViewId(document.view_id().clone());
+            let input = TaskInput::SpecificView(document.view_id().clone());
             let tasks = reduce_task(node.context.clone(), input).await.unwrap();
 
             assert!(tasks.is_none());
@@ -565,7 +565,7 @@ mod tests {
             assert!(reduce_task(node.context.clone(), input).await.is_ok());
 
             // Dispatch a reduce task for a document which doesn't exist by it's document view id.
-            let input = TaskInput::DocumentViewId(document_view_id);
+            let input = TaskInput::SpecificView(document_view_id);
             assert!(reduce_task(node.context.clone(), input).await.is_ok());
         });
     }
@@ -600,7 +600,7 @@ mod tests {
 
             // Issue a reduce task for the document view, which should succeed although no new view
             // is inserted
-            let input = TaskInput::DocumentViewId(document.view_id().clone());
+            let input = TaskInput::SpecificView(document.view_id().clone());
             assert!(reduce_task(node.context.clone(), input).await.is_ok());
         })
     }
