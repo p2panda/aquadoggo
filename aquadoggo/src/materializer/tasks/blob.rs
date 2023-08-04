@@ -93,7 +93,7 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
             .join(blob_document.id().as_str());
 
         fs::create_dir_all(&blob_dir).map_err(|err| TaskError::Critical(err.to_string()))?;
-        let blob_view_path = blob_dir.join(blob_document.view_id());
+        let blob_view_path = blob_dir.join(blob_document.view_id().to_string());
 
         // Write the blob to the filesystem.
         info!("Creating blob at path {blob_view_path:?}");
