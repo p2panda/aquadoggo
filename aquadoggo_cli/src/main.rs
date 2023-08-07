@@ -147,7 +147,9 @@ impl TryFrom<Cli> for Configuration {
             None
         };
 
-        config.http_port = cli.http_port.unwrap_or(2020);
+        if let Some(http_port) = cli.http_port {
+            config.http_port = http_port
+        }
 
         config.network = NetworkConfiguration {
             autonat: cli.autonat.unwrap_or(false),
