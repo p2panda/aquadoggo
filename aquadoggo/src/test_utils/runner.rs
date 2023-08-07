@@ -66,8 +66,7 @@ impl TestNodeManager {
         let store = SqlStore::new(pool.clone());
 
         // Construct node config supporting any schema.
-        let mut cfg = Configuration::default();
-        cfg.dynamic_schema = true;
+        let cfg = Configuration::default();
 
         // Construct the actual test node
         let test_node = TestNode {
@@ -103,8 +102,7 @@ pub fn test_runner<F: AsyncTestFn + Send + Sync + 'static>(test: F) {
         let store = SqlStore::new(pool);
 
         // Construct node config supporting any schema.
-        let mut cfg = Configuration::default();
-        cfg.dynamic_schema = true;
+        let cfg = Configuration::default();
 
         // Construct the actual test node
         let node = TestNode {

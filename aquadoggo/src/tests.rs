@@ -43,9 +43,7 @@ async fn e2e() {
     // default options. The only thing we want to do change is the database config. We want an
     // in-memory sqlite database for this test.
 
-    let mut config = Configuration::new_ephemeral();
-    // In this demo we any schema to be automatically supported by the node.
-    config.dynamic_schema = true;
+    let config = Configuration::new_ephemeral();
     let key_pair = KeyPair::new();
 
     // Start the node.
