@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use anyhow::Result;
-use log::{debug, info};
 use p2panda_rs::identity::KeyPair;
-use p2panda_rs::schema::SYSTEM_SCHEMAS;
 
 use crate::bus::ServiceMessage;
 use crate::config::Configuration;
@@ -60,29 +58,13 @@ impl Node {
         // Prepare storage and schema providers using connection pool
         let store = SqlStore::new(pool.clone());
 
-        // If the `dynamic_schema` flag is set then this node will be configured to support any
-        // schema that it discovers. Otherwise it is configured to support only the schema
-        // identified by their id in the `config.toml` file.
-        let schema_provider = if config.dynamic_schema {
-            SchemaProvider::default()
-        } else {
-            SchemaProvider::new_with_supported_schema(config.supported_schema_ids.clone())
-        };
-
-        // Attempt to add any known schema to the schema provider.
-        let mut all_schemas = SYSTEM_SCHEMAS.clone();
+        // Initiate the SchemaProvider with all currently known schema from the store.
+        //
+        // If supported_schema_ids are provided then only schema identified in this list will be
+        // added to the provider and supported by the node.
         let application_schema = store.get_all_schema().await.unwrap();
-        all_schemas.extend(&application_schema);
-
-        for schema in all_schemas {
-            match schema_provider.update(schema.clone()).await {
-                Ok(_) => info!("Schema added to schema provider: {}", schema.id()),
-                Err(_) => debug!(
-                    "Schema not added to schema provider: not supported {}",
-                    schema.id()
-                ),
-            }
-        }
+        let schema_provider =
+            SchemaProvider::new(application_schema, config.supported_schema_ids.clone());
 
         // Create service manager with shared data between services
         let context = Context::new(store, key_pair, config, schema_provider);

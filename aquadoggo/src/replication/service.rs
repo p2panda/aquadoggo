@@ -137,7 +137,19 @@ impl ConnectionManager {
 
     /// Returns set of schema ids we are interested in and support on this node.
     async fn target_set(&self) -> TargetSet {
-        TargetSet::new(&self.schema_provider.supported_schema().await)
+        let supported_schema = match self.schema_provider.supported_schema_ids() {
+            // If supported_schema_ids is set return this list.
+            Some(supported_schema_ids) => supported_schema_ids.to_owned(),
+            // Otherwise return ids for all schema we know about on this node.
+            None => self
+                .schema_provider
+                .all()
+                .await
+                .iter()
+                .map(|schema| schema.id().to_owned())
+                .collect(),
+        };
+        TargetSet::new(&supported_schema)
     }
 
     /// Register a new peer connection on the manager.
@@ -178,7 +190,12 @@ impl ConnectionManager {
         // If this is a SyncRequest message first we check if the contained TargetSet matches our
         // own locally configured TargetSet.
         if let Message::SyncRequest(_, target_set) = message.message() {
-            if target_set != &self.target_set().await {
+            // If this node has been configured with supported_schema_ids then we check the target
+            // set of the requests matches our own, otherwise we skip this step and accept any
+            // target set.
+            if self.schema_provider.supported_schema_ids().is_some()
+                && target_set != &self.target_set().await
+            {
                 // If it doesn't match we signal that an error occurred and return at this point.
                 self.on_replication_error(peer, session_id, ReplicationError::UnsupportedTargetSet)
                     .await;
@@ -382,6 +399,7 @@ mod tests {
     use crate::network::Peer;
     use crate::replication::service::PeerStatus;
     use crate::replication::{Message, Mode, SyncMessage, TargetSet};
+    use crate::schema::SchemaProvider;
     use crate::test_utils::{test_runner, TestNode};
 
     use super::ConnectionManager;
@@ -452,12 +470,9 @@ mod tests {
         test_runner(move |node: TestNode| async move {
             let (tx, mut rx) = broadcast::channel::<ServiceMessage>(10);
 
-            let mut manager = ConnectionManager::new(
-                &node.context.schema_provider,
-                &node.context.store,
-                &tx,
-                local_peer_id,
-            );
+            let schema_provider = SchemaProvider::new(vec![], Some(vec![]));
+            let mut manager =
+                ConnectionManager::new(&schema_provider, &node.context.store, &tx, local_peer_id);
 
             let remote_peer = Peer::new(remote_peer_id, ConnectionId::new_unchecked(1));
 

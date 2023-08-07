@@ -20,7 +20,7 @@ pub struct SchemaProvider {
 
     /// Optional list of schema this provider supports. If set only these schema will be added to the schema
     /// registry once materialized.
-    supported_schema: Option<Vec<SchemaId>>,
+    supported_schema_ids: Option<Vec<SchemaId>>,
 
     /// Sender for broadcast channel informing subscribers about updated schemas.
     tx: Sender<SchemaId>,
@@ -28,7 +28,10 @@ pub struct SchemaProvider {
 
 impl SchemaProvider {
     /// Returns a `SchemaProvider` containing the given application schemas and all system schemas.
-    pub fn new(application_schemas: Vec<Schema>) -> Self {
+    pub fn new(
+        application_schemas: Vec<Schema>,
+        supported_schema_ids: Option<Vec<SchemaId>>,
+    ) -> Self {
         // Collect all system and application schemas.
         let mut schemas = SYSTEM_SCHEMAS.clone();
         schemas.extend(&application_schemas);
@@ -39,41 +42,9 @@ impl SchemaProvider {
             index.insert(schema.id().to_owned(), schema.to_owned());
         }
 
-        let (tx, _) = channel(64);
-
-        debug!(
-            "Initialised schema provider:\n- {}",
-            index
-                .values()
-                .map(|schema| schema.to_string())
-                .collect::<Vec<String>>()
-                .join("\n- ")
-        );
-
-        Self {
-            schemas: Arc::new(Mutex::new(index)),
-            supported_schema: None,
-            tx,
-        }
-    }
-
-    pub fn new_with_supported_schema(supported_schema: Vec<SchemaId>) -> Self {
-        // Validate that the passed known schema are all mentioned in the supported schema list.
-
-        // Collect all system and application schemas.
-        let system_schemas = SYSTEM_SCHEMAS.clone();
-
-        // Filter system schema against passed supported schema and collect into index Hashmap.
-        let index: HashMap<SchemaId, Schema> = system_schemas
-            .into_iter()
-            .filter_map(|schema| {
-                if supported_schema.contains(schema.id()) {
-                    Some((schema.id().to_owned(), schema.to_owned()))
-                } else {
-                    None
-                }
-            })
-            .collect();
+        if let Some(supported_schema_ids) = &supported_schema_ids {
+            index.retain(|schema_id, _| supported_schema_ids.contains(schema_id));
+        };
 
         let (tx, _) = channel(64);
 
@@ -88,7 +59,7 @@ impl SchemaProvider {
 
         Self {
             schemas: Arc::new(Mutex::new(index)),
-            supported_schema: Some(supported_schema),
+            supported_schema_ids,
             tx,
         }
     }
@@ -113,7 +84,7 @@ impl SchemaProvider {
     /// Returns `true` if a schema was updated or it already existed in it's current state, and
     /// `false` if it was inserted.
     pub async fn update(&self, schema: Schema) -> Result<bool> {
-        if let Some(supported_schema) = self.supported_schema.as_ref() {
+        if let Some(supported_schema) = self.supported_schema_ids.as_ref() {
             if !supported_schema.contains(schema.id()) {
                 return Err(anyhow!(
                     "Attempted to add unsupported schema to schema provider"
@@ -143,21 +114,15 @@ impl SchemaProvider {
         Ok(is_update)
     }
 
-    // Return the configured supported schema, or all schema we know about if no restrictions on
-    // schema have been set.
-    pub async fn supported_schema(&self) -> Vec<SchemaId> {
-        match &self.supported_schema {
-            Some(supported_schema) => supported_schema.to_owned(),
-            // If `supported_schema` is None it means there are no limits on schema and so we
-            // support all schema we know about.
-            None => self.schemas.lock().await.keys().cloned().collect(),
-        }
+    // Return the configured supported schema.
+    pub fn supported_schema_ids(&self) -> Option<&Vec<SchemaId>> {
+        self.supported_schema_ids.as_ref()
     }
 }
 
 impl Default for SchemaProvider {
     fn default() -> Self {
-        Self::new(Vec::new())
+        Self::new(Vec::new(), None)
     }
 }
 
@@ -214,7 +179,7 @@ mod test {
             &[("test_field", FieldType::String)],
         )
         .unwrap();
-        let provider = SchemaProvider::new_with_supported_schema(vec![new_schema_id.clone()]);
+        let provider = SchemaProvider::new(vec![], Some(vec![new_schema_id.clone()]));
         let result = provider.update(new_schema).await;
         assert!(result.is_ok());
         assert!(!result.unwrap());
@@ -224,7 +189,7 @@ mod test {
 
     #[tokio::test]
     async fn update_unsupported_schemas() {
-        let provider = SchemaProvider::new_with_supported_schema(vec![]);
+        let provider = SchemaProvider::new(vec![], Some(vec![]));
         let new_schema_id = SchemaId::Application(
             SchemaName::new("test_schema").unwrap(),
             random_document_view_id(),
