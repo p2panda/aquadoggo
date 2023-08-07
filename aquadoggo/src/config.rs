@@ -46,10 +46,9 @@ pub struct Configuration {
     pub worker_pool_size: u32,
 
     /// The ids of schema this node supports.
-    pub supported_schema_ids: Vec<SchemaId>,
-
-    /// If set to true then the node will dynamically support any new schema it replicates.
-    pub dynamic_schema: bool,
+    /// 
+    /// If `None` then the node will support all system schema and any new schema it discovers.
+    pub supported_schema_ids: Option<Vec<SchemaId>>,
 }
 
 impl Default for Configuration {
@@ -61,8 +60,7 @@ impl Default for Configuration {
             http_port: 2020,
             network: NetworkConfiguration::default(),
             worker_pool_size: 16,
-            supported_schema_ids: vec![],
-            dynamic_schema: false,
+            supported_schema_ids: None,
         }
     }
 }
