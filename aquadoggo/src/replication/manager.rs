@@ -466,9 +466,9 @@ where
                 )
                 .await
             {
-                // Duplicate entries arriving at a node, or the case where a schema has not been
-                // materialized yet, we don't want to treat as an error. This is expected
-                // behavior which may occur when concurrent sync sessions are running.
+                // When duplicate entries arrive at a node, or a schema is not materialized yet,
+                // we don't want to treat as an error. This is expected behavior which may occur
+                // when concurrent sync sessions are running.
                 Ok(_) | Err(IngestError::DuplicateEntry(_)) | Err(IngestError::SchemaNotFound) => {
                     Ok(SyncResult {
                         messages: vec![],
