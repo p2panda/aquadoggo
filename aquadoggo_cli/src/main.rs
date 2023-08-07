@@ -180,10 +180,12 @@ async fn main() {
 
     // Read schema ids from config.toml file or
     let supported_schemas = match File::open(CONFIG_FILE_PATH) {
-        Ok(mut file) => schemas::read_schema_ids_from_file(&mut file),
-        Err(_) => Ok(vec![]),
-    }
-    .expect("Reading schema ids from config.toml failed");
+        Ok(mut file) => Some(
+            schemas::read_schema_ids_from_file(&mut file)
+                .expect("Reading schema ids from config.toml failed"),
+        ),
+        Err(_) => None,
+    };
     config.supported_schema_ids = supported_schemas;
 
     // We unwrap the path as we know it has been initialised during the conversion step before
