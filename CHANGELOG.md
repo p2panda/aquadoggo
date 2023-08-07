@@ -83,6 +83,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Do nothing on log insertion conflict [#468](https://github.com/p2panda/aquadoggo/pull/468)
 - Don't update or announce an update in schema provider if a schema with this id exists already [#472](https://github.com/p2panda/aquadoggo/pull/472)
 - Do nothing on document_view insertion conflicts [#474](https://github.com/p2panda/aquadoggo/pull/474)
+- Only over-write `http_port` when cli arg is passed [#489](https://github.com/p2panda/aquadoggo/pull/489)
 
 ### Open Sauce
 
