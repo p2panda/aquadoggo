@@ -46,7 +46,7 @@ pub struct Configuration {
     pub worker_pool_size: u32,
 
     /// The ids of schema this node supports.
-    /// 
+    ///
     /// If `None` then the node will support all system schema and any new schema it discovers.
     pub supported_schema_ids: Option<Vec<SchemaId>>,
 }

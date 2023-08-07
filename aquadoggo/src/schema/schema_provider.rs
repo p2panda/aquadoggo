@@ -43,11 +43,8 @@ impl SchemaProvider {
         }
 
         if let Some(supported_schema_ids) = &supported_schema_ids {
-            index = index
-                .into_iter()
-                .filter(|(schema_id, _)| supported_schema_ids.contains(schema_id))
-                .collect();
-        }
+            index.retain(|schema_id, _| supported_schema_ids.contains(schema_id));
+        };
 
         let (tx, _) = channel(64);
 
