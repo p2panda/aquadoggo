@@ -37,13 +37,13 @@ impl SqlStore {
         // Get the length of the blob.
         let length = match blob.get("length").unwrap() {
             OperationValue::Integer(length) => length,
-            _ => return Err(BlobStoreError::MissingLengthField),
+            _ => panic!(), // We should never hit this as we already validated that this is a blob document.
         };
 
         // Get the number of pieces in the blob.
         let num_pieces = match blob.get("pieces").unwrap() {
             OperationValue::PinnedRelationList(list) => list.len(),
-            _ => return Err(BlobStoreError::MissingPiecesField),
+            _ => panic!(), // We should never hit this as we already validated that this is a blob document.
         };
 
         // Now collect all exiting pieces for the blob.
@@ -85,7 +85,7 @@ impl SqlStore {
                 .expect("Blob piece document without \"data\" field")
             {
                 OperationValue::String(data_str) => blob_data += data_str,
-                _ => return Err(BlobStoreError::MissingPiecesField),
+                _ => panic!(), // We should never hit this as we only queried for blob piece documents.
             }
         }
 
@@ -103,9 +103,10 @@ mod tests {
     use p2panda_rs::document::DocumentId;
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::schema::SchemaId;
-    use p2panda_rs::test_utils::fixtures::key_pair;
+    use p2panda_rs::test_utils::fixtures::{key_pair, random_document_view_id};
     use rstest::rstest;
 
+    use crate::db::errors::BlobStoreError;
     use crate::test_utils::{add_document, test_runner, TestNode};
 
     #[rstest]
@@ -128,7 +129,7 @@ mod tests {
                 &key_pair,
             )
             .await;
-            let blob_piece_view_id = add_document(
+            let blob_view_id = add_document(
                 &mut node,
                 &SchemaId::Blob(1),
                 vec![
@@ -143,12 +144,116 @@ mod tests {
             )
             .await;
 
-            let document_id: DocumentId = blob_piece_view_id.to_string().parse().unwrap();
+            let document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
 
             let blob = node.context.store.get_blob(&document_id).await.unwrap();
 
             assert!(blob.is_some());
             assert_eq!(blob.unwrap(), blob_data)
+        })
+    }
+
+    #[rstest]
+    fn get_blob_errors(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            let blob_data = "Hello, World!".to_string();
+
+            // Publish a blob containing pieces which aren't in the store.
+            let blob_view_id = add_document(
+                &mut node,
+                &SchemaId::Blob(1),
+                vec![
+                    ("length", { blob_data.len() as i64 }.into()),
+                    ("mime_type", "text/plain".into()),
+                    (
+                        "pieces",
+                        vec![random_document_view_id(), random_document_view_id()].into(),
+                    ),
+                ],
+                &key_pair,
+            )
+            .await;
+
+            let blob_document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
+
+            // We get the correct `NoBlobPiecesFound` error.
+            let result = node.context.store.get_blob(&blob_document_id).await;
+            assert!(
+                matches!(result, Err(BlobStoreError::NoBlobPiecesFound)),
+                "{:?}",
+                result
+            );
+
+            // Publish one blob piece.
+            let blob_piece_view_id_1 = add_document(
+                &mut node,
+                &SchemaId::BlobPiece(1),
+                vec![("data", blob_data[..5].into())],
+                &key_pair,
+            )
+            .await;
+
+            // Publish a blob with one piece that is in the store and one that isn't.
+            let blob_view_id = add_document(
+                &mut node,
+                &SchemaId::Blob(1),
+                vec![
+                    ("length", { blob_data.len() as i64 }.into()),
+                    ("mime_type", "text/plain".into()),
+                    (
+                        "pieces",
+                        vec![blob_piece_view_id_1.clone(), random_document_view_id()].into(),
+                    ),
+                ],
+                &key_pair,
+            )
+            .await;
+
+            let blob_document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
+
+            // We should get the correct `MissingBlobPieces` error.
+            let result = node.context.store.get_blob(&blob_document_id).await;
+            assert!(
+                matches!(result, Err(BlobStoreError::MissingPieces)),
+                "{:?}",
+                result
+            );
+
+            // Publish one more blob piece, but it doesn't contain the correct number of bytes.
+            let blob_piece_view_id_2 = add_document(
+                &mut node,
+                &SchemaId::BlobPiece(1),
+                vec![("data", blob_data[9..].into())],
+                &key_pair,
+            )
+            .await;
+
+            // Publish a blob with two pieces that are in the store but they don't add up to the
+            // right byte length.
+            let blob_view_id = add_document(
+                &mut node,
+                &SchemaId::Blob(1),
+                vec![
+                    ("length", { blob_data.len() as i64 }.into()),
+                    ("mime_type", "text/plain".into()),
+                    (
+                        "pieces",
+                        vec![blob_piece_view_id_1, blob_piece_view_id_2].into(),
+                    ),
+                ],
+                &key_pair,
+            )
+            .await;
+
+            let blob_document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
+
+            // We get the correct `IncorrectLength` error.
+            let result = node.context.store.get_blob(&blob_document_id).await;
+            assert!(
+                matches!(result, Err(BlobStoreError::IncorrectLength)),
+                "{:?}",
+                result
+            );
         })
     }
 }
