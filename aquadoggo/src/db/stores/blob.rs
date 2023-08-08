@@ -33,7 +33,7 @@ impl SqlStore {
             }
             None => return Ok(None),
         };
-        document_to_blob_data(&self, blob_document).await
+        document_to_blob_data(self, blob_document).await
     }
 
     /// Get the data for one blob from the store, identified by it's document view id.
@@ -51,7 +51,7 @@ impl SqlStore {
             }
             None => return Ok(None),
         };
-        document_to_blob_data(&self, blob_document).await
+        document_to_blob_data(self, blob_document).await
     }
 }
 
