@@ -365,6 +365,79 @@ impl SqlStore {
             .await
             .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))
     }
+
+    /// Iterate over all views of a document and delete any which:
+    /// - are not the current view
+    /// - _and_ no document field exists in the database which contains a pinned relation to this view
+    async fn prune_document_views(
+        &self,
+        document_id: &DocumentId,
+    ) -> Result<(), DocumentStorageError> {
+        // Start a transaction, any db insertions after this point, and before the `commit()`
+        // will be rolled back in the event of an error.
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+
+        // Collect all views _except_ the current view for this document
+        let document_view_ids: Vec<String> = query_scalar(
+            "
+            SELECT 
+                document_views.document_view_id, 
+                documents.document_view_id as current_view 
+            FROM 
+                document_views
+            LEFT JOIN 
+                documents 
+            ON 
+                current_view = document_views.document_view_id
+            WHERE 
+                document_views.document_id = $1
+            AND 
+                current_view ISNULL
+            ",
+        )
+        .bind(document_id.as_str())
+        .fetch_all(&mut tx)
+        .await
+        .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
+
+        // Iterate over all document views and delete them if no document field exists in the
+        // database which contains a pinned relation to this view.
+        //
+        // Deletes on "document_views" cascade to "document_view_fields" so rows there are also removed
+        // from the database.
+        for document_view_id in document_view_ids {
+            query(
+                "
+                DELETE FROM 
+                    document_views
+                WHERE
+                    document_views.document_view_id = $1
+                AND NOT EXISTS (
+                    SELECT * FROM operation_fields_v1
+                    WHERE
+                        operation_fields_v1.field_type IN ('pinned_relation', 'pinned_relation_list')
+                    AND 
+                        operation_fields_v1.value = $1
+                )
+                ",
+            )
+            .bind(document_view_id)
+            .execute(&mut tx)
+            .await
+            .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
+        }
+
+        // Commit the tx here as no errors occurred.
+        tx.commit()
+            .await
+            .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+
+        Ok(())
+    }
 }
 
 // Helper method for getting rows from the `document_view_fields` table.
