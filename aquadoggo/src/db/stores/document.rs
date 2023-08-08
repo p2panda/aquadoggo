@@ -605,12 +605,13 @@ mod tests {
     use p2panda_rs::document::materialization::build_graph;
     use p2panda_rs::document::traits::AsDocument;
     use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewFields, DocumentViewId};
+    use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::traits::AsOperation;
-    use p2panda_rs::operation::{Operation, OperationId};
+    use p2panda_rs::operation::{Operation, OperationId, OperationValue};
     use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
     use p2panda_rs::test_utils::constants;
     use p2panda_rs::test_utils::fixtures::{
-        operation, random_document_id, random_document_view_id, random_operation_id,
+        key_pair, operation, random_document_id, random_document_view_id, random_operation_id,
     };
     use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
     use p2panda_rs::WithId;
@@ -620,7 +621,8 @@ mod tests {
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
     use crate::test_utils::{
-        build_document, populate_and_materialize, populate_store_config, test_runner, TestNode,
+        add_schema_and_documents, build_document, populate_and_materialize, populate_store_config,
+        test_runner, TestNode,
     };
 
     #[rstest]
@@ -1056,6 +1058,54 @@ mod tests {
                 .context
                 .store
                 .get_document_by_view_id(&current_document_view_id)
+                .await
+                .unwrap();
+            assert!(document.is_some());
+        });
+    }
+
+    #[rstest]
+    fn does_not_prune_pinned_views(
+        #[from(populate_store_config)]
+        #[with(2, 1, 1)]
+        config: PopulateStoreConfig,
+        key_pair: KeyPair,
+    ) {
+        test_runner(|mut node: TestNode| async move {
+            // Populate the store and materialize all documents.
+            let (_, document_ids) = populate_and_materialize(&mut node, &config).await;
+            let document_id = document_ids[0].clone();
+            let first_document_view_id: DocumentViewId = document_id.as_str().parse().unwrap();
+
+            // Reduce a historic view of an existing document.
+            let _ = reduce_task(
+                node.context.clone(),
+                TaskInput::DocumentViewId(first_document_view_id.clone()),
+            )
+            .await;
+
+            // Add a new document to the store which pins the first view of the above document.
+            add_schema_and_documents(
+                &mut node,
+                "new_schema",
+                vec![vec![(
+                    "pin_document",
+                    first_document_view_id.clone().into(),
+                    Some(config.schema.id().to_owned()),
+                )]],
+                &key_pair,
+            )
+            .await;
+
+            // Now prune dangling views for the document.
+            let result = node.context.store.prune_document_views(&document_id).await;
+            assert!(result.is_ok());
+
+            // Get the first document view, it should still be in the store as it was pinned.
+            let document = node
+                .context
+                .store
+                .get_document_by_view_id(&first_document_view_id)
                 .await
                 .unwrap();
             assert!(document.is_some());
