@@ -617,6 +617,8 @@ mod tests {
     use rstest::rstest;
 
     use crate::db::stores::document::DocumentView;
+    use crate::materializer::tasks::reduce_task;
+    use crate::materializer::TaskInput;
     use crate::test_utils::{
         build_document, populate_and_materialize, populate_store_config, test_runner, TestNode,
     };
@@ -999,6 +1001,64 @@ mod tests {
 
             // There should be ten.
             assert_eq!(schema_documents.len(), 10);
+        });
+    }
+
+    #[rstest]
+    fn prunes_document_views(
+        #[from(populate_store_config)]
+        #[with(2, 1, 1)]
+        config: PopulateStoreConfig,
+    ) {
+        test_runner(|mut node: TestNode| async move {
+            // Populate the store and materialize all documents.
+            let (_, document_ids) = populate_and_materialize(&mut node, &config).await;
+            let document_id = document_ids[0].clone();
+            let first_document_view_id: DocumentViewId = document_id.as_str().parse().unwrap();
+
+            // Get the current document from the store.
+            let current_document = node.context.store.get_document(&document_id).await.unwrap();
+
+            // Get the current view id.
+            let current_document_view_id = current_document.unwrap().view_id().to_owned();
+
+            // Reduce a historic view of an existing document.
+            let _ = reduce_task(
+                node.context.clone(),
+                TaskInput::DocumentViewId(first_document_view_id.clone()),
+            )
+            .await;
+
+            // Get that view again to check it's in the db.
+            let document = node
+                .context
+                .store
+                .get_document_by_view_id(&first_document_view_id)
+                .await
+                .unwrap();
+            assert!(document.is_some());
+
+            // Now prune dangling views for the document.
+            let result = node.context.store.prune_document_views(&document_id).await;
+            assert!(result.is_ok());
+
+            // Get the first document view again, it should no longer be there.
+            let document = node
+                .context
+                .store
+                .get_document_by_view_id(&first_document_view_id)
+                .await
+                .unwrap();
+            assert!(document.is_none());
+
+            // Get the current view of the document to make sure that wasn't deleted too.
+            let document = node
+                .context
+                .store
+                .get_document_by_view_id(&current_document_view_id)
+                .await
+                .unwrap();
+            assert!(document.is_some());
         });
     }
 }
