@@ -4,7 +4,6 @@ CREATE TABLE IF NOT EXISTS document_view_fields (
     document_view_id              TEXT            NOT NULL,
     operation_id                  TEXT            NOT NULL,
     name                          TEXT            NOT NULL,
-    FOREIGN KEY(operation_id)     REFERENCES      operations_v1(operation_id),
     FOREIGN KEY(document_view_id) REFERENCES      document_views(document_view_id) ON DELETE CASCADE
 );
 
