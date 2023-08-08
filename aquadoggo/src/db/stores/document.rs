@@ -397,7 +397,7 @@ impl SqlStore {
             WHERE 
                 document_views.document_id = $1
             AND 
-                current_view ISNULL
+                current_view IS NULL
             ",
         )
         .bind(document_id.as_str())
