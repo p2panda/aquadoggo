@@ -369,6 +369,7 @@ impl SqlStore {
     /// Iterate over all views of a document and delete any which:
     /// - are not the current view
     /// - _and_ no document field exists in the database which contains a pinned relation to this view
+    #[allow(dead_code)]
     async fn prune_document_views(
         &self,
         document_id: &DocumentId,
@@ -607,7 +608,7 @@ mod tests {
     use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewFields, DocumentViewId};
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::traits::AsOperation;
-    use p2panda_rs::operation::{Operation, OperationId, OperationValue};
+    use p2panda_rs::operation::{Operation, OperationId};
     use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
     use p2panda_rs::test_utils::constants;
     use p2panda_rs::test_utils::fixtures::{
