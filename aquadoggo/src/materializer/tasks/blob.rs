@@ -51,9 +51,7 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
         }
 
         // This task is about an updated blob piece document that may be used in one or more blob documents.
-        SchemaId::BlobPiece(_) => {
-            get_related_blobs(&input_view_id, &context).await
-        }
+        SchemaId::BlobPiece(_) => get_related_blobs(&input_view_id, &context).await,
         _ => Err(TaskError::Critical(format!(
             "Unknown system schema id: {}",
             schema
