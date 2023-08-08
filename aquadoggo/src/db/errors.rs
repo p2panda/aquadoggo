@@ -47,18 +47,6 @@ pub enum SchemaStoreError {
 pub enum BlobStoreError {
     /// Error when no "pieces" field found on blob document.
     #[error("Missing \"pieces\" field on blob document")]
-    MissingPiecesField,
-
-    /// Error when no "length" field found on blob document.
-    #[error("Missing \"length\" field on blob document")]
-    MissingLengthField,
-
-    /// Error when no "data" field found on blob pieces document.
-    #[error("Missing \"data\" field on blob pieces document")]
-    MissingDataField,
-
-    /// Error when no "pieces" field found on blob document.
-    #[error("Missing \"pieces\" field on blob document")]
     NotBlobDocument,
 
     /// Error when no pieces found for existing blob document.
