@@ -387,17 +387,17 @@ impl SqlStore {
             "
             SELECT 
                 document_views.document_view_id, 
-                documents.document_view_id as current_view 
+                documents.document_view_id
             FROM 
                 document_views
             LEFT JOIN 
                 documents 
             ON 
-                current_view = document_views.document_view_id
+                documents.document_view_id = document_views.document_view_id
             WHERE 
                 document_views.document_id = $1
             AND 
-                current_view IS NULL
+                documents.document_view_id IS NULL
             ",
         )
         .bind(document_id.as_str())
