@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Add method to store for pruning document views [#491](https://github.com/p2panda/aquadoggo/pull/491)
 - Introduce `BlobStore` [#484](https://github.com/p2panda/aquadoggo/pull/484)
 
 ## [0.5.0]
