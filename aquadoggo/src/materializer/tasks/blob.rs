@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// use std::fs::{self, File};
-// use std::io::Write;
-// use std::os::unix::fs::symlink;
+use std::fs::{self, File};
+use std::io::Write;
+use std::os::unix::fs::symlink;
 
 use log::{debug, info};
 use p2panda_rs::document::traits::AsDocument;
@@ -11,7 +11,7 @@ use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
 
-// use crate::config::{BLOBS_DIR_NAME, BLOBS_SYMLINK_DIR_NAME};
+use crate::config::{BLOBS_DIR_NAME, BLOBS_SYMLINK_DIR_NAME};
 use crate::context::Context;
 use crate::db::types::StorageDocument;
 use crate::db::SqlStore;
@@ -68,7 +68,7 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
     // Materialize all updated blobs to the filesystem.
     for blob_document in updated_blobs.iter() {
         // Get the raw blob data.
-        let _blob_data = context
+        let blob_data = context
             .store
             .get_blob_by_view_id(blob_document.view_id())
             .await
@@ -76,39 +76,37 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
             .unwrap();
 
         // Compose, and when needed create, the path for the blob file.
-        let _base_path = match &context.config.base_path {
+        let base_path = match &context.config.base_path {
             Some(base_path) => base_path,
             None => return Err(TaskError::Critical("No base path configured".to_string())),
         };
 
-        // @TODO: uncomment when merged with dependent branches
-        // let blob_dir = base_path
-        //     .join(BLOBS_DIR_NAME)
-        //     .join(blob_document.id().as_str());
-        //
-        // fs::create_dir_all(&blob_dir).map_err(|err| TaskError::Critical(err.to_string()))?;
-        // let blob_view_path = blob_dir.join(blob_document.view_id().to_string());
-        //
-        // // Write the blob to the filesystem.
-        // info!("Creating blob at path {blob_view_path:?}");
-        //
-        // let mut file = File::create(&blob_view_path).unwrap();
-        // file.write_all(blob_data.as_bytes()).unwrap();
+        let blob_dir = base_path
+            .join(BLOBS_DIR_NAME)
+            .join(blob_document.id().as_str());
+        
+        fs::create_dir_all(&blob_dir).map_err(|err| TaskError::Critical(err.to_string()))?;
+        let blob_view_path = blob_dir.join(blob_document.view_id().to_string());
+        
+        // Write the blob to the filesystem.
+        info!("Creating blob at path {blob_view_path:?}");
+        
+        let mut file = File::create(&blob_view_path).unwrap();
+        file.write_all(blob_data.as_bytes()).unwrap();
 
-        // create a symlink from `/documents/document_id -> /document_id/current_view_id`
+        // create a symlink from `../documents/<document_id>` -> `../<document_id>/<current_view_id>`
         if is_current_view(&context.store, blob_document.view_id()).await? {
             info!("Creating symlink from document id to current view");
 
-            // @TODO: uncomment when merged with dependent branches
-            // let link_path = base_path
-            //     .join(BLOBS_DIR_NAME)
-            //     .join(BLOBS_SYMLINK_DIR_NAME)
-            //     .join(blob_document.id().as_str());
-            //
-            // let _ = fs::remove_file(&link_path);
-            //
-            // symlink(blob_view_path, link_path)
-            //     .map_err(|err| TaskError::Critical(err.to_string()))?;
+            let link_path = base_path
+                .join(BLOBS_DIR_NAME)
+                .join(BLOBS_SYMLINK_DIR_NAME)
+                .join(blob_document.id().as_str());
+            
+            let _ = fs::remove_file(&link_path);
+            
+            symlink(blob_view_path, link_path)
+                .map_err(|err| TaskError::Critical(err.to_string()))?;
         }
     }
 
