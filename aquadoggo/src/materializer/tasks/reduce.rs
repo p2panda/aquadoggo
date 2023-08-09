@@ -231,6 +231,8 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
                 .await
                 .map_err(|err| TaskError::Critical(err.to_string()))?;
 
+            let mut tasks = vec![];
+
             // If the document was deleted, then we return nothing
             if document.is_deleted() {
                 debug!(
@@ -238,7 +240,6 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
                     document.display(),
                     document.view_id().display()
                 );
-                return Ok(None);
             }
 
             if document.is_edited() {
@@ -251,14 +252,29 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
                 debug!("Created {}", document.display());
             };
 
+            if document.is_deleted() || document.is_edited() {
+                debug!(
+                    "Dispatch prune task for document with id: {}",
+                    document.id()
+                );
+
+                tasks.push(Task::new(
+                    "prune",
+                    TaskInput::DocumentId(document.id().to_owned()),
+                ))
+            }
+
             debug!(
                 "Dispatch dependency task for view with id: {}",
                 document.view_id()
             );
-            Ok(Some(vec![Task::new(
+
+            tasks.push(Task::new(
                 "dependency",
                 TaskInput::DocumentViewId(document.view_id().to_owned()),
-            )]))
+            ));
+
+            Ok(Some(tasks))
         }
         Err(err) => {
             // There is not enough operations yet to materialise this view. Maybe next time!
