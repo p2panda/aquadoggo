@@ -16,6 +16,9 @@ const DATA_DIR_NAME: &str = "aquadoggo";
 /// Filename of default sqlite database.
 const DEFAULT_SQLITE_NAME: &str = "aquadoggo-node.sqlite3";
 
+/// Blobs directory
+pub const BLOBS_DIR_NAME: &str = "blobs";
+
 /// Configuration object holding all important variables throughout the application.
 ///
 /// Each configuration also assures that a data directory exists on the host machine where database
@@ -78,7 +81,7 @@ impl Configuration {
         });
 
         // Create folders when they don't exist yet
-        fs::create_dir_all(&base_path)?;
+        fs::create_dir_all(base_path.join(BLOBS_DIR_NAME))?;
 
         Ok(base_path)
     }
@@ -113,8 +116,12 @@ impl Configuration {
 impl Configuration {
     /// Returns a new configuration object for a node which stores all data temporarily in memory.
     pub fn new_ephemeral() -> Self {
+        let tmp_dir = tempfile::TempDir::new().unwrap();
+        let tmp_path = tmp_dir.path().to_owned();
+
         Configuration {
             database_url: Some("sqlite::memory:".to_string()),
+            base_path: Some(tmp_path),
             ..Default::default()
         }
     }

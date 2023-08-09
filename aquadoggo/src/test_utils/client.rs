@@ -13,7 +13,7 @@ use tower::make::Shared;
 use tower_service::Service;
 
 use crate::graphql::GraphQLSchemaManager;
-use crate::http::{build_server, HttpServiceContext};
+use crate::http::{build_server, HttpServiceContext, BLOBS_ROUTE};
 use crate::test_utils::TestNode;
 
 /// GraphQL client which can be used for querying a node in tests.
@@ -74,7 +74,7 @@ pub async fn graphql_test_client(node: &TestNode) -> TestClient {
         node.context.schema_provider.clone(),
     )
     .await;
-    let http_context = HttpServiceContext::new(manager);
+    let http_context = HttpServiceContext::new(manager, BLOBS_ROUTE.into());
     TestClient::new(build_server(http_context))
 }
 
