@@ -8,7 +8,7 @@ use tokio::task;
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
 use crate::manager::{ServiceReadySender, Shutdown};
-use crate::materializer::tasks::{dependency_task, reduce_task, schema_task, prune_task};
+use crate::materializer::tasks::{dependency_task, prune_task, reduce_task, schema_task};
 use crate::materializer::worker::{Factory, Task, TaskStatus};
 use crate::materializer::TaskInput;
 
