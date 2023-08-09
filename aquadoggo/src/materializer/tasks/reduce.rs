@@ -518,7 +518,7 @@ mod tests {
             for document_id in &document_ids {
                 let input = TaskInput::DocumentId(document_id.clone());
                 let tasks = reduce_task(node.context.clone(), input).await.unwrap();
-                assert!(tasks.is_none());
+                assert_eq!(tasks.unwrap().len(), 1);
             }
 
             for document_id in &document_ids {
@@ -545,16 +545,16 @@ mod tests {
     #[rstest]
     #[case(
         populate_store_config(3, 1, 1, false, doggo_schema(), doggo_fields(), doggo_fields()),
-        true
+        vec!["prune".to_string(), "dependency".to_string()]
     )]
     // This document is deleted, it shouldn't spawn a dependency task.
     #[case(
         populate_store_config(3, 1, 1, true, doggo_schema(), doggo_fields(), doggo_fields()),
-        false
+        vec!["prune".to_string()]
     )]
-    fn returns_dependency_task_inputs(
+    fn returns_correct_dependency_and_prune_tasks(
         #[case] config: PopulateStoreConfig,
-        #[case] is_next_task: bool,
+        #[case] expected_worker_names: Vec<String>,
     ) {
         test_runner(move |node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any
@@ -565,9 +565,16 @@ mod tests {
                 .expect("There should be at least one document id");
 
             let input = TaskInput::DocumentId(document_id.clone());
-            let next_task_inputs = reduce_task(node.context.clone(), input).await.unwrap();
+            let next_tasks = reduce_task(node.context.clone(), input)
+                .await
+                .expect("Ok result")
+                .expect("Some tasks returned");
 
-            assert_eq!(next_task_inputs.is_some(), is_next_task);
+            assert_eq!(next_tasks.len(), expected_worker_names.len());
+
+            for (index, worker_name) in expected_worker_names.iter().enumerate() {
+                assert_eq!(next_tasks[index].worker_name(), worker_name);
+            }
         });
     }
 
