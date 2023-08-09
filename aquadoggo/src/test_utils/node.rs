@@ -97,7 +97,7 @@ pub async fn populate_and_materialize(
         // Create reduce task input.
         let input = TaskInput::DocumentId(document_id);
         // Run reduce task and collect returned dependency tasks.
-        let mut next_tasks = reduce_task(node.context.clone(), input.clone())
+        let next_tasks = reduce_task(node.context.clone(), input.clone())
             .await
             .expect("Reduce document");
 
