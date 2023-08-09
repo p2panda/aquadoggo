@@ -30,6 +30,7 @@
 //! retained, we use a system of "pinned relations" to identify and materialise only views we
 //! explicitly wish to keep.
 use async_trait::async_trait;
+use log::debug;
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::schema::SchemaId;
@@ -372,12 +373,12 @@ impl SqlStore {
     pub async fn prune_document_views(
         &self,
         document_id: &DocumentId,
-    ) -> Result<Vec<DocumentViewId>, DocumentStorageError> {
+    ) -> Result<Vec<DocumentId>, DocumentStorageError> {
         // Start a transaction, any db insertions after this point, and before the `commit()`
         // will be rolled back in the event of an error.
 
         // Collect all views _except_ the current view for this document
-        let document_view_ids: Vec<String> = query_scalar(
+        let historic_document_view_ids: Vec<String> = query_scalar(
             "
             SELECT 
                 document_views.document_view_id, 
@@ -404,8 +405,43 @@ impl SqlStore {
         //
         // Deletes on "document_views" cascade to "document_view_fields" so rows there are also removed
         // from the database.
-        for document_view_id in &document_view_ids {
-            query(
+        let mut effected_child_relations = vec![];
+
+        for document_view_id in &historic_document_view_ids {
+            // Before attempting to delete this view we need to fetch the ids of any child documents
+            // which would be effected by this view being deleted. This is so if the deletion goes
+            // ahead, we can return these values as they are useful for performing further garbage
+            // collection tasks.
+            let effected_children_ids: Vec<String> = query_scalar(
+                "
+                SELECT DISTINCT
+                    document_views.document_id
+                FROM
+                    document_views
+                LEFT JOIN 
+                    document_view_fields
+                ON
+                    document_view_fields.document_view_id = document_views.document_view_id
+                LEFT JOIN 
+                    operation_fields_v1
+                ON
+                    document_view_fields.operation_id = operation_fields_v1.operation_id
+                AND
+                    document_view_fields.name = operation_fields_v1.name
+                WHERE
+                    operation_fields_v1.field_type IN ('pinned_relation', 'pinned_relation_list')
+                AND 
+                    document_view_fields.document_view_id = $1
+                ",
+            )
+            .bind(document_view_id.to_string())
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
+
+            // Attempt to delete the view. If it is pinned from an existing view the deletion will
+            // not go ahead.
+            let result = query(
                 "
                 DELETE FROM 
                     document_views
@@ -424,7 +460,51 @@ impl SqlStore {
             .execute(&self.pool)
             .await
             .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
+
+            // If any rows were affected (the deletion went ahead) then extend the
+            // uneffected_child_relations list with the previously collected ids.
+            if result.rows_affected() > 0 {
+                debug!("Deleted view: {}", document_view_id);
+                effected_child_relations.extend(effected_children_ids);
+            } else {
+                debug!("Did not delete view: {}", document_view_id);
+            }
         }
+
+        let effected_child_relations: Vec<DocumentId> = effected_child_relations
+            .iter()
+            .map(|view_id_string| view_id_string.parse().unwrap())
+            .collect();
+
+        Ok(effected_child_relations)
+    }
+
+    pub async fn get_pinned_children_view_ids(
+        &self,
+        document_view_id: &DocumentViewId,
+    ) -> Result<Vec<DocumentViewId>, DocumentStorageError> {
+        let document_view_ids: Vec<String> = query_scalar(
+            "
+            SELECT DISTINCT
+                operation_fields_v1.value 
+            FROM
+                operation_fields_v1
+            LEFT JOIN 
+                document_view_fields
+            ON
+                document_view_fields.operation_id = operation_fields_v1.operation_id
+            AND
+                document_view_fields.name = operation_fields_v1.name
+            WHERE
+                operation_fields_v1.field_type IN ('pinned_relation', 'pinned_relation_list')
+            AND 
+                document_view_fields.document_view_id = $1
+            ",
+        )
+        .bind(document_view_id.to_string())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
 
         let document_view_ids: Vec<DocumentViewId> = document_view_ids
             .iter()

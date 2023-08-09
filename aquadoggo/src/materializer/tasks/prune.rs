@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use log::debug;
-use p2panda_rs::storage_provider::traits::OperationStore;
+use p2panda_rs::Human;
 
 use crate::context::Context;
 use crate::materializer::worker::{TaskError, TaskResult};
@@ -15,33 +15,15 @@ pub async fn prune_task(context: Context, input: TaskInput) -> TaskResult<TaskIn
             // This task is concerned with a document which has been reduced and may now have
             // dangling views. We want to check for this and delete any views which are no longer
             // needed.
-            let pruned_document_view_ids = context
+            debug!("Prune document views for document: {}", id.display());
+            let effected_child_relations = context
                 .store
                 .prune_document_views(&id)
                 .await
                 .map_err(|err| TaskError::Critical(err.to_string()))?;
 
-            debug!("Removed document views: {pruned_document_view_ids:#?}");
-
-            // Any deleted views may have themselves been pinning other views which are now
-            // dangling. To account for this we issue more prune tasks for the documents of these views.
-            let mut prune_next_documents = vec![];
-            for document_view_id in pruned_document_view_ids {
-                let document_id = context
-                    .store
-                    .get_document_id_by_operation_id(document_view_id.graph_tips().first().unwrap())
-                    .await
-                    .map_err(|err| TaskError::Critical(err.to_string()))?;
-                if let Some(document_id) = document_id {
-                    prune_next_documents.push(document_id);
-                };
-            }
-
-            // De-duplicate as there is no point issue two tasks for the same document id.
-            prune_next_documents.dedup();
-
             // Compose next tasks.
-            let next_tasks: Vec<Task<TaskInput>> = prune_next_documents
+            let next_tasks: Vec<Task<TaskInput>> = effected_child_relations
                 .iter()
                 .map(|document_id| {
                     debug!("Issue prune task for document: {document_id:#?}");
