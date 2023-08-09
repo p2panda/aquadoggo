@@ -473,7 +473,7 @@ impl SqlStore {
 
         let effected_child_relations: Vec<DocumentId> = effected_child_relations
             .iter()
-            .map(|view_id_string| view_id_string.parse().unwrap())
+            .map(|document_id| document_id.parse().unwrap())
             .collect();
 
         Ok(effected_child_relations)
