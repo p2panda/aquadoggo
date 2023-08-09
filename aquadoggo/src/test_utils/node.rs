@@ -97,13 +97,18 @@ pub async fn populate_and_materialize(
         // Create reduce task input.
         let input = TaskInput::DocumentId(document_id);
         // Run reduce task and collect returned dependency tasks.
-        let dependency_tasks = reduce_task(node.context.clone(), input.clone())
+        let mut next_tasks = reduce_task(node.context.clone(), input.clone())
             .await
             .expect("Reduce document");
 
         // Run dependency tasks.
-        if let Some(tasks) = dependency_tasks {
-            for task in tasks {
+        if let Some(tasks) = next_tasks {
+            // We only want to issue dependency tasks.
+            let dependency_tasks = tasks
+                .iter()
+                .filter(|task| task.worker_name() == "depenedency");
+
+            for task in dependency_tasks {
                 dependency_task(node.context.clone(), task.input().to_owned())
                     .await
                     .expect("Run dependency task");
@@ -145,13 +150,18 @@ pub async fn add_document(
         .expect("Publish CREATE operation");
 
     let input = TaskInput::DocumentId(DocumentId::from(entry_signed.hash()));
-    let dependency_tasks = reduce_task(node.context.clone(), input.clone())
+    let next_tasks = reduce_task(node.context.clone(), input.clone())
         .await
         .expect("Reduce document");
 
     // Run dependency tasks
-    if let Some(tasks) = dependency_tasks {
-        for task in tasks {
+    if let Some(tasks) = next_tasks {
+        // We only want to issue dependency tasks.
+        let dependency_tasks = tasks
+            .iter()
+            .filter(|task| task.worker_name() == "depenedency");
+
+        for task in dependency_tasks {
             dependency_task(node.context.clone(), task.input().to_owned())
                 .await
                 .expect("Run dependency task");
