@@ -45,7 +45,7 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
                 .store
                 .get_document_by_view_id(&input_view_id)
                 .await
-                .map_err(|err| TaskError::Critical(err.to_string()))?
+                .map_err(|err| TaskError::Failure(err.to_string()))?
                 .unwrap();
             Ok(vec![document])
         }
@@ -72,7 +72,9 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
             .store
             .get_blob_by_view_id(blob_document.view_id())
             .await
-            .map_err(|err| TaskError::Critical(err.to_string()))?
+            // We don't raise a critical error here, as it is possible that this method returns an
+            // error.
+            .map_err(|err| TaskError::Failure(err.to_string()))?
             .unwrap();
 
         // Compose, and when needed create, the path for the blob file.
@@ -143,7 +145,7 @@ async fn get_related_blobs(
                 continue;
             }
         } else {
-            // Abort if there are blobs in the store that don't match the blob schema.
+            // It is a critical if there are blobs in the store that don't match the blob schema.
             Err(TaskError::Critical(
                 "Blob operation does not have a 'pieces' operation field".into(),
             ))?
