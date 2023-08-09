@@ -86,13 +86,13 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
         let blob_dir = base_path
             .join(BLOBS_DIR_NAME)
             .join(blob_document.id().as_str());
-        
+
         fs::create_dir_all(&blob_dir).map_err(|err| TaskError::Critical(err.to_string()))?;
         let blob_view_path = blob_dir.join(blob_document.view_id().to_string());
-        
+
         // Write the blob to the filesystem.
         info!("Creating blob at path {blob_view_path:?}");
-        
+
         let mut file = File::create(&blob_view_path).unwrap();
         file.write_all(blob_data.as_bytes()).unwrap();
 
@@ -104,9 +104,9 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
                 .join(BLOBS_DIR_NAME)
                 .join(BLOBS_SYMLINK_DIR_NAME)
                 .join(blob_document.id().as_str());
-            
+
             let _ = fs::remove_file(&link_path);
-            
+
             symlink(blob_view_path, link_path)
                 .map_err(|err| TaskError::Critical(err.to_string()))?;
         }
