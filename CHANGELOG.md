@@ -31,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Only replicate and materialize configured "supported schema" [#569](https://github.com/p2panda/aquadoggo/pull/469)
 - Parse supported schema ids from `config.toml` [#473](https://github.com/p2panda/aquadoggo/pull/473)
 - Serve static files from `blobs` directory [#480](https://github.com/p2panda/aquadoggo/pull/480)
+- Add method to store for pruning document views [#491](https://github.com/p2panda/aquadoggo/pull/491)
+- Introduce `BlobStore` [#484](https://github.com/p2panda/aquadoggo/pull/484)
 
 ### Changed
 
@@ -54,6 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remove `quick_commit` from materialization service [#450](https://github.com/p2panda/aquadoggo/pull/450)
 - Reduce `warn` logging in network and replication services [#467](https://github.com/p2panda/aquadoggo/pull/467)
 - `mdns` and `autonat` disabled by default [#475](https://github.com/p2panda/aquadoggo/pull/475)
+- By default, nodes support _any_ schema [#487](https://github.com/p2panda/aquadoggo/pull/487)
 
 ### Fixed
 
@@ -84,6 +87,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Do nothing on log insertion conflict [#468](https://github.com/p2panda/aquadoggo/pull/468)
 - Don't update or announce an update in schema provider if a schema with this id exists already [#472](https://github.com/p2panda/aquadoggo/pull/472)
 - Do nothing on document_view insertion conflicts [#474](https://github.com/p2panda/aquadoggo/pull/474)
+- Only over-write `http_port` when cli arg is passed [#489](https://github.com/p2panda/aquadoggo/pull/489)
 
 ### Open Sauce
 

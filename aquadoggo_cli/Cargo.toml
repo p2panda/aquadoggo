@@ -25,7 +25,7 @@ clap = { version = "4.1.8", features = ["derive"] }
 env_logger = "0.9.0"
 hex = "0.4.3"
 libp2p = "0.52.0"
-p2panda-rs = "0.7.1"
+p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "17f4fcb1dcf7cebabd6d9b5a824399e9384d96b2" }
 tokio = { version = "1.28.2", features = ["full"] }
 toml = "0.7.6"
 
