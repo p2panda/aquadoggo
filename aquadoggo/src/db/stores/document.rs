@@ -369,18 +369,12 @@ impl SqlStore {
     /// Iterate over all views of a document and delete any which:
     /// - are not the current view
     /// - _and_ no document field exists in the database which contains a pinned relation to this view
-    #[allow(dead_code)]
-    async fn prune_document_views(
+    pub async fn prune_document_views(
         &self,
         document_id: &DocumentId,
-    ) -> Result<(), DocumentStorageError> {
+    ) -> Result<Vec<DocumentViewId>, DocumentStorageError> {
         // Start a transaction, any db insertions after this point, and before the `commit()`
         // will be rolled back in the event of an error.
-        let mut tx = self
-            .pool
-            .begin()
-            .await
-            .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
 
         // Collect all views _except_ the current view for this document
         let document_view_ids: Vec<String> = query_scalar(
@@ -401,7 +395,7 @@ impl SqlStore {
             ",
         )
         .bind(document_id.as_str())
-        .fetch_all(&mut tx)
+        .fetch_all(&self.pool)
         .await
         .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
 
@@ -410,7 +404,7 @@ impl SqlStore {
         //
         // Deletes on "document_views" cascade to "document_view_fields" so rows there are also removed
         // from the database.
-        for document_view_id in document_view_ids {
+        for document_view_id in &document_view_ids {
             query(
                 "
                 DELETE FROM 
@@ -427,17 +421,17 @@ impl SqlStore {
                 ",
             )
             .bind(document_view_id)
-            .execute(&mut tx)
+            .execute(&self.pool)
             .await
             .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
         }
 
-        // Commit the tx here as no errors occurred.
-        tx.commit()
-            .await
-            .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+        let document_view_ids: Vec<DocumentViewId> = document_view_ids
+            .iter()
+            .map(|view_id_string| view_id_string.parse().unwrap())
+            .collect();
 
-        Ok(())
+        Ok(document_view_ids)
     }
 }
 
