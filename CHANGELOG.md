@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Introduce peer sampling to the replication service [#463](https://github.com/p2panda/aquadoggo/pull/463)
 - Only replicate and materialize configured "supported schema" [#569](https://github.com/p2panda/aquadoggo/pull/469)
 - Parse supported schema ids from `config.toml` [#473](https://github.com/p2panda/aquadoggo/pull/473)
+- Add method to store for pruning document views [#491](https://github.com/p2panda/aquadoggo/pull/491)
 - Introduce `BlobStore` [#484](https://github.com/p2panda/aquadoggo/pull/484)
 
 ### Changed
