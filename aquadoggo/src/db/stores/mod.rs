@@ -2,6 +2,7 @@
 
 //! Implementations of all `p2panda-rs` defined storage provider traits and additionally
 //! `aquadoggo` specific interfaces.
+mod blob;
 pub mod document;
 mod entry;
 mod log;
