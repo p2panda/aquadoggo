@@ -22,6 +22,9 @@ pub async fn prune_task(context: Context, input: TaskInput) -> TaskResult<TaskIn
                 .map_err(|err| TaskError::Critical(err.to_string()))?;
 
             debug!("Removed document views: {pruned_document_view_ids:#?}");
+
+            // Any deleted views may have themselves been pinning other views which are now
+            // dangling. To account for this we issue more prune tasks for the documents of these views.
             let mut prune_next_documents = vec![];
             for document_view_id in pruned_document_view_ids {
                 let document_id = context
@@ -34,7 +37,10 @@ pub async fn prune_task(context: Context, input: TaskInput) -> TaskResult<TaskIn
                 };
             }
 
+            // De-duplicate as there is no point issue two tasks for the same document id.
             prune_next_documents.dedup();
+
+            // Compose next tasks.
             let next_tasks: Vec<Task<TaskInput>> = prune_next_documents
                 .iter()
                 .map(|document_id| {
@@ -49,6 +55,6 @@ pub async fn prune_task(context: Context, input: TaskInput) -> TaskResult<TaskIn
                 Ok(Some(next_tasks))
             }
         }
-        _ => return Err(TaskError::Critical("Invalid task input".into())),
+        _ => Err(TaskError::Critical("Invalid task input".into())),
     }
 }
