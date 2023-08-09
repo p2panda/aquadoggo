@@ -12,17 +12,18 @@ pub async fn prune_task(context: Context, input: TaskInput) -> TaskResult<TaskIn
 
     match input {
         TaskInput::DocumentId(id) => {
-            // This task is concerned with a document which has been reduced and may now have
-            // dangling views. We want to check for this and delete any views which are no longer
-            // needed.
+            // This task is concerned with a document which may now have dangling views. We want
+            // to check for this and delete any views which are no longer needed.
             debug!("Prune document views for document: {}", id.display());
+
+            // This method returns the document ids of child relations of any views which were deleted.
             let effected_child_relations = context
                 .store
                 .prune_document_views(&id)
                 .await
                 .map_err(|err| TaskError::Critical(err.to_string()))?;
 
-            // Compose next tasks.
+            // We compose some more prune tasks based on the effected documents returned above.
             let next_tasks: Vec<Task<TaskInput>> = effected_child_relations
                 .iter()
                 .map(|document_id| {
