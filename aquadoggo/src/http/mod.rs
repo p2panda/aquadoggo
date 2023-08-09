@@ -5,4 +5,4 @@ mod context;
 mod service;
 
 pub use context::HttpServiceContext;
-pub use service::{build_server, http_service};
+pub use service::{build_server, http_service, BLOBS_ROUTE};

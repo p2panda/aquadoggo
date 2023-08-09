@@ -4,6 +4,15 @@ use p2panda_rs::schema::SchemaId;
 
 use crate::network::NetworkConfiguration;
 
+/// Data directory name.
+const DATA_DIR_NAME: &str = "aquadoggo";
+
+/// Filename of default sqlite database.
+const DEFAULT_SQLITE_NAME: &str = "aquadoggo-node.sqlite3";
+
+/// Blobs directory
+pub const BLOBS_DIR_NAME: &str = "blobs";
+
 /// Configuration object holding all important variables throughout the application.
 #[derive(Debug, Clone)]
 pub struct Configuration {
