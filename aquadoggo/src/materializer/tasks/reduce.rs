@@ -264,15 +264,17 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
                 ))
             }
 
-            debug!(
-                "Dispatch dependency task for view with id: {}",
-                document.view_id()
-            );
+            if !document.is_deleted() {
+                debug!(
+                    "Dispatch dependency task for view with id: {}",
+                    document.view_id()
+                );
 
-            tasks.push(Task::new(
-                "dependency",
-                TaskInput::DocumentViewId(document.view_id().to_owned()),
-            ));
+                tasks.push(Task::new(
+                    "dependency",
+                    TaskInput::DocumentViewId(document.view_id().to_owned()),
+                ));
+            }
 
             Ok(Some(tasks))
         }
