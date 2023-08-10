@@ -706,9 +706,7 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::{
         key_pair, operation, random_document_id, random_document_view_id, random_operation_id,
     };
-    use p2panda_rs::test_utils::memory_store::helpers::{
-        populate_store, PopulateStoreConfig,
-    };
+    use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
     use p2panda_rs::WithId;
     use rstest::rstest;
 
@@ -1275,12 +1273,12 @@ mod tests {
             assert!(historic_document_view.is_some());
 
             // Create another document, which has a pinned relation to the parent document created
-            // above. Now the relation graph looks like this 
+            // above. Now the relation graph looks like this
             //
             // GrandParent --> Parent --> Child1
-            //                      \                     
+            //                      \
             //                        --> Child2
-            //  
+            //
             let (schema_for_grand_parent, grand_parent_document_view_ids) =
                 add_schema_and_documents(
                     &mut node,
