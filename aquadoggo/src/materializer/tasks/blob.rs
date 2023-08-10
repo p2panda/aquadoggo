@@ -174,3 +174,101 @@ async fn is_current_view(
 
     Ok(current_blob_document.view_id() == document_view_id)
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use p2panda_rs::document::DocumentId;
+    use p2panda_rs::identity::KeyPair;
+    use p2panda_rs::schema::SchemaId;
+    use p2panda_rs::test_utils::fixtures::key_pair;
+    use rstest::rstest;
+
+    use crate::config::{BLOBS_DIR_NAME, BLOBS_SYMLINK_DIR_NAME};
+    use crate::materializer::tasks::blob_task;
+    use crate::materializer::TaskInput;
+    use crate::test_utils::{add_document, test_runner, TestNode};
+
+    #[rstest]
+    fn materializes_blob_to_filesystem(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            let blob_data = "Hello, World!".to_string();
+
+            // Publish blob pieces and blob.
+            let blob_piece_view_id_1 = add_document(
+                &mut node,
+                &SchemaId::BlobPiece(1),
+                vec![("data", blob_data[..5].into())],
+                &key_pair,
+            )
+            .await;
+
+            let blob_piece_view_id_2 = add_document(
+                &mut node,
+                &SchemaId::BlobPiece(1),
+                vec![("data", blob_data[5..].into())],
+                &key_pair,
+            )
+            .await;
+
+            // Publish blob.
+            let blob_view_id = add_document(
+                &mut node,
+                &SchemaId::Blob(1),
+                vec![
+                    ("length", { blob_data.len() as i64 }.into()),
+                    ("mime_type", "text/plain".into()),
+                    (
+                        "pieces",
+                        vec![blob_piece_view_id_1, blob_piece_view_id_2].into(),
+                    ),
+                ],
+                &key_pair,
+            )
+            .await;
+
+            // Run blob task.
+            let result = blob_task(
+                node.context.clone(),
+                TaskInput::DocumentViewId(blob_view_id.clone()),
+            )
+            .await;
+
+            // It shouldn't fail.
+            assert!(result.is_ok(), "{:#?}", result);
+            // It should return no extra tasks.
+            assert!(result.unwrap().is_none());
+
+            // Convert blob view id to document id.
+            let document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
+
+            // Construct the expected path to the blob view file. 
+            let base_path = node.context.config.base_path.as_ref().unwrap();
+            let blob_path = base_path
+                .join(BLOBS_DIR_NAME)
+                .join(document_id.as_str())
+                .join(blob_view_id.to_string());
+
+            // Read from this file
+            let retrieved_blob_data = fs::read_to_string(blob_path);
+
+            // It should match the complete published blob data.
+            assert!(retrieved_blob_data.is_ok(), "{:?}", retrieved_blob_data);
+            assert_eq!(blob_data, retrieved_blob_data.unwrap());
+
+            // Construct the expected path to the blob symlink file location.
+            let blob_path = base_path
+                .join(BLOBS_DIR_NAME)
+                .join(BLOBS_SYMLINK_DIR_NAME)
+                .join(document_id.as_str());
+
+            // Read from this file
+            let retrieved_blob_data = fs::read_to_string(blob_path);
+
+            // It should match the complete published blob data.
+            assert!(retrieved_blob_data.is_ok(), "{:?}", retrieved_blob_data);
+            assert_eq!(blob_data, retrieved_blob_data.unwrap())
+        })
+    }
+}
