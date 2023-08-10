@@ -65,8 +65,11 @@ impl TestNodeManager {
         // Initialise test store using pool.
         let store = SqlStore::new(pool.clone());
 
+        // Construct tempfile directory for the test runner.
+        let tmp_dir = tempfile::TempDir::new().unwrap();
+
         // Construct node config supporting any schema.
-        let cfg = Configuration::default();
+        let cfg = Configuration::new(Some(tmp_dir.path().to_path_buf())).unwrap();
 
         // Construct the actual test node
         let test_node = TestNode {
@@ -101,8 +104,11 @@ pub fn test_runner<F: AsyncTestFn + Send + Sync + 'static>(test: F) {
         let (_config, pool) = initialize_db().await;
         let store = SqlStore::new(pool);
 
+        // Construct tempfile directory for the test runner.
+        let tmp_dir = tempfile::TempDir::new().unwrap();
+
         // Construct node config supporting any schema.
-        let cfg = Configuration::default();
+        let cfg = Configuration::new(Some(tmp_dir.path().to_path_buf())).unwrap();
 
         // Construct the actual test node
         let node = TestNode {
