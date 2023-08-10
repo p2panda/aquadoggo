@@ -381,8 +381,7 @@ impl SqlStore {
         let historic_document_view_ids: Vec<String> = query_scalar(
             "
             SELECT 
-                document_views.document_view_id, 
-                documents.document_view_id
+                document_views.document_view_id
             FROM 
                 document_views
             LEFT JOIN 
@@ -414,24 +413,34 @@ impl SqlStore {
             // collection tasks.
             let effected_children_ids: Vec<String> = query_scalar(
                 "
-                SELECT DISTINCT
+                SELECT DISTINCT 
                     document_views.document_id
                 FROM
                     document_views
-                LEFT JOIN 
-                    document_view_fields
-                ON
-                    document_view_fields.document_view_id = document_views.document_view_id
-                LEFT JOIN 
-                    operation_fields_v1
-                ON
-                    document_view_fields.operation_id = operation_fields_v1.operation_id
-                AND
-                    document_view_fields.name = operation_fields_v1.name
-                WHERE
-                    operation_fields_v1.field_type IN ('pinned_relation', 'pinned_relation_list')
-                AND 
-                    document_view_fields.document_view_id = $1
+                WHERE 
+                    document_views.document_view_id 
+                IN (
+                    SELECT
+                        operation_fields_v1.value
+                    FROM
+                        operation_fields_v1
+                    LEFT JOIN 
+                        document_view_fields
+                    ON
+                        document_view_fields.operation_id = operation_fields_v1.operation_id
+                    AND
+                        document_view_fields.name = operation_fields_v1.name
+                    LEFT JOIN 
+                        documents 
+                    ON 
+                        documents.document_view_id = document_views.document_view_id
+                    WHERE
+                        operation_fields_v1.field_type IN ('pinned_relation', 'pinned_relation_list')
+                    AND 
+                        document_view_fields.document_view_id = $1
+                    AND 
+                        documents.document_view_id IS NULL
+                )
                 ",
             )
             .bind(document_view_id.to_string())
@@ -448,7 +457,16 @@ impl SqlStore {
                 WHERE
                     document_views.document_view_id = $1
                 AND NOT EXISTS (
-                    SELECT * FROM operation_fields_v1
+                    SELECT 
+                        document_view_fields.document_view_id 
+                    FROM 
+                        document_view_fields
+                    LEFT JOIN
+                        operation_fields_v1
+                    ON
+                        document_view_fields.operation_id = operation_fields_v1.operation_id
+                    AND
+                        document_view_fields.name = operation_fields_v1.name
                     WHERE
                         operation_fields_v1.field_type IN ('pinned_relation', 'pinned_relation_list')
                     AND 
