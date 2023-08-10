@@ -4,8 +4,9 @@ use log::{debug, info};
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::entry::traits::AsEncodedEntry;
 use p2panda_rs::identity::KeyPair;
-use p2panda_rs::operation::{OperationBuilder, OperationValue};
+use p2panda_rs::operation::{OperationAction, OperationBuilder, OperationId, OperationValue};
 use p2panda_rs::schema::{FieldType, Schema, SchemaId, SchemaName};
+use p2panda_rs::storage_provider::traits::OperationStore;
 use p2panda_rs::test_utils::memory_store::helpers::{
     populate_store, send_to_store, PopulateStoreConfig,
 };
@@ -273,4 +274,61 @@ pub async fn add_schema_and_documents(
     }
 
     (schema, view_ids)
+}
+
+/// Helper method for updating documents.
+pub async fn update_document(
+    node: &mut TestNode,
+    schema_id: &SchemaId,
+    fields: Vec<(&str, OperationValue)>,
+    previous: &DocumentViewId,
+    key_pair: &KeyPair,
+) -> DocumentViewId {
+    // Get requested schema from store.
+    let schema = node
+        .context
+        .schema_provider
+        .get(schema_id)
+        .await
+        .expect("Schema not found");
+
+    // Build, publish and reduce an update operation for document.
+    let create_op = OperationBuilder::new(schema.id())
+        .action(OperationAction::Update)
+        .fields(&fields)
+        .previous(previous)
+        .build()
+        .expect("Build operation");
+
+    let (entry_signed, _) = send_to_store(&node.context.store, &create_op, &schema, key_pair)
+        .await
+        .expect("Publish UPDATE operation");
+
+    let document_id = node
+        .context
+        .store
+        .get_document_id_by_operation_id(&OperationId::from(entry_signed.hash()))
+        .await
+        .expect("No db errors")
+        .expect("Can get document id");
+
+    let input = TaskInput::DocumentId(document_id);
+    let next_tasks = reduce_task(node.context.clone(), input.clone())
+        .await
+        .expect("Reduce document");
+
+    // Run dependency tasks
+    if let Some(tasks) = next_tasks {
+        // We only want to issue dependency tasks.
+        let dependency_tasks = tasks
+            .iter()
+            .filter(|task| task.worker_name() == "dependency");
+
+        for task in dependency_tasks {
+            dependency_task(node.context.clone(), task.input().to_owned())
+                .await
+                .expect("Run dependency task");
+        }
+    }
+    DocumentViewId::from(entry_signed.hash())
 }
