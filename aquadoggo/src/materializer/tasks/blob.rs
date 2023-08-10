@@ -243,7 +243,7 @@ mod tests {
             // Convert blob view id to document id.
             let document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
 
-            // Construct the expected path to the blob view file. 
+            // Construct the expected path to the blob view file.
             let base_path = node.context.config.base_path.as_ref().unwrap();
             let blob_path = base_path
                 .join(BLOBS_DIR_NAME)
