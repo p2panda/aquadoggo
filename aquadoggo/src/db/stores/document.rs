@@ -35,7 +35,7 @@ use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::error::DocumentStorageError;
-use p2panda_rs::storage_provider::traits::DocumentStore;
+use p2panda_rs::storage_provider::traits::{DocumentStore, LogStore};
 use sqlx::any::AnyQueryResult;
 use sqlx::{query, query_as, query_scalar, Any, Transaction};
 
@@ -511,6 +511,24 @@ impl SqlStore {
 
         Ok(effected_child_relations)
     }
+
+    pub async fn purge_document(
+        &self,
+        document_id: &DocumentId,
+    ) -> Result<(), DocumentStorageError> {
+        query(
+            "
+            DELETE FROM documents
+            WHERE documents.document_id = $1
+            ",
+        )
+        .bind(document_id.to_string())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+
+        Ok(())
+    }
 }
 
 // Helper method for getting rows from the `document_view_fields` table.
@@ -674,6 +692,7 @@ mod tests {
     use p2panda_rs::document::materialization::build_graph;
     use p2panda_rs::document::traits::AsDocument;
     use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewFields, DocumentViewId};
+    use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::traits::AsOperation;
     use p2panda_rs::operation::{Operation, OperationId};
@@ -685,6 +704,7 @@ mod tests {
     use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
     use p2panda_rs::WithId;
     use rstest::rstest;
+    use sqlx::{query, query_as, query_scalar};
 
     use crate::db::stores::document::DocumentView;
     use crate::materializer::tasks::reduce_task;
@@ -1356,6 +1376,86 @@ mod tests {
 
             // It has.
             assert!(historic_document_view.is_none());
+        });
+    }
+
+    // Helper for asserting expected number of items yielded from a SQL query.
+    async fn assert_query(node: &TestNode, sql: &str, expected_len: usize) {
+        let result: Result<Vec<String>, _> =
+            query_scalar(sql).fetch_all(&node.context.store.pool).await;
+
+        assert!(result.is_ok(), "{:#?}", result);
+        assert_eq!(result.unwrap().len(), expected_len);
+    }
+
+    #[rstest]
+    fn purge_document(
+        #[from(populate_store_config)]
+        #[with(2, 1, 1)]
+        config: PopulateStoreConfig,
+    ) {
+        test_runner(|mut node: TestNode| async move {
+            // Populate the store and materialize all documents.
+            let (_, document_ids) = populate_and_materialize(&mut node, &config).await;
+            let document_id = document_ids[0].clone();
+
+            // There is one document in the database which contains an CREATE and UPDATE operation
+            // which were both published by the same author. These are the number of rows we
+            // expect for each table.
+            assert_query(&node, "SELECT entry_hash FROM entries", 2).await;
+            assert_query(&node, "SELECT operation_id FROM operations_v1", 2).await;
+            assert_query(&node, "SELECT operation_id FROM operation_fields_v1", 26).await;
+            assert_query(&node, "SELECT log_id FROM logs", 1).await;
+            assert_query(&node, "SELECT document_id FROM documents", 1).await;
+            assert_query(&node, "SELECT document_id FROM document_views", 1).await;
+            assert_query(&node, "SELECT name FROM document_view_fields", 10).await;
+
+            // Purge this document from the database, we now expect all tables to be empty.
+            let result = node.context.store.purge_document(&document_id).await;
+            assert!(result.is_ok(), "{:#?}", result);
+            assert_query(&node, "SELECT entry_hash FROM entries", 0).await;
+            assert_query(&node, "SELECT operation_id FROM operations_v1", 0).await;
+            assert_query(&node, "SELECT operation_id FROM operation_fields_v1", 0).await;
+            assert_query(&node, "SELECT log_id FROM logs", 0).await;
+            assert_query(&node, "SELECT document_id FROM documents", 0).await;
+            assert_query(&node, "SELECT document_id FROM document_views", 0).await;
+            assert_query(&node, "SELECT name FROM document_view_fields", 0).await;
+        });
+    }
+
+    #[rstest]
+    fn purging_only_effects_target_document(
+        #[from(populate_store_config)]
+        #[with(1, 2, 1)]
+        config: PopulateStoreConfig,
+    ) {
+        test_runner(|mut node: TestNode| async move {
+            // Populate the store and materialize all documents.
+            let (_, document_ids) = populate_and_materialize(&mut node, &config).await;
+            let document_id = document_ids[0].clone();
+
+            // There are two documents in the database which each contain a single CREATE operation
+            // and they were published by the same author. These are the number of rows we expect
+            // for each table.
+            assert_query(&node, "SELECT entry_hash FROM entries", 2).await;
+            assert_query(&node, "SELECT operation_id FROM operations_v1", 2).await;
+            assert_query(&node, "SELECT operation_id FROM operation_fields_v1", 26).await;
+            assert_query(&node, "SELECT log_id FROM logs", 2).await;
+            assert_query(&node, "SELECT document_id FROM documents", 2).await;
+            assert_query(&node, "SELECT document_id FROM document_views", 2).await;
+            assert_query(&node, "SELECT name FROM document_view_fields", 20).await;
+
+            // Purge one document from the database, we now expect half the rows to be remaining.
+            let result = node.context.store.purge_document(&document_id).await;
+            assert!(result.is_ok(), "{:#?}", result);
+
+            assert_query(&node, "SELECT entry_hash FROM entries", 1).await;
+            assert_query(&node, "SELECT operation_id FROM operations_v1", 1).await;
+            assert_query(&node, "SELECT operation_id FROM operation_fields_v1", 13).await;
+            assert_query(&node, "SELECT log_id FROM logs", 1).await;
+            assert_query(&node, "SELECT document_id FROM documents", 1).await;
+            assert_query(&node, "SELECT document_id FROM document_views", 1).await;
+            assert_query(&node, "SELECT name FROM document_view_fields", 10).await;
         });
     }
 }
