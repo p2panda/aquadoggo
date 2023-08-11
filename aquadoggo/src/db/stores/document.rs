@@ -451,10 +451,10 @@ impl SqlStore {
                     WHERE
                         operation_fields_v1.field_type IN ('pinned_relation', 'pinned_relation_list')
                     AND 
-                        -- Only select the the values from the one document view we're interested in.
                         document_view_fields.document_view_id = $1
                     AND 
-                        -- And only for the views which are not the current.
+                        -- As we joined above on document_view_id, this field is NULL when 
+                        -- the document view is not the current one for the document.     
                         documents.document_view_id IS NULL
                 )
                 "
