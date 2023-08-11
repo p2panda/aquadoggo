@@ -370,16 +370,21 @@ impl SqlStore {
     /// Iterate over all views of a document and delete any which:
     /// - are not the current view
     /// - _and_ no document field exists in the database which contains a pinned relation to this view
-    /// 
+    ///
     /// Returns the document ids of any document which were related to in a pinned relation of the
     /// deleted views. It's useful to return these documents as they themselves may now be
-    /// dangling and require pruning. 
+    /// dangling and require pruning.
     pub async fn prune_document_views(
         &self,
         document_id: &DocumentId,
     ) -> Result<Vec<DocumentId>, DocumentStorageError> {
         // Start a transaction, any db insertions after this point, and before the `commit()`
         // will be rolled back in the event of an error.
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
 
         // Collect all views _except_ the current view for this document
         let historic_document_view_ids: Vec<String> = query_scalar(
@@ -399,7 +404,7 @@ impl SqlStore {
             ",
         )
         .bind(document_id.as_str())
-        .fetch_all(&self.pool)
+        .fetch_all(&mut tx)
         .await
         .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
 
@@ -448,7 +453,7 @@ impl SqlStore {
                 ",
             )
             .bind(document_view_id.to_string())
-            .fetch_all(&self.pool)
+            .fetch_all(&mut tx)
             .await
             .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
 
@@ -479,7 +484,7 @@ impl SqlStore {
                 ",
             )
             .bind(document_view_id)
-            .execute(&self.pool)
+            .execute(&mut tx)
             .await
             .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
 
@@ -492,6 +497,11 @@ impl SqlStore {
                 debug!("Did not delete view: {}", document_view_id);
             }
         }
+
+        // Commit the tx here as no errors occurred.
+        tx.commit()
+            .await
+            .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
 
         let effected_child_relations: Vec<DocumentId> = effected_child_relations
             .iter()
