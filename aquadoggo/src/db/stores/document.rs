@@ -30,6 +30,7 @@
 //! retained, we use a system of "pinned relations" to identify and materialise only views we
 //! explicitly wish to keep.
 use async_trait::async_trait;
+use log::debug;
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::schema::SchemaId;
@@ -43,6 +44,16 @@ use crate::db::models::{DocumentRow, DocumentViewFieldRow};
 use crate::db::types::StorageDocument;
 use crate::db::Pool;
 use crate::db::SqlStore;
+
+static JOINED_FIELDS: &str = "
+        document_view_fields
+    LEFT JOIN
+        operation_fields_v1
+    ON
+        document_view_fields.operation_id = operation_fields_v1.operation_id
+    AND
+        document_view_fields.name = operation_fields_v1.name
+    ";
 
 #[async_trait]
 impl DocumentStore for SqlStore {
@@ -369,11 +380,14 @@ impl SqlStore {
     /// Iterate over all views of a document and delete any which:
     /// - are not the current view
     /// - _and_ no document field exists in the database which contains a pinned relation to this view
-    #[allow(dead_code)]
-    async fn prune_document_views(
+    ///
+    /// Returns the document ids of any document which were related to in a pinned relation of the
+    /// deleted views. It's useful to return these documents as they themselves may now be
+    /// dangling and require pruning.
+    pub async fn prune_document_views(
         &self,
         document_id: &DocumentId,
-    ) -> Result<(), DocumentStorageError> {
+    ) -> Result<Vec<DocumentId>, DocumentStorageError> {
         // Start a transaction, any db insertions after this point, and before the `commit()`
         // will be rolled back in the event of an error.
         let mut tx = self
@@ -383,11 +397,10 @@ impl SqlStore {
             .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
 
         // Collect all views _except_ the current view for this document
-        let document_view_ids: Vec<String> = query_scalar(
+        let historic_document_view_ids: Vec<String> = query_scalar(
             "
             SELECT 
-                document_views.document_view_id, 
-                documents.document_view_id
+                document_views.document_view_id
             FROM 
                 document_views
             LEFT JOIN 
@@ -397,6 +410,8 @@ impl SqlStore {
             WHERE 
                 document_views.document_id = $1
             AND 
+                -- As we joined above on document_view_id, this field is NULL when 
+                -- the document view is not the current one for the document. 
                 documents.document_view_id IS NULL
             ",
         )
@@ -410,26 +425,78 @@ impl SqlStore {
         //
         // Deletes on "document_views" cascade to "document_view_fields" so rows there are also removed
         // from the database.
-        for document_view_id in document_view_ids {
-            query(
+        let mut effected_child_relations = vec![];
+
+        for document_view_id in &historic_document_view_ids {
+            // Before attempting to delete this view we need to fetch the ids of any child documents
+            // which might have views that could become unpinned as a result of this delete. These
+            // will be returned if the deletion is successful.
+            let effected_children_ids: Vec<String> = query_scalar(&format!(
+                "
+                SELECT DISTINCT 
+                    document_views.document_id
+                FROM
+                    document_views
+                WHERE 
+                    document_views.document_view_id 
+                IN (
+                    SELECT
+                        operation_fields_v1.value
+                    FROM 
+                        {JOINED_FIELDS}
+                    LEFT JOIN 
+                        documents 
+                    ON 
+                        documents.document_view_id = document_views.document_view_id
+                    WHERE
+                        operation_fields_v1.field_type IN ('pinned_relation', 'pinned_relation_list')
+                    AND 
+                        document_view_fields.document_view_id = $1
+                    AND 
+                        -- As we joined above on document_view_id, this field is NULL when 
+                        -- the document view is not the current one for the document.     
+                        documents.document_view_id IS NULL
+                )
+                "
+            ))
+            .bind(document_view_id.to_string())
+            .fetch_all(&mut tx)
+            .await
+            .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
+
+            // Attempt to delete the view. If it is pinned from an existing view the deletion will
+            // not go ahead.
+            let result = query(&format!(
                 "
                 DELETE FROM 
                     document_views
                 WHERE
                     document_views.document_view_id = $1
                 AND NOT EXISTS (
-                    SELECT * FROM operation_fields_v1
+                    SELECT 
+                        document_view_fields.document_view_id 
+                    FROM 
+                        {JOINED_FIELDS}
                     WHERE
                         operation_fields_v1.field_type IN ('pinned_relation', 'pinned_relation_list')
                     AND 
                         operation_fields_v1.value = $1
                 )
-                ",
+                "),
             )
             .bind(document_view_id)
             .execute(&mut tx)
             .await
             .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
+
+            // If any rows were affected (the deletion went ahead) then extend the
+            // uneffected_child_relations list with the previously collected ids.
+            if result.rows_affected() > 0 {
+                debug!("Deleted view: {}", document_view_id);
+                effected_child_relations.extend(effected_children_ids);
+            } else {
+                debug!("Did not delete view: {}", document_view_id);
+            }
         }
 
         // Commit the tx here as no errors occurred.
@@ -437,7 +504,12 @@ impl SqlStore {
             .await
             .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
 
-        Ok(())
+        let effected_child_relations: Vec<DocumentId> = effected_child_relations
+            .iter()
+            .map(|document_id| document_id.parse().unwrap())
+            .collect();
+
+        Ok(effected_child_relations)
     }
 }
 
@@ -455,7 +527,7 @@ async fn get_document_view_field_rows(
     // Each field has one row, or in the case of list values (pinned relations, or relation lists)
     // then one row exists for every item in the list. The `list_index` column is used for
     // consistently ordering list items.
-    query_as::<_, DocumentViewFieldRow>(
+    query_as::<_, DocumentViewFieldRow>(&format!(
         "
         SELECT
             document_views.document_id,
@@ -465,22 +537,18 @@ async fn get_document_view_field_rows(
             operation_fields_v1.list_index,
             operation_fields_v1.field_type,
             operation_fields_v1.value
-        FROM
-            document_view_fields
-        LEFT JOIN document_views
-            ON
-                document_view_fields.document_view_id = document_views.document_view_id
-        LEFT JOIN operation_fields_v1
-            ON
-                document_view_fields.operation_id = operation_fields_v1.operation_id
-            AND
-                document_view_fields.name = operation_fields_v1.name
+        FROM 
+            {JOINED_FIELDS}
+        LEFT JOIN 
+            document_views
+        ON
+            document_view_fields.document_view_id = document_views.document_view_id
         WHERE
             document_view_fields.document_view_id = $1
         ORDER BY
             operation_fields_v1.list_index ASC
-        ",
-    )
+        "
+    ))
     .bind(id.to_string())
     .fetch_all(pool)
     .await
@@ -623,7 +691,7 @@ mod tests {
     use crate::materializer::TaskInput;
     use crate::test_utils::{
         add_schema_and_documents, build_document, populate_and_materialize, populate_store_config,
-        test_runner, TestNode,
+        test_runner, update_document, TestNode,
     };
 
     #[rstest]
@@ -1022,6 +1090,8 @@ mod tests {
             // Get the current document from the store.
             let current_document = node.context.store.get_document(&document_id).await.unwrap();
 
+            println!("{current_document:#?}");
+
             // Get the current view id.
             let current_document_view_id = current_document.unwrap().view_id().to_owned();
 
@@ -1044,6 +1114,10 @@ mod tests {
             // Now prune dangling views for the document.
             let result = node.context.store.prune_document_views(&document_id).await;
             assert!(result.is_ok());
+            // This should be `0` because even though the default test document contains pinned
+            // relations none of them have been materialized into the store, so there actually are
+            // zero effected children for this pruning.
+            assert_eq!(result.unwrap().len(), 0);
 
             // Get the first document view again, it should no longer be there.
             let document = node
@@ -1110,6 +1184,178 @@ mod tests {
                 .await
                 .unwrap();
             assert!(document.is_some());
+        });
+    }
+
+    #[rstest]
+    fn recursive_pruning(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            // Publish some documents which we will later point relations at.
+            let (child_schema, child_document_view_ids) = add_schema_and_documents(
+                &mut node,
+                "schema_for_child",
+                vec![
+                    vec![("uninteresting_field", 1.into(), None)],
+                    vec![("uninteresting_field", 2.into(), None)],
+                ],
+                &key_pair,
+            )
+            .await;
+
+            // Create some parent documents which contain a pinned relation list pointing to the
+            // children created above.
+            let (parent_schema, parent_document_view_ids) = add_schema_and_documents(
+                &mut node,
+                "schema_for_parent",
+                vec![vec![
+                    ("name", "parent".into(), None),
+                    (
+                        "children",
+                        child_document_view_ids.clone().into(),
+                        Some(child_schema.id().to_owned()),
+                    ),
+                ]],
+                &key_pair,
+            )
+            .await;
+
+            // Convert view id to document id.
+            let parent_document_id: DocumentId = parent_document_view_ids[0]
+                .clone()
+                .to_string()
+                .parse()
+                .unwrap();
+
+            // Update the parent document so that there are now two views stored in the db, one
+            // current and one dangling.
+            let updated_parent_view_id = update_document(
+                &mut node,
+                parent_schema.id(),
+                vec![("name", "Parent".into())],
+                &parent_document_view_ids[0],
+                &key_pair,
+            )
+            .await;
+
+            // Get the historic (dangling) view to check it's actually there.
+            let historic_document_view = node
+                .context
+                .store
+                .get_document_by_view_id(&parent_document_view_ids[0].clone())
+                .await
+                .unwrap();
+
+            // It is there...
+            assert!(historic_document_view.is_some());
+
+            // Create another document, which has a pinned relation to the parent document created
+            // above. Now the relation graph looks like this
+            //
+            // GrandParent --> Parent --> Child1
+            //                      \
+            //                        --> Child2
+            //
+            let (schema_for_grand_parent, grand_parent_document_view_ids) =
+                add_schema_and_documents(
+                    &mut node,
+                    "schema_for_grand_parent",
+                    vec![vec![
+                        ("name", "grand parent".into(), None),
+                        (
+                            "child",
+                            parent_document_view_ids[0].clone().into(),
+                            Some(parent_schema.id().to_owned()),
+                        ),
+                    ]],
+                    &key_pair,
+                )
+                .await;
+
+            // Convert view id to document id.
+            let grand_parent_document_id: DocumentId = grand_parent_document_view_ids[0]
+                .clone()
+                .to_string()
+                .parse()
+                .unwrap();
+
+            // Update the grand parent document to a new view, leaving the previous one dangling.
+            //
+            // Note: this method _does not_ dispatch "prune" tasks.
+            update_document(
+                &mut node,
+                schema_for_grand_parent.id(),
+                vec![
+                    ("name", "Grand Parent".into()),
+                    ("child", updated_parent_view_id.into()),
+                ],
+                &grand_parent_document_view_ids[0],
+                &key_pair,
+            )
+            .await;
+
+            // Get the historic (dangling) view to make sure it exists.
+            let historic_document_view = node
+                .context
+                .store
+                .get_document_by_view_id(&grand_parent_document_view_ids[0].clone())
+                .await
+                .unwrap();
+
+            // It does...
+            assert!(historic_document_view.is_some());
+
+            // Now prune dangling views for the grand parent document. This method deletes any
+            // dangling views (not pinned, not current) from the database for this document. It
+            // returns the document ids of any documents which may have views which have become
+            // "un-pinned" as a result of this view being removed. In this case, that's the
+            // document id of the "parent" document.
+            let result = node
+                .context
+                .store
+                .prune_document_views(&grand_parent_document_id)
+                .await;
+
+            assert!(result.is_ok());
+            let effected_document_ids = result.unwrap();
+            // One effected document id is returned.
+            assert_eq!(effected_document_ids.len(), 1);
+            // It is the parent (which this grand parent relates to) as we expect.
+            assert_eq!(effected_document_ids[0], parent_document_id);
+
+            // Check the historic view has been deleted.
+            let historic_document_view = node
+                .context
+                .store
+                .get_document_by_view_id(&grand_parent_document_view_ids[0].clone())
+                .await
+                .unwrap();
+
+            // It has...
+            assert!(historic_document_view.is_none());
+
+            // Now prune dangling views for the parent document.
+            let result = node
+                .context
+                .store
+                .prune_document_views(&effected_document_ids[0])
+                .await;
+
+            assert!(result.is_ok());
+            let effected_document_ids = result.unwrap();
+            // We expect this to be 0 as the only potentially effected views for this document are
+            // current views for their document, which we know won't be garbage collected.
+            assert_eq!(effected_document_ids.len(), 0);
+
+            // Check the historic view has been deleted.
+            let historic_document_view = node
+                .context
+                .store
+                .get_document_by_view_id(&parent_document_view_ids[0].clone())
+                .await
+                .unwrap();
+
+            // It has.
+            assert!(historic_document_view.is_none());
         });
     }
 }
