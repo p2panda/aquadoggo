@@ -370,6 +370,10 @@ impl SqlStore {
     /// Iterate over all views of a document and delete any which:
     /// - are not the current view
     /// - _and_ no document field exists in the database which contains a pinned relation to this view
+    /// 
+    /// Returns the document ids of any document which were related to in a pinned relation of the
+    /// deleted views. It's useful to return these documents as they themselves may now be
+    /// dangling and require pruning. 
     pub async fn prune_document_views(
         &self,
         document_id: &DocumentId,
