@@ -496,41 +496,6 @@ impl SqlStore {
 
         Ok(effected_child_relations)
     }
-
-    pub async fn get_pinned_children_view_ids(
-        &self,
-        document_view_id: &DocumentViewId,
-    ) -> Result<Vec<DocumentViewId>, DocumentStorageError> {
-        let document_view_ids: Vec<String> = query_scalar(
-            "
-            SELECT DISTINCT
-                operation_fields_v1.value 
-            FROM
-                operation_fields_v1
-            LEFT JOIN 
-                document_view_fields
-            ON
-                document_view_fields.operation_id = operation_fields_v1.operation_id
-            AND
-                document_view_fields.name = operation_fields_v1.name
-            WHERE
-                operation_fields_v1.field_type IN ('pinned_relation', 'pinned_relation_list')
-            AND 
-                document_view_fields.document_view_id = $1
-            ",
-        )
-        .bind(document_view_id.to_string())
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
-
-        let document_view_ids: Vec<DocumentViewId> = document_view_ids
-            .iter()
-            .map(|view_id_string| view_id_string.parse().unwrap())
-            .collect();
-
-        Ok(document_view_ids)
-    }
 }
 
 // Helper method for getting rows from the `document_view_fields` table.
