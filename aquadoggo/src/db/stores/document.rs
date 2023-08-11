@@ -45,6 +45,16 @@ use crate::db::types::StorageDocument;
 use crate::db::Pool;
 use crate::db::SqlStore;
 
+static JOINED_FIELDS: &str = "
+        document_view_fields
+    LEFT JOIN
+        operation_fields_v1
+    ON
+        document_view_fields.operation_id = operation_fields_v1.operation_id
+    AND
+        document_view_fields.name = operation_fields_v1.name
+    ";
+
 #[async_trait]
 impl DocumentStore for SqlStore {
     type Document = StorageDocument;
@@ -400,6 +410,8 @@ impl SqlStore {
             WHERE 
                 document_views.document_id = $1
             AND 
+                -- As we joined above on document_view_id, this field is NULL when 
+                -- the document view is not the current one for the document. 
                 documents.document_view_id IS NULL
             ",
         )
@@ -417,10 +429,9 @@ impl SqlStore {
 
         for document_view_id in &historic_document_view_ids {
             // Before attempting to delete this view we need to fetch the ids of any child documents
-            // which would be effected by this view being deleted. This is so if the deletion goes
-            // ahead, we can return these values as they are useful for performing further garbage
-            // collection tasks.
-            let effected_children_ids: Vec<String> = query_scalar(
+            // which might have views that could become unpinned as a result of this delete. These
+            // will be returned if the deletion is successful.
+            let effected_children_ids: Vec<String> = query_scalar(&format!(
                 "
                 SELECT DISTINCT 
                     document_views.document_id
@@ -431,14 +442,8 @@ impl SqlStore {
                 IN (
                     SELECT
                         operation_fields_v1.value
-                    FROM
-                        operation_fields_v1
-                    LEFT JOIN 
-                        document_view_fields
-                    ON
-                        document_view_fields.operation_id = operation_fields_v1.operation_id
-                    AND
-                        document_view_fields.name = operation_fields_v1.name
+                    FROM 
+                        {JOINED_FIELDS}
                     LEFT JOIN 
                         documents 
                     ON 
@@ -446,12 +451,14 @@ impl SqlStore {
                     WHERE
                         operation_fields_v1.field_type IN ('pinned_relation', 'pinned_relation_list')
                     AND 
+                        -- Only select the the values from the one document view we're interested in.
                         document_view_fields.document_view_id = $1
                     AND 
+                        -- And only for the views which are not the current.
                         documents.document_view_id IS NULL
                 )
-                ",
-            )
+                "
+            ))
             .bind(document_view_id.to_string())
             .fetch_all(&mut tx)
             .await
@@ -459,7 +466,7 @@ impl SqlStore {
 
             // Attempt to delete the view. If it is pinned from an existing view the deletion will
             // not go ahead.
-            let result = query(
+            let result = query(&format!(
                 "
                 DELETE FROM 
                     document_views
@@ -469,19 +476,13 @@ impl SqlStore {
                     SELECT 
                         document_view_fields.document_view_id 
                     FROM 
-                        document_view_fields
-                    LEFT JOIN
-                        operation_fields_v1
-                    ON
-                        document_view_fields.operation_id = operation_fields_v1.operation_id
-                    AND
-                        document_view_fields.name = operation_fields_v1.name
+                        {JOINED_FIELDS}
                     WHERE
                         operation_fields_v1.field_type IN ('pinned_relation', 'pinned_relation_list')
                     AND 
                         operation_fields_v1.value = $1
                 )
-                ",
+                "),
             )
             .bind(document_view_id)
             .execute(&mut tx)
@@ -526,7 +527,7 @@ async fn get_document_view_field_rows(
     // Each field has one row, or in the case of list values (pinned relations, or relation lists)
     // then one row exists for every item in the list. The `list_index` column is used for
     // consistently ordering list items.
-    query_as::<_, DocumentViewFieldRow>(
+    query_as::<_, DocumentViewFieldRow>(&format!(
         "
         SELECT
             document_views.document_id,
@@ -536,22 +537,18 @@ async fn get_document_view_field_rows(
             operation_fields_v1.list_index,
             operation_fields_v1.field_type,
             operation_fields_v1.value
-        FROM
-            document_view_fields
-        LEFT JOIN document_views
-            ON
-                document_view_fields.document_view_id = document_views.document_view_id
-        LEFT JOIN operation_fields_v1
-            ON
-                document_view_fields.operation_id = operation_fields_v1.operation_id
-            AND
-                document_view_fields.name = operation_fields_v1.name
+        FROM 
+            {JOINED_FIELDS}
+        LEFT JOIN 
+            document_views
+        ON
+            document_view_fields.document_view_id = document_views.document_view_id
         WHERE
             document_view_fields.document_view_id = $1
         ORDER BY
             operation_fields_v1.list_index ASC
-        ",
-    )
+        "
+    ))
     .bind(id.to_string())
     .fetch_all(pool)
     .await
