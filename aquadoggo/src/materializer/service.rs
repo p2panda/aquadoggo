@@ -8,7 +8,7 @@ use tokio::task;
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
 use crate::manager::{ServiceReadySender, Shutdown};
-use crate::materializer::tasks::{blob_task, dependency_task, reduce_task, schema_task, prune_task};
+use crate::materializer::tasks::{blob_task, dependency_task, garbage_collection_task, reduce_task, schema_task};
 use crate::materializer::worker::{Factory, Task, TaskStatus};
 use crate::materializer::TaskInput;
 
@@ -39,7 +39,7 @@ pub async fn materializer_service(
     factory.register("dependency", pool_size, dependency_task);
     factory.register("schema", pool_size, schema_task);
     factory.register("blob", pool_size, blob_task);
-    factory.register("prune", pool_size, prune_task);
+    factory.register("prune", pool_size, garbage_collection_task);
 
     // Get a listener for error signal from factory
     let on_error = factory.on_error();

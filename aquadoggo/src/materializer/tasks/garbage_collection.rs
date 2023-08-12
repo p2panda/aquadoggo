@@ -8,7 +8,7 @@ use crate::context::Context;
 use crate::materializer::worker::{TaskError, TaskResult};
 use crate::materializer::{Task, TaskInput};
 
-pub async fn prune_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
+pub async fn garbage_collection_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
     debug!("Working on {}", input);
 
     match input {
@@ -99,7 +99,7 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::key_pair;
     use rstest::rstest;
 
-    use crate::materializer::tasks::prune_task;
+    use crate::materializer::tasks::garbage_collection_task;
     use crate::materializer::{Task, TaskInput};
     use crate::test_utils::{add_schema_and_documents, test_runner, update_document, TestNode};
 
@@ -225,7 +225,7 @@ mod tests {
             // returns the document ids of any documents which may have views which have become
             // "un-pinned" as a result of this view being removed. In this case, that's the
             // document id of the "parent" document.
-            let next_tasks = prune_task(
+            let next_tasks = garbage_collection_task(
                 node.context.clone(),
                 TaskInput::DocumentId(grand_parent_document_id),
             )
@@ -253,7 +253,7 @@ mod tests {
             assert!(historic_document_view.is_none());
 
             // Now prune dangling views for the parent document.
-            let next_tasks = prune_task(node.context.clone(), next_tasks[0].input().to_owned())
+            let next_tasks = garbage_collection_task(node.context.clone(), next_tasks[0].input().to_owned())
                 .await
                 .unwrap()
                 .unwrap();
