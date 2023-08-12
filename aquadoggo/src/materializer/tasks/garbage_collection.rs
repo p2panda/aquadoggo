@@ -4,7 +4,7 @@ use log::debug;
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::operation::traits::AsOperation;
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
+use p2panda_rs::storage_provider::traits::OperationStore;
 use p2panda_rs::Human;
 
 use crate::context::Context;
@@ -41,7 +41,7 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
                 // Check if this is the current view of it's document.
                 let is_current_view = context
                     .store
-                    .is_current_view(&document_view_id)
+                    .is_current_view(document_view_id)
                     .await
                     .map_err(|err| TaskError::Critical(err.to_string()))?;
 
@@ -62,7 +62,7 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
                     // not go ahead.
                     view_deleted = context
                         .store
-                        .prune_document_view(&document_view_id)
+                        .prune_document_view(document_view_id)
                         .await
                         .map_err(|err| TaskError::Critical(err.to_string()))?;
                 }

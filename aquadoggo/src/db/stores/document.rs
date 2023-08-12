@@ -59,12 +59,6 @@ pub static DOCUMENT_VIEWS: &str = "
         document_view_fields.document_view_id = document_views.document_view_id
 ";
 
-pub static DOCUMENTS: &str = "
-        documents
-    ON
-        document_view_fields.document_view_id = documents.document_view_id
-";
-
 #[async_trait]
 impl DocumentStore for SqlStore {
     type Document = StorageDocument;
@@ -392,7 +386,7 @@ impl SqlStore {
         &self,
         document_id: &DocumentId,
     ) -> Result<Vec<DocumentViewId>, DocumentStorageError> {
-        let document_view_ids: Vec<String> = query_scalar(&format!(
+        let document_view_ids: Vec<String> = query_scalar(
             "
             SELECT 
                 document_views.document_view_id
@@ -401,7 +395,7 @@ impl SqlStore {
             WHERE 
                 document_views.document_id = $1
             ",
-        ))
+        )
         .bind(document_id.as_str())
         .fetch_all(&self.pool)
         .await
@@ -726,7 +720,7 @@ mod tests {
     use crate::materializer::TaskInput;
     use crate::test_utils::{
         add_schema_and_documents, build_document, populate_and_materialize, populate_store_config,
-        test_runner, update_document, TestNode,
+        test_runner, TestNode,
     };
 
     #[rstest]
@@ -1145,7 +1139,11 @@ mod tests {
             assert!(document.is_some());
 
             // Prune the first document view.
-            let result = node.context.store.prune_document_view(&first_document_view_id).await;
+            let result = node
+                .context
+                .store
+                .prune_document_view(&first_document_view_id)
+                .await;
             assert!(result.is_ok());
             // Returns `true` when pruning succeeded.
             assert!(result.unwrap());
@@ -1204,7 +1202,11 @@ mod tests {
             .await;
 
             // Attempt to prune the first document view.
-            let result = node.context.store.prune_document_view(&first_document_view_id).await;
+            let result = node
+                .context
+                .store
+                .prune_document_view(&first_document_view_id)
+                .await;
             assert!(result.is_ok());
             // Returns `false` when pruning failed.
             assert!(!result.unwrap());
@@ -1220,7 +1222,6 @@ mod tests {
         });
     }
 
-    
     #[rstest]
     fn does_not_prune_current_view(
         #[from(populate_store_config)]
@@ -1234,7 +1235,11 @@ mod tests {
             let current_document_view_id: DocumentViewId = document_id.as_str().parse().unwrap();
 
             // Attempt to prune the current document view.
-            let result = node.context.store.prune_document_view(&current_document_view_id).await;
+            let result = node
+                .context
+                .store
+                .prune_document_view(&current_document_view_id)
+                .await;
             assert!(result.is_ok());
             // Returns `false` when pruning failed.
             assert!(!result.unwrap());
