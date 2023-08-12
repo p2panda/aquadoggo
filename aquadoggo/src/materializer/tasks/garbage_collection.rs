@@ -86,10 +86,9 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
                     .expect("Operation exists in store");
 
                 if let SchemaId::Blob(_) = operation.schema_id() {
-                    // @TODO: we should purge blob and all blob piece documents too.
                     context
                         .store
-                        .purge_document(&document_id)
+                        .purge_blob(&document_id)
                         .await
                         .map_err(|err| TaskError::Failure(err.to_string()))?;
                 }
