@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use log::debug;
+use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::Human;
 
 use crate::context::Context;
@@ -11,20 +12,68 @@ pub async fn prune_task(context: Context, input: TaskInput) -> TaskResult<TaskIn
     debug!("Working on {}", input);
 
     match input {
-        TaskInput::DocumentId(id) => {
+        TaskInput::DocumentId(document_id) => {
             // This task is concerned with a document which may now have dangling views. We want
             // to check for this and delete any views which are no longer needed.
-            debug!("Prune document views for document: {}", id.display());
+            debug!(
+                "Prune document views for document: {}",
+                document_id.display()
+            );
 
-            // This method returns the document ids of child relations of any views which were deleted.
-            let effected_child_relations = context
+            // Collect the ids of all views for this document.
+            let all_document_view_ids: Vec<DocumentViewId> = context
                 .store
-                .prune_document_views(&id)
+                .get_all_document_view_ids(&document_id)
                 .await
                 .map_err(|err| TaskError::Critical(err.to_string()))?;
 
+            // Iterate over all document views and delete them if no document view exists which refers
+            // to it in a pinned relation field AND they are not the current view of a document.
+            //
+            // Deletes on "document_views" cascade to "document_view_fields" so rows there are also removed
+            // from the database.
+            let mut all_effected_child_relations = vec![];
+            for document_view_id in &all_document_view_ids {
+                // Check if this is the current view of it's document.
+                let is_current_view = context
+                    .store
+                    .is_current_view(&document_view_id)
+                    .await
+                    .map_err(|err| TaskError::Critical(err.to_string()))?;
+
+                let mut effected_child_relations = vec![];
+                let mut view_deleted = false;
+
+                if !is_current_view {
+                    // Before attempting to delete this view we need to fetch the ids of any child documents
+                    // which might have views that could become unpinned as a result of this delete. These
+                    // will be returned if the deletion is successful.
+                    effected_child_relations = context
+                        .store
+                        .get_child_document_view_ids(document_view_id)
+                        .await
+                        .map_err(|err| TaskError::Critical(err.to_string()))?;
+
+                    // Attempt to delete the view. If it is pinned from an existing view the deletion will
+                    // not go ahead.
+                    view_deleted = context
+                        .store
+                        .prune_document_view(&document_view_id)
+                        .await
+                        .map_err(|err| TaskError::Critical(err.to_string()))?;
+                }
+
+                // If the view was deleted then push the effected children to the return array
+                if view_deleted {
+                    debug!("Deleted view: {}", document_view_id);
+                    all_effected_child_relations.extend(effected_child_relations);
+                } else {
+                    debug!("Did not delete view: {}", document_view_id);
+                }
+            }
+
             // We compose some more prune tasks based on the effected documents returned above.
-            let next_tasks: Vec<Task<TaskInput>> = effected_child_relations
+            let next_tasks: Vec<Task<TaskInput>> = all_effected_child_relations
                 .iter()
                 .map(|document_id| {
                     debug!("Issue prune task for document: {document_id:#?}");
