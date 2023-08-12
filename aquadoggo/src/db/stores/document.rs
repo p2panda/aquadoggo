@@ -35,7 +35,7 @@ use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::error::DocumentStorageError;
-use p2panda_rs::storage_provider::traits::{DocumentStore, LogStore};
+use p2panda_rs::storage_provider::traits::DocumentStore;
 use sqlx::any::AnyQueryResult;
 use sqlx::{query, query_as, query_scalar, Any, Transaction};
 
@@ -45,15 +45,25 @@ use crate::db::types::StorageDocument;
 use crate::db::Pool;
 use crate::db::SqlStore;
 
-static JOINED_FIELDS: &str = "
-        document_view_fields
-    LEFT JOIN
+pub static OPERATION_FIELDS: &str = "
         operation_fields_v1
     ON
         document_view_fields.operation_id = operation_fields_v1.operation_id
     AND
         document_view_fields.name = operation_fields_v1.name
     ";
+
+pub static DOCUMENT_VIEWS: &str = "
+        document_views
+    ON
+        document_view_fields.document_view_id = document_views.document_view_id
+";
+
+pub static DOCUMENTS: &str = "
+        documents
+    ON
+        document_view_fields.document_view_id = documents.document_view_id
+";
 
 #[async_trait]
 impl DocumentStore for SqlStore {
@@ -397,16 +407,14 @@ impl SqlStore {
             .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
 
         // Collect all views _except_ the current view for this document
-        let historic_document_view_ids: Vec<String> = query_scalar(
+        let historic_document_view_ids: Vec<String> = query_scalar(&format!(
             "
             SELECT 
                 document_views.document_view_id
             FROM 
                 document_views
             LEFT JOIN 
-                documents 
-            ON 
-                documents.document_view_id = document_views.document_view_id
+                {DOCUMENTS}
             WHERE 
                 document_views.document_id = $1
             AND 
@@ -414,7 +422,7 @@ impl SqlStore {
                 -- the document view is not the current one for the document. 
                 documents.document_view_id IS NULL
             ",
-        )
+        ))
         .bind(document_id.as_str())
         .fetch_all(&mut tx)
         .await
@@ -443,11 +451,11 @@ impl SqlStore {
                     SELECT
                         operation_fields_v1.value
                     FROM 
-                        {JOINED_FIELDS}
+                        document_view_fields
                     LEFT JOIN 
-                        documents 
-                    ON 
-                        documents.document_view_id = document_views.document_view_id
+                        {OPERATION_FIELDS}
+                    LEFT JOIN                         
+                        {DOCUMENTS}
                     WHERE
                         operation_fields_v1.field_type IN ('pinned_relation', 'pinned_relation_list')
                     AND 
@@ -476,7 +484,9 @@ impl SqlStore {
                     SELECT 
                         document_view_fields.document_view_id 
                     FROM 
-                        {JOINED_FIELDS}
+                        document_view_fields
+                    LEFT JOIN
+                        {OPERATION_FIELDS}
                     WHERE
                         operation_fields_v1.field_type IN ('pinned_relation', 'pinned_relation_list')
                     AND 
@@ -556,11 +566,11 @@ async fn get_document_view_field_rows(
             operation_fields_v1.field_type,
             operation_fields_v1.value
         FROM 
-            {JOINED_FIELDS}
+            document_view_fields
+        LEFT JOIN
+            {OPERATION_FIELDS}
         LEFT JOIN 
-            document_views
-        ON
-            document_view_fields.document_view_id = document_views.document_view_id
+            {DOCUMENT_VIEWS}
         WHERE
             document_view_fields.document_view_id = $1
         ORDER BY
@@ -692,7 +702,6 @@ mod tests {
     use p2panda_rs::document::materialization::build_graph;
     use p2panda_rs::document::traits::AsDocument;
     use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewFields, DocumentViewId};
-    use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::traits::AsOperation;
     use p2panda_rs::operation::{Operation, OperationId};
@@ -704,7 +713,7 @@ mod tests {
     use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
     use p2panda_rs::WithId;
     use rstest::rstest;
-    use sqlx::{query, query_as, query_scalar};
+    use sqlx::query_scalar;
 
     use crate::db::stores::document::DocumentView;
     use crate::materializer::tasks::reduce_task;
