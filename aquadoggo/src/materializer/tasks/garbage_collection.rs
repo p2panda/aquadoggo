@@ -2,6 +2,9 @@
 
 use log::debug;
 use p2panda_rs::document::DocumentViewId;
+use p2panda_rs::operation::traits::AsOperation;
+use p2panda_rs::schema::SchemaId;
+use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
 use p2panda_rs::Human;
 
 use crate::context::Context;
@@ -33,6 +36,7 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
             // Deletes on "document_views" cascade to "document_view_fields" so rows there are also removed
             // from the database.
             let mut all_effected_child_relations = vec![];
+            let mut deleted_views_count = 0;
             for document_view_id in &all_document_view_ids {
                 // Check if this is the current view of it's document.
                 let is_current_view = context
@@ -66,9 +70,28 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
                 // If the view was deleted then push the effected children to the return array
                 if view_deleted {
                     debug!("Deleted view: {}", document_view_id);
+                    deleted_views_count += 1;
                     all_effected_child_relations.extend(effected_child_relations);
                 } else {
                     debug!("Did not delete view: {}", document_view_id);
+                }
+            }
+
+            if all_document_view_ids.len() == deleted_views_count {
+                let operation = context
+                    .store
+                    .get_operation(&document_id.as_str().parse().unwrap())
+                    .await
+                    .map_err(|err| TaskError::Failure(err.to_string()))?
+                    .expect("Operation exists in store");
+
+                if let SchemaId::Blob(_) = operation.schema_id() {
+                    // @TODO: we should purge blob and all blob piece documents too.
+                    context
+                        .store
+                        .purge_document(&document_id)
+                        .await
+                        .map_err(|err| TaskError::Failure(err.to_string()))?;
                 }
             }
 
@@ -253,10 +276,11 @@ mod tests {
             assert!(historic_document_view.is_none());
 
             // Now prune dangling views for the parent document.
-            let next_tasks = garbage_collection_task(node.context.clone(), next_tasks[0].input().to_owned())
-                .await
-                .unwrap()
-                .unwrap();
+            let next_tasks =
+                garbage_collection_task(node.context.clone(), next_tasks[0].input().to_owned())
+                    .await
+                    .unwrap()
+                    .unwrap();
 
             // Two new prune tasks issued.
             assert_eq!(next_tasks.len(), 2);
