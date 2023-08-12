@@ -206,10 +206,23 @@ mod tests {
             // Now prune dangling views for the parent document.
             let next_tasks = prune_task(node.context.clone(), next_tasks[0].input().to_owned())
                 .await
+                .unwrap()
                 .unwrap();
 
-            // No more tasks should be issued.
-            assert!(next_tasks.is_none());
+            // Two new prune tasks issued.
+            assert_eq!(next_tasks.len(), 2);
+            // These are the two final child documents.
+            assert_eq!(
+                next_tasks,
+                child_document_view_ids
+                    .iter()
+                    .rev()
+                    .map(|document_view_id| {
+                        let document_id: DocumentId = document_view_id.to_string().parse().unwrap();
+                        Task::new("prune", TaskInput::DocumentId(document_id))
+                    })
+                    .collect::<Vec<Task<TaskInput>>>()
+            );
 
             // Check the historic view has been deleted.
             let historic_document_view = node

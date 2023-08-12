@@ -387,94 +387,90 @@ impl SqlStore {
             .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))
     }
 
-    /// Iterate over all views of a document and delete any which:
-    /// - are not the current view
-    /// - _and_ no document field exists in the database which contains a pinned relation to this view
-    ///
-    /// Returns the document ids of any document which were related to in a pinned relation of the
-    /// deleted views. It's useful to return these documents as they themselves may now be
-    /// dangling and require pruning.
-    pub async fn prune_document_views(
+    /// Get the ids for all document views for a document which are currently materialized to the store.
+    pub async fn get_all_document_view_ids(
         &self,
         document_id: &DocumentId,
-    ) -> Result<Vec<DocumentId>, DocumentStorageError> {
-        // Start a transaction, any db insertions after this point, and before the `commit()`
-        // will be rolled back in the event of an error.
-        let mut tx = self
-            .pool
-            .begin()
-            .await
-            .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
-
-        // Collect all views _except_ the current view for this document
-        let historic_document_view_ids: Vec<String> = query_scalar(&format!(
+    ) -> Result<Vec<DocumentViewId>, DocumentStorageError> {
+        let document_view_ids: Vec<String> = query_scalar(&format!(
             "
             SELECT 
                 document_views.document_view_id
             FROM 
                 document_views
-            LEFT JOIN 
-                {DOCUMENTS}
             WHERE 
                 document_views.document_id = $1
-            AND 
-                -- As we joined above on document_view_id, this field is NULL when 
-                -- the document view is not the current one for the document. 
-                documents.document_view_id IS NULL
             ",
         ))
         .bind(document_id.as_str())
-        .fetch_all(&mut tx)
+        .fetch_all(&self.pool)
         .await
         .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
 
-        // Iterate over all document views and delete them if no document field exists in the
-        // database which contains a pinned relation to this view.
-        //
-        // Deletes on "document_views" cascade to "document_view_fields" so rows there are also removed
-        // from the database.
-        let mut effected_child_relations = vec![];
+        Ok(document_view_ids
+            .iter()
+            .map(|document_id_str| {
+                document_id_str
+                    .parse::<DocumentViewId>()
+                    .expect("Document Id's coming from the store should be valid")
+            })
+            .collect())
+    }
 
-        for document_view_id in &historic_document_view_ids {
-            // Before attempting to delete this view we need to fetch the ids of any child documents
-            // which might have views that could become unpinned as a result of this delete. These
-            // will be returned if the deletion is successful.
-            let effected_children_ids: Vec<String> = query_scalar(&format!(
-                "
-                SELECT DISTINCT 
-                    document_views.document_id
-                FROM
-                    document_views
-                WHERE 
-                    document_views.document_view_id 
-                IN (
-                    SELECT
-                        operation_fields_v1.value
-                    FROM 
-                        document_view_fields
-                    LEFT JOIN 
-                        {OPERATION_FIELDS}
-                    LEFT JOIN                         
-                        {DOCUMENTS}
-                    WHERE
-                        operation_fields_v1.field_type IN ('pinned_relation', 'pinned_relation_list')
-                    AND 
-                        document_view_fields.document_view_id = $1
-                    AND 
-                        -- As we joined above on document_view_id, this field is NULL when 
-                        -- the document view is not the current one for the document.     
-                        documents.document_view_id IS NULL
-                )
-                "
-            ))
-            .bind(document_view_id.to_string())
-            .fetch_all(&mut tx)
-            .await
-            .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
+    /// Get the ids of all document views which are related to from another document view.
+    pub async fn get_child_document_view_ids(
+        &self,
+        document_view_id: &DocumentViewId,
+    ) -> Result<Vec<DocumentId>, DocumentStorageError> {
+        let document_view_ids: Vec<String> = query_scalar(&format!(
+            "
+            SELECT DISTINCT 
+                document_views.document_id
+            FROM
+                document_views
+            WHERE 
+                document_views.document_view_id 
+            IN (
+                SELECT
+                    operation_fields_v1.value
+                FROM 
+                    document_view_fields
+                LEFT JOIN 
+                    {OPERATION_FIELDS}
+                WHERE
+                    operation_fields_v1.field_type IN ('pinned_relation', 'pinned_relation_list')
+                AND 
+                    document_view_fields.document_view_id = $1
+            )
+            "
+        ))
+        .bind(document_view_id.to_string())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
 
-            // Attempt to delete the view. If it is pinned from an existing view the deletion will
-            // not go ahead.
-            let result = query(&format!(
+        Ok(document_view_ids
+            .iter()
+            .map(|document_id_str| {
+                document_id_str
+                    .parse::<DocumentId>()
+                    .expect("Document Id's coming from the store should be valid")
+            })
+            .collect())
+    }
+
+    /// Attempt to remove a document view from the store. Returns a boolean which indicates if the
+    /// removal took place.
+    ///
+    /// This removal only succeeds if the view is "dangling", meaning no other document view
+    /// exists which relates to this view.
+    pub async fn prune_document_view(
+        &self,
+        document_view_id: &DocumentViewId,
+    ) -> Result<bool, DocumentStorageError> {
+        // Attempt to delete the view. If it is pinned from an existing view the deletion will
+        // not go ahead.
+        let result = query(&format!(
                 "
                 DELETE FROM 
                     document_views
@@ -494,32 +490,90 @@ impl SqlStore {
                 )
                 "),
             )
-            .bind(document_view_id)
-            .execute(&mut tx)
+            .bind(document_view_id.to_string())
+            .execute(&self.pool)
             .await
             .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
 
-            // If any rows were affected (the deletion went ahead) then extend the
-            // uneffected_child_relations list with the previously collected ids.
-            if result.rows_affected() > 0 {
+        // If any rows were affected the deletion went ahead.
+        if result.rows_affected() > 0 {
+            debug!("Deleted view: {}", document_view_id);
+            Ok(true)
+        } else {
+            debug!("Did not delete view: {}", document_view_id);
+            Ok(false)
+        }
+    }
+
+    /// Check if this view is the current view of it's document.
+    pub async fn is_current_view(
+        &self,
+        document_view_id: &DocumentViewId,
+    ) -> Result<bool, DocumentStorageError> {
+        let document_view_id: Option<String> = query_scalar(
+            "
+            SELECT documents.document_view_id FROM documents
+            WHERE documents.document_view_id = $1
+            ",
+        )
+        .bind(document_view_id.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
+
+        Ok(document_view_id.is_some())
+    }
+
+    /// Iterate over all views of a document and delete any which:
+    /// - are not the current view
+    /// - _and_ no document field exists in the database which contains a pinned relation to this view
+    ///
+    /// Returns the document ids of any documents who contains a document view related to from the
+    /// deleted views. It's useful to return these documents as they themselves may now be
+    /// dangling and require pruning.
+    pub async fn prune_document_views(
+        &self,
+        document_id: &DocumentId,
+    ) -> Result<Vec<DocumentId>, DocumentStorageError> {
+        // Collect the ids of all views for this document.
+        let all_document_view_ids: Vec<DocumentViewId> =
+            self.get_all_document_view_ids(&document_id).await?;
+
+        // Iterate over all document views and delete them if no document view exists which refers
+        // to it in a pinned relation field AND they are not the current view of a document.
+        //
+        // Deletes on "document_views" cascade to "document_view_fields" so rows there are also removed
+        // from the database.
+        let mut all_effected_child_relations = vec![];
+        for document_view_id in &all_document_view_ids {
+            // Check if this is the current view of it's document.
+            let is_current_view = self.is_current_view(&document_view_id).await?;
+
+            let mut effected_child_relations = vec![];
+            let mut view_deleted = false;
+
+            if !is_current_view {
+                // Before attempting to delete this view we need to fetch the ids of any child documents
+                // which might have views that could become unpinned as a result of this delete. These
+                // will be returned if the deletion is successful.
+                effected_child_relations =
+                    self.get_child_document_view_ids(document_view_id).await?;
+
+                // Attempt to delete the view. If it is pinned from an existing view the deletion will
+                // not go ahead.
+                view_deleted = self.prune_document_view(&document_view_id).await?
+            }
+
+            // If the view was deleted then push the effected children to the return array
+            if view_deleted {
                 debug!("Deleted view: {}", document_view_id);
-                effected_child_relations.extend(effected_children_ids);
+                all_effected_child_relations.extend(effected_child_relations);
             } else {
                 debug!("Did not delete view: {}", document_view_id);
             }
         }
 
-        // Commit the tx here as no errors occurred.
-        tx.commit()
-            .await
-            .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
-
-        let effected_child_relations: Vec<DocumentId> = effected_child_relations
-            .iter()
-            .map(|document_id| document_id.parse().unwrap())
-            .collect();
-
-        Ok(effected_child_relations)
+        Ok(all_effected_child_relations)
     }
 
     pub async fn purge_document(
@@ -1119,8 +1173,6 @@ mod tests {
             // Get the current document from the store.
             let current_document = node.context.store.get_document(&document_id).await.unwrap();
 
-            println!("{current_document:#?}");
-
             // Get the current view id.
             let current_document_view_id = current_document.unwrap().view_id().to_owned();
 
@@ -1371,9 +1423,8 @@ mod tests {
 
             assert!(result.is_ok());
             let effected_document_ids = result.unwrap();
-            // We expect this to be 0 as the only potentially effected views for this document are
-            // current views for their document, which we know won't be garbage collected.
-            assert_eq!(effected_document_ids.len(), 0);
+            // We expect this to be 2 tasks returned which are the two remaining child documents.
+            assert_eq!(effected_document_ids.len(), 2);
 
             // Check the historic view has been deleted.
             let historic_document_view = node
