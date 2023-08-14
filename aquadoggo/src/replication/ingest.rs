@@ -17,7 +17,7 @@ use crate::schema::SchemaProvider;
 #[derive(Debug, Clone)]
 pub struct SyncIngest {
     tx: ServiceSender,
-    schema_provider: SchemaProvider,
+    pub schema_provider: SchemaProvider,
 }
 
 impl SyncIngest {

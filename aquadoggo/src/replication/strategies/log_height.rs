@@ -5,11 +5,13 @@ use std::collections::HashMap;
 use anyhow::Result;
 use async_trait::async_trait;
 use log::trace;
+use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::DocumentId;
 use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
 use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::identity::PublicKey;
-use p2panda_rs::storage_provider::traits::OperationStore;
+use p2panda_rs::schema::{Schema, SchemaId};
+use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
 use p2panda_rs::Human;
 
 use crate::db::types::StorageEntry;
@@ -18,8 +20,26 @@ use crate::replication::errors::ReplicationError;
 use crate::replication::strategies::diff_log_heights;
 use crate::replication::traits::Strategy;
 use crate::replication::{LogHeights, Message, Mode, SchemaIdSet, StrategyResult};
+use crate::schema::SchemaProvider;
 
 type SortedIndex = i32;
+
+fn has_blob_relation(schema: &Schema) -> bool {
+    for (_, field_type) in schema.fields().iter() {
+        match field_type {
+            p2panda_rs::schema::FieldType::Relation(schema_id)
+            | p2panda_rs::schema::FieldType::RelationList(schema_id)
+            | p2panda_rs::schema::FieldType::PinnedRelation(schema_id)
+            | p2panda_rs::schema::FieldType::PinnedRelationList(schema_id) => {
+                if schema_id == &SchemaId::Blob(1) {
+                    return true;
+                }
+            }
+            _ => (),
+        }
+    }
+    false
+}
 
 /// Retrieve entries from the store, group the result by document id and then sub-order them by
 /// their sorted index.
@@ -66,18 +86,78 @@ async fn retrieve_entries(
 
 #[derive(Clone, Debug)]
 pub struct LogHeightStrategy {
+    schema_provider: SchemaProvider,
     target_set: SchemaIdSet,
     received_remote_have: bool,
     sent_have: bool,
 }
 
 impl LogHeightStrategy {
-    pub fn new(target_set: &SchemaIdSet) -> Self {
+    pub fn new(target_set: &SchemaIdSet, schema_provider: SchemaProvider) -> Self {
         Self {
+            schema_provider,
             target_set: target_set.clone(),
             received_remote_have: false,
             sent_have: false,
         }
+    }
+
+    async fn included_document_ids(&self, store: &SqlStore) -> (Vec<DocumentId>, Vec<DocumentId>) {
+        let wants_blobs = self.target_set().contains(&SchemaId::Blob(1));
+        let wants_blob_pieces = self.target_set().contains(&SchemaId::BlobPiece(1));
+        let mut all_blob_documents_with_dependencies_met = vec![];
+        let mut all_non_blob_documents = vec![];
+        for schema_id in self.target_set().iter() {
+            // If the schema is `blob_v1` or `blob_piece_v1` we don't take any action and just
+            // move onto the next loop as these types of documents are only included as part of
+            // other application documents.
+            if schema_id == &SchemaId::Blob(1) || schema_id == &SchemaId::BlobPiece(1) {
+                continue;
+            }
+
+            let has_blob_relation = match self.schema_provider.get(schema_id).await {
+                Some(schema) => has_blob_relation(&schema),
+                None => false,
+            };
+
+            let schema_documents: Vec<DocumentId> = store
+                .get_documents_by_schema(schema_id)
+                .await
+                .unwrap()
+                .iter()
+                .map(|document| document.id())
+                .cloned()
+                .collect();
+
+            let mut schema_blob_documents = vec![];
+
+            if wants_blobs && has_blob_relation {
+                for document_id in &schema_documents {
+                    let blob_documents = store.get_blob_child_relations(document_id).await.unwrap();
+                    println!("{blob_documents:?}");
+                    schema_blob_documents.extend(blob_documents)
+                }
+            }
+
+            for blob_id in schema_blob_documents {
+                let include_blob = if wants_blob_pieces {
+                    let result = store.get_blob(&blob_id).await;
+                    result.is_ok()
+                } else {
+                    true
+                };
+
+                if include_blob {
+                    all_blob_documents_with_dependencies_met.push(blob_id);
+                }
+            }
+            all_non_blob_documents.extend(schema_documents);
+        }
+
+        (
+            all_non_blob_documents,
+            all_blob_documents_with_dependencies_met,
+        )
     }
 
     // Calculate the heights of all logs which contain contributions to documents in the current
@@ -85,26 +165,18 @@ impl LogHeightStrategy {
     async fn local_log_heights(
         &self,
         store: &SqlStore,
+        included_documents: &[DocumentId],
     ) -> HashMap<PublicKey, Vec<(LogId, SeqNum)>> {
-        let mut log_heights: HashMap<PublicKey, Vec<(LogId, SeqNum)>> = HashMap::new();
+        println!("{included_documents:?}");
+        // For every schema id in the target set retrieve log heights for all contributing authors
+        let document_log_heights = store
+            .get_document_log_heights(included_documents)
+            .await
+            .expect("Fatal database error")
+            .into_iter()
+            .collect();
 
-        for schema_id in self.target_set().iter() {
-            // For every schema id in the target set retrieve log heights for all contributing authors
-            let schema_logs = store
-                .get_log_heights(schema_id)
-                .await
-                .expect("Fatal database error")
-                .into_iter();
-
-            // Then merge them into any existing records for the author
-            for (public_key, logs) in schema_logs {
-                let mut author_logs = log_heights.get(&public_key).cloned().unwrap_or(vec![]);
-                author_logs.extend(logs);
-                author_logs.sort();
-                log_heights.insert(public_key, author_logs);
-            }
-        }
-        log_heights
+        document_log_heights
     }
 
     // Prepare entry responses based on a remotes log heights. The response contains all entries
@@ -116,8 +188,13 @@ impl LogHeightStrategy {
         store: &SqlStore,
         remote_log_heights: &[LogHeights],
     ) -> Vec<Message> {
+        let (document_ids, blob_ids) = self.included_document_ids(store).await;
+        let mut all_document_ids = vec![];
+        all_document_ids.extend(document_ids);
+        all_document_ids.extend(blob_ids.clone());
+
         // Get local log heights for the configured target set.
-        let local_log_heights = self.local_log_heights(store).await;
+        let local_log_heights = self.local_log_heights(store, &all_document_ids).await;
 
         // Compare local and remote log heights to determine what they need from us.
         let remote_needs = diff_log_heights(
@@ -155,7 +232,12 @@ impl Strategy for LogHeightStrategy {
     }
 
     async fn initial_messages(&mut self, store: &SqlStore) -> StrategyResult {
-        let log_heights = self.local_log_heights(store).await;
+        let (document_ids, blob_ids) = self.included_document_ids(store).await;
+        let mut all_document_ids = vec![];
+        all_document_ids.extend(document_ids);
+        all_document_ids.extend(blob_ids);
+
+        let log_heights = self.local_log_heights(store, &all_document_ids).await;
         self.sent_have = true;
 
         StrategyResult {
@@ -212,7 +294,8 @@ mod tests {
     use p2panda_rs::operation::{
         EncodedOperation, OperationAction, OperationBuilder, OperationValue,
     };
-    use p2panda_rs::schema::Schema;
+    use p2panda_rs::schema::{Schema, SchemaId};
+    use p2panda_rs::test_utils::fixtures::key_pair;
     use p2panda_rs::test_utils::memory_store::helpers::{send_to_store, PopulateStoreConfig};
     use rstest::rstest;
     use tokio::sync::broadcast;
@@ -223,8 +306,8 @@ mod tests {
     use crate::replication::strategies::log_height::{retrieve_entries, SortedIndex};
     use crate::replication::{LogHeightStrategy, LogHeights, Message, SchemaIdSet};
     use crate::test_utils::{
-        populate_and_materialize, populate_store_config, test_runner_with_manager, TestNode,
-        TestNodeManager,
+        add_blob, add_schema_and_documents, populate_and_materialize, populate_store_config,
+        test_runner_with_manager, TestNode, TestNodeManager,
     };
 
     // Helper for retrieving operations ordered as expected for replication and testing the result.
@@ -407,7 +490,6 @@ mod tests {
             let schema = config.schema.clone();
             let target_set = SchemaIdSet::new(&vec![schema.id().to_owned()]);
 
-            let strategy_a = LogHeightStrategy::new(&target_set);
             let mut node_a = manager.create().await;
             populate_and_materialize(&mut node_a, &config).await;
 
@@ -415,7 +497,8 @@ mod tests {
             let schema_provider = node_b.context.schema_provider.clone();
             let _ = schema_provider.update(schema).await;
             let (tx, _) = broadcast::channel(50);
-            let ingest = SyncIngest::new(schema_provider, tx);
+            let ingest = SyncIngest::new(schema_provider.clone(), tx);
+            let strategy_a = LogHeightStrategy::new(&target_set, schema_provider.clone());
 
             let entry_responses: Vec<(EncodedEntry, Option<EncodedOperation>)> = strategy_a
                 .entry_responses(&node_a.context.store, &[])
@@ -452,11 +535,14 @@ mod tests {
         test_runner_with_manager(move |manager: TestNodeManager| async move {
             let target_set = SchemaIdSet::new(&vec![config.schema.id().to_owned()]);
 
-            let strategy_a = LogHeightStrategy::new(&target_set);
             let mut node_a = manager.create().await;
-            let (key_pairs, _) = populate_and_materialize(&mut node_a, &config).await;
+            let (key_pairs, document_ids) = populate_and_materialize(&mut node_a, &config).await;
+            let strategy_a =
+                LogHeightStrategy::new(&target_set, node_a.context.schema_provider.clone());
 
-            let log_heights = strategy_a.local_log_heights(&node_a.context.store).await;
+            let log_heights = strategy_a
+                .local_log_heights(&node_a.context.store, &document_ids)
+                .await;
 
             let expected_log_heights = key_pairs
                 .into_iter()
@@ -470,6 +556,59 @@ mod tests {
                     )
                 })
                 .collect();
+
+            assert_eq!(log_heights, expected_log_heights);
+        });
+    }
+
+    #[rstest]
+    #[case(vec![], vec![(LogId::new(5), SeqNum::new(1).unwrap())])]
+    #[case(vec![SchemaId::Blob(1)], vec![(LogId::new(2), SeqNum::new(1).unwrap()), (LogId::new(5), SeqNum::new(1).unwrap())])]
+    #[case(vec![SchemaId::Blob(1), SchemaId::BlobPiece(1)], vec![(LogId::new(2), SeqNum::new(1).unwrap()), (LogId::new(5), SeqNum::new(1).unwrap())])]
+    fn calculates_log_heights_with_complete_blobs(
+        #[case] target_set_extension: Vec<SchemaId>,
+        key_pair: KeyPair,
+        #[case] expected_log_heights: Vec<(LogId, SeqNum)>,
+    ) {
+        test_runner_with_manager(move |manager: TestNodeManager| async move {
+            let mut node_a = manager.create().await;
+            let document_view_id = add_blob(&mut node_a, "Hello World!", &key_pair).await;
+
+            let (schema, document_view_ids) = add_schema_and_documents(
+                &mut node_a,
+                "img",
+                vec![vec![(
+                    "relation_to_blob",
+                    document_view_id.into(),
+                    Some(SchemaId::Blob(1)),
+                )]],
+                &key_pair,
+            )
+            .await;
+
+            let mut target_set_schema = vec![schema.id().to_owned()];
+            target_set_schema.extend(target_set_extension);
+            let target_set = SchemaIdSet::new(&target_set_schema);
+            let _ = node_a.context.schema_provider.update(schema).await;
+
+            let strategy_a =
+                LogHeightStrategy::new(&target_set, node_a.context.schema_provider.clone());
+
+            let (document_ids, blob_ids) = strategy_a
+                .included_document_ids(&node_a.context.store)
+                .await;
+            let mut included_documents = vec![];
+            included_documents.extend(document_ids);
+            included_documents.extend(blob_ids.clone());
+
+            let log_heights = strategy_a
+                .local_log_heights(&node_a.context.store, &included_documents)
+                .await;
+
+            let expected_log_heights =
+                vec![(key_pair.public_key(), expected_log_heights.to_owned())]
+                    .into_iter()
+                    .collect();
 
             assert_eq!(log_heights, expected_log_heights);
         });
