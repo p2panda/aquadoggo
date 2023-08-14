@@ -699,9 +699,11 @@ async fn insert_document(
 
 #[cfg(test)]
 mod tests {
+    use p2panda_rs::api::next_args;
     use p2panda_rs::document::materialization::build_graph;
     use p2panda_rs::document::traits::AsDocument;
     use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewFields, DocumentViewId};
+    use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::traits::AsOperation;
     use p2panda_rs::operation::{Operation, OperationId};
@@ -1292,7 +1294,7 @@ mod tests {
             assert_query(&node, "SELECT entry_hash FROM entries", 0).await;
             assert_query(&node, "SELECT operation_id FROM operations_v1", 0).await;
             assert_query(&node, "SELECT operation_id FROM operation_fields_v1", 0).await;
-            assert_query(&node, "SELECT log_id FROM logs", 0).await;
+            assert_query(&node, "SELECT log_id FROM logs", 1).await;
             assert_query(&node, "SELECT document_id FROM documents", 0).await;
             assert_query(&node, "SELECT document_id FROM document_views", 0).await;
             assert_query(&node, "SELECT name FROM document_view_fields", 0).await;
@@ -1328,10 +1330,41 @@ mod tests {
             assert_query(&node, "SELECT entry_hash FROM entries", 1).await;
             assert_query(&node, "SELECT operation_id FROM operations_v1", 1).await;
             assert_query(&node, "SELECT operation_id FROM operation_fields_v1", 13).await;
-            assert_query(&node, "SELECT log_id FROM logs", 1).await;
+            assert_query(&node, "SELECT log_id FROM logs", 2).await;
             assert_query(&node, "SELECT document_id FROM documents", 1).await;
             assert_query(&node, "SELECT document_id FROM document_views", 1).await;
             assert_query(&node, "SELECT name FROM document_view_fields", 10).await;
+        });
+    }
+
+    #[rstest]
+    fn next_args_after_purge(
+        #[from(populate_store_config)]
+        #[with(2, 1, 1)]
+        config: PopulateStoreConfig,
+    ) {
+        test_runner(|mut node: TestNode| async move {
+            // Populate the store and materialize all documents.
+            let (key_pairs, document_ids) = populate_and_materialize(&mut node, &config).await;
+            let document_id = document_ids[0].clone();
+            let public_key = key_pairs[0].public_key();
+
+            let _ = node.context.store.purge_document(&document_id).await;
+
+            let result = next_args(
+                &node.context.store,
+                &public_key,
+                Some(&document_id.as_str().parse().unwrap()),
+            )
+            .await;
+            println!("{:#?}", result);
+            assert!(result.is_err());
+
+            let result = next_args(&node.context.store, &public_key, None).await;
+
+            assert!(result.is_ok());
+            let next_args = result.unwrap();
+            assert_eq!(next_args, (None, None, SeqNum::default(), LogId::new(1)));
         });
     }
 }

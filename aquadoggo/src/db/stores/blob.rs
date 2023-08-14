@@ -433,7 +433,7 @@ mod tests {
             assert_query(&node, "SELECT entry_hash FROM entries", 0).await;
             assert_query(&node, "SELECT operation_id FROM operations_v1", 0).await;
             assert_query(&node, "SELECT operation_id FROM operation_fields_v1", 0).await;
-            assert_query(&node, "SELECT log_id FROM logs", 0).await;
+            assert_query(&node, "SELECT log_id FROM logs", 3).await;
             assert_query(&node, "SELECT document_id FROM documents", 0).await;
             assert_query(&node, "SELECT document_id FROM document_views", 0).await;
             assert_query(&node, "SELECT name FROM document_view_fields", 0).await;
@@ -475,7 +475,7 @@ mod tests {
             assert_query(&node, "SELECT entry_hash FROM entries", 1).await;
             assert_query(&node, "SELECT operation_id FROM operations_v1", 1).await;
             assert_query(&node, "SELECT operation_id FROM operation_fields_v1", 13).await;
-            assert_query(&node, "SELECT log_id FROM logs", 1).await;
+            assert_query(&node, "SELECT log_id FROM logs", 4).await;
             assert_query(&node, "SELECT document_id FROM documents", 1).await;
             assert_query(&node, "SELECT document_id FROM document_views", 1).await;
             assert_query(&node, "SELECT name FROM document_view_fields", 10).await;
