@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Serve static files from `blobs` directory [#480](https://github.com/p2panda/aquadoggo/pull/480)
 - Add method to store for pruning document views [#491](https://github.com/p2panda/aquadoggo/pull/491)
 - Introduce `BlobStore` [#484](https://github.com/p2panda/aquadoggo/pull/484)
-- `prune` materialization task [#484](https://github.com/p2panda/aquadoggo/pull/496)
+- `garbage_collection` materialization task [#500](https://github.com/p2panda/aquadoggo/pull/500)
 
 ## [0.5.0]
 
