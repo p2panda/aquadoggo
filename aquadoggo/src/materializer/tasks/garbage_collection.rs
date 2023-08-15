@@ -104,7 +104,7 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
                 .iter()
                 .map(|document_id| {
                     debug!("Issue prune task for document: {document_id:#?}");
-                    Task::new("prune", TaskInput::DocumentId(document_id.to_owned()))
+                    Task::new("garbage_collection", TaskInput::DocumentId(document_id.to_owned()))
                 })
                 .collect();
 
@@ -226,7 +226,7 @@ mod tests {
 
             // Update the grand parent document to a new view, leaving the previous one dangling.
             //
-            // Note: this test method _does not_ dispatch "prune" tasks.
+            // Note: this test method _does not_ dispatch "garbage_collection" tasks.
             update_document(
                 &mut node,
                 schema_for_grand_parent.id(),
@@ -268,7 +268,7 @@ mod tests {
             // It is the parent (which this grand parent relates to) as we expect.
             assert_eq!(
                 next_tasks[0],
-                Task::new("prune", TaskInput::DocumentId(parent_document_id))
+                Task::new("garbage_collection", TaskInput::DocumentId(parent_document_id))
             );
 
             // Check the historic view has been deleted.
@@ -299,7 +299,7 @@ mod tests {
                     .rev()
                     .map(|document_view_id| {
                         let document_id: DocumentId = document_view_id.to_string().parse().unwrap();
-                        Task::new("prune", TaskInput::DocumentId(document_id))
+                        Task::new("garbage_collection", TaskInput::DocumentId(document_id))
                     })
                     .collect::<Vec<Task<TaskInput>>>()
             );

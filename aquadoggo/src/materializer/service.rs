@@ -41,7 +41,7 @@ pub async fn materializer_service(
     factory.register("dependency", pool_size, dependency_task);
     factory.register("schema", pool_size, schema_task);
     factory.register("blob", pool_size, blob_task);
-    factory.register("prune", pool_size, garbage_collection_task);
+    factory.register("garbage_collection", pool_size, garbage_collection_task);
 
     // Get a listener for error signal from factory
     let on_error = factory.on_error();

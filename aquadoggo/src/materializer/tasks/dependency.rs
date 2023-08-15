@@ -996,7 +996,7 @@ mod tests {
                 .unwrap()
                 .expect("Should have returned new tasks");
             assert_eq!(tasks.len(), 2);
-            assert_eq!(tasks[0].worker_name(), &String::from("prune"));
+            assert_eq!(tasks[0].worker_name(), &String::from("garbage_collection"));
             assert_eq!(tasks[1].worker_name(), &String::from("dependency"));
 
             // We should have now a materialized latest post and comment document but not the

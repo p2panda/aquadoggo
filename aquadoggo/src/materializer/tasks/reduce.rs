@@ -259,7 +259,7 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
                 );
 
                 tasks.push(Task::new(
-                    "prune",
+                    "garbage_collection",
                     TaskInput::DocumentId(document.id().to_owned()),
                 ))
             }
@@ -545,12 +545,12 @@ mod tests {
     #[rstest]
     #[case(
         populate_store_config(3, 1, 1, false, doggo_schema(), doggo_fields(), doggo_fields()),
-        vec!["prune".to_string(), "dependency".to_string()]
+        vec!["garbage_collection".to_string(), "dependency".to_string()]
     )]
     // This document is deleted, it shouldn't spawn a dependency task.
     #[case(
         populate_store_config(3, 1, 1, true, doggo_schema(), doggo_fields(), doggo_fields()),
-        vec!["prune".to_string()]
+        vec!["garbage_collection".to_string()]
     )]
     fn returns_correct_dependency_and_prune_tasks(
         #[case] config: PopulateStoreConfig,
