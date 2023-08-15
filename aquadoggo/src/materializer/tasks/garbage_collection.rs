@@ -104,7 +104,10 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
                 .iter()
                 .map(|document_id| {
                     debug!("Issue prune task for document: {document_id:#?}");
-                    Task::new("garbage_collection", TaskInput::DocumentId(document_id.to_owned()))
+                    Task::new(
+                        "garbage_collection",
+                        TaskInput::DocumentId(document_id.to_owned()),
+                    )
                 })
                 .collect();
 
@@ -268,7 +271,10 @@ mod tests {
             // It is the parent (which this grand parent relates to) as we expect.
             assert_eq!(
                 next_tasks[0],
-                Task::new("garbage_collection", TaskInput::DocumentId(parent_document_id))
+                Task::new(
+                    "garbage_collection",
+                    TaskInput::DocumentId(parent_document_id)
+                )
             );
 
             // Check the historic view has been deleted.

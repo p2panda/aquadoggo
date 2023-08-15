@@ -60,7 +60,7 @@ impl SqlStore {
     pub async fn purge_blob(&self, document_id: &DocumentId) -> Result<(), SqlStoreError> {
         // Collect the view id of any existing document views which contain a relation to the blob
         // which is the purge target.
-        let blob_reverse_relations = reverse_relations(&self.pool, &document_id, None).await?;
+        let blob_reverse_relations = reverse_relations(&self.pool, document_id, None).await?;
 
         // If there are no documents referring to the blob then we continue with the purge.
         if blob_reverse_relations.is_empty() {
@@ -87,7 +87,7 @@ impl SqlStore {
             .await
             .map_err(|e| SqlStoreError::Transaction(e.to_string()))?;
 
-            self.purge_document(&document_id).await?;
+            self.purge_document(document_id).await?;
 
             for blob_piece_id in blob_piece_ids {
                 let blob_piece_id: DocumentId = blob_piece_id
@@ -116,7 +116,7 @@ async fn reverse_relations(
     schema_id: Option<SchemaId>,
 ) -> Result<Vec<String>, SqlStoreError> {
     let schema_id_condition = match schema_id {
-        Some(schema_id) => format!("AND document_views.schema_id = '{}'", schema_id.to_string()),
+        Some(schema_id) => format!("AND document_views.schema_id = '{}'", schema_id),
         None => String::new(),
     };
 
