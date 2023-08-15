@@ -230,7 +230,7 @@ mod tests {
     use crate::db::errors::BlobStoreError;
     use crate::test_utils::{
         add_blob, add_document, add_schema_and_documents, populate_and_materialize,
-        populate_store_config, test_runner, TestNode,
+        populate_store_config, test_runner, TestNode, assert_query,
     };
 
     #[rstest]
@@ -362,15 +362,6 @@ mod tests {
                 result
             );
         })
-    }
-
-    // Helper for asserting expected number of items yielded from a SQL query.
-    async fn assert_query(node: &TestNode, sql: &str, expected_len: usize) {
-        let result: Result<Vec<String>, _> =
-            query_scalar(sql).fetch_all(&node.context.store.pool).await;
-
-        assert!(result.is_ok(), "{:#?}", result);
-        assert_eq!(result.unwrap().len(), expected_len, "{sql}");
     }
 
     #[rstest]

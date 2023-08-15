@@ -11,6 +11,7 @@ use p2panda_rs::test_utils::memory_store::helpers::{
     populate_store, send_to_store, PopulateStoreConfig,
 };
 use rstest::fixture;
+use sqlx::query_scalar;
 
 use crate::context::Context;
 use crate::db::SqlStore;
@@ -367,4 +368,13 @@ pub async fn add_blob(node: &mut TestNode, blob_data: &str, key_pair: &KeyPair) 
     .await;
 
     blob_view_id
+}
+
+// Helper for asserting expected number of items yielded from a SQL query.
+pub async fn assert_query(node: &TestNode, sql: &str, expected_len: usize) {
+    let result: Result<Vec<String>, _> =
+        query_scalar(sql).fetch_all(&node.context.store.pool).await;
+
+    assert!(result.is_ok(), "{:#?}", result);
+    assert_eq!(result.unwrap().len(), expected_len);
 }

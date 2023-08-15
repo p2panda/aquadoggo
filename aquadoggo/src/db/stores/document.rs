@@ -722,7 +722,7 @@ mod tests {
     use crate::materializer::TaskInput;
     use crate::test_utils::{
         add_schema_and_documents, build_document, populate_and_materialize, populate_store_config,
-        test_runner, TestNode,
+        test_runner, TestNode, assert_query,
     };
 
     #[rstest]
@@ -1255,15 +1255,6 @@ mod tests {
                 .unwrap();
             assert!(document.is_some());
         });
-    }
-
-    // Helper for asserting expected number of items yielded from a SQL query.
-    async fn assert_query(node: &TestNode, sql: &str, expected_len: usize) {
-        let result: Result<Vec<String>, _> =
-            query_scalar(sql).fetch_all(&node.context.store.pool).await;
-
-        assert!(result.is_ok(), "{:#?}", result);
-        assert_eq!(result.unwrap().len(), expected_len);
     }
 
     #[rstest]
