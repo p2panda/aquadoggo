@@ -107,6 +107,9 @@ impl SqlStore {
     }
 }
 
+/// Helper for getting the document ids of any document which relates to the specified document.
+///
+/// Optionally pass in a `SchemaId` to restrict the results to documents of a certain schema.
 async fn reverse_relations(
     pool: &AnyPool,
     document_id: &DocumentId,

@@ -5,7 +5,7 @@ use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::operation::traits::AsOperation;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::OperationStore;
-use p2panda_rs::Human;
+use p2panda_rs::{Human, WithId};
 
 use crate::context::Context;
 use crate::materializer::worker::{TaskError, TaskResult};
@@ -77,6 +77,9 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
                 }
             }
 
+            // If the number of deleted views equals the total existing views, then there is a
+            // chance this became completely detached. In this case we should check if this
+            // document is a blob document and then try to purge it.
             if all_document_view_ids.len() == deleted_views_count {
                 let operation = context
                     .store
@@ -86,6 +89,8 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
                     .expect("Operation exists in store");
 
                 if let SchemaId::Blob(_) = operation.schema_id() {
+                    // Purge the blob and all it's pieces. This only succeeds if no document
+                    // refers to the blob document by either a relation or pinned relation.
                     context
                         .store
                         .purge_blob(&document_id)
