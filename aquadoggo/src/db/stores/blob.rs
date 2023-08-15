@@ -219,7 +219,7 @@ async fn document_to_blob_data(
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::document::{DocumentId, DocumentViewId};
+    use p2panda_rs::document::DocumentId;
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::test_utils::fixtures::{key_pair, random_document_view_id};
@@ -229,54 +229,15 @@ mod tests {
 
     use crate::db::errors::BlobStoreError;
     use crate::test_utils::{
-        add_document, add_schema_and_documents, populate_and_materialize, populate_store_config,
-        test_runner, TestNode,
+        add_blob, add_document, add_schema_and_documents, populate_and_materialize,
+        populate_store_config, test_runner, TestNode,
     };
-
-    async fn add_blob_data(
-        node: &mut TestNode,
-        blob_data: &str,
-        key_pair: &KeyPair,
-    ) -> DocumentViewId {
-        // Publish blob pieces and blob.
-        let blob_piece_view_id_1 = add_document(
-            node,
-            &SchemaId::BlobPiece(1),
-            vec![("data", blob_data[..5].into())],
-            &key_pair,
-        )
-        .await;
-
-        let blob_piece_view_id_2 = add_document(
-            node,
-            &SchemaId::BlobPiece(1),
-            vec![("data", blob_data[5..].into())],
-            &key_pair,
-        )
-        .await;
-        let blob_view_id = add_document(
-            node,
-            &SchemaId::Blob(1),
-            vec![
-                ("length", { blob_data.len() as i64 }.into()),
-                ("mime_type", "text/plain".into()),
-                (
-                    "pieces",
-                    vec![blob_piece_view_id_1, blob_piece_view_id_2].into(),
-                ),
-            ],
-            &key_pair,
-        )
-        .await;
-
-        blob_view_id
-    }
 
     #[rstest]
     fn get_blob(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
             let blob_data = "Hello, World!".to_string();
-            let blob_view_id = add_blob_data(&mut node, &blob_data, &key_pair).await;
+            let blob_view_id = add_blob(&mut node, &blob_data, &key_pair).await;
 
             let document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
 
@@ -416,7 +377,7 @@ mod tests {
     fn purge_blob(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
             let blob_data = "Hello, World!".to_string();
-            let blob_view_id = add_blob_data(&mut node, &blob_data, &key_pair).await;
+            let blob_view_id = add_blob(&mut node, &blob_data, &key_pair).await;
 
             // There is one blob and two blob pieces in database.
             //
@@ -458,7 +419,7 @@ mod tests {
             let _ = populate_and_materialize(&mut node, &config).await;
 
             let blob_data = "Hello, World!".to_string();
-            let blob_view_id = add_blob_data(&mut node, &blob_data, &key_pair).await;
+            let blob_view_id = add_blob(&mut node, &blob_data, &key_pair).await;
 
             // There is one blob and two blob pieces in database.
             //
@@ -493,7 +454,7 @@ mod tests {
     fn does_not_purge_blob_if_still_pinned(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
             let blob_data = "Hello, World!".to_string();
-            let blob_view_id = add_blob_data(&mut node, &blob_data, &key_pair).await;
+            let blob_view_id = add_blob(&mut node, &blob_data, &key_pair).await;
 
             let _ = add_schema_and_documents(
                 &mut node,

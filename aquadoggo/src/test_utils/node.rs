@@ -332,3 +332,39 @@ pub async fn update_document(
     }
     DocumentViewId::from(entry_signed.hash())
 }
+
+pub async fn add_blob(node: &mut TestNode, blob_data: &str, key_pair: &KeyPair) -> DocumentViewId {
+    // Publish blob pieces and blob.
+    let (blob_data_a, blob_data_b) = blob_data.split_at(blob_data.len() / 2);
+    let blob_piece_view_id_1 = add_document(
+        node,
+        &SchemaId::BlobPiece(1),
+        vec![("data", blob_data_a.into())],
+        &key_pair,
+    )
+    .await;
+
+    let blob_piece_view_id_2 = add_document(
+        node,
+        &SchemaId::BlobPiece(1),
+        vec![("data", blob_data_b.into())],
+        &key_pair,
+    )
+    .await;
+    let blob_view_id = add_document(
+        node,
+        &SchemaId::Blob(1),
+        vec![
+            ("length", { blob_data.len() as i64 }.into()),
+            ("mime_type", "text/plain".into()),
+            (
+                "pieces",
+                vec![blob_piece_view_id_1, blob_piece_view_id_2].into(),
+            ),
+        ],
+        &key_pair,
+    )
+    .await;
+
+    blob_view_id
+}
