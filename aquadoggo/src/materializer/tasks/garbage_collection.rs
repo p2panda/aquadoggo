@@ -5,7 +5,7 @@ use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::operation::traits::AsOperation;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::OperationStore;
-use p2panda_rs::{Human, WithId};
+use p2panda_rs::Human;
 
 use crate::context::Context;
 use crate::materializer::worker::{TaskError, TaskResult};
