@@ -225,12 +225,11 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::{key_pair, random_document_view_id};
     use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
     use rstest::rstest;
-    use sqlx::query_scalar;
 
     use crate::db::errors::BlobStoreError;
     use crate::test_utils::{
-        add_blob, add_document, add_schema_and_documents, populate_and_materialize,
-        populate_store_config, test_runner, TestNode, assert_query,
+        add_blob, add_document, add_schema_and_documents, assert_query, populate_and_materialize,
+        populate_store_config, test_runner, TestNode,
     };
 
     #[rstest]
@@ -381,7 +380,8 @@ mod tests {
             assert_query(&node, "SELECT document_id FROM document_views", 3).await;
             assert_query(&node, "SELECT name FROM document_view_fields", 5).await;
 
-            // Purge this blob from the database, we now expect all tables to be empty.
+            // Purge this blob from the database, we now expect all tables to be empty (except the
+            // logs table).
             let document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
             let result = node.context.store.purge_blob(&document_id).await;
             assert!(result.is_ok(), "{:#?}", result);
@@ -423,7 +423,6 @@ mod tests {
             assert_query(&node, "SELECT document_id FROM document_views", 4).await;
             assert_query(&node, "SELECT name FROM document_view_fields", 15).await;
 
-            // Purge this blob from the database, we now expect all tables to be empty.
             let document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
             let result = node.context.store.purge_blob(&document_id).await;
             assert!(result.is_ok(), "{:#?}", result);

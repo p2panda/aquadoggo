@@ -715,14 +715,13 @@ mod tests {
     use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
     use p2panda_rs::WithId;
     use rstest::rstest;
-    use sqlx::query_scalar;
 
     use crate::db::stores::document::DocumentView;
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
     use crate::test_utils::{
-        add_schema_and_documents, build_document, populate_and_materialize, populate_store_config,
-        test_runner, TestNode, assert_query,
+        add_schema_and_documents, assert_query, build_document, populate_and_materialize,
+        populate_store_config, test_runner, TestNode,
     };
 
     #[rstest]

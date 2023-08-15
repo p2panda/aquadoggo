@@ -80,7 +80,7 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
             // If the number of deleted views equals the total existing views, then there is a
             // chance this became completely detached. In this case we should check if this
             // document is a blob document and then try to purge it.
-            if all_document_view_ids.len() == deleted_views_count {
+            if all_document_view_ids.len() - 1 == deleted_views_count {
                 let operation = context
                     .store
                     .get_operation(&document_id.as_str().parse().unwrap())
@@ -122,16 +122,19 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
 mod tests {
     use p2panda_rs::document::DocumentId;
     use p2panda_rs::identity::KeyPair;
+    use p2panda_rs::schema::SchemaId;
     use p2panda_rs::storage_provider::traits::DocumentStore;
-    use p2panda_rs::test_utils::fixtures::key_pair;
+    use p2panda_rs::test_utils::fixtures::{key_pair, random_document_view_id};
     use rstest::rstest;
 
     use crate::materializer::tasks::garbage_collection_task;
     use crate::materializer::{Task, TaskInput};
-    use crate::test_utils::{add_schema_and_documents, test_runner, update_document, TestNode};
+    use crate::test_utils::{
+        add_blob, add_schema_and_documents, assert_query, test_runner, update_document, TestNode,
+    };
 
     #[rstest]
-    fn prunes_document_views(key_pair: KeyPair) {
+    fn e2e_pruning(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
             // Publish some documents which we will later point relations at.
             let (child_schema, child_document_view_ids) = add_schema_and_documents(
@@ -223,7 +226,7 @@ mod tests {
 
             // Update the grand parent document to a new view, leaving the previous one dangling.
             //
-            // Note: this method _does not_ dispatch "prune" tasks.
+            // Note: this test method _does not_ dispatch "prune" tasks.
             update_document(
                 &mut node,
                 schema_for_grand_parent.id(),
@@ -311,6 +314,330 @@ mod tests {
 
             // It has.
             assert!(historic_document_view.is_none());
+
+            // Running the child tasks returns no new tasks.
+            let next_tasks =
+                garbage_collection_task(node.context.clone(), next_tasks[0].input().to_owned())
+                    .await
+                    .unwrap();
+
+            assert!(next_tasks.is_none());
         });
+    }
+
+    #[rstest]
+    fn no_new_tasks_issued_when_no_views_pruned(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            // Create a child document.
+            let (child_schema, child_document_view_ids) = add_schema_and_documents(
+                &mut node,
+                "schema_for_child",
+                vec![vec![("uninteresting_field", 1.into(), None)]],
+                &key_pair,
+            )
+            .await;
+
+            // Create a parent document which contains a pinned relation list pointing to the
+            // child created above.
+            let (_, parent_document_view_ids) = add_schema_and_documents(
+                &mut node,
+                "schema_for_parent",
+                vec![vec![
+                    ("name", "parent".into(), None),
+                    (
+                        "children",
+                        child_document_view_ids.clone().into(),
+                        Some(child_schema.id().to_owned()),
+                    ),
+                ]],
+                &key_pair,
+            )
+            .await;
+
+            // Run a garbage collection task for the parent.
+            let document_id: DocumentId = parent_document_view_ids[0].to_string().parse().unwrap();
+            let next_tasks =
+                garbage_collection_task(node.context.clone(), TaskInput::DocumentId(document_id))
+                    .await
+                    .unwrap();
+
+            // No views were pruned so we expect no new tasks to be issued.
+            assert!(next_tasks.is_none());
+        })
+    }
+
+    #[rstest]
+    fn purges_blobs(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            // Publish a blob.
+            let blob_document_view = add_blob(&mut node, "Hello World!", &key_pair).await;
+            let blob_document_id: DocumentId = blob_document_view.to_string().parse().unwrap();
+
+            // Check the blob is there.
+            let blob = node
+                .context
+                .store
+                .get_blob(&blob_document_id)
+                .await
+                .unwrap();
+            assert!(blob.is_some());
+
+            // Run a garbage collection task for the blob document.
+            let next_tasks = garbage_collection_task(
+                node.context.clone(),
+                TaskInput::DocumentId(blob_document_id.clone()),
+            )
+            .await
+            .unwrap();
+
+            // It shouldn't return any new tasks.
+            assert!(next_tasks.is_none());
+
+            // The blob should no longer be available.
+            let blob = node
+                .context
+                .store
+                .get_blob(&blob_document_id)
+                .await
+                .unwrap();
+            assert!(blob.is_none());
+
+            // And all expected rows deleted from the database.
+            assert_query(&node, "SELECT entry_hash FROM entries", 0).await;
+            assert_query(&node, "SELECT operation_id FROM operations_v1", 0).await;
+            assert_query(&node, "SELECT operation_id FROM operation_fields_v1", 0).await;
+            assert_query(&node, "SELECT log_id FROM logs", 3).await;
+            assert_query(&node, "SELECT document_id FROM documents", 0).await;
+            assert_query(&node, "SELECT document_id FROM document_views", 0).await;
+            assert_query(&node, "SELECT name FROM document_view_fields", 0).await;
+        });
+    }
+
+    #[rstest]
+    fn purges_newly_detached_blobs(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            // Create a blob document.
+            let blob_data = "Hello, World!".to_string();
+            let blob_view_id = add_blob(&mut node, &blob_data, &key_pair).await;
+            let blob_document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
+
+            // Relate to the blob from a new document.
+            let (schema, documents_pinning_blob) = add_schema_and_documents(
+                &mut node,
+                "img",
+                vec![vec![(
+                    "blob",
+                    blob_view_id.clone().into(),
+                    Some(SchemaId::Blob(1)),
+                )]],
+                &key_pair,
+            )
+            .await;
+
+            // Now update the document to relate to another blob. This means the previously
+            // created blob is now "dangling".
+            update_document(
+                &mut node,
+                schema.id(),
+                vec![("blob", random_document_view_id().into())],
+                &documents_pinning_blob[0].clone(),
+                &key_pair,
+            )
+            .await;
+
+            // Run a task for the parent document.
+            let document_id: DocumentId = documents_pinning_blob[0].to_string().parse().unwrap();
+            let next_tasks =
+                garbage_collection_task(node.context.clone(), TaskInput::DocumentId(document_id))
+                    .await
+                    .unwrap()
+                    .unwrap();
+
+            // It issues one new task which is for the blob document.
+            assert_eq!(next_tasks.len(), 1);
+            let next_tasks =
+                garbage_collection_task(node.context.clone(), next_tasks[0].input().to_owned())
+                    .await
+                    .unwrap();
+            // No new tasks issued.
+            assert!(next_tasks.is_none());
+
+            // The blob has correctly been purged.
+            let blob = node
+                .context
+                .store
+                .get_blob(&blob_document_id)
+                .await
+                .unwrap();
+
+            assert!(blob.is_none());
+        })
+    }
+
+    #[rstest]
+    fn other_documents_keep_blob_alive(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            // Create a blob document.
+            let blob_data = "Hello, World!".to_string();
+            let blob_view_id = add_blob(&mut node, &blob_data, &key_pair).await;
+            let blob_document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
+
+            // Relate to the blob from a new document.
+            let (schema, documents_pinning_blob) = add_schema_and_documents(
+                &mut node,
+                "img",
+                vec![vec![(
+                    "blob",
+                    blob_view_id.clone().into(),
+                    Some(SchemaId::Blob(1)),
+                )]],
+                &key_pair,
+            )
+            .await;
+
+            // Now update the document to relate to another blob. This means the previously
+            // created blob is now "dangling".
+            update_document(
+                &mut node,
+                schema.id(),
+                vec![("blob", random_document_view_id().into())],
+                &documents_pinning_blob[0].clone(),
+                &key_pair,
+            )
+            .await;
+
+            // Another document relating to the blob (this time from in a relation field).
+            let _ = add_schema_and_documents(
+                &mut node,
+                "img",
+                vec![vec![(
+                    "blob",
+                    blob_document_id.clone().into(),
+                    Some(SchemaId::Blob(1)),
+                )]],
+                &key_pair,
+            )
+            .await;
+
+            // Run a task for the parent document.
+            let document_id: DocumentId = documents_pinning_blob[0].to_string().parse().unwrap();
+            let next_tasks =
+                garbage_collection_task(node.context.clone(), TaskInput::DocumentId(document_id))
+                    .await
+                    .unwrap()
+                    .unwrap();
+
+            // It issues one new task which is for the blob document.
+            assert_eq!(next_tasks.len(), 1);
+            let next_tasks =
+                garbage_collection_task(node.context.clone(), next_tasks[0].input().to_owned())
+                    .await
+                    .unwrap();
+            // No new tasks issued.
+            assert!(next_tasks.is_none());
+
+            // The blob should still be there as it was kept alive by a different document.
+            let blob = node
+                .context
+                .store
+                .get_blob(&blob_document_id)
+                .await
+                .unwrap();
+
+            assert!(blob.is_some());
+        })
+    }
+
+    #[rstest]
+    fn all_relation_types_keep_blobs_alive(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            let blob_data = "Hello, World!".to_string();
+
+            // Any type of relation can keep a blob alive, here we create one of each and run
+            // garbage collection tasks for each blob.
+
+            let blob_view_id_1 = add_blob(&mut node, &blob_data, &key_pair).await;
+            let _ = add_schema_and_documents(
+                &mut node,
+                "img",
+                vec![vec![(
+                    "blob",
+                    blob_view_id_1.clone().into(),
+                    Some(SchemaId::Blob(1)),
+                )]],
+                &key_pair,
+            )
+            .await;
+
+            let blob_view_id_2 = add_blob(&mut node, &blob_data, &key_pair).await;
+            let _ = add_schema_and_documents(
+                &mut node,
+                "img",
+                vec![vec![(
+                    "blob",
+                    vec![blob_view_id_2.clone()].into(),
+                    Some(SchemaId::Blob(1)),
+                )]],
+                &key_pair,
+            )
+            .await;
+
+            let blob_view_id_3 = add_blob(&mut node, &blob_data, &key_pair).await;
+            let _ = add_schema_and_documents(
+                &mut node,
+                "img",
+                vec![vec![(
+                    "blob",
+                    blob_view_id_3
+                        .to_string()
+                        .parse::<DocumentId>()
+                        .unwrap()
+                        .into(),
+                    Some(SchemaId::Blob(1)),
+                )]],
+                &key_pair,
+            )
+            .await;
+
+            let blob_view_id_4 = add_blob(&mut node, &blob_data, &key_pair).await;
+            let _ = add_schema_and_documents(
+                &mut node,
+                "img",
+                vec![vec![(
+                    "blob",
+                    vec![blob_view_id_4.to_string().parse::<DocumentId>().unwrap()].into(),
+                    Some(SchemaId::Blob(1)),
+                )]],
+                &key_pair,
+            )
+            .await;
+
+            for blob_view_id in [
+                blob_view_id_1,
+                blob_view_id_2,
+                blob_view_id_3,
+                blob_view_id_4,
+            ] {
+                let blob_document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
+                let next_tasks = garbage_collection_task(
+                    node.context.clone(),
+                    TaskInput::DocumentId(blob_document_id.clone()),
+                )
+                .await
+                .unwrap();
+
+                assert!(next_tasks.is_none());
+
+                // All blobs should be kept alive.
+                let blob = node
+                    .context
+                    .store
+                    .get_blob(&blob_document_id)
+                    .await
+                    .unwrap();
+
+                assert!(blob.is_some());
+            }
+        })
     }
 }

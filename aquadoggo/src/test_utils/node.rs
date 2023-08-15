@@ -376,5 +376,5 @@ pub async fn assert_query(node: &TestNode, sql: &str, expected_len: usize) {
         query_scalar(sql).fetch_all(&node.context.store.pool).await;
 
     assert!(result.is_ok(), "{:#?}", result);
-    assert_eq!(result.unwrap().len(), expected_len);
+    assert_eq!(result.unwrap().len(), expected_len, "{:?}", sql);
 }
