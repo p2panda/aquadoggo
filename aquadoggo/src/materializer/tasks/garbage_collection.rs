@@ -54,7 +54,7 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
                     // will be returned if the deletion is successful.
                     effected_child_relations = context
                         .store
-                        .get_child_document_view_ids(document_view_id)
+                        .get_child_document_ids(document_view_id)
                         .await
                         .map_err(|err| TaskError::Critical(err.to_string()))?;
 

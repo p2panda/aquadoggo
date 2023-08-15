@@ -411,8 +411,8 @@ impl SqlStore {
             .collect())
     }
 
-    /// Get the ids of all document views which are related to from another document view.
-    pub async fn get_child_document_view_ids(
+    /// Get the ids of all documents which are related to from another document view.
+    pub async fn get_child_document_ids(
         &self,
         document_view_id: &DocumentViewId,
     ) -> Result<Vec<DocumentId>, DocumentStorageError> {
