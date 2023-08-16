@@ -2126,6 +2126,7 @@ dependencies = [
  "libp2p-autonat",
  "libp2p-connection-limits",
  "libp2p-core",
+ "libp2p-dcutr",
  "libp2p-dns",
  "libp2p-gossipsub",
  "libp2p-identify",
@@ -2213,6 +2214,27 @@ dependencies = [
  "smallvec",
  "thiserror",
  "unsigned-varint",
+ "void",
+]
+
+[[package]]
+name = "libp2p-dcutr"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "458dce197aa5347a7ec0634a4c1343c6dfbf75859ef34d51e92b0cc333fe7cc3"
+dependencies = [
+ "asynchronous-codec",
+ "either",
+ "futures",
+ "futures-timer",
+ "instant",
+ "libp2p-core",
+ "libp2p-identity",
+ "libp2p-swarm",
+ "log",
+ "quick-protobuf",
+ "quick-protobuf-codec",
+ "thiserror",
  "void",
 ]
 
@@ -2362,6 +2384,7 @@ checksum = "239ba7d28f8d0b5d77760dc6619c05c7e88e74ec8fbbe97f856f20a56745e620"
 dependencies = [
  "instant",
  "libp2p-core",
+ "libp2p-dcutr",
  "libp2p-identify",
  "libp2p-identity",
  "libp2p-ping",

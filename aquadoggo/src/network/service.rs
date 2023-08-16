@@ -102,7 +102,9 @@ pub async fn client(
         let rendezvous_address = network_config.clone().rendezvous_address.unwrap();
 
         // Connect to the relay server. Not for the reservation or relayed connection, but to (a) learn
-        // our local public address and (b) enable a freshly started relay to learn its public address.
+        // our local public address and (b) enable a freshly started relay to learn its public
+        // address.
+
         match swarm.dial(rendezvous_address.clone()) {
             Ok(_) => (),
             Err(_) => warn!("Failed to dial relay: {rendezvous_address:?}"),
@@ -314,6 +316,7 @@ impl EventLoop {
                     if self.swarm.behaviour().peers.is_enabled() {
                         self.handle_mdns_discovery_events(&event).await;
                         self.handle_rendezvous_discovery_events(&event).await;
+                        self.handle_dcutr_events(&event).await;
                         self.handle_peer_events(&event).await;
                     }
                 }
@@ -480,6 +483,15 @@ impl EventLoop {
                     }
                 }
             },
+            _ => (),
+        }
+    }
+
+    async fn handle_dcutr_events<E: std::fmt::Debug>(&mut self, event: &SwarmEvent<Event, E>) {
+        match event {
+            SwarmEvent::Behaviour(Event::Dcutr(event)) => {
+                debug!("{:?}", event)
+            }
             _ => (),
         }
     }

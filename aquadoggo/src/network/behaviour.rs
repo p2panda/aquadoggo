@@ -6,7 +6,7 @@ use anyhow::Result;
 use libp2p::identity::Keypair;
 use libp2p::swarm::behaviour::toggle::Toggle;
 use libp2p::swarm::NetworkBehaviour;
-use libp2p::{autonat, connection_limits, identify, mdns, ping, relay, rendezvous};
+use libp2p::{autonat, connection_limits, dcutr, identify, mdns, ping, relay, rendezvous};
 use log::debug;
 use void;
 
@@ -51,6 +51,8 @@ pub struct P2pandaBehaviour {
     /// Serve as a rendezvous point for remote peers to register their external addresses and query
     /// the addresses of other peers.
     pub rendezvous_server: Toggle<rendezvous::server::Behaviour>,
+
+    pub dcutr: Toggle<dcutr::Behaviour>,
 
     /// Register peer connections and handle p2panda messaging with them.
     pub peers: Toggle<peers::Behaviour>,
@@ -137,6 +139,12 @@ impl P2pandaBehaviour {
             None
         };
 
+        let dcutr = if network_config.relay_server_enabled || relay_client.is_some() {
+            Some(dcutr::Behaviour::new(peer_id))
+        } else {
+            None
+        };
+
         Ok(Self {
             identify: identify.into(),
             mdns: mdns.into(),
@@ -145,6 +153,7 @@ impl P2pandaBehaviour {
             rendezvous_server: rendezvous_server.into(),
             relay_client: relay_client.into(),
             relay_server: relay_server.into(),
+            dcutr: dcutr.into(),
             peers: peers.into(),
         })
     }
@@ -158,6 +167,7 @@ pub enum Event {
     RelayServer(relay::Event),
     RendezvousClient(rendezvous::client::Event),
     RendezvousServer(rendezvous::server::Event),
+    Dcutr(dcutr::Event),
     Peers(peers::Event),
     Void,
 }
@@ -195,6 +205,12 @@ impl From<rendezvous::client::Event> for Event {
 impl From<rendezvous::server::Event> for Event {
     fn from(e: rendezvous::server::Event) -> Self {
         Event::RendezvousServer(e)
+    }
+}
+
+impl From<dcutr::Event> for Event {
+    fn from(e: dcutr::Event) -> Self {
+        Event::Dcutr(e)
     }
 }
 
