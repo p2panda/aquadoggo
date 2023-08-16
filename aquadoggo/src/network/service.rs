@@ -432,6 +432,8 @@ impl EventLoop {
                                     .with(Protocol::P2pCircuit)
                                     .with(Protocol::P2p(PeerId::from(peer).into()))])
                                 .extend_addresses_through_behaviour()
+                                .condition(PeerCondition::Disconnected)
+                                .condition(PeerCondition::NotDialing)
                                 .build();
 
                             // establish relay-connection with remote peer
