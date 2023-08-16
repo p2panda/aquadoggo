@@ -231,28 +231,6 @@ pub async fn relay(
         .with(Protocol::QuicV1);
     swarm.listen_on(listen_addr_quic)?;
 
-    loop {
-        match swarm.next().await.expect("Infinite Stream.") {
-            SwarmEvent::Behaviour(event) => {
-                if let Event::Identify(identify::Event::Received {
-                    info: identify::Info { observed_addr, .. },
-                    ..
-                }) = &event
-                {
-                    info!("Observed external address reported: {observed_addr}");
-                    swarm.add_external_address(observed_addr.clone());
-                    break;
-                }
-
-                info!("{event:?}");
-            }
-            SwarmEvent::NewListenAddr { address, .. } => {
-                info!("Listening on {address:?}");
-            }
-            _ => {}
-        }
-    }
-
     info!("Relay initialized");
 
     Ok(swarm)
