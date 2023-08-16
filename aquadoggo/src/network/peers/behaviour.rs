@@ -82,12 +82,14 @@ pub enum Event {
 #[derive(Debug)]
 pub struct Behaviour {
     events: VecDeque<ToSwarm<Event, HandlerFromBehaviour>>,
+    running: bool,
 }
 
 impl Behaviour {
     pub fn new() -> Self {
         Self {
             events: VecDeque::new(),
+            running: false,
         }
     }
 
@@ -119,6 +121,10 @@ impl Behaviour {
             .push_back(ToSwarm::GenerateEvent(Event::MessageReceived(
                 peer, message,
             )));
+    }
+
+    pub fn run(&mut self) {
+        self.running = true
     }
 
     pub fn send_message(&mut self, peer: Peer, message: SyncMessage) {
@@ -216,8 +222,10 @@ impl NetworkBehaviour for Behaviour {
         _cx: &mut Context<'_>,
         _params: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
-        if let Some(event) = self.events.pop_front() {
-            return Poll::Ready(event);
+        if self.running {
+            if let Some(event) = self.events.pop_front() {
+                return Poll::Ready(event);
+            }
         }
 
         Poll::Pending

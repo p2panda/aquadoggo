@@ -285,14 +285,8 @@ impl EventLoop {
     pub async fn run(mut self) {
         let mut shutdown_request_received = self.shutdown_handler.is_requested();
 
-        if let Some(rendezvous_peer_id) = self.network_config.rendezvous_peer_id {
-            let opts = DialOpts::peer_id(rendezvous_peer_id)
-                .condition(PeerCondition::Always)
-                .build();
-            match self.swarm.dial(opts) {
-                Ok(_) => (),
-                Err(_) => warn!("Error dialing peer: {rendezvous_peer_id}"),
-            };
+        if let Some(peers) = self.swarm.behaviour_mut().peers.as_mut() {
+            peers.run();
         };
 
         loop {
@@ -391,28 +385,22 @@ impl EventLoop {
 
                 for registration in registrations {
                     for address in registration.record.addresses() {
-                        let peer = registration.record.peer_id();
-                        if peer != self.local_peer_id {
-                            info!("Dialing peer {} at {}", peer, address);
+                        let peer_id = registration.record.peer_id();
+                        if peer_id != self.local_peer_id {
+                            info!("Add new peer to address book: {} {}", peer_id, address);
 
-                            let opts = DialOpts::peer_id(peer)
-                                .addresses(vec![self
-                                    .network_config
-                                    .clone()
-                                    .relay_address
-                                    .unwrap()
-                                    .clone()
-                                    .with(Protocol::P2pCircuit)
-                                    .with(Protocol::P2p(PeerId::from(peer).into()))])
-                                .extend_addresses_through_behaviour()
-                                .condition(PeerCondition::Disconnected)
-                                .condition(PeerCondition::NotDialing)
-                                .build();
+                            let addr = self
+                                .network_config
+                                .clone()
+                                .relay_address
+                                .unwrap()
+                                .clone()
+                                .with(Protocol::P2pCircuit)
+                                .with(Protocol::P2p(PeerId::from(peer_id).into()));
 
-                            // establish relay-connection with remote peer
-                            match self.swarm.dial(opts) {
-                                Ok(_) => (),
-                                Err(_) => warn!("Error dialing peer: {peer}"),
+                            if let Some(dialer) = self.swarm.behaviour_mut().dialer.as_mut() {
+                                dialer.add_peer(peer_id, addr);
+                                dialer.dial_peer(peer_id)
                             };
                         }
                     }
@@ -451,17 +439,12 @@ impl EventLoop {
         match event {
             SwarmEvent::Behaviour(Event::Mdns(event)) => match event {
                 mdns::Event::Discovered(list) => {
-                    for (peer_id, _multiaddr) in list {
+                    for (peer_id, addr) in list {
                         debug!("mDNS discovered a new peer: {peer_id}");
 
-                        let opts = DialOpts::peer_id(*peer_id)
-                            .condition(PeerCondition::Disconnected)
-                            .condition(PeerCondition::NotDialing)
-                            .build();
-
-                        match self.swarm.dial(opts) {
-                            Ok(_) => (),
-                            Err(_) => warn!("Error dialing peer: {peer_id}"),
+                        if let Some(dialer) = self.swarm.behaviour_mut().dialer.as_mut() {
+                            dialer.add_peer(*peer_id, addr.to_owned());
+                            dialer.dial_peer(*peer_id);
                         };
                     }
                 }

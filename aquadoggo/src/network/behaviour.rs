@@ -11,8 +11,8 @@ use log::debug;
 use void;
 
 use crate::network::config::NODE_NAMESPACE;
-use crate::network::peers;
 use crate::network::NetworkConfiguration;
+use crate::network::{dialer, peers};
 
 /// How often do we broadcast mDNS queries into the network.
 const MDNS_QUERY_INTERVAL: Duration = Duration::from_secs(5);
@@ -56,6 +56,9 @@ pub struct P2pandaBehaviour {
 
     /// Register peer connections and handle p2panda messaging with them.
     pub peers: Toggle<peers::Behaviour>,
+
+    /// Maintains a list of peer addresses and initiates dial attempts.  
+    pub dialer: Toggle<dialer::Behaviour>,
 }
 
 impl P2pandaBehaviour {
@@ -132,14 +135,17 @@ impl P2pandaBehaviour {
             None
         };
 
-        // Create behaviour to manage peer connections and handle p2panda messaging
-        let peers = Some(peers::Behaviour::new());
-
         let dcutr = if network_config.relay_server_enabled || relay_client.is_some() {
             Some(dcutr::Behaviour::new(peer_id))
         } else {
             None
         };
+
+        // Create behaviour to maintain address book and dialing peers
+        let dialer = Some(dialer::Behaviour::new());
+
+        // Create behaviour to manage peer connections and handle p2panda messaging
+        let peers = Some(peers::Behaviour::new());
 
         Ok(Self {
             identify: identify.into(),
@@ -151,6 +157,7 @@ impl P2pandaBehaviour {
             relay_server: relay_server.into(),
             dcutr: dcutr.into(),
             peers: peers.into(),
+            dialer: dialer.into(),
         })
     }
 }
@@ -165,6 +172,7 @@ pub enum Event {
     RendezvousServer(rendezvous::server::Event),
     Dcutr(dcutr::Event),
     Peers(peers::Event),
+    Dialer(dialer::Event),
     Void,
 }
 
@@ -213,6 +221,12 @@ impl From<dcutr::Event> for Event {
 impl From<peers::Event> for Event {
     fn from(e: peers::Event) -> Self {
         Event::Peers(e)
+    }
+}
+
+impl From<dialer::Event> for Event {
+    fn from(e: dialer::Event) -> Self {
+        Event::Dialer(e)
     }
 }
 

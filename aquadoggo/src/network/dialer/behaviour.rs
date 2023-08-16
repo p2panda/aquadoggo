@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 use exponential_backoff::Backoff;
 use libp2p::core::Endpoint;
 use libp2p::swarm::derive_prelude::ConnectionEstablished;
+use libp2p::swarm::dial_opts::{DialOpts, PeerCondition};
 use libp2p::swarm::dummy::ConnectionHandler as DummyConnectionHandler;
 use libp2p::swarm::{
     ConnectionDenied, ConnectionId, DialFailure, FromSwarm, NetworkBehaviour, PollParameters,
@@ -16,14 +17,14 @@ use libp2p::{Multiaddr, PeerId};
 use log::{debug, warn};
 
 const RETRY_LIMIT: u32 = 8;
-const BACKOFF_SEC_MIN: u64 = 1;
+const BACKOFF_SEC_MIN: u64 = 5;
 const BACKOFF_SEC_MAX: u64 = 60;
 
 /// Events which are sent to the swarm from the dialer.
 #[derive(Clone, Debug)]
 pub enum Event {
     /// Event sent to request that the swarm dials a known peer.
-    Dial(PeerId),
+    Dial(PeerId, Multiaddr),
 }
 
 /// Status of a peer known to the dialer behaviour.
@@ -53,6 +54,9 @@ pub struct Behaviour {
     /// Queue of known peers we want to make a new dial attempt to.
     dial: VecDeque<PeerId>,
 
+    /// Addresses of known peers.
+    address_book: HashMap<PeerId, Multiaddr>,
+
     /// Map of peers whose initial dial attempt failed and we want to re-dial.
     retry: HashMap<PeerId, RetryStatus>,
 
@@ -69,13 +73,21 @@ impl Behaviour {
         Self {
             dial: VecDeque::new(),
             retry: HashMap::new(),
+            address_book: HashMap::new(),
             backoff,
         }
     }
 
-    /// Add a known peer to the dial queue.
+    /// Add a peer to the address book.
+    pub fn add_peer(&mut self, peer_id: PeerId, address: Multiaddr) {
+        self.address_book.insert(peer_id, address);
+    }
+
+    /// Push a known peer to the dial queue.
     pub fn dial_peer(&mut self, peer_id: PeerId) {
-        self.dial.push_back(peer_id);
+        if !self.dial.contains(&peer_id) {
+            self.dial.push_back(peer_id);
+        }
     }
 
     /// Inform the behaviour that an unexpected error occurred on a connection to a peer, passing
@@ -172,14 +184,17 @@ impl NetworkBehaviour for Behaviour {
             FromSwarm::ConnectionEstablished(ConnectionEstablished { peer_id, .. }) => {
                 self.on_connection_established(&peer_id)
             }
-            FromSwarm::DialFailure(DialFailure { peer_id, .. }) => {
-                if let Some(peer_id) = peer_id {
-                    debug!("Dialing peer failed: {peer_id}");
-                    self.on_dial_failed(&peer_id);
-                } else {
-                    warn!("Dial failed to unknown peer")
+            FromSwarm::DialFailure(DialFailure { peer_id, error, .. }) => match error {
+                libp2p::swarm::DialError::DialPeerConditionFalse(err) => {
+                    debug!("Not dialing peer as dial condition not met: {peer_id:?} {err:#?}")
                 }
-            }
+                err => {
+                    debug!("Unexpected error dialing peer: {peer_id:?} {err:?}");
+                    if let Some(peer_id) = peer_id {
+                        self.on_dial_failed(&peer_id);
+                    }
+                }
+            },
             FromSwarm::ConnectionClosed(_)
             | FromSwarm::AddressChange(_)
             | FromSwarm::ListenFailure(_)
@@ -210,7 +225,15 @@ impl NetworkBehaviour for Behaviour {
         // First dial the next peer which exist in the `dial` queue.
         if let Some(peer_id) = self.dial.pop_back() {
             debug!("Dial: {peer_id}");
-            return Poll::Ready(ToSwarm::GenerateEvent(Event::Dial(peer_id.to_owned())));
+            if let Some(addr) = self.address_book.get(&peer_id) {
+                let opts = DialOpts::peer_id(peer_id.clone())
+                    .addresses(vec![addr.to_owned()])
+                    .condition(PeerCondition::NotDialing)
+                    .condition(PeerCondition::Disconnected)
+                    .build();
+
+                return Poll::Ready(ToSwarm::Dial { opts });
+            };
         }
 
         // If there were none we move onto peers we want to re-dial.
@@ -240,7 +263,15 @@ impl NetworkBehaviour for Behaviour {
             // Set the peers `next_dial` value to None. This get's set again if the dial attempt fails.
             status.next_dial = None;
 
-            return Poll::Ready(ToSwarm::GenerateEvent(Event::Dial(peer_id.to_owned())));
+            if let Some(addr) = self.address_book.get(&peer_id) {
+                let opts = DialOpts::peer_id(peer_id.clone())
+                    .addresses(vec![addr.to_owned()])
+                    .condition(PeerCondition::NotDialing)
+                    .condition(PeerCondition::Disconnected)
+                    .build();
+
+                return Poll::Ready(ToSwarm::Dial { opts });
+            };
         }
 
         Poll::Pending
