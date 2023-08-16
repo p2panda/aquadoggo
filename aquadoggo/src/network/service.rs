@@ -309,12 +309,12 @@ impl EventLoop {
             tokio::select! {
                 event = self.swarm.next() => {
                     let event = event.expect("Swarm stream to be infinite");
-                    self.handle_identity_event(&event).await;
+                    self.handle_identity_event_events(&event).await;
 
                     if self.swarm.behaviour().peers.is_enabled() {
                         self.handle_mdns_discovery_events(&event).await;
-                        self.handle_discovery(&event).await;
-                        self.handle_peer_connections(&event).await;
+                        self.handle_rendezvous_discovery_events(&event).await;
+                        self.handle_peer_events(&event).await;
                     }
                 }
                 event = self.rx.next() => match event {
@@ -359,7 +359,7 @@ impl EventLoop {
         }
     }
 
-    async fn handle_peer_connections<E: std::fmt::Debug>(&mut self, event: &SwarmEvent<Event, E>) {
+    async fn handle_peer_events<E: std::fmt::Debug>(&mut self, event: &SwarmEvent<Event, E>) {
         match event {
             // ~~~~~~~~~~~~~
             // p2panda peers
@@ -385,7 +385,10 @@ impl EventLoop {
         }
     }
 
-    async fn handle_discovery<E: std::fmt::Debug>(&mut self, event: &SwarmEvent<Event, E>) {
+    async fn handle_rendezvous_discovery_events<E: std::fmt::Debug>(
+        &mut self,
+        event: &SwarmEvent<Event, E>,
+    ) {
         match event {
             // ~~~~~~~~~~~~~~~~~~~~
             // rendezvous discovery
@@ -428,7 +431,10 @@ impl EventLoop {
         }
     }
 
-    async fn handle_identity_event<E: std::fmt::Debug>(&mut self, event: &SwarmEvent<Event, E>) {
+    async fn handle_identity_event_events<E: std::fmt::Debug>(
+        &mut self,
+        event: &SwarmEvent<Event, E>,
+    ) {
         match event {
             SwarmEvent::Behaviour(Event::Identify(identify::Event::Received {
                 info: identify::Info { observed_addr, .. },
