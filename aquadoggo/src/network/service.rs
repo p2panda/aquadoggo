@@ -309,7 +309,7 @@ impl EventLoop {
             tokio::select! {
                 event = self.swarm.next() => {
                     let event = event.expect("Swarm stream to be infinite");
-                    self.handle_identity_event_events(&event).await;
+                    self.handle_identify_event_events(&event).await;
 
                     if self.swarm.behaviour().peers.is_enabled() {
                         self.handle_mdns_discovery_events(&event).await;
@@ -431,7 +431,7 @@ impl EventLoop {
         }
     }
 
-    async fn handle_identity_event_events<E: std::fmt::Debug>(
+    async fn handle_identify_event_events<E: std::fmt::Debug>(
         &mut self,
         event: &SwarmEvent<Event, E>,
     ) {
