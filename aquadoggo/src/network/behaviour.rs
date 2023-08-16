@@ -133,11 +133,7 @@ impl P2pandaBehaviour {
         };
 
         // Create behaviour to manage peer connections and handle p2panda messaging
-        let peers = if !network_config.relay_server_enabled {
-            Some(peers::Behaviour::new())
-        } else {
-            None
-        };
+        let peers = Some(peers::Behaviour::new());
 
         let dcutr = if network_config.relay_server_enabled || relay_client.is_some() {
             Some(dcutr::Behaviour::new(peer_id))
