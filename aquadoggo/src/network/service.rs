@@ -285,6 +285,16 @@ impl EventLoop {
     pub async fn run(mut self) {
         let mut shutdown_request_received = self.shutdown_handler.is_requested();
 
+        if let Some(rendezvous_peer_id) = self.network_config.rendezvous_peer_id {
+            let opts = DialOpts::peer_id(rendezvous_peer_id)
+                .condition(PeerCondition::Always)
+                .build();
+            match self.swarm.dial(opts) {
+                Ok(_) => (),
+                Err(_) => warn!("Error dialing peer: {rendezvous_peer_id}"),
+            };
+        };
+
         loop {
             tokio::select! {
                 event = self.swarm.next() => {
