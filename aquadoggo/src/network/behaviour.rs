@@ -5,7 +5,7 @@ use std::time::Duration;
 use anyhow::Result;
 use libp2p::identity::Keypair;
 use libp2p::swarm::behaviour::toggle::Toggle;
-use libp2p::swarm::{NetworkBehaviour};
+use libp2p::swarm::NetworkBehaviour;
 use libp2p::{autonat, connection_limits, identify, mdns, ping, relay, rendezvous};
 use log::debug;
 use void;
@@ -33,6 +33,9 @@ pub struct P2pandaBehaviour {
 
     /// Enforce a set of connection limits.
     pub limits: connection_limits::Behaviour,
+
+    /// Automatically discover peers on the local network.
+    pub mdns: Toggle<mdns::tokio::Behaviour>,
 
     /// Communicate with remote peers via a relay server when a direct peer-to-peer
     /// connection is not possible.
@@ -73,6 +76,20 @@ impl P2pandaBehaviour {
                 format!("{NODE_NAMESPACE}/1.0.0"),
                 key_pair.public(),
             )))
+        } else {
+            None
+        };
+
+        // Create an mDNS behaviour with default configuration if the mDNS flag is set
+        let mdns = if network_config.mdns {
+            debug!("mDNS network behaviour enabled");
+            Some(mdns::Behaviour::new(
+                mdns::Config {
+                    query_interval: MDNS_QUERY_INTERVAL,
+                    ..mdns::Config::default()
+                },
+                peer_id,
+            )?)
         } else {
             None
         };
@@ -122,6 +139,7 @@ impl P2pandaBehaviour {
 
         Ok(Self {
             identify: identify.into(),
+            mdns: mdns.into(),
             limits,
             rendezvous_client: rendezvous_client.into(),
             rendezvous_server: rendezvous_server.into(),
@@ -135,6 +153,7 @@ impl P2pandaBehaviour {
 #[derive(Debug)]
 pub enum Event {
     Identify(identify::Event),
+    Mdns(mdns::Event),
     RelayClient(relay::client::Event),
     RelayServer(relay::Event),
     RendezvousClient(rendezvous::client::Event),
@@ -146,6 +165,12 @@ pub enum Event {
 impl From<identify::Event> for Event {
     fn from(e: identify::Event) -> Self {
         Event::Identify(e)
+    }
+}
+
+impl From<mdns::Event> for Event {
+    fn from(e: mdns::Event) -> Self {
+        Event::Mdns(e)
     }
 }
 
