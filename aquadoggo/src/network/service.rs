@@ -92,15 +92,6 @@ pub async fn client(
     // Build the network swarm and retrieve the local peer ID
     let mut swarm = swarm::build_client_swarm(&network_config, key_pair).await?;
 
-    // Listen on all interfaces
-    let listen_addr_tcp = Multiaddr::empty()
-        .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
-        .with(Protocol::Tcp(0));
-    match swarm.listen_on(listen_addr_tcp.clone()) {
-        Ok(_) => (),
-        Err(_) => warn!("Failed to listen on address: {listen_addr_tcp:?}"),
-    };
-
     let listen_addr_quic = Multiaddr::empty()
         .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
         .with(Protocol::Udp(0))
