@@ -27,7 +27,7 @@ struct Cli {
     #[arg(short = 'P', long)]
     http_port: Option<u16>,
 
-    /// Port for the QUIC transport, 2022 by default.
+    /// Port for the QUIC transport, 2022 by default for a relay/rendezvous node.
     #[arg(short, long)]
     quic_port: Option<u16>,
 
@@ -155,7 +155,7 @@ impl TryFrom<Cli> for Configuration {
             autonat: cli.autonat.unwrap_or(false),
             mdns: cli.mdns.unwrap_or(false),
             ping: cli.ping.unwrap_or(false),
-            quic_port: cli.quic_port.unwrap_or(2022),
+            quic_port: cli.quic_port,
             relay_address: cli.relay_address,
             relay_peer_id,
             relay_server_enabled: cli.enable_relay_server,

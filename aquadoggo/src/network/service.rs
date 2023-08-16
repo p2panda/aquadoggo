@@ -85,6 +85,7 @@ pub async fn client(
     network_config: &NetworkConfiguration,
     key_pair: libp2p::identity::Keypair,
 ) -> Result<Swarm<P2pandaBehaviour>> {
+    let quic_port = network_config.quic_port.unwrap_or(0);
     let relay_address = network_config.relay_address.clone().unwrap();
     let rendezvous_point = network_config.clone().relay_peer_id.unwrap();
     let rendezvous_address = network_config.clone().rendezvous_address.unwrap();
@@ -94,7 +95,7 @@ pub async fn client(
 
     let listen_addr_quic = Multiaddr::empty()
         .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
-        .with(Protocol::Udp(0))
+        .with(Protocol::Udp(quic_port))
         .with(Protocol::QuicV1);
     match swarm.listen_on(listen_addr_quic.clone()) {
         Ok(_) => (),
@@ -236,6 +237,7 @@ pub async fn relay(
     network_config: &NetworkConfiguration,
     key_pair: libp2p::identity::Keypair,
 ) -> Result<Swarm<P2pandaBehaviour>> {
+    let quic_port = network_config.quic_port.unwrap_or(2022);
     let mut swarm = swarm::build_relay_swarm(&network_config, key_pair).await?;
 
     let listen_addr_tcp = Multiaddr::empty()
@@ -245,7 +247,7 @@ pub async fn relay(
 
     let listen_addr_quic = Multiaddr::empty()
         .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
-        .with(Protocol::Udp(network_config.quic_port))
+        .with(Protocol::Udp(quic_port))
         .with(Protocol::QuicV1);
     swarm.listen_on(listen_addr_quic)?;
 

@@ -67,7 +67,7 @@ pub struct NetworkConfiguration {
     pub ping: bool,
 
     /// QUIC transport port.
-    pub quic_port: u16,
+    pub quic_port: Option<u16>,
 
     /// Address and peer ID of a relay server in the form of a multiaddress.
     pub relay_address: Option<Multiaddr>,
@@ -109,7 +109,7 @@ impl Default for NetworkConfiguration {
             notify_handler_buffer_size: 128,
             per_connection_event_buffer_size: 8,
             ping: false,
-            quic_port: 2022,
+            quic_port: None,
             relay_address: None,
             relay_peer_id: None,
             relay_server_enabled: false,
