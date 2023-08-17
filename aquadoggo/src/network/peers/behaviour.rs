@@ -10,8 +10,6 @@ use libp2p::swarm::{
     PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use libp2p::{Multiaddr, PeerId};
-use log::trace;
-use p2panda_rs::Human;
 
 use crate::network::peers::handler::{Handler, HandlerFromBehaviour, HandlerToBehaviour};
 use crate::network::peers::Peer;

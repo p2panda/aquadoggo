@@ -10,10 +10,9 @@ use std::net::IpAddr;
 
 use anyhow::Result;
 use aquadoggo::{Configuration, NetworkConfiguration, Node};
-use clap::error::ErrorKind as ClapErrorKind;
-use clap::{CommandFactory, Parser};
+use clap::Parser;
 use libp2p::multiaddr::Protocol;
-use libp2p::{Multiaddr, PeerId};
+use libp2p::Multiaddr;
 
 const CONFIG_FILE_PATH: &str = "config.toml";
 

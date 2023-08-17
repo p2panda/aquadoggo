@@ -17,13 +17,6 @@ use crate::network::NetworkConfiguration;
 /// How often do we broadcast mDNS queries into the network.
 const MDNS_QUERY_INTERVAL: Duration = Duration::from_secs(5);
 
-/// How often do we ping other peers to check for a healthy connection.
-const PING_INTERVAL: Duration = Duration::from_secs(5);
-
-/// How long do we wait for an answer from the other peer before we consider the connection as
-/// stale.
-const PING_TIMEOUT: Duration = Duration::from_secs(3);
-
 #[derive(NetworkBehaviour)]
 #[behaviour(to_swarm = "Event", event_process = false)]
 pub struct P2pandaBehaviour {
@@ -223,7 +216,7 @@ impl From<peers::Event> for Event {
 }
 
 impl From<void::Void> for Event {
-    fn from(e: void::Void) -> Self {
+    fn from(_: void::Void) -> Self {
         Event::Void
     }
 }

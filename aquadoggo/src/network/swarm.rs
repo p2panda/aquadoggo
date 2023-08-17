@@ -6,7 +6,7 @@ use anyhow::Result;
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::transport::Boxed;
 use libp2p::identity::Keypair;
-use libp2p::swarm::{behaviour, Swarm, SwarmBuilder};
+use libp2p::swarm::{Swarm, SwarmBuilder};
 use libp2p::PeerId;
 
 use crate::network::behaviour::P2pandaBehaviour;
