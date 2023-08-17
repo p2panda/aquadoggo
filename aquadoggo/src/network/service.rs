@@ -88,6 +88,10 @@ pub async fn client(
     // Build the network swarm and retrieve the local peer ID
     let mut swarm = swarm::build_client_swarm(&network_config, key_pair).await?;
 
+    if let Some(peers) = swarm.behaviour_mut().peers.as_mut() {
+        peers.stop();
+    };
+
     let listen_addr_quic = Multiaddr::empty()
         .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
         .with(Protocol::Udp(quic_port))
@@ -205,7 +209,19 @@ pub async fn client(
                 None,
                 rendezvous_point,
             );
+
+        if let Some(dialer) = swarm.behaviour_mut().dialer.as_mut() {
+            dialer.add_peer(rendezvous_point, rendezvous_address);
+            let opts = DialOpts::peer_id(rendezvous_point)
+                .condition(PeerCondition::Always)
+                .build();
+            let _ = swarm.dial(opts);
+        }
     }
+
+    if let Some(peers) = swarm.behaviour_mut().peers.as_mut() {
+        peers.restart();
+    };
 
     // All swarm setup complete and we are connected to the network.
     info!("Node initialized in client mode");
@@ -230,8 +246,6 @@ pub async fn relay(
         .with(Protocol::Udp(quic_port))
         .with(Protocol::QuicV1);
     swarm.listen_on(listen_addr_quic)?;
-
-    info!("Relay initialized");
 
     Ok(swarm)
 }
@@ -284,10 +298,6 @@ impl EventLoop {
     /// an ongoing async stream.
     pub async fn run(mut self) {
         let mut shutdown_request_received = self.shutdown_handler.is_requested();
-
-        if let Some(peers) = self.swarm.behaviour_mut().peers.as_mut() {
-            peers.run();
-        };
 
         loop {
             tokio::select! {
