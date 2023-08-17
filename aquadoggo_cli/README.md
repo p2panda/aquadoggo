@@ -13,48 +13,34 @@ Options:
           Port for the http server, 2020 by default
 
   -q, --quic-port <QUIC_PORT>
-          Port for the QUIC transport, 2022 by default
+          Port for the QUIC transport, 2022 by default for a relay/rendezvous node
 
   -r, --remote-node-addresses <REMOTE_NODE_ADDRESSES>
           URLs of remote nodes to replicate with
 
-  -a, --autonat <AUTONAT>
-          Enable AutoNAT to facilitate NAT status determination, false by default
-
-          [possible values: true, false]
-
   -m, --mdns <MDNS>
           Enable mDNS for peer discovery over LAN (using port 5353), false by default
-
+          
           [possible values: true, false]
-
-      --ping <PING>
-          Enable ping for connected peers (send and receive ping packets), false by default
-
-          [possible values: true, false]
-
-     --enable-rendezvous-server
-          Enable rendezvous server to facilitate peer discovery for remote peers, false by default
-
-      --rendezvous-address <RENDEZVOUS_ADDRESS>
-          The IP address and peer ID of a rendezvous server in the form of a multiaddress.
-
-          eg. --rendezvous-address "/ip4/127.0.0.1/udp/12345/quic-v1/p2p/12D3KooWD3eckifWpRn9wQpMG9R9hX3sD158z7EqHWmweQAJU5SA"
 
       --enable-relay-server
           Enable relay server to facilitate peer connectivity, false by default
 
-      --relay-address <RELAY_ADDRESS>
-          The IP address and peer ID of a relay server in the form of a multiaddress.
+      --relay-addr <RELAY_ADDR>
+          IP address for the relay peer.
+          
+          eg. --relay-addr "127.0.0.1"
 
-          eg. --relay-address "/ip4/127.0.0.1/udp/12345/quic-v1/p2p/12D3KooWD3eckifWpRn9wQpMG9R9hX3sD158z7EqHWmweQAJU5SA"
+      --relay-port <RELAY_PORT>
+          Port for the relay peer, defaults to expected relay port 2022.
+          
+          eg. --relay-port "2020"
 
   -h, --help
           Print help (see a summary with '-h')
 
   -V, --version
-          Print version
-```
+          Print version```
 
 ## Environment variables
 
