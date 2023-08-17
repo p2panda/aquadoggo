@@ -12,8 +12,7 @@ use libp2p::yamux::Config as YamuxConfig;
 use libp2p::{relay, tcp, PeerId, Transport};
 use libp2p_quic as quic;
 
-// Build the transport stack to be used by the network swarm
-#[allow(deprecated)]
+// Build the transport stack to be used by nodes _not_ behaving as relays.
 pub async fn build_client_transport(
     key_pair: &Keypair,
 ) -> (Boxed<(PeerId, StreamMuxerBox)>, relay::client::Behaviour) {
@@ -40,7 +39,7 @@ pub async fn build_client_transport(
     (transport, relay_client)
 }
 
-// Build the transport stack to be used by the network swarm
+// Build the transport stack to be used by nodes with relay capabilities.
 pub async fn build_relay_transport(key_pair: &Keypair) -> Boxed<(PeerId, StreamMuxerBox)> {
     let tcp_transport = tcp::async_io::Transport::new(tcp::Config::new().port_reuse(true))
         .upgrade(Version::V1)
