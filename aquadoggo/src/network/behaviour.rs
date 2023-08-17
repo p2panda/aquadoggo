@@ -73,8 +73,7 @@ impl P2pandaBehaviour {
 
         // Create an identify server behaviour with default configuration if a rendezvous
         // server address has been provided or the rendezvous server flag is set
-        let identify = if network_config.rendezvous_address.is_some()
-            || network_config.rendezvous_server_enabled
+        let identify = if network_config.relay_addr.is_some() || network_config.relay_server_enabled
         {
             debug!("Identify network behaviour enabled");
             Some(identify::Behaviour::new(identify::Config::new(
@@ -104,7 +103,7 @@ impl P2pandaBehaviour {
 
         // Create a rendezvous client behaviour with default configuration if a rendezvous server
         // address has been provided
-        let rendezvous_client = if network_config.rendezvous_address.is_some() {
+        let rendezvous_client = if network_config.relay_addr.is_some() {
             debug!("Rendezvous client network behaviour enabled");
             Some(rendezvous::client::Behaviour::new(key_pair))
         } else {
@@ -113,7 +112,7 @@ impl P2pandaBehaviour {
 
         // Create a rendezvous server behaviour with default configuration if the rendezvous server
         // flag is set
-        let rendezvous_server = if network_config.rendezvous_server_enabled {
+        let rendezvous_server = if network_config.relay_server_enabled {
             debug!("Rendezvous server network behaviour enabled");
             Some(rendezvous::server::Behaviour::new(
                 rendezvous::server::Config::default(),

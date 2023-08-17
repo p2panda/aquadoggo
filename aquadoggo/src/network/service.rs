@@ -6,8 +6,8 @@ use std::time::Duration;
 use anyhow::Result;
 use libp2p::multiaddr::Protocol;
 use libp2p::swarm::dial_opts::{DialOpts, PeerCondition};
-use libp2p::swarm::{ConnectionError, NetworkBehaviour, SwarmEvent};
-use libp2p::{autonat, identify, mdns, relay, rendezvous, Multiaddr, PeerId, Swarm};
+use libp2p::swarm::SwarmEvent;
+use libp2p::{identify, mdns, relay, rendezvous, Multiaddr, PeerId, Swarm};
 use log::{debug, info, trace, warn};
 use tokio::task;
 use tokio_stream::wrappers::BroadcastStream;
@@ -18,7 +18,7 @@ use crate::context::Context;
 use crate::manager::{ServiceReadySender, Shutdown};
 use crate::network::behaviour::Event;
 use crate::network::config::NODE_NAMESPACE;
-use crate::network::{dialer, identity, peers, swarm, NetworkConfiguration, ShutdownHandler};
+use crate::network::{identity, peers, swarm, NetworkConfiguration, ShutdownHandler};
 
 use super::behaviour::P2pandaBehaviour;
 
@@ -64,7 +64,7 @@ pub async fn network_service(
     tx_ready: ServiceReadySender,
 ) -> Result<()> {
     // Read the network configuration parameters from the application context
-    let network_config = context.config.network.clone();
+    let mut network_config = context.config.network.clone();
     let key_pair = identity::to_libp2p_key_pair(&context.key_pair);
     let local_peer_id = key_pair.public().to_peer_id();
     info!("Local peer id: {local_peer_id}");
@@ -73,17 +73,16 @@ pub async fn network_service(
         let swarm = relay(&network_config, key_pair).await?;
         spawn_event_loop(swarm, local_peer_id, network_config, shutdown, tx, tx_ready).await
     } else {
-        let swarm: Swarm<P2pandaBehaviour> = client(&network_config, key_pair).await?;
+        let swarm: Swarm<P2pandaBehaviour> = client(&mut network_config, key_pair).await?;
         spawn_event_loop(swarm, local_peer_id, network_config, shutdown, tx, tx_ready).await
     }
 }
 
 pub async fn client(
-    network_config: &NetworkConfiguration,
+    network_config: &mut NetworkConfiguration,
     key_pair: libp2p::identity::Keypair,
 ) -> Result<Swarm<P2pandaBehaviour>> {
     let quic_port = network_config.quic_port.unwrap_or(0);
-    let relay_address = network_config.relay_address.clone();
 
     // Build the network swarm and retrieve the local peer ID
     let mut swarm = swarm::build_client_swarm(&network_config, key_pair).await?;
@@ -101,17 +100,14 @@ pub async fn client(
         Err(_) => warn!("Failed to listen on address: {listen_addr_quic:?}"),
     };
 
-    if let Some(relay_address) = relay_address {
-        let rendezvous_point = network_config.clone().relay_peer_id.unwrap();
-        let rendezvous_address = network_config.clone().rendezvous_address.unwrap();
-
+    if let Some(mut relay_addr) = network_config.relay_addr.clone() {
         // Connect to the relay server. Not for the reservation or relayed connection, but to (a) learn
         // our local public address and (b) enable a freshly started relay to learn its public
         // address.
 
-        match swarm.dial(rendezvous_address.clone()) {
+        match swarm.dial(relay_addr.clone()) {
             Ok(_) => (),
-            Err(_) => warn!("Failed to dial relay: {rendezvous_address:?}"),
+            Err(_) => warn!("Failed to dial relay: {relay_addr:?}"),
         };
 
         // Wait to get confirmation that we told the relay node it's public address and that they told
@@ -128,11 +124,16 @@ pub async fn client(
                 }
                 SwarmEvent::Behaviour(Event::Identify(identify::Event::Received {
                     info: identify::Info { observed_addr, .. },
-                    ..
+                    peer_id,
                 })) => {
                     info!("Relay told us our public address: {:?}", observed_addr);
+                    let _ = relay_addr.pop();
+                    relay_addr.push(Protocol::P2p(peer_id));
                     swarm.add_external_address(observed_addr);
+
                     learned_observed_addr = true;
+                    network_config.relay_peer_id = Some(peer_id);
+                    network_config.relay_addr = Some(relay_addr.clone());
                 }
                 event => debug!("{event:?}"),
             }
@@ -142,10 +143,14 @@ pub async fn client(
             }
         }
 
+        let relay_peer_id = network_config
+            .relay_peer_id
+            .expect("Received relay peer id");
+
         // Now we have received our external address, and we know the relay has too, listen on our
         // relay circuit address.
-        let circuit_relay_address = relay_address.clone().with(Protocol::P2pCircuit);
-        swarm.listen_on(circuit_relay_address.clone()).unwrap();
+        let circuit_addr = relay_addr.clone().with(Protocol::P2pCircuit);
+        swarm.listen_on(circuit_addr.clone()).unwrap();
 
         // Register in the `NODE_NAMESPACE` on the rendezvous server. Doing this will mean that we can
         // discover other peers also registered to the same rendezvous server and namespace.
@@ -156,7 +161,7 @@ pub async fn client(
             .unwrap()
             .register(
                 rendezvous::Namespace::from_static(NODE_NAMESPACE),
-                rendezvous_point,
+                relay_peer_id,
                 None, // Default ttl is 7200s
             )
             .unwrap();
@@ -185,8 +190,13 @@ pub async fn client(
                     // Listening on a relay circuit address opens a connection to the relay node, this
                     // doesn't always succeed first time though, so we catch if the connection closed
                     // and retry listening.
-                    warn!("Relay circuit connection closed, re-attempting listening on: {circuit_relay_address}");
-                    swarm.listen_on(circuit_relay_address.clone()).unwrap();
+                    warn!(
+                        "Relay circuit connection closed, re-attempting listening on: {:?}",
+                        circuit_addr
+                    );
+                    swarm
+                        .listen_on(circuit_addr.clone())
+                        .expect("Can listen on circuit address");
                 }
                 event => debug!("{event:?}"),
             }
@@ -207,12 +217,12 @@ pub async fn client(
                 Some(rendezvous::Namespace::new(NODE_NAMESPACE.to_string()).unwrap()),
                 None,
                 None,
-                rendezvous_point,
+                relay_peer_id,
             );
 
         if let Some(dialer) = swarm.behaviour_mut().dialer.as_mut() {
-            dialer.add_peer(rendezvous_point, rendezvous_address);
-            let opts = DialOpts::peer_id(rendezvous_point)
+            dialer.add_peer(relay_peer_id, relay_addr);
+            let opts = DialOpts::peer_id(relay_peer_id)
                 .condition(PeerCondition::Always)
                 .build();
             let _ = swarm.dial(opts);
@@ -397,21 +407,19 @@ impl EventLoop {
                     for address in registration.record.addresses() {
                         let peer_id = registration.record.peer_id();
                         if peer_id != self.local_peer_id {
-                            info!("Add new peer to address book: {} {}", peer_id, address);
+                            if let Some(relay_addr) = &self.network_config.relay_addr {
+                                info!("Add new peer to address book: {} {}", peer_id, address);
 
-                            let addr = self
-                                .network_config
-                                .clone()
-                                .relay_address
-                                .unwrap()
-                                .clone()
-                                .with(Protocol::P2pCircuit)
-                                .with(Protocol::P2p(PeerId::from(peer_id).into()));
+                                let peer_circuit_addr = relay_addr
+                                    .clone()
+                                    .with(Protocol::P2pCircuit)
+                                    .with(Protocol::P2p(PeerId::from(peer_id).into()));
 
-                            if let Some(dialer) = self.swarm.behaviour_mut().dialer.as_mut() {
-                                dialer.add_peer(peer_id, addr);
-                                dialer.dial_peer(peer_id)
-                            };
+                                if let Some(dialer) = self.swarm.behaviour_mut().dialer.as_mut() {
+                                    dialer.add_peer(peer_id, peer_circuit_addr);
+                                    dialer.dial_peer(peer_id)
+                                };
+                            }
                         }
                     }
                 }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use libp2p::connection_limits::ConnectionLimits;
+use libp2p::multiaddr::Protocol;
 use libp2p::{Multiaddr, PeerId};
 use serde::{Deserialize, Serialize};
 
@@ -10,11 +11,6 @@ pub const NODE_NAMESPACE: &str = "aquadoggo";
 /// Network config for the node.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct NetworkConfiguration {
-    /// AutoNAT behaviour enabled.
-    ///
-    /// Determine NAT status by requesting remote peers to dial the public address of the local node.
-    pub autonat: bool,
-
     /// Dial concurrency factor.
     ///
     /// Number of addresses concurrently dialed for an outbound connection attempt with a single
@@ -60,45 +56,27 @@ pub struct NetworkConfiguration {
     /// manager will sleep.
     pub per_connection_event_buffer_size: usize,
 
-    /// Ping behaviour enabled.
-    ///
-    /// Send outbound pings to connected peers every 15 seconds and respond to inbound pings. Every
-    /// sent ping must yield a response within 20 seconds in order to be successful.
-    pub ping: bool,
-
     /// QUIC transport port.
     pub quic_port: Option<u16>,
 
-    /// Address and peer ID of a relay server in the form of a multiaddress.
-    pub relay_address: Option<Multiaddr>,
+    /// Address of a peer which can act as a relay/rendezvous server.
+    pub relay_addr: Option<Multiaddr>,
 
-    /// Peer ID of a relay server.
+    /// Peer id of the relay if known.
     pub relay_peer_id: Option<PeerId>,
+
+    /// The addresses of remote peers to replicate from.
+    pub remote_peers: Vec<Multiaddr>,
 
     /// Relay server behaviour enabled.
     ///
     /// Serve as a relay point for peer connections.
     pub relay_server_enabled: bool,
-
-    /// The addresses of remote peers to replicate from.
-    pub remote_peers: Vec<Multiaddr>,
-
-    /// Address and peer ID of a rendezvous server in the form of a multiaddress.
-    pub rendezvous_address: Option<Multiaddr>,
-
-    /// Peer ID of a rendezvous server.
-    pub rendezvous_peer_id: Option<PeerId>,
-
-    /// Rendezvous server behaviour enabled.
-    ///
-    /// Serve as a rendezvous point for peer discovery, allowing peer registration and queries.
-    pub rendezvous_server_enabled: bool,
 }
 
 impl Default for NetworkConfiguration {
     fn default() -> Self {
         Self {
-            autonat: false,
             dial_concurrency_factor: 8,
             max_connections_in: 16,
             max_connections_out: 16,
@@ -108,15 +86,11 @@ impl Default for NetworkConfiguration {
             mdns: false,
             notify_handler_buffer_size: 128,
             per_connection_event_buffer_size: 8,
-            ping: false,
             quic_port: None,
-            relay_address: None,
+            relay_addr: None,
             relay_peer_id: None,
-            relay_server_enabled: false,
             remote_peers: Vec::new(),
-            rendezvous_address: None,
-            rendezvous_peer_id: None,
-            rendezvous_server_enabled: false,
+            relay_server_enabled: false,
         }
     }
 }
