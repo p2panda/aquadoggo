@@ -16,243 +16,232 @@ use tokio_stream::StreamExt;
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
 use crate::manager::{ServiceReadySender, Shutdown};
-use crate::network::behaviour::Event;
+use crate::network::behaviour::{Event, P2pandaBehaviour};
 use crate::network::config::NODE_NAMESPACE;
 use crate::network::{identity, peers, swarm, NetworkConfiguration, ShutdownHandler};
 
-use super::behaviour::P2pandaBehaviour;
+static DEFAULT_QUIC_PORT: u16 = 2020;
 
-pub async fn spawn_event_loop(
-    swarm: Swarm<P2pandaBehaviour>,
-    local_peer_id: PeerId,
-    network_config: NetworkConfiguration,
-    shutdown: Shutdown,
-    tx: ServiceSender,
-    tx_ready: ServiceReadySender,
-) -> Result<()> {
-    let mut shutdown_handler = ShutdownHandler::new();
-
-    // Spawn a task to run swarm in event loop
-    let event_loop = EventLoop::new(
-        swarm,
-        local_peer_id,
-        tx,
-        network_config,
-        shutdown_handler.clone(),
-    );
-    let handle = task::spawn(event_loop.run());
-
-    if tx_ready.send(()).is_err() {
-        warn!("No subscriber informed about network service being ready");
-    };
-
-    // Wait until we received the application shutdown signal or handle closed
-    tokio::select! {
-        _ = handle => (),
-        _ = shutdown => (),
-    }
-
-    shutdown_handler.is_done().await;
-
-    Ok(())
-}
-
+/// Network service which handles all networking logic for a p2panda node.
+///
+/// This includes:
+/// - discovering connecting to other nodes on the local network
+/// - discovering and connecting to other nodes via a known relay node
+/// - upgrade relayed connections to direct connections (NAT traversal)
+/// - routing replication messages to connected nodes
+///
+/// Can perform in "relay" mode, which means in addition to the usual node networking behaviours
+/// this node will also be able to act as a relay for other nodes with restricted connectivity.
 pub async fn network_service(
     context: Context,
     shutdown: Shutdown,
     tx: ServiceSender,
     tx_ready: ServiceReadySender,
 ) -> Result<()> {
-    // Read the network configuration parameters from the application context
     let mut network_config = context.config.network.clone();
     let key_pair = identity::to_libp2p_key_pair(&context.key_pair);
     let local_peer_id = key_pair.public().to_peer_id();
+
     info!("Local peer id: {local_peer_id}");
 
-    if network_config.relay_server_enabled {
-        let swarm = relay(&network_config, key_pair).await?;
-        spawn_event_loop(swarm, local_peer_id, network_config, shutdown, tx, tx_ready).await
+    // The swarm can be initiated with or without "relay" capabilities.
+    let mut swarm = if network_config.relay_server_enabled {
+        info!("Networking service initializing with relay capabilities...");
+        swarm::build_relay_swarm(&network_config, key_pair).await?
     } else {
-        let swarm: Swarm<P2pandaBehaviour> = client(&mut network_config, key_pair).await?;
-        spawn_event_loop(swarm, local_peer_id, network_config, shutdown, tx, tx_ready).await
-    }
-}
+        info!("Networking service initializing...");
+        swarm::build_client_swarm(&network_config, key_pair).await?
+    };
 
-pub async fn client(
-    network_config: &mut NetworkConfiguration,
-    key_pair: libp2p::identity::Keypair,
-) -> Result<Swarm<P2pandaBehaviour>> {
-    let quic_port = network_config.quic_port.unwrap_or(0);
+    // Get quic port from config or use default.
+    let quic_port = network_config.quic_port.unwrap_or(DEFAULT_QUIC_PORT);
 
-    // Build the network swarm and retrieve the local peer ID
-    let mut swarm = swarm::build_client_swarm(&network_config, key_pair).await?;
-
-    swarm.behaviour_mut().peers.stop();
-
-    swarm.listen_on(
-        Multiaddr::empty()
-            .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
-            .with(Protocol::Tcp(0)),
-    )?;
-
-    swarm.listen_on(
-        Multiaddr::empty()
-            .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
-            .with(Protocol::Udp(quic_port))
-            .with(Protocol::QuicV1),
-    )?;
-
-    if let Some(mut relay_addr) = network_config.relay_addr.clone() {
-        // Connect to the relay server. Not for the reservation or relayed connection, but to (a) learn
-        // our local public address and (b) enable a freshly started relay to learn its public
-        // address.
-
-        swarm.dial(relay_addr.clone())?;
-
-        // Wait to get confirmation that we told the relay node it's public address and that they told
-        // us ours.
-
-        let mut learned_observed_addr = false;
-        let mut told_relay_observed_addr = false;
-
-        loop {
-            match swarm.next().await.unwrap() {
-                SwarmEvent::Behaviour(Event::Identify(identify::Event::Sent { .. })) => {
-                    info!("Told relay its public address.");
-                    told_relay_observed_addr = true;
-                }
-                SwarmEvent::Behaviour(Event::Identify(identify::Event::Received {
-                    info: identify::Info { observed_addr, .. },
-                    peer_id,
-                })) => {
-                    info!("Relay told us our public address: {:?}", observed_addr);
-                    let _ = relay_addr.pop();
-                    relay_addr.push(Protocol::P2p(peer_id));
-                    swarm.add_external_address(observed_addr);
-
-                    learned_observed_addr = true;
-                    network_config.relay_peer_id = Some(peer_id);
-                    network_config.relay_addr = Some(relay_addr.clone());
-                }
-                event => debug!("{event:?}"),
-            }
-
-            if learned_observed_addr && told_relay_observed_addr {
-                break;
-            }
-        }
-
-        let relay_peer_id = network_config
-            .relay_peer_id
-            .expect("Received relay peer id");
-
-        // Now we have received our external address, and we know the relay has too, listen on our
-        // relay circuit address.
-        let circuit_addr = relay_addr.clone().with(Protocol::P2pCircuit);
-        swarm.listen_on(circuit_addr.clone())?;
-
-        // Register in the `NODE_NAMESPACE` on the rendezvous server. Doing this will mean that we can
-        // discover other peers also registered to the same rendezvous server and namespace.
-        swarm
-            .behaviour_mut()
-            .rendezvous_client
-            .as_mut()
-            .unwrap()
-            .register(
-                rendezvous::Namespace::from_static(NODE_NAMESPACE),
-                relay_peer_id,
-                None, // Default ttl is 7200s
-            )?;
-
-        // Wait to get confirmation that our registration on the rendezvous server at namespace
-        // `NODE_NAMESPACE` was successful and that the relay server has accepted our reservation.
-
-        let mut rendezvous_registered = false;
-        let mut relay_reservation_accepted = false;
-
-        loop {
-            match swarm.next().await.expect("Infinite Stream") {
-                SwarmEvent::Behaviour(Event::RelayClient(
-                    relay::client::Event::ReservationReqAccepted { .. },
-                )) => {
-                    info!("Relay circuit reservation request accepted");
-                    relay_reservation_accepted = true;
-                }
-                SwarmEvent::Behaviour(Event::RendezvousClient(
-                    rendezvous::client::Event::Registered { namespace, .. },
-                )) => {
-                    info!("Registered on rendezvous in namespace \"{namespace}\"");
-                    rendezvous_registered = true;
-                }
-                SwarmEvent::ConnectionClosed { .. } => {
-                    // Listening on a relay circuit address opens a connection to the relay node, this
-                    // doesn't always succeed first time though, so we catch if the connection closed
-                    // and retry listening.
-                    warn!(
-                        "Relay circuit connection closed, re-attempting listening on: {:?}",
-                        circuit_addr
-                    );
-                    swarm.listen_on(circuit_addr.clone())?;
-                }
-                event => debug!("{event:?}"),
-            }
-
-            if relay_reservation_accepted && rendezvous_registered {
-                break;
-            }
-        }
-
-        // Now request to discover other peers in `NODE_NAMESPACE`.
-        info!("Discovering peers in namespace \"{NODE_NAMESPACE}\"",);
-        swarm
-            .behaviour_mut()
-            .rendezvous_client
-            .as_mut()
-            .unwrap()
-            .discover(
-                Some(rendezvous::Namespace::new(NODE_NAMESPACE.to_string()).unwrap()),
-                None,
-                None,
-                relay_peer_id,
-            );
-
-        let opts = DialOpts::peer_id(relay_peer_id)
-            .condition(PeerCondition::Always)
-            .build();
-
-        match swarm.dial(opts) {
-            Ok(_) => (),
-            Err(err) => debug!("Error dialing peer: {:?}", err),
-        };
-    }
-
-    swarm.behaviour_mut().peers.restart();
-
-    // All swarm setup complete and we are connected to the network.
-    info!("Node initialized in client mode");
-
-    Ok(swarm)
-}
-
-pub async fn relay(
-    network_config: &NetworkConfiguration,
-    key_pair: libp2p::identity::Keypair,
-) -> Result<Swarm<P2pandaBehaviour>> {
-    let quic_port = network_config.quic_port.unwrap_or(2022);
-    let mut swarm = swarm::build_relay_swarm(&network_config, key_pair).await?;
-
+    // Start listening on tcp address.
+    //
+    // @TODO: It's still not clear to me if "client" nodes need to do this, when I don't listen
+    // here for clients it doesn't seem to make any difference. Maybe it effects things like dcutr
+    // though, I'm not sure.
     let listen_addr_tcp = Multiaddr::empty()
         .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
         .with(Protocol::Tcp(0));
     swarm.listen_on(listen_addr_tcp)?;
 
+    // Start listening on quic address.
     let listen_addr_quic = Multiaddr::empty()
         .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
         .with(Protocol::Udp(quic_port))
         .with(Protocol::QuicV1);
     swarm.listen_on(listen_addr_quic)?;
 
-    Ok(swarm)
+    // If a relay node address was provided, then connect and performing necessary setup before we
+    // run the main event loop.
+    if let Some(relay_addr) = network_config.relay_addr.clone() {
+        connect_to_relay(&mut swarm, &mut network_config, relay_addr).await?;
+    }
+
+    info!("Network service ready!");
+
+    // Spawn main event loop handling all p2panda and libp2p network events.
+    spawn_event_loop(swarm, local_peer_id, network_config, shutdown, tx, tx_ready).await
+}
+
+/// Connect to a relay node, confirm exchange identity information and wait to listen on our
+/// circuit relay address.
+pub async fn connect_to_relay(
+    swarm: &mut Swarm<P2pandaBehaviour>,
+    network_config: &mut NetworkConfiguration,
+    mut relay_addr: Multiaddr,
+) -> Result<()> {
+    // First we need to stop the "peers" behaviour.
+    //
+    // We do this so that the connections we create during initialization do not trigger
+    // replication sessions, which could leave the node in a strange state.
+    swarm.behaviour_mut().peers.stop();
+
+    // Connect to the relay server. Not for the reservation or relayed connection, but to (a) learn
+    // our local public address and (b) enable a freshly started relay to learn its public
+    // address.
+    swarm.dial(relay_addr.clone())?;
+
+    // Wait to get confirmation that we told the relay node it's public address and that they told
+    // us ours.
+    let mut learned_observed_addr = false;
+    let mut told_relay_observed_addr = false;
+
+    loop {
+        match swarm.next().await.unwrap() {
+            SwarmEvent::Behaviour(Event::Identify(identify::Event::Sent { .. })) => {
+                info!("Told relay its public address.");
+                told_relay_observed_addr = true;
+            }
+            SwarmEvent::Behaviour(Event::Identify(identify::Event::Received {
+                info: identify::Info { observed_addr, .. },
+                peer_id,
+            })) => {
+                info!("Relay told us our public address: {:?}", observed_addr);
+
+                // Add the newly learned address to our external addresses.
+                swarm.add_external_address(observed_addr);
+
+                // Now that we have a reply from the relay node we can add their peer id to the
+                // relay address.
+
+                // Pop off the "p2p" protocol.
+                let _ = relay_addr.pop();
+
+                // Add it back on again with the relay nodes peer id included.
+                relay_addr.push(Protocol::P2p(peer_id));
+
+                // Update values on the config.
+                network_config.relay_peer_id = Some(peer_id);
+                network_config.relay_addr = Some(relay_addr.clone());
+
+                // All done, we've learned our external address successfully.
+                learned_observed_addr = true;
+            }
+            event => debug!("{event:?}"),
+        }
+
+        if learned_observed_addr && told_relay_observed_addr {
+            break;
+        }
+    }
+
+    // We know the relays peer address was learned in the above step so we unwrap it here.
+    let relay_peer_id = network_config
+        .relay_peer_id
+        .expect("Received relay peer id");
+
+    // Now we have received our external address, and we know the relay has too, listen on our
+    // relay circuit address.
+    let circuit_addr = relay_addr.clone().with(Protocol::P2pCircuit);
+    swarm.listen_on(circuit_addr.clone())?;
+
+    // Register in the `NODE_NAMESPACE` on the rendezvous server. Doing this will mean that we can
+    // discover other peers also registered to the same rendezvous server and namespace.
+    swarm
+        .behaviour_mut()
+        .rendezvous_client
+        .as_mut()
+        .unwrap()
+        .register(
+            rendezvous::Namespace::from_static(NODE_NAMESPACE),
+            relay_peer_id,
+            None, // Default ttl is 7200s
+        )?;
+
+    // Wait to get confirmation that our registration on the rendezvous server at namespace
+    // `NODE_NAMESPACE` was successful and that the relay server has accepted our reservation.
+    let mut rendezvous_registered = false;
+    let mut relay_reservation_accepted = false;
+
+    loop {
+        match swarm.next().await.expect("Infinite Stream") {
+            SwarmEvent::Behaviour(Event::RelayClient(
+                relay::client::Event::ReservationReqAccepted { .. },
+            )) => {
+                info!("Relay circuit reservation request accepted");
+                relay_reservation_accepted = true;
+            }
+            SwarmEvent::Behaviour(Event::RendezvousClient(
+                rendezvous::client::Event::Registered { namespace, .. },
+            )) => {
+                info!("Registered on rendezvous in namespace \"{namespace}\"");
+                rendezvous_registered = true;
+            }
+            SwarmEvent::ConnectionClosed { .. } => {
+                // Listening on a relay circuit address opens a connection to the relay node, this
+                // doesn't always succeed first time though, so we catch here when the connection closed
+                // and retry listening.
+                warn!(
+                    "Relay circuit connection closed, re-attempting listening on: {:?}",
+                    circuit_addr
+                );
+
+                // After a short wait.
+                tokio::time::sleep(Duration::from_millis(100)).await;
+
+                // Listen again.
+                swarm.listen_on(circuit_addr.clone())?;
+            }
+            event => debug!("{event:?}"),
+        }
+
+        if relay_reservation_accepted && rendezvous_registered {
+            break;
+        }
+    }
+
+    // Now request to discover other peers in `NODE_NAMESPACE`.
+    info!("Discovering peers in namespace \"{NODE_NAMESPACE}\"",);
+    swarm
+        .behaviour_mut()
+        .rendezvous_client
+        .as_mut()
+        .expect("Relay client exists as we a relay address was provided")
+        .discover(
+            Some(rendezvous::Namespace::new(NODE_NAMESPACE.to_string()).expect("Valid namespace")),
+            None,
+            None,
+            relay_peer_id,
+        );
+
+    // Finally we want to dial the relay node _again_, this time in order to initiate replication
+    // with it, which will happen automatically once the connection succeeds.
+
+    // First restart the "peers" behaviour in order to handle the expected messages.
+    swarm.behaviour_mut().peers.restart();
+
+    let opts = DialOpts::peer_id(relay_peer_id)
+        .condition(PeerCondition::Always) // There is an existing connection, so we force dial here.
+        .build();
+
+    match swarm.dial(opts) {
+        Ok(_) => (),
+        Err(err) => debug!("Error dialing peer: {:?}", err),
+    };
+
+    Ok(())
 }
 
 /// Main loop polling the async swarm event stream and incoming service messages stream.
@@ -441,4 +430,39 @@ impl EventLoop {
             event => trace!("{event:?}"),
         }
     }
+}
+
+pub async fn spawn_event_loop(
+    swarm: Swarm<P2pandaBehaviour>,
+    local_peer_id: PeerId,
+    network_config: NetworkConfiguration,
+    shutdown: Shutdown,
+    tx: ServiceSender,
+    tx_ready: ServiceReadySender,
+) -> Result<()> {
+    let mut shutdown_handler = ShutdownHandler::new();
+
+    // Spawn a task to run swarm in event loop
+    let event_loop = EventLoop::new(
+        swarm,
+        local_peer_id,
+        tx,
+        network_config,
+        shutdown_handler.clone(),
+    );
+    let handle = task::spawn(event_loop.run());
+
+    if tx_ready.send(()).is_err() {
+        warn!("No subscriber informed about network service being ready");
+    };
+
+    // Wait until we received the application shutdown signal or handle closed
+    tokio::select! {
+        _ = handle => (),
+        _ = shutdown => (),
+    }
+
+    shutdown_handler.is_done().await;
+
+    Ok(())
 }
