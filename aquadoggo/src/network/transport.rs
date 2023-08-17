@@ -44,8 +44,7 @@ pub async fn build_relay_transport(key_pair: &Keypair) -> Boxed<(PeerId, StreamM
     let tcp_transport = tcp::async_io::Transport::new(tcp::Config::new().port_reuse(true))
         .upgrade(Version::V1)
         .authenticate(NoiseConfig::new(key_pair).unwrap())
-        .multiplex(YamuxConfig::default())
-        .timeout(Duration::from_secs(20));
+        .multiplex(YamuxConfig::default());
 
     let quic_transport = {
         let mut config = libp2p_quic::Config::new(key_pair);
