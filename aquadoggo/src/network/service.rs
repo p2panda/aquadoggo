@@ -91,24 +91,25 @@ pub async fn client(
         peers.stop();
     };
 
-    let listen_addr_quic = Multiaddr::empty()
-        .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
-        .with(Protocol::Udp(quic_port))
-        .with(Protocol::QuicV1);
-    match swarm.listen_on(listen_addr_quic.clone()) {
-        Ok(_) => (),
-        Err(_) => warn!("Failed to listen on address: {listen_addr_quic:?}"),
-    };
+    swarm.listen_on(
+        Multiaddr::empty()
+            .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
+            .with(Protocol::Tcp(0)),
+    )?;
+
+    swarm.listen_on(
+        Multiaddr::empty()
+            .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
+            .with(Protocol::Udp(quic_port))
+            .with(Protocol::QuicV1),
+    )?;
 
     if let Some(mut relay_addr) = network_config.relay_addr.clone() {
         // Connect to the relay server. Not for the reservation or relayed connection, but to (a) learn
         // our local public address and (b) enable a freshly started relay to learn its public
         // address.
 
-        match swarm.dial(relay_addr.clone()) {
-            Ok(_) => (),
-            Err(_) => warn!("Failed to dial relay: {relay_addr:?}"),
-        };
+        swarm.dial(relay_addr.clone())?;
 
         // Wait to get confirmation that we told the relay node it's public address and that they told
         // us ours.
@@ -150,7 +151,7 @@ pub async fn client(
         // Now we have received our external address, and we know the relay has too, listen on our
         // relay circuit address.
         let circuit_addr = relay_addr.clone().with(Protocol::P2pCircuit);
-        swarm.listen_on(circuit_addr.clone()).unwrap();
+        swarm.listen_on(circuit_addr.clone())?;
 
         // Register in the `NODE_NAMESPACE` on the rendezvous server. Doing this will mean that we can
         // discover other peers also registered to the same rendezvous server and namespace.
@@ -163,8 +164,7 @@ pub async fn client(
                 rendezvous::Namespace::from_static(NODE_NAMESPACE),
                 relay_peer_id,
                 None, // Default ttl is 7200s
-            )
-            .unwrap();
+            )?;
 
         // Wait to get confirmation that our registration on the rendezvous server at namespace
         // `NODE_NAMESPACE` was successful and that the relay server has accepted our reservation.
@@ -194,9 +194,7 @@ pub async fn client(
                         "Relay circuit connection closed, re-attempting listening on: {:?}",
                         circuit_addr
                     );
-                    swarm
-                        .listen_on(circuit_addr.clone())
-                        .expect("Can listen on circuit address");
+                    swarm.listen_on(circuit_addr.clone())?;
                 }
                 event => debug!("{event:?}"),
             }
@@ -220,13 +218,14 @@ pub async fn client(
                 relay_peer_id,
             );
 
-        if let Some(dialer) = swarm.behaviour_mut().dialer.as_mut() {
-            dialer.add_peer(relay_peer_id, relay_addr);
-            let opts = DialOpts::peer_id(relay_peer_id)
-                .condition(PeerCondition::Always)
-                .build();
-            let _ = swarm.dial(opts);
-        }
+        let opts = DialOpts::peer_id(relay_peer_id)
+            .condition(PeerCondition::Always)
+            .build();
+
+        match swarm.dial(opts) {
+            Ok(_) => (),
+            Err(err) => debug!("Error dialing peer: {:?}", err),
+        };
     }
 
     if let Some(peers) = swarm.behaviour_mut().peers.as_mut() {
@@ -415,9 +414,9 @@ impl EventLoop {
                                     .with(Protocol::P2pCircuit)
                                     .with(Protocol::P2p(PeerId::from(peer_id).into()));
 
-                                if let Some(dialer) = self.swarm.behaviour_mut().dialer.as_mut() {
-                                    dialer.add_peer(peer_id, peer_circuit_addr);
-                                    dialer.dial_peer(peer_id)
+                                match self.swarm.dial(peer_circuit_addr) {
+                                    Ok(_) => (),
+                                    Err(err) => debug!("Error dialing peer: {:?}", err),
                                 };
                             }
                         }
@@ -457,12 +456,12 @@ impl EventLoop {
         match event {
             SwarmEvent::Behaviour(Event::Mdns(event)) => match event {
                 mdns::Event::Discovered(list) => {
-                    for (peer_id, addr) in list {
+                    for (peer_id, _) in list {
                         debug!("mDNS discovered a new peer: {peer_id}");
 
-                        if let Some(dialer) = self.swarm.behaviour_mut().dialer.as_mut() {
-                            dialer.add_peer(*peer_id, addr.to_owned());
-                            dialer.dial_peer(*peer_id);
+                        match self.swarm.dial(*peer_id) {
+                            Ok(_) => (),
+                            Err(err) => debug!("Error dialing peer: {:?}", err),
                         };
                     }
                 }
