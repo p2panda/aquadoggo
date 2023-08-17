@@ -25,9 +25,9 @@ pub async fn build_client_transport(
                 tcp::Config::default().port_reuse(true),
             ))
             .upgrade(Version::V1)
-            .authenticate(NoiseConfig::new(&key_pair).unwrap())
+            .authenticate(NoiseConfig::new(key_pair).unwrap())
             .multiplex(YamuxConfig::default())
-            .or_transport(quic::tokio::Transport::new(quic::Config::new(&key_pair)));
+            .or_transport(quic::tokio::Transport::new(quic::Config::new(key_pair)));
 
         relay_tcp_quic_transport
             .map(|either_output, _| match either_output {
@@ -42,15 +42,14 @@ pub async fn build_client_transport(
 
 // Build the transport stack to be used by the network swarm
 pub async fn build_relay_transport(key_pair: &Keypair) -> Boxed<(PeerId, StreamMuxerBox)> {
-    let tcp_transport =
-        tcp::async_io::Transport::new(tcp::Config::new().port_reuse(true).nodelay(true))
-            .upgrade(Version::V1)
-            .authenticate(NoiseConfig::new(&key_pair).unwrap())
-            .multiplex(YamuxConfig::default())
-            .timeout(Duration::from_secs(20));
+    let tcp_transport = tcp::async_io::Transport::new(tcp::Config::new().port_reuse(true))
+        .upgrade(Version::V1)
+        .authenticate(NoiseConfig::new(key_pair).unwrap())
+        .multiplex(YamuxConfig::default())
+        .timeout(Duration::from_secs(20));
 
     let quic_transport = {
-        let mut config = libp2p_quic::Config::new(&key_pair);
+        let mut config = libp2p_quic::Config::new(key_pair);
         config.support_draft_29 = true;
         libp2p_quic::tokio::Transport::new(config)
     };

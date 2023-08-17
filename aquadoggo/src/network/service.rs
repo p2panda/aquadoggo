@@ -386,7 +386,7 @@ impl EventLoop {
                                 let peer_circuit_addr = relay_addr
                                     .clone()
                                     .with(Protocol::P2pCircuit)
-                                    .with(Protocol::P2p(PeerId::from(peer_id).into()));
+                                    .with(Protocol::P2p(peer_id));
 
                                 match self.swarm.dial(peer_circuit_addr) {
                                     Ok(_) => (),

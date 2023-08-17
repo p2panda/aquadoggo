@@ -8,7 +8,6 @@ use libp2p::swarm::behaviour::toggle::Toggle;
 use libp2p::swarm::NetworkBehaviour;
 use libp2p::{connection_limits, dcutr, identify, mdns, relay, rendezvous};
 use log::debug;
-use void;
 
 use crate::network::config::NODE_NAMESPACE;
 use crate::network::peers;
