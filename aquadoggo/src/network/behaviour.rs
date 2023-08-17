@@ -48,7 +48,7 @@ pub struct P2pandaBehaviour {
     pub dcutr: Toggle<dcutr::Behaviour>,
 
     /// Register peer connections and handle p2panda messaging with them.
-    pub peers: Toggle<peers::Behaviour>,
+    pub peers: peers::Behaviour,
 }
 
 impl P2pandaBehaviour {
@@ -138,7 +138,7 @@ impl P2pandaBehaviour {
         };
 
         // Create behaviour to manage peer connections and handle p2panda messaging
-        let peers = Some(peers::Behaviour::new());
+        let peers = peers::Behaviour::new();
 
         Ok(Self {
             identify: identify.into(),
@@ -149,7 +149,7 @@ impl P2pandaBehaviour {
             relay_client: relay_client.into(),
             relay_server: relay_server.into(),
             dcutr: dcutr.into(),
-            peers: peers.into(),
+            peers,
         })
     }
 }

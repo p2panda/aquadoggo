@@ -313,13 +313,10 @@ impl EventLoop {
                 event = self.swarm.next() => {
                     let event = event.expect("Swarm stream to be infinite");
                     self.handle_identify_event_events(&event).await;
-
-                    if self.swarm.behaviour().peers.is_enabled() {
-                        self.handle_mdns_discovery_events(&event).await;
-                        self.handle_rendezvous_discovery_events(&event).await;
-                        self.handle_dcutr_events(&event).await;
-                        self.handle_peer_events(&event).await;
-                    }
+                    self.handle_mdns_discovery_events(&event).await;
+                    self.handle_rendezvous_discovery_events(&event).await;
+                    self.handle_dcutr_events(&event).await;
+                    self.handle_peer_events(&event).await;
                 }
                 event = self.rx.next() => match event {
                     Some(Ok(message)) => self.handle_service_message(message).await,
