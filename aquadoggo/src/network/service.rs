@@ -312,11 +312,14 @@ impl EventLoop {
             tokio::select! {
                 event = self.swarm.next() => {
                     let event = event.expect("Swarm stream to be infinite");
-                    self.handle_identify_event_events(&event).await;
-                    self.handle_mdns_discovery_events(&event).await;
-                    self.handle_rendezvous_discovery_events(&event).await;
-                    self.handle_dcutr_events(&event).await;
-                    self.handle_peer_events(&event).await;
+                    match event {
+                        SwarmEvent::Behaviour(Event::Identify(event)) => self.handle_identify_events(&event).await,
+                        SwarmEvent::Behaviour(Event::Mdns(event)) => self.handle_mdns_events(&event).await,
+                        SwarmEvent::Behaviour(Event::RendezvousClient(event)) => self.handle_rendezvous_client_events(&event).await,
+                        SwarmEvent::Behaviour(Event::Peers(event)) => self.handle_peers_events(&event).await,
+                        event => trace!("{event:?}")
+
+                    }
                 }
                 event = self.rx.next() => match event {
                     Some(Ok(message)) => self.handle_service_message(message).await,
@@ -360,43 +363,29 @@ impl EventLoop {
         }
     }
 
-    async fn handle_peer_events<E: std::fmt::Debug>(&mut self, event: &SwarmEvent<Event, E>) {
+    async fn handle_peers_events(&mut self, event: &peers::Event) {
         match event {
-            // ~~~~~~~~~~~~~
-            // p2panda peers
-            // ~~~~~~~~~~~~~
-            SwarmEvent::Behaviour(Event::Peers(event)) => match event {
-                peers::Event::PeerConnected(peer) => {
-                    // Inform other services about new peer
-                    self.send_service_message(ServiceMessage::PeerConnected(*peer));
-                }
-                peers::Event::PeerDisconnected(peer) => {
-                    // Inform other services about peer leaving
-                    self.send_service_message(ServiceMessage::PeerDisconnected(*peer));
-                }
-                peers::Event::MessageReceived(peer, message) => {
-                    // Inform other services about received messages from peer
-                    self.send_service_message(ServiceMessage::ReceivedReplicationMessage(
-                        *peer,
-                        message.clone(),
-                    ))
-                }
-            },
-            _ => (),
+            peers::Event::PeerConnected(peer) => {
+                // Inform other services about new peer
+                self.send_service_message(ServiceMessage::PeerConnected(*peer));
+            }
+            peers::Event::PeerDisconnected(peer) => {
+                // Inform other services about peer leaving
+                self.send_service_message(ServiceMessage::PeerDisconnected(*peer));
+            }
+            peers::Event::MessageReceived(peer, message) => {
+                // Inform other services about received messages from peer
+                self.send_service_message(ServiceMessage::ReceivedReplicationMessage(
+                    *peer,
+                    message.clone(),
+                ))
+            }
         }
     }
 
-    async fn handle_rendezvous_discovery_events<E: std::fmt::Debug>(
-        &mut self,
-        event: &SwarmEvent<Event, E>,
-    ) {
+    async fn handle_rendezvous_client_events(&mut self, event: &rendezvous::client::Event) {
         match event {
-            // ~~~~~~~~~~~~~~~~~~~~
-            // rendezvous discovery
-            // ~~~~~~~~~~~~~~~~~~~~
-            SwarmEvent::Behaviour(Event::RendezvousClient(
-                rendezvous::client::Event::Discovered { registrations, .. },
-            )) => {
+            rendezvous::client::Event::Discovered { registrations, .. } => {
                 info!("Discovered peers registered at rendezvous: {registrations:?}",);
 
                 for registration in registrations {
@@ -420,19 +409,16 @@ impl EventLoop {
                     }
                 }
             }
-            _ => (),
+            event => trace!("{event:?}"),
         }
     }
 
-    async fn handle_identify_event_events<E: std::fmt::Debug>(
-        &mut self,
-        event: &SwarmEvent<Event, E>,
-    ) {
+    async fn handle_identify_events(&mut self, event: &identify::Event) {
         match event {
-            SwarmEvent::Behaviour(Event::Identify(identify::Event::Received {
+            identify::Event::Received {
                 info: identify::Info { observed_addr, .. },
                 ..
-            })) => {
+            } => {
                 info!("Observed external address reported: {observed_addr}");
                 if !self
                     .swarm
@@ -442,42 +428,23 @@ impl EventLoop {
                     self.swarm.add_external_address(observed_addr.clone());
                 }
             }
-            _ => (),
+            event => trace!("{event:?}"),
         }
     }
 
-    async fn handle_mdns_discovery_events<E: std::fmt::Debug>(
-        &mut self,
-        event: &SwarmEvent<Event, E>,
-    ) {
+    async fn handle_mdns_events(&mut self, event: &mdns::Event) {
         match event {
-            SwarmEvent::Behaviour(Event::Mdns(event)) => match event {
-                mdns::Event::Discovered(list) => {
-                    for (peer_id, _) in list {
-                        debug!("mDNS discovered a new peer: {peer_id}");
+            mdns::Event::Discovered(list) => {
+                for (peer_id, _) in list {
+                    debug!("mDNS discovered a new peer: {peer_id}");
 
-                        match self.swarm.dial(*peer_id) {
-                            Ok(_) => (),
-                            Err(err) => debug!("Error dialing peer: {:?}", err),
-                        };
-                    }
+                    match self.swarm.dial(*peer_id) {
+                        Ok(_) => (),
+                        Err(err) => debug!("Error dialing peer: {:?}", err),
+                    };
                 }
-                mdns::Event::Expired(list) => {
-                    for (peer_id, _multiaddr) in list {
-                        trace!("mDNS peer has expired: {peer_id}");
-                    }
-                }
-            },
-            _ => (),
-        }
-    }
-
-    async fn handle_dcutr_events<E: std::fmt::Debug>(&mut self, event: &SwarmEvent<Event, E>) {
-        match event {
-            SwarmEvent::Behaviour(Event::Dcutr(event)) => {
-                debug!("{:?}", event)
             }
-            _ => (),
+            event => trace!("{event:?}"),
         }
     }
 }
