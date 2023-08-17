@@ -238,7 +238,7 @@ pub async fn relay(
 
     let listen_addr_tcp = Multiaddr::empty()
         .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
-        .with(Protocol::Tcp(2030));
+        .with(Protocol::Tcp(0));
     swarm.listen_on(listen_addr_tcp)?;
 
     let listen_addr_quic = Multiaddr::empty()
