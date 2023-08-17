@@ -53,8 +53,13 @@ pub async fn network_service(
         swarm::build_client_swarm(&network_config, key_pair).await?
     };
 
-    // Get quic port from config or use default.
-    let quic_port = network_config.quic_port.unwrap_or(DEFAULT_QUIC_PORT);
+    // Get quic port from config or use default when relay capabilities are enabled.
+    let quic_port = if network_config.relay_server_enabled {
+        network_config.quic_port.unwrap_or(DEFAULT_QUIC_PORT)
+    } else {
+        // For non-relay nodes we can pick any available port.
+        network_config.quic_port.unwrap_or(0)
+    };
 
     // Start listening on tcp address.
     //
