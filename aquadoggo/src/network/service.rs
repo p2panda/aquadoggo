@@ -20,7 +20,7 @@ use crate::network::behaviour::{Event, P2pandaBehaviour};
 use crate::network::config::NODE_NAMESPACE;
 use crate::network::{identity, peers, swarm, NetworkConfiguration, ShutdownHandler};
 
-static DEFAULT_QUIC_PORT: u16 = 2020;
+static DEFAULT_QUIC_PORT: u16 = 2022;
 
 /// Network service which handles all networking logic for a p2panda node.
 ///
