@@ -115,11 +115,13 @@ impl LogHeightStrategy {
                 continue;
             }
 
+            // Check if documents of this type contain a relation to a blob document.
             let has_blob_relation = match self.schema_provider.get(schema_id).await {
                 Some(schema) => has_blob_relation(&schema),
                 None => false,
             };
 
+            // Get the ids of all documents of this schema.
             let schema_documents: Vec<DocumentId> = store
                 .get_documents_by_schema(schema_id)
                 .await
@@ -131,15 +133,16 @@ impl LogHeightStrategy {
 
             let mut schema_blob_documents = vec![];
 
+            // If the target set included `blob_v1` schema_id then we collect any related blob documents.
             if wants_blobs && has_blob_relation {
                 for document_id in &schema_documents {
                     let blob_documents = store.get_blob_child_relations(document_id).await.unwrap();
-                    println!("{blob_documents:?}");
                     schema_blob_documents.extend(blob_documents)
                 }
             }
 
             for blob_id in schema_blob_documents {
+                // Check each blob to see if it's complete.
                 let include_blob = if wants_blob_pieces {
                     let result = store.get_blob(&blob_id).await;
                     result.is_ok()
@@ -147,6 +150,7 @@ impl LogHeightStrategy {
                     true
                 };
 
+                // Only included completed blobs.
                 if include_blob {
                     all_blob_documents_with_dependencies_met.push(blob_id);
                 }

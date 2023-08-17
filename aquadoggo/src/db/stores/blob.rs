@@ -230,6 +230,7 @@ impl SqlStore {
         Ok(())
     }
 
+    /// Get ids for all blob documents which are related to from any view of the passed document.
     pub async fn get_blob_child_relations(
         &self,
         document_id: &DocumentId,
