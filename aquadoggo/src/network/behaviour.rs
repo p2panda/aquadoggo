@@ -130,7 +130,14 @@ impl P2pandaBehaviour {
         // flag is set
         let relay_server = if network_config.relay_server_enabled {
             debug!("Relay server network behaviour enabled");
-            Some(relay::Behaviour::new(peer_id, relay::Config::default()))
+            Some(relay::Behaviour::new(
+                peer_id,
+                relay::Config {
+                    max_circuit_duration: Duration::from_secs(60 * 60),
+                    reservation_duration: Duration::from_secs(60 * 60),
+                    ..relay::Config::default()
+                },
+            ))
         } else {
             None
         };
