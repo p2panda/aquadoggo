@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::time::Duration;
-
 use futures::future::Either;
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::transport::upgrade::Version;
@@ -10,7 +8,12 @@ use libp2p::identity::Keypair;
 use libp2p::noise::Config as NoiseConfig;
 use libp2p::yamux::Config as YamuxConfig;
 use libp2p::{relay, tcp, PeerId, Transport};
-use libp2p_quic as quic;
+
+fn quic_config(key_pair: &Keypair) -> libp2p_quic::Config {
+    let mut config = libp2p_quic::Config::new(key_pair);
+    config.support_draft_29 = true;
+    config
+}
 
 // Build the transport stack to be used by nodes _not_ behaving as relays.
 pub async fn build_client_transport(
@@ -19,6 +22,8 @@ pub async fn build_client_transport(
     let (relay_transport, relay_client) = relay::client::new(key_pair.public().to_peer_id());
 
     let transport = {
+        let quic_transport = libp2p_quic::tokio::Transport::new(quic_config(key_pair));
+
         let relay_tcp_quic_transport = relay_transport
             .or_transport(tcp::tokio::Transport::new(
                 tcp::Config::default().port_reuse(true),
@@ -26,7 +31,7 @@ pub async fn build_client_transport(
             .upgrade(Version::V1)
             .authenticate(NoiseConfig::new(key_pair).unwrap())
             .multiplex(YamuxConfig::default())
-            .or_transport(quic::tokio::Transport::new(quic::Config::new(key_pair)));
+            .or_transport(quic_transport);
 
         relay_tcp_quic_transport
             .map(|either_output, _| match either_output {
@@ -46,11 +51,7 @@ pub async fn build_relay_transport(key_pair: &Keypair) -> Boxed<(PeerId, StreamM
         .authenticate(NoiseConfig::new(key_pair).unwrap())
         .multiplex(YamuxConfig::default());
 
-    let quic_transport = {
-        let mut config = libp2p_quic::Config::new(key_pair);
-        config.support_draft_29 = true;
-        libp2p_quic::tokio::Transport::new(config)
-    };
+    let quic_transport = libp2p_quic::tokio::Transport::new(quic_config(key_pair));
 
     OrTransport::new(quic_transport, tcp_transport)
         .map(|either_output, _| match either_output {
