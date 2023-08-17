@@ -87,9 +87,7 @@ pub async fn client(
     // Build the network swarm and retrieve the local peer ID
     let mut swarm = swarm::build_client_swarm(&network_config, key_pair).await?;
 
-    if let Some(peers) = swarm.behaviour_mut().peers.as_mut() {
-        peers.stop();
-    };
+    swarm.behaviour_mut().peers.stop();
 
     swarm.listen_on(
         Multiaddr::empty()
@@ -228,9 +226,7 @@ pub async fn client(
         };
     }
 
-    if let Some(peers) = swarm.behaviour_mut().peers.as_mut() {
-        peers.restart();
-    };
+    swarm.behaviour_mut().peers.restart();
 
     // All swarm setup complete and we are connected to the network.
     info!("Node initialized in client mode");
@@ -349,15 +345,13 @@ impl EventLoop {
     /// Handle an incoming message via the communication bus from other services.
     async fn handle_service_message(&mut self, message: ServiceMessage) {
         match message {
-            ServiceMessage::SentReplicationMessage(peer, sync_message) => {
-                if let Some(peers) = self.swarm.behaviour_mut().peers.as_mut() {
-                    peers.send_message(peer, sync_message)
-                }
-            }
+            ServiceMessage::SentReplicationMessage(peer, sync_message) => self
+                .swarm
+                .behaviour_mut()
+                .peers
+                .send_message(peer, sync_message),
             ServiceMessage::ReplicationFailed(peer) => {
-                if let Some(peers) = self.swarm.behaviour_mut().peers.as_mut() {
-                    peers.handle_critical_error(peer);
-                }
+                self.swarm.behaviour_mut().peers.handle_critical_error(peer);
             }
             _ => (),
         }
