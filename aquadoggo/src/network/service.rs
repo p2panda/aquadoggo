@@ -61,14 +61,18 @@ pub async fn network_service(
         .with(Protocol::Tcp(0));
     swarm.listen_on(listen_addr_tcp)?;
 
-    // Start listening on quic address.
+    // Start listening on QUIC address. Pick a random one if the given is taken already.
     let listen_addr_quic = Multiaddr::empty()
         .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
         .with(Protocol::Udp(network_config.quic_port))
         .with(Protocol::QuicV1);
-    swarm.listen_on(listen_addr_quic.clone())?;
-
-    info!("Listening on: {listen_addr_quic:?}");
+    if let Err(_) = swarm.listen_on(listen_addr_quic) {
+        let random_port_addr = Multiaddr::empty()
+            .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
+            .with(Protocol::Udp(0))
+            .with(Protocol::QuicV1);
+        swarm.listen_on(random_port_addr)?;
+    }
 
     // If a relay node address was provided, then connect and performing necessary setup before we
     // run the main event loop.
