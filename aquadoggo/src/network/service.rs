@@ -66,7 +66,7 @@ pub async fn network_service(
         .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
         .with(Protocol::Udp(network_config.quic_port))
         .with(Protocol::QuicV1);
-    if let Err(_) = swarm.listen_on(listen_addr_quic) {
+    if swarm.listen_on(listen_addr_quic).is_err() {
         let random_port_addr = Multiaddr::empty()
             .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
             .with(Protocol::Udp(0))
