@@ -103,16 +103,16 @@ impl LogHeightStrategy {
     }
 
     /// Calculate the documents which should be included in this replication session.
-    /// 
+    ///
     /// This is based on the schema ids included in the target set and any document dependencies
     /// which we have on our local node. Documents which are of type `blob_v1` are only included
     /// if the `blob_v1` schema is included in the target set _and_ the blob document is related
     /// to from another document (also of a schema included in the target set). The same is true
     /// of `blob_piece_v1` documents. These are only included if a blob document is also included
     /// which relates to them.
-    /// 
+    ///
     /// For example, a target set including the schema id `[img_0020, blob_v1]` would look at all
-    /// `img_0020` documents and only include blobs which they relate to. 
+    /// `img_0020` documents and only include blobs which they relate to.
     async fn included_document_ids(&self, store: &SqlStore) -> Vec<DocumentId> {
         let wants_blobs = self.target_set().contains(&SchemaId::Blob(1));
         let wants_blob_pieces = self.target_set().contains(&SchemaId::BlobPiece(1));
@@ -152,7 +152,6 @@ impl LogHeightStrategy {
                     schema_blob_documents.extend(blob_documents)
                 }
             }
-
 
             // If `blob_piece_v1` is included in the target set.
             if wants_blob_pieces && has_blob_relation {
@@ -194,14 +193,12 @@ impl LogHeightStrategy {
     ) -> HashMap<PublicKey, Vec<(LogId, SeqNum)>> {
         println!("{included_documents:?}");
         // For every schema id in the target set retrieve log heights for all contributing authors
-        let document_log_heights = store
+        store
             .get_document_log_heights(included_documents)
             .await
             .expect("Fatal database error")
             .into_iter()
-            .collect();
-
-        document_log_heights
+            .collect()
     }
 
     // Prepare entry responses based on a remotes log heights. The response contains all entries
@@ -585,18 +582,18 @@ mod tests {
     #[rstest]
     #[case(vec![], vec![(LogId::new(5), SeqNum::new(1).unwrap())])]
     #[case(
-        vec![SchemaId::Blob(1)], 
+        vec![SchemaId::Blob(1)],
         vec![
-            (LogId::new(2), SeqNum::new(1).unwrap()), 
+            (LogId::new(2), SeqNum::new(1).unwrap()),
             (LogId::new(5), SeqNum::new(1).unwrap())
         ]
     )]
     #[case(
-        vec![SchemaId::Blob(1), SchemaId::BlobPiece(1)], 
+        vec![SchemaId::Blob(1), SchemaId::BlobPiece(1)],
         vec![
-            (LogId::new(0), SeqNum::new(1).unwrap()), 
-            (LogId::new(1), SeqNum::new(1).unwrap()), 
-            (LogId::new(2), SeqNum::new(1).unwrap()), 
+            (LogId::new(0), SeqNum::new(1).unwrap()),
+            (LogId::new(1), SeqNum::new(1).unwrap()),
+            (LogId::new(2), SeqNum::new(1).unwrap()),
             (LogId::new(5), SeqNum::new(1).unwrap())
         ]
     )]
