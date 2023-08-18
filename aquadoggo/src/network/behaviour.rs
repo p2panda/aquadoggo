@@ -179,7 +179,7 @@ impl P2pandaBehaviour {
     }
 }
 
-/// Helper type to wrap behaviour events into one enum and convert from them.
+/// Gather all libp2p event types coming from different behaviours into one enum.
 #[derive(Debug)]
 pub enum Event {
     Identify(identify::Event),
