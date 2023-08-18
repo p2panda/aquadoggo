@@ -76,11 +76,14 @@ pub async fn network_service(
         .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
         .with(Protocol::Udp(quic_port))
         .with(Protocol::QuicV1);
-    swarm.listen_on(listen_addr_quic)?;
+    swarm.listen_on(listen_addr_quic.clone())?;
+
+    info!("Listening on: {listen_addr_quic:?}");
 
     // If a relay node address was provided, then connect and performing necessary setup before we
     // run the main event loop.
     if let Some(relay_addr) = network_config.relay_addr.clone() {
+        info!("Connecting to relay node at: {relay_addr}");
         connect_to_relay(&mut swarm, &mut network_config, relay_addr).await?;
     }
 
