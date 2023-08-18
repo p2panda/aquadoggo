@@ -580,19 +580,21 @@ mod tests {
     }
 
     #[rstest]
-    #[case(vec![], vec![(LogId::new(5), SeqNum::new(1).unwrap())])]
+    // In the test we add the schema id of the `img` document to the target which is why this
+    // seemingly empty target set returns log heights....
+    #[case(vec![], vec![(LogId::new(5), SeqNum::new(1).unwrap())])] // LogId 5 is where the img document lives
     #[case(
         vec![SchemaId::Blob(1)],
         vec![
-            (LogId::new(2), SeqNum::new(1).unwrap()),
+            (LogId::new(2), SeqNum::new(1).unwrap()), // LogId 2 is where the blob document lives
             (LogId::new(5), SeqNum::new(1).unwrap())
         ]
     )]
     #[case(
         vec![SchemaId::Blob(1), SchemaId::BlobPiece(1)],
         vec![
-            (LogId::new(0), SeqNum::new(1).unwrap()),
-            (LogId::new(1), SeqNum::new(1).unwrap()),
+            (LogId::new(0), SeqNum::new(1).unwrap()), // LogId 0 is where a blob piece lives
+            (LogId::new(1), SeqNum::new(1).unwrap()), // LogId 1 is where a blob piece lives
             (LogId::new(2), SeqNum::new(1).unwrap()),
             (LogId::new(5), SeqNum::new(1).unwrap())
         ]
