@@ -46,9 +46,9 @@ struct Cli {
 
     /// IP address for the relay peer.
     ///
-    /// eg. --relay-addr "127.0.0.1"
+    /// eg. --relay-address "127.0.0.1"
     #[arg(long)]
-    relay_addr: Option<IpAddr>,
+    relay_address: Option<IpAddr>,
 
     /// Port for the relay peer, defaults to expected relay port 2022.
     ///
@@ -63,8 +63,8 @@ impl TryFrom<Cli> for Configuration {
     fn try_from(cli: Cli) -> Result<Self, Self::Error> {
         let mut config = Configuration::new(cli.data_dir)?;
 
-        let relay_addr = if let Some(relay_addr) = cli.relay_addr {
-            let mut multiaddr = match relay_addr {
+        let relay_address = if let Some(relay_address) = cli.relay_address {
+            let mut multiaddr = match relay_address {
                 IpAddr::V4(ip) => Multiaddr::from(Protocol::Ip4(ip)),
                 IpAddr::V6(ip) => Multiaddr::from(Protocol::Ip6(ip)),
             };
@@ -84,7 +84,7 @@ impl TryFrom<Cli> for Configuration {
             mdns: cli.mdns.unwrap_or(false),
             quic_port: cli.quic_port,
             relay_server_enabled: cli.enable_relay_server,
-            relay_addr,
+            relay_address,
             remote_peers: cli.remote_node_addresses,
             ..config.network
         };

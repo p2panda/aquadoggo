@@ -67,7 +67,7 @@ pub struct NetworkConfiguration {
     pub relay_server_enabled: bool,
 
     /// Address of a peer which can act as a relay/rendezvous server.
-    pub relay_addr: Option<Multiaddr>,
+    pub relay_address: Option<Multiaddr>,
 
     /// Peer id of the relay if known.
     pub relay_peer_id: Option<PeerId>,
@@ -86,7 +86,7 @@ impl Default for NetworkConfiguration {
             notify_handler_buffer_size: 128,
             per_connection_event_buffer_size: 8,
             quic_port: None,
-            relay_addr: None,
+            relay_address: None,
             relay_peer_id: None,
             remote_peers: Vec::new(),
             relay_server_enabled: false,

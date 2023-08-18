@@ -82,9 +82,9 @@ pub async fn network_service(
 
     // If a relay node address was provided, then connect and performing necessary setup before we
     // run the main event loop.
-    if let Some(relay_addr) = network_config.relay_addr.clone() {
-        info!("Connecting to relay node at: {relay_addr}");
-        connect_to_relay(&mut swarm, &mut network_config, relay_addr).await?;
+    if let Some(relay_address) = network_config.relay_address.clone() {
+        info!("Connecting to relay node at: {relay_address}");
+        connect_to_relay(&mut swarm, &mut network_config, relay_address).await?;
     }
 
     info!("Network service ready!");
@@ -98,7 +98,7 @@ pub async fn network_service(
 pub async fn connect_to_relay(
     swarm: &mut Swarm<P2pandaBehaviour>,
     network_config: &mut NetworkConfiguration,
-    mut relay_addr: Multiaddr,
+    mut relay_address: Multiaddr,
 ) -> Result<()> {
     // First we need to stop the "peers" behaviour.
     //
@@ -109,7 +109,7 @@ pub async fn connect_to_relay(
     // Connect to the relay server. Not for the reservation or relayed connection, but to (a) learn
     // our local public address and (b) enable a freshly started relay to learn its public
     // address.
-    swarm.dial(relay_addr.clone())?;
+    swarm.dial(relay_address.clone())?;
 
     // Wait to get confirmation that we told the relay node it's public address and that they told
     // us ours.
@@ -135,14 +135,14 @@ pub async fn connect_to_relay(
                 // relay address.
 
                 // Pop off the "p2p" protocol.
-                let _ = relay_addr.pop();
+                let _ = relay_address.pop();
 
                 // Add it back on again with the relay nodes peer id included.
-                relay_addr.push(Protocol::P2p(peer_id));
+                relay_address.push(Protocol::P2p(peer_id));
 
                 // Update values on the config.
                 network_config.relay_peer_id = Some(peer_id);
-                network_config.relay_addr = Some(relay_addr.clone());
+                network_config.relay_address = Some(relay_address.clone());
 
                 // All done, we've learned our external address successfully.
                 learned_observed_addr = true;
@@ -162,8 +162,8 @@ pub async fn connect_to_relay(
 
     // Now we have received our external address, and we know the relay has too, listen on our
     // relay circuit address.
-    let circuit_addr = relay_addr.clone().with(Protocol::P2pCircuit);
-    swarm.listen_on(circuit_addr.clone())?;
+    let circuit_address = relay_address.clone().with(Protocol::P2pCircuit);
+    swarm.listen_on(circuit_address.clone())?;
 
     // Register in the `NODE_NAMESPACE` on the rendezvous server. Doing this will mean that we can
     // discover other peers also registered to the same rendezvous server and namespace.
@@ -203,14 +203,14 @@ pub async fn connect_to_relay(
                 // and retry listening.
                 warn!(
                     "Relay circuit connection closed, re-attempting listening on: {:?}",
-                    circuit_addr
+                    circuit_address
                 );
 
                 // After a short wait.
                 tokio::time::sleep(Duration::from_millis(100)).await;
 
                 // Listen again.
-                swarm.listen_on(circuit_addr.clone())?;
+                swarm.listen_on(circuit_address.clone())?;
             }
             event => debug!("{event:?}"),
         }
@@ -383,15 +383,15 @@ impl EventLoop {
                     for address in registration.record.addresses() {
                         let peer_id = registration.record.peer_id();
                         if peer_id != self.local_peer_id {
-                            if let Some(relay_addr) = &self.network_config.relay_addr {
+                            if let Some(relay_address) = &self.network_config.relay_address {
                                 info!("Add new peer to address book: {} {}", peer_id, address);
 
-                                let peer_circuit_addr = relay_addr
+                                let peer_circuit_address = relay_address
                                     .clone()
                                     .with(Protocol::P2pCircuit)
                                     .with(Protocol::P2p(peer_id));
 
-                                match self.swarm.dial(peer_circuit_addr) {
+                                match self.swarm.dial(peer_circuit_address) {
                                     Ok(_) => (),
                                     Err(err) => debug!("Error dialing peer: {:?}", err),
                                 };

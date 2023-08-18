@@ -87,16 +87,16 @@ impl P2pandaBehaviour {
 
         // Create an identify server behaviour with default configuration if a rendezvous server
         // address has been provided or the rendezvous server flag is set
-        let identify = if network_config.relay_addr.is_some() || network_config.relay_server_enabled
-        {
-            debug!("Identify network behaviour enabled");
-            Some(identify::Behaviour::new(identify::Config::new(
-                format!("{NODE_NAMESPACE}/1.0.0"),
-                key_pair.public(),
-            )))
-        } else {
-            None
-        };
+        let identify =
+            if network_config.relay_address.is_some() || network_config.relay_server_enabled {
+                debug!("Identify network behaviour enabled");
+                Some(identify::Behaviour::new(identify::Config::new(
+                    format!("{NODE_NAMESPACE}/1.0.0"),
+                    key_pair.public(),
+                )))
+            } else {
+                None
+            };
 
         // Create an mDNS behaviour with default configuration if the mDNS flag is set
         let mdns = if network_config.mdns {
@@ -117,7 +117,7 @@ impl P2pandaBehaviour {
 
         // Create a rendezvous client behaviour with default configuration if a rendezvous server
         // address has been provided
-        let rendezvous_client = if network_config.relay_addr.is_some() {
+        let rendezvous_client = if network_config.relay_address.is_some() {
             debug!("Rendezvous client network behaviour enabled");
             Some(rendezvous::client::Behaviour::new(key_pair))
         } else {
