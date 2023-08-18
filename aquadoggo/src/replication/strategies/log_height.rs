@@ -102,11 +102,23 @@ impl LogHeightStrategy {
         }
     }
 
-    async fn included_document_ids(&self, store: &SqlStore) -> (Vec<DocumentId>, Vec<DocumentId>) {
+    /// Calculate the documents which should be included in this replication session.
+    /// 
+    /// This is based on the schema ids included in the target set and any document dependencies
+    /// which we have on our local node. Documents which are of type `blob_v1` are only included
+    /// if the `blob_v1` schema is included in the target set _and_ the blob document is related
+    /// to from another document (also of a schema included in the target set). The same is true
+    /// of `blob_piece_v1` documents. These are only included if a blob document is also included
+    /// which relates to them.
+    /// 
+    /// For example, a target set including the schema id `[img_0020, blob_v1]` would look at all
+    /// `img_0020` documents and only include blobs which they relate to. 
+    async fn included_document_ids(&self, store: &SqlStore) -> Vec<DocumentId> {
         let wants_blobs = self.target_set().contains(&SchemaId::Blob(1));
         let wants_blob_pieces = self.target_set().contains(&SchemaId::BlobPiece(1));
-        let mut all_blob_documents_with_dependencies_met = vec![];
-        let mut all_non_blob_documents = vec![];
+        let mut all_target_documents = vec![];
+        let mut all_blob_documents = vec![];
+        let mut all_blob_piece_documents = vec![];
         for schema_id in self.target_set().iter() {
             // If the schema is `blob_v1` or `blob_piece_v1` we don't take any action and just
             // move onto the next loop as these types of documents are only included as part of
@@ -141,27 +153,36 @@ impl LogHeightStrategy {
                 }
             }
 
-            for blob_id in schema_blob_documents {
-                // Check each blob to see if it's complete.
-                let include_blob = if wants_blob_pieces {
-                    let result = store.get_blob(&blob_id).await;
-                    result.is_ok()
-                } else {
-                    true
-                };
 
-                // Only included completed blobs.
-                if include_blob {
-                    all_blob_documents_with_dependencies_met.push(blob_id);
+            // If `blob_piece_v1` is included in the target set.
+            if wants_blob_pieces && has_blob_relation {
+                for blob_id in &schema_blob_documents {
+                    // Get all existing views for this blob document.
+                    let blob_document_view_ids = store
+                        .get_all_document_view_ids(blob_id)
+                        .await
+                        .expect("Fatal database error");
+                    for blob_view_id in blob_document_view_ids {
+                        // Get all pieces for each blob view.
+                        let blob_piece_ids = store
+                            .get_child_document_ids(&blob_view_id)
+                            .await
+                            .expect("Fatal database error");
+                        all_blob_piece_documents.extend(blob_piece_ids)
+                    }
                 }
             }
-            all_non_blob_documents.extend(schema_documents);
+
+            all_target_documents.extend(schema_documents);
+            all_blob_documents.extend(schema_blob_documents);
         }
 
-        (
-            all_non_blob_documents,
-            all_blob_documents_with_dependencies_met,
-        )
+        let mut all_included_document_ids = vec![];
+        all_included_document_ids.extend(all_target_documents);
+        all_included_document_ids.extend(all_blob_documents);
+        all_included_document_ids.extend(all_blob_piece_documents);
+
+        all_included_document_ids
     }
 
     // Calculate the heights of all logs which contain contributions to documents in the current
@@ -192,13 +213,11 @@ impl LogHeightStrategy {
         store: &SqlStore,
         remote_log_heights: &[LogHeights],
     ) -> Vec<Message> {
-        let (document_ids, blob_ids) = self.included_document_ids(store).await;
-        let mut all_document_ids = vec![];
-        all_document_ids.extend(document_ids);
-        all_document_ids.extend(blob_ids.clone());
+        // Calculate which documents should be included in the log height.
+        let included_document_ids = self.included_document_ids(store).await;
 
         // Get local log heights for the configured target set.
-        let local_log_heights = self.local_log_heights(store, &all_document_ids).await;
+        let local_log_heights = self.local_log_heights(store, &included_document_ids).await;
 
         // Compare local and remote log heights to determine what they need from us.
         let remote_needs = diff_log_heights(
@@ -236,12 +255,10 @@ impl Strategy for LogHeightStrategy {
     }
 
     async fn initial_messages(&mut self, store: &SqlStore) -> StrategyResult {
-        let (document_ids, blob_ids) = self.included_document_ids(store).await;
-        let mut all_document_ids = vec![];
-        all_document_ids.extend(document_ids);
-        all_document_ids.extend(blob_ids);
+        // Calculate which documents should be included in the log height.
+        let included_document_ids = self.included_document_ids(store).await;
 
-        let log_heights = self.local_log_heights(store, &all_document_ids).await;
+        let log_heights = self.local_log_heights(store, &included_document_ids).await;
         self.sent_have = true;
 
         StrategyResult {
@@ -567,9 +584,23 @@ mod tests {
 
     #[rstest]
     #[case(vec![], vec![(LogId::new(5), SeqNum::new(1).unwrap())])]
-    #[case(vec![SchemaId::Blob(1)], vec![(LogId::new(2), SeqNum::new(1).unwrap()), (LogId::new(5), SeqNum::new(1).unwrap())])]
-    #[case(vec![SchemaId::Blob(1), SchemaId::BlobPiece(1)], vec![(LogId::new(2), SeqNum::new(1).unwrap()), (LogId::new(5), SeqNum::new(1).unwrap())])]
-    fn calculates_log_heights_with_complete_blobs(
+    #[case(
+        vec![SchemaId::Blob(1)], 
+        vec![
+            (LogId::new(2), SeqNum::new(1).unwrap()), 
+            (LogId::new(5), SeqNum::new(1).unwrap())
+        ]
+    )]
+    #[case(
+        vec![SchemaId::Blob(1), SchemaId::BlobPiece(1)], 
+        vec![
+            (LogId::new(0), SeqNum::new(1).unwrap()), 
+            (LogId::new(1), SeqNum::new(1).unwrap()), 
+            (LogId::new(2), SeqNum::new(1).unwrap()), 
+            (LogId::new(5), SeqNum::new(1).unwrap())
+        ]
+    )]
+    fn calculates_log_heights_based_on_dependencies(
         #[case] target_set_extension: Vec<SchemaId>,
         key_pair: KeyPair,
         #[case] expected_log_heights: Vec<(LogId, SeqNum)>,
@@ -578,7 +609,7 @@ mod tests {
             let mut node_a = manager.create().await;
             let document_view_id = add_blob(&mut node_a, "Hello World!", &key_pair).await;
 
-            let (schema, document_view_ids) = add_schema_and_documents(
+            let (schema, _) = add_schema_and_documents(
                 &mut node_a,
                 "img",
                 vec![vec![(
@@ -598,15 +629,12 @@ mod tests {
             let strategy_a =
                 LogHeightStrategy::new(&target_set, node_a.context.schema_provider.clone());
 
-            let (document_ids, blob_ids) = strategy_a
+            let included_document_ids = strategy_a
                 .included_document_ids(&node_a.context.store)
                 .await;
-            let mut included_documents = vec![];
-            included_documents.extend(document_ids);
-            included_documents.extend(blob_ids.clone());
 
             let log_heights = strategy_a
-                .local_log_heights(&node_a.context.store, &included_documents)
+                .local_log_heights(&node_a.context.store, &included_document_ids)
                 .await;
 
             let expected_log_heights =
