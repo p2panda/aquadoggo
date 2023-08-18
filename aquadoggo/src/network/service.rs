@@ -56,6 +56,8 @@ pub async fn network_service(
     // @TODO: It's still not clear to me if "client" nodes need to do this, when I don't listen
     // here for clients it doesn't seem to make any difference. Maybe it effects things like dcutr
     // though, I'm not sure.
+    //
+    // Related issue: https://github.com/p2panda/aquadoggo/issues/508
     let listen_addr_tcp = Multiaddr::empty()
         .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
         .with(Protocol::Tcp(0));
