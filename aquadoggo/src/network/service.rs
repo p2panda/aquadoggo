@@ -25,10 +25,10 @@ static DEFAULT_QUIC_PORT: u16 = 2022;
 /// Network service which handles all networking logic for a p2panda node.
 ///
 /// This includes:
-/// - discovering connecting to other nodes on the local network
-/// - discovering and connecting to other nodes via a known relay node
-/// - upgrade relayed connections to direct connections (NAT traversal)
-/// - routing replication messages to connected nodes
+/// - Discovering and connecting to other nodes on the local network via mDNS
+/// - Discovering and connecting to other nodes via a known relay node
+/// - Upgrade relayed connections to direct connections (NAT traversal)
+/// - Routing replication messages to connected nodes
 ///
 /// Can perform in "relay" mode, which means in addition to the usual node networking behaviours
 /// this node will also be able to act as a relay for other nodes with restricted connectivity.
