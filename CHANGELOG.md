@@ -55,6 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reduce WARN level logging in network and replication services [#467](https://github.com/p2panda/aquadoggo/pull/467)
 - mDNS and AutoNAT disabled by default [#475](https://github.com/p2panda/aquadoggo/pull/475)
 - By default, nodes support _any_ schema [#487](https://github.com/p2panda/aquadoggo/pull/487)
+- Rework networking service [#502](https://github.com/p2panda/aquadoggo/pull/502)
 
 ### Fixed
 
