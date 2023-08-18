@@ -16,6 +16,14 @@ use crate::network::NetworkConfiguration;
 /// How often do we broadcast mDNS queries into the network.
 const MDNS_QUERY_INTERVAL: Duration = Duration::from_secs(5);
 
+/// The reservation of a relayed connection becomes invalid after this time and it's the
+/// responsibility of the client to refresh.
+const RELAY_RESERVATION_DURATION: Duration = Duration::from_secs(60 * 60); // 1 hour
+
+/// A successfully established, relayed connection becomes invalid after this time and it's the
+/// responsibility of the client to refresh.
+const RELAY_MAX_CIRCUIT_DURATION: Duration = Duration::from_secs(60 * 60); // 1 hour
+
 /// Network behaviour for the aquadoggo node.
 ///
 /// In libp2p all different behaviours are "merged" into one "main behaviour" with help of the
@@ -31,22 +39,22 @@ const MDNS_QUERY_INTERVAL: Duration = Duration::from_secs(5);
 #[derive(NetworkBehaviour)]
 #[behaviour(to_swarm = "Event", event_process = false)]
 pub struct P2pandaBehaviour {
-    /// Periodically exchange information between peer on an established connection. This
-    /// is useful for learning the external address of the local node from a remote peer.
+    /// Periodically exchange information between peer on an established connection. This is useful
+    /// for learning the external address of the local node from a remote peer.
     pub identify: Toggle<identify::Behaviour>,
 
     /// Enforce a set of connection limits.
     pub limits: connection_limits::Behaviour,
 
-    /// Automatically discover peers on the local network.
+    /// Automatically discover peers on the local network via multicast DNS.
     pub mdns: Toggle<mdns::tokio::Behaviour>,
 
-    /// Communicate with remote peers via a relay server when a direct peer-to-peer
-    /// connection is not possible.
+    /// Communicate with remote peers via a relay server when a direct peer-to-peer connection is
+    /// not possible.
     pub relay_client: Toggle<relay::client::Behaviour>,
 
     /// Serve as a relay point for remote peers to establish connectivity when a direct
-    /// peer-to-peer connection is not possible.
+    /// peer-to-peer connection is not possible first.
     pub relay_server: Toggle<relay::Behaviour>,
 
     /// Register with a rendezvous server and query remote peer addresses.
@@ -56,6 +64,11 @@ pub struct P2pandaBehaviour {
     /// the addresses of other peers.
     pub rendezvous_server: Toggle<rendezvous::server::Behaviour>,
 
+    /// Allow two peers behind NAT to communicate directly by utilizing a technique called hole
+    /// punching.
+    ///
+    /// The technique relies on the two peers synchronizing and simultaneously opening connections
+    /// to each other to their predicted external address with help of a third-party relay server.
     pub dcutr: Toggle<dcutr::Behaviour>,
 
     /// Register peer connections and handle p2panda messaging with them.
@@ -63,8 +76,8 @@ pub struct P2pandaBehaviour {
 }
 
 impl P2pandaBehaviour {
-    /// Generate a new instance of the composed network behaviour according to
-    /// the network configuration context.
+    /// Generate a new instance of the composed network behaviour according to the network
+    /// configuration.
     pub fn new(
         network_config: &NetworkConfiguration,
         key_pair: Keypair,
@@ -72,8 +85,8 @@ impl P2pandaBehaviour {
     ) -> Result<Self> {
         let peer_id = key_pair.public().to_peer_id();
 
-        // Create an identify server behaviour with default configuration if a rendezvous
-        // server address has been provided or the rendezvous server flag is set
+        // Create an identify server behaviour with default configuration if a rendezvous server
+        // address has been provided or the rendezvous server flag is set
         let identify = if network_config.relay_addr.is_some() || network_config.relay_server_enabled
         {
             debug!("Identify network behaviour enabled");
@@ -126,15 +139,15 @@ impl P2pandaBehaviour {
             debug!("Relay client network behaviour enabled");
         }
 
-        // Create a relay server behaviour with default configuration if the relay server
-        // flag is set
+        // Create a relay server behaviour with default configuration if the relay server flag is
+        // set
         let relay_server = if network_config.relay_server_enabled {
             debug!("Relay server network behaviour enabled");
             Some(relay::Behaviour::new(
                 peer_id,
                 relay::Config {
-                    max_circuit_duration: Duration::from_secs(60 * 60),
-                    reservation_duration: Duration::from_secs(60 * 60),
+                    max_circuit_duration: RELAY_MAX_CIRCUIT_DURATION,
+                    reservation_duration: RELAY_RESERVATION_DURATION,
                     ..relay::Config::default()
                 },
             ))
@@ -142,13 +155,14 @@ impl P2pandaBehaviour {
             None
         };
 
+        // Create UDP holepunching behaviour (DCUtR) if the flag is set
         let dcutr = if network_config.relay_server_enabled || relay_client.is_some() {
             Some(dcutr::Behaviour::new(peer_id))
         } else {
             None
         };
 
-        // Create behaviour to manage peer connections and handle p2panda messaging
+        // Always create behaviour to manage peer connections and handle p2panda messaging
         let peers = peers::Behaviour::new();
 
         Ok(Self {
@@ -165,6 +179,7 @@ impl P2pandaBehaviour {
     }
 }
 
+/// Helper type to wrap behaviour events into one enum and convert from them.
 #[derive(Debug)]
 pub enum Event {
     Identify(identify::Event),

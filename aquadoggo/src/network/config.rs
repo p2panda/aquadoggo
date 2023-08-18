@@ -55,22 +55,22 @@ pub struct NetworkConfiguration {
     /// manager will sleep.
     pub per_connection_event_buffer_size: usize,
 
+    /// The addresses of remote peers to replicate from.
+    pub remote_peers: Vec<Multiaddr>,
+
     /// QUIC transport port.
     pub quic_port: Option<u16>,
+
+    /// Relay server behaviour enabled.
+    ///
+    /// Serve as a relay point for peer connections.
+    pub relay_server_enabled: bool,
 
     /// Address of a peer which can act as a relay/rendezvous server.
     pub relay_addr: Option<Multiaddr>,
 
     /// Peer id of the relay if known.
     pub relay_peer_id: Option<PeerId>,
-
-    /// The addresses of remote peers to replicate from.
-    pub remote_peers: Vec<Multiaddr>,
-
-    /// Relay server behaviour enabled.
-    ///
-    /// Serve as a relay point for peer connections.
-    pub relay_server_enabled: bool,
 }
 
 impl Default for NetworkConfiguration {
