@@ -643,4 +643,48 @@ mod tests {
             assert_eq!(log_heights, expected_log_heights);
         });
     }
+
+    #[rstest]
+    #[case(vec![])]
+    #[case(vec![SchemaId::Blob(1)])]
+    #[case(vec![SchemaId::Blob(1), SchemaId::BlobPiece(1)])]
+    fn blobs_and_pieces_not_included_on_their_own(
+        #[case] target_set_schema: Vec<SchemaId>,
+        key_pair: KeyPair,
+    ) {
+        test_runner_with_manager(move |manager: TestNodeManager| async move {
+            let mut node_a = manager.create().await;
+            let document_view_id = add_blob(&mut node_a, "Hello World!", &key_pair).await;
+
+            let (schema, _) = add_schema_and_documents(
+                &mut node_a,
+                "img",
+                vec![vec![(
+                    "relation_to_blob",
+                    document_view_id.into(),
+                    Some(SchemaId::Blob(1)),
+                )]],
+                &key_pair,
+            )
+            .await;
+
+            let target_set = TargetSet::new(&target_set_schema);
+            let _ = node_a.context.schema_provider.update(schema).await;
+
+            let strategy_a =
+                LogHeightStrategy::new(&target_set, node_a.context.schema_provider.clone());
+
+            let included_document_ids = strategy_a
+                .included_document_ids(&node_a.context.store)
+                .await;
+
+            assert!(included_document_ids.is_empty());
+
+            let log_heights = strategy_a
+                .local_log_heights(&node_a.context.store, &included_document_ids)
+                .await;
+
+            assert!(log_heights.is_empty());
+        });
+    }
 }
