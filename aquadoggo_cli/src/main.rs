@@ -30,7 +30,7 @@ struct Cli {
 
     /// Port for the QUIC transport, 2022 by default for a relay/rendezvous node.
     #[arg(short, long)]
-    quic_port: Option<u16>,
+    quic_port: u16,
 
     /// URLs of remote nodes to replicate with.
     #[arg(short, long)]
@@ -52,7 +52,7 @@ struct Cli {
 
     /// Port for the relay peer, defaults to expected relay port 2022.
     ///
-    /// eg. --relay-port "2020"
+    /// eg. --relay-port "1234"
     #[arg(long)]
     relay_port: Option<u16>,
 }

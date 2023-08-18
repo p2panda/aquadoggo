@@ -20,8 +20,6 @@ use crate::network::behaviour::{Event, P2pandaBehaviour};
 use crate::network::config::NODE_NAMESPACE;
 use crate::network::{identity, peers, swarm, NetworkConfiguration, ShutdownHandler};
 
-static DEFAULT_QUIC_PORT: u16 = 2022;
-
 /// Network service which handles all networking logic for a p2panda node.
 ///
 /// This includes:
@@ -53,14 +51,6 @@ pub async fn network_service(
         swarm::build_client_swarm(&network_config, key_pair).await?
     };
 
-    // Get quic port from config or use default when relay capabilities are enabled.
-    let quic_port = if network_config.relay_server_enabled {
-        network_config.quic_port.unwrap_or(DEFAULT_QUIC_PORT)
-    } else {
-        // For non-relay nodes we can pick any available port.
-        network_config.quic_port.unwrap_or(0)
-    };
-
     // Start listening on tcp address.
     //
     // @TODO: It's still not clear to me if "client" nodes need to do this, when I don't listen
@@ -74,7 +64,7 @@ pub async fn network_service(
     // Start listening on quic address.
     let listen_addr_quic = Multiaddr::empty()
         .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
-        .with(Protocol::Udp(quic_port))
+        .with(Protocol::Udp(network_config.quic_port))
         .with(Protocol::QuicV1);
     swarm.listen_on(listen_addr_quic.clone())?;
 

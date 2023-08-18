@@ -59,7 +59,7 @@ pub struct NetworkConfiguration {
     pub remote_peers: Vec<Multiaddr>,
 
     /// QUIC transport port.
-    pub quic_port: Option<u16>,
+    pub quic_port: u16,
 
     /// Relay server behaviour enabled.
     ///
@@ -85,7 +85,7 @@ impl Default for NetworkConfiguration {
             mdns: false,
             notify_handler_buffer_size: 128,
             per_connection_event_buffer_size: 8,
-            quic_port: None,
+            quic_port: 2022,
             relay_address: None,
             relay_peer_id: None,
             remote_peers: Vec::new(),

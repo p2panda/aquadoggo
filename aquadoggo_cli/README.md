@@ -33,7 +33,7 @@ Node server with GraphQL API for the p2panda network.
       --relay-port <RELAY_PORT>
           Port for the relay peer, defaults to expected relay port 2022.
 
-          eg. --relay-port "2020"
+          eg. --relay-port "1234"
 
   -h, --help
           Print help (see a summary with '-h')
