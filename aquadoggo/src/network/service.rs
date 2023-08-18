@@ -230,6 +230,12 @@ pub async fn connect_to_relay(
 
     // Finally we want to dial the relay node _again_, this time in order to initiate replication
     // with it, which will happen automatically once the connection succeeds.
+    //
+    // @TODO: This is a workaround since we don't have a way yet to start replication _not_ at the
+    // same time the connection gets successfully established. We should fix this and remove the
+    // second, potentially redundant dial.
+    //
+    // See related issue: https://github.com/p2panda/aquadoggo/issues/507
 
     // First restart the "peers" behaviour in order to handle the expected messages
     swarm.behaviour_mut().peers.enable();
@@ -237,7 +243,6 @@ pub async fn connect_to_relay(
     let opts = DialOpts::peer_id(relay_peer_id)
         .condition(PeerCondition::Always) // There is an existing connection, so we force dial here.
         .build();
-
     match swarm.dial(opts) {
         Ok(_) => (),
         Err(err) => debug!("Error dialing peer: {:?}", err),
