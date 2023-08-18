@@ -5,7 +5,6 @@ Node server with GraphQL API for the p2panda network.
 ## Usage
 
 ```
-Options:
   -d, --data-dir <DATA_DIR>
           Path to data folder, $HOME/.local/share/aquadoggo by default on Linux
 
@@ -20,7 +19,7 @@ Options:
 
   -m, --mdns <MDNS>
           Enable mDNS for peer discovery over LAN (using port 5353), false by default
-          
+
           [possible values: true, false]
 
       --enable-relay-server
@@ -28,19 +27,20 @@ Options:
 
       --relay-addr <RELAY_ADDR>
           IP address for the relay peer.
-          
+
           eg. --relay-addr "127.0.0.1"
 
       --relay-port <RELAY_PORT>
           Port for the relay peer, defaults to expected relay port 2022.
-          
+
           eg. --relay-port "2020"
 
   -h, --help
           Print help (see a summary with '-h')
 
   -V, --version
-          Print version```
+          Print version
+```
 
 ## Environment variables
 
