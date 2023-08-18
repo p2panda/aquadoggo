@@ -191,8 +191,7 @@ impl LogHeightStrategy {
         store: &SqlStore,
         included_documents: &[DocumentId],
     ) -> HashMap<PublicKey, Vec<(LogId, SeqNum)>> {
-        println!("{included_documents:?}");
-        // For every schema id in the target set retrieve log heights for all contributing authors
+        // For every included document calculate the heights of any contributing logs.
         store
             .get_document_log_heights(included_documents)
             .await
