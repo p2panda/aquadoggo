@@ -80,14 +80,14 @@ pub enum Event {
 #[derive(Debug)]
 pub struct Behaviour {
     events: VecDeque<ToSwarm<Event, HandlerFromBehaviour>>,
-    running: bool,
+    enabled: bool,
 }
 
 impl Behaviour {
     pub fn new() -> Self {
         Self {
             events: VecDeque::new(),
-            running: true,
+            enabled: true,
         }
     }
 
@@ -114,21 +114,20 @@ impl Behaviour {
     }
 
     fn push_event(&mut self, event: ToSwarm<Event, HandlerFromBehaviour>) -> bool {
-        if self.running {
+        if self.enabled {
             self.events.push_back(event);
             return true;
         }
         false
     }
 
-    /// Stop the peers behaviour from running, it won't handle any connection events or received messages.
-    pub fn stop(&mut self) {
-        self.running = false
+    /// Disable the behaviour, it won't handle any connection events or received messages.
+    pub fn disable(&mut self) {
+        self.enabled = false
     }
 
-    /// Restart the peers behaviour.
-    pub fn restart(&mut self) {
-        self.running = true
+    pub fn enable(&mut self) {
+        self.enabled = true
     }
 
     pub fn send_message(&mut self, peer: Peer, message: SyncMessage) {

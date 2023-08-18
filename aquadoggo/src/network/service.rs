@@ -104,7 +104,7 @@ pub async fn connect_to_relay(
     //
     // We do this so that the connections we create during initialization do not trigger
     // replication sessions, which could leave the node in a strange state.
-    swarm.behaviour_mut().peers.stop();
+    swarm.behaviour_mut().peers.disable();
 
     // Connect to the relay server. Not for the reservation or relayed connection, but to (a) learn
     // our local public address and (b) enable a freshly started relay to learn its public
@@ -237,8 +237,8 @@ pub async fn connect_to_relay(
     // Finally we want to dial the relay node _again_, this time in order to initiate replication
     // with it, which will happen automatically once the connection succeeds.
 
-    // First restart the "peers" behaviour in order to handle the expected messages.
-    swarm.behaviour_mut().peers.restart();
+    // First restart the "peers" behaviour in order to handle the expected messages
+    swarm.behaviour_mut().peers.enable();
 
     let opts = DialOpts::peer_id(relay_peer_id)
         .condition(PeerCondition::Always) // There is an existing connection, so we force dial here.
