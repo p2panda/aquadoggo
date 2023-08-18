@@ -30,7 +30,7 @@ struct Cli {
 
     /// Port for the QUIC transport, 2022 by default for a relay/rendezvous node.
     #[arg(short, long)]
-    quic_port: u16,
+    quic_port: Option<u16>,
 
     /// URLs of remote nodes to replicate with.
     #[arg(short, long)]
@@ -77,17 +77,20 @@ impl TryFrom<Cli> for Configuration {
         };
 
         if let Some(http_port) = cli.http_port {
-            config.http_port = http_port
+            config.http_port = http_port;
         }
 
         config.network = NetworkConfiguration {
             mdns: cli.mdns.unwrap_or(false),
-            quic_port: cli.quic_port,
             relay_server_enabled: cli.enable_relay_server,
             relay_address,
             remote_peers: cli.remote_node_addresses,
             ..config.network
         };
+
+        if let Some(quic_port) = cli.quic_port {
+            config.network.quic_port = quic_port;
+        }
 
         Ok(config)
     }
