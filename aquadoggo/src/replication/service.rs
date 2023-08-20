@@ -66,8 +66,21 @@ pub async fn replication_service(
 /// Statistics about successful and failed replication sessions for each connected peer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PeerStatus {
+    /// Connectivity information like libp2p peer id and connection id.
     peer: Peer,
+
+    /// Last known announcement of this peer. This contains a list of schema ids this peer is
+    /// interested in.
+    announcement: Option<TargetSet>,
+
+    /// Timestamp of the last known announcement. Helps to understand if we can override the
+    /// previous announcement with a newer one.
+    announcement_timestamp: u64,
+
+    /// Number of successful replication sessions.
     successful_count: usize,
+
+    /// Number of failed replication sessions.
     failed_count: usize,
 }
 
@@ -75,6 +88,8 @@ impl PeerStatus {
     pub fn new(peer: Peer) -> Self {
         Self {
             peer,
+            announcement: None,
+            announcement_timestamp: 0,
             successful_count: 0,
             failed_count: 0,
         }
