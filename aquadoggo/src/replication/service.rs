@@ -172,9 +172,18 @@ impl ConnectionManager {
             }
             None => {
                 self.peers.insert(peer, PeerStatus::new(peer));
-                self.update_sessions().await;
+                self.on_update().await;
             }
         }
+    }
+
+    /// Routines which get executed on every scheduler beat and newly established connection.
+    async fn on_update(&mut self) {
+        // Inform new peers about our supported protocol version and schema ids
+        self.announce().await;
+
+        // Check if we can establish replication sessions with peers
+        self.update_sessions().await;
     }
 
     /// Handle a peer connection closing.
@@ -471,8 +480,7 @@ impl ConnectionManager {
 
                 // Announcement & replication schedule is due
                 Some(_) = self.scheduler.next() => {
-                    self.announce().await;
-                    self.update_sessions().await
+                    self.on_update().await;
                 }
             }
         }
