@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+mod announcement;
 pub mod errors;
 mod ingest;
 mod manager;
@@ -11,6 +12,7 @@ mod strategies;
 mod target_set;
 pub mod traits;
 
+pub use announcement::Announcement;
 pub use ingest::SyncIngest;
 pub use manager::SyncManager;
 pub use message::{LiveMode, LogHeights, Message, SyncMessage};

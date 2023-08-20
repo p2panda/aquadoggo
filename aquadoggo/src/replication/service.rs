@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::collections::HashMap;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use anyhow::Result;
 use libp2p::PeerId;
@@ -22,7 +22,8 @@ use crate::network::identity::to_libp2p_peer_id;
 use crate::network::Peer;
 use crate::replication::errors::ReplicationError;
 use crate::replication::{
-    Message, Mode, Session, SessionId, SyncIngest, SyncManager, SyncMessage, TargetSet,
+    Announcement, Message, Mode, Session, SessionId, SyncIngest, SyncManager, SyncMessage,
+    TargetSet,
 };
 use crate::schema::SchemaProvider;
 
@@ -61,30 +62,6 @@ pub async fn replication_service(
     }
 
     Ok(())
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct Announcement {
-    /// This contains a list of schema ids this peer is interested in.
-    target_set: TargetSet,
-
-    /// Timestamp of this announcement. Helps to understand if we can override the previous
-    /// announcement with a newer one.
-    timestamp: u64,
-}
-
-impl Announcement {
-    pub fn new(target_set: TargetSet) -> Self {
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("System time invalid, operation system time configured before UNIX epoch")
-            .as_secs();
-
-        Self {
-            timestamp,
-            target_set,
-        }
-    }
 }
 
 /// Statistics about successful and failed replication sessions for each connected peer.
