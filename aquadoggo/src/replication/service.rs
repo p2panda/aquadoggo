@@ -216,10 +216,18 @@ impl ConnectionManager {
                 Some(current) => {
                     // Only update peer status when incoming announcement has a newer timestamp
                     if current.timestamp < incoming_announcement.timestamp {
+                        trace!(
+                            "Received updated announcement state from peer {}",
+                            peer.display()
+                        );
                         status.announcement = Some(incoming_announcement);
                     }
                 }
                 None => {
+                    trace!(
+                        "Received first announcement state from peer {}",
+                        peer.display()
+                    );
                     status.announcement = Some(incoming_announcement);
                 }
             },
@@ -235,11 +243,18 @@ impl ConnectionManager {
 
         // If this is a SyncRequest message first we check if the contained target set matches our
         // own locally configured one.
-        if let Message::SyncRequest(_, target_set) = message.message() {
+        if let Message::SyncRequest(_, remote_target_set) = message.message() {
+            let local_target_set = &self
+                .announcement
+                .as_ref()
+                .expect("Our announcement needs to be set latest when we call 'update_sessions'")
+                .target_set;
+
             // If this node has been configured with a whitelist of schema ids then we check the
             // target set of the requests matches our own, otherwise we skip this step and accept
             // any target set.
-            if self.schema_provider.is_whitelist_active() && target_set != &self.target_set().await
+            if self.schema_provider.is_whitelist_active()
+                && !local_target_set.is_valid_set(remote_target_set)
             {
                 // If it doesn't match we signal that an error occurred and return at this point.
                 self.on_replication_error(peer, session_id, ReplicationError::UnsupportedTargetSet)

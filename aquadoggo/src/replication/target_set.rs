@@ -57,6 +57,13 @@ impl TargetSet {
         self.0.contains(schema_id)
     }
 
+    /// Returns true if both target sets know about the same elements.
+    pub fn is_valid_set(&self, target_set: &TargetSet) -> bool {
+        self.iter()
+            .find(|schema_id| !target_set.contains(schema_id))
+            .is_none()
+    }
+
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
@@ -178,6 +185,7 @@ mod tests {
         #[from(random_document_view_id)] document_view_id_2: DocumentViewId,
         #[from(random_document_view_id)] document_view_id_3: DocumentViewId,
     ) {
+        // Correctly calculates intersections
         let schema_id_1 =
             SchemaId::new_application(&SchemaName::new("messages").unwrap(), &document_view_id_1);
         let schema_id_2 =
@@ -192,6 +200,14 @@ mod tests {
             TargetSet::from_intersection(&set_1, &set_2),
             TargetSet::new(&[schema_id_2.clone()])
         );
+
+        // Correctly verifies if both target sets know about all given elements
+        assert!(TargetSet::new(&[schema_id_2.clone()])
+            .is_valid_set(&TargetSet::new(&[schema_id_2.clone()])));
+        assert!(TargetSet::new(&[schema_id_3.clone(), schema_id_2.clone()])
+            .is_valid_set(&TargetSet::new(&[schema_id_2.clone()])));
+        assert!(!TargetSet::new(&[schema_id_1.clone()])
+            .is_valid_set(&TargetSet::new(&[schema_id_2.clone(), schema_id_1.clone()])));
     }
 
     #[rstest]
