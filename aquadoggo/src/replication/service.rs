@@ -22,8 +22,8 @@ use crate::network::identity::to_libp2p_peer_id;
 use crate::network::{Peer, PeerMessage};
 use crate::replication::errors::ReplicationError;
 use crate::replication::{
-    Announcement, Message, Mode, Session, SessionId, SyncIngest, SyncManager, SyncMessage,
-    TargetSet,
+    Announcement, AnnouncementMessage, Message, Mode, Session, SessionId, SyncIngest, SyncManager,
+    SyncMessage, TargetSet,
 };
 use crate::schema::SchemaProvider;
 
@@ -339,7 +339,8 @@ impl ConnectionManager {
         }
     }
 
-    async fn announce(&self) {
+    /// Send our local announcement state to all peers which are not informed yet.
+    async fn announce(&mut self) {
         let local_announcement = self
             .announcement
             .as_ref()
@@ -350,8 +351,10 @@ impl ConnectionManager {
                 continue;
             }
 
-            // @TODO
-            // self.send_service_message(ServiceMessage::SentMessage(*peer, message));
+            self.send_service_message(ServiceMessage::SentMessage(
+                *peer,
+                PeerMessage::Announce(AnnouncementMessage(local_announcement.clone())),
+            ));
         }
     }
 

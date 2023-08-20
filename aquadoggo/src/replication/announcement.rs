@@ -37,7 +37,7 @@ impl Announcement {
 
 /// Message which can be used to send announcements over the wire.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AnnouncementMessage(Announcement);
+pub struct AnnouncementMessage(pub Announcement);
 
 impl Serialize for AnnouncementMessage {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
