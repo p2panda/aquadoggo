@@ -305,13 +305,14 @@ impl ConnectionManager {
     /// Determine if we can attempt new replication sessions with the peers we currently know
     /// about.
     async fn update_sessions(&mut self) {
-        let local_announcement = self
+        let local_target_set = &self
             .announcement
             .as_ref()
-            .expect("Our announcement needs to be set latest when we call 'update_sessions'");
+            .expect("Our announcement needs to be set latest when we call 'update_sessions'")
+            .target_set;
 
         // Iterate through all currently connected peers
-        let mut attempt_peers: Vec<Peer> = self
+        let mut attempt_peers: Vec<(Peer, TargetSet)> = self
             .peers
             .clone()
             .into_iter()
@@ -326,21 +327,28 @@ impl ConnectionManager {
                     return None;
                 };
 
-                // 2. Check if we're running too many sessions with that peer on this connection
+                // 2. Calculate intersection of local and remote target set. Do we have any
+                //    supported schema id's in common?
+                let target_set = TargetSet::from_intersection(local_target_set, &remote_target_set);
+                if target_set.is_empty() {
+                    return None;
+                }
+
+                // 3. Check if we're running too many sessions with that peer on this connection
                 //    already. This limit is configurable.
                 let active_sessions: Vec<&Session> = sessions
                     .iter()
                     .filter(|session| !session.is_done())
                     .collect();
 
-                // 3. Check if we're already having at least one session concerning the same target
+                // 4. Check if we're already having at least one session concerning the same target
                 //    set. If we would start that session again it would be considered an error.
                 let has_active_target_set_session = active_sessions
                     .iter()
-                    .any(|session| session.target_set() == local_announcement.target_set);
+                    .any(|session| session.target_set() == target_set);
 
                 if active_sessions.len() < MAX_SESSIONS_PER_PEER && !has_active_target_set_session {
-                    Some(peer)
+                    Some((peer, target_set))
                 } else {
                     None
                 }
@@ -355,9 +363,8 @@ impl ConnectionManager {
         attempt_peers.shuffle(&mut thread_rng());
         attempt_peers.truncate(MAX_PEER_SAMPLE);
 
-        for peer in attempt_peers {
-            // @TODO
-            // self.initiate_replication(&peer, &target_set).await;
+        for (peer, target_set) in &attempt_peers {
+            self.initiate_replication(peer, target_set).await;
         }
     }
 
