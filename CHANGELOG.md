@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Only replicate and materialize configured "supported schema" [#569](https://github.com/p2panda/aquadoggo/pull/469)
 - Parse supported schema ids from `config.toml` [#473](https://github.com/p2panda/aquadoggo/pull/473)
 - Fix relayed connections, add DCUtR Holepunching and reduce CLI args [#502](https://github.com/p2panda/aquadoggo/pull/502)
+- Target set announcements in network [#515](https://github.com/p2panda/aquadoggo/pull/515)
 
 ### Changed
 
