@@ -23,7 +23,7 @@ pub enum ServiceMessage {
     /// Node sent a message to remote node.
     SentMessage(Peer, PeerMessage),
 
-    /// Node received a message from remote node for replication.
+    /// Node received a message from remote node.
     ReceivedMessage(Peer, PeerMessage),
 
     /// Replication protocol failed with an critical error.
