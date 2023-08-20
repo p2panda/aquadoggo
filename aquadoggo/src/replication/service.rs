@@ -22,8 +22,8 @@ use crate::network::identity::to_libp2p_peer_id;
 use crate::network::{Peer, PeerMessage};
 use crate::replication::errors::ReplicationError;
 use crate::replication::{
-    Announcement, AnnouncementMessage, Message, Mode, Session, SessionId, SyncIngest, SyncManager,
-    SyncMessage, TargetSet,
+    now, Announcement, AnnouncementMessage, Message, Mode, Session, SessionId, SyncIngest,
+    SyncManager, SyncMessage, TargetSet,
 };
 use crate::schema::SchemaProvider;
 
@@ -390,14 +390,18 @@ impl ConnectionManager {
             .expect("Our announcement needs to be set latest when we call 'update_sessions'");
 
         for (peer, status) in &self.peers {
-            if status.sent_our_announcement_timestamp > local_announcement.timestamp {
-                continue;
+            if status.sent_our_announcement_timestamp < local_announcement.timestamp {
+                self.send_service_message(ServiceMessage::SentMessage(
+                    *peer,
+                    PeerMessage::Announce(AnnouncementMessage::new(local_announcement.clone())),
+                ));
             }
+        }
 
-            self.send_service_message(ServiceMessage::SentMessage(
-                *peer,
-                PeerMessage::Announce(AnnouncementMessage::new(local_announcement.clone())),
-            ));
+        for (_, status) in self.peers.iter_mut() {
+            if status.sent_our_announcement_timestamp < local_announcement.timestamp {
+                status.sent_our_announcement_timestamp = now();
+            }
         }
     }
 

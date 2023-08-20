@@ -9,6 +9,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::replication::{TargetSet, REPLICATION_PROTOCOL_VERSION};
 
+/// u64 timestamp from UNIX epoch until now.
+pub fn now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("System time invalid, operation system time configured before UNIX epoch")
+        .as_secs()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Announcement {
     /// This contains a list of schema ids this peer is interested in.
@@ -21,13 +29,8 @@ pub struct Announcement {
 
 impl Announcement {
     pub fn new(target_set: TargetSet) -> Self {
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("System time invalid, operation system time configured before UNIX epoch")
-            .as_secs();
-
         Self {
-            timestamp,
+            timestamp: now(),
             target_set,
         }
     }

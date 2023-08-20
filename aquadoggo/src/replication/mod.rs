@@ -12,7 +12,7 @@ mod strategies;
 mod target_set;
 pub mod traits;
 
-pub use announcement::{Announcement, AnnouncementMessage};
+pub use announcement::{now, Announcement, AnnouncementMessage};
 pub use ingest::SyncIngest;
 pub use manager::SyncManager;
 pub use message::{LiveMode, LogHeights, Message, SyncMessage};
