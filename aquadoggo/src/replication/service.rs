@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::collections::HashMap;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
 use libp2p::PeerId;
@@ -73,6 +73,20 @@ struct Announcement {
     timestamp: u64,
 }
 
+impl Announcement {
+    pub fn new(target_set: TargetSet) -> Self {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("System time invalid, operation system time configured before UNIX epoch")
+            .as_secs();
+
+        Self {
+            timestamp,
+            target_set,
+        }
+    }
+}
+
 /// Statistics about successful and failed replication sessions for each connected peer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PeerStatus {
@@ -138,7 +152,7 @@ struct ConnectionManager {
 
     /// Our latest announcement state we want to propagate to all current and future peers. It
     /// contains a list of schema ids we're supporting as a node.
-    announcement: Announcement,
+    announcement: Option<Announcement>,
 }
 
 impl ConnectionManager {
@@ -161,10 +175,7 @@ impl ConnectionManager {
             tx: tx.clone(),
             rx: BroadcastStream::new(tx.subscribe()),
             schema_provider: schema_provider.clone(),
-            announcement: Announcement {
-                target_set: TargetSet::new(&[]),
-                timestamp: 0,
-            },
+            announcement: None,
         }
     }
 
@@ -285,6 +296,12 @@ impl ConnectionManager {
         self.send_service_message(ServiceMessage::ReplicationFailed(peer));
     }
 
+    /// Generates our new announcement state we can then propagate to all known and future peers.
+    async fn update_announcement(&mut self) {
+        let target_set = self.target_set().await;
+        self.announcement = Some(Announcement::new(target_set));
+    }
+
     /// Determine if we can attempt new replication sessions with the peers we currently know
     /// about.
     async fn update_sessions(&mut self) {
@@ -384,6 +401,9 @@ impl ConnectionManager {
 
     /// Main event loop running the async streams.
     pub async fn run(mut self) {
+        // Generate our own first announcement
+        self.update_announcement().await;
+
         // Subscribe to updates when our target set got changed
         let mut schema_provider_rx = self.schema_provider.on_schema_added();
 
@@ -403,6 +423,7 @@ impl ConnectionManager {
 
                 // Target set got updated
                 Ok(_) = schema_provider_rx.recv() => {
+                    self.update_announcement().await;
                 },
 
                 // Replication schedule is due
