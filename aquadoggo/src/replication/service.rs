@@ -195,7 +195,12 @@ impl ConnectionManager {
 
     /// Update announcement state of a remote peer.
     async fn on_announcement_message(&mut self, peer: Peer, message: AnnouncementMessage) {
-        let incoming_announcement = message.0;
+        // Check if this node supports our replication protocol version
+        if !message.is_version_supported() {
+            return;
+        }
+
+        let incoming_announcement = message.announcement();
 
         match self.peers.get_mut(&peer) {
             Some(status) => match &status.announcement {
@@ -382,7 +387,7 @@ impl ConnectionManager {
 
             self.send_service_message(ServiceMessage::SentMessage(
                 *peer,
-                PeerMessage::Announce(AnnouncementMessage(local_announcement.clone())),
+                PeerMessage::Announce(AnnouncementMessage::new(local_announcement.clone())),
             ));
         }
     }

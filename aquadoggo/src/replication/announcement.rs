@@ -33,9 +33,25 @@ impl Announcement {
     }
 }
 
+pub type ProtocolVersion = u64;
+
 /// Message which can be used to send announcements over the wire.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AnnouncementMessage(pub Announcement);
+pub struct AnnouncementMessage(ProtocolVersion, Announcement);
+
+impl AnnouncementMessage {
+    pub fn new(announcement: Announcement) -> Self {
+        Self(REPLICATION_PROTOCOL_VERSION, announcement)
+    }
+
+    pub fn announcement(&self) -> Announcement {
+        self.1.clone()
+    }
+
+    pub fn is_version_supported(&self) -> bool {
+        self.0 == REPLICATION_PROTOCOL_VERSION
+    }
+}
 
 impl Serialize for AnnouncementMessage {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -43,9 +59,9 @@ impl Serialize for AnnouncementMessage {
         S: serde::Serializer,
     {
         let mut seq = serializer.serialize_seq(Some(3))?;
-        seq.serialize_element(&REPLICATION_PROTOCOL_VERSION)?;
-        seq.serialize_element(&self.0.timestamp)?;
-        seq.serialize_element(&self.0.target_set)?;
+        seq.serialize_element(&self.0)?;
+        seq.serialize_element(&self.1.timestamp)?;
+        seq.serialize_element(&self.1.target_set)?;
         seq.end()
     }
 }
@@ -68,12 +84,9 @@ impl<'de> Deserialize<'de> for AnnouncementMessage {
             where
                 A: serde::de::SeqAccess<'de>,
             {
-                let version: u64 = seq.next_element()?.ok_or_else(|| {
-                    serde::de::Error::custom("missing version in announce message")
+                let protocol_version: ProtocolVersion = seq.next_element()?.ok_or_else(|| {
+                    serde::de::Error::custom("missing protocol version in announce message")
                 })?;
-                if version != REPLICATION_PROTOCOL_VERSION {
-                    return Err(serde::de::Error::custom("invalid announce message version"));
-                }
 
                 let timestamp: u64 = seq.next_element()?.ok_or_else(|| {
                     serde::de::Error::custom("missing timestamp in announce message")
@@ -86,10 +99,13 @@ impl<'de> Deserialize<'de> for AnnouncementMessage {
                     serde::de::Error::custom("invalid target set in announce message")
                 })?;
 
-                Ok(AnnouncementMessage(Announcement {
-                    target_set,
-                    timestamp,
-                }))
+                Ok(AnnouncementMessage(
+                    protocol_version,
+                    Announcement {
+                        target_set,
+                        timestamp,
+                    },
+                ))
             }
         }
 
