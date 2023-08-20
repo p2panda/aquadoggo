@@ -113,12 +113,19 @@ impl SchemaProvider {
     }
 
     /// Returns a list of all supported schema ids.
+    ///
+    /// If no whitelist was set it returns the list of all currently known schema ids. If a
+    /// whitelist was set it directly returns the list itself.
     pub async fn supported_schema_ids(&self) -> Vec<SchemaId> {
-        self.all()
-            .await
-            .iter()
-            .map(|schema| schema.id().to_owned())
-            .collect()
+        match &self.supported_schema_ids {
+            Some(schema_ids) => schema_ids.clone(),
+            None => self
+                .all()
+                .await
+                .iter()
+                .map(|schema| schema.id().to_owned())
+                .collect(),
+        }
     }
 
     /// Returns true if a whitelist of supported schema ids was provided through user
