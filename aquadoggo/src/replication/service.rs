@@ -247,7 +247,7 @@ impl ConnectionManager {
             let local_target_set = &self
                 .announcement
                 .as_ref()
-                .expect("Our announcement needs to be set latest when we call 'update_sessions'")
+                .expect("Announcement state needs to be set with 'update_announcement'")
                 .target_set;
 
             // If this node has been configured with a whitelist of schema ids then we check the
@@ -337,7 +337,7 @@ impl ConnectionManager {
         let local_target_set = &self
             .announcement
             .as_ref()
-            .expect("Our announcement needs to be set latest when we call 'update_sessions'")
+            .expect("Announcement state needs to be set with 'update_announcement'")
             .target_set;
 
         // Iterate through all currently connected peers
@@ -402,7 +402,7 @@ impl ConnectionManager {
         let local_announcement = self
             .announcement
             .as_ref()
-            .expect("Our announcement needs to be set latest when we call 'update_sessions'");
+            .expect("Announcement state needs to be set with 'update_announcement'");
 
         for (peer, status) in &self.peers {
             if status.sent_our_announcement_timestamp < local_announcement.timestamp {
@@ -618,6 +618,7 @@ mod tests {
             let schema_provider = SchemaProvider::new(vec![], Some(vec![]));
             let mut manager =
                 ConnectionManager::new(&schema_provider, &node.context.store, &tx, local_peer_id);
+            manager.update_announcement().await;
 
             let remote_peer = Peer::new(remote_peer_id, ConnectionId::new_unchecked(1));
 
