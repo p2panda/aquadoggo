@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use anyhow::{anyhow, Result};
+use anyhow::{bail, Result};
 use log::{debug, info};
 use p2panda_rs::schema::{Schema, SchemaId, SYSTEM_SCHEMAS};
 use p2panda_rs::Human;
@@ -18,8 +18,8 @@ pub struct SchemaProvider {
     /// In-memory store of registered schemas.
     schemas: Arc<Mutex<HashMap<SchemaId, Schema>>>,
 
-    /// Optional list of schema this provider supports. If set only these schema will be added to the schema
-    /// registry once materialized.
+    /// Optional list of whitelisted schema ids. When set, only these schema ids will be accepted
+    /// on this node, if not set _all_ schema ids are accepted.
     supported_schema_ids: Option<Vec<SchemaId>>,
 
     /// Sender for broadcast channel informing subscribers about updated schemas.
@@ -86,9 +86,7 @@ impl SchemaProvider {
     pub async fn update(&self, schema: Schema) -> Result<bool> {
         if let Some(supported_schema) = self.supported_schema_ids.as_ref() {
             if !supported_schema.contains(schema.id()) {
-                return Err(anyhow!(
-                    "Attempted to add unsupported schema to schema provider"
-                ));
+                bail!("Attempted to add unsupported schema to schema provider");
             }
         };
 
@@ -96,8 +94,8 @@ impl SchemaProvider {
         let schema_exists = schemas.get(schema.id()).is_some();
 
         if schema_exists {
-            // Return true here as the schema already exists in it's current state so we don't
-            // need to mutate the schema store or announce any change.
+            // Return true here as the schema already exists in it's current state so we don't need
+            // to mutate the schema store or announce any change.
             return Ok(true);
         }
 
@@ -114,9 +112,19 @@ impl SchemaProvider {
         Ok(is_update)
     }
 
-    // Return the configured supported schema.
-    pub fn supported_schema_ids(&self) -> Option<&Vec<SchemaId>> {
-        self.supported_schema_ids.as_ref()
+    /// Returns a list of all supported schema ids.
+    pub async fn supported_schema_ids(&self) -> Vec<SchemaId> {
+        self.all()
+            .await
+            .iter()
+            .map(|schema| schema.id().to_owned())
+            .collect()
+    }
+
+    /// Returns true if a whitelist of supported schema ids was provided through user
+    /// configuration.
+    pub fn is_whitelist_active(&self) -> bool {
+        self.supported_schema_ids.is_some()
     }
 }
 

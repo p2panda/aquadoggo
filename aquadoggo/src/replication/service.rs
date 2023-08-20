@@ -63,19 +63,28 @@ pub async fn replication_service(
     Ok(())
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Announcement {
+    /// This contains a list of schema ids this peer is interested in.
+    target_set: TargetSet,
+
+    /// Timestamp of this announcement. Helps to understand if we can override the previous
+    /// announcement with a newer one.
+    timestamp: u64,
+}
+
 /// Statistics about successful and failed replication sessions for each connected peer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PeerStatus {
     /// Connectivity information like libp2p peer id and connection id.
     peer: Peer,
 
-    /// Last known announcement of this peer. This contains a list of schema ids this peer is
-    /// interested in.
-    announcement: Option<TargetSet>,
+    /// Last known announcement of this peer.
+    announcement: Option<Announcement>,
 
-    /// Timestamp of the last known announcement. Helps to understand if we can override the
-    /// previous announcement with a newer one.
-    announcement_timestamp: u64,
+    /// Last time we've announced our local target set with this peer. Helps to check if we need to
+    /// inform them about any updates from our side.
+    sent_our_announcement_timestamp: u64,
 
     /// Number of successful replication sessions.
     successful_count: usize,
@@ -89,7 +98,7 @@ impl PeerStatus {
         Self {
             peer,
             announcement: None,
-            announcement_timestamp: 0,
+            sent_our_announcement_timestamp: 0,
             successful_count: 0,
             failed_count: 0,
         }
@@ -100,12 +109,13 @@ impl PeerStatus {
 ///
 /// This entails:
 ///
-/// 1. Handles incoming replication- and peer connection messages from other services
-/// 2. Maintains a list of currently connected p2panda peers
-/// 3. Routes messages to the right replication session with help of the `SyncManager` and returns
+/// 1. Manages announcements of us and other peers about which schema ids are supported
+/// 2. Handles incoming replication- and peer connection messages from other services
+/// 3. Maintains a list of currently connected p2panda peers.
+/// 4. Routes messages to the right replication session with help of the `SyncManager` and returns
 ///    responses to other services
-/// 4. Schedules new replication sessions
-/// 5. Handles replication errors and informs other services about them
+/// 5. Schedules new replication sessions
+/// 6. Handles replication errors and informs other services about them
 struct ConnectionManager {
     /// List of peers the connection mananger knows about and are available for replication.
     peers: HashMap<Peer, PeerStatus>,
@@ -125,6 +135,10 @@ struct ConnectionManager {
 
     /// Provider to retrieve our currently supported schema ids.
     schema_provider: SchemaProvider,
+
+    /// Our latest announcement state we want to propagate to all current and future peers. It
+    /// contains a list of schema ids we're supporting as a node.
+    announcement: Announcement,
 }
 
 impl ConnectionManager {
@@ -147,24 +161,17 @@ impl ConnectionManager {
             tx: tx.clone(),
             rx: BroadcastStream::new(tx.subscribe()),
             schema_provider: schema_provider.clone(),
+            announcement: Announcement {
+                target_set: TargetSet::new(&[]),
+                timestamp: 0,
+            },
         }
     }
 
     /// Returns set of schema ids we are interested in and support on this node.
     async fn target_set(&self) -> TargetSet {
-        let supported_schema = match self.schema_provider.supported_schema_ids() {
-            // If supported_schema_ids is set return this list.
-            Some(supported_schema_ids) => supported_schema_ids.to_owned(),
-            // Otherwise return ids for all schema we know about on this node.
-            None => self
-                .schema_provider
-                .all()
-                .await
-                .iter()
-                .map(|schema| schema.id().to_owned())
-                .collect(),
-        };
-        TargetSet::new(&supported_schema)
+        let supported_schema_ids = self.schema_provider.supported_schema_ids().await;
+        TargetSet::new(&supported_schema_ids)
     }
 
     /// Register a new peer connection on the manager.
@@ -202,14 +209,13 @@ impl ConnectionManager {
     async fn on_replication_message(&mut self, peer: Peer, message: SyncMessage) {
         let session_id = message.session_id();
 
-        // If this is a SyncRequest message first we check if the contained TargetSet matches our
-        // own locally configured TargetSet.
+        // If this is a SyncRequest message first we check if the contained target set matches our
+        // own locally configured one.
         if let Message::SyncRequest(_, target_set) = message.message() {
-            // If this node has been configured with supported_schema_ids then we check the target
-            // set of the requests matches our own, otherwise we skip this step and accept any
-            // target set.
-            if self.schema_provider.supported_schema_ids().is_some()
-                && target_set != &self.target_set().await
+            // If this node has been configured with a whitelist of schema ids then we check the
+            // target set of the requests matches our own, otherwise we skip this step and accept
+            // any target set.
+            if self.schema_provider.is_whitelist_active() && target_set != &self.target_set().await
             {
                 // If it doesn't match we signal that an error occurred and return at this point.
                 self.on_replication_error(peer, session_id, ReplicationError::UnsupportedTargetSet)
@@ -378,8 +384,12 @@ impl ConnectionManager {
 
     /// Main event loop running the async streams.
     pub async fn run(mut self) {
+        // Subscribe to updates when our target set got changed
+        let mut schema_provider_rx = self.schema_provider.on_schema_added();
+
         loop {
             tokio::select! {
+                // Service message arrived
                 event = self.rx.next() => match event {
                     Some(Ok(message)) => self.handle_service_message(message).await,
                     Some(Err(err)) => {
@@ -390,6 +400,12 @@ impl ConnectionManager {
                         return
                     },
                 },
+
+                // Target set got updated
+                Ok(_) = schema_provider_rx.recv() => {
+                },
+
+                // Replication schedule is due
                 Some(_) = self.scheduler.next() => {
                     self.update_sessions().await
                 }
