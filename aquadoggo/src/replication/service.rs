@@ -193,6 +193,28 @@ impl ConnectionManager {
         }
     }
 
+    /// Update announcement state of a remote peer.
+    async fn on_announcement_message(&mut self, peer: Peer, announcement: AnnouncementMessage) {
+        let incoming_announcement = announcement.0;
+
+        match self.peers.get_mut(&peer) {
+            Some(status) => match &status.announcement {
+                Some(current) => {
+                    // Only update peer status when incoming announcement has a newer timestamp
+                    if current.timestamp < incoming_announcement.timestamp {
+                        status.announcement = Some(incoming_announcement);
+                    }
+                }
+                None => {
+                    status.announcement = Some(incoming_announcement);
+                }
+            },
+            None => {
+                trace!("Tried to update announcement state of unknown peer");
+            }
+        }
+    }
+
     /// Route incoming replication messages to the right session.
     async fn on_replication_message(&mut self, peer: Peer, message: SyncMessage) {
         let session_id = message.session_id();
@@ -304,14 +326,14 @@ impl ConnectionManager {
                     return None;
                 };
 
-                // 1. Check if we're running too many sessions with that peer on this connection
+                // 2. Check if we're running too many sessions with that peer on this connection
                 //    already. This limit is configurable.
                 let active_sessions: Vec<&Session> = sessions
                     .iter()
                     .filter(|session| !session.is_done())
                     .collect();
 
-                // 2. Check if we're already having at least one session concerning the same target
+                // 3. Check if we're already having at least one session concerning the same target
                 //    set. If we would start that session again it would be considered an error.
                 let has_active_target_set_session = active_sessions
                     .iter()
@@ -392,7 +414,9 @@ impl ConnectionManager {
                 PeerMessage::SyncMessage(message) => {
                     self.on_replication_message(peer, message).await;
                 }
-                PeerMessage::Announce(announcement) => todo!(),
+                PeerMessage::Announce(announcement) => {
+                    self.on_announcement_message(peer, announcement).await;
+                }
             },
             _ => (), // Ignore all other messages
         }
