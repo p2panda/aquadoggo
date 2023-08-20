@@ -559,9 +559,11 @@ mod tests {
             let status = manager
                 .peers
                 .get(&remote_peer)
-                .expect("Peer to be registered in connection manager");
+                .expect("Peer to be registered in connection manager")
+                .clone();
             assert_eq!(manager.peers.len(), 1);
             assert_eq!(status.peer, remote_peer);
+            assert!(status.sent_our_announcement_timestamp > 0);
 
             // Manager announces target set with peer
             assert_eq!(rx.len(), 1);
@@ -574,6 +576,22 @@ mod tests {
                     )))
                 ))
             );
+
+            // Peer informs us about its target set
+            assert_eq!(status.announcement, None);
+            let announcement = Announcement::new(target_set.clone());
+            manager
+                .handle_service_message(ServiceMessage::ReceivedMessage(
+                    remote_peer.clone(),
+                    PeerMessage::Announce(AnnouncementMessage::new(announcement.clone())),
+                ))
+                .await;
+            let status = manager
+                .peers
+                .get(&remote_peer)
+                .expect("Peer to be registered in connection manager")
+                .clone();
+            assert_eq!(status.announcement, Some(announcement.clone()));
 
             // Inform manager about peer disconnected
             manager
