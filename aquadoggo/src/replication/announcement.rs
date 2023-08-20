@@ -99,6 +99,14 @@ impl<'de> Deserialize<'de> for AnnouncementMessage {
                     serde::de::Error::custom("invalid target set in announce message")
                 })?;
 
+                if let Some(items_left) = seq.size_hint() {
+                    if items_left > 0 {
+                        return Err(serde::de::Error::custom(
+                            "too many fields for announce message",
+                        ));
+                    }
+                };
+
                 Ok(AnnouncementMessage(
                     protocol_version,
                     Announcement {
@@ -110,5 +118,56 @@ impl<'de> Deserialize<'de> for AnnouncementMessage {
         }
 
         deserializer.deserialize_seq(MessageVisitor)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ciborium::cbor;
+    use ciborium::value::{Error, Value};
+    use p2panda_rs::serde::{deserialize_into, serialize_from, serialize_value};
+    use rstest::rstest;
+
+    use crate::replication::TargetSet;
+    use crate::test_utils::helpers::random_target_set;
+
+    use super::{Announcement, AnnouncementMessage};
+
+    #[rstest]
+    fn serialize(#[from(random_target_set)] target_set: TargetSet) {
+        let announcement = Announcement::new(target_set.clone());
+        assert_eq!(
+            serialize_from(AnnouncementMessage::new(announcement.clone())),
+            serialize_value(cbor!([1, announcement.timestamp, target_set]))
+        );
+    }
+
+    #[rstest]
+    fn deserialize(#[from(random_target_set)] target_set: TargetSet) {
+        assert_eq!(
+            deserialize_into::<AnnouncementMessage>(&serialize_value(cbor!([
+                1, 12345678, target_set
+            ])))
+            .unwrap(),
+            AnnouncementMessage::new(Announcement {
+                timestamp: 12345678,
+                target_set,
+            })
+        );
+    }
+
+    #[rstest]
+    #[should_panic(expected = "missing protocol version in announce message")]
+    #[case::missing_version(cbor!([]))]
+    #[should_panic(expected = "missing timestamp in announce message")]
+    #[case::missing_timestamp(cbor!([122]))]
+    #[should_panic(expected = "too many fields for announce message")]
+    #[case::too_many_fields(cbor!([1, 0, ["schema_field_definition_v1"], "too much"]))]
+    fn deserialize_invalid_messages(#[case] cbor: Result<Value, Error>) {
+        // Check the cbor is valid
+        assert!(cbor.is_ok());
+
+        // We unwrap here to cause a panic and then test for expected error stings
+        deserialize_into::<AnnouncementMessage>(&serialize_value(cbor)).unwrap();
     }
 }
