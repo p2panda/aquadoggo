@@ -247,7 +247,7 @@ mod tests {
                 51,
                 Message::SyncRequest(Mode::SetReconciliation, target_set.clone())
             )),
-            serialize_value(cbor!([0, 51, 1, target_set]))
+            serialize_value(cbor!([1, 51, 1, target_set]))
         );
 
         assert_eq!(
@@ -274,7 +274,7 @@ mod tests {
     #[rstest]
     fn deserialize(#[from(random_target_set)] target_set: TargetSet, public_key: PublicKey) {
         assert_eq!(
-            deserialize_into::<SyncMessage>(&serialize_value(cbor!([0, 12, 0, target_set])))
+            deserialize_into::<SyncMessage>(&serialize_value(cbor!([1, 12, 0, target_set])))
                 .unwrap(),
             SyncMessage::new(
                 12,
