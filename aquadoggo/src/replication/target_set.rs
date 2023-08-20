@@ -60,11 +60,6 @@ impl Validate for TargetSet {
     type Error = TargetSetError;
 
     fn validate(&self) -> Result<(), Self::Error> {
-        // Check if at least one schema id is given
-        if self.0.is_empty() {
-            return Err(TargetSetError::ZeroSchemaIds);
-        };
-
         let mut prev_schema_id: Option<&SchemaId> = None;
         let mut initial_system_schema = true;
 
