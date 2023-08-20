@@ -57,11 +57,9 @@ impl TargetSet {
         self.0.contains(schema_id)
     }
 
-    /// Returns true if both target sets know about the same elements.
+    /// Returns true if there are no unknown elements in external target set.
     pub fn is_valid_set(&self, target_set: &TargetSet) -> bool {
-        self.iter()
-            .find(|schema_id| !target_set.contains(schema_id))
-            .is_none()
+        !target_set.iter().any(|schema_id| !self.contains(schema_id))
     }
 
     pub fn is_empty(&self) -> bool {
