@@ -51,15 +51,14 @@ impl SyncIngest {
 
         // If the node has been configured with a whitelist of supported schema ids, check that the
         // sent operation follows one of our supported schema
-        if self.schema_provider.is_whitelist_active() {
-            if self
+        if self.schema_provider.is_whitelist_active()
+            && self
                 .schema_provider
                 .supported_schema_ids()
                 .await
                 .contains(plain_operation.schema_id())
-            {
-                return Err(IngestError::UnsupportedSchema);
-            }
+        {
+            return Err(IngestError::UnsupportedSchema);
         }
 
         // Retrieve the schema if it has been materialized on the node.
