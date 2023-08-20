@@ -21,3 +21,6 @@ pub use service::replication_service;
 pub use session::{Session, SessionId, SessionState};
 pub use strategies::{LogHeightStrategy, SetReconciliationStrategy, StrategyResult};
 pub use target_set::TargetSet;
+
+/// Currently supported p2panda replication protocol version.
+pub const REPLICATION_PROTOCOL_VERSION: u64 = 1;

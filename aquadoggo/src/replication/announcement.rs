@@ -7,9 +7,7 @@ use serde::de::Visitor;
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Serialize};
 
-use crate::replication::TargetSet;
-
-const ANNOUNCEMENT_MESSAGE_VERSION: u64 = 1;
+use crate::replication::{TargetSet, REPLICATION_PROTOCOL_VERSION};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Announcement {
@@ -45,7 +43,7 @@ impl Serialize for AnnouncementMessage {
         S: serde::Serializer,
     {
         let mut seq = serializer.serialize_seq(Some(3))?;
-        seq.serialize_element(&ANNOUNCEMENT_MESSAGE_VERSION)?;
+        seq.serialize_element(&REPLICATION_PROTOCOL_VERSION)?;
         seq.serialize_element(&self.0.timestamp)?;
         seq.serialize_element(&self.0.target_set)?;
         seq.end()
@@ -73,7 +71,7 @@ impl<'de> Deserialize<'de> for AnnouncementMessage {
                 let version: u64 = seq.next_element()?.ok_or_else(|| {
                     serde::de::Error::custom("missing version in announce message")
                 })?;
-                if version != ANNOUNCEMENT_MESSAGE_VERSION {
+                if version != REPLICATION_PROTOCOL_VERSION {
                     return Err(serde::de::Error::custom("invalid announce message version"));
                 }
 
