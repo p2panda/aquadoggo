@@ -521,7 +521,9 @@ mod tests {
     use crate::bus::ServiceMessage;
     use crate::network::{Peer, PeerMessage};
     use crate::replication::service::PeerStatus;
-    use crate::replication::{Message, Mode, SyncMessage, TargetSet};
+    use crate::replication::{
+        Announcement, AnnouncementMessage, Message, Mode, SyncMessage, TargetSet,
+    };
     use crate::schema::SchemaProvider;
     use crate::test_utils::{test_runner, TestNode};
 
@@ -545,6 +547,7 @@ mod tests {
             );
 
             let target_set = manager.target_set().await;
+            manager.update_announcement().await;
 
             // Inform connection manager about new peer
             let remote_peer = Peer::new(remote_peer_id, ConnectionId::new_unchecked(1));
@@ -560,19 +563,17 @@ mod tests {
             assert_eq!(manager.peers.len(), 1);
             assert_eq!(status.peer, remote_peer);
 
-            // Manager attempts a replication session with that peer
+            // Manager announces target set with peer
             assert_eq!(rx.len(), 1);
             assert_eq!(
                 rx.recv().await,
                 Ok(ServiceMessage::SentMessage(
                     remote_peer,
-                    PeerMessage::SyncMessage(SyncMessage::new(
-                        0,
-                        Message::SyncRequest(Mode::LogHeight, target_set)
-                    ))
+                    PeerMessage::Announce(AnnouncementMessage::new(Announcement::new(
+                        target_set.clone()
+                    )))
                 ))
             );
-            assert_eq!(manager.sync_manager.get_sessions(&remote_peer).len(), 1);
 
             // Inform manager about peer disconnected
             manager
