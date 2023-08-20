@@ -41,6 +41,10 @@ impl TargetSet {
         self.0.contains(schema_id)
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     fn from_untrusted(schema_ids: Vec<SchemaId>) -> Result<Self, TargetSetError> {
         // Create target set with potentially invalid data
         let target_set = Self(schema_ids);

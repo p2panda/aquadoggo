@@ -6,7 +6,7 @@ use p2panda_rs::entry::EncodedEntry;
 use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::EncodedOperation;
-use p2panda_rs::Human;
+use p2panda_rs::{Human, Validate};
 use serde::de::Visitor;
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Serialize};
@@ -158,6 +158,16 @@ impl<'de> Deserialize<'de> for SyncMessage {
                     let target_set: TargetSet = seq.next_element()?.ok_or_else(|| {
                         serde::de::Error::custom("missing target set in sync request message")
                     })?;
+
+                    target_set.validate().map_err(|_| {
+                        serde::de::Error::custom("invalid target set in sync request message")
+                    })?;
+
+                    if target_set.is_empty() {
+                        return Err(serde::de::Error::custom(
+                            "empty target set in sync request message",
+                        ));
+                    }
 
                     Ok(Message::SyncRequest(mode, target_set))
                 } else if message_type == ENTRY_TYPE {
