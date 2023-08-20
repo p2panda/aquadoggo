@@ -194,8 +194,8 @@ impl ConnectionManager {
     }
 
     /// Update announcement state of a remote peer.
-    async fn on_announcement_message(&mut self, peer: Peer, announcement: AnnouncementMessage) {
-        let incoming_announcement = announcement.0;
+    async fn on_announcement_message(&mut self, peer: Peer, message: AnnouncementMessage) {
+        let incoming_announcement = message.0;
 
         match self.peers.get_mut(&peer) {
             Some(status) => match &status.announcement {
@@ -414,8 +414,8 @@ impl ConnectionManager {
                 PeerMessage::SyncMessage(message) => {
                     self.on_replication_message(peer, message).await;
                 }
-                PeerMessage::Announce(announcement) => {
-                    self.on_announcement_message(peer, announcement).await;
+                PeerMessage::Announce(message) => {
+                    self.on_announcement_message(peer, message).await;
                 }
             },
             _ => (), // Ignore all other messages
