@@ -6,7 +6,7 @@ use std::time::Duration;
 use anyhow::Result;
 use libp2p::PeerId;
 use log::{debug, info, trace, warn};
-use p2panda_rs::{Human, Validate};
+use p2panda_rs::Human;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 use tokio::task;
@@ -284,11 +284,6 @@ impl ConnectionManager {
     async fn update_sessions(&mut self) {
         // Determine the target set our node is interested in
         let target_set = self.target_set().await;
-
-        if let Err(err) = target_set.validate() {
-            warn!("Not initiating replication: {err}");
-            return;
-        }
 
         // Iterate through all currently connected peers
         let mut attempt_peers: Vec<Peer> = self
