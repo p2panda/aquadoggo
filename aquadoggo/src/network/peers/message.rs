@@ -2,14 +2,14 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::replication::SyncMessage;
+use crate::replication::{AnnouncementMessage, SyncMessage};
 
 /// p2panda protocol messages which can be sent over the wire.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum PeerMessage {
     /// Announcement of peers about the schema ids they are interest in.
-    // Announce(AnnounceMessage),
+    Announce(AnnouncementMessage),
 
     /// Replication status and data exchange.
     SyncMessage(SyncMessage),

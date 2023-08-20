@@ -389,6 +389,7 @@ impl ConnectionManager {
                 PeerMessage::SyncMessage(message) => {
                     self.on_replication_message(peer, message).await;
                 }
+                PeerMessage::Announce(announcement) => todo!(),
             },
             _ => (), // Ignore all other messages
         }
