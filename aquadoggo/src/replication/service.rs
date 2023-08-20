@@ -19,7 +19,7 @@ use crate::context::Context;
 use crate::db::SqlStore;
 use crate::manager::{ServiceReadySender, Shutdown};
 use crate::network::identity::to_libp2p_peer_id;
-use crate::network::Peer;
+use crate::network::{Peer, PeerMessage};
 use crate::replication::errors::ReplicationError;
 use crate::replication::{
     Announcement, Message, Mode, Session, SessionId, SyncIngest, SyncManager, SyncMessage,
@@ -216,8 +216,9 @@ impl ConnectionManager {
         match self.sync_manager.handle_message(&peer, &message).await {
             Ok(result) => {
                 for message in result.messages {
-                    self.send_service_message(ServiceMessage::SentReplicationMessage(
-                        peer, message,
+                    self.send_service_message(ServiceMessage::SentMessage(
+                        peer,
+                        PeerMessage::SyncMessage(message),
                     ));
                 }
 
@@ -282,16 +283,26 @@ impl ConnectionManager {
     /// Determine if we can attempt new replication sessions with the peers we currently know
     /// about.
     async fn update_sessions(&mut self) {
-        // Determine the target set our node is interested in
-        let target_set = self.target_set().await;
+        let local_announcement = self
+            .announcement
+            .as_ref()
+            .expect("Our announcement needs to be set latest when we call 'update_sessions'");
 
         // Iterate through all currently connected peers
         let mut attempt_peers: Vec<Peer> = self
             .peers
             .clone()
             .into_iter()
-            .filter_map(|(peer, _)| {
+            .filter_map(|(peer, status)| {
                 let sessions = self.sync_manager.get_sessions(&peer);
+
+                // 1. Did we already receive this peers announcement state? If not we can't do
+                //    anything yet and need to wait.
+                let remote_target_set: TargetSet = if let Some(announcement) = status.announcement {
+                    announcement.target_set
+                } else {
+                    return None;
+                };
 
                 // 1. Check if we're running too many sessions with that peer on this connection
                 //    already. This limit is configurable.
@@ -304,7 +315,7 @@ impl ConnectionManager {
                 //    set. If we would start that session again it would be considered an error.
                 let has_active_target_set_session = active_sessions
                     .iter()
-                    .any(|session| session.target_set() == target_set);
+                    .any(|session| session.target_set() == local_announcement.target_set);
 
                 if active_sessions.len() < MAX_SESSIONS_PER_PEER && !has_active_target_set_session {
                     Some(peer)
@@ -323,7 +334,24 @@ impl ConnectionManager {
         attempt_peers.truncate(MAX_PEER_SAMPLE);
 
         for peer in attempt_peers {
-            self.initiate_replication(&peer, &target_set).await;
+            // @TODO
+            // self.initiate_replication(&peer, &target_set).await;
+        }
+    }
+
+    async fn announce(&self) {
+        let local_announcement = self
+            .announcement
+            .as_ref()
+            .expect("Our announcement needs to be set latest when we call 'update_sessions'");
+
+        for (peer, status) in &self.peers {
+            if status.sent_our_announcement_timestamp > local_announcement.timestamp {
+                continue;
+            }
+
+            // @TODO
+            // self.send_service_message(ServiceMessage::SentMessage(*peer, message));
         }
     }
 
@@ -336,8 +364,9 @@ impl ConnectionManager {
         {
             Ok(messages) => {
                 for message in messages {
-                    self.send_service_message(ServiceMessage::SentReplicationMessage(
-                        *peer, message,
+                    self.send_service_message(ServiceMessage::SentMessage(
+                        *peer,
+                        PeerMessage::SyncMessage(message),
                     ));
                 }
             }
@@ -356,9 +385,11 @@ impl ConnectionManager {
             ServiceMessage::PeerDisconnected(peer) => {
                 self.on_connection_closed(peer).await;
             }
-            ServiceMessage::ReceivedReplicationMessage(peer, message) => {
-                self.on_replication_message(peer, message).await;
-            }
+            ServiceMessage::ReceivedMessage(peer, message) => match message {
+                PeerMessage::SyncMessage(message) => {
+                    self.on_replication_message(peer, message).await;
+                }
+            },
             _ => (), // Ignore all other messages
         }
     }
@@ -398,8 +429,9 @@ impl ConnectionManager {
                     self.update_announcement().await;
                 },
 
-                // Replication schedule is due
+                // Announcement & replication schedule is due
                 Some(_) = self.scheduler.next() => {
+                    self.announce().await;
                     self.update_sessions().await
                 }
             }
@@ -420,7 +452,7 @@ mod tests {
     use tokio::sync::broadcast;
 
     use crate::bus::ServiceMessage;
-    use crate::network::Peer;
+    use crate::network::{Peer, PeerMessage};
     use crate::replication::service::PeerStatus;
     use crate::replication::{Message, Mode, SyncMessage, TargetSet};
     use crate::schema::SchemaProvider;
@@ -465,9 +497,12 @@ mod tests {
             assert_eq!(rx.len(), 1);
             assert_eq!(
                 rx.recv().await,
-                Ok(ServiceMessage::SentReplicationMessage(
+                Ok(ServiceMessage::SentMessage(
                     remote_peer,
-                    SyncMessage::new(0, Message::SyncRequest(Mode::LogHeight, target_set))
+                    PeerMessage::SyncMessage(SyncMessage::new(
+                        0,
+                        Message::SyncRequest(Mode::LogHeight, target_set)
+                    ))
                 ))
             );
             assert_eq!(manager.sync_manager.get_sessions(&remote_peer).len(), 1);
@@ -510,12 +545,12 @@ mod tests {
             );
             let unsupported_target_set = TargetSet::new(&[unsupported_schema_id]);
             manager
-                .handle_service_message(ServiceMessage::ReceivedReplicationMessage(
+                .handle_service_message(ServiceMessage::ReceivedMessage(
                     remote_peer,
-                    SyncMessage::new(
+                    PeerMessage::SyncMessage(SyncMessage::new(
                         0,
                         Message::SyncRequest(Mode::LogHeight, unsupported_target_set),
-                    ),
+                    )),
                 ))
                 .await;
 

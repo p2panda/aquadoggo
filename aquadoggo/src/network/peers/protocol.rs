@@ -7,13 +7,13 @@ use futures::{future, AsyncRead, AsyncWrite, Future};
 use libp2p::core::UpgradeInfo;
 use libp2p::{InboundUpgrade, OutboundUpgrade};
 
-use crate::replication::SyncMessage;
+use crate::network::peers::PeerMessage;
 
 pub const PROTOCOL_NAME: &str = "/p2p/p2panda/1.0.0";
 
 pub type CodecError = CborCodecError;
 
-pub type Codec = CborCodec<SyncMessage, SyncMessage>;
+pub type Codec = CborCodec<PeerMessage, PeerMessage>;
 
 #[derive(Clone, Debug)]
 pub struct Protocol;

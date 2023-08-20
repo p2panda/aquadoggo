@@ -3,8 +3,7 @@
 use p2panda_rs::operation::OperationId;
 
 use crate::manager::Sender;
-use crate::network::Peer;
-use crate::replication::SyncMessage;
+use crate::network::{Peer, PeerMessage};
 
 /// Sender for cross-service communication bus.
 pub type ServiceSender = Sender<ServiceMessage>;
@@ -21,11 +20,11 @@ pub enum ServiceMessage {
     /// Node closed a connection to another node.
     PeerDisconnected(Peer),
 
-    /// Node sent a message to remote node for replication.
-    SentReplicationMessage(Peer, SyncMessage),
+    /// Node sent a message to remote node.
+    SentMessage(Peer, PeerMessage),
 
     /// Node received a message from remote node for replication.
-    ReceivedReplicationMessage(Peer, SyncMessage),
+    ReceivedMessage(Peer, PeerMessage),
 
     /// Replication protocol failed with an critical error.
     ReplicationFailed(Peer),

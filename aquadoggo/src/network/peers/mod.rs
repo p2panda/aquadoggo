@@ -2,10 +2,12 @@
 
 mod behaviour;
 mod handler;
+mod message;
 mod peer;
 mod protocol;
 
 pub use behaviour::{Behaviour, Event};
 pub use handler::Handler;
+pub use message::PeerMessage;
 pub use peer::Peer;
 pub use protocol::{Codec, CodecError, Protocol, PROTOCOL_NAME};

@@ -12,13 +12,12 @@ use libp2p::swarm::{
 use libp2p::{Multiaddr, PeerId};
 
 use crate::network::peers::handler::{Handler, HandlerFromBehaviour, HandlerToBehaviour};
-use crate::network::peers::Peer;
-use crate::replication::SyncMessage;
+use crate::network::peers::{Peer, PeerMessage};
 
 #[derive(Debug)]
 pub enum Event {
     /// Message received on the inbound stream.
-    MessageReceived(Peer, SyncMessage),
+    MessageReceived(Peer, PeerMessage),
 
     /// We established an inbound or outbound connection to a peer for the first time.
     PeerConnected(Peer),
@@ -105,7 +104,7 @@ impl Behaviour {
         &mut self,
         peer_id: PeerId,
         connection_id: ConnectionId,
-        message: SyncMessage,
+        message: PeerMessage,
     ) {
         let peer = Peer::new(peer_id, connection_id);
         self.push_event(ToSwarm::GenerateEvent(Event::MessageReceived(
@@ -130,7 +129,7 @@ impl Behaviour {
         self.enabled = true
     }
 
-    pub fn send_message(&mut self, peer: Peer, message: SyncMessage) {
+    pub fn send_message(&mut self, peer: Peer, message: PeerMessage) {
         self.push_event(ToSwarm::NotifyHandler {
             peer_id: peer.id(),
             event: HandlerFromBehaviour::Message(message),
@@ -236,7 +235,7 @@ mod tests {
     use p2panda_rs::schema::SchemaId;
     use rstest::rstest;
 
-    use crate::network::Peer;
+    use crate::network::{Peer, PeerMessage};
     use crate::replication::{Message, SyncMessage, TargetSet};
     use crate::test_utils::helpers::random_target_set;
 
@@ -306,7 +305,10 @@ mod tests {
         // Send a message from to swarm_1 local peer from swarm_2 local peer.
         swarm_1.behaviour_mut().send_message(
             Peer::new(swarm_2_peer_id, ConnectionId::new_unchecked(1)),
-            SyncMessage::new(0, Message::SyncRequest(0.into(), TargetSet::new(&vec![]))),
+            PeerMessage::SyncMessage(SyncMessage::new(
+                0,
+                Message::SyncRequest(0.into(), TargetSet::new(&vec![])),
+            )),
         );
 
         // Await a swarm event on swarm_2.
@@ -370,13 +372,19 @@ mod tests {
         // Send a message from swarm_1 to swarm_2
         swarm_1.behaviour_mut().send_message(
             peer_2,
-            SyncMessage::new(0, Message::SyncRequest(0.into(), target_set_1.clone())),
+            PeerMessage::SyncMessage(SyncMessage::new(
+                0,
+                Message::SyncRequest(0.into(), target_set_1.clone()),
+            )),
         );
 
         // Send a message from swarm_2 to swarm_1
         swarm_2.behaviour_mut().send_message(
             peer_1,
-            SyncMessage::new(1, Message::SyncRequest(0.into(), target_set_2.clone())),
+            PeerMessage::SyncMessage(SyncMessage::new(
+                1,
+                Message::SyncRequest(0.into(), target_set_2.clone()),
+            )),
         );
 
         // And again add the next behaviour events which occur in either swarms
@@ -395,7 +403,10 @@ mod tests {
         assert_eq!(peer.id(), swarm_2_peer_id);
         assert_eq!(
             message.unwrap(),
-            SyncMessage::new(1, Message::SyncRequest(0.into(), target_set_2.clone()))
+            PeerMessage::SyncMessage(SyncMessage::new(
+                1,
+                Message::SyncRequest(0.into(), target_set_2.clone())
+            ))
         );
 
         // swarm_2 should have received the message from swarm_1 peer
@@ -403,7 +414,10 @@ mod tests {
         assert_eq!(peer.id(), swarm_1_peer_id);
         assert_eq!(
             message.unwrap(),
-            SyncMessage::new(0, Message::SyncRequest(0.into(), target_set_1))
+            PeerMessage::SyncMessage(SyncMessage::new(
+                0,
+                Message::SyncRequest(0.into(), target_set_1)
+            ))
         );
     }
 }

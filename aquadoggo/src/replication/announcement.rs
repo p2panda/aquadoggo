@@ -7,11 +7,11 @@ use crate::replication::TargetSet;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Announcement {
     /// This contains a list of schema ids this peer is interested in.
-    target_set: TargetSet,
+    pub target_set: TargetSet,
 
     /// Timestamp of this announcement. Helps to understand if we can override the previous
     /// announcement with a newer one.
-    timestamp: u64,
+    pub timestamp: u64,
 }
 
 impl Announcement {

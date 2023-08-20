@@ -13,15 +13,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::replication::{Mode, SessionId, TargetSet};
 
-pub const ANNOUNCE_TYPE: MessageType = 0;
-pub const SYNC_REQUEST_TYPE: MessageType = 1;
-pub const SYNC_DONE_TYPE: MessageType = 2;
-pub const ENTRY_TYPE: MessageType = 3;
+pub const SYNC_REQUEST_TYPE: MessageType = 0;
+pub const ENTRY_TYPE: MessageType = 8;
+pub const SYNC_DONE_TYPE: MessageType = 9;
 pub const HAVE_TYPE: MessageType = 10;
 
 pub type MessageType = u64;
-
-pub type Timestamp = u64;
 
 pub type LiveMode = bool;
 
@@ -29,7 +26,6 @@ pub type LogHeights = (PublicKey, Vec<(LogId, SeqNum)>);
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Message {
-    Announce(Timestamp, TargetSet),
     SyncRequest(Mode, TargetSet),
     Have(Vec<LogHeights>),
     Entry(EncodedEntry, Option<EncodedOperation>),
@@ -39,11 +35,10 @@ pub enum Message {
 impl Message {
     pub fn message_type(&self) -> MessageType {
         match self {
-            Message::Announce(_, _) => ANNOUNCE_TYPE,
             Message::SyncRequest(_, _) => SYNC_REQUEST_TYPE,
-            Message::Have(_) => HAVE_TYPE,
             Message::Entry(_, _) => ENTRY_TYPE,
             Message::SyncDone(_) => SYNC_DONE_TYPE,
+            Message::Have(_) => HAVE_TYPE,
         }
     }
 }
@@ -103,21 +98,10 @@ impl Serialize for SyncMessage {
         };
 
         match self.message() {
-            Message::Announce(timestamp, target_set) => {
-                let mut seq = serialize_header(serializer.serialize_seq(Some(4))?)?;
-                seq.serialize_element(timestamp)?;
-                seq.serialize_element(target_set)?;
-                seq.end()
-            }
             Message::SyncRequest(mode, target_set) => {
                 let mut seq = serialize_header(serializer.serialize_seq(Some(4))?)?;
                 seq.serialize_element(mode)?;
                 seq.serialize_element(target_set)?;
-                seq.end()
-            }
-            Message::Have(log_heights) => {
-                let mut seq = serialize_header(serializer.serialize_seq(Some(3))?)?;
-                seq.serialize_element(log_heights)?;
                 seq.end()
             }
             Message::Entry(entry_bytes, operation_bytes) => {
@@ -129,6 +113,11 @@ impl Serialize for SyncMessage {
             Message::SyncDone(live_mode) => {
                 let mut seq = serialize_header(serializer.serialize_seq(Some(3))?)?;
                 seq.serialize_element(live_mode)?;
+                seq.end()
+            }
+            Message::Have(log_heights) => {
+                let mut seq = serialize_header(serializer.serialize_seq(Some(3))?)?;
+                seq.serialize_element(log_heights)?;
                 seq.end()
             }
         }
@@ -161,17 +150,7 @@ impl<'de> Deserialize<'de> for SyncMessage {
                     serde::de::Error::custom("missing session id in replication message")
                 })?;
 
-                let message = if message_type == ANNOUNCE_TYPE {
-                    let timestamp: Timestamp = seq.next_element()?.ok_or_else(|| {
-                        serde::de::Error::custom("missing timestamp in announce message")
-                    })?;
-
-                    let target_set: TargetSet = seq.next_element()?.ok_or_else(|| {
-                        serde::de::Error::custom("missing target set in announce message")
-                    })?;
-
-                    Ok(Message::Announce(timestamp, target_set))
-                } else if message_type == SYNC_REQUEST_TYPE {
+                let message = if message_type == SYNC_REQUEST_TYPE {
                     let mode: Mode = seq.next_element()?.ok_or_else(|| {
                         serde::de::Error::custom("missing mode in sync request message")
                     })?;
@@ -247,7 +226,7 @@ mod tests {
                 51,
                 Message::SyncRequest(Mode::SetReconciliation, target_set.clone())
             )),
-            serialize_value(cbor!([1, 51, 1, target_set]))
+            serialize_value(cbor!([0, 51, 1, target_set]))
         );
 
         assert_eq!(
@@ -274,7 +253,7 @@ mod tests {
     #[rstest]
     fn deserialize(#[from(random_target_set)] target_set: TargetSet, public_key: PublicKey) {
         assert_eq!(
-            deserialize_into::<SyncMessage>(&serialize_value(cbor!([1, 12, 0, target_set])))
+            deserialize_into::<SyncMessage>(&serialize_value(cbor!([0, 12, 0, target_set])))
                 .unwrap(),
             SyncMessage::new(
                 12,
