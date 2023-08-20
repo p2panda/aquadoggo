@@ -307,6 +307,8 @@ mod tests {
     #[case::unknown_message_type(cbor!([122, 0]))]
     #[should_panic(expected = "missing session id in replication message")]
     #[case::only_message_type(cbor!([0]))]
+    #[should_panic(expected = "empty target set in sync request")]
+    #[case::only_message_type(cbor!([0, 0, 0, []]))]
     #[should_panic(expected = "too many fields for replication message")]
     #[case::too_many_fields(cbor!([0, 0, 0, ["schema_field_definition_v1"], "too much"]))]
     fn deserialize_invalid_messages(#[case] cbor: Result<Value, Error>) {
