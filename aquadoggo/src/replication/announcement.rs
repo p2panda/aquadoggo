@@ -152,7 +152,7 @@ mod tests {
         let announcement = Announcement::new(target_set.clone());
         assert_eq!(
             serialize_from(AnnouncementMessage::new(announcement.clone())),
-            serialize_value(cbor!([1, announcement.timestamp, target_set]))
+            serialize_value(cbor!([0, 1, announcement.timestamp, target_set]))
         );
     }
 
@@ -160,7 +160,7 @@ mod tests {
     fn deserialize(#[from(random_target_set)] target_set: TargetSet) {
         assert_eq!(
             deserialize_into::<AnnouncementMessage>(&serialize_value(cbor!([
-                1, 12345678, target_set
+                0, 1, 12345678, target_set
             ])))
             .unwrap(),
             AnnouncementMessage::new(Announcement {
@@ -171,12 +171,14 @@ mod tests {
     }
 
     #[rstest]
-    #[should_panic(expected = "missing protocol version in announce message")]
+    #[should_panic(expected = "missing message type in announce message")]
     #[case::missing_version(cbor!([]))]
+    #[should_panic(expected = "missing protocol version in announce message")]
+    #[case::missing_version(cbor!([0]))]
     #[should_panic(expected = "missing timestamp in announce message")]
-    #[case::missing_timestamp(cbor!([122]))]
+    #[case::missing_timestamp(cbor!([0, 122]))]
     #[should_panic(expected = "too many fields for announce message")]
-    #[case::too_many_fields(cbor!([1, 0, ["schema_field_definition_v1"], "too much"]))]
+    #[case::too_many_fields(cbor!([0, 1, 0, ["schema_field_definition_v1"], "too much"]))]
     fn deserialize_invalid_messages(#[case] cbor: Result<Value, Error>) {
         // Check the cbor is valid
         assert!(cbor.is_ok());
