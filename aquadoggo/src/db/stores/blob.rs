@@ -239,7 +239,7 @@ mod tests {
     use crate::db::errors::BlobStoreError;
     use crate::test_utils::{
         add_blob, add_document, add_schema_and_documents, assert_query, populate_and_materialize,
-        populate_store_config, test_runner, TestNode,
+        populate_store_config, test_runner, update_document, TestNode,
     };
 
     #[rstest]
@@ -487,6 +487,61 @@ mod tests {
             assert_query(&node, "SELECT document_id FROM documents", 6).await;
             assert_query(&node, "SELECT document_id FROM document_views", 6).await;
             assert_query(&node, "SELECT name FROM document_view_fields", 11).await;
+
+            let result = node.context.store.purge_blob(&document_id).await;
+
+            assert!(result.is_ok(), "{:#?}", result)
+        })
+    }
+
+    #[rstest]
+    fn purge_all_pieces_of_updated_blob(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            let blob_data = "Hello, World!".to_string();
+            let blob_view_id = add_blob(&mut node, &blob_data, &key_pair).await;
+
+            // Create a new blob piece.
+            let new_blob_pieces = add_document(
+                &mut node,
+                &SchemaId::BlobPiece(1),
+                vec![("data", "more blob data".into())],
+                &key_pair,
+            )
+            .await;
+
+            // Update the blob document to point at the new blob piece.
+            let _ = update_document(
+                &mut node,
+                &SchemaId::Blob(1),
+                vec![("pieces", vec![new_blob_pieces].into())],
+                &blob_view_id,
+                &key_pair,
+            )
+            .await;
+
+            // There is one blob and three blob pieces in database.
+            //
+            // These are the rows we expect to exist in each table.
+            assert_query(&node, "SELECT entry_hash FROM entries", 5).await;
+            assert_query(&node, "SELECT operation_id FROM operations_v1", 5).await;
+            assert_query(&node, "SELECT operation_id FROM operation_fields_v1", 8).await;
+            assert_query(&node, "SELECT log_id FROM logs", 4).await;
+            assert_query(&node, "SELECT document_id FROM documents", 4).await;
+            assert_query(&node, "SELECT document_id FROM document_views", 5).await;
+            assert_query(&node, "SELECT name FROM document_view_fields", 9).await;
+
+            // Purge this blob from the database, we now expect all tables to be empty (except the
+            // logs table).
+            let document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
+            let result = node.context.store.purge_blob(&document_id).await;
+            assert!(result.is_ok(), "{:#?}", result);
+            assert_query(&node, "SELECT entry_hash FROM entries", 0).await;
+            assert_query(&node, "SELECT operation_id FROM operations_v1", 0).await;
+            assert_query(&node, "SELECT operation_id FROM operation_fields_v1", 0).await;
+            assert_query(&node, "SELECT log_id FROM logs", 4).await;
+            assert_query(&node, "SELECT document_id FROM documents", 0).await;
+            assert_query(&node, "SELECT document_id FROM document_views", 0).await;
+            assert_query(&node, "SELECT name FROM document_view_fields", 0).await;
 
             let result = node.context.store.purge_blob(&document_id).await;
 
