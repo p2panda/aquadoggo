@@ -152,6 +152,35 @@ fn load_config() -> Result<Configuration, figment::Error> {
         .extract()
 }
 
+fn panda_da() -> String {
+    r#"
+                           ██████ ███████ ████
+                          ████████       ██████
+                          ██████            ███
+                           █████              ██
+                           █     ████      █████
+                          █     ██████   █ █████
+                         ██      ████   ███ █████
+                        █████         ██████    █
+                       ███████                ██
+                       █████████   █████████████
+                       ███████████      █████████
+                       █████████████████         ████
+                  ██████    ███████████              ██
+              ██████████        █████                 █
+               █████████        ██          ███       ██
+                 ██████        █            █           ██
+                    ██       ██             ███████     ██
+                  ███████████                      ██████
+    ████████     ████████████                   ██████
+    ████   ██████ ██████████            █   ████
+      █████████   ████████       ███    ███████
+        ████████             ██████    ████████
+    █████████  ████████████████████████   ███
+    █████████                      ██"#
+        .into()
+}
+
 #[tokio::main]
 async fn main() {
     env_logger::init();
@@ -159,7 +188,7 @@ async fn main() {
     match load_config() {
         Ok(config) => {
             // @TODO: Nicer print
-            println!("{:?}", config);
+            println!("{}\n\n{:#?}", panda_da(), config);
 
             let key_pair = match &config.private_key {
                 Some(path) => key_pair::generate_or_load_key_pair(path.clone())
