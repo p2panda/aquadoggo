@@ -1,0 +1,166 @@
+# aquadoggo configuration file
+#
+# Copy this file to the location where aquadoggo will be run or refer to it
+# using the -c command line argument when running aquadoggo. Replace the
+# example values with your own desired configuration.
+#
+# NOTE: Paths in this file follow the XDG Base Directory Specification for
+# Linux. You might want to adjust these values for your regarding operating
+# system.
+
+# ~~~~~~~
+# Schemas
+# ~~~~~~~
+
+# List of schema ids which a node will replicate and expose on the GraphQL API.
+#
+# When whitelisting a schema you automatically opt into announcing, replicating
+# and materializing documents connected to it, supporting applications which
+# are dependent on this data.
+#
+# It is recommended to set this list to all schema ids your own application
+# should support. Defaults to an empty list.
+#
+# WARNING: When set empty, your node will support _all_ schema ids. This is
+# useful for experimentation and local development but _not_ recommended for
+# production settings.
+#
+supported_schema_ids = [
+    # To discover new schema, set your node to replicate schema definition
+    # documents by including these two built-in schema ids. Your node will now
+    # search for and replicate schemas which have been published to the
+    # network.
+    # "schema_field_definition_v1",
+    # "schema_definition_v1",
+
+    # Once you discover new schemas and want to start replicating their
+    # documents, then add their schema ids to this list as well. It's also
+    # possible to load schema directly onto your node using the tool `fishy`:
+    # https://github.com/p2panda/fishy
+    # "example_0020a01fe...",
+]
+
+# ~~~~~~~~
+# Database
+# ~~~~~~~~
+
+# URL / connection string to PostgreSQL or SQLite database.
+#
+# When commented out it will default to an in-memory SQLite database URL.
+#
+# WARNING: When commented out, no data will be persisted after the node shuts
+# down. Uncomment this value when running on production as you will otherwise
+# loose data.
+#
+# database_uri = "sqlite:$HOME/.local/share/aquadoggo/db.sqlite3"
+
+# Maximum number of connections that the database pool should maintain.
+#
+# Be mindful of the connection limits for your database as well as other
+# applications which may want to connect to the same database (or even multiple
+# instances of the same application in high-availability deployments).
+#
+database_max_connections = 32
+
+# ~~~~~~~
+# Workers
+# ~~~~~~~
+
+# Number of concurrent workers which defines the maximum of materialization
+# tasks which can be worked on simultaneously.
+#
+# Use a higher number if you run your node on a powerful machine with many CPU
+# cores. Lower number for low-energy devices with limited resources.
+#
+worker_pool_size = 16
+
+# ~~~~~
+# Ports
+# ~~~~~
+
+# HTTP port, serving the GraphQL API (for example hosted under
+# http://localhost:2020/graphql). This API is used for client-node
+# communication. Defaults to 2020.
+#
+# When port is taken the node will automatically pick a random, free port.
+#
+http_port = 2020
+
+# QUIC port for node-node communication and data replication. Defaults to 2022.
+#
+# When port is taken the node will automatically pick a random, free port.
+#
+quic_port = 2022
+
+# ~~~~~~~~
+# Identity
+# ~~~~~~~~
+
+# Path to persist your ed25519 private key file. The key is used to identify
+# you towards other nodes during network discovery and replication. This key is
+# _not_ used to create and sign data.
+#
+# Will be generated newly and stored under this path when node starts for the
+# first time.
+#
+# When commented out, your node will generate an ephemeral private key on every
+# start up and _not_ persist it.
+#
+# private_key = "$HOME/.local/share/aquadoggo/private-key.txt"
+
+# ~~~~~~~~~~~~~~
+# Local networks
+# ~~~~~~~~~~~~~~
+
+# mDNS to discover other peers on the local network. Enabled by default.
+#
+mdns = true
+
+# ~~~~~
+# Nodes
+# ~~~~~
+
+# List of addresses of trusted and known nodes.
+#
+# NOTE: Make sure that nodes mentioned in this list can be connected directly
+# (for example when they are hosted with a static IP Address). If you need to
+# connect to nodes with changing, dynamic IP addresses or even with nodes
+# behind a firewall or NAT, you will need at least one Relay.
+#
+node_addresses = [
+    # "192.0.2.0:2022",
+    # "192.0.2.2:3000",
+]
+
+# ~~~~~~
+# Relays
+# ~~~~~~
+
+# Address of relay.
+#
+# Relays help discover other nodes on the internet (also known as "rendesvouz"
+# or "bootstrap" server) and help establishing direct p2p connections when node
+# is behind a firewall or NAT (also known as "holepunching").
+#
+# When a direct connection is not possible the relay will help to redirect the
+# (encrypted) traffic as an intermediary between us and other nodes. The node
+# will contact each server and register our IP address for other peers.
+#
+# WARNING: This will potentially expose your IP address on the network. Do only
+# connect to trusted relays or make sure your IP address is hidden via a VPN or
+# proxy.
+#
+# WARNING: Using relays will potentially connect you to untrusted / unknown
+# nodes with which you will then exchange data with. If in doubt, use the list
+# of known node addresses instead and only connect to trusted nodes.
+#
+# relay_address = "192.0.2.16:2022"
+
+# Set to true if our node should also function as a relay. Defaults to false.
+#
+# Other nodes can use relays to aid discovery and establishing connectivity.
+#
+# NOTE: Relays _need_ to be hosted in a way where they can be reached directly,
+# for example with a static IP address through an VPS.
+#
+relay = false

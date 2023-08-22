@@ -1,6 +1,9 @@
 target/
 debug/
+
+# Config files
 config.toml
+!aquadoggo_cli/config.toml
 
 # IDE
 .vscode
