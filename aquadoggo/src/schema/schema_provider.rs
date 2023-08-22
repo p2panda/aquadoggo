@@ -10,7 +10,7 @@ use p2panda_rs::Human;
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 use tokio::sync::Mutex;
 
-use crate::config::SupportedSchemaIds;
+use crate::config::WildcardOption;
 
 /// Provides fast access to system and application schemas.
 ///
@@ -22,7 +22,7 @@ pub struct SchemaProvider {
 
     /// Optional list of whitelisted schema ids. When not empty, only these schema ids will be
     /// accepted on this node, if not set _all_ schema ids are accepted (wildcard).
-    supported_schema_ids: SupportedSchemaIds,
+    supported_schema_ids: WildcardOption<SchemaId>,
 
     /// Sender for broadcast channel informing subscribers about updated schemas.
     tx: Sender<SchemaId>,
@@ -30,7 +30,10 @@ pub struct SchemaProvider {
 
 impl SchemaProvider {
     /// Returns a `SchemaProvider` containing the given application schemas and all system schemas.
-    pub fn new(application_schemas: Vec<Schema>, supported_schema_ids: SupportedSchemaIds) -> Self {
+    pub fn new(
+        application_schemas: Vec<Schema>,
+        supported_schema_ids: WildcardOption<SchemaId>,
+    ) -> Self {
         // Collect all system and application schemas.
         let mut schemas = SYSTEM_SCHEMAS.clone();
         schemas.extend(&application_schemas);
@@ -42,7 +45,7 @@ impl SchemaProvider {
         }
 
         // Filter out all unsupported schema ids when list was set
-        if let SupportedSchemaIds::List(schema_ids) = &supported_schema_ids {
+        if let WildcardOption::Set(schema_ids) = &supported_schema_ids {
             index.retain(|id, _| schema_ids.contains(id));
         };
 
@@ -84,7 +87,7 @@ impl SchemaProvider {
     /// Returns `true` if a schema was updated or it already existed in it's current state, and
     /// `false` if it was inserted.
     pub async fn update(&self, schema: Schema) -> Result<bool> {
-        if let SupportedSchemaIds::List(supported_schema_ids) = &self.supported_schema_ids {
+        if let WildcardOption::Set(supported_schema_ids) = &self.supported_schema_ids {
             if !supported_schema_ids.contains(schema.id()) {
                 bail!("Attempted to add unsupported schema to schema provider");
             }
@@ -118,8 +121,8 @@ impl SchemaProvider {
     /// whitelist was set it directly returns the list itself.
     pub async fn supported_schema_ids(&self) -> Vec<SchemaId> {
         match &self.supported_schema_ids {
-            SupportedSchemaIds::List(schema_ids) => schema_ids.clone(),
-            SupportedSchemaIds::Wildcard => self
+            WildcardOption::Set(schema_ids) => schema_ids.clone(),
+            WildcardOption::Wildcard => self
                 .all()
                 .await
                 .iter()
@@ -131,13 +134,13 @@ impl SchemaProvider {
     /// Returns true if a whitelist of supported schema ids was provided through user
     /// configuration.
     pub fn is_whitelist_active(&self) -> bool {
-        matches!(self.supported_schema_ids, SupportedSchemaIds::List(_))
+        matches!(self.supported_schema_ids, WildcardOption::Set(_))
     }
 }
 
 impl Default for SchemaProvider {
     fn default() -> Self {
-        Self::new(Vec::new(), SupportedSchemaIds::Wildcard)
+        Self::new(Vec::new(), WildcardOption::Wildcard)
     }
 }
 

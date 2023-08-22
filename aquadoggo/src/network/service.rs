@@ -79,7 +79,7 @@ pub async fn network_service(
 
     // If a relay node address was provided, then connect and performing necessary setup before we
     // run the main event loop.
-    if let Some(relay_address) = network_config.relay_node.clone() {
+    if let Some(relay_address) = network_config.relay_address.clone() {
         info!("Connecting to relay node at: {relay_address}");
         connect_to_relay(&mut swarm, &mut network_config, relay_address).await?;
     }
@@ -139,7 +139,7 @@ pub async fn connect_to_relay(
 
                 // Update values on the config.
                 learned_relay_peer_id = Some(peer_id);
-                network_config.relay_node = Some(relay_address.clone());
+                network_config.relay_address = Some(relay_address.clone());
 
                 // All done, we've learned our external address successfully.
                 learned_observed_addr = true;
@@ -380,7 +380,7 @@ impl EventLoop {
                     for address in registration.record.addresses() {
                         let peer_id = registration.record.peer_id();
                         if peer_id != self.local_peer_id {
-                            if let Some(relay_address) = &self.network_config.relay_node {
+                            if let Some(relay_address) = &self.network_config.relay_address {
                                 info!("Add new peer to address book: {} {}", peer_id, address);
 
                                 let peer_circuit_address = relay_address

@@ -22,7 +22,7 @@ pub struct NetworkConfiguration {
     /// with a static IP Address). If the node needs to connect to other ndoes with changing,
     /// dynamic IP addresses or even with nodes behind a firewall or NAT, at least one Relay will
     /// be required.
-    pub trusted_nodes: Vec<Multiaddr>,
+    pub node_addresses: Vec<Multiaddr>,
 
     /// Set to true if node should also function as a relay. Other nodes can use relays to aid
     /// discovery and establishing connectivity.
@@ -40,7 +40,7 @@ pub struct NetworkConfiguration {
     /// When a direct connection is not possible the relay will help to redirect the (encrypted)
     /// traffic as an intermediary between us and other nodes. The node will contact each server
     /// and register our IP address for other peers.
-    pub relay_node: Option<Multiaddr>,
+    pub relay_address: Option<Multiaddr>,
 
     /// Notify handler buffer size.
     ///
@@ -93,12 +93,12 @@ impl Default for NetworkConfiguration {
             max_connections_pending_out: 8,
             max_connections_per_peer: 8,
             mdns: true,
+            node_addresses: Vec::new(),
             notify_handler_buffer_size: 128,
             per_connection_event_buffer_size: 8,
             quic_port: 2022,
             relay: false,
-            relay_node: None,
-            trusted_nodes: Vec::new(),
+            relay_address: None,
         }
     }
 }

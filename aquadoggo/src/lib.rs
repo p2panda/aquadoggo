@@ -63,7 +63,7 @@ mod test_utils;
 #[cfg(test)]
 mod tests;
 
-pub use crate::config::Configuration;
+pub use crate::config::{Configuration, WildcardOption};
 pub use crate::network::NetworkConfiguration;
 pub use node::Node;
 

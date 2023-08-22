@@ -1,14 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use anyhow::Result;
 use p2panda_rs::schema::SchemaId;
-use serde::Deserialize;
 
 use crate::network::NetworkConfiguration;
 
 /// Configuration object holding all important variables throughout the application.
-#[derive(Debug, Clone, Deserialize)]
-#[serde(default)]
+#[derive(Debug, Clone)]
 pub struct Configuration {
     /// URL / connection string to PostgreSQL or SQLite database.
     pub database_url: String,
@@ -37,7 +34,7 @@ pub struct Configuration {
     /// When whitelisting a schema you automatically opt into announcing, replicating and
     /// materializing documents connected to it, supporting applications which are dependent on
     /// this data.
-    pub supported_schema_ids: SupportedSchemaIds,
+    pub supported_schema_ids: WildcardOption<SchemaId>,
 
     /// Network configuration.
     pub network: NetworkConfiguration,
@@ -50,38 +47,24 @@ impl Default for Configuration {
             database_max_connections: 32,
             http_port: 2020,
             worker_pool_size: 16,
-            supported_schema_ids: SupportedSchemaIds::Wildcard,
+            supported_schema_ids: WildcardOption::Wildcard,
             network: NetworkConfiguration::default(),
         }
     }
 }
 
+/// Set a configuration value to either a concrete set of elements or to a wildcard (*).
 #[derive(Debug, Clone)]
-pub enum SupportedSchemaIds {
-    /// Support all schema ids.
+pub enum WildcardOption<T> {
+    /// Support all possible items.
     Wildcard,
 
-    /// Support only a certain list of schema ids.
-    List(Vec<SchemaId>),
+    /// Support only a certain set of items.
+    Set(Vec<T>),
 }
 
-impl Default for SupportedSchemaIds {
+impl<T> Default for WildcardOption<T> {
     fn default() -> Self {
         Self::Wildcard
-    }
-}
-
-impl<'de> Deserialize<'de> for SupportedSchemaIds {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let supported_schema_ids: Vec<SchemaId> = Vec::deserialize(deserializer)?;
-
-        if supported_schema_ids.is_empty() {
-            Ok(Self::Wildcard)
-        } else {
-            Ok(Self::List(supported_schema_ids))
-        }
     }
 }
