@@ -22,5 +22,14 @@ pub use session::{Session, SessionId, SessionState};
 pub use strategies::{LogHeightStrategy, SetReconciliationStrategy, StrategyResult};
 pub use target_set::TargetSet;
 
+pub type MessageType = u64;
+
+// Integers indicating message type for wire message format.
+pub const ANNOUNCE_TYPE: MessageType = 0;
+pub const SYNC_REQUEST_TYPE: MessageType = 1;
+pub const SYNC_DONE_TYPE: MessageType = 2;
+pub const ENTRY_TYPE: MessageType = 3;
+pub const HAVE_TYPE: MessageType = 10;
+
 /// Currently supported p2panda replication protocol version.
 pub const REPLICATION_PROTOCOL_VERSION: u64 = 1;

@@ -7,7 +7,7 @@ use serde::de::Visitor;
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Serialize};
 
-use crate::replication::{TargetSet, REPLICATION_PROTOCOL_VERSION};
+use crate::replication::{MessageType, TargetSet, ANNOUNCE_TYPE, REPLICATION_PROTOCOL_VERSION};
 
 /// u64 timestamp from UNIX epoch until now.
 pub fn now() -> u64 {
@@ -61,7 +61,8 @@ impl Serialize for AnnouncementMessage {
     where
         S: serde::Serializer,
     {
-        let mut seq = serializer.serialize_seq(Some(3))?;
+        let mut seq = serializer.serialize_seq(Some(4))?;
+        seq.serialize_element(&ANNOUNCE_TYPE)?;
         seq.serialize_element(&self.0)?;
         seq.serialize_element(&self.1.timestamp)?;
         seq.serialize_element(&self.1.target_set)?;
@@ -87,6 +88,16 @@ impl<'de> Deserialize<'de> for AnnouncementMessage {
             where
                 A: serde::de::SeqAccess<'de>,
             {
+                let message_type: MessageType = seq.next_element()?.ok_or_else(|| {
+                    serde::de::Error::custom("missing message type in announce message")
+                })?;
+
+                if message_type != ANNOUNCE_TYPE {
+                    return Err(serde::de::Error::custom(
+                        "invalid message type for announce message",
+                    ));
+                }
+
                 let protocol_version: ProtocolVersion = seq.next_element()?.ok_or_else(|| {
                     serde::de::Error::custom("missing protocol version in announce message")
                 })?;

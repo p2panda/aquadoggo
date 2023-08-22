@@ -11,14 +11,10 @@ use serde::de::Visitor;
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Serialize};
 
-use crate::replication::{Mode, SessionId, TargetSet};
-
-pub const SYNC_REQUEST_TYPE: MessageType = 0;
-pub const ENTRY_TYPE: MessageType = 8;
-pub const SYNC_DONE_TYPE: MessageType = 9;
-pub const HAVE_TYPE: MessageType = 10;
-
-pub type MessageType = u64;
+use crate::replication::{
+    MessageType, Mode, SessionId, TargetSet, ENTRY_TYPE, HAVE_TYPE, SYNC_DONE_TYPE,
+    SYNC_REQUEST_TYPE,
+};
 
 pub type LiveMode = bool;
 
