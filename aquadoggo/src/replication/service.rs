@@ -526,6 +526,7 @@ mod tests {
     };
     use crate::schema::SchemaProvider;
     use crate::test_utils::{test_runner, TestNode};
+    use crate::WildcardOption;
 
     use super::ConnectionManager;
 
@@ -615,7 +616,7 @@ mod tests {
         test_runner(move |node: TestNode| async move {
             let (tx, mut rx) = broadcast::channel::<ServiceMessage>(10);
 
-            let schema_provider = SchemaProvider::new(vec![], Some(vec![]));
+            let schema_provider = SchemaProvider::new(vec![], WildcardOption::Set(vec![]));
             let mut manager =
                 ConnectionManager::new(&schema_provider, &node.context.store, &tx, local_peer_id);
             manager.update_announcement().await;

@@ -149,6 +149,8 @@ mod test {
     use p2panda_rs::schema::{FieldType, Schema, SchemaId, SchemaName};
     use p2panda_rs::test_utils::fixtures::random_document_view_id;
 
+    use crate::WildcardOption;
+
     use super::SchemaProvider;
 
     #[tokio::test]
@@ -197,7 +199,8 @@ mod test {
             &[("test_field", FieldType::String)],
         )
         .unwrap();
-        let provider = SchemaProvider::new(vec![], Some(vec![new_schema_id.clone()]));
+        let provider =
+            SchemaProvider::new(vec![], WildcardOption::Set(vec![new_schema_id.clone()]));
         let result = provider.update(new_schema).await;
         assert!(result.is_ok());
         assert!(!result.unwrap());
@@ -207,7 +210,7 @@ mod test {
 
     #[tokio::test]
     async fn update_unsupported_schemas() {
-        let provider = SchemaProvider::new(vec![], Some(vec![]));
+        let provider = SchemaProvider::new(vec![], WildcardOption::Set(vec![]));
         let new_schema_id = SchemaId::Application(
             SchemaName::new("test_schema").unwrap(),
             random_document_view_id(),
