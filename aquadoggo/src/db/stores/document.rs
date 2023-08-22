@@ -522,20 +522,69 @@ impl SqlStore {
         Ok(document_view_id.is_some())
     }
 
+    /// Purge a document from the store by it's id.
+    ///
+    /// This removes entries, operations and any materialized documents which exist.
+    ///
+    /// The only unaffected table after deletion is the `logs` table as we still want to remember
+    /// which log ids an author has already used so we can continue to avoid collisions.
     pub async fn purge_document(
         &self,
         document_id: &DocumentId,
     ) -> Result<(), DocumentStorageError> {
+        // Start a transaction, any db insertions after this point, and before the `commit()`
+        // will be rolled back in the event of an error.
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+
+        // Delete rows from `documents` table, this cascades up to `document_views` and
+        // `document_view_fields` tables.
         query(
             "
-            DELETE FROM documents
-            WHERE documents.document_id = $1
-            ",
+                DELETE FROM documents
+                WHERE documents.document_id = $1
+                ",
         )
         .bind(document_id.to_string())
-        .fetch_all(&self.pool)
+        .fetch_all(&mut tx)
         .await
         .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+
+        // Delete rows from `entries` table.
+        query(
+            "
+                DELETE FROM entries 
+                WHERE entries.entry_hash IN (
+                    SELECT operations_v1.operation_id FROM operations_v1
+                    WHERE operations_v1.document_id = $1
+                )
+                ",
+        )
+        .bind(document_id.to_string())
+        .fetch_all(&mut tx)
+        .await
+        .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+
+        // Delete rows from `operations_v1` table, this cascades up to `operation_fields_v1` table
+        // as well.
+        query(
+            "
+                DELETE FROM operations_v1
+                WHERE operations_v1.document_id = $1
+                ",
+        )
+        .bind(document_id.to_string())
+        .fetch_all(&mut tx)
+        .await
+        .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+
+        // Commit the transaction if all queries succeeded.
+        tx.commit()
+            .await
+            .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
 
         Ok(())
     }
