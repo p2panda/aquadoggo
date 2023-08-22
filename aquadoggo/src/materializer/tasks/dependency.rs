@@ -131,10 +131,17 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
                     TaskInput::DocumentViewId(document_view.id().clone()),
                 ));
             }
+            // Start `blob` task when a blob or blob_piece view is completed with
+            // dependencies.
+            SchemaId::Blob(_) | SchemaId::BlobPiece(_) => {
+                next_tasks.push(Task::new(
+                    "blob",
+                    TaskInput::DocumentViewId(document_view.id().clone()),
+                ));
+            }
             _ => {}
         }
     }
-
     // Now we check all the "parent" or "inverse" relations, that is _other_ documents pointing at
     // the one we're currently looking at
     let mut reverse_tasks = get_inverse_relation_tasks(&context, document.schema_id()).await?;

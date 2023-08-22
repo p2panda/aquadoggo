@@ -13,6 +13,8 @@ const DEFAULT_SQLITE_NAME: &str = "aquadoggo-node.sqlite3";
 /// Blobs directory
 pub const BLOBS_DIR_NAME: &str = "blobs";
 
+pub const BLOBS_SYMLINK_DIR_NAME: &str = "documents";
+
 /// Configuration object holding all important variables throughout the application.
 #[derive(Debug, Clone)]
 pub struct Configuration {
