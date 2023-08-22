@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::net::Ipv4Addr;
+use std::num::NonZeroU8;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -430,7 +431,13 @@ impl EventLoop {
                 for (peer_id, _) in list {
                     debug!("mDNS discovered a new peer: {peer_id}");
 
-                    match self.swarm.dial(*peer_id) {
+                    let dial_opts = DialOpts::peer_id(*peer_id)
+                        .condition(PeerCondition::Disconnected)
+                        .condition(PeerCondition::NotDialing)
+                        .override_dial_concurrency_factor(NonZeroU8::new(1).expect("Is nonzero u8"))
+                        .build();
+
+                    match self.swarm.dial(dial_opts) {
                         Ok(_) => (),
                         Err(err) => debug!("Error dialing peer: {:?}", err),
                     };
