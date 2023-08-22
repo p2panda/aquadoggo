@@ -10,8 +10,6 @@ use libp2p::swarm::{
     PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use libp2p::{Multiaddr, PeerId};
-use log::trace;
-use p2panda_rs::Human;
 
 use crate::network::peers::handler::{Handler, HandlerFromBehaviour, HandlerToBehaviour};
 use crate::network::peers::Peer;
@@ -82,25 +80,25 @@ pub enum Event {
 #[derive(Debug)]
 pub struct Behaviour {
     events: VecDeque<ToSwarm<Event, HandlerFromBehaviour>>,
+    enabled: bool,
 }
 
 impl Behaviour {
     pub fn new() -> Self {
         Self {
             events: VecDeque::new(),
+            enabled: true,
         }
     }
 
     fn on_connection_established(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
         let peer = Peer::new(peer_id, connection_id);
-        self.events
-            .push_back(ToSwarm::GenerateEvent(Event::PeerConnected(peer)));
+        self.push_event(ToSwarm::GenerateEvent(Event::PeerConnected(peer)));
     }
 
     fn on_connection_closed(&mut self, peer_id: PeerId, connection_id: ConnectionId) {
         let peer = Peer::new(peer_id, connection_id);
-        self.events
-            .push_back(ToSwarm::GenerateEvent(Event::PeerDisconnected(peer)));
+        self.push_event(ToSwarm::GenerateEvent(Event::PeerDisconnected(peer)));
     }
 
     fn on_received_message(
@@ -110,24 +108,30 @@ impl Behaviour {
         message: SyncMessage,
     ) {
         let peer = Peer::new(peer_id, connection_id);
-        trace!(
-            "Notify swarm of received sync message: {} {}",
-            peer.display(),
-            message.display()
-        );
-        self.events
-            .push_back(ToSwarm::GenerateEvent(Event::MessageReceived(
-                peer, message,
-            )));
+        self.push_event(ToSwarm::GenerateEvent(Event::MessageReceived(
+            peer, message,
+        )));
+    }
+
+    fn push_event(&mut self, event: ToSwarm<Event, HandlerFromBehaviour>) -> bool {
+        if self.enabled {
+            self.events.push_back(event);
+            return true;
+        }
+        false
+    }
+
+    /// Disable the behaviour, it won't handle any connection events or received messages.
+    pub fn disable(&mut self) {
+        self.enabled = false
+    }
+
+    pub fn enable(&mut self) {
+        self.enabled = true
     }
 
     pub fn send_message(&mut self, peer: Peer, message: SyncMessage) {
-        trace!(
-            "Notify handler of sent sync message: {} {}",
-            peer.display(),
-            message.display(),
-        );
-        self.events.push_back(ToSwarm::NotifyHandler {
+        self.push_event(ToSwarm::NotifyHandler {
             peer_id: peer.id(),
             event: HandlerFromBehaviour::Message(message),
             handler: NotifyHandler::One(peer.connection_id()),
@@ -135,7 +139,7 @@ impl Behaviour {
     }
 
     pub fn handle_critical_error(&mut self, peer: Peer) {
-        self.events.push_back(ToSwarm::NotifyHandler {
+        self.push_event(ToSwarm::NotifyHandler {
             peer_id: peer.id(),
             event: HandlerFromBehaviour::CriticalError,
             handler: NotifyHandler::One(peer.connection_id()),

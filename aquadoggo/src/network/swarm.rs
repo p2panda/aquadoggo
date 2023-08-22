@@ -3,27 +3,22 @@
 use std::convert::TryInto;
 
 use anyhow::Result;
+use libp2p::core::muxing::StreamMuxerBox;
+use libp2p::core::transport::Boxed;
 use libp2p::identity::Keypair;
 use libp2p::swarm::{Swarm, SwarmBuilder};
+use libp2p::PeerId;
 
-use crate::network::behaviour::Behaviour;
+use crate::network::behaviour::P2pandaBehaviour;
 use crate::network::transport;
 use crate::network::NetworkConfiguration;
 
-pub async fn build_swarm(
+fn build_swarm(
     network_config: &NetworkConfiguration,
-    key_pair: Keypair,
-) -> Result<Swarm<Behaviour>> {
-    let peer_id = key_pair.public().to_peer_id();
-    let relay_client_enabled = network_config.relay_address.is_some();
-
-    // Prepare QUIC transport
-    let (transport, relay_client) =
-        transport::build_transport(&key_pair, relay_client_enabled).await;
-
-    // Instantiate the custom network behaviour
-    let behaviour = Behaviour::new(network_config, key_pair, relay_client)?;
-
+    transport: Boxed<(PeerId, StreamMuxerBox)>,
+    behaviour: P2pandaBehaviour,
+    peer_id: PeerId,
+) -> Result<Swarm<P2pandaBehaviour>> {
     // Initialise a swarm with QUIC transports and our composed network behaviour
     let swarm = SwarmBuilder::with_tokio_executor(transport, behaviour, peer_id)
         // This method expects a NonZeroU8 as input, hence the try_into conversion
@@ -33,4 +28,26 @@ pub async fn build_swarm(
         .build();
 
     Ok(swarm)
+}
+
+pub async fn build_relay_swarm(
+    network_config: &NetworkConfiguration,
+    key_pair: Keypair,
+) -> Result<Swarm<P2pandaBehaviour>> {
+    let peer_id = key_pair.public().to_peer_id();
+    let transport = transport::build_relay_transport(&key_pair).await;
+    let behaviour = P2pandaBehaviour::new(network_config, key_pair, None)?;
+
+    build_swarm(network_config, transport, behaviour, peer_id)
+}
+
+pub async fn build_client_swarm(
+    network_config: &NetworkConfiguration,
+    key_pair: Keypair,
+) -> Result<Swarm<P2pandaBehaviour>> {
+    let peer_id = key_pair.public().to_peer_id();
+    let (transport, relay_client) = transport::build_client_transport(&key_pair).await;
+    let behaviour = P2pandaBehaviour::new(network_config, key_pair, Some(relay_client))?;
+
+    build_swarm(network_config, transport, behaviour, peer_id)
 }

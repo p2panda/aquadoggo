@@ -6,11 +6,12 @@ mod schemas;
 
 use std::convert::{TryFrom, TryInto};
 use std::fs::File;
+use std::net::IpAddr;
 
 use anyhow::Result;
 use aquadoggo::{Configuration, NetworkConfiguration, Node};
-use clap::error::ErrorKind as ClapErrorKind;
-use clap::{CommandFactory, Parser};
+use clap::Parser;
+use libp2p::multiaddr::Protocol;
 use libp2p::Multiaddr;
 
 const CONFIG_FILE_PATH: &str = "config.toml";
@@ -27,7 +28,7 @@ struct Cli {
     #[arg(short = 'P', long)]
     http_port: Option<u16>,
 
-    /// Port for the QUIC transport, 2022 by default.
+    /// Port for the QUIC transport, 2022 by default for a relay/rendezvous node.
     #[arg(short, long)]
     quic_port: Option<u16>,
 
@@ -35,82 +36,25 @@ struct Cli {
     #[arg(short, long)]
     remote_node_addresses: Vec<Multiaddr>,
 
-    /// Enable AutoNAT to facilitate NAT status determination, false by default.
-    #[arg(short, long)]
-    autonat: Option<bool>,
-
     /// Enable mDNS for peer discovery over LAN (using port 5353), false by default.
     #[arg(short, long)]
     mdns: Option<bool>,
-
-    /// Enable ping for connected peers (send and receive ping packets), false by default.
-    #[arg(long)]
-    ping: Option<bool>,
-
-    /// Enable rendezvous server to facilitate peer discovery for remote peers, false by default.
-    #[arg(long)]
-    enable_rendezvous_server: bool,
-
-    /// The IP address and peer ID of a rendezvous server in the form of a multiaddress.
-    ///
-    /// eg. --rendezvous-address "/ip4/127.0.0.1/udp/12345/quic-v1/p2p/12D3KooWD3eckifWpRn9wQpMG9R9hX3sD158z7EqHWmweQAJU5SA"
-    #[arg(long)]
-    rendezvous_address: Option<Multiaddr>,
 
     /// Enable relay server to facilitate peer connectivity, false by default.
     #[arg(long)]
     enable_relay_server: bool,
 
-    /// The IP address and peer ID of a relay server in the form of a multiaddress.
+    /// IP address for the relay peer.
     ///
-    /// eg. --relay-address "/ip4/127.0.0.1/udp/12345/quic-v1/p2p/12D3KooWD3eckifWpRn9wQpMG9R9hX3sD158z7EqHWmweQAJU5SA"
+    /// eg. --relay-address "127.0.0.1"
     #[arg(long)]
-    relay_address: Option<Multiaddr>,
-}
+    relay_address: Option<IpAddr>,
 
-impl Cli {
-    // Run custom validators on parsed CLI input
-    fn validate(self) -> Self {
-        // Ensure rendezvous server address includes a peer ID
-        if let Some(addr) = &self.rendezvous_address {
-            // Check if the given `Multiaddr` contains a `PeerId`
-            let error = match addr.clone().pop() {
-                Some(protocol) => match protocol {
-                    libp2p::multiaddr::Protocol::P2p(_) => None,
-                    _ => Some("'--rendezvous-address' address must support the `p2p` protocol"),
-                },
-                None => Some("'--rendezvous-address' must include the peer ID of the server"),
-            };
-
-            if let Some(error) = error {
-                // Print a help message about the missing value(s) and exit
-                Cli::command()
-                    .error(ClapErrorKind::ValueValidation, error)
-                    .exit()
-            }
-        }
-
-        // Ensure relay server address includes a peer ID
-        if let Some(addr) = &self.relay_address {
-            // Check if the given `Multiaddr` contains a `PeerId`
-            let error = match addr.clone().pop() {
-                Some(protocol) => match protocol {
-                    libp2p::multiaddr::Protocol::P2p(_) => None,
-                    _ => Some("'--relay-address' address must support the `p2p` protocol"),
-                },
-                None => Some("'--relay-address' must include the peer ID of the server"),
-            };
-
-            if let Some(error) = error {
-                // Print a help message about the missing value(s) and exit
-                Cli::command()
-                    .error(ClapErrorKind::ValueValidation, error)
-                    .exit()
-            }
-        }
-
-        self
-    }
+    /// Port for the relay peer, defaults to expected relay port 2022.
+    ///
+    /// eg. --relay-port "1234"
+    #[arg(long)]
+    relay_port: Option<u16>,
 }
 
 impl TryFrom<Cli> for Configuration {
@@ -119,52 +63,34 @@ impl TryFrom<Cli> for Configuration {
     fn try_from(cli: Cli) -> Result<Self, Self::Error> {
         let mut config = Configuration::new(cli.data_dir)?;
 
-        let relay_peer_id = if let Some(addr) = &cli.relay_address {
-            let peer_id = match addr
-                .clone()
-                .pop()
-                .expect("Address has already been validated and contains expected protocol")
-            {
-                libp2p::multiaddr::Protocol::P2p(peer_id) => peer_id,
-                _ => panic!("Expected p2p protocol to be defined on relay multiaddr"),
+        let relay_address = if let Some(relay_address) = cli.relay_address {
+            let mut multiaddr = match relay_address {
+                IpAddr::V4(ip) => Multiaddr::from(Protocol::Ip4(ip)),
+                IpAddr::V6(ip) => Multiaddr::from(Protocol::Ip6(ip)),
             };
-            Some(peer_id)
-        } else {
-            None
-        };
+            multiaddr.push(Protocol::Udp(cli.relay_port.unwrap_or(2022)));
+            multiaddr.push(Protocol::QuicV1);
 
-        let rendezvous_peer_id = if let Some(addr) = &cli.rendezvous_address {
-            let peer_id = match addr
-                .clone()
-                .pop()
-                .expect("Address has already been validated and contains expected protocol")
-            {
-                libp2p::multiaddr::Protocol::P2p(peer_id) => peer_id,
-                _ => panic!("Expected p2p protocol to be defined on rendezvous multiaddr"),
-            };
-            Some(peer_id)
+            Some(multiaddr)
         } else {
             None
         };
 
         if let Some(http_port) = cli.http_port {
-            config.http_port = http_port
+            config.http_port = http_port;
         }
 
         config.network = NetworkConfiguration {
-            autonat: cli.autonat.unwrap_or(false),
             mdns: cli.mdns.unwrap_or(false),
-            ping: cli.ping.unwrap_or(false),
-            quic_port: cli.quic_port.unwrap_or(2022),
-            relay_address: cli.relay_address,
-            relay_peer_id,
             relay_server_enabled: cli.enable_relay_server,
+            relay_address,
             remote_peers: cli.remote_node_addresses,
-            rendezvous_address: cli.rendezvous_address,
-            rendezvous_peer_id,
-            rendezvous_server_enabled: cli.enable_rendezvous_server,
             ..config.network
         };
+
+        if let Some(quic_port) = cli.quic_port {
+            config.network.quic_port = quic_port;
+        }
 
         Ok(config)
     }
@@ -174,8 +100,8 @@ impl TryFrom<Cli> for Configuration {
 async fn main() {
     env_logger::init();
 
-    // Parse command line arguments and run custom validators
-    let cli = Cli::parse().validate();
+    // Parse command line arguments
+    let cli = Cli::parse();
 
     // Load configuration parameters and apply defaults
     let mut config: Configuration = cli.try_into().expect("Could not load configuration");

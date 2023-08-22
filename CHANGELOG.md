@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Introduce peer sampling to the replication service [#463](https://github.com/p2panda/aquadoggo/pull/463)
 - Only replicate and materialize configured "supported schema" [#569](https://github.com/p2panda/aquadoggo/pull/469)
 - Parse supported schema ids from `config.toml` [#473](https://github.com/p2panda/aquadoggo/pull/473)
+- Fix relayed connections, add DCUtR Holepunching and reduce CLI args [#502](https://github.com/p2panda/aquadoggo/pull/502)
 
 ### Changed
 
@@ -50,10 +51,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Use `libp2p` `0.52.0` [#425](https://github.com/p2panda/aquadoggo/pull/425)
 - Check for duplicate entries arriving to `Ingest` before consuming [#439](https://github.com/p2panda/aquadoggo/pull/439)
 - Replicate entries in their topologically sorted document order [#442](https://github.com/p2panda/aquadoggo/pull/442)
-- Remove `quick_commit` from materialization service [#450](https://github.com/p2panda/aquadoggo/pull/450)
-- Reduce `warn` logging in network and replication services [#467](https://github.com/p2panda/aquadoggo/pull/467)
-- `mdns` and `autonat` disabled by default [#475](https://github.com/p2panda/aquadoggo/pull/475)
+- Remove "quick commit" from materialization service [#450](https://github.com/p2panda/aquadoggo/pull/450)
+- Reduce WARN level logging in network and replication services [#467](https://github.com/p2panda/aquadoggo/pull/467)
+- mDNS and AutoNAT disabled by default [#475](https://github.com/p2panda/aquadoggo/pull/475)
 - By default, nodes support _any_ schema [#487](https://github.com/p2panda/aquadoggo/pull/487)
+- Rework networking service [#502](https://github.com/p2panda/aquadoggo/pull/502)
 
 ### Fixed
 

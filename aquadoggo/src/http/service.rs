@@ -58,7 +58,14 @@ pub async fn http_service(
     // Introduce a new context for all HTTP routes
     let http_context = HttpServiceContext::new(graphql_schema_manager);
 
-    axum::Server::try_bind(&http_address)?
+    // Start HTTP server with given port and re-attempt with random port if it was taken already
+    let builder = if let Ok(builder) = axum::Server::try_bind(&http_address) {
+        builder
+    } else {
+        axum::Server::try_bind(&SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0))?
+    };
+
+    builder
         .serve(build_server(http_context).into_make_service())
         .with_graceful_shutdown(async {
             debug!("HTTP service is ready");
