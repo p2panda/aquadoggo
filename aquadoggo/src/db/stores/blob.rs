@@ -86,16 +86,21 @@ impl SqlStore {
             .await
             .map_err(|e| SqlStoreError::Transaction(e.to_string()))?;
 
+            // Purge the blob document itself.
             self.purge_document(document_id).await?;
 
+            // Now iterate over each collected blob piece in order to check if they are still
+            // needed by any other blob document, and if not purge them as well.
             for blob_piece_id in blob_piece_ids {
                 let blob_piece_id: DocumentId = blob_piece_id
                     .parse()
                     .expect("Document Id's from the store are valid");
 
+                // Collect reverse relations for this blob piece.
                 let blob_piece_reverse_relations =
                     reverse_relations(&self.pool, &blob_piece_id, Some(SchemaId::Blob(1))).await?;
 
+                // If there are none then purge the blob piece.
                 if blob_piece_reverse_relations.is_empty() {
                     self.purge_document(&blob_piece_id).await?;
                 }
