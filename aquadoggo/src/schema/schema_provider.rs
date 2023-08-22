@@ -10,17 +10,19 @@ use p2panda_rs::Human;
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 use tokio::sync::Mutex;
 
-/// Provides fast thread-safe access to system and application schemas.
+use crate::config::SupportedSchemaIds;
+
+/// Provides fast access to system and application schemas.
 ///
 /// Application schemas can be added and updated.
 #[derive(Clone, Debug)]
 pub struct SchemaProvider {
-    /// In-memory store of registered schemas.
+    /// In-memory store of registered and materialized schemas.
     schemas: Arc<Mutex<HashMap<SchemaId, Schema>>>,
 
-    /// Optional list of whitelisted schema ids. When set, only these schema ids will be accepted
-    /// on this node, if not set _all_ schema ids are accepted.
-    whitelisted_schema_ids: Option<Vec<SchemaId>>,
+    /// Optional list of whitelisted schema ids. When not empty, only these schema ids will be
+    /// accepted on this node, if not set _all_ schema ids are accepted (wildcard).
+    supported_schema_ids: SupportedSchemaIds,
 
     /// Sender for broadcast channel informing subscribers about updated schemas.
     tx: Sender<SchemaId>,
@@ -28,10 +30,7 @@ pub struct SchemaProvider {
 
 impl SchemaProvider {
     /// Returns a `SchemaProvider` containing the given application schemas and all system schemas.
-    pub fn new(
-        application_schemas: Vec<Schema>,
-        whitelisted_schema_ids: Option<Vec<SchemaId>>,
-    ) -> Self {
+    pub fn new(application_schemas: Vec<Schema>, supported_schema_ids: SupportedSchemaIds) -> Self {
         // Collect all system and application schemas.
         let mut schemas = SYSTEM_SCHEMAS.clone();
         schemas.extend(&application_schemas);
@@ -42,7 +41,8 @@ impl SchemaProvider {
             index.insert(schema.id().to_owned(), schema.to_owned());
         }
 
-        if let Some(schema_ids) = &whitelisted_schema_ids {
+        // Filter out all unsupported schema ids when list was set
+        if let SupportedSchemaIds::List(schema_ids) = &supported_schema_ids {
             index.retain(|id, _| schema_ids.contains(id));
         };
 
@@ -59,7 +59,7 @@ impl SchemaProvider {
 
         Self {
             schemas: Arc::new(Mutex::new(index)),
-            whitelisted_schema_ids,
+            supported_schema_ids,
             tx,
         }
     }
@@ -84,8 +84,8 @@ impl SchemaProvider {
     /// Returns `true` if a schema was updated or it already existed in it's current state, and
     /// `false` if it was inserted.
     pub async fn update(&self, schema: Schema) -> Result<bool> {
-        if let Some(whitelisted_ids) = self.whitelisted_schema_ids.as_ref() {
-            if !whitelisted_ids.contains(schema.id()) {
+        if let SupportedSchemaIds::List(supported_schema_ids) = &self.supported_schema_ids {
+            if !supported_schema_ids.contains(schema.id()) {
                 bail!("Attempted to add unsupported schema to schema provider");
             }
         };
@@ -117,9 +117,9 @@ impl SchemaProvider {
     /// If no whitelist was set it returns the list of all currently known schema ids. If a
     /// whitelist was set it directly returns the list itself.
     pub async fn supported_schema_ids(&self) -> Vec<SchemaId> {
-        match &self.whitelisted_schema_ids {
-            Some(schema_ids) => schema_ids.clone(),
-            None => self
+        match &self.supported_schema_ids {
+            SupportedSchemaIds::List(schema_ids) => schema_ids.clone(),
+            SupportedSchemaIds::Wildcard => self
                 .all()
                 .await
                 .iter()
@@ -131,13 +131,13 @@ impl SchemaProvider {
     /// Returns true if a whitelist of supported schema ids was provided through user
     /// configuration.
     pub fn is_whitelist_active(&self) -> bool {
-        self.whitelisted_schema_ids.is_some()
+        matches!(self.supported_schema_ids, SupportedSchemaIds::List(_))
     }
 }
 
 impl Default for SchemaProvider {
     fn default() -> Self {
-        Self::new(Vec::new(), None)
+        Self::new(Vec::new(), SupportedSchemaIds::Wildcard)
     }
 }
 

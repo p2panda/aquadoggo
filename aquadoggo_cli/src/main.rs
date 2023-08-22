@@ -4,26 +4,25 @@
 mod key_pair;
 mod schemas;
 
-use std::convert::{TryFrom, TryInto};
-use std::fs::File;
+use std::convert::TryFrom;
 use std::net::IpAddr;
 
 use anyhow::Result;
 use aquadoggo::{Configuration, NetworkConfiguration, Node};
 use clap::Parser;
+use figment::providers::{Env, Format, Serialized, Toml};
+use figment::Figment;
 use libp2p::multiaddr::Protocol;
 use libp2p::Multiaddr;
+use serde::{Deserialize, Serialize};
 
-const CONFIG_FILE_PATH: &str = "config.toml";
+const CONFIG_FILE_NAME: &str = "config.toml";
+const CONFIG_ENV_VAR_PREFIX: &str = "DOGGO_";
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Serialize, Deserialize)]
 #[command(name = "aquadoggo Node", version)]
 /// Node server for the p2panda network.
 struct Cli {
-    /// Path to data folder, $HOME/.local/share/aquadoggo by default on Linux.
-    #[arg(short, long)]
-    data_dir: Option<std::path::PathBuf>,
-
     /// Port for the http server, 2020 by default.
     #[arg(short = 'P', long)]
     http_port: Option<u16>,
@@ -61,9 +60,9 @@ impl TryFrom<Cli> for Configuration {
     type Error = anyhow::Error;
 
     fn try_from(cli: Cli) -> Result<Self, Self::Error> {
-        let mut config = Configuration::new(cli.data_dir)?;
+        let mut config = Configuration::default();
 
-        let relay_address = if let Some(relay_address) = cli.relay_address {
+        let relay_node = if let Some(relay_address) = cli.relay_address {
             let mut multiaddr = match relay_address {
                 IpAddr::V4(ip) => Multiaddr::from(Protocol::Ip4(ip)),
                 IpAddr::V6(ip) => Multiaddr::from(Protocol::Ip6(ip)),
@@ -82,9 +81,9 @@ impl TryFrom<Cli> for Configuration {
 
         config.network = NetworkConfiguration {
             mdns: cli.mdns.unwrap_or(false),
-            relay_server_enabled: cli.enable_relay_server,
-            relay_address,
-            remote_peers: cli.remote_node_addresses,
+            relay: cli.enable_relay_server,
+            relay_node,
+            trusted_nodes: cli.remote_node_addresses,
             ..config.network
         };
 
@@ -101,37 +100,33 @@ async fn main() {
     env_logger::init();
 
     // Parse command line arguments
-    let cli = Cli::parse();
+    let config: Result<Configuration, figment::Error> = Figment::new()
+        .merge(Toml::file(CONFIG_FILE_NAME))
+        .merge(Env::prefixed(CONFIG_ENV_VAR_PREFIX))
+        .merge(Serialized::defaults(Cli::parse()))
+        .extract();
 
-    // Load configuration parameters and apply defaults
-    let mut config: Configuration = cli.try_into().expect("Could not load configuration");
+    match config {
+        Ok(config) => {
+            let key_pair = key_pair::generate_ephemeral_key_pair();
 
-    // Read schema ids from config.toml file or
-    let supported_schemas = match File::open(CONFIG_FILE_PATH) {
-        Ok(mut file) => Some(
-            schemas::read_schema_ids_from_file(&mut file)
-                .expect("Reading schema ids from config.toml failed"),
-        ),
-        Err(_) => None,
-    };
-    config.supported_schema_ids = supported_schemas;
+            // Start p2panda node in async runtime
+            let node = Node::start(key_pair, config).await;
 
-    // We unwrap the path as we know it has been initialised during the conversion step before
-    let base_path = config.base_path.clone().unwrap();
+            // Run this until [CTRL] + [C] got pressed or something went wrong
+            tokio::select! {
+                _ = tokio::signal::ctrl_c() => (),
+                _ = node.on_exit() => (),
+            }
 
-    // Generate new key pair or load it from file
-    let key_pair =
-        key_pair::generate_or_load_key_pair(base_path).expect("Could not load key pair from file");
-
-    // Start p2panda node in async runtime
-    let node = Node::start(key_pair, config).await;
-
-    // Run this until [CTRL] + [C] got pressed or something went wrong
-    tokio::select! {
-        _ = tokio::signal::ctrl_c() => (),
-        _ = node.on_exit() => (),
+            // Wait until all tasks are gracefully shut down and exit
+            node.shutdown().await;
+        }
+        Err(error) => {
+            println!("Error: Could not load configuration:");
+            for error in error {
+                println!("- {}", error);
+            }
+        }
     }
-
-    // Wait until all tasks are gracefully shut down and exit
-    node.shutdown().await;
 }

@@ -37,13 +37,7 @@ async fn e2e() {
     // designed to be "local first" which means they are fine if there is currently no internet
     // connection on your computer.
 
-    // Node configuration.
-    //
-    // Before even starting the node, we need to configure it a little. We mostly go for the
-    // default options. The only thing we want to do change is the database config. We want an
-    // in-memory sqlite database for this test.
-
-    let config = Configuration::new_ephemeral();
+    let config = Configuration::default();
     let key_pair = KeyPair::new();
 
     // Start the node.

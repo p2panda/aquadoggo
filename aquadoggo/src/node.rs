@@ -24,14 +24,10 @@ async fn initialize_db(config: &Configuration) -> Result<Pool> {
     openssl_probe::init_ssl_cert_env_vars();
 
     // Create database when not existing
-    create_database(&config.database_url.clone().unwrap()).await?;
+    create_database(&config.database_url).await?;
 
     // Create connection pool
-    let pool = connection_pool(
-        &config.database_url.clone().unwrap(),
-        config.database_max_connections,
-    )
-    .await?;
+    let pool = connection_pool(&config.database_url, config.database_max_connections).await?;
 
     // Run pending migrations
     run_pending_migrations(&pool).await?;

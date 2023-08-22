@@ -13,15 +13,12 @@ const KEY_PAIR_FILE_NAME: &str = "private-key";
 
 /// Returns a new instance of `KeyPair` by either loading the private key from a path or generating
 /// a new one and saving it in the file system.
-pub fn generate_or_load_key_pair(base_path: PathBuf) -> Result<KeyPair> {
-    let mut key_pair_path = base_path;
-    key_pair_path.push(KEY_PAIR_FILE_NAME);
-
-    let key_pair = if key_pair_path.is_file() {
-        load_key_pair_from_file(key_pair_path)?
+pub fn generate_or_load_key_pair(path: PathBuf) -> Result<KeyPair> {
+    let key_pair = if path.is_file() {
+        load_key_pair_from_file(path)?
     } else {
         let key_pair = KeyPair::new();
-        save_key_pair_to_file(&key_pair, key_pair_path)?;
+        save_key_pair_to_file(&key_pair, path)?;
         key_pair
     };
 
@@ -32,7 +29,6 @@ pub fn generate_or_load_key_pair(base_path: PathBuf) -> Result<KeyPair> {
 /// file system.
 ///
 /// This method is useful to run nodes for testing purposes.
-#[allow(dead_code)]
 pub fn generate_ephemeral_key_pair() -> KeyPair {
     KeyPair::new()
 }
