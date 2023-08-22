@@ -624,7 +624,7 @@ async fn get_document_view_field_rows(
             document_view_fields.document_view_id = $1
         ORDER BY
             operation_fields_v1.list_index ASC
-        "
+        ",
     )
     .bind(id.to_string())
     .fetch_all(pool)
