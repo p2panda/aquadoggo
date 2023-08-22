@@ -38,7 +38,8 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
             let mut all_effected_child_relations = vec![];
             let mut deleted_views_count = 0;
             for document_view_id in &all_document_view_ids {
-                // Check if this is the current view of it's document.
+                // Check if this is the current view of it's document. This will still return true
+                // if the document in question is deleted.
                 let is_current_view = context
                     .store
                     .is_current_view(document_view_id)
@@ -77,9 +78,9 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
                 }
             }
 
-            // If the number of deleted views equals the total existing views, then there is a
-            // chance this became completely detached. In this case we should check if this
-            // document is a blob document and then try to purge it.
+            // If the number of deleted views equals the total existing views (minus one for the
+            // current view), then there is a chance this became completely detached. In this case
+            // we should check if this document is a blob document and then try to purge it.
             if all_document_view_ids.len() - 1 == deleted_views_count {
                 let operation = context
                     .store
