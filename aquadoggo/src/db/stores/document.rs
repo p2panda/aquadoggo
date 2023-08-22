@@ -402,7 +402,7 @@ impl SqlStore {
         &self,
         document_view_id: &DocumentViewId,
     ) -> Result<Vec<DocumentId>, DocumentStorageError> {
-        let document_view_ids: Vec<String> = query_scalar(&format!(
+        let document_view_ids: Vec<String> = query_scalar(
             "
             SELECT DISTINCT 
                 document_views.document_id
@@ -426,8 +426,8 @@ impl SqlStore {
                 AND 
                     document_view_fields.document_view_id = $1
             )
-            "
-        ))
+            ",
+        )
         .bind(document_view_id.to_string())
         .fetch_all(&self.pool)
         .await
@@ -454,7 +454,7 @@ impl SqlStore {
     ) -> Result<bool, DocumentStorageError> {
         // Attempt to delete the view. If it is pinned from an existing view, or it is the current
         // view of a document, the deletion will not go ahead.
-        let result = query(&format!(
+        let result = query(
                 "
                 DELETE FROM 
                     document_views
@@ -480,7 +480,7 @@ impl SqlStore {
                     SELECT documents.document_id FROM documents
                     WHERE documents.document_view_id = $1        
                 )
-                "),
+                "
             )
             .bind(document_view_id.to_string())
             .execute(&self.pool)
@@ -598,7 +598,7 @@ async fn get_document_view_field_rows(
     // Each field has one row, or in the case of list values (pinned relations, or relation lists)
     // then one row exists for every item in the list. The `list_index` column is used for
     // consistently ordering list items.
-    query_as::<_, DocumentViewFieldRow>(&format!(
+    query_as::<_, DocumentViewFieldRow>(
         "
         SELECT
             document_views.document_id,
@@ -625,7 +625,7 @@ async fn get_document_view_field_rows(
         ORDER BY
             operation_fields_v1.list_index ASC
         "
-    ))
+    )
     .bind(id.to_string())
     .fetch_all(pool)
     .await
