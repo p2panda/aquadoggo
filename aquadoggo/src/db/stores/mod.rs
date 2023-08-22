@@ -11,7 +11,6 @@ mod query;
 mod schema;
 mod task;
 
-pub use document::{DOCUMENT_VIEWS, OPERATION_FIELDS};
 pub use operation::OperationCursor;
 pub use query::{
     PaginationCursor, PaginationData, Query, QueryResponse, RelationList, RelationListType,

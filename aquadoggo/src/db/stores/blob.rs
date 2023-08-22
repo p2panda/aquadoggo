@@ -12,7 +12,6 @@ use sqlx::{query_scalar, AnyPool};
 use crate::db::errors::{BlobStoreError, SqlStoreError};
 use crate::db::query::{Field, Filter, Order, Pagination, Select};
 use crate::db::stores::query::{Query, RelationList};
-use crate::db::stores::{DOCUMENT_VIEWS, OPERATION_FIELDS};
 use crate::db::SqlStore;
 
 /// The maximum allowed number of blob pieces per blob.
@@ -127,9 +126,15 @@ async fn reverse_relations(
         FROM 
             document_view_fields
         LEFT JOIN
-            {OPERATION_FIELDS}
+            operation_fields_v1
+        ON
+            document_view_fields.operation_id = operation_fields_v1.operation_id
+        AND
+            document_view_fields.name = operation_fields_v1.name
         LEFT JOIN 
-            {DOCUMENT_VIEWS}
+            document_views
+        ON
+            document_view_fields.document_view_id = document_views.document_view_id
         WHERE
             operation_fields_v1.field_type
         IN 
