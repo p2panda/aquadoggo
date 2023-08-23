@@ -138,19 +138,20 @@ node_addresses = [
 
 # Address of relay.
 #
-# Relays help discover other nodes on the internet (also known as "rendesvouz"
-# or "bootstrap" server) and help establishing direct p2p connections when node
-# is behind a firewall or NAT (also known as "holepunching").
+# A relay helps discover other nodes on the internet (also known as
+# "rendesvouz" or "bootstrap" server) and helps establishing direct p2p
+# connections when node is behind a firewall or NAT (also known as
+# "holepunching").
 #
 # When a direct connection is not possible the relay will help to redirect the
 # (encrypted) traffic as an intermediary between us and other nodes. The node
-# will contact each server and register our IP address for other peers.
+# will contact the relay and register our IP address for other peers.
 #
 # WARNING: This will potentially expose your IP address on the network. Do only
 # connect to trusted relays or make sure your IP address is hidden via a VPN or
-# proxy.
+# proxy if you're concerned about leaking your IP.
 #
-# WARNING: Using relays will potentially connect you to untrusted / unknown
+# WARNING: Using a relay will potentially connect you to untrusted / unknown
 # nodes with which you will then exchange data with. If in doubt, use the list
 # of known node addresses instead and only connect to trusted nodes.
 #
