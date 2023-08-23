@@ -2,18 +2,20 @@
 
 mod key_pair;
 
+use std::fmt::Display;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 
 use anyhow::Result;
 use aquadoggo::{AllowList, Configuration as NodeConfiguration, NetworkConfiguration, Node};
-use clap::Parser;
+use clap::{crate_version, Parser};
 use directories::ProjectDirs;
 use figment::providers::{Env, Format, Serialized, Toml};
 use figment::Figment;
 use libp2p::multiaddr::Protocol;
 use libp2p::Multiaddr;
 use p2panda_rs::schema::SchemaId;
+use p2panda_rs::Human;
 use serde::{Deserialize, Serialize};
 
 const CONFIG_FILE_NAME: &str = "config.toml";
@@ -73,6 +75,36 @@ struct Configuration {
     im_a_relay: bool,
 }
 
+impl Display for Configuration {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            self.config
+                .as_ref()
+                .map_or("No config file provided".into(), |ref path| format!(
+                    "Loading config file from {}",
+                    path.display()
+                ))
+        )?;
+
+        write!(f, "\n\n")?;
+
+        // @TODO: Nicer printing of all values
+        write!(f, "Schemas\n")?;
+        write!(
+            f,
+            "{:<20} {:<20}\n",
+            "supported_schema_ids",
+            self.supported_schema_ids
+                .iter()
+                .map(|id| id.display())
+                .collect::<Vec<String>>()
+                .join(", ")
+        )
+    }
+}
+
 impl From<Configuration> for NodeConfiguration {
     fn from(cli: Configuration) -> Self {
         let supported_schema_ids = if cli.supported_schema_ids.is_empty() {
@@ -129,10 +161,10 @@ fn try_determine_config_file_path() -> Option<PathBuf> {
 
 fn load_config() -> Result<Configuration, figment::Error> {
     // Parse command line arguments first
-    let cli = Configuration::parse();
+    let mut cli = Configuration::parse();
 
     // Determine if a config file path was provided or if we should look for it in common locations
-    let config_file_path = if cli.config.is_some() {
+    cli.config = if cli.config.is_some() {
         cli.config.clone()
     } else {
         try_determine_config_file_path()
@@ -142,43 +174,15 @@ fn load_config() -> Result<Configuration, figment::Error> {
     // arguments
     let mut figment = Figment::new();
 
-    if let Some(path) = config_file_path {
+    if let Some(path) = &cli.config {
         figment = figment.merge(Toml::file(path));
     }
 
+    // @TODO: Fix not overriding values when empty array was set
     figment
         .merge(Env::prefixed(CONFIG_ENV_VAR_PREFIX))
         .merge(Serialized::defaults(cli))
         .extract()
-}
-
-fn panda_da() -> String {
-    r#"
-                           ██████ ███████ ████
-                          ████████       ██████
-                          ██████            ███
-                           █████              ██
-                           █     ████      █████
-                          █     ██████   █ █████
-                         ██      ████   ███ █████
-                        █████         ██████    █
-                       ███████                ██
-                       █████████   █████████████
-                       ███████████      █████████
-                       █████████████████         ████
-                  ██████    ███████████              ██
-              ██████████        █████                 █
-               █████████        ██          ███       ██
-                 ██████        █            █           ██
-                    ██       ██             ███████     ██
-                  ███████████                      ██████
-    ████████     ████████████                   ██████
-    ████   ██████ ██████████            █   ████
-      █████████   ████████       ███    ███████
-        ████████             ██████    ████████
-    █████████  ████████████████████████   ███
-    █████████                      ██"#
-        .into()
 }
 
 #[tokio::main]
@@ -187,9 +191,9 @@ async fn main() {
 
     match load_config() {
         Ok(config) => {
-            // @TODO: Nicer print
-            println!("{}\n\n{:#?}", panda_da(), config);
+            println!("aquadoggo v{}\n\n{:?}", crate_version!(), config);
 
+            // @TODO: Create folders when paths for db or key was set
             let key_pair = match &config.private_key {
                 Some(path) => key_pair::generate_or_load_key_pair(path.clone())
                     .expect("Could not load private key from file"),
