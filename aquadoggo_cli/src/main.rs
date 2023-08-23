@@ -70,7 +70,7 @@ struct Configuration {
 
     /// Set to true if our node should also function as a relay. Defaults to false.
     #[arg(short = 'e', long, default_value_t = false)]
-    relay: bool,
+    im_a_relay: bool,
 }
 
 impl From<Configuration> for NodeConfiguration {
@@ -91,7 +91,7 @@ impl From<Configuration> for NodeConfiguration {
                 quic_port: cli.quic_port,
                 mdns: cli.mdns,
                 node_addresses: cli.relay_address.into_iter().map(to_multiaddress).collect(),
-                relay: cli.relay,
+                im_a_relay: cli.im_a_relay,
                 relay_address: cli.relay_address.map(to_multiaddress),
                 ..Default::default()
             },

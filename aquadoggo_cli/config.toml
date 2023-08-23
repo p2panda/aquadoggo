@@ -132,9 +132,9 @@ node_addresses = [
     # "192.0.2.2:3000",
 ]
 
-# ~~~~~~
-# Relays
-# ~~~~~~
+# ~~~~~
+# Relay
+# ~~~~~
 
 # Address of relay.
 #
@@ -163,4 +163,4 @@ node_addresses = [
 # NOTE: Relays _need_ to be hosted in a way where they can be reached directly,
 # for example with a static IP address through an VPS.
 #
-relay = false
+im_a_relay = false
