@@ -250,10 +250,10 @@ impl ConnectionManager {
                 .expect("Announcement state needs to be set with 'update_announcement'")
                 .target_set;
 
-            // If this node has been configured with a whitelist of schema ids then we check the
+            // If this node has been configured with an allow-list of schema ids then we check the
             // target set of the requests matches our own, otherwise we skip this step and accept
             // any target set.
-            if self.schema_provider.is_whitelist_active()
+            if self.schema_provider.is_allow_list_active()
                 && !local_target_set.is_valid_set(remote_target_set)
             {
                 // If it doesn't match we signal that an error occurred and return at this point.
@@ -526,7 +526,7 @@ mod tests {
     };
     use crate::schema::SchemaProvider;
     use crate::test_utils::{test_runner, TestNode};
-    use crate::WildcardOption;
+    use crate::AllowList;
 
     use super::ConnectionManager;
 
@@ -616,7 +616,7 @@ mod tests {
         test_runner(move |node: TestNode| async move {
             let (tx, mut rx) = broadcast::channel::<ServiceMessage>(10);
 
-            let schema_provider = SchemaProvider::new(vec![], WildcardOption::Set(vec![]));
+            let schema_provider = SchemaProvider::new(vec![], AllowList::Set(vec![]));
             let mut manager =
                 ConnectionManager::new(&schema_provider, &node.context.store, &tx, local_peer_id);
             manager.update_announcement().await;

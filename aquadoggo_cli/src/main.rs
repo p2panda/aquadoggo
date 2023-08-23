@@ -6,7 +6,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 
 use anyhow::Result;
-use aquadoggo::{Configuration as NodeConfiguration, NetworkConfiguration, Node, WildcardOption};
+use aquadoggo::{AllowList, Configuration as NodeConfiguration, NetworkConfiguration, Node};
 use clap::Parser;
 use directories::ProjectDirs;
 use figment::providers::{Env, Format, Serialized, Toml};
@@ -76,9 +76,9 @@ struct Configuration {
 impl From<Configuration> for NodeConfiguration {
     fn from(cli: Configuration) -> Self {
         let supported_schema_ids = if cli.supported_schema_ids.is_empty() {
-            WildcardOption::Wildcard
+            AllowList::Wildcard
         } else {
-            WildcardOption::Set(cli.supported_schema_ids)
+            AllowList::Set(cli.supported_schema_ids)
         };
 
         NodeConfiguration {

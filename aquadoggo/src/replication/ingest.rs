@@ -49,9 +49,9 @@ impl SyncIngest {
 
         let plain_operation = decode_operation(encoded_operation)?;
 
-        // If the node has been configured with a whitelist of supported schema ids, check that the
-        // sent operation follows one of our supported schema
-        if self.schema_provider.is_whitelist_active()
+        // If the node has been configured with an allow-list of supported schema ids, check that
+        // the sent operation follows one of our supported schema
+        if self.schema_provider.is_allow_list_active()
             && self
                 .schema_provider
                 .supported_schema_ids()

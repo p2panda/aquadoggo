@@ -14,9 +14,9 @@
 
 # List of schema ids which a node will replicate and expose on the GraphQL API.
 #
-# When whitelisting a schema you automatically opt into announcing, replicating
-# and materializing documents connected to it, supporting applications which
-# are dependent on this data.
+# When allowing a schema you automatically opt into announcing, replicating and
+# materializing documents connected to it, supporting applications which are
+# dependent on this data.
 #
 # It is recommended to set this list to all schema ids your own application
 # should support. Defaults to an empty list.
@@ -52,7 +52,7 @@ supported_schema_ids = [
 # down. Uncomment this value when running on production as you will otherwise
 # loose data.
 #
-# database_uri = "sqlite:$HOME/.local/share/aquadoggo/db.sqlite3"
+# database_url = "sqlite:$HOME/.local/share/aquadoggo/db.sqlite3"
 
 # Maximum number of connections that the database pool should maintain.
 #

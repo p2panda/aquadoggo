@@ -31,10 +31,9 @@ pub struct Configuration {
 
     /// List of schema ids which a node will replicate and expose on the GraphQL API.
     ///
-    /// When whitelisting a schema you automatically opt into announcing, replicating and
-    /// materializing documents connected to it, supporting applications which are dependent on
-    /// this data.
-    pub supported_schema_ids: WildcardOption<SchemaId>,
+    /// When allowing a schema you automatically opt into announcing, replicating and materializing
+    /// documents connected to it, supporting applications which are dependent on this data.
+    pub supported_schema_ids: AllowList<SchemaId>,
 
     /// Network configuration.
     pub network: NetworkConfiguration,
@@ -47,23 +46,23 @@ impl Default for Configuration {
             database_max_connections: 32,
             http_port: 2020,
             worker_pool_size: 16,
-            supported_schema_ids: WildcardOption::Wildcard,
+            supported_schema_ids: AllowList::Wildcard,
             network: NetworkConfiguration::default(),
         }
     }
 }
 
-/// Set a configuration value to either a concrete set of elements or to a wildcard (*).
+/// Set a configuration value to either allow a defined set of elements or to a wildcard (*).
 #[derive(Debug, Clone)]
-pub enum WildcardOption<T> {
-    /// Support all possible items.
+pub enum AllowList<T> {
+    /// Allow all possible items.
     Wildcard,
 
-    /// Support only a certain set of items.
+    /// Allow only a certain set of items.
     Set(Vec<T>),
 }
 
-impl<T> Default for WildcardOption<T> {
+impl<T> Default for AllowList<T> {
     fn default() -> Self {
         Self::Wildcard
     }
