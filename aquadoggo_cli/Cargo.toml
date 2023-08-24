@@ -28,6 +28,7 @@ figment = { version = "0.10.10", features = ["toml", "env"] }
 hex = "0.4.3"
 libp2p = "0.52.0"
 p2panda-rs = "0.7.1"
+path-clean = "1.0.1"
 serde = { version = "1.0.185", features = ["serde_derive"] }
 tokio = { version = "1.28.2", features = ["full"] }
 toml = "0.7.6"

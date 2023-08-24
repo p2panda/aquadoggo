@@ -2,6 +2,7 @@
 
 mod config;
 mod key_pair;
+mod utils;
 
 use std::convert::TryInto;
 
@@ -9,6 +10,7 @@ use anyhow::Context;
 use aquadoggo::Node;
 use clap::crate_version;
 
+use crate::utils::absolute_path;
 use crate::config::load_config;
 use crate::key_pair::{generate_ephemeral_key_pair, generate_or_load_key_pair};
 
@@ -37,7 +39,7 @@ async fn main() -> anyhow::Result<()> {
     println!("aquadoggo v{}\n", crate_version!());
     match config_file_path {
         Some(path) => {
-            println!("Loading config file from {}", path.display());
+            println!("Loading config file from {}", absolute_path(path).display());
         }
         None => {
             println!("No config file provided");
