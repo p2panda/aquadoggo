@@ -25,7 +25,8 @@ async fn main() -> anyhow::Result<()> {
         .try_into()
         .context("Could not load configuration")?;
 
-    // @TODO: Create folders when paths for db or key was set
+    // Generate a new key pair, either just for this session or persisted. Folders are
+    // automatically created when we picked a path
     let key_pair = match &config.private_key {
         Some(path) => generate_or_load_key_pair(path.clone())
             .context("Could not load private key from file")?,
