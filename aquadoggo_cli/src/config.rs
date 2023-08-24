@@ -16,6 +16,8 @@ use libp2p::Multiaddr;
 use p2panda_rs::schema::SchemaId;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+const WILDCARD: &'static str = "*";
+
 const CONFIG_FILE_NAME: &str = "config.toml";
 
 type ConfigFilePath = Option<PathBuf>;
@@ -223,8 +225,9 @@ fn try_determine_config_file_path() -> Option<PathBuf> {
         .cloned()
 }
 
-const WILDCARD: &'static str = "*";
-
+/// Helper struct to deserialize from either a wildcard string "*" or a list of string values.
+///
+/// These string values are not checked yet and need to be validated in a succeeding step.
 #[derive(Debug, Clone)]
 pub enum UncheckedAllowList {
     Wildcard,
