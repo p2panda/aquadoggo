@@ -16,7 +16,7 @@ use libp2p::Multiaddr;
 use p2panda_rs::schema::SchemaId;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-const WILDCARD: &'static str = "*";
+const WILDCARD: &str = "*";
 
 const CONFIG_FILE_NAME: &str = "config.toml";
 
