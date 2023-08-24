@@ -46,23 +46,19 @@ pub async fn network_service(
     // The swarm can be initiated with or without "relay" capabilities.
     let mut swarm = if network_config.relay_mode {
         info!("Networking service initializing with relay capabilities...");
-        swarm::build_relay_swarm(&network_config, key_pair).await?
+        let mut swarm = swarm::build_relay_swarm(&network_config, key_pair).await?;
+
+        // Start listening on tcp address.
+        let listen_addr_tcp = Multiaddr::empty()
+            .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
+            .with(Protocol::Tcp(0));
+        swarm.listen_on(listen_addr_tcp)?;
+
+        swarm
     } else {
         info!("Networking service initializing...");
         swarm::build_client_swarm(&network_config, key_pair).await?
     };
-
-    // Start listening on tcp address.
-    //
-    // @TODO: It's still not clear to me if "client" nodes need to do this, when I don't listen
-    // here for clients it doesn't seem to make any difference. Maybe it effects things like dcutr
-    // though, I'm not sure.
-    //
-    // Related issue: https://github.com/p2panda/aquadoggo/issues/508
-    let listen_addr_tcp = Multiaddr::empty()
-        .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
-        .with(Protocol::Tcp(0));
-    swarm.listen_on(listen_addr_tcp)?;
 
     // Start listening on QUIC address. Pick a random one if the given is taken already.
     let listen_addr_quic = Multiaddr::empty()
