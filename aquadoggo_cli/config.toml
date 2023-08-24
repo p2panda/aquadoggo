@@ -120,14 +120,14 @@ mdns = true
 # Nodes
 # ~~~~~
 
-# List of addresses of trusted and known nodes.
+# List of known node addresses (IP + port) we want to connect to directly.
 #
-# NOTE: Make sure that nodes mentioned in this list can be connected directly
-# (for example when they are hosted with a static IP Address). If you need to
+# NOTE: Make sure that nodes mentioned in this list are directly reachable (for
+# example they need to be hosted with a static IP Address). If you need to
 # connect to nodes with changing, dynamic IP addresses or even with nodes
-# behind a firewall or NAT, you will need at least one Relay.
+# behind a firewall or NAT, do not use this field but use at least one relay.
 #
-node_addresses = [
+direct_node_addresses = [
     # "192.0.2.0:2022",
     # "192.0.2.2:3000",
 ]
