@@ -16,13 +16,13 @@ pub struct NetworkConfiguration {
     /// Discover peers on the local network via mDNS (over IPv4 only, using port 5353).
     pub mdns: bool,
 
-    /// List of addresses of trusted and known nodes.
+    /// List of known node addresses (IP + port) we want to connect to directly.
     ///
-    /// Nodes mentioned in this list can be connected directly (for example when they are hosted
-    /// with a static IP Address). If the node needs to connect to other ndoes with changing,
-    /// dynamic IP addresses or even with nodes behind a firewall or NAT, at least one Relay will
-    /// be required.
-    pub node_addresses: Vec<Multiaddr>,
+    /// Make sure that nodes mentioned in this list are directly reachable (for example they need
+    /// to be hosted with a static IP Address). If you need to connect to nodes with changing,
+    /// dynamic IP addresses or even with nodes behind a firewall or NAT, do not use this field but
+    /// use at least one relay.
+    pub direct_node_addresses: Vec<Multiaddr>,
 
     /// Set to true if node should also function as a relay. Other nodes can use relays to aid
     /// discovery and establishing connectivity.
@@ -93,7 +93,7 @@ impl Default for NetworkConfiguration {
             max_connections_pending_out: 8,
             max_connections_per_peer: 8,
             mdns: true,
-            node_addresses: Vec::new(),
+            direct_node_addresses: Vec::new(),
             notify_handler_buffer_size: 128,
             per_connection_event_buffer_size: 8,
             quic_port: 2022,

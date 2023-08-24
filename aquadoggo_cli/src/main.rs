@@ -41,12 +41,12 @@ struct Configuration {
     #[arg(long, default_value_t = 32)]
     database_max_connections: u32,
 
-    /// Number of concurrent workers which defines the maximum of materialization
-    /// tasks which can be worked on simultaneously.
+    /// Number of concurrent workers, defines the maximum of materialization tasks which can be
+    /// worked on simultaneously.
     #[arg(long, default_value_t = 16)]
     worker_pool_size: u32,
 
-    /// HTTP port, serving the GraphQL API.
+    /// HTTP port for client-node communication, serving the GraphQL API.
     #[arg(short = 'p', long, default_value_t = 2020)]
     http_port: u16,
 
@@ -62,9 +62,9 @@ struct Configuration {
     #[arg(short = 'm', long, default_value_t = true)]
     mdns: bool,
 
-    /// List of addresses of trusted and known nodes.
+    /// List of known node addresses (IP + port) we want to connect to directly.
     #[arg(short = 'n', long)]
-    node_addresses: Vec<SocketAddr>,
+    direct_node_addresses: Vec<SocketAddr>,
 
     /// Address of relay.
     #[arg(short = 'r', long)]
@@ -122,7 +122,11 @@ impl From<Configuration> for NodeConfiguration {
             network: NetworkConfiguration {
                 quic_port: cli.quic_port,
                 mdns: cli.mdns,
-                node_addresses: cli.relay_address.into_iter().map(to_multiaddress).collect(),
+                direct_node_addresses: cli
+                    .direct_node_addresses
+                    .into_iter()
+                    .map(to_multiaddress)
+                    .collect(),
                 im_a_relay: cli.im_a_relay,
                 relay_address: cli.relay_address.map(to_multiaddress),
                 ..Default::default()
