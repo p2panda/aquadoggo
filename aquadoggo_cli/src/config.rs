@@ -276,12 +276,16 @@ pub fn print_config(path: ConfigFilePath, config: &NodeConfiguration) -> String 
 
     let supported_schema_ids: String = match &config.supported_schema_ids {
         AllowList::Set(schema_ids) => {
-            String::from("\n")
-                + &schema_ids
-                    .iter()
-                    .map(|id| format!("• {id}"))
-                    .collect::<Vec<String>>()
-                    .join("\n")
+            if schema_ids.is_empty() {
+                "none (disable replication)".into()
+            } else {
+                String::from("\n")
+                    + &schema_ids
+                        .iter()
+                        .map(|id| format!("• {id}"))
+                        .collect::<Vec<String>>()
+                        .join("\n")
+            }
         }
         AllowList::Wildcard => "support all incoming schemas (*)".into(),
     };
