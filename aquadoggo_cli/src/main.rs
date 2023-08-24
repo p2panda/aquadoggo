@@ -8,10 +8,8 @@ use std::convert::TryInto;
 
 use anyhow::Context;
 use aquadoggo::Node;
-use clap::crate_version;
 
-use crate::utils::absolute_path;
-use crate::config::load_config;
+use crate::config::{load_config, print_config};
 use crate::key_pair::{generate_ephemeral_key_pair, generate_or_load_key_pair};
 
 #[tokio::main]
@@ -36,17 +34,7 @@ async fn main() -> anyhow::Result<()> {
     };
 
     // Show configuration info to the user
-    println!("aquadoggo v{}\n", crate_version!());
-    match config_file_path {
-        Some(path) => {
-            println!("Loading config file from {}", absolute_path(path).display());
-        }
-        None => {
-            println!("No config file provided");
-        }
-    }
-    // @TODO: Improve print
-    println!("{:?}", config);
+    println!("{}", print_config(config_file_path, &node_config));
 
     // Start p2panda node in async runtime
     let node = Node::start(key_pair, node_config).await;

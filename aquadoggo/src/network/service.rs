@@ -19,7 +19,7 @@ use crate::context::Context;
 use crate::manager::{ServiceReadySender, Shutdown};
 use crate::network::behaviour::{Event, P2pandaBehaviour};
 use crate::network::config::NODE_NAMESPACE;
-use crate::network::{identity, peers, swarm, NetworkConfiguration, ShutdownHandler};
+use crate::network::{identity, peers, swarm, utils, NetworkConfiguration, ShutdownHandler};
 
 /// Network service which handles all networking logic for a p2panda node.
 ///
@@ -41,10 +41,10 @@ pub async fn network_service(
     let key_pair = identity::to_libp2p_key_pair(&context.key_pair);
     let local_peer_id = key_pair.public().to_peer_id();
 
-    info!("Local peer id: {local_peer_id}");
+    println!("Peer id: {local_peer_id}");
 
     // The swarm can be initiated with or without "relay" capabilities.
-    let mut swarm = if network_config.im_a_relay {
+    let mut swarm = if network_config.relay_mode {
         info!("Networking service initializing with relay capabilities...");
         swarm::build_relay_swarm(&network_config, key_pair).await?
     } else {
@@ -74,6 +74,10 @@ pub async fn network_service(
             .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
             .with(Protocol::Udp(0))
             .with(Protocol::QuicV1);
+        println!(
+            "QUIC port {} was already taken, try random port instead ..",
+            network_config.quic_port
+        );
         swarm.listen_on(random_port_addr)?;
     }
 
@@ -260,6 +264,7 @@ struct EventLoop {
     rx: BroadcastStream<ServiceMessage>,
     network_config: NetworkConfiguration,
     shutdown_handler: ShutdownHandler,
+    learned_port: bool,
 }
 
 impl EventLoop {
@@ -277,6 +282,7 @@ impl EventLoop {
             tx,
             network_config,
             shutdown_handler,
+            learned_port: false,
         }
     }
 
@@ -306,6 +312,17 @@ impl EventLoop {
                 event = self.swarm.next() => {
                     let event = event.expect("Swarm stream to be infinite");
                     match event {
+                        SwarmEvent::NewListenAddr { address, .. } => {
+                            if self.learned_port {
+                                continue;
+                            }
+
+                            // Only only one QUIC address once
+                            if let Some(address) = utils::to_quic_address(&address) {
+                                println!("Node is listening on 0.0.0.0:{}", address.port());
+                                self.learned_port = true;
+                            }
+                        }
                         SwarmEvent::Behaviour(Event::Identify(event)) => self.handle_identify_events(&event).await,
                         SwarmEvent::Behaviour(Event::Mdns(event)) => self.handle_mdns_events(&event).await,
                         SwarmEvent::Behaviour(Event::RendezvousClient(event)) => self.handle_rendezvous_client_events(&event).await,

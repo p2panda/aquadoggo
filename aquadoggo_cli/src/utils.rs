@@ -9,12 +9,12 @@ use path_clean::PathClean;
 pub fn absolute_path(path: impl AsRef<Path>) -> PathBuf {
     let path = path.as_ref();
 
-    let absolute_path = if path.is_absolute() {
+    if path.is_absolute() {
         path.to_path_buf()
     } else {
-        env::current_dir().expect("Could not determine current directory").join(path)
+        env::current_dir()
+            .expect("Could not determine current directory")
+            .join(path)
     }
-    .clean();
-
-    absolute_path
+    .clean()
 }

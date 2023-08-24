@@ -7,7 +7,8 @@ use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Result};
 use aquadoggo::{AllowList, Configuration as NodeConfiguration, NetworkConfiguration};
-use clap::Parser;
+use clap::{crate_version, Parser};
+use colored::Colorize;
 use directories::ProjectDirs;
 use figment::providers::{Env, Format, Serialized, Toml};
 use figment::Figment;
@@ -15,6 +16,8 @@ use libp2p::multiaddr::Protocol;
 use libp2p::Multiaddr;
 use p2panda_rs::schema::SchemaId;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+use crate::utils::absolute_path;
 
 const WILDCARD: &str = "*";
 
@@ -57,11 +60,11 @@ pub fn load_config() -> Result<(ConfigFilePath, Configuration)> {
     Ok((config_file_path, config))
 }
 
-/// Command line arguments for user configuration.
+/// Configuration derived from command line arguments.
 ///
 /// All arguments are optional and don't get serialized to Figment when they're None. This is to
-/// assure that default values do not overwrite all previous settings, even when they haven't been
-/// set.
+/// assure that default values do not overwrite all previous settings, especially when they haven't
+/// been set.
 #[derive(Parser, Serialize, Debug)]
 #[command(
     name = "aquadoggo Node",
@@ -117,10 +120,10 @@ struct Cli {
     /// Set to true if our node should also function as a relay.
     #[arg(short = 'e', long, value_name = "BOOL")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    im_a_relay: Option<bool>,
+    relay_mode: Option<bool>,
 }
 
-/// Configuration for environment variables and .toml file.
+/// Configuration derived from environment variables and .toml file.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Configuration {
     pub supported_schema_ids: UncheckedAllowList,
@@ -133,7 +136,7 @@ pub struct Configuration {
     pub mdns: bool,
     pub direct_node_addresses: Vec<SocketAddr>,
     pub relay_address: Option<SocketAddr>,
-    pub im_a_relay: bool,
+    pub relay_mode: bool,
 }
 
 impl Default for Configuration {
@@ -149,7 +152,7 @@ impl Default for Configuration {
             mdns: true,
             direct_node_addresses: vec![],
             relay_address: None,
-            im_a_relay: false,
+            relay_mode: false,
         }
     }
 }
@@ -189,7 +192,7 @@ impl TryFrom<Configuration> for NodeConfiguration {
                     .into_iter()
                     .map(to_multiaddress)
                     .collect(),
-                im_a_relay: value.im_a_relay,
+                relay_mode: value.relay_mode,
                 relay_address: value.relay_address.map(to_multiaddress),
                 ..Default::default()
             },
@@ -223,6 +226,99 @@ fn try_determine_config_file_path() -> Option<PathBuf> {
         .iter()
         .find(|path| path.exists())
         .cloned()
+}
+
+pub fn print_config(path: ConfigFilePath, config: &NodeConfiguration) -> String {
+    println!(
+        r"                       ██████ ███████ ████
+                      ████████       ██████
+                      ██████            ███
+                       █████              ██
+                       █     ████      █████
+                      █     ██████   █ █████
+                     ██      ████   ███ █████
+                    █████         ██████    █
+                   ███████                ██
+                   █████████   █████████████
+                   ███████████      █████████
+                   █████████████████         ████
+              ██████    ███████████              ██
+          ██████████        █████                 █
+           █████████        ██          ███       ██
+             ██████        █            █           ██
+                ██       ██             ███████     ██
+              ███████████                      ██████
+████████     ████████████                   ██████
+████   ██████ ██████████            █   ████
+  █████████   ████████       ███    ███████
+    ████████             ██████    ████████
+█████████  ████████████████████████   ███
+█████████                      ██
+    "
+    );
+
+    println!("{} v{}\n", "aquadoggo".underline(), crate_version!());
+
+    match path {
+        Some(path) => {
+            println!(
+                "Loading config file from {}",
+                absolute_path(path).display().to_string().blue()
+            );
+        }
+        None => {
+            println!("No config file provided");
+        }
+    }
+
+    println!();
+    println!("{}\n", "Configuration".underline());
+
+    let supported_schema_ids: String = match &config.supported_schema_ids {
+        AllowList::Set(schema_ids) => {
+            String::from("\n")
+                + &schema_ids
+                    .iter()
+                    .map(|id| format!("• {id}"))
+                    .collect::<Vec<String>>()
+                    .join("\n")
+        }
+        AllowList::Wildcard => "support all incoming schemas (*)".into(),
+    };
+
+    let database_url = if config.database_url == "sqlite::memory:" {
+        "memory (data is not persisted)".into()
+    } else if config.database_url.contains("sqlite:") {
+        format!("SQLite: {}", config.database_url)
+    } else {
+        "PostgreSQL".into()
+    };
+
+    let mdns = if config.network.mdns {
+        "enabled"
+    } else {
+        "disabled"
+    };
+
+    let relay_mode = if config.network.relay_mode {
+        "enabled"
+    } else {
+        "disabled"
+    };
+
+    format!(
+        r"Supported Schema IDs: {}
+Database URL: {}
+mDNS: {}
+Relay Mode: {}
+
+Node is ready!
+",
+        supported_schema_ids.blue(),
+        database_url.blue(),
+        mdns.blue(),
+        relay_mode.blue(),
+    )
 }
 
 /// Helper struct to deserialize from either a wildcard string "*" or a list of string values.

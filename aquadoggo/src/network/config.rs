@@ -29,7 +29,7 @@ pub struct NetworkConfiguration {
     ///
     /// Relays _need_ to be hosted in a way where they can be reached directly, for example with a
     /// static IP address through an VPS.
-    pub im_a_relay: bool,
+    pub relay_mode: bool,
 
     /// Address of a peer which can act as a relay/rendezvous server.
     ///
@@ -97,7 +97,7 @@ impl Default for NetworkConfiguration {
             notify_handler_buffer_size: 128,
             per_connection_event_buffer_size: 8,
             quic_port: 2022,
-            im_a_relay: false,
+            relay_mode: false,
             relay_address: None,
         }
     }

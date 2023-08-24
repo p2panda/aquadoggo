@@ -166,4 +166,4 @@ direct_node_addresses = [
 # NOTE: Relays _need_ to be hosted in a way where they can be reached directly,
 # for example with a static IP address through an VPS.
 #
-im_a_relay = false
+relay_mode = false

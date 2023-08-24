@@ -188,6 +188,7 @@ dependencies = [
  "proptest",
  "proptest-derive",
  "rand 0.8.5",
+ "regex",
  "reqwest",
  "rstest 0.15.0",
  "rstest_reuse 0.3.0",
@@ -212,6 +213,7 @@ dependencies = [
  "anyhow",
  "aquadoggo",
  "clap",
+ "colored",
  "directories",
  "env_logger",
  "figment",
@@ -954,6 +956,17 @@ name = "colorchoice"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "acbf1af155f9b9ef647e42cdc158db4b64a1b61f743629225fde6f3e0be2a7c7"
+
+[[package]]
+name = "colored"
+version = "2.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2674ec482fbc38012cf31e6c42ba0177b431a0cb6f15fe40efa5aab1bda516f6"
+dependencies = [
+ "is-terminal",
+ "lazy_static",
+ "windows-sys",
+]
 
 [[package]]
 name = "concurrent-queue"

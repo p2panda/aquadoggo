@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::{bail, Result};
-use log::{debug, info};
+use log::{debug, info, trace};
 use p2panda_rs::schema::{Schema, SchemaId, SYSTEM_SCHEMAS};
 use p2panda_rs::Human;
 use tokio::sync::broadcast::{channel, Receiver, Sender};
@@ -51,7 +51,7 @@ impl SchemaProvider {
 
         let (tx, _) = channel(64);
 
-        debug!(
+        trace!(
             "Initialised schema provider:\n- {}",
             index
                 .values()

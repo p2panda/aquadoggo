@@ -8,6 +8,7 @@ mod service;
 mod shutdown;
 mod swarm;
 mod transport;
+pub mod utils;
 
 pub use config::NetworkConfiguration;
 pub use peers::{Peer, PeerMessage};
