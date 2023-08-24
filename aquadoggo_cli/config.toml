@@ -19,26 +19,28 @@
 # dependent on this data.
 #
 # It is recommended to set this list to all schema ids your own application
-# should support. Defaults to an empty list.
+# should support, including all important system schemas. For example:
 #
-# WARNING: When set empty, your node will support _all_ schema ids. This is
-# useful for experimentation and local development but _not_ recommended for
-# production settings.
+# supported_schema_ids = [
+#     # To discover new schema, set your node to replicate schema definition
+#     # documents by including these two built-in schema ids. Your node will now
+#     # search for and replicate schemas which have been published to the
+#     # network.
+#     "schema_definition_v1",
+#     "schema_field_definition_v1",
 #
-supported_schema_ids = [
-    # To discover new schema, set your node to replicate schema definition
-    # documents by including these two built-in schema ids. Your node will now
-    # search for and replicate schemas which have been published to the
-    # network.
-    # "schema_field_definition_v1",
-    # "schema_definition_v1",
-
-    # Once you discover new schemas and want to start replicating their
-    # documents, then add their schema ids to this list as well. It's also
-    # possible to load schema directly onto your node using the tool `fishy`:
-    # https://github.com/p2panda/fishy
-    # "example_0020a01fe...",
-]
+#     # Once you discover new schemas and want to start replicating their
+#     # documents, then add their schema ids to this list as well. It's also
+#     # possible to load or create schemas directly onto your node using the
+#     # tool `fishy`: https://github.com/p2panda/fishy
+#     "my_interesting_schema_0020a01fe...",
+# ]
+#
+# WARNING: When set to wildcard "*", your node will support _all_ schema ids it
+# will encounter on the network. This is useful for experimentation and local
+# development but _not_ recommended for production settings.
+#
+supported_schema_ids = "*"
 
 # ~~~~~~~~
 # Database

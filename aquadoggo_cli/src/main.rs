@@ -1,227 +1,61 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+mod config;
 mod key_pair;
 
-use std::fmt::Display;
-use std::net::{IpAddr, SocketAddr};
-use std::path::PathBuf;
+use std::convert::TryInto;
 
-use anyhow::Result;
-use aquadoggo::{AllowList, Configuration as NodeConfiguration, NetworkConfiguration, Node};
-use clap::{crate_version, Parser};
-use directories::ProjectDirs;
-use figment::providers::{Env, Format, Serialized, Toml};
-use figment::Figment;
-use libp2p::multiaddr::Protocol;
-use libp2p::Multiaddr;
-use p2panda_rs::schema::SchemaId;
-use p2panda_rs::Human;
-use serde::{Deserialize, Serialize};
+use anyhow::Context;
+use aquadoggo::Node;
+use clap::crate_version;
 
-const CONFIG_FILE_NAME: &str = "config.toml";
-const CONFIG_ENV_VAR_PREFIX: &str = "DOGGO_";
-
-/// Node server for the p2panda network.
-#[derive(Parser, Debug, Serialize, Deserialize)]
-#[command(name = "aquadoggo Node", version)]
-struct Configuration {
-    /// Path to config.toml file.
-    #[arg(short = 'c', long)]
-    config: Option<PathBuf>,
-
-    /// List of schema ids which a node will replicate and expose on the GraphQL API.
-    #[arg(short = 's', long)]
-    supported_schema_ids: Vec<SchemaId>,
-
-    /// URL / connection string to PostgreSQL or SQLite database.
-    #[arg(short = 'd', long, default_value = "sqlite::memory:")]
-    database_url: String,
-
-    /// Maximum number of connections that the database pool should maintain.
-    #[arg(long, default_value_t = 32)]
-    database_max_connections: u32,
-
-    /// Number of concurrent workers, defines the maximum of materialization tasks which can be
-    /// worked on simultaneously.
-    #[arg(long, default_value_t = 16)]
-    worker_pool_size: u32,
-
-    /// HTTP port for client-node communication, serving the GraphQL API.
-    #[arg(short = 'p', long, default_value_t = 2020)]
-    http_port: u16,
-
-    /// QUIC port for node-node communication and data replication.
-    #[arg(short = 'q', long, default_value_t = 2022)]
-    quic_port: u16,
-
-    /// Path to persist your ed25519 private key file.
-    #[arg(short = 'k', long)]
-    private_key: Option<PathBuf>,
-
-    /// mDNS to discover other peers on the local network.
-    #[arg(short = 'm', long, default_value_t = true)]
-    mdns: bool,
-
-    /// List of known node addresses (IP + port) we want to connect to directly.
-    #[arg(short = 'n', long)]
-    direct_node_addresses: Vec<SocketAddr>,
-
-    /// Address of relay.
-    #[arg(short = 'r', long)]
-    relay_address: Option<SocketAddr>,
-
-    /// Set to true if our node should also function as a relay. Defaults to false.
-    #[arg(short = 'e', long, default_value_t = false)]
-    im_a_relay: bool,
-}
-
-impl Display for Configuration {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            self.config
-                .as_ref()
-                .map_or("No config file provided".into(), |ref path| format!(
-                    "Loading config file from {}",
-                    path.display()
-                ))
-        )?;
-
-        write!(f, "\n\n")?;
-
-        // @TODO: Nicer printing of all values
-        write!(f, "Schemas\n")?;
-        write!(
-            f,
-            "{:<20} {:<20}\n",
-            "supported_schema_ids",
-            self.supported_schema_ids
-                .iter()
-                .map(|id| id.display())
-                .collect::<Vec<String>>()
-                .join(", ")
-        )
-    }
-}
-
-impl From<Configuration> for NodeConfiguration {
-    fn from(cli: Configuration) -> Self {
-        let supported_schema_ids = if cli.supported_schema_ids.is_empty() {
-            AllowList::Wildcard
-        } else {
-            AllowList::Set(cli.supported_schema_ids)
-        };
-
-        NodeConfiguration {
-            database_url: cli.database_url,
-            database_max_connections: cli.database_max_connections,
-            http_port: cli.http_port,
-            worker_pool_size: cli.worker_pool_size,
-            supported_schema_ids,
-            network: NetworkConfiguration {
-                quic_port: cli.quic_port,
-                mdns: cli.mdns,
-                direct_node_addresses: cli
-                    .direct_node_addresses
-                    .into_iter()
-                    .map(to_multiaddress)
-                    .collect(),
-                im_a_relay: cli.im_a_relay,
-                relay_address: cli.relay_address.map(to_multiaddress),
-                ..Default::default()
-            },
-        }
-    }
-}
-
-fn to_multiaddress(socket_address: SocketAddr) -> Multiaddr {
-    let mut multiaddr = match socket_address.ip() {
-        IpAddr::V4(ip) => Multiaddr::from(Protocol::Ip4(ip)),
-        IpAddr::V6(ip) => Multiaddr::from(Protocol::Ip6(ip)),
-    };
-    multiaddr.push(Protocol::Udp(socket_address.port()));
-    multiaddr.push(Protocol::QuicV1);
-    multiaddr
-}
-
-fn try_determine_config_file_path() -> Option<PathBuf> {
-    // Find config file in current folder
-    let mut current_dir = std::env::current_dir().expect("Could not determine current directory");
-    current_dir.push(CONFIG_FILE_NAME);
-
-    // Find config file in XDG config folder
-    let mut xdg_config_dir: PathBuf = ProjectDirs::from("", "", "aquadoggo")
-        .expect("Could not determine valid config directory path from operating system")
-        .config_dir()
-        .to_path_buf();
-    xdg_config_dir.push(CONFIG_FILE_NAME);
-
-    [current_dir, xdg_config_dir]
-        .iter()
-        .find(|path| path.exists())
-        .cloned()
-}
-
-fn load_config() -> Result<Configuration, figment::Error> {
-    // Parse command line arguments first
-    let mut cli = Configuration::parse();
-
-    // Determine if a config file path was provided or if we should look for it in common locations
-    cli.config = if cli.config.is_some() {
-        cli.config.clone()
-    } else {
-        try_determine_config_file_path()
-    };
-
-    // Get configuration from .toml file (optional), environment variable and command line
-    // arguments
-    let mut figment = Figment::new();
-
-    if let Some(path) = &cli.config {
-        figment = figment.merge(Toml::file(path));
-    }
-
-    // @TODO: Fix not overriding values when empty array was set
-    figment
-        .merge(Env::prefixed(CONFIG_ENV_VAR_PREFIX))
-        .merge(Serialized::defaults(cli))
-        .extract()
-}
+use crate::config::load_config;
+use crate::key_pair::{generate_ephemeral_key_pair, generate_or_load_key_pair};
 
 #[tokio::main]
-async fn main() {
+async fn main() -> anyhow::Result<()> {
     env_logger::init();
 
-    match load_config() {
-        Ok(config) => {
-            println!("aquadoggo v{}\n\n{:?}", crate_version!(), config);
+    // Load configuration from command line arguments, environment variables and .toml file
+    let (config_file_path, config) = load_config().context("Could not load configuration")?;
 
-            // @TODO: Create folders when paths for db or key was set
-            let key_pair = match &config.private_key {
-                Some(path) => key_pair::generate_or_load_key_pair(path.clone())
-                    .expect("Could not load private key from file"),
-                None => key_pair::generate_ephemeral_key_pair(),
-            };
+    // Convert to `aquadoggo` configuration format and check for invalid inputs
+    let node_config = config
+        .clone()
+        .try_into()
+        .context("Could not load configuration")?;
 
-            // Start p2panda node in async runtime
-            let node = Node::start(key_pair, config.into()).await;
+    // @TODO: Create folders when paths for db or key was set
+    let key_pair = match &config.private_key {
+        Some(path) => generate_or_load_key_pair(path.clone())
+            .context("Could not load private key from file")?,
+        None => generate_ephemeral_key_pair(),
+    };
 
-            // Run this until [CTRL] + [C] got pressed or something went wrong
-            tokio::select! {
-                _ = tokio::signal::ctrl_c() => (),
-                _ = node.on_exit() => (),
-            }
-
-            // Wait until all tasks are gracefully shut down and exit
-            node.shutdown().await;
+    // Show configuration info to the user
+    println!("aquadoggo v{}\n", crate_version!());
+    match config_file_path {
+        Some(path) => {
+            println!("Loading config file from {}", path.display());
         }
-        Err(error) => {
-            println!("Failed loading configuration:");
-
-            for error in error {
-                println!("- {}", error);
-            }
+        None => {
+            println!("No config file provided");
         }
     }
+    // @TODO: Improve print
+    println!("{:?}", config);
+
+    // Start p2panda node in async runtime
+    let node = Node::start(key_pair, node_config).await;
+
+    // Run this until [CTRL] + [C] got pressed or something went wrong
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => (),
+        _ = node.on_exit() => (),
+    }
+
+    // Wait until all tasks are gracefully shut down and exit
+    node.shutdown().await;
+
+    Ok(())
 }

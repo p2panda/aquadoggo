@@ -1,0 +1,271 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+use std::convert::TryFrom;
+use std::net::{IpAddr, SocketAddr};
+use std::path::PathBuf;
+use std::str::FromStr;
+
+use anyhow::{anyhow, bail, Result};
+use aquadoggo::{AllowList, Configuration as NodeConfiguration, NetworkConfiguration};
+use clap::Parser;
+use directories::ProjectDirs;
+use figment::providers::{Env, Format, Serialized, Toml};
+use figment::Figment;
+use libp2p::multiaddr::Protocol;
+use libp2p::Multiaddr;
+use p2panda_rs::schema::SchemaId;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+const CONFIG_FILE_NAME: &str = "config.toml";
+
+type ConfigFilePath = Option<PathBuf>;
+
+/// Get configuration from 1. .toml file, 2. environment variables and 3. command line arguments
+/// (in that order, meaning that later configuration sources take precedence over the earlier
+/// ones).
+///
+/// Returns a partly unchecked configuration object which results from all of these sources. It
+/// still needs to be converted for aquadoggo as it might still contain invalid values.
+pub fn load_config() -> Result<(ConfigFilePath, Configuration)> {
+    // Parse command line arguments first to get optional config file path
+    let cli = Cli::parse();
+
+    // Determine if a config file path was provided or if we should look for it in common locations
+    let config_file_path: ConfigFilePath = match &cli.config {
+        Some(path) => {
+            if !path.exists() {
+                bail!("Config file '{}' does not exist", path.display());
+            }
+
+            Some(path.clone())
+        }
+        None => try_determine_config_file_path(),
+    };
+
+    let mut figment = Figment::from(Serialized::defaults(Configuration::default()));
+    if let Some(path) = &config_file_path {
+        figment = figment.merge(Toml::file(path));
+    }
+
+    let config = figment
+        .merge(Env::raw())
+        .merge(Serialized::defaults(cli))
+        .extract()?;
+
+    Ok((config_file_path, config))
+}
+
+/// Command line arguments for user configuration.
+///
+/// All arguments are optional and don't get serialized to Figment when they're None. This is to
+/// assure that default values do not overwrite all previous settings, even when they haven't been
+/// set.
+#[derive(Parser, Serialize, Debug)]
+#[command(
+    name = "aquadoggo Node",
+    about = "Node server for the p2panda network",
+    version
+)]
+struct Cli {
+    /// Path to a config.toml file.
+    #[arg(short = 'c', long, value_name = "PATH")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    config: Option<PathBuf>,
+
+    /// List of schema ids which a node will replicate and expose on the GraphQL API.
+    #[arg(short = 's', long, value_name = "SCHEMA_ID SCHEMA_ID, ...", num_args = 0..)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    supported_schema_ids: Option<Vec<SchemaId>>,
+
+    /// URL / connection string to PostgreSQL or SQLite database.
+    #[arg(short = 'd', long, value_name = "CONNECTION_STRING")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    database_url: Option<String>,
+
+    /// HTTP port for client-node communication, serving the GraphQL API.
+    #[arg(short = 'p', long, value_name = "PORT")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    http_port: Option<u16>,
+
+    /// QUIC port for node-node communication and data replication.
+    #[arg(short = 'q', long, value_name = "PORT")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    quic_port: Option<u16>,
+
+    /// Path to persist your ed25519 private key file.
+    #[arg(short = 'k', long, value_name = "PATH")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    private_key: Option<PathBuf>,
+
+    /// mDNS to discover other peers on the local network.
+    #[arg(short = 'm', long, value_name = "BOOL")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mdns: Option<bool>,
+
+    /// List of known node addresses we want to connect to directly.
+    #[arg(short = 'n', long, value_name = "IP:PORT IP:PORT, ...", num_args = 0..)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    direct_node_addresses: Option<Vec<SocketAddr>>,
+
+    /// Address of relay.
+    #[arg(short = 'r', long, value_name = "IP:PORT")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    relay_address: Option<SocketAddr>,
+
+    /// Set to true if our node should also function as a relay.
+    #[arg(short = 'e', long, value_name = "BOOL")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    im_a_relay: Option<bool>,
+}
+
+/// Configuration for environment variables and .toml file.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Configuration {
+    pub supported_schema_ids: UncheckedAllowList,
+    pub database_url: String,
+    pub database_max_connections: u32,
+    pub worker_pool_size: u32,
+    pub http_port: u16,
+    pub quic_port: u16,
+    pub private_key: Option<PathBuf>,
+    pub mdns: bool,
+    pub direct_node_addresses: Vec<SocketAddr>,
+    pub relay_address: Option<SocketAddr>,
+    pub im_a_relay: bool,
+}
+
+impl Default for Configuration {
+    fn default() -> Self {
+        Self {
+            supported_schema_ids: UncheckedAllowList::Set(vec![]),
+            database_url: "sqlite::memory:".into(),
+            database_max_connections: 32,
+            worker_pool_size: 16,
+            http_port: 2020,
+            quic_port: 2022,
+            private_key: None,
+            mdns: true,
+            direct_node_addresses: vec![],
+            relay_address: None,
+            im_a_relay: false,
+        }
+    }
+}
+
+impl TryFrom<Configuration> for NodeConfiguration {
+    type Error = anyhow::Error;
+
+    fn try_from(value: Configuration) -> Result<Self, Self::Error> {
+        // Check if given schema ids are valid
+        let supported_schema_ids = match value.supported_schema_ids {
+            UncheckedAllowList::Wildcard => AllowList::<SchemaId>::Wildcard,
+            UncheckedAllowList::Set(str_values) => {
+                let schema_ids: Result<Vec<SchemaId>, anyhow::Error> = str_values
+                    .iter()
+                    .map(|str_value| {
+                        SchemaId::from_str(str_value).map_err(|_| {
+                            anyhow!("Invalid schema id '{str_value}' found in 'supported_schema_ids' list")
+                        })
+                    })
+                    .collect();
+
+                AllowList::Set(schema_ids?)
+            }
+        };
+
+        Ok(NodeConfiguration {
+            database_url: value.database_url,
+            database_max_connections: value.database_max_connections,
+            http_port: value.http_port,
+            worker_pool_size: value.worker_pool_size,
+            supported_schema_ids,
+            network: NetworkConfiguration {
+                quic_port: value.quic_port,
+                mdns: value.mdns,
+                direct_node_addresses: value
+                    .direct_node_addresses
+                    .into_iter()
+                    .map(to_multiaddress)
+                    .collect(),
+                im_a_relay: value.im_a_relay,
+                relay_address: value.relay_address.map(to_multiaddress),
+                ..Default::default()
+            },
+        })
+    }
+}
+
+fn to_multiaddress(socket_address: SocketAddr) -> Multiaddr {
+    let mut multiaddr = match socket_address.ip() {
+        IpAddr::V4(ip) => Multiaddr::from(Protocol::Ip4(ip)),
+        IpAddr::V6(ip) => Multiaddr::from(Protocol::Ip6(ip)),
+    };
+    multiaddr.push(Protocol::Udp(socket_address.port()));
+    multiaddr.push(Protocol::QuicV1);
+    multiaddr
+}
+
+fn try_determine_config_file_path() -> Option<PathBuf> {
+    // Find config file in current folder
+    let mut current_dir = std::env::current_dir().expect("Could not determine current directory");
+    current_dir.push(CONFIG_FILE_NAME);
+
+    // Find config file in XDG config folder
+    let mut xdg_config_dir: PathBuf = ProjectDirs::from("", "", "aquadoggo")
+        .expect("Could not determine valid config directory path from operating system")
+        .config_dir()
+        .to_path_buf();
+    xdg_config_dir.push(CONFIG_FILE_NAME);
+
+    [current_dir, xdg_config_dir]
+        .iter()
+        .find(|path| path.exists())
+        .cloned()
+}
+
+const WILDCARD: &'static str = "*";
+
+#[derive(Debug, Clone)]
+pub enum UncheckedAllowList {
+    Wildcard,
+    Set(Vec<String>),
+}
+
+impl Serialize for UncheckedAllowList {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            UncheckedAllowList::Wildcard => serializer.serialize_str(WILDCARD),
+            UncheckedAllowList::Set(list) => list.serialize(serializer),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for UncheckedAllowList {
+    fn deserialize<D>(deserializer: D) -> Result<UncheckedAllowList, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Value<T> {
+            String(String),
+            Vec(Vec<T>),
+        }
+
+        let value = Value::deserialize(deserializer)?;
+
+        match value {
+            Value::String(str_value) => {
+                if str_value == WILDCARD {
+                    Ok(UncheckedAllowList::Wildcard)
+                } else {
+                    Err(serde::de::Error::custom("only wildcard strings allowed"))
+                }
+            }
+            Value::Vec(vec) => Ok(UncheckedAllowList::Set(vec)),
+        }
+    }
+}

@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::str::FromStr;
+
+use anyhow::bail;
 use p2panda_rs::schema::SchemaId;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::network::NetworkConfiguration;
 
@@ -52,6 +56,8 @@ impl Default for Configuration {
     }
 }
 
+const WILDCARD: &'static str = "*";
+
 /// Set a configuration value to either allow a defined set of elements or to a wildcard (*).
 #[derive(Debug, Clone)]
 pub enum AllowList<T> {
@@ -62,8 +68,66 @@ pub enum AllowList<T> {
     Set(Vec<T>),
 }
 
+impl<T> FromStr for AllowList<T> {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s == WILDCARD {
+            Ok(Self::Wildcard)
+        } else {
+            bail!("only wildcard strings allowed")
+        }
+    }
+}
+
 impl<T> Default for AllowList<T> {
     fn default() -> Self {
         Self::Wildcard
+    }
+}
+
+impl<T> Serialize for AllowList<T>
+where
+    T: Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            AllowList::Wildcard => serializer.serialize_str(WILDCARD),
+            AllowList::Set(list) => list.serialize(serializer),
+        }
+    }
+}
+
+impl<'de, T> Deserialize<'de> for AllowList<T>
+where
+    T: Deserialize<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<AllowList<T>, D::Error>
+    where
+        D: Deserializer<'de>,
+        T: Deserialize<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Value<T> {
+            String(String),
+            Vec(Vec<T>),
+        }
+
+        let value = Value::deserialize(deserializer)?;
+
+        match value {
+            Value::String(str_value) => {
+                if str_value == WILDCARD {
+                    Ok(AllowList::Wildcard)
+                } else {
+                    Err(serde::de::Error::custom("only wildcard strings allowed"))
+                }
+            }
+            Value::Vec(vec) => Ok(AllowList::Set(vec)),
+        }
     }
 }
