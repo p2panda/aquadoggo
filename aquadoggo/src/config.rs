@@ -7,10 +7,18 @@ use crate::network::NetworkConfiguration;
 /// Configuration object holding all important variables throughout the application.
 #[derive(Debug, Clone)]
 pub struct Configuration {
-    /// List of schema ids which a node will replicate and expose on the GraphQL API.
+    /// List of schema ids which a node will replicate, persist and expose on the GraphQL API.
     ///
     /// When allowing a schema you automatically opt into announcing, replicating and materializing
-    /// documents connected to it, supporting applications which are dependent on this data.
+    /// documents connected to it, supporting applications and networks which are dependent on this
+    /// data.
+    ///
+    /// It is recommended to set this list to all schema ids your own application should support,
+    /// including all important system schemas.
+    ///
+    /// **Warning**: When set to `AllowList::Wildcard`, your node will support _any_ schemas it
+    /// will encounter on the network. This is useful for experimentation and local development but
+    /// _not_ recommended for production settings.
     pub allow_schema_ids: AllowList<SchemaId>,
 
     /// URL / connection string to PostgreSQL or SQLite database.
