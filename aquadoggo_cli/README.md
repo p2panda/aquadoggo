@@ -24,7 +24,8 @@
 
 <br/>
 
-Configurable node implementation for the [`p2panda`] network.
+Configurable node for the [`p2panda`] network, which runs as a command line
+application on any computer, raspberry pi or server.
 
 ## Install
 
