@@ -340,18 +340,23 @@ impl ConnectionManager {
             .expect("Announcement state needs to be set with 'update_announcement'")
             .supported_schema_ids;
 
+        // De-duplicate peer connections based on peer ids as we only need to pick one connection
+        // per peer.
+        let mut dedup_peers: HashMap<PeerId, (Peer, PeerStatus)> = HashMap::new();
+        for (peer, peer_status) in self.peers.iter() {
+            dedup_peers.insert(peer.id(), (*peer, peer_status.to_owned()));
+        }
+
         // Iterate through all currently connected peers
-        let mut attempt_peers: Vec<(Peer, TargetSet)> = self
-            .peers
-            .clone()
-            .into_iter()
+        let mut attempt_peers: Vec<(Peer, TargetSet)> = dedup_peers
+            .values()
             .filter_map(|(peer, status)| {
                 let sessions = self.sync_manager.get_sessions(&peer);
 
                 // 1. Did we already receive this peers announcement state? If not we can't do
                 //    anything yet and need to wait.
                 let remote_supported_schema_ids: TargetSet =
-                    if let Some(announcement) = status.announcement {
+                    if let Some(announcement) = status.clone().announcement {
                         announcement.supported_schema_ids
                     } else {
                         return None;
@@ -381,7 +386,7 @@ impl ConnectionManager {
                     .any(|session| session.target_set() == target_set);
 
                 if active_sessions.len() < MAX_SESSIONS_PER_PEER && !has_active_target_set_session {
-                    Some((peer, target_set))
+                    Some((peer.clone(), target_set))
                 } else {
                     None
                 }
