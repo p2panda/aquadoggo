@@ -198,9 +198,12 @@ where
 {
     match list {
         Some(list) => {
-            // Wildcard symbol comes in form of an array ["*"], convert it to just a string "*"
             if list.len() == 1 && list[0] == WILDCARD {
+                // Wildcard symbol comes in form of an array ["*"], convert it to just a string "*"
                 serializer.serialize_str(WILDCARD)
+            } else if list.len() == 1 && list[0].is_empty() {
+                // Empty string should not lead to [""] but to an empty array []
+                Vec::<Vec<String>>::new().serialize(serializer)
             } else {
                 list.serialize(serializer)
             }
