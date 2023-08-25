@@ -3,7 +3,6 @@
 use std::time::Duration;
 
 use anyhow::Result;
-use futures::stream::All;
 use libp2p::identity::Keypair;
 use libp2p::swarm::behaviour::toggle::Toggle;
 use libp2p::swarm::NetworkBehaviour;
@@ -169,14 +168,15 @@ impl P2pandaBehaviour {
         // Always create behaviour to manage peer connections and handle p2panda messaging
         let peers = peers::Behaviour::new();
 
-        let allowed_peers = if let Some(allowed_peer_ids) = &network_config.allowed_peers {
-            let mut allowed_peers = allow_block_list::Behaviour::default();
-            for peer_id in allowed_peer_ids {
-                allowed_peers.allow_peer(*peer_id)
+        let allowed_peers = match &network_config.allow_peer_ids {
+            crate::AllowList::Wildcard => None,
+            crate::AllowList::Set(allow_peer_ids) => {
+                let mut allowed_peers = allow_block_list::Behaviour::default();
+                for peer_id in allow_peer_ids {
+                    allowed_peers.allow_peer(*peer_id)
+                }
+                Some(allowed_peers)
             }
-            Some(allowed_peers)
-        } else {
-            None
         };
 
         Ok(Self {

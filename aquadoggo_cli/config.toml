@@ -140,6 +140,17 @@ direct_node_addresses = [
     # "192.0.2.2:3000",
 ]
 
+# List of peers which can connect to our node.
+#
+# If set then only peers (identified by their peer id) contained in this list will be able
+# to connect to our node (via a relay or directly). When not set then there are no
+# restrictions on which nodes can connect to ours.
+#
+# WARNING: When set to wildcard "*", your node will accept connections requests from any peers.
+# This is useful for experimentation and local development or settings where access to the network
+# is secured via other means.
+allow_peer_ids = "*"
+
 # ﾟ･｡+☆
 # RELAY
 # ﾟ･｡+☆

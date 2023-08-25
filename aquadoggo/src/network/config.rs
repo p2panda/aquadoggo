@@ -2,13 +2,14 @@
 
 use libp2p::Multiaddr;
 use libp2p::{connection_limits::ConnectionLimits, PeerId};
-use serde::{Deserialize, Serialize};
+
+use crate::AllowList;
 
 /// The namespace used by the `identify` network behaviour.
 pub const NODE_NAMESPACE: &str = "aquadoggo";
 
 /// Network config for the node.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone)]
 pub struct NetworkConfiguration {
     /// QUIC port for node-to-node communication.
     pub quic_port: u16,
@@ -42,7 +43,12 @@ pub struct NetworkConfiguration {
     /// and register our IP address for other peers.
     pub relay_addresses: Vec<Multiaddr>,
 
-    pub allowed_peers: Option<Vec<PeerId>>,
+    /// List of peers which can connect to our node.
+    ///
+    /// If set then only peers (identified by their peer id) contained in this list will be able
+    /// to connect to our node (via a relay or directly). When not set then there are no
+    /// restrictions on which nodes can connect to ours.
+    pub allow_peer_ids: AllowList<PeerId>,
 
     /// Notify handler buffer size.
     ///
@@ -101,7 +107,7 @@ impl Default for NetworkConfiguration {
             quic_port: 2022,
             relay_mode: false,
             relay_addresses: Vec::new(),
-            allowed_peers: None,
+            allow_peer_ids: AllowList::<PeerId>::Wildcard,
         }
     }
 }

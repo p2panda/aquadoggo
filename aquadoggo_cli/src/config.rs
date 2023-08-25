@@ -170,9 +170,10 @@ struct Cli {
     #[serde(skip_serializing_if = "Option::is_none")]
     relay_addresses: Option<Vec<SocketAddr>>,
 
+    /// List of peers this node will accept connections with.
     #[arg(short = 'a', long, value_name = "PEER_ID PEER_ID, ...", num_args = 0..)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    allowed_peers: Option<Vec<PeerId>>,
+    allow_peer_ids: Option<Vec<PeerId>>,
 
     /// Enable if node should also function as a relay. Disabled by default.
     ///
@@ -230,7 +231,7 @@ pub struct Configuration {
     pub direct_node_addresses: Vec<SocketAddr>,
     pub relay_addresses: Vec<SocketAddr>,
     pub relay_mode: bool,
-    pub allowed_peers: Option<Vec<PeerId>>,
+    pub allow_peer_ids: UncheckedAllowList,
 }
 
 impl Default for Configuration {
@@ -247,7 +248,7 @@ impl Default for Configuration {
             direct_node_addresses: vec![],
             relay_addresses: vec![],
             relay_mode: false,
-            allowed_peers: None,
+            allow_peer_ids: UncheckedAllowList::Wildcard,
         }
     }
 }
@@ -275,6 +276,23 @@ impl TryFrom<Configuration> for NodeConfiguration {
             }
         };
 
+        // Check if given schema ids are valid
+        let allow_peer_ids = match value.allow_peer_ids {
+            UncheckedAllowList::Wildcard => AllowList::<PeerId>::Wildcard,
+            UncheckedAllowList::Set(str_values) => {
+                let peer_ids: Result<Vec<PeerId>, anyhow::Error> = str_values
+                    .iter()
+                    .map(|str_value| {
+                        PeerId::from_str(str_value).map_err(|_| {
+                            anyhow!("Invalid peer id '{str_value}' found in 'allow_peer_ids' list")
+                        })
+                    })
+                    .collect();
+
+                AllowList::Set(peer_ids?)
+            }
+        };
+
         Ok(NodeConfiguration {
             database_url: value.database_url,
             database_max_connections: value.database_max_connections,
@@ -295,7 +313,7 @@ impl TryFrom<Configuration> for NodeConfiguration {
                     .into_iter()
                     .map(to_multiaddress)
                     .collect(),
-                allowed_peers: value.allowed_peers,
+                allow_peer_ids,
                 ..Default::default()
             },
         })
