@@ -43,8 +43,8 @@
 
 <br/>
 
-Configurable node server implementation for the [`p2panda`] network which can
-be embedded inside your Rust program.
+Configurable node implementation for the [`p2panda`] network which can be
+embedded inside your Rust program.
 
 > The core p2panda [`specification`] is fully functional but still under review so
 > please be prepared for breaking API changes until we reach v1.0. Currently no

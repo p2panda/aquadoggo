@@ -67,8 +67,8 @@ pub fn load_config() -> Result<(ConfigFilePath, Configuration)> {
 /// been set.
 #[derive(Parser, Serialize, Debug)]
 #[command(
-    name = "aquadoggo Node",
-    about = "Node server for the p2panda network",
+    name = "aquadoggo",
+    about = "Node for the p2panda network",
     long_about = None,
     version
 )]
