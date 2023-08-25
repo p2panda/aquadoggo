@@ -253,16 +253,16 @@ pub struct Configuration {
     pub allow_schema_ids: UncheckedAllowList,
     pub database_url: String,
     pub database_max_connections: u32,
-    pub worker_pool_size: u32,
     pub http_port: u16,
     pub quic_port: u16,
     pub private_key: Option<PathBuf>,
     pub mdns: bool,
     pub direct_node_addresses: Vec<SocketAddr>,
-    pub relay_addresses: Vec<SocketAddr>,
-    pub relay_mode: bool,
     pub allow_peer_ids: UncheckedAllowList,
     pub block_peer_ids: Vec<PeerId>,
+    pub relay_addresses: Vec<SocketAddr>,
+    pub relay_mode: bool,
+    pub worker_pool_size: u32,
 }
 
 impl Default for Configuration {
@@ -271,16 +271,16 @@ impl Default for Configuration {
             allow_schema_ids: UncheckedAllowList::Wildcard,
             database_url: "sqlite::memory:".into(),
             database_max_connections: 32,
-            worker_pool_size: 16,
             http_port: 2020,
             quic_port: 2022,
-            private_key: None,
             mdns: true,
+            private_key: None,
             direct_node_addresses: vec![],
-            relay_addresses: vec![],
-            relay_mode: false,
             allow_peer_ids: UncheckedAllowList::Wildcard,
             block_peer_ids: Vec::new(),
+            relay_addresses: vec![],
+            relay_mode: false,
+            worker_pool_size: 16,
         }
     }
 }
@@ -326,11 +326,11 @@ impl TryFrom<Configuration> for NodeConfiguration {
         };
 
         Ok(NodeConfiguration {
+            allow_schema_ids,
             database_url: value.database_url,
             database_max_connections: value.database_max_connections,
             http_port: value.http_port,
             worker_pool_size: value.worker_pool_size,
-            allow_schema_ids,
             network: NetworkConfiguration {
                 quic_port: value.quic_port,
                 mdns: value.mdns,
@@ -339,14 +339,14 @@ impl TryFrom<Configuration> for NodeConfiguration {
                     .into_iter()
                     .map(to_multiaddress)
                     .collect(),
-                relay_mode: value.relay_mode,
+                allow_peer_ids,
+                block_peer_ids: value.block_peer_ids,
                 relay_addresses: value
                     .relay_addresses
                     .into_iter()
                     .map(to_multiaddress)
                     .collect(),
-                allow_peer_ids,
-                block_peer_ids: value.block_peer_ids,
+                relay_mode: value.relay_mode,
                 ..Default::default()
             },
         })

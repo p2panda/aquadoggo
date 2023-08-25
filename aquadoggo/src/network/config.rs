@@ -25,24 +25,6 @@ pub struct NetworkConfiguration {
     /// use at least one relay.
     pub direct_node_addresses: Vec<Multiaddr>,
 
-    /// Set to true if node should also function as a relay. Other nodes can use relays to aid
-    /// discovery and establishing connectivity.
-    ///
-    /// Relays _need_ to be hosted in a way where they can be reached directly, for example with a
-    /// static IP address through an VPS.
-    pub relay_mode: bool,
-
-    /// Addresses of a peers which can act as a relay/rendezvous server.
-    ///
-    /// Relays help discover other nodes on the internet (also known as "rendesvouz" or "bootstrap"
-    /// server) and help establishing direct p2p connections when node is behind a firewall or NAT
-    /// (also known as "holepunching").
-    ///
-    /// When a direct connection is not possible the relay will help to redirect the (encrypted)
-    /// traffic as an intermediary between us and other nodes. The node will contact each server
-    /// and register our IP address for other peers.
-    pub relay_addresses: Vec<Multiaddr>,
-
     /// List of peers which can connect to our node.
     ///
     /// If set then only peers (identified by their peer id) contained in this list will be able
@@ -56,6 +38,24 @@ pub struct NetworkConfiguration {
     /// to connect to our node (via a relay or directly). When not set then there are no
     /// restrictions on which nodes can connect to ours.
     pub block_peer_ids: Vec<PeerId>,
+
+    /// Addresses of a peers which can act as a relay/rendezvous server.
+    ///
+    /// Relays help discover other nodes on the internet (also known as "rendesvouz" or "bootstrap"
+    /// server) and help establishing direct p2p connections when node is behind a firewall or NAT
+    /// (also known as "holepunching").
+    ///
+    /// When a direct connection is not possible the relay will help to redirect the (encrypted)
+    /// traffic as an intermediary between us and other nodes. The node will contact each server
+    /// and register our IP address for other peers.
+    pub relay_addresses: Vec<Multiaddr>,
+
+    /// Set to true if node should also function as a relay. Other nodes can use relays to aid
+    /// discovery and establishing connectivity.
+    ///
+    /// Relays _need_ to be hosted in a way where they can be reached directly, for example with a
+    /// static IP address through an VPS.
+    pub relay_mode: bool,
 
     /// Notify handler buffer size.
     ///
@@ -101,21 +101,21 @@ pub struct NetworkConfiguration {
 impl Default for NetworkConfiguration {
     fn default() -> Self {
         Self {
+            quic_port: 2022,
+            mdns: true,
+            direct_node_addresses: Vec::new(),
+            allow_peer_ids: AllowList::<PeerId>::Wildcard,
+            block_peer_ids: Vec::new(),
+            relay_addresses: Vec::new(),
+            relay_mode: false,
+            notify_handler_buffer_size: 128,
+            per_connection_event_buffer_size: 8,
             dial_concurrency_factor: 8,
             max_connections_in: 16,
             max_connections_out: 16,
             max_connections_pending_in: 8,
             max_connections_pending_out: 8,
             max_connections_per_peer: 8,
-            mdns: true,
-            direct_node_addresses: Vec::new(),
-            notify_handler_buffer_size: 128,
-            per_connection_event_buffer_size: 8,
-            quic_port: 2022,
-            relay_mode: false,
-            relay_addresses: Vec::new(),
-            allow_peer_ids: AllowList::<PeerId>::Wildcard,
-            block_peer_ids: Vec::new(),
         }
     }
 }
