@@ -20,6 +20,8 @@ pub fn now() -> u64 {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Announcement {
     /// This contains a list of schema ids this peer allowed to support.
+    // @TODO: `TargetSet` is not a good name anymore in this context. See related issue:
+    // https://github.com/p2panda/aquadoggo/issues/527
     pub supported_schema_ids: TargetSet,
 
     /// Timestamp of this announcement. Helps to understand if we can override the previous
@@ -142,13 +144,13 @@ mod tests {
     use p2panda_rs::serde::{deserialize_into, serialize_from, serialize_value};
     use rstest::rstest;
 
-    use crate::replication::SchemaIdSet;
+    use crate::replication::TargetSet;
     use crate::test_utils::helpers::random_target_set;
 
     use super::{Announcement, AnnouncementMessage};
 
     #[rstest]
-    fn serialize(#[from(random_target_set)] supported_schema_ids: SchemaIdSet) {
+    fn serialize(#[from(random_target_set)] supported_schema_ids: TargetSet) {
         let announcement = Announcement::new(supported_schema_ids.clone());
         assert_eq!(
             serialize_from(AnnouncementMessage::new(announcement.clone())),
@@ -157,7 +159,7 @@ mod tests {
     }
 
     #[rstest]
-    fn deserialize(#[from(random_target_set)] supported_schema_ids: SchemaIdSet) {
+    fn deserialize(#[from(random_target_set)] supported_schema_ids: TargetSet) {
         assert_eq!(
             deserialize_into::<AnnouncementMessage>(&serialize_value(cbor!([
                 0,
