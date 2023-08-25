@@ -12,7 +12,7 @@ use libp2p::swarm::{
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, Stream as NegotiatedStream,
     SubstreamProtocol,
 };
-use log::warn;
+use log::trace;
 use thiserror::Error;
 
 use crate::network::peers::{Codec, CodecError, PeerMessage, Protocol};
@@ -294,7 +294,7 @@ impl ConnectionHandler for Handler {
                             ));
                         }
                         Poll::Ready(Some(Err(err))) => {
-                            warn!("Error decoding inbound message: {err}");
+                            trace!("Error decoding inbound message: {err}");
 
                             // Close this side of the stream. If the peer is still around, they
                             // will re-establish their connection
@@ -320,7 +320,7 @@ impl ConnectionHandler for Handler {
                                 // Don't close the connection but just drop the inbound substream.
                                 // In case the remote has more to send, they will open up a new
                                 // substream.
-                                warn!("Error during closing inbound connection: {err}")
+                                trace!("Error during closing inbound connection: {err}")
                             }
                             self.inbound_substream = None;
                             break;
@@ -373,14 +373,14 @@ impl ConnectionHandler for Handler {
                                         Some(OutboundSubstreamState::PendingFlush(substream))
                                 }
                                 Err(err) => {
-                                    warn!("Error sending outbound message: {err}");
+                                    trace!("Error sending outbound message: {err}");
                                     self.outbound_substream = None;
                                     break;
                                 }
                             }
                         }
                         Poll::Ready(Err(err)) => {
-                            warn!("Error encoding outbound message: {err}");
+                            trace!("Error encoding outbound message: {err}");
                             self.outbound_substream = None;
                             break;
                         }
@@ -399,7 +399,7 @@ impl ConnectionHandler for Handler {
                                 Some(OutboundSubstreamState::WaitingOutput(substream))
                         }
                         Poll::Ready(Err(err)) => {
-                            warn!("Error flushing outbound message: {err}");
+                            trace!("Error flushing outbound message: {err}");
                             self.outbound_substream = None;
                             break;
                         }
