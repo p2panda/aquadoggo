@@ -7,7 +7,7 @@ mod utils;
 use std::convert::TryInto;
 
 use anyhow::Context;
-use aquadoggo::{AllowList, Node};
+use aquadoggo::{AllowList, Configuration, Node};
 use log::warn;
 
 use crate::config::{load_config, print_config};
@@ -36,18 +36,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Show configuration info to the user
     println!("{}", print_config(config_file_path, &node_config));
-
-    // Show some hopefully helpful warnings
-    match &node_config.allow_schema_ids {
-        AllowList::Set(values) => {
-            if values.is_empty() && !node_config.network.relay_mode {
-                warn!("Your node was set to not allow any schema ids which is only useful in combination with enabling relay mode. With this setting you will not be able to interact with any client or node.");
-            }
-        }
-        AllowList::Wildcard => {
-            warn!("Allowed schema ids is set to wildcard. Your node will support _any_ schemas it will encounter on the network. This is useful for experimentation and local development but _not_ recommended for production settings.");
-        }
-    }
+    show_warnings(&node_config);
 
     // Start p2panda node in async runtime
     let node = Node::start(key_pair, node_config).await;
@@ -62,4 +51,18 @@ async fn main() -> anyhow::Result<()> {
     node.shutdown().await;
 
     Ok(())
+}
+
+/// Show some hopefully helpful warnings around common configuration issues.
+fn show_warnings(config: &Configuration) {
+    match &config.allow_schema_ids {
+        AllowList::Set(values) => {
+            if values.is_empty() && !config.network.relay_mode {
+                warn!("Your node was set to not allow any schema ids which is only useful in combination with enabling relay mode. With this setting you will not be able to interact with any client or node.");
+            }
+        }
+        AllowList::Wildcard => {
+            warn!("Allowed schema ids is set to wildcard. Your node will support _any_ schemas it will encounter on the network. This is useful for experimentation and local development but _not_ recommended for production settings.");
+        }
+    }
 }
