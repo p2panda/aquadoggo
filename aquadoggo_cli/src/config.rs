@@ -381,7 +381,11 @@ fn try_determine_config_file_path() -> Option<PathBuf> {
         .cloned()
 }
 
-pub fn print_config(path: ConfigFilePath, config: &NodeConfiguration) -> String {
+pub fn print_config(
+    private_key_path: Option<&PathBuf>,
+    config_file_path: ConfigFilePath,
+    config: &NodeConfiguration,
+) -> String {
     println!(
         r"                       ██████ ███████ ████
                       ████████       ██████
@@ -412,7 +416,7 @@ pub fn print_config(path: ConfigFilePath, config: &NodeConfiguration) -> String 
 
     println!("{} v{}\n", "aquadoggo".underline(), crate_version!());
 
-    match path {
+    match config_file_path {
         Some(path) => {
             println!(
                 "Loading config file from {}",
@@ -457,6 +461,13 @@ pub fn print_config(path: ConfigFilePath, config: &NodeConfiguration) -> String 
         "disabled"
     };
 
+    let private_key = match &private_key_path {
+        Some(path) => {
+            format!("{}", absolute_path(path).display().to_string().blue())
+        }
+        None => "ephemeral (not persisted)".into(),
+    };
+
     let relay_mode = if config.network.relay_mode {
         "enabled"
     } else {
@@ -464,16 +475,18 @@ pub fn print_config(path: ConfigFilePath, config: &NodeConfiguration) -> String 
     };
 
     format!(
-        r"Allow Schema IDs: {}
+        r"Allow schema IDs: {}
 Database URL: {}
 mDNS: {}
-Relay Mode: {}
+Private key: {}
+Relay mode: {}
 
 Node is ready!
 ",
         allow_schema_ids.blue(),
         database_url.blue(),
         mdns.blue(),
+        private_key.blue(),
         relay_mode.blue(),
     )
 }

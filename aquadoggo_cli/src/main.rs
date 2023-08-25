@@ -28,14 +28,17 @@ async fn main() -> anyhow::Result<()> {
 
     // Generate a new key pair, either just for this session or persisted. Folders are
     // automatically created when we picked a path
-    let key_pair = match &config.private_key {
-        Some(path) => generate_or_load_key_pair(path.clone())
-            .context("Could not load private key from file")?,
-        None => generate_ephemeral_key_pair(),
+    let (key_pair_path, key_pair) = match &config.private_key {
+        Some(path) => {
+            let key_pair = generate_or_load_key_pair(path.clone())
+                .context("Could not load private key from file")?;
+            (Some(path), key_pair)
+        }
+        None => (None, generate_ephemeral_key_pair()),
     };
 
     // Show configuration info to the user
-    println!("{}", print_config(config_file_path, &node_config));
+    println!("{}", print_config(key_pair_path, config_file_path, &node_config));
     show_warnings(&node_config);
 
     // Start p2panda node in async runtime
