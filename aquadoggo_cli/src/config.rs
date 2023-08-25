@@ -149,15 +149,50 @@ struct Cli {
 
     /// List of known node addresses we want to connect to directly.
     ///
-    /// Make sure that nodes mentioned in this list are directly reachable (for example they need
-    /// to be hosted with a static IP Address). If you need to connect to nodes with changing,
-    /// dynamic IP addresses or even with nodes behind a firewall or NAT, do not use this field but
-    /// use at least one relay.
+    /// Make sure that nodes mentioned in this list are directly reachable (they need to be hosted
+    /// with a static IP Address). If you need to connect to nodes with changing, dynamic IP
+    /// addresses or even with nodes behind a firewall or NAT, do not use this field but use at
+    /// least one relay.
     #[arg(short = 'n', long, value_name = "IP:PORT", num_args = 0..)]
     #[serde(skip_serializing_if = "Option::is_none")]
     direct_node_addresses: Option<Vec<SocketAddr>>,
 
-    /// Addresses of a relays.
+    /// List of peers which are allowed to connect to your node.
+    ///
+    /// If set then only nodes (identified by their peer id) contained in this list will be able to
+    /// connect to your node (via a relay or directly). When not set any other node can connect to
+    /// yours.
+    ///
+    /// Peer IDs identify nodes by using their hashed public keys. They do _not_ represent authored
+    /// data from clients and are only used to authenticate nodes towards each other during
+    /// networking.
+    ///
+    /// Use this list for example for setups where the identifier of the nodes you want to form a
+    /// network with is known but you still need to use relays as their IP addresses change
+    /// dynamically.
+    #[arg(short = 'a', long, value_name = "PEER_ID", num_args = 0..)]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "serialize_with_wildcard"
+    )]
+    allow_peer_ids: Option<Vec<String>>,
+
+    /// List of peers which will be blocked from connecting to your node.
+    ///
+    /// If set then any peers (identified by their peer id) contained in this list will be blocked
+    /// from connecting to your node (via a relay or directly). When an empty list is provided then
+    /// there are no restrictions on which nodes can connect to yours.
+    ///
+    /// Block lists and allow lists are exclusive, which means that you should _either_ use a block
+    /// list _or_ an allow list depending on your setup.
+    ///
+    /// Use this list for example if you want to allow _any_ node to connect to yours _except_ of a
+    /// known number of excluded nodes.
+    #[arg(short = 'b', long, value_name = "PEER_ID", num_args = 0..)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    block_peer_ids: Option<Vec<PeerId>>,
+
+    /// List of relay addresses.
     ///
     /// A relay helps discover other nodes on the internet (also known as "rendesvouz" or
     /// "bootstrap" server) and helps establishing direct p2p connections when node is behind a
@@ -166,19 +201,9 @@ struct Cli {
     /// WARNING: This will potentially expose your IP address on the network. Do only connect to
     /// trusted relays or make sure your IP address is hidden via a VPN or proxy if you're
     /// concerned about leaking your IP.
-    #[arg(short = 'r', long, value_name = "IP:PORT IP:PORT, ...", num_args = 0..)]
+    #[arg(short = 'r', long, value_name = "IP:PORT", num_args = 0..)]
     #[serde(skip_serializing_if = "Option::is_none")]
     relay_addresses: Option<Vec<SocketAddr>>,
-
-    /// List of peers this node will accept connections with.
-    #[arg(short = 'a', long, value_name = "PEER_ID PEER_ID, ...", num_args = 0..)]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    allow_peer_ids: Option<Vec<PeerId>>,
-
-    /// List of peers this node will block connections with.
-    #[arg(short = 'b', long, value_name = "PEER_ID PEER_ID, ...", num_args = 0..)]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    block_peer_ids: Option<Vec<PeerId>>,
 
     /// Enable if node should also function as a relay. Disabled by default.
     ///
@@ -228,16 +253,16 @@ pub struct Configuration {
     pub allow_schema_ids: UncheckedAllowList,
     pub database_url: String,
     pub database_max_connections: u32,
-    pub worker_pool_size: u32,
     pub http_port: u16,
     pub quic_port: u16,
     pub private_key: Option<PathBuf>,
     pub mdns: bool,
     pub direct_node_addresses: Vec<SocketAddr>,
+    pub allow_peer_ids: UncheckedAllowList,
+    pub block_peer_ids: Vec<PeerId>,
     pub relay_addresses: Vec<SocketAddr>,
     pub relay_mode: bool,
-    pub allow_peer_ids: UncheckedAllowList,
-    pub block_peer_ids: UncheckedAllowList,
+    pub worker_pool_size: u32,
 }
 
 impl Default for Configuration {
@@ -246,16 +271,16 @@ impl Default for Configuration {
             allow_schema_ids: UncheckedAllowList::Wildcard,
             database_url: "sqlite::memory:".into(),
             database_max_connections: 32,
-            worker_pool_size: 16,
             http_port: 2020,
             quic_port: 2022,
-            private_key: None,
             mdns: true,
+            private_key: None,
             direct_node_addresses: vec![],
+            allow_peer_ids: UncheckedAllowList::Wildcard,
+            block_peer_ids: Vec::new(),
             relay_addresses: vec![],
             relay_mode: false,
-            allow_peer_ids: UncheckedAllowList::Wildcard,
-            block_peer_ids: UncheckedAllowList::Wildcard,
+            worker_pool_size: 16,
         }
     }
 }
@@ -300,29 +325,12 @@ impl TryFrom<Configuration> for NodeConfiguration {
             }
         };
 
-        // Check if given peer ids are valid
-        let block_peer_ids = match value.block_peer_ids {
-            UncheckedAllowList::Wildcard => AllowList::<PeerId>::Wildcard,
-            UncheckedAllowList::Set(str_values) => {
-                let peer_ids: Result<Vec<PeerId>, anyhow::Error> = str_values
-                    .iter()
-                    .map(|str_value| {
-                        PeerId::from_str(str_value).map_err(|_| {
-                            anyhow!("Invalid peer id '{str_value}' found in 'allow_peer_ids' list")
-                        })
-                    })
-                    .collect();
-
-                AllowList::Set(peer_ids?)
-            }
-        };
-
         Ok(NodeConfiguration {
+            allow_schema_ids,
             database_url: value.database_url,
             database_max_connections: value.database_max_connections,
             http_port: value.http_port,
             worker_pool_size: value.worker_pool_size,
-            allow_schema_ids,
             network: NetworkConfiguration {
                 quic_port: value.quic_port,
                 mdns: value.mdns,
@@ -331,14 +339,14 @@ impl TryFrom<Configuration> for NodeConfiguration {
                     .into_iter()
                     .map(to_multiaddress)
                     .collect(),
-                relay_mode: value.relay_mode,
+                allow_peer_ids,
+                block_peer_ids: value.block_peer_ids,
                 relay_addresses: value
                     .relay_addresses
                     .into_iter()
                     .map(to_multiaddress)
                     .collect(),
-                allow_peer_ids,
-                block_peer_ids,
+                relay_mode: value.relay_mode,
                 ..Default::default()
             },
         })
@@ -373,7 +381,11 @@ fn try_determine_config_file_path() -> Option<PathBuf> {
         .cloned()
 }
 
-pub fn print_config(path: ConfigFilePath, config: &NodeConfiguration) -> String {
+pub fn print_config(
+    private_key_path: Option<&PathBuf>,
+    config_file_path: ConfigFilePath,
+    config: &NodeConfiguration,
+) -> String {
     println!(
         r"                       ██████ ███████ ████
                       ████████       ██████
@@ -404,7 +416,7 @@ pub fn print_config(path: ConfigFilePath, config: &NodeConfiguration) -> String 
 
     println!("{} v{}\n", "aquadoggo".underline(), crate_version!());
 
-    match path {
+    match config_file_path {
         Some(path) => {
             println!(
                 "Loading config file from {}",
@@ -449,6 +461,13 @@ pub fn print_config(path: ConfigFilePath, config: &NodeConfiguration) -> String 
         "disabled"
     };
 
+    let private_key = match &private_key_path {
+        Some(path) => {
+            format!("{}", absolute_path(path).display().to_string().blue())
+        }
+        None => "ephemeral (not persisted)".into(),
+    };
+
     let relay_mode = if config.network.relay_mode {
         "enabled"
     } else {
@@ -456,16 +475,18 @@ pub fn print_config(path: ConfigFilePath, config: &NodeConfiguration) -> String 
     };
 
     format!(
-        r"Allow Schema IDs: {}
+        r"Allow schema IDs: {}
 Database URL: {}
 mDNS: {}
-Relay Mode: {}
+Private key: {}
+Relay mode: {}
 
 Node is ready!
 ",
         allow_schema_ids.blue(),
         database_url.blue(),
         mdns.blue(),
+        private_key.blue(),
         relay_mode.blue(),
     )
 }

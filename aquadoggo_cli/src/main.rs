@@ -7,7 +7,7 @@ mod utils;
 use std::convert::TryInto;
 
 use anyhow::Context;
-use aquadoggo::{AllowList, Node};
+use aquadoggo::{AllowList, Configuration, Node};
 use log::warn;
 
 use crate::config::{load_config, print_config};
@@ -28,26 +28,18 @@ async fn main() -> anyhow::Result<()> {
 
     // Generate a new key pair, either just for this session or persisted. Folders are
     // automatically created when we picked a path
-    let key_pair = match &config.private_key {
-        Some(path) => generate_or_load_key_pair(path.clone())
-            .context("Could not load private key from file")?,
-        None => generate_ephemeral_key_pair(),
+    let (key_pair_path, key_pair) = match &config.private_key {
+        Some(path) => {
+            let key_pair = generate_or_load_key_pair(path.clone())
+                .context("Could not load private key from file")?;
+            (Some(path), key_pair)
+        }
+        None => (None, generate_ephemeral_key_pair()),
     };
 
     // Show configuration info to the user
-    println!("{}", print_config(config_file_path, &node_config));
-
-    // Show some hopefully helpful warnings
-    match &node_config.allow_schema_ids {
-        AllowList::Set(values) => {
-            if values.is_empty() && !node_config.network.relay_mode {
-                warn!("Your node was set to not allow any schema ids which is only useful in combination with enabling relay mode. With this setting you will not be able to interact with any client or node.");
-            }
-        }
-        AllowList::Wildcard => {
-            warn!("Allowed schema ids is set to wildcard. Your node will support _any_ schemas it will encounter on the network. This is useful for experimentation and local development but _not_ recommended for production settings.");
-        }
-    }
+    println!("{}", print_config(key_pair_path, config_file_path, &node_config));
+    show_warnings(&node_config);
 
     // Start p2panda node in async runtime
     let node = Node::start(key_pair, node_config).await;
@@ -62,4 +54,22 @@ async fn main() -> anyhow::Result<()> {
     node.shutdown().await;
 
     Ok(())
+}
+
+/// Show some hopefully helpful warnings around common configuration issues.
+fn show_warnings(config: &Configuration) {
+    match &config.allow_schema_ids {
+        AllowList::Set(values) => {
+            if values.is_empty() && !config.network.relay_mode {
+                warn!("Your node was set to not allow any schema ids which is only useful in combination with enabling relay mode. With this setting you will not be able to interact with any client or node.");
+            }
+        }
+        AllowList::Wildcard => {
+            warn!("Allowed schema ids is set to wildcard. Your node will support _any_ schemas it will encounter on the network. This is useful for experimentation and local development but _not_ recommended for production settings.");
+        }
+    }
+
+    if !config.network.relay_addresses.is_empty() && config.network.relay_mode {
+        warn!("Will not connect to given relay addresses when relay mode is enabled");
+    }
 }

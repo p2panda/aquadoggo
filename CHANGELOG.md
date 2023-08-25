@@ -59,6 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - By default, nodes support _any_ schema [#487](https://github.com/p2panda/aquadoggo/pull/487)
 - Rework networking service [#502](https://github.com/p2panda/aquadoggo/pull/502)
 - Deduplicate peer connections when initiating replication sessions [#525](https://github.com/p2panda/aquadoggo/pull/525)
+- Improve consistency and documentation of configuration API [#528](https://github.com/p2panda/aquadoggo/pull/528)
 
 ### Fixed
 
