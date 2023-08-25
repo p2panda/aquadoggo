@@ -62,11 +62,19 @@ pub async fn http_service(
     let builder = if let Ok(builder) = axum::Server::try_bind(&http_address) {
         builder
     } else {
+        println!("HTTP port {http_port} was already taken, try random port instead ..");
         axum::Server::try_bind(&SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0))?
     };
 
+    let builder = builder.serve(build_server(http_context).into_make_service());
+
+    let local_address = builder.local_addr();
+    println!(
+        "Go to http://{}/graphql to use GraphQL playground",
+        local_address
+    );
+
     builder
-        .serve(build_server(http_context).into_make_service())
         .with_graceful_shutdown(async {
             debug!("HTTP service is ready");
             if tx_ready.send(()).is_err() {

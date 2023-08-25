@@ -24,14 +24,10 @@ async fn initialize_db(config: &Configuration) -> Result<Pool> {
     openssl_probe::init_ssl_cert_env_vars();
 
     // Create database when not existing
-    create_database(&config.database_url.clone().unwrap()).await?;
+    create_database(&config.database_url).await?;
 
     // Create connection pool
-    let pool = connection_pool(
-        &config.database_url.clone().unwrap(),
-        config.database_max_connections,
-    )
-    .await?;
+    let pool = connection_pool(&config.database_url, config.database_max_connections).await?;
 
     // Run pending migrations
     run_pending_migrations(&pool).await?;
@@ -60,11 +56,11 @@ impl Node {
 
         // Initiate the SchemaProvider with all currently known schema from the store.
         //
-        // If supported_schema_ids are provided then only schema identified in this list will be
-        // added to the provider and supported by the node.
+        // If a list of allowed schema ids is provided then only schema identified in this list
+        // will be added to the provider and supported by the node.
         let application_schema = store.get_all_schema().await.unwrap();
         let schema_provider =
-            SchemaProvider::new(application_schema, config.supported_schema_ids.clone());
+            SchemaProvider::new(application_schema, config.allow_schema_ids.clone());
 
         // Create service manager with shared data between services
         let context = Context::new(store, key_pair, config, schema_provider);

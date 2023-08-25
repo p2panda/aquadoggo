@@ -4,23 +4,25 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::{bail, Result};
-use log::{debug, info};
+use log::{debug, info, trace};
 use p2panda_rs::schema::{Schema, SchemaId, SYSTEM_SCHEMAS};
 use p2panda_rs::Human;
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 use tokio::sync::Mutex;
 
-/// Provides fast thread-safe access to system and application schemas.
+use crate::config::AllowList;
+
+/// Provides fast access to system and application schemas.
 ///
 /// Application schemas can be added and updated.
 #[derive(Clone, Debug)]
 pub struct SchemaProvider {
-    /// In-memory store of registered schemas.
+    /// In-memory store of registered and materialized schemas.
     schemas: Arc<Mutex<HashMap<SchemaId, Schema>>>,
 
-    /// Optional list of whitelisted schema ids. When set, only these schema ids will be accepted
-    /// on this node, if not set _all_ schema ids are accepted.
-    whitelisted_schema_ids: Option<Vec<SchemaId>>,
+    /// Optional list of allowed schema ids. When not empty, only these schema ids will be accepted
+    /// on this node, if not set _all_ schema ids are accepted (wildcard).
+    allow_schema_ids: AllowList<SchemaId>,
 
     /// Sender for broadcast channel informing subscribers about updated schemas.
     tx: Sender<SchemaId>,
@@ -28,10 +30,7 @@ pub struct SchemaProvider {
 
 impl SchemaProvider {
     /// Returns a `SchemaProvider` containing the given application schemas and all system schemas.
-    pub fn new(
-        application_schemas: Vec<Schema>,
-        whitelisted_schema_ids: Option<Vec<SchemaId>>,
-    ) -> Self {
+    pub fn new(application_schemas: Vec<Schema>, allow_schema_ids: AllowList<SchemaId>) -> Self {
         // Collect all system and application schemas.
         let mut schemas = SYSTEM_SCHEMAS.clone();
         schemas.extend(&application_schemas);
@@ -42,13 +41,14 @@ impl SchemaProvider {
             index.insert(schema.id().to_owned(), schema.to_owned());
         }
 
-        if let Some(schema_ids) = &whitelisted_schema_ids {
+        // Filter out all unsupported schema ids when list was set
+        if let AllowList::Set(schema_ids) = &allow_schema_ids {
             index.retain(|id, _| schema_ids.contains(id));
         };
 
         let (tx, _) = channel(64);
 
-        debug!(
+        trace!(
             "Initialised schema provider:\n- {}",
             index
                 .values()
@@ -59,7 +59,7 @@ impl SchemaProvider {
 
         Self {
             schemas: Arc::new(Mutex::new(index)),
-            whitelisted_schema_ids,
+            allow_schema_ids,
             tx,
         }
     }
@@ -84,8 +84,8 @@ impl SchemaProvider {
     /// Returns `true` if a schema was updated or it already existed in it's current state, and
     /// `false` if it was inserted.
     pub async fn update(&self, schema: Schema) -> Result<bool> {
-        if let Some(whitelisted_ids) = self.whitelisted_schema_ids.as_ref() {
-            if !whitelisted_ids.contains(schema.id()) {
+        if let AllowList::Set(allow_schema_ids) = &self.allow_schema_ids {
+            if !allow_schema_ids.contains(schema.id()) {
                 bail!("Attempted to add unsupported schema to schema provider");
             }
         };
@@ -114,12 +114,12 @@ impl SchemaProvider {
 
     /// Returns a list of all supported schema ids.
     ///
-    /// If no whitelist was set it returns the list of all currently known schema ids. If a
-    /// whitelist was set it directly returns the list itself.
+    /// If no allow-list was set it returns the list of all currently known schema ids. If an
+    /// allo-wlist was set it directly returns the list itself.
     pub async fn supported_schema_ids(&self) -> Vec<SchemaId> {
-        match &self.whitelisted_schema_ids {
-            Some(schema_ids) => schema_ids.clone(),
-            None => self
+        match &self.allow_schema_ids {
+            AllowList::Set(schema_ids) => schema_ids.clone(),
+            AllowList::Wildcard => self
                 .all()
                 .await
                 .iter()
@@ -128,16 +128,16 @@ impl SchemaProvider {
         }
     }
 
-    /// Returns true if a whitelist of supported schema ids was provided through user
+    /// Returns true if an allow-list of supported schema ids was provided through user
     /// configuration.
-    pub fn is_whitelist_active(&self) -> bool {
-        self.whitelisted_schema_ids.is_some()
+    pub fn is_allow_list_active(&self) -> bool {
+        matches!(self.allow_schema_ids, AllowList::Set(_))
     }
 }
 
 impl Default for SchemaProvider {
     fn default() -> Self {
-        Self::new(Vec::new(), None)
+        Self::new(Vec::new(), AllowList::Wildcard)
     }
 }
 
@@ -145,6 +145,8 @@ impl Default for SchemaProvider {
 mod test {
     use p2panda_rs::schema::{FieldType, Schema, SchemaId, SchemaName};
     use p2panda_rs::test_utils::fixtures::random_document_view_id;
+
+    use crate::AllowList;
 
     use super::SchemaProvider;
 
@@ -194,7 +196,7 @@ mod test {
             &[("test_field", FieldType::String)],
         )
         .unwrap();
-        let provider = SchemaProvider::new(vec![], Some(vec![new_schema_id.clone()]));
+        let provider = SchemaProvider::new(vec![], AllowList::Set(vec![new_schema_id.clone()]));
         let result = provider.update(new_schema).await;
         assert!(result.is_ok());
         assert!(!result.unwrap());
@@ -204,7 +206,7 @@ mod test {
 
     #[tokio::test]
     async fn update_unsupported_schemas() {
-        let provider = SchemaProvider::new(vec![], Some(vec![]));
+        let provider = SchemaProvider::new(vec![], AllowList::Set(vec![]));
         let new_schema_id = SchemaId::Application(
             SchemaName::new("test_schema").unwrap(),
             random_document_view_id(),

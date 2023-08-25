@@ -1,130 +1,56 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-#![allow(clippy::uninlined_format_args)]
+mod config;
 mod key_pair;
-mod schemas;
+mod utils;
 
-use std::convert::{TryFrom, TryInto};
-use std::fs::File;
-use std::net::IpAddr;
+use std::convert::TryInto;
 
-use anyhow::Result;
-use aquadoggo::{Configuration, NetworkConfiguration, Node};
-use clap::Parser;
-use libp2p::multiaddr::Protocol;
-use libp2p::Multiaddr;
+use anyhow::Context;
+use aquadoggo::{AllowList, Node};
+use log::warn;
 
-const CONFIG_FILE_PATH: &str = "config.toml";
-
-#[derive(Parser, Debug)]
-#[command(name = "aquadoggo Node", version)]
-/// Node server for the p2panda network.
-struct Cli {
-    /// Path to data folder, $HOME/.local/share/aquadoggo by default on Linux.
-    #[arg(short, long)]
-    data_dir: Option<std::path::PathBuf>,
-
-    /// Port for the http server, 2020 by default.
-    #[arg(short = 'P', long)]
-    http_port: Option<u16>,
-
-    /// Port for the QUIC transport, 2022 by default for a relay/rendezvous node.
-    #[arg(short, long)]
-    quic_port: Option<u16>,
-
-    /// URLs of remote nodes to replicate with.
-    #[arg(short, long)]
-    remote_node_addresses: Vec<Multiaddr>,
-
-    /// Enable mDNS for peer discovery over LAN (using port 5353), false by default.
-    #[arg(short, long)]
-    mdns: Option<bool>,
-
-    /// Enable relay server to facilitate peer connectivity, false by default.
-    #[arg(long)]
-    enable_relay_server: bool,
-
-    /// IP address for the relay peer.
-    ///
-    /// eg. --relay-address "127.0.0.1"
-    #[arg(long)]
-    relay_address: Option<IpAddr>,
-
-    /// Port for the relay peer, defaults to expected relay port 2022.
-    ///
-    /// eg. --relay-port "1234"
-    #[arg(long)]
-    relay_port: Option<u16>,
-}
-
-impl TryFrom<Cli> for Configuration {
-    type Error = anyhow::Error;
-
-    fn try_from(cli: Cli) -> Result<Self, Self::Error> {
-        let mut config = Configuration::new(cli.data_dir)?;
-
-        let relay_address = if let Some(relay_address) = cli.relay_address {
-            let mut multiaddr = match relay_address {
-                IpAddr::V4(ip) => Multiaddr::from(Protocol::Ip4(ip)),
-                IpAddr::V6(ip) => Multiaddr::from(Protocol::Ip6(ip)),
-            };
-            multiaddr.push(Protocol::Udp(cli.relay_port.unwrap_or(2022)));
-            multiaddr.push(Protocol::QuicV1);
-
-            Some(multiaddr)
-        } else {
-            None
-        };
-
-        if let Some(http_port) = cli.http_port {
-            config.http_port = http_port;
-        }
-
-        config.network = NetworkConfiguration {
-            mdns: cli.mdns.unwrap_or(false),
-            relay_server_enabled: cli.enable_relay_server,
-            relay_address,
-            remote_peers: cli.remote_node_addresses,
-            ..config.network
-        };
-
-        if let Some(quic_port) = cli.quic_port {
-            config.network.quic_port = quic_port;
-        }
-
-        Ok(config)
-    }
-}
+use crate::config::{load_config, print_config};
+use crate::key_pair::{generate_ephemeral_key_pair, generate_or_load_key_pair};
 
 #[tokio::main]
-async fn main() {
+async fn main() -> anyhow::Result<()> {
     env_logger::init();
 
-    // Parse command line arguments
-    let cli = Cli::parse();
+    // Load configuration from command line arguments, environment variables and .toml file
+    let (config_file_path, config) = load_config().context("Could not load configuration")?;
 
-    // Load configuration parameters and apply defaults
-    let mut config: Configuration = cli.try_into().expect("Could not load configuration");
+    // Convert to `aquadoggo` configuration format and check for invalid inputs
+    let node_config = config
+        .clone()
+        .try_into()
+        .context("Could not load configuration")?;
 
-    // Read schema ids from config.toml file or
-    let supported_schemas = match File::open(CONFIG_FILE_PATH) {
-        Ok(mut file) => Some(
-            schemas::read_schema_ids_from_file(&mut file)
-                .expect("Reading schema ids from config.toml failed"),
-        ),
-        Err(_) => None,
+    // Generate a new key pair, either just for this session or persisted. Folders are
+    // automatically created when we picked a path
+    let key_pair = match &config.private_key {
+        Some(path) => generate_or_load_key_pair(path.clone())
+            .context("Could not load private key from file")?,
+        None => generate_ephemeral_key_pair(),
     };
-    config.supported_schema_ids = supported_schemas;
 
-    // We unwrap the path as we know it has been initialised during the conversion step before
-    let base_path = config.base_path.clone().unwrap();
+    // Show configuration info to the user
+    println!("{}", print_config(config_file_path, &node_config));
 
-    // Generate new key pair or load it from file
-    let key_pair =
-        key_pair::generate_or_load_key_pair(base_path).expect("Could not load key pair from file");
+    // Show some hopefully helpful warnings
+    match &node_config.allow_schema_ids {
+        AllowList::Set(values) => {
+            if values.is_empty() && !node_config.network.relay_mode {
+                warn!("Your node was set to not allow any schema ids which is only useful in combination with enabling relay mode. With this setting you will not be able to interact with any client or node.");
+            }
+        }
+        AllowList::Wildcard => {
+            warn!("Allowed schema ids is set to wildcard. Your node will support _any_ schemas it will encounter on the network. This is useful for experimentation and local development but _not_ recommended for production settings.");
+        }
+    }
 
     // Start p2panda node in async runtime
-    let node = Node::start(key_pair, config).await;
+    let node = Node::start(key_pair, node_config).await;
 
     // Run this until [CTRL] + [C] got pressed or something went wrong
     tokio::select! {
@@ -134,4 +60,6 @@ async fn main() {
 
     // Wait until all tasks are gracefully shut down and exit
     node.shutdown().await;
+
+    Ok(())
 }
