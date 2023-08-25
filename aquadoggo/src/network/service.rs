@@ -317,7 +317,8 @@ impl EventLoop {
                                 continue;
                             }
 
-                            // Only only one QUIC address once
+                            // Show only one QUIC address during the runtime of the node, otherwise
+                            // it might get too spammy
                             if let Some(address) = utils::to_quic_address(&address) {
                                 println!("Node is listening on 0.0.0.0:{}", address.port());
                                 self.learned_port = true;

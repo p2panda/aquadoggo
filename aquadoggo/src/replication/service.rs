@@ -157,9 +157,9 @@ impl ConnectionManager {
     }
 
     /// Returns set of schema ids we are interested in and support on this node.
-    async fn target_set(&self) -> TargetSet {
-        let allow_schema_ids = self.schema_provider.supported_schema_ids().await;
-        TargetSet::new(&allow_schema_ids)
+    async fn supported_schema_ids(&self) -> TargetSet {
+        let supported_schema_ids = self.schema_provider.supported_schema_ids().await;
+        TargetSet::new(&supported_schema_ids)
     }
 
     /// Register a new peer connection on the manager.
@@ -327,8 +327,8 @@ impl ConnectionManager {
 
     /// Generates our new announcement state we can then propagate to all known and future peers.
     async fn update_announcement(&mut self) {
-        let target_set = self.target_set().await;
-        self.announcement = Some(Announcement::new(target_set));
+        let supported_schema_ids = self.supported_schema_ids().await;
+        self.announcement = Some(Announcement::new(supported_schema_ids));
     }
 
     /// Determine if we can attempt new replication sessions with the peers we currently know
@@ -551,7 +551,7 @@ mod tests {
                 local_peer_id,
             );
 
-            let target_set = manager.target_set().await;
+            let supported_schema_ids = manager.supported_schema_ids().await;
             manager.update_announcement().await;
 
             // Inform connection manager about new peer
@@ -577,14 +577,14 @@ mod tests {
                 Ok(ServiceMessage::SentMessage(
                     remote_peer,
                     PeerMessage::Announce(AnnouncementMessage::new(Announcement::new(
-                        target_set.clone()
+                        supported_schema_ids.clone()
                     )))
                 ))
             );
 
             // Peer informs us about its target set
             assert_eq!(status.announcement, None);
-            let announcement = Announcement::new(target_set.clone());
+            let announcement = Announcement::new(supported_schema_ids.clone());
             manager
                 .handle_service_message(ServiceMessage::ReceivedMessage(
                     remote_peer.clone(),
