@@ -351,7 +351,7 @@ impl ConnectionManager {
         let mut attempt_peers: Vec<(Peer, TargetSet)> = dedup_peers
             .values()
             .filter_map(|(peer, status)| {
-                let sessions = self.sync_manager.get_sessions(&peer);
+                let sessions = self.sync_manager.get_sessions(peer);
 
                 // 1. Did we already receive this peers announcement state? If not we can't do
                 //    anything yet and need to wait.
@@ -386,7 +386,7 @@ impl ConnectionManager {
                     .any(|session| session.target_set() == target_set);
 
                 if active_sessions.len() < MAX_SESSIONS_PER_PEER && !has_active_target_set_session {
-                    Some((peer.clone(), target_set))
+                    Some((*peer, target_set))
                 } else {
                     None
                 }
