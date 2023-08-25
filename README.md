@@ -69,7 +69,7 @@ program.
 
 ## Example
 
-Embed the node server in your Rust application or web container like [`Tauri`]:
+Embed the node server in your Rust application, mobile application (via [FFI bindings](https://github.com/p2panda/meli/)) or web container like [`Tauri`]:
 
 ```rust
 use aquadoggo::{Configuration, Node};
@@ -80,25 +80,31 @@ let key_pair = KeyPair::new();
 let node = Node::start(key_pair, config).await;
 ```
 
-You can also run the node server simply as a [command line application][`command line application`]:
+You can also run the node simply as a [command line application][`command line application`] and [configure](/aquadoggo_cli/README.md#Usage) it:
 
 ```bash
-# Compile and run local node at http://localhost:2020/graphql
-cargo run
+# Run local node
+aquadoggo
 
 # Enable logging
-RUST_LOG=aquadoggo=info cargo run
+RUST_LOG=aquadoggo=info aquadoggo
 ```
 
 .. or run it inside a [Docker](https://hub.docker.com/r/p2panda/aquadoggo) container:
 
 ```bash
-docker run -p 2020:2020 -e RUST_LOG=aquadoggo=info p2panda/aquadoggo
+docker run -p 2020:2020 -p 2022:2022 -e RUST_LOG=aquadoggo=info p2panda/aquadoggo
 ```
 
 [`Tauri`]: https://tauri.studio
 
 ## Installation
+
+### Command line application
+
+Check out our [Releases](releases) section or read [how you can compile](/aquadoggo_cli/README.md#Installation) `aquadoggo` yourself.
+
+### Rust Crate
 
 ```sh
 cargo add aquadoggo
