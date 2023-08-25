@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::convert::TryFrom;
-use std::net::{IpAddr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::OnceLock;
@@ -114,6 +114,16 @@ struct Cli {
     #[arg(short = 'd', long, value_name = "CONNECTION_STRING")]
     #[serde(skip_serializing_if = "Option::is_none")]
     database_url: Option<String>,
+
+    /// IPv4 address this node listens to for networking with other nodes.
+    ///
+    /// Depending on this bind address other nodes will or will not be able to reach out to you.
+    ///
+    /// Set address to 0.0.0.0 (catch-all) if you want your node to listen on all networking
+    /// interfaces. This might expose your node to the internet.
+    #[arg(short = 'i', long, value_name = "IP")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    bind_address: Option<Ipv4Addr>,
 
     /// HTTP port for client-node communication, serving the GraphQL API. Defaults to 2020.
     #[arg(short = 'p', long, value_name = "PORT")]
@@ -278,6 +288,7 @@ pub struct Configuration {
     pub allow_schema_ids: UncheckedAllowList,
     pub database_url: String,
     pub database_max_connections: u32,
+    pub bind_address: Ipv4Addr,
     pub http_port: u16,
     pub quic_port: u16,
     pub blobs_base_path: Option<PathBuf>,
@@ -298,6 +309,7 @@ impl Default for Configuration {
             allow_schema_ids: UncheckedAllowList::Wildcard,
             database_url: "sqlite::memory:".into(),
             database_max_connections: 32,
+            bind_address: Ipv4Addr::LOCALHOST,
             http_port: 2020,
             quic_port: 2022,
             blobs_base_path: None,
@@ -371,6 +383,7 @@ impl TryFrom<Configuration> for NodeConfiguration {
             allow_schema_ids,
             database_url: value.database_url,
             database_max_connections: value.database_max_connections,
+            bind_address: value.bind_address,
             http_port: value.http_port,
             blobs_base_path,
             worker_pool_size: value.worker_pool_size,

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, SocketAddr};
 
 use anyhow::Result;
 use axum::extract::Extension;
@@ -55,7 +55,8 @@ pub async fn http_service(
     tx_ready: ServiceReadySender,
 ) -> Result<()> {
     let http_port = context.config.http_port;
-    let http_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), http_port);
+    let bind_address = context.config.bind_address;
+    let http_address = SocketAddr::new(IpAddr::V4(bind_address), http_port);
 
     // Prepare GraphQL manager executing incoming GraphQL queries via HTTP
     let graphql_schema_manager =
@@ -75,7 +76,7 @@ pub async fn http_service(
         builder
     } else {
         println!("HTTP port {http_port} was already taken, try random port instead ..");
-        axum::Server::try_bind(&SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0))?
+        axum::Server::try_bind(&SocketAddr::new(IpAddr::V4(bind_address), 0))?
     };
 
     let builder = builder.serve(build_server(http_context).into_make_service());

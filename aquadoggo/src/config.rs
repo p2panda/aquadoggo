@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::path::PathBuf;
+use std::net::Ipv4Addr;
 
 use p2panda_rs::schema::SchemaId;
 
@@ -33,6 +34,14 @@ pub struct Configuration {
     /// application in high-availability deployments).
     pub database_max_connections: u32,
 
+    /// IPv4 address this node listens to for networking with other nodes.
+    ///
+    /// Depending on this bind address other nodes will or will not be able to reach out to you.
+    ///
+    /// Set address to 0.0.0.0 (catch-all) if you want your node to listen on all networking
+    /// interfaces. This might expose your node to the internet.
+    pub bind_address: Ipv4Addr,
+
     /// HTTP port, serving the GraphQL API (for example hosted under
     /// http://localhost:2020/graphql). This API is used for client-node communication. Defaults to
     /// 2020.
@@ -61,6 +70,7 @@ impl Default for Configuration {
             allow_schema_ids: AllowList::Wildcard,
             database_url: "sqlite::memory:".into(),
             database_max_connections: 32,
+            bind_address: Ipv4Addr::LOCALHOST,
             http_port: 2020,
             blobs_base_path: PathBuf::new(),
             worker_pool_size: 16,
