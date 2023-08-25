@@ -78,7 +78,7 @@ struct Cli {
     config: Option<PathBuf>,
 
     /// List of schema ids which a node will replicate and expose on the GraphQL API.
-    #[arg(short = 's', long, value_name = "SCHEMA_ID SCHEMA_ID, ...", num_args = 0..)]
+    #[arg(short = 's', long, value_name = "SCHEMA_ID SCHEMA_ID ...", num_args = 0..)]
     #[serde(skip_serializing_if = "Option::is_none")]
     supported_schema_ids: Option<Vec<SchemaId>>,
 
@@ -103,12 +103,18 @@ struct Cli {
     private_key: Option<PathBuf>,
 
     /// mDNS to discover other peers on the local network.
-    #[arg(short = 'm', long, value_name = "BOOL")]
+    #[arg(
+        short = 'm',
+        long,
+        value_name = "BOOL",
+        default_missing_value = "true",
+        num_args = 0..=1,
+    )]
     #[serde(skip_serializing_if = "Option::is_none")]
     mdns: Option<bool>,
 
     /// List of known node addresses we want to connect to directly.
-    #[arg(short = 'n', long, value_name = "IP:PORT IP:PORT, ...", num_args = 0..)]
+    #[arg(short = 'n', long, value_name = "IP:PORT IP:PORT ...", num_args = 0..)]
     #[serde(skip_serializing_if = "Option::is_none")]
     direct_node_addresses: Option<Vec<SocketAddr>>,
 
@@ -118,7 +124,13 @@ struct Cli {
     relay_address: Option<SocketAddr>,
 
     /// Set to true if our node should also function as a relay.
-    #[arg(short = 'e', long, value_name = "BOOL")]
+    #[arg(
+        short = 'e',
+        long,
+        value_name = "BOOL",
+        default_missing_value = "true",
+        num_args = 0..=1,
+    )]
     #[serde(skip_serializing_if = "Option::is_none")]
     relay_mode: Option<bool>,
 }
