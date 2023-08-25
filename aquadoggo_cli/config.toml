@@ -70,18 +70,6 @@ allow_schema_ids = "*"
 #
 database_max_connections = 32
 
-# ﾟ･｡+☆+｡･
-# WORKERS
-# ﾟ･｡+☆+｡･
-
-# Number of concurrent workers which defines the maximum of materialization
-# tasks which can be worked on simultaneously.
-#
-# Use a higher number if you run your node on a powerful machine with many CPU
-# cores. Lower number for low-energy devices with limited resources.
-#
-worker_pool_size = 16
-
 # ﾟ･｡+☆
 # PORTS
 # ﾟ･｡+☆
@@ -197,3 +185,15 @@ relay_addresses = [
 # for example with a static IP address through an VPS.
 #
 relay_mode = false
+
+# ﾟ･｡+☆+｡･
+# WORKERS
+# ﾟ･｡+☆+｡･
+
+# Number of concurrent workers which defines the maximum of materialization
+# tasks which can be worked on simultaneously.
+#
+# Use a higher number if you run your node on a powerful machine with many CPU
+# cores. Lower number for low-energy devices with limited resources.
+#
+worker_pool_size = 16
