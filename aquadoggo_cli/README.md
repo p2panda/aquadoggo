@@ -24,7 +24,7 @@
 
 <br/>
 
-Configurable node implementation for the [`p2panda`] network.
+Configurable node implementation for the [`p2panda`](https://p2panda.org) network.
 
 ## Install
 
