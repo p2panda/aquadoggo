@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use libp2p::{connection_limits::ConnectionLimits, PeerId};
 use libp2p::Multiaddr;
+use libp2p::{connection_limits::ConnectionLimits, PeerId};
 use serde::{Deserialize, Serialize};
 
 /// The namespace used by the `identify` network behaviour.
