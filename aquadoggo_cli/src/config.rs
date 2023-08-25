@@ -73,40 +73,70 @@ pub fn load_config() -> Result<(ConfigFilePath, Configuration)> {
     version
 )]
 struct Cli {
-    /// Path to a config.toml file.
+    /// Path to an optional "config.toml" file for further configuration.
+    ///
+    /// When not set the program will try to find a `config.toml` file in the same folder the
+    /// program is executed in and otherwise in the regarding operation systems XDG config
+    /// directory ("$HOME/.config/aquadoggo/config.toml" on Linux).
     #[arg(short = 'c', long, value_name = "PATH")]
     #[serde(skip_serializing_if = "Option::is_none")]
     config: Option<PathBuf>,
 
-    /// List of schema ids which a node will replicate and expose on the GraphQL API.
-    #[arg(short = 's', long, value_name = "SCHEMA_ID SCHEMA_ID ...", num_args = 0..)]
+    /// List of schema ids which a node will replicate, persist and expose on the GraphQL API.
+    /// Separate multiple values with a whitespace. Defaults to allow _any_ schemas ("*").
+    ///
+    /// When allowing a schema you automatically opt into announcing, replicating and materializing
+    /// documents connected to it, supporting applications and networks which are dependent on this
+    /// data.
+    ///
+    /// It is recommended to set this list to all schema ids your own application should support,
+    /// including all important system schemas.
+    ///
+    /// WARNING: When set to wildcard "*", your node will support _any_ schemas it will encounter
+    /// on the network. This is useful for experimentation and local development but _not_
+    /// recommended for production settings.
+    #[arg(short = 's', long, value_name = "SCHEMA_ID", num_args = 0..)]
     #[serde(
         skip_serializing_if = "Option::is_none",
         serialize_with = "serialize_with_wildcard"
     )]
     allow_schema_ids: Option<Vec<String>>,
 
-    /// URL / connection string to PostgreSQL or SQLite database.
+    /// URL / connection string to PostgreSQL or SQLite database. Defaults to an in-memory SQLite
+    /// database.
+    ///
+    /// WARNING: By default your node will not persist anything after shutdown. Set a database
+    /// connection url for production settings to not loose data.
     #[arg(short = 'd', long, value_name = "CONNECTION_STRING")]
     #[serde(skip_serializing_if = "Option::is_none")]
     database_url: Option<String>,
 
-    /// HTTP port for client-node communication, serving the GraphQL API.
+    /// HTTP port for client-node communication, serving the GraphQL API. Defaults to 2020.
     #[arg(short = 'p', long, value_name = "PORT")]
     #[serde(skip_serializing_if = "Option::is_none")]
     http_port: Option<u16>,
 
-    /// QUIC port for node-node communication and data replication.
+    /// QUIC port for node-node communication and data replication. Defaults to 2022.
     #[arg(short = 'q', long, value_name = "PORT")]
     #[serde(skip_serializing_if = "Option::is_none")]
     quic_port: Option<u16>,
 
-    /// Path to persist your ed25519 private key file.
+    /// Path to persist your ed25519 private key file. Defaults to an ephemeral key only for this
+    /// current session.
+    ///
+    /// The key is used to identify you towards other nodes during network discovery and
+    /// replication. This key is _not_ used to create and sign data.
+    ///
+    /// If a path is set, a key will be generated newly and stored under this path when node starts
+    /// for the first time.
+    ///
+    /// When no path is set, your node will generate an ephemeral private key on every start up and
+    /// _not_ persist it.
     #[arg(short = 'k', long, value_name = "PATH")]
     #[serde(skip_serializing_if = "Option::is_none")]
     private_key: Option<PathBuf>,
 
-    /// mDNS to discover other peers on the local network.
+    /// mDNS to discover other peers on the local network. Enabled by default.
     #[arg(
         short = 'm',
         long,
@@ -118,16 +148,34 @@ struct Cli {
     mdns: Option<bool>,
 
     /// List of known node addresses we want to connect to directly.
-    #[arg(short = 'n', long, value_name = "IP:PORT IP:PORT ...", num_args = 0..)]
+    ///
+    /// Make sure that nodes mentioned in this list are directly reachable (for example they need
+    /// to be hosted with a static IP Address). If you need to connect to nodes with changing,
+    /// dynamic IP addresses or even with nodes behind a firewall or NAT, do not use this field but
+    /// use at least one relay.
+    #[arg(short = 'n', long, value_name = "IP:PORT", num_args = 0..)]
     #[serde(skip_serializing_if = "Option::is_none")]
     direct_node_addresses: Option<Vec<SocketAddr>>,
 
-    /// Address of relay.
+    /// Address of a relay.
+    ///
+    /// A relay helps discover other nodes on the internet (also known as "rendesvouz" or
+    /// "bootstrap" server) and helps establishing direct p2p connections when node is behind a
+    /// firewall or NAT (also known as "holepunching").
+    ///
+    /// WARNING: This will potentially expose your IP address on the network. Do only connect to
+    /// trusted relays or make sure your IP address is hidden via a VPN or proxy if you're
+    /// concerned about leaking your IP.
     #[arg(short = 'r', long, value_name = "IP:PORT")]
     #[serde(skip_serializing_if = "Option::is_none")]
     relay_address: Option<SocketAddr>,
 
-    /// Set to true if our node should also function as a relay.
+    /// Enable if node should also function as a relay. Disabled by default.
+    ///
+    /// Other nodes can use relays to aid discovery and establishing connectivity.
+    ///
+    /// Relays _need_ to be hosted in a way where they can be reached directly, for example with a
+    /// static IP address through an VPS.
     #[arg(
         short = 'e',
         long,

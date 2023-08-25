@@ -1,28 +1,34 @@
 # aquadoggo configuration file
 #
-# Copy this file to the location where aquadoggo will be run or refer to it
-# using the -c command line argument when running aquadoggo. Replace the
-# example values with your own desired configuration.
+# 1. Copy this file to the location where a) aquadoggo will run b) in an XDG
+# compliant config directory (for example "$HOME/.config/aquadoggo/config.toml"
+# on Linux) or c) refer to it using the -c command line argument when running
+# aquadoggo.
+# 2. Replace the example values with your own desired configuration. All values
+# in this template resemble the defaults
+# 3. Check out our website https://p2panda.org for tutorials or official chat
+# for further help finding the right configuration for your p2panda network
 #
 # NOTE: Paths in this file follow the XDG Base Directory Specification for
 # Linux. You might want to adjust these values for your regarding operating
 # system.
 
-# ~~~~~~~
-# Schemas
-# ~~~~~~~
+# ﾟ･｡+☆+｡
+# SCHEMAS
+# ﾟ･｡+☆+｡
 
-# List of schema ids which a node will replicate and expose on the GraphQL API.
+# List of schema ids which a node will replicate, persist and expose on the
+# GraphQL API.
 #
 # When allowing a schema you automatically opt into announcing, replicating and
-# materializing documents connected to it, supporting applications which are
-# dependent on this data.
+# materializing documents connected to it, supporting applications and networks
+# which are dependent on this data.
 #
 # It is recommended to set this list to all schema ids your own application
 # should support, including all important system schemas. For example:
 #
-# supported_schema_ids = [
-#     # To discover new schema, set your node to replicate schema definition
+# allow_schema_ids = [
+#     # To discover new schemas, set your node to replicate schema definition
 #     # documents by including these two built-in schema ids. Your node will now
 #     # search for and replicate schemas which have been published to the
 #     # network.
@@ -31,20 +37,20 @@
 #
 #     # Once you discover new schemas and want to start replicating their
 #     # documents, then add their schema ids to this list as well. It's also
-#     # possible to load or create schemas directly onto your node using the
+#     # possible to create and load schemas directly onto your node using the
 #     # tool `fishy`: https://github.com/p2panda/fishy
 #     "my_interesting_schema_0020a01fe...",
 # ]
 #
-# WARNING: When set to wildcard "*", your node will support _all_ schema ids it
+# WARNING: When set to wildcard "*", your node will support _any_ schemas it
 # will encounter on the network. This is useful for experimentation and local
 # development but _not_ recommended for production settings.
 #
 allow_schema_ids = "*"
 
-# ~~~~~~~~
-# Database
-# ~~~~~~~~
+# ﾟ･｡+☆+｡･
+# DATABASE
+# ﾟ･｡+☆+｡･
 
 # URL / connection string to PostgreSQL or SQLite database.
 #
@@ -64,9 +70,9 @@ allow_schema_ids = "*"
 #
 database_max_connections = 32
 
-# ~~~~~~~
-# Workers
-# ~~~~~~~
+# ﾟ･｡+☆+｡･
+# WORKERS
+# ﾟ･｡+☆+｡･
 
 # Number of concurrent workers which defines the maximum of materialization
 # tasks which can be worked on simultaneously.
@@ -76,9 +82,9 @@ database_max_connections = 32
 #
 worker_pool_size = 16
 
-# ~~~~~
-# Ports
-# ~~~~~
+# ﾟ･｡+☆
+# PORTS
+# ﾟ･｡+☆
 
 # HTTP port, serving the GraphQL API (for example hosted under
 # http://localhost:2020/graphql). This API is used for client-node
@@ -94,33 +100,33 @@ http_port = 2020
 #
 quic_port = 2022
 
-# ~~~~~~~~
-# Identity
-# ~~~~~~~~
+# ﾟ･｡+☆+｡･
+# IDENTITY
+# ﾟ･｡+☆+｡･
 
 # Path to persist your ed25519 private key file. The key is used to identify
 # you towards other nodes during network discovery and replication. This key is
 # _not_ used to create and sign data.
 #
-# Will be generated newly and stored under this path when node starts for the
-# first time.
+# If a path is set, a key will be generated newly and stored under this path
+# when node starts for the first time.
 #
-# When commented out, your node will generate an ephemeral private key on every
-# start up and _not_ persist it.
+# When comment out or no path is set, your node will generate an ephemeral
+# private key on every start up and _not_ persist it.
 #
 # private_key = "$HOME/.local/share/aquadoggo/private-key.txt"
 
-# ~~~~~~~~~~~~~~
-# Local networks
-# ~~~~~~~~~~~~~~
+# ﾟ･｡+☆+｡･ﾟ･｡+☆+
+# LOCAL NETWORKS
+# ﾟ･｡+☆+｡･ﾟ･｡+☆+
 
 # mDNS to discover other peers on the local network. Enabled by default.
 #
 mdns = true
 
-# ~~~~~
-# Nodes
-# ~~~~~
+# ﾟ･｡+☆
+# NODES
+# ﾟ･｡+☆
 
 # List of known node addresses (IP + port) we want to connect to directly.
 #
@@ -134,11 +140,11 @@ direct_node_addresses = [
     # "192.0.2.2:3000",
 ]
 
-# ~~~~~
-# Relay
-# ~~~~~
+# ﾟ･｡+☆
+# RELAY
+# ﾟ･｡+☆
 
-# Address of relay.
+# Address of a relay.
 #
 # A relay helps discover other nodes on the internet (also known as
 # "rendesvouz" or "bootstrap" server) and helps establishing direct p2p
@@ -159,7 +165,7 @@ direct_node_addresses = [
 #
 # relay_address = "192.0.2.16:2022"
 
-# Set to true if our node should also function as a relay. Defaults to false.
+# Set to true if node should also function as a relay. Defaults to false.
 #
 # Other nodes can use relays to aid discovery and establishing connectivity.
 #
