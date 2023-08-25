@@ -237,7 +237,7 @@ pub struct Configuration {
     pub relay_addresses: Vec<SocketAddr>,
     pub relay_mode: bool,
     pub allow_peer_ids: UncheckedAllowList,
-    pub block_peer_ids: UncheckedAllowList,
+    pub block_peer_ids: Vec<PeerId>,
 }
 
 impl Default for Configuration {
@@ -255,7 +255,7 @@ impl Default for Configuration {
             relay_addresses: vec![],
             relay_mode: false,
             allow_peer_ids: UncheckedAllowList::Wildcard,
-            block_peer_ids: UncheckedAllowList::Wildcard,
+            block_peer_ids: Vec::new(),
         }
     }
 }
@@ -300,23 +300,6 @@ impl TryFrom<Configuration> for NodeConfiguration {
             }
         };
 
-        // Check if given peer ids are valid
-        let block_peer_ids = match value.block_peer_ids {
-            UncheckedAllowList::Wildcard => AllowList::<PeerId>::Wildcard,
-            UncheckedAllowList::Set(str_values) => {
-                let peer_ids: Result<Vec<PeerId>, anyhow::Error> = str_values
-                    .iter()
-                    .map(|str_value| {
-                        PeerId::from_str(str_value).map_err(|_| {
-                            anyhow!("Invalid peer id '{str_value}' found in 'allow_peer_ids' list")
-                        })
-                    })
-                    .collect();
-
-                AllowList::Set(peer_ids?)
-            }
-        };
-
         Ok(NodeConfiguration {
             database_url: value.database_url,
             database_max_connections: value.database_max_connections,
@@ -338,7 +321,7 @@ impl TryFrom<Configuration> for NodeConfiguration {
                     .map(to_multiaddress)
                     .collect(),
                 allow_peer_ids,
-                block_peer_ids,
+                block_peer_ids: value.block_peer_ids,
                 ..Default::default()
             },
         })

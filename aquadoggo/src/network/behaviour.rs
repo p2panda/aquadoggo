@@ -14,6 +14,7 @@ use log::debug;
 use crate::network::config::NODE_NAMESPACE;
 use crate::network::peers;
 use crate::network::NetworkConfiguration;
+use crate::AllowList;
 
 /// How often do we broadcast mDNS queries into the network.
 const MDNS_QUERY_INTERVAL: Duration = Duration::from_secs(5);
@@ -73,14 +74,14 @@ pub struct P2pandaBehaviour {
     /// to each other to their predicted external address with help of a third-party relay server.
     pub dcutr: Toggle<dcutr::Behaviour>,
 
-    /// Register peer connections and handle p2panda messaging with them.
-    pub peers: peers::Behaviour,
-
     /// Allow connections based on an allow list of peer ids.
     pub allowed_peers: Toggle<allow_block_list::Behaviour<AllowedPeers>>,
 
     /// Block connections based on a block list of peer ids.
     pub blocked_peers: Toggle<allow_block_list::Behaviour<BlockedPeers>>,
+
+    /// Register peer connections and handle p2panda messaging with them.
+    pub peers: peers::Behaviour,
 }
 
 impl P2pandaBehaviour {
@@ -169,13 +170,10 @@ impl P2pandaBehaviour {
             None
         };
 
-        // Always create behaviour to manage peer connections and handle p2panda messaging
-        let peers = peers::Behaviour::new();
-
-        // Construct behaviour to manage an allow list of peers when configured.
+        // Construct behaviour to manage an allow list of peers when configured
         let allowed_peers = match &network_config.allow_peer_ids {
-            crate::AllowList::Wildcard => None,
-            crate::AllowList::Set(allow_peer_ids) => {
+            AllowList::Wildcard => None,
+            AllowList::Set(allow_peer_ids) => {
                 let mut allowed_peers = allow_block_list::Behaviour::default();
                 for peer_id in allow_peer_ids {
                     allowed_peers.allow_peer(*peer_id)
@@ -184,17 +182,19 @@ impl P2pandaBehaviour {
             }
         };
 
-        // Construct behaviour to manage a block list of peers when configured.
-        let blocked_peers = match &network_config.block_peer_ids {
-            crate::AllowList::Wildcard => None,
-            crate::AllowList::Set(block_peer_ids) => {
-                let mut blocked_peers = allow_block_list::Behaviour::default();
-                for peer_id in block_peer_ids {
-                    blocked_peers.block_peer(*peer_id)
-                }
-                Some(blocked_peers)
+        // Construct behaviour to manage a block list of peers when configured
+        let blocked_peers = if network_config.block_peer_ids.is_empty() {
+            None
+        } else {
+            let mut blocked_peers = allow_block_list::Behaviour::default();
+            for peer_id in &network_config.block_peer_ids {
+                blocked_peers.block_peer(*peer_id)
             }
+            Some(blocked_peers)
         };
+
+        // Always create behaviour to manage peer connections and handle p2panda messaging
+        let peers = peers::Behaviour::new();
 
         Ok(Self {
             identify: identify.into(),
