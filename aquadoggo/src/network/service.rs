@@ -22,6 +22,8 @@ use crate::network::behaviour::{Event, P2pandaBehaviour};
 use crate::network::config::NODE_NAMESPACE;
 use crate::network::{identity, peers, swarm, utils, ShutdownHandler};
 
+const RELAY_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+
 /// Network service which handles all networking logic for a p2panda node.
 ///
 /// This includes:
@@ -92,11 +94,14 @@ pub async fn network_service(
         swarm.behaviour_mut().peers.disable();
 
         for mut relay_address in network_config.relay_addresses.clone() {
+            if let Some(address) = utils::to_quic_address(&relay_address) {
+                info!("Connecting to relay node {}", address);
+            }
+
             // Attempt to connect to the relay node, we give this a 5 second timeout so as not to
             // get stuck if one relay is unreachable.
-            info!("Connecting to relay node at: {relay_address}");
             if let Ok(result) = tokio::time::timeout(
-                Duration::from_secs(5),
+                RELAY_CONNECT_TIMEOUT,
                 connect_to_relay(&mut swarm, &mut relay_address),
             )
             .await
@@ -157,10 +162,14 @@ pub async fn network_service(
 
     // Dial all nodes we want to directly connect to.
     for direct_node_address in &network_config.direct_node_addresses {
-        info!("Connecting to node at: {direct_node_address}");
+        if let Some(address) = utils::to_quic_address(&direct_node_address) {
+            info!("Connecting to node @ {}", address);
+        }
+
         let opts = DialOpts::unknown_peer_id()
             .address(direct_node_address.clone())
             .build();
+
         match swarm.dial(opts) {
             Ok(_) => (),
             Err(err) => debug!("Error dialing node: {:?}", err),
@@ -207,7 +216,7 @@ pub async fn connect_to_relay(
                 info: identify::Info { observed_addr, .. },
                 peer_id,
             })) => {
-                info!("Relay told us our public address: {:?}", observed_addr);
+                debug!("Relay told us our public address: {:?}", observed_addr);
 
                 // Add the newly learned address to our external addresses.
                 swarm.add_external_address(observed_addr);
@@ -441,13 +450,13 @@ impl EventLoop {
                 rendezvous_node,
                 ..
             } => {
-                info!("Discovered peers registered at rendezvous: {registrations:?}",);
+                debug!("Discovered peers registered at rendezvous: {registrations:?}",);
 
                 for registration in registrations {
                     for address in registration.record.addresses() {
                         let peer_id = registration.record.peer_id();
                         if peer_id != self.local_peer_id {
-                            info!("Add new peer to address book: {} {}", peer_id, address);
+                            debug!("Add new peer to address book: {} {}", peer_id, address);
 
                             if let Some(relay_address) = self.relay_addresses.get(rendezvous_node) {
                                 let peer_circuit_address = relay_address
@@ -476,7 +485,7 @@ impl EventLoop {
                 info: identify::Info { observed_addr, .. },
                 ..
             } => {
-                info!("Observed external address reported: {observed_addr}");
+                debug!("Observed external address reported: {observed_addr}");
                 if !self
                     .swarm
                     .external_addresses()
