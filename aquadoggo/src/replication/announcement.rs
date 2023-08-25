@@ -143,12 +143,12 @@ mod tests {
     use rstest::rstest;
 
     use crate::replication::SchemaIdSet;
-    use crate::test_utils::helpers::random_target_set;
+    use crate::test_utils::helpers::random_schema_id_set;
 
     use super::{Announcement, AnnouncementMessage};
 
     #[rstest]
-    fn serialize(#[from(random_target_set)] supported_schema_ids: SchemaIdSet) {
+    fn serialize(#[from(random_schema_id_set)] supported_schema_ids: SchemaIdSet) {
         let announcement = Announcement::new(supported_schema_ids.clone());
         assert_eq!(
             serialize_from(AnnouncementMessage::new(announcement.clone())),
@@ -157,7 +157,7 @@ mod tests {
     }
 
     #[rstest]
-    fn deserialize(#[from(random_target_set)] supported_schema_ids: SchemaIdSet) {
+    fn deserialize(#[from(random_schema_id_set)] supported_schema_ids: SchemaIdSet) {
         assert_eq!(
             deserialize_into::<AnnouncementMessage>(&serialize_value(cbor!([
                 0,

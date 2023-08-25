@@ -182,7 +182,7 @@ mod tests {
 
     use crate::replication::manager::INITIAL_SESSION_ID;
     use crate::replication::{Message, Mode, SchemaIdSet, SessionState};
-    use crate::test_utils::helpers::random_target_set;
+    use crate::test_utils::helpers::random_schema_id_set;
     use crate::test_utils::{
         populate_and_materialize, populate_store_config, test_runner, test_runner_with_manager,
         TestNode, TestNodeManager,
@@ -191,7 +191,7 @@ mod tests {
     use super::Session;
 
     #[rstest]
-    fn state_machine(#[from(random_target_set)] target_set: SchemaIdSet) {
+    fn state_machine(#[from(random_schema_id_set)] target_set: SchemaIdSet) {
         test_runner(move |node: TestNode| async move {
             let mut session = Session::new(
                 &INITIAL_SESSION_ID,

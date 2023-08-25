@@ -525,7 +525,7 @@ mod tests {
         Mode, SchemaIdSet, SyncIngest, SyncMessage, HAVE_TYPE, SYNC_DONE_TYPE,
     };
     use crate::schema::SchemaProvider;
-    use crate::test_utils::helpers::random_target_set;
+    use crate::test_utils::helpers::random_schema_id_set;
     use crate::test_utils::{
         populate_and_materialize, populate_store_config, test_runner, test_runner_with_manager,
         TestNode, TestNodeManager,
@@ -550,8 +550,8 @@ mod tests {
 
     #[rstest]
     fn initiate_outbound_session(
-        #[from(random_target_set)] target_set_1: SchemaIdSet,
-        #[from(random_target_set)] target_set_2: SchemaIdSet,
+        #[from(random_schema_id_set)] target_set_1: SchemaIdSet,
+        #[from(random_schema_id_set)] target_set_2: SchemaIdSet,
     ) {
         let peer_id_local: Peer = Peer::new("local");
         let peer_id_remote: Peer = Peer::new("remote");
@@ -585,9 +585,9 @@ mod tests {
 
     #[rstest]
     fn initiate_inbound_session(
-        #[from(random_target_set)] target_set_1: SchemaIdSet,
-        #[from(random_target_set)] target_set_2: SchemaIdSet,
-        #[from(random_target_set)] target_set_3: SchemaIdSet,
+        #[from(random_schema_id_set)] target_set_1: SchemaIdSet,
+        #[from(random_schema_id_set)] target_set_2: SchemaIdSet,
+        #[from(random_schema_id_set)] target_set_3: SchemaIdSet,
     ) {
         let peer_id_local: Peer = Peer::new("local");
         let peer_id_remote: Peer = Peer::new("remote");
@@ -672,8 +672,8 @@ mod tests {
     //  ============ SESSION 1 CLOSED ===============
     #[rstest]
     fn concurrent_requests_duplicate_session_ids(
-        #[from(random_target_set)] target_set_1: SchemaIdSet,
-        #[from(random_target_set)] target_set_2: SchemaIdSet,
+        #[from(random_schema_id_set)] target_set_1: SchemaIdSet,
+        #[from(random_schema_id_set)] target_set_2: SchemaIdSet,
     ) {
         let peer_id_local: Peer = Peer::new("local");
         let peer_id_remote: Peer = Peer::new("remote");
@@ -874,7 +874,7 @@ mod tests {
     //  ============== SESSION CLOSED ===============
     #[rstest]
     fn concurrent_requests_duplicate_target_set(
-        #[from(random_target_set)] target_set_1: SchemaIdSet,
+        #[from(random_schema_id_set)] target_set_1: SchemaIdSet,
     ) {
         let peer_id_local: Peer = Peer::new("local");
         let peer_id_remote: Peer = Peer::new("remote");
@@ -995,7 +995,7 @@ mod tests {
     }
 
     #[rstest]
-    fn inbound_checks_supported_mode(#[from(random_target_set)] target_set: SchemaIdSet) {
+    fn inbound_checks_supported_mode(#[from(random_schema_id_set)] target_set: SchemaIdSet) {
         let peer_id_local: Peer = Peer::new("local");
         let peer_id_remote: Peer = Peer::new("remote");
 

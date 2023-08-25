@@ -237,7 +237,7 @@ mod tests {
 
         let expected_result = ciborium::de::Error::<std::io::Error>::Semantic(
             None,
-            "Target set contains unsorted or duplicate schema ids".to_string(),
+            "Set contains unsorted or duplicate schema ids".to_string(),
         );
         assert_eq!(result.unwrap_err().to_string(), expected_result.to_string());
     }
