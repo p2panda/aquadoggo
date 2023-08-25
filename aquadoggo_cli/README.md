@@ -1,13 +1,32 @@
 # aquadoggo CLI
 
-Node server with GraphQL API for the p2panda network.
+Configurable node for the p2panda network.
+
+## Usage
+
+`aquadoggo` is a powerful node implementation which can run in very different setups during development and in production. It can be configured through a `config.toml` file, environment variables and command line arguments, depending on your needs.
+
+Check out the [`config.toml`](config.toml) file for all configurations and documentation.
+
+```bash
+# Show all possible command line arguments
+aquadoggo --help
+
+# Run aquadoggo in local development mode (default)
+aquadoggo
+```
 
 ## Development
 
 ```bash
-cargo run
+# Run node during development with logging enabled
+RUST_LOG=aquadoggo=debug cargo run
+
+# Run all tests
 cargo test
-cargo build
+
+# Compile release binary
+cargo build --release
 ```
 
 ## License
