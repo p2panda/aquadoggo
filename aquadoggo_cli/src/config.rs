@@ -79,8 +79,11 @@ struct Cli {
 
     /// List of schema ids which a node will replicate and expose on the GraphQL API.
     #[arg(short = 's', long, value_name = "SCHEMA_ID SCHEMA_ID ...", num_args = 0..)]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    supported_schema_ids: Option<Vec<SchemaId>>,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "serialize_with_wildcard"
+    )]
+    supported_schema_ids: Option<Vec<String>>,
 
     /// URL / connection string to PostgreSQL or SQLite database.
     #[arg(short = 'd', long, value_name = "CONNECTION_STRING")]
@@ -133,6 +136,28 @@ struct Cli {
     )]
     #[serde(skip_serializing_if = "Option::is_none")]
     relay_mode: Option<bool>,
+}
+
+/// Clap converts wildcard symbols from command line arguments (for example --supported-schema-ids
+/// "*") into an array, (["*"]), but we need it to be just a string ("*").
+fn serialize_with_wildcard<S>(
+    list: &Option<Vec<String>>,
+    serializer: S,
+) -> std::result::Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match list {
+        Some(list) => {
+            // Wildcard symbol comes in form of an array ["*"], convert it to just a string "*"
+            if list.len() == 1 && list[0] == WILDCARD {
+                serializer.serialize_str(WILDCARD)
+            } else {
+                list.serialize(serializer)
+            }
+        }
+        None => unreachable!("Serialization is skipped if value is None"),
+    }
 }
 
 /// Configuration derived from environment variables and .toml file.
