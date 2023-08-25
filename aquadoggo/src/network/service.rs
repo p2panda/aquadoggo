@@ -152,6 +152,18 @@ pub async fn network_service(
         }
     }
 
+    // Dial all nodes we want to directly connect to.
+    for direct_node_address in &network_config.direct_node_addresses {
+        info!("Connecting to node at: {direct_node_address}");
+        let opts = DialOpts::unknown_peer_id()
+            .address(direct_node_address.clone())
+            .build();
+        match swarm.dial(opts) {
+            Ok(_) => (),
+            Err(err) => debug!("Error dialing node: {:?}", err),
+        };
+    }
+
     info!("Network service ready!");
 
     // Spawn main event loop handling all p2panda and libp2p network events.
