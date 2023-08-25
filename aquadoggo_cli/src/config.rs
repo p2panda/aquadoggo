@@ -378,7 +378,7 @@ pub fn print_config(path: ConfigFilePath, config: &NodeConfiguration) -> String 
                         .join("\n")
             }
         }
-        AllowList::Wildcard => "* (any schema id)".into(),
+        AllowList::Wildcard => format!("{WILDCARD} (any schema id)"),
     };
 
     let database_url = if config.database_url == "sqlite::memory:" {
