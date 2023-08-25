@@ -157,7 +157,7 @@ struct Cli {
     #[serde(skip_serializing_if = "Option::is_none")]
     direct_node_addresses: Option<Vec<SocketAddr>>,
 
-    /// Address of a relay.
+    /// Addresses of a relays.
     ///
     /// A relay helps discover other nodes on the internet (also known as "rendesvouz" or
     /// "bootstrap" server) and helps establishing direct p2p connections when node is behind a
@@ -166,9 +166,9 @@ struct Cli {
     /// WARNING: This will potentially expose your IP address on the network. Do only connect to
     /// trusted relays or make sure your IP address is hidden via a VPN or proxy if you're
     /// concerned about leaking your IP.
-    #[arg(short = 'r', long, value_name = "IP:PORT")]
+    #[arg(short = 'r', long, value_name = "IP:PORT IP:PORT, ...", num_args = 0..)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    relay_address: Option<SocketAddr>,
+    relay_addresses: Option<Vec<SocketAddr>>,
 
     /// Enable if node should also function as a relay. Disabled by default.
     ///
@@ -224,7 +224,7 @@ pub struct Configuration {
     pub private_key: Option<PathBuf>,
     pub mdns: bool,
     pub direct_node_addresses: Vec<SocketAddr>,
-    pub relay_address: Option<SocketAddr>,
+    pub relay_addresses: Vec<SocketAddr>,
     pub relay_mode: bool,
 }
 
@@ -240,7 +240,7 @@ impl Default for Configuration {
             private_key: None,
             mdns: true,
             direct_node_addresses: vec![],
-            relay_address: None,
+            relay_addresses: vec![],
             relay_mode: false,
         }
     }
@@ -284,7 +284,11 @@ impl TryFrom<Configuration> for NodeConfiguration {
                     .map(to_multiaddress)
                     .collect(),
                 relay_mode: value.relay_mode,
-                relay_address: value.relay_address.map(to_multiaddress),
+                relay_addresses: value
+                    .relay_addresses
+                    .into_iter()
+                    .map(to_multiaddress)
+                    .collect(),
                 ..Default::default()
             },
         })
