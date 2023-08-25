@@ -124,7 +124,7 @@ pub async fn network_service(
         // First restart the "peers" behaviour in order to handle the expected messages
         swarm.behaviour_mut().peers.enable();
 
-        for (relay_peer_id, _) in &connected_relays {
+        for relay_peer_id in connected_relays.keys() {
             let opts = DialOpts::peer_id(*relay_peer_id)
                 .condition(PeerCondition::Always) // There is an existing connection, so we force dial here.
                 .build();
