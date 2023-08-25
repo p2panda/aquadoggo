@@ -59,11 +59,25 @@ be embedded inside your Rust program.
 - Verifies the consistency, format and signature of operations and rejects invalid ones.
 - Stores operations of the network in an SQL database of your choice (SQLite, PostgreSQL).
 - Materializes views on top of the known data.
-- Answers filterable and paginated data queries via GraphQL.
+- Answers filtered, sorted and paginated data queries via GraphQL.
 - Discovers other nodes in local network and internet.
-- Replicates data with other nodes.
+- Establishes direct peer-to-peer connections via UDP holepunching.
+- Falls back to relays when direct connections are not possible.
+- Replicates data efficiently with other nodes.
 
-## Example
+## Command line application
+
+Configure and run your own `aquadoggo` instance.
+
+```bash
+aquadoggo -c config.toml
+```
+
+Read more about [how to use the application](/aquadoggo_cli).
+
+## Rust Crate
+
+### Example
 
 Embed the node server in your Rust application or web container like [`Tauri`]:
 
@@ -78,7 +92,7 @@ let node = Node::start(key_pair, config).await;
 
 [`Tauri`]: https://tauri.studio
 
-## Installation
+### Installation
 
 With [`cargo-edit`](https://github.com/killercup/cargo-edit) installed run:
 
