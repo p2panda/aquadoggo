@@ -149,15 +149,50 @@ struct Cli {
 
     /// List of known node addresses we want to connect to directly.
     ///
-    /// Make sure that nodes mentioned in this list are directly reachable (for example they need
-    /// to be hosted with a static IP Address). If you need to connect to nodes with changing,
-    /// dynamic IP addresses or even with nodes behind a firewall or NAT, do not use this field but
-    /// use at least one relay.
+    /// Make sure that nodes mentioned in this list are directly reachable (they need to be hosted
+    /// with a static IP Address). If you need to connect to nodes with changing, dynamic IP
+    /// addresses or even with nodes behind a firewall or NAT, do not use this field but use at
+    /// least one relay.
     #[arg(short = 'n', long, value_name = "IP:PORT", num_args = 0..)]
     #[serde(skip_serializing_if = "Option::is_none")]
     direct_node_addresses: Option<Vec<SocketAddr>>,
 
-    /// Addresses of a relays.
+    /// List of peers which are allowed to connect to your node.
+    ///
+    /// If set then only nodes (identified by their peer id) contained in this list will be able to
+    /// connect to your node (via a relay or directly). When not set any other node can connect to
+    /// yours.
+    ///
+    /// Peer IDs identify nodes by using their hashed public keys. They do _not_ represent authored
+    /// data from clients and are only used to authenticate nodes towards each other during
+    /// networking.
+    ///
+    /// Use this list for example for setups where the identifier of the nodes you want to form a
+    /// network with is known but you still need to use relays as their IP addresses change
+    /// dynamically.
+    #[arg(short = 'a', long, value_name = "PEER_ID", num_args = 0..)]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "serialize_with_wildcard"
+    )]
+    allow_peer_ids: Option<Vec<String>>,
+
+    /// List of peers which will be blocked from connecting to your node.
+    ///
+    /// If set then any peers (identified by their peer id) contained in this list will be blocked
+    /// from connecting to your node (via a relay or directly). When an empty list is provided then
+    /// there are no restrictions on which nodes can connect to yours.
+    ///
+    /// Block lists and allow lists are exclusive, which means that you should _either_ use a block
+    /// list _or_ an allow list depending on your setup.
+    ///
+    /// Use this list for example if you want to allow _any_ node to connect to yours _except_ of a
+    /// known number of excluded nodes.
+    #[arg(short = 'b', long, value_name = "PEER_ID", num_args = 0..)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    block_peer_ids: Option<Vec<PeerId>>,
+
+    /// List of relay addresses.
     ///
     /// A relay helps discover other nodes on the internet (also known as "rendesvouz" or
     /// "bootstrap" server) and helps establishing direct p2p connections when node is behind a
@@ -169,19 +204,6 @@ struct Cli {
     #[arg(short = 'r', long, value_name = "IP:PORT", num_args = 0..)]
     #[serde(skip_serializing_if = "Option::is_none")]
     relay_addresses: Option<Vec<SocketAddr>>,
-
-    /// List of peers this node will accept connections with.
-    #[arg(short = 'a', long, value_name = "PEER_ID", num_args = 0..)]
-    #[serde(
-        skip_serializing_if = "Option::is_none",
-        serialize_with = "serialize_with_wildcard"
-    )]
-    allow_peer_ids: Option<Vec<String>>,
-
-    /// List of peers this node will block connections with.
-    #[arg(short = 'b', long, value_name = "PEER_ID", num_args = 0..)]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    block_peer_ids: Option<Vec<PeerId>>,
 
     /// Enable if node should also function as a relay. Disabled by default.
     ///

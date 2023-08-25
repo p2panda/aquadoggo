@@ -118,42 +118,52 @@ mdns = true
 
 # List of known node addresses (IP + port) we want to connect to directly.
 #
-# NOTE: Make sure that nodes mentioned in this list are directly reachable (for
-# example they need to be hosted with a static IP Address). If you need to
-# connect to nodes with changing, dynamic IP addresses or even with nodes
-# behind a firewall or NAT, do not use this field but use at least one relay.
+# NOTE: Make sure that nodes mentioned in this list are directly reachable
+# (they need to be hosted with a static IP Address). If you need to connect to
+# nodes with changing, dynamic IP addresses or even with nodes behind a
+# firewall or NAT, do not use this field but use at least one relay.
 #
 direct_node_addresses = [
     # "192.0.2.0:2022",
     # "192.0.2.2:3000",
 ]
 
-# List of peers which can connect to our node.
+# List of peers which are allowed to connect to your node.
 #
-# If set then only peers (identified by their peer id) contained in this list
-# will be able to connect to our node (via a relay or directly). When not set
-# then there are no restrictions on which nodes can connect to ours.
+# If set then only nodes (identified by their peer id) contained in this list
+# will be able to connect to your node (via a relay or directly). When not set
+# any other node can connect to yours.
 #
-# WARNING: When set to wildcard "*", your node will accept connections requests
-# from any peers. This is useful for experimentation and local development or
-# settings where access to the network is secured via other means.
+# Peer IDs identify nodes by using their hashed public keys. They do _not_
+# represent authored data from clients and are only used to authenticate nodes
+# towards each other during networking.
+#
+# Use this list for example for setups where the identifier of the nodes you
+# want to form a network with is known but you still need to use relays as
+# their IP addresses change dynamically.
 #
 allow_peer_ids = "*"
 
-# List of peers which will be blocked from connecting to our node.
+# List of peers which will be blocked from connecting to your node.
 #
 # If set then any peers (identified by their peer id) contained in this list
-# will be blocked from connecting to our node (via a relay or directly). When
+# will be blocked from connecting to your node (via a relay or directly). When
 # an empty list is provided then there are no restrictions on which nodes can
-# connect to ours.
+# connect to yours.
+#
+# Block lists and allow lists are exclusive, which means that you should
+# _either_ use a block list _or_ an allow list depending on your setup.
+#
+# Use this list for example if you want to allow _any_ node to connect to yours
+# _except_ of a known number of excluded nodes.
 #
 block_peer_ids = []
 
-# ﾟ･｡+☆
-# RELAY
-# ﾟ･｡+☆
+# ﾟ･｡+☆+
+# RELAYS
+# ﾟ･｡+☆+
 
-# Address of a relays.
+# List of relay addresses.
 #
 # A relay helps discover other nodes on the internet (also known as
 # "rendesvouz" or "bootstrap" server) and helps establishing direct p2p
@@ -162,7 +172,7 @@ block_peer_ids = []
 #
 # When a direct connection is not possible the relay will help to redirect the
 # (encrypted) traffic as an intermediary between us and other nodes. The node
-# will contact the relay and register our IP address for other peers.
+# will contact the relay and register your IP address for other peers.
 #
 # WARNING: This will potentially expose your IP address on the network. Do only
 # connect to trusted relays or make sure your IP address is hidden via a VPN or
