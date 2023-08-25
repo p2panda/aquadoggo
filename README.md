@@ -61,9 +61,10 @@ Configurable node server implementation for the [`p2panda`] network running as a
 - Verifies the consistency, format and signature of operations and rejects invalid ones.
 - Stores operations of the network in an SQL database of your choice (SQLite, PostgreSQL).
 - Materializes views on top of the known data.
-- Answers filterable and paginated data queries via GraphQL.
+- Answers filtered, sorted and paginated data queries via GraphQL.
 - Discovers other nodes in local network and internet.
-- Replicates data with other nodes.
+- Establishes connections (peer-to-peer via UDP holepunching) or via relays.
+- Replicates data efficiently with other nodes.
 
 ## Example
 
