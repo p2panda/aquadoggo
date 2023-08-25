@@ -56,11 +56,11 @@ impl Node {
 
         // Initiate the SchemaProvider with all currently known schema from the store.
         //
-        // If supported_schema_ids are provided then only schema identified in this list will be
-        // added to the provider and supported by the node.
+        // If a list of allowed schema ids is provided then only schema identified in this list
+        // will be added to the provider and supported by the node.
         let application_schema = store.get_all_schema().await.unwrap();
         let schema_provider =
-            SchemaProvider::new(application_schema, config.supported_schema_ids.clone());
+            SchemaProvider::new(application_schema, config.allow_schema_ids.clone());
 
         // Create service manager with shared data between services
         let context = Context::new(store, key_pair, config, schema_provider);

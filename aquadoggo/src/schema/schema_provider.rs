@@ -22,7 +22,7 @@ pub struct SchemaProvider {
 
     /// Optional list of allowed schema ids. When not empty, only these schema ids will be accepted
     /// on this node, if not set _all_ schema ids are accepted (wildcard).
-    supported_schema_ids: AllowList<SchemaId>,
+    allow_schema_ids: AllowList<SchemaId>,
 
     /// Sender for broadcast channel informing subscribers about updated schemas.
     tx: Sender<SchemaId>,
@@ -30,10 +30,7 @@ pub struct SchemaProvider {
 
 impl SchemaProvider {
     /// Returns a `SchemaProvider` containing the given application schemas and all system schemas.
-    pub fn new(
-        application_schemas: Vec<Schema>,
-        supported_schema_ids: AllowList<SchemaId>,
-    ) -> Self {
+    pub fn new(application_schemas: Vec<Schema>, allow_schema_ids: AllowList<SchemaId>) -> Self {
         // Collect all system and application schemas.
         let mut schemas = SYSTEM_SCHEMAS.clone();
         schemas.extend(&application_schemas);
@@ -45,7 +42,7 @@ impl SchemaProvider {
         }
 
         // Filter out all unsupported schema ids when list was set
-        if let AllowList::Set(schema_ids) = &supported_schema_ids {
+        if let AllowList::Set(schema_ids) = &allow_schema_ids {
             index.retain(|id, _| schema_ids.contains(id));
         };
 
@@ -62,7 +59,7 @@ impl SchemaProvider {
 
         Self {
             schemas: Arc::new(Mutex::new(index)),
-            supported_schema_ids,
+            allow_schema_ids,
             tx,
         }
     }
@@ -87,8 +84,8 @@ impl SchemaProvider {
     /// Returns `true` if a schema was updated or it already existed in it's current state, and
     /// `false` if it was inserted.
     pub async fn update(&self, schema: Schema) -> Result<bool> {
-        if let AllowList::Set(supported_schema_ids) = &self.supported_schema_ids {
-            if !supported_schema_ids.contains(schema.id()) {
+        if let AllowList::Set(allow_schema_ids) = &self.allow_schema_ids {
+            if !allow_schema_ids.contains(schema.id()) {
                 bail!("Attempted to add unsupported schema to schema provider");
             }
         };
@@ -120,7 +117,7 @@ impl SchemaProvider {
     /// If no allow-list was set it returns the list of all currently known schema ids. If an
     /// allo-wlist was set it directly returns the list itself.
     pub async fn supported_schema_ids(&self) -> Vec<SchemaId> {
-        match &self.supported_schema_ids {
+        match &self.allow_schema_ids {
             AllowList::Set(schema_ids) => schema_ids.clone(),
             AllowList::Wildcard => self
                 .all()
@@ -134,7 +131,7 @@ impl SchemaProvider {
     /// Returns true if an allow-list of supported schema ids was provided through user
     /// configuration.
     pub fn is_allow_list_active(&self) -> bool {
-        matches!(self.supported_schema_ids, AllowList::Set(_))
+        matches!(self.allow_schema_ids, AllowList::Set(_))
     }
 }
 

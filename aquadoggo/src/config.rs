@@ -33,7 +33,7 @@ pub struct Configuration {
     ///
     /// When allowing a schema you automatically opt into announcing, replicating and materializing
     /// documents connected to it, supporting applications which are dependent on this data.
-    pub supported_schema_ids: AllowList<SchemaId>,
+    pub allow_schema_ids: AllowList<SchemaId>,
 
     /// Network configuration.
     pub network: NetworkConfiguration,
@@ -46,7 +46,7 @@ impl Default for Configuration {
             database_max_connections: 32,
             http_port: 2020,
             worker_pool_size: 16,
-            supported_schema_ids: AllowList::Wildcard,
+            allow_schema_ids: AllowList::Wildcard,
             network: NetworkConfiguration::default(),
         }
     }

@@ -83,7 +83,7 @@ struct Cli {
         skip_serializing_if = "Option::is_none",
         serialize_with = "serialize_with_wildcard"
     )]
-    supported_schema_ids: Option<Vec<String>>,
+    allow_schema_ids: Option<Vec<String>>,
 
     /// URL / connection string to PostgreSQL or SQLite database.
     #[arg(short = 'd', long, value_name = "CONNECTION_STRING")]
@@ -163,7 +163,7 @@ where
 /// Configuration derived from environment variables and .toml file.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Configuration {
-    pub supported_schema_ids: UncheckedAllowList,
+    pub allow_schema_ids: UncheckedAllowList,
     pub database_url: String,
     pub database_max_connections: u32,
     pub worker_pool_size: u32,
@@ -179,7 +179,7 @@ pub struct Configuration {
 impl Default for Configuration {
     fn default() -> Self {
         Self {
-            supported_schema_ids: UncheckedAllowList::Set(vec![]),
+            allow_schema_ids: UncheckedAllowList::Wildcard,
             database_url: "sqlite::memory:".into(),
             database_max_connections: 32,
             worker_pool_size: 16,
@@ -199,14 +199,16 @@ impl TryFrom<Configuration> for NodeConfiguration {
 
     fn try_from(value: Configuration) -> Result<Self, Self::Error> {
         // Check if given schema ids are valid
-        let supported_schema_ids = match value.supported_schema_ids {
+        let allow_schema_ids = match value.allow_schema_ids {
             UncheckedAllowList::Wildcard => AllowList::<SchemaId>::Wildcard,
             UncheckedAllowList::Set(str_values) => {
                 let schema_ids: Result<Vec<SchemaId>, anyhow::Error> = str_values
                     .iter()
                     .map(|str_value| {
                         SchemaId::from_str(str_value).map_err(|_| {
-                            anyhow!("Invalid schema id '{str_value}' found in 'supported_schema_ids' list")
+                            anyhow!(
+                                "Invalid schema id '{str_value}' found in 'allow_schema_ids' list"
+                            )
                         })
                     })
                     .collect();
@@ -220,7 +222,7 @@ impl TryFrom<Configuration> for NodeConfiguration {
             database_max_connections: value.database_max_connections,
             http_port: value.http_port,
             worker_pool_size: value.worker_pool_size,
-            supported_schema_ids,
+            allow_schema_ids,
             network: NetworkConfiguration {
                 quic_port: value.quic_port,
                 mdns: value.mdns,
@@ -311,7 +313,7 @@ pub fn print_config(path: ConfigFilePath, config: &NodeConfiguration) -> String 
     println!();
     println!("{}\n", "Configuration".underline());
 
-    let supported_schema_ids: String = match &config.supported_schema_ids {
+    let allow_schema_ids: String = match &config.allow_schema_ids {
         AllowList::Set(schema_ids) => {
             if schema_ids.is_empty() {
                 "none (disable replication)".into()
@@ -324,7 +326,7 @@ pub fn print_config(path: ConfigFilePath, config: &NodeConfiguration) -> String 
                         .join("\n")
             }
         }
-        AllowList::Wildcard => "support all incoming schemas (*)".into(),
+        AllowList::Wildcard => "* (any schema id)".into(),
     };
 
     let database_url = if config.database_url == "sqlite::memory:" {
@@ -348,14 +350,14 @@ pub fn print_config(path: ConfigFilePath, config: &NodeConfiguration) -> String 
     };
 
     format!(
-        r"Supported Schema IDs: {}
+        r"Allow Schema IDs: {}
 Database URL: {}
 mDNS: {}
 Relay Mode: {}
 
 Node is ready!
 ",
-        supported_schema_ids.blue(),
+        allow_schema_ids.blue(),
         database_url.blue(),
         mdns.blue(),
         relay_mode.blue(),

@@ -40,7 +40,7 @@
 # will encounter on the network. This is useful for experimentation and local
 # development but _not_ recommended for production settings.
 #
-supported_schema_ids = "*"
+allow_schema_ids = "*"
 
 # ~~~~~~~~
 # Database
