@@ -69,6 +69,7 @@ pub fn load_config() -> Result<(ConfigFilePath, Configuration)> {
 #[command(
     name = "aquadoggo Node",
     about = "Node server for the p2panda network",
+    long_about = None,
     version
 )]
 struct Cli {
