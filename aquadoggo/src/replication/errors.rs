@@ -56,9 +56,6 @@ pub enum IngestError {
 
 #[derive(Error, Debug)]
 pub enum TargetSetError {
-    #[error("Target set does not contain any schema ids")]
-    ZeroSchemaIds,
-
     #[error("Target set contains unsorted or duplicate schema ids")]
     UnsortedSchemaIds,
 }

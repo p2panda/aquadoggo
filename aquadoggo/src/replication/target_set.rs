@@ -37,8 +37,10 @@ impl TargetSet {
         Self(deduplicated_set)
     }
 
-    pub fn contains(&self, schema_id: &SchemaId) -> bool {
-        self.0.contains(schema_id)
+    pub fn from_intersection(local_target_set: &TargetSet, remote_target_set: &TargetSet) -> Self {
+        let mut target_set = local_target_set.clone();
+        target_set.0.retain(|id| remote_target_set.contains(id));
+        target_set
     }
 
     fn from_untrusted(schema_ids: Vec<SchemaId>) -> Result<Self, TargetSetError> {
@@ -51,6 +53,19 @@ impl TargetSet {
         Ok(target_set)
     }
 
+    pub fn contains(&self, schema_id: &SchemaId) -> bool {
+        self.0.contains(schema_id)
+    }
+
+    /// Returns true if there are no unknown elements in external target set.
+    pub fn is_valid_set(&self, target_set: &TargetSet) -> bool {
+        !target_set.iter().any(|schema_id| !self.contains(schema_id))
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     pub fn iter(&self) -> Iter<SchemaId> {
         self.0.iter()
     }
@@ -60,11 +75,6 @@ impl Validate for TargetSet {
     type Error = TargetSetError;
 
     fn validate(&self) -> Result<(), Self::Error> {
-        // Check if at least one schema id is given
-        if self.0.is_empty() {
-            return Err(TargetSetError::ZeroSchemaIds);
-        };
-
         let mut prev_schema_id: Option<&SchemaId> = None;
         let mut initial_system_schema = true;
 
@@ -165,6 +175,37 @@ mod tests {
             TargetSet::new(&[schema_id_1.clone()]),
             TargetSet::new(&[schema_id_2.clone()]),
         );
+    }
+
+    #[rstest]
+    fn calculate_intersection(
+        #[from(random_document_view_id)] document_view_id_1: DocumentViewId,
+        #[from(random_document_view_id)] document_view_id_2: DocumentViewId,
+        #[from(random_document_view_id)] document_view_id_3: DocumentViewId,
+    ) {
+        // Correctly calculates intersections
+        let schema_id_1 =
+            SchemaId::new_application(&SchemaName::new("messages").unwrap(), &document_view_id_1);
+        let schema_id_2 =
+            SchemaId::new_application(&SchemaName::new("profiles").unwrap(), &document_view_id_2);
+        let schema_id_3 =
+            SchemaId::new_application(&SchemaName::new("events").unwrap(), &document_view_id_3);
+
+        let set_1 = TargetSet::new(&[schema_id_1.clone(), schema_id_2.clone()]);
+        let set_2 = TargetSet::new(&[schema_id_3.clone(), schema_id_2.clone()]);
+
+        assert_eq!(
+            TargetSet::from_intersection(&set_1, &set_2),
+            TargetSet::new(&[schema_id_2.clone()])
+        );
+
+        // Correctly verifies if both target sets know about all given elements
+        assert!(TargetSet::new(&[schema_id_2.clone()])
+            .is_valid_set(&TargetSet::new(&[schema_id_2.clone()])));
+        assert!(TargetSet::new(&[schema_id_3.clone(), schema_id_2.clone()])
+            .is_valid_set(&TargetSet::new(&[schema_id_2.clone()])));
+        assert!(!TargetSet::new(&[schema_id_1.clone()])
+            .is_valid_set(&TargetSet::new(&[schema_id_2.clone(), schema_id_1.clone()])));
     }
 
     #[rstest]

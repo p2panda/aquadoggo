@@ -520,8 +520,8 @@ mod tests {
     use tokio::sync::broadcast;
 
     use crate::replication::errors::{DuplicateSessionRequestError, ReplicationError};
-    use crate::replication::message::{Message, HAVE_TYPE, SYNC_DONE_TYPE};
-    use crate::replication::{Mode, SyncIngest, SyncMessage, TargetSet};
+    use crate::replication::message::Message;
+    use crate::replication::{Mode, SyncIngest, SyncMessage, TargetSet, HAVE_TYPE, SYNC_DONE_TYPE};
     use crate::schema::SchemaProvider;
     use crate::test_utils::helpers::random_target_set;
     use crate::test_utils::{

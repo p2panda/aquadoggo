@@ -49,12 +49,16 @@ impl SyncIngest {
 
         let plain_operation = decode_operation(encoded_operation)?;
 
-        // If the node has been configured with supported_schema_ids, check that the sent
-        // operation follows one of our supported schema.
-        if let Some(supported_schema_ids) = self.schema_provider.supported_schema_ids() {
-            if supported_schema_ids.contains(plain_operation.schema_id()) {
-                return Err(IngestError::UnsupportedSchema);
-            }
+        // If the node has been configured with a whitelist of supported schema ids, check that the
+        // sent operation follows one of our supported schema
+        if self.schema_provider.is_whitelist_active()
+            && self
+                .schema_provider
+                .supported_schema_ids()
+                .await
+                .contains(plain_operation.schema_id())
+        {
+            return Err(IngestError::UnsupportedSchema);
         }
 
         // Retrieve the schema if it has been materialized on the node.

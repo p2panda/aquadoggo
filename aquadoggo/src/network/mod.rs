@@ -10,6 +10,6 @@ mod swarm;
 mod transport;
 
 pub use config::NetworkConfiguration;
-pub use peers::Peer;
+pub use peers::{Peer, PeerMessage};
 pub use service::network_service;
 pub use shutdown::ShutdownHandler;

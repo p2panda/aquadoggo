@@ -344,11 +344,11 @@ impl EventLoop {
     /// Handle an incoming message via the communication bus from other services.
     async fn handle_service_message(&mut self, message: ServiceMessage) {
         match message {
-            ServiceMessage::SentReplicationMessage(peer, sync_message) => self
+            ServiceMessage::SentMessage(peer, peer_message) => self
                 .swarm
                 .behaviour_mut()
                 .peers
-                .send_message(peer, sync_message),
+                .send_message(peer, peer_message),
             ServiceMessage::ReplicationFailed(peer) => {
                 self.swarm.behaviour_mut().peers.handle_critical_error(peer);
             }
@@ -368,10 +368,7 @@ impl EventLoop {
             }
             peers::Event::MessageReceived(peer, message) => {
                 // Inform other services about received messages from peer
-                self.send_service_message(ServiceMessage::ReceivedReplicationMessage(
-                    *peer,
-                    message.clone(),
-                ))
+                self.send_service_message(ServiceMessage::ReceivedMessage(*peer, message.clone()))
             }
         }
     }

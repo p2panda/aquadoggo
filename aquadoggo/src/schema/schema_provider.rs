@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use anyhow::{anyhow, Result};
+use anyhow::{bail, Result};
 use log::{debug, info};
 use p2panda_rs::schema::{Schema, SchemaId, SYSTEM_SCHEMAS};
 use p2panda_rs::Human;
@@ -18,9 +18,9 @@ pub struct SchemaProvider {
     /// In-memory store of registered schemas.
     schemas: Arc<Mutex<HashMap<SchemaId, Schema>>>,
 
-    /// Optional list of schema this provider supports. If set only these schema will be added to the schema
-    /// registry once materialized.
-    supported_schema_ids: Option<Vec<SchemaId>>,
+    /// Optional list of whitelisted schema ids. When set, only these schema ids will be accepted
+    /// on this node, if not set _all_ schema ids are accepted.
+    whitelisted_schema_ids: Option<Vec<SchemaId>>,
 
     /// Sender for broadcast channel informing subscribers about updated schemas.
     tx: Sender<SchemaId>,
@@ -30,7 +30,7 @@ impl SchemaProvider {
     /// Returns a `SchemaProvider` containing the given application schemas and all system schemas.
     pub fn new(
         application_schemas: Vec<Schema>,
-        supported_schema_ids: Option<Vec<SchemaId>>,
+        whitelisted_schema_ids: Option<Vec<SchemaId>>,
     ) -> Self {
         // Collect all system and application schemas.
         let mut schemas = SYSTEM_SCHEMAS.clone();
@@ -42,8 +42,8 @@ impl SchemaProvider {
             index.insert(schema.id().to_owned(), schema.to_owned());
         }
 
-        if let Some(supported_schema_ids) = &supported_schema_ids {
-            index.retain(|schema_id, _| supported_schema_ids.contains(schema_id));
+        if let Some(schema_ids) = &whitelisted_schema_ids {
+            index.retain(|id, _| schema_ids.contains(id));
         };
 
         let (tx, _) = channel(64);
@@ -59,7 +59,7 @@ impl SchemaProvider {
 
         Self {
             schemas: Arc::new(Mutex::new(index)),
-            supported_schema_ids,
+            whitelisted_schema_ids,
             tx,
         }
     }
@@ -84,11 +84,9 @@ impl SchemaProvider {
     /// Returns `true` if a schema was updated or it already existed in it's current state, and
     /// `false` if it was inserted.
     pub async fn update(&self, schema: Schema) -> Result<bool> {
-        if let Some(supported_schema) = self.supported_schema_ids.as_ref() {
-            if !supported_schema.contains(schema.id()) {
-                return Err(anyhow!(
-                    "Attempted to add unsupported schema to schema provider"
-                ));
+        if let Some(whitelisted_ids) = self.whitelisted_schema_ids.as_ref() {
+            if !whitelisted_ids.contains(schema.id()) {
+                bail!("Attempted to add unsupported schema to schema provider");
             }
         };
 
@@ -96,8 +94,8 @@ impl SchemaProvider {
         let schema_exists = schemas.get(schema.id()).is_some();
 
         if schema_exists {
-            // Return true here as the schema already exists in it's current state so we don't
-            // need to mutate the schema store or announce any change.
+            // Return true here as the schema already exists in it's current state so we don't need
+            // to mutate the schema store or announce any change.
             return Ok(true);
         }
 
@@ -114,9 +112,26 @@ impl SchemaProvider {
         Ok(is_update)
     }
 
-    // Return the configured supported schema.
-    pub fn supported_schema_ids(&self) -> Option<&Vec<SchemaId>> {
-        self.supported_schema_ids.as_ref()
+    /// Returns a list of all supported schema ids.
+    ///
+    /// If no whitelist was set it returns the list of all currently known schema ids. If a
+    /// whitelist was set it directly returns the list itself.
+    pub async fn supported_schema_ids(&self) -> Vec<SchemaId> {
+        match &self.whitelisted_schema_ids {
+            Some(schema_ids) => schema_ids.clone(),
+            None => self
+                .all()
+                .await
+                .iter()
+                .map(|schema| schema.id().to_owned())
+                .collect(),
+        }
+    }
+
+    /// Returns true if a whitelist of supported schema ids was provided through user
+    /// configuration.
+    pub fn is_whitelist_active(&self) -> bool {
+        self.whitelisted_schema_ids.is_some()
     }
 }
 

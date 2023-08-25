@@ -6,19 +6,15 @@ use p2panda_rs::entry::EncodedEntry;
 use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::EncodedOperation;
-use p2panda_rs::Human;
+use p2panda_rs::{Human, Validate};
 use serde::de::Visitor;
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Serialize};
 
-use crate::replication::{Mode, SessionId, TargetSet};
-
-pub const SYNC_REQUEST_TYPE: MessageType = 0;
-pub const ENTRY_TYPE: MessageType = 8;
-pub const SYNC_DONE_TYPE: MessageType = 9;
-pub const HAVE_TYPE: MessageType = 10;
-
-pub type MessageType = u64;
+use crate::replication::{
+    MessageType, Mode, SessionId, TargetSet, ENTRY_TYPE, HAVE_TYPE, SYNC_DONE_TYPE,
+    SYNC_REQUEST_TYPE,
+};
 
 pub type LiveMode = bool;
 
@@ -159,6 +155,16 @@ impl<'de> Deserialize<'de> for SyncMessage {
                         serde::de::Error::custom("missing target set in sync request message")
                     })?;
 
+                    target_set.validate().map_err(|_| {
+                        serde::de::Error::custom("invalid target set in sync request message")
+                    })?;
+
+                    if target_set.is_empty() {
+                        return Err(serde::de::Error::custom(
+                            "empty target set in sync request message",
+                        ));
+                    }
+
                     Ok(Message::SyncRequest(mode, target_set))
                 } else if message_type == ENTRY_TYPE {
                     let entry_bytes: EncodedEntry = seq.next_element()?.ok_or_else(|| {
@@ -226,7 +232,7 @@ mod tests {
                 51,
                 Message::SyncRequest(Mode::SetReconciliation, target_set.clone())
             )),
-            serialize_value(cbor!([0, 51, 1, target_set]))
+            serialize_value(cbor!([1, 51, 1, target_set]))
         );
 
         assert_eq!(
@@ -253,7 +259,7 @@ mod tests {
     #[rstest]
     fn deserialize(#[from(random_target_set)] target_set: TargetSet, public_key: PublicKey) {
         assert_eq!(
-            deserialize_into::<SyncMessage>(&serialize_value(cbor!([0, 12, 0, target_set])))
+            deserialize_into::<SyncMessage>(&serialize_value(cbor!([1, 12, 0, target_set])))
                 .unwrap(),
             SyncMessage::new(
                 12,
@@ -296,9 +302,11 @@ mod tests {
     #[should_panic(expected = "unknown message type 122 in replication message")]
     #[case::unknown_message_type(cbor!([122, 0]))]
     #[should_panic(expected = "missing session id in replication message")]
-    #[case::only_message_type(cbor!([0]))]
+    #[case::only_message_type(cbor!([1]))]
+    #[should_panic(expected = "empty target set in sync request")]
+    #[case::only_message_type(cbor!([1, 0, 0, []]))]
     #[should_panic(expected = "too many fields for replication message")]
-    #[case::too_many_fields(cbor!([0, 0, 0, ["schema_field_definition_v1"], "too much"]))]
+    #[case::too_many_fields(cbor!([1, 0, 0, ["schema_field_definition_v1"], "too much"]))]
     fn deserialize_invalid_messages(#[case] cbor: Result<Value, Error>) {
         // Check the cbor is valid
         assert!(cbor.is_ok());

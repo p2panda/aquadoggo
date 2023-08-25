@@ -15,8 +15,7 @@ use libp2p::swarm::{
 use log::warn;
 use thiserror::Error;
 
-use crate::network::peers::{Codec, CodecError, Protocol};
-use crate::replication::SyncMessage;
+use crate::network::peers::{Codec, CodecError, PeerMessage, Protocol};
 
 /// The time a connection is maintained to a peer without being in live mode and without
 /// send/receiving a message from. Connections that idle beyond this timeout are disconnected.
@@ -89,7 +88,7 @@ pub struct Handler {
     outbound_substream_establishing: bool,
 
     /// Queue of messages that we want to send to the remote.
-    send_queue: VecDeque<SyncMessage>,
+    send_queue: VecDeque<PeerMessage>,
 
     /// Last time we've observed inbound or outbound messaging activity.
     last_io_activity: Instant,
@@ -140,7 +139,7 @@ impl Handler {
 #[derive(Debug)]
 pub enum HandlerFromBehaviour {
     /// Message to send on outbound stream.
-    Message(SyncMessage),
+    Message(PeerMessage),
 
     /// Protocol failed with a critical error.
     CriticalError,
@@ -152,7 +151,7 @@ pub enum HandlerFromBehaviour {
 #[derive(Debug)]
 pub enum HandlerToBehaviour {
     /// Message received on the inbound stream.
-    Message(SyncMessage),
+    Message(PeerMessage),
 }
 
 #[derive(Debug, Error)]
@@ -181,7 +180,7 @@ enum OutboundSubstreamState {
     WaitingOutput(Stream),
 
     /// Waiting to send a message to the remote.
-    PendingSend(Stream, SyncMessage),
+    PendingSend(Stream, PeerMessage),
 
     /// Waiting to flush the substream so that the data arrives to the remote.
     PendingFlush(Stream),
