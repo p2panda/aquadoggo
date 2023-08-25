@@ -178,6 +178,7 @@ dependencies = [
  "http",
  "hyper",
  "libp2p",
+ "libp2p-allow-block-list",
  "libp2p-quic",
  "libp2p-swarm-test",
  "lipmaa-link 0.2.2",

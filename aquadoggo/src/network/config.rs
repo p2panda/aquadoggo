@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use libp2p::connection_limits::ConnectionLimits;
+use libp2p::{connection_limits::ConnectionLimits, PeerId};
 use libp2p::Multiaddr;
 use serde::{Deserialize, Serialize};
 
@@ -41,6 +41,8 @@ pub struct NetworkConfiguration {
     /// traffic as an intermediary between us and other nodes. The node will contact each server
     /// and register our IP address for other peers.
     pub relay_addresses: Vec<Multiaddr>,
+
+    pub allowed_peers: Option<Vec<PeerId>>,
 
     /// Notify handler buffer size.
     ///
@@ -99,6 +101,7 @@ impl Default for NetworkConfiguration {
             quic_port: 2022,
             relay_mode: false,
             relay_addresses: Vec::new(),
+            allowed_peers: None,
         }
     }
 }

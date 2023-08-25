@@ -3,10 +3,13 @@
 use std::time::Duration;
 
 use anyhow::Result;
+use futures::stream::All;
 use libp2p::identity::Keypair;
 use libp2p::swarm::behaviour::toggle::Toggle;
 use libp2p::swarm::NetworkBehaviour;
 use libp2p::{connection_limits, dcutr, identify, mdns, relay, rendezvous};
+use libp2p_allow_block_list as allow_block_list;
+use libp2p_allow_block_list::AllowedPeers;
 use log::debug;
 
 use crate::network::config::NODE_NAMESPACE;
@@ -73,6 +76,8 @@ pub struct P2pandaBehaviour {
 
     /// Register peer connections and handle p2panda messaging with them.
     pub peers: peers::Behaviour,
+
+    pub allowed_peers: Toggle<allow_block_list::Behaviour<AllowedPeers>>,
 }
 
 impl P2pandaBehaviour {
@@ -164,6 +169,16 @@ impl P2pandaBehaviour {
         // Always create behaviour to manage peer connections and handle p2panda messaging
         let peers = peers::Behaviour::new();
 
+        let allowed_peers = if let Some(allowed_peer_ids) = &network_config.allowed_peers {
+            let mut allowed_peers = allow_block_list::Behaviour::default();
+            for peer_id in allowed_peer_ids {
+                allowed_peers.allow_peer(*peer_id)
+            }
+            Some(allowed_peers)
+        } else {
+            None
+        };
+
         Ok(Self {
             identify: identify.into(),
             mdns: mdns.into(),
@@ -174,6 +189,7 @@ impl P2pandaBehaviour {
             relay_server: relay_server.into(),
             dcutr: dcutr.into(),
             peers,
+            allowed_peers: allowed_peers.into(),
         })
     }
 }

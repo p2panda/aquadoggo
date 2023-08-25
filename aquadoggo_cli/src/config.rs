@@ -13,7 +13,7 @@ use directories::ProjectDirs;
 use figment::providers::{Env, Format, Serialized, Toml};
 use figment::Figment;
 use libp2p::multiaddr::Protocol;
-use libp2p::Multiaddr;
+use libp2p::{Multiaddr, PeerId};
 use p2panda_rs::schema::SchemaId;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -170,6 +170,10 @@ struct Cli {
     #[serde(skip_serializing_if = "Option::is_none")]
     relay_addresses: Option<Vec<SocketAddr>>,
 
+    #[arg(short = 'a', long, value_name = "PEER_ID PEER_ID, ...", num_args = 0..)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    allowed_peers: Option<Vec<PeerId>>,
+
     /// Enable if node should also function as a relay. Disabled by default.
     ///
     /// Other nodes can use relays to aid discovery and establishing connectivity.
@@ -226,6 +230,7 @@ pub struct Configuration {
     pub direct_node_addresses: Vec<SocketAddr>,
     pub relay_addresses: Vec<SocketAddr>,
     pub relay_mode: bool,
+    pub allowed_peers: Option<Vec<PeerId>>,
 }
 
 impl Default for Configuration {
@@ -242,6 +247,7 @@ impl Default for Configuration {
             direct_node_addresses: vec![],
             relay_addresses: vec![],
             relay_mode: false,
+            allowed_peers: None,
         }
     }
 }
@@ -289,6 +295,7 @@ impl TryFrom<Configuration> for NodeConfiguration {
                     .into_iter()
                     .map(to_multiaddress)
                     .collect(),
+                allowed_peers: value.allowed_peers,
                 ..Default::default()
             },
         })
